@@ -1,0 +1,4 @@
+# These helpers exercise process uncaught-exception termination and must run
+# through the conformance runner instead of silently using Node's builtin.
+fixtures/uncaught-exceptions/uncaught-monitor1.js
+fixtures/uncaught-exceptions/uncaught-monitor2.js

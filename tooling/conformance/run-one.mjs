@@ -9,7 +9,7 @@
 // Reports one JSON line on stdout so the parent can aggregate without parsing
 // prose.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { join, dirname, isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { createRequire, registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,7 +83,11 @@ function report(result) {
   // second framed result onto inherited stdout could make run.mjs select the
   // child's line instead. Exit status is the ordinary child-process contract.
   if (nestedConformanceChild) {
-    if (result.kind !== "pass") hostProcess.exitCode = 1;
+    // A subject exit listener is allowed to change its own exitCode. Once the
+    // harness has found a failure, that behavior must not overwrite the
+    // runner's status in the process lifecycle relay. End this already-failed
+    // nested runner directly; it publishes no framed result of its own.
+    if (result.kind !== "pass") hostProcess.reallyExit(1);
     return;
   }
   // Bound at load: node's console tests replace `process.stdout.write`, and
@@ -252,6 +256,20 @@ let subjectTestBindings = null;
 
 /** The module's own uncaught-exception dispatch, when it has one. */
 let uncaughtHandler = null;
+
+/**
+ * Give an escaped exception to the subject, preserving a nested program's
+ * ordinary fatal-error contract when nobody handles it.
+ */
+function dispatchEscapedException(error) {
+  if (uncaughtHandler?.(underTest, error)) return true;
+  if (!nestedConformanceChild) return false;
+
+  const rendered = error?.stack ?? String(error);
+  hostProcess.stderr.write(`${rendered}\n`);
+  const chosenExitCode = globalThis.process?.exitCode;
+  hostProcess.reallyExit(typeof chosenExitCode === "number" ? chosenExitCode : 1);
+}
 
 /**
  * `--sabotage`, via the environment so the child sees it.
@@ -428,6 +446,8 @@ try {
 
 const realRequire = createRequire(import.meta.url);
 const nodeTestRoot = join(ROOT, "third_party/node/test");
+const localTestRoot = join(moduleDir, "test");
+const hostNodeExecutable = realpathSync(hostProcess.execPath);
 const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
 const realWorkerThreads = realRequire("node:worker_threads");
@@ -452,16 +472,33 @@ if (existsSync(childFixturesPath)) {
 function commonJsNodeTestTarget(candidate, cwd) {
   if (typeof candidate !== "string") return null;
   const target = resolvePath(cwd, candidate);
-  const withinTestTree = relative(nodeTestRoot, target);
+  const withinNodeTests = relative(nodeTestRoot, target);
+  const withinLocalTests = relative(localTestRoot, target);
+  const belongsToKnownTestTree =
+    (!withinNodeTests.startsWith("..") && !isAbsolute(withinNodeTests)) ||
+    (!withinLocalTests.startsWith("..") && !isAbsolute(withinLocalTests));
   if (
     !target.endsWith(".js") ||
     (dirname(target) !== dirname(resolvePath(file)) && !declaredChildFixtures.has(target)) ||
-    withinTestTree.startsWith("..") ||
-    isAbsolute(withinTestTree)
+    !belongsToKnownTestTree
   ) {
     return null;
   }
   return target;
+}
+
+/** Whether a spawn command names this Node binary, directly or through a symlink. */
+function isNodeExecutable(command) {
+  if (command === hostProcess.execPath) return true;
+  if (typeof command !== "string") return false;
+
+  let resolved;
+  try {
+    resolved = realpathSync(command);
+  } catch {
+    return false;
+  }
+  return resolved === hostNodeExecutable;
 }
 
 function nestedChildOptions(options) {
@@ -514,7 +551,7 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
   const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
 
   if (
-    command === hostProcess.execPath &&
+    isNodeExecutable(command) &&
     fixtureIndex >= 0 &&
     target !== null &&
     args
@@ -549,7 +586,7 @@ function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
   const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
 
   if (
-    command === hostProcess.execPath &&
+    isNodeExecutable(command) &&
     fixtureIndex >= 0 &&
     target !== null &&
     args
@@ -609,9 +646,66 @@ function execInfrastructure(command, optionsOrCallback, maybeCallback) {
     : realChildProcess.exec(command, options, callback);
 }
 
+/** Re-enter the runner for `execFile(process.execPath, [fixture], ...)`. */
+function execFileInfrastructure(file, argsOrOptionsOrCallback, optionsOrCallback, maybeCallback) {
+  const hasArgs = Array.isArray(argsOrOptionsOrCallback);
+  const args = hasArgs ? argsOrOptionsOrCallback : [];
+  const second = hasArgs ? optionsOrCallback : argsOrOptionsOrCallback;
+  const callbackOnly = typeof second === "function";
+  const options = callbackOnly ? undefined : second;
+  const callback = callbackOnly ? second : hasArgs ? maybeCallback : optionsOrCallback;
+  const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
+  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
+  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
+
+  if (
+    isNodeExecutable(file) &&
+    fixtureIndex >= 0 &&
+    target !== null &&
+    args
+      .slice(0, fixtureIndex)
+      .every((argument) => typeof argument === "string" && argument.startsWith("-"))
+  ) {
+    const routedArgs = [
+      ...args.slice(0, fixtureIndex),
+      conformanceRunner,
+      moduleName,
+      target,
+      addon ?? "-",
+      ...args.slice(fixtureIndex + 1),
+    ];
+    const nested = nestedChildOptions(options);
+    return callback === undefined
+      ? realChildProcess.execFile(file, routedArgs, nested)
+      : realChildProcess.execFile(file, routedArgs, nested, callback);
+  }
+
+  if (hasArgs) {
+    if (callbackOnly) return realChildProcess.execFile(file, args, callback);
+    if (options === undefined) {
+      return callback === undefined
+        ? realChildProcess.execFile(file, args)
+        : realChildProcess.execFile(file, args, undefined, callback);
+    }
+    return callback === undefined
+      ? realChildProcess.execFile(file, args, options)
+      : realChildProcess.execFile(file, args, options, callback);
+  }
+  if (callbackOnly) return realChildProcess.execFile(file, callback);
+  if (options === undefined) {
+    return callback === undefined
+      ? realChildProcess.execFile(file)
+      : realChildProcess.execFile(file, undefined, callback);
+  }
+  return callback === undefined
+    ? realChildProcess.execFile(file, options)
+    : realChildProcess.execFile(file, options, callback);
+}
+
 const childProcessInfrastructure = {
   ...realChildProcess,
   exec: execInfrastructure,
+  execFile: execFileInfrastructure,
   fork: forkInfrastructure,
   spawn: spawnInfrastructure,
   spawnSync: spawnSyncInfrastructure,
@@ -1163,7 +1257,7 @@ try {
         (error) => {
           if (error instanceof Skip || error?.name === "Skip") {
             reportFailure(error);
-          } else if (!uncaughtHandler?.(underTest, error)) {
+          } else if (!dispatchEscapedException(error)) {
             reportFailure(error);
           } else {
             judgeWhenQuiet();
@@ -1190,7 +1284,7 @@ try {
       // make every such test fail for the one reason the test is about. Only
       // a module that declares the hook can claim one -- for everything else
       // an escaped exception is exactly the failure it looks like.
-      if (!uncaughtHandler?.(underTest, e)) {
+      if (!dispatchEscapedException(e)) {
         reportFailure(e);
         return;
       }

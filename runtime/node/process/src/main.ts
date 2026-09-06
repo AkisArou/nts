@@ -55,15 +55,22 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET,
 } from "../../internal/errors.ts";
-import { validateArray, validateObject, validateString } from "../../internal/validators.ts";
+import {
+  validateArray,
+  validateInteger,
+  validateObject,
+  validateString,
+} from "../../internal/validators.ts";
 import { exceptionWithHostPort, uvException } from "../../internal/uv.ts";
 import { nextTick } from "../../internal/tick.ts";
 import { setProcessWarningHandler } from "../../internal/process-warning.ts";
+import { format } from "../../util/src/format.ts";
+import type { Architecture, Platform } from "../../os/src/main.ts";
 
 declare function nts_process_pid(): number;
 declare function nts_process_ppid(): number;
-declare function nts_platform(): string;
-declare function nts_process_arch(): string;
+declare function nts_platform(): Platform;
+declare function nts_process_arch(): Architecture;
 declare function nts_process_argv(): string[];
 declare function nts_process_argv0(): string;
 declare function nts_process_exec_path(): string;
@@ -93,7 +100,11 @@ declare function nts_process_active_resources(): string[];
 declare function nts_process_active_handles(): unknown[];
 declare function nts_process_active_requests(): unknown[];
 /** Tell the host whether an uncaught exception should abort rather than exit. */
-declare function nts_process_execve(path: string, args: string[], env: string[]): void;
+declare function nts_process_execve(
+  path: string,
+  args: readonly string[],
+  env: readonly string[],
+): never;
 /** Zero on success, otherwise a negative libuv filesystem error. */
 declare function nts_process_load_env_file(path: string): number;
 declare function nts_process_raw_debug(text: string): void;
@@ -164,28 +175,37 @@ class NodeEnvironmentFlagsSet extends Set<string> {
   }
 }
 
-const refSymbol: unique symbol = Symbol.for("nodejs.ref");
-const unrefSymbol: unique symbol = Symbol.for("nodejs.unref");
-
-/** The current symbol protocol and its legacy string-named fallback. */
-interface Refable {
-  [refSymbol]?: ((this: Refable) => unknown) | undefined;
-  [unrefSymbol]?: ((this: Refable) => unknown) | undefined;
-  ref?: ((this: Refable) => unknown) | undefined;
-  unref?: ((this: Refable) => unknown) | undefined;
-}
+// Process lifecycle is runtime-global, not instance state. Keeping it beside
+// the one process singleton lets the public functions below be direct aliases
+// that remain valid when called detached, as Node's bootstrap-installed
+// closure functions do.
+let currentExitCode: number | undefined = undefined;
+let processExiting = false;
+let captureCallback: ((error: unknown) => void) | null = null;
+let handlingFatalException = false;
 
 /**
  * The process.
  *
- * A class with one instance rather than an object literal, so that the methods
- * live on a prototype: node's tests read `process.constructor.name` and check
- * that methods are inherited rather than own properties.
+ * A class with one instance rather than a loose object literal, so the runtime
+ * has one fixed layout and one statically known method table.
  */
 class Process extends EventEmitter {
+  constructor() {
+    super();
+    nts_process_on_before_exit((code) => {
+      this.emit("beforeExit", this.exitCode ?? code);
+    });
+    nts_process_on_exit((code) => {
+      emitExitOnce(this, this.exitCode ?? code);
+    });
+  }
+
   readonly env = env;
   readonly pid = nts_process_pid();
-  readonly ppid = nts_process_ppid();
+  get ppid(): number {
+    return nts_process_ppid();
+  }
   readonly platform = nts_platform();
   readonly arch = nts_process_arch();
   readonly version = nts_process_version();
@@ -197,9 +217,37 @@ class Process extends EventEmitter {
   readonly stdout = stdout;
   readonly stderr = stderr;
 
-  /** Set by `exit`, and readable by an `exit` listener deciding what to do. */
-  exitCode: number | undefined = undefined;
-  _exiting = false;
+  /** The normalized code a graceful or explicit exit will report. */
+  get exitCode(): number | undefined {
+    return currentExitCode;
+  }
+
+  set exitCode(code: number | string | null | undefined) {
+    if (code === null || code === undefined) {
+      currentExitCode = undefined;
+      return;
+    }
+
+    let value: number | string = code;
+    if (typeof code === "string" && code !== "") {
+      const converted = Number(code);
+      if (!Number.isNaN(converted)) value = converted;
+    }
+    validateInteger(value, "code");
+    // Node stores this field in the runtime's signed 32-bit exit-info table.
+    // Preserve that representation after accepting the wider safe-integer
+    // input: the OS ultimately consumes only the low exit-status bits too.
+    currentExitCode = value | 0;
+  }
+
+  /** Node's bootstrap-visible indication that terminal exit has begun. */
+  get _exiting(): boolean {
+    return processExiting;
+  }
+
+  set _exiting(value: boolean) {
+    processExiting = value;
+  }
 
   // The four warning switches. Node sets these from the command line; they are
   // writable here because a program is also allowed to set them, and node's
@@ -220,7 +268,7 @@ class Process extends EventEmitter {
   // Readonly in the static API. Node additionally freezes these objects at
   // runtime, but per-property mutability/extensibility is a §13 non-goal.
   readonly config: Record<string, unknown> = metadata("config");
-  readonly allowedNodeEnvironmentFlags = new NodeEnvironmentFlagsSet(
+  allowedNodeEnvironmentFlags: ReadonlySet<string> = new NodeEnvironmentFlagsSet(
     nts_process_allowed_env_flags(),
   );
 
@@ -240,33 +288,12 @@ class Process extends EventEmitter {
    * operation and the microtask checkpoint, and nothing in the language names
    * that instant.
    */
-  nextTick<A extends unknown[]>(callback: (...args: A) => void, ...args: A): void {
-    if (typeof callback !== "function") {
-      throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
-    }
-    // Through the shared implementation rather than the binding, because a
-    // tick is an asynchronous resource: it reports itself to `async_hooks` and
-    // it carries the current context to its callback. Calling the binding here
-    // made `process.nextTick` and the internal one two different things, and
-    // only one of them was a tick anybody could observe.
-    nextTick(callback, ...args);
-  }
+  nextTick = processNextTick;
 
-  cwd(): string {
-    return cwd();
-  }
-
-  chdir(directory: string): void {
-    chdir(directory);
-  }
-
-  umask(mask?: number | string): number {
-    return umask(mask);
-  }
-
-  uptime(): number {
-    return uptime();
-  }
+  cwd = cwd;
+  chdir = chdir;
+  umask = umask;
+  uptime = uptime;
 
   hrtime = hrtime;
   cpuUsage = cpuUsage;
@@ -276,34 +303,17 @@ class Process extends EventEmitter {
   availableMemory = availableMemory;
   constrainedMemory = constrainedMemory;
 
-  abort(): never {
-    return abort();
-  }
+  abort = abort;
 
-  /**
-   * The raw signal delivery, separated so it can be replaced.
-   *
-   * Node splits `kill` from `_kill` for exactly one reason: its own tests
-   * replace `_kill` to observe what signal a subsystem sent without actually
-   * sending it. Keeping the split keeps those tests meaningful.
-   */
-  _kill(pid: number, signal: number): number {
-    return rawKill(pid, signal);
-  }
-
-  kill(pid: number, signal?: string | number): boolean {
+  kill(pid: number, signal?: string | number): true {
     // `!=` on purpose: node accepts a numeric string here, and the check is
     // "does this round-trip through a 32-bit integer", not "is this a number".
     if (pid != (pid | 0)) {
       throw new ERR_INVALID_ARG_TYPE("pid", "number", pid);
     }
-    const err = this._kill(pid, signalNumber(signal));
+    const err = rawKill(pid, signalNumber(signal));
     if (err) throw exceptionWithHostPort(err, "kill");
     return true;
-  }
-
-  reallyExit(code: number): void {
-    reallyExit(code);
   }
 
   /**
@@ -314,49 +324,19 @@ class Process extends EventEmitter {
    * hypothetical, because the usual reason to listen is to flush something,
    * and flushing can fail and call `exit` with a different code.
    */
-  exit(code?: number): void {
-    if (code !== undefined) this.exitCode = code;
+  exit = processExit;
 
-    if (!this._exiting) {
-      this._exiting = true;
-      this.emit("exit", this.exitCode || 0);
-    }
-    this.reallyExit(this.exitCode || 0);
-  }
-
-  getuid(): number {
-    return getuid();
-  }
-  getgid(): number {
-    return getgid();
-  }
-  geteuid(): number {
-    return geteuid();
-  }
-  getegid(): number {
-    return getegid();
-  }
-  getgroups(): number[] {
-    return getgroups();
-  }
-  setuid(id: number | string): void {
-    setuid(id);
-  }
-  setgid(id: number | string): void {
-    setgid(id);
-  }
-  seteuid(id: number | string): void {
-    seteuid(id);
-  }
-  setegid(id: number | string): void {
-    setegid(id);
-  }
-  setgroups(groups: (number | string)[]): void {
-    setgroups(groups);
-  }
-  initgroups(user: number | string, extraGroup: number | string): void {
-    initgroups(user, extraGroup);
-  }
+  getuid = getuid;
+  getgid = getgid;
+  geteuid = geteuid;
+  getegid = getegid;
+  getgroups = getgroups;
+  setuid = setuid;
+  setgid = setgid;
+  seteuid = seteuid;
+  setegid = setegid;
+  setgroups = setgroups;
+  initgroups = initgroups;
 
   emitWarning = emitWarningFor(this);
 
@@ -368,31 +348,9 @@ class Process extends EventEmitter {
    * knows about all three -- so asking each module and merging would be a list
    * that is wrong whenever a module forgets to register.
    */
-  getActiveResourcesInfo(): string[] {
-    return nts_process_active_resources();
-  }
-
-  _getActiveHandles(): unknown[] {
-    return nts_process_active_handles();
-  }
-
-  _getActiveRequests(): unknown[] {
-    return nts_process_active_requests();
-  }
-
-  /** Keep a resource alive through Node's symbol protocol or legacy method. */
-  ref(resource: Refable | null | undefined): void {
-    if (resource == null) return;
-    const ref = resource[refSymbol] ?? resource.ref;
-    if (typeof ref === "function") ref.call(resource);
-  }
-
-  /** Release a resource through Node's symbol protocol or legacy method. */
-  unref(resource: Refable | null | undefined): void {
-    if (resource == null) return;
-    const unref = resource[unrefSymbol] ?? resource.unref;
-    if (typeof unref === "function") unref.call(resource);
-  }
+  getActiveResourcesInfo = nts_process_active_resources;
+  _getActiveHandles = nts_process_active_handles;
+  _getActiveRequests = nts_process_active_requests;
 
   /**
    * Divert uncaught exceptions to `fn` instead of ending the process.
@@ -403,25 +361,8 @@ class Process extends EventEmitter {
    * to a test framework, or the reverse; refusing the second makes the
    * conflict visible where it happens.
    */
-  setUncaughtExceptionCaptureCallback(fn: ((error: unknown) => void) | null): void {
-    if (fn === null) {
-      this.#captureCallback = null;
-      return;
-    }
-    if (typeof fn !== "function") {
-      throw new ERR_INVALID_ARG_TYPE("fn", ["Function", "null"], fn);
-    }
-    if (this.#captureCallback !== null) {
-      throw new ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET();
-    }
-    this.#captureCallback = fn;
-  }
-
-  hasUncaughtExceptionCaptureCallback(): boolean {
-    return this.#captureCallback !== null;
-  }
-
-  #captureCallback: ((error: unknown) => void) | null = null;
+  setUncaughtExceptionCaptureCallback = setUncaughtExceptionCaptureCallback;
+  hasUncaughtExceptionCaptureCallback = hasUncaughtExceptionCaptureCallback;
 
   /**
    * An exception that escaped everything. Returns whether anyone took it.
@@ -435,18 +376,10 @@ class Process extends EventEmitter {
    * really is finished.
    *
    * Node calls this `_fatalException` and calls it from C++ at the point the
-   * stack has unwound completely. The name is kept because node's own tests
-   * replace it.
+   * stack has unwound completely. The name is the native/bootstrap contract,
+   * even though runtime replacement of the method is outside this profile.
    */
-  _fatalException(error: unknown, fromPromise = false): boolean {
-    const origin = fromPromise ? "unhandledRejection" : "uncaughtException";
-    this.emit("uncaughtExceptionMonitor", error, origin);
-    if (this.#captureCallback !== null) {
-      this.#captureCallback(error);
-      return true;
-    }
-    return this.emit("uncaughtException", error, origin);
-  }
+  _fatalException = fatalException;
 
   /**
    * Replace this process image with another program.
@@ -455,61 +388,154 @@ class Process extends EventEmitter {
    * this process was holding is gone. That is the point -- a supervisor that
    * `execve`s its real payload keeps the pid its own supervisor is watching.
    */
-  execve(
-    execPath: string,
-    args: string[] = [],
-    environment: Readonly<Record<string, string | undefined>> = this.env,
-  ): void {
-    this.emitWarning(
+  execve = processExecve;
+
+  loadEnvFile = loadEnvFile;
+
+  /** Write past every stream and every hook, for debugging the streams. */
+  _rawDebug = rawDebug;
+}
+
+function processNextTick<A extends unknown[]>(callback: (...args: A) => void, ...args: A): void {
+  if (typeof callback !== "function") {
+    throw new ERR_INVALID_ARG_TYPE("callback", "Function", callback);
+  }
+  if (processExiting) return;
+  // Through the shared implementation rather than the binding, because a
+  // tick is an asynchronous resource: it reports itself to `async_hooks` and
+  // it carries the current context to its callback. Calling the binding here
+  // made `process.nextTick` and the internal one two different things, and
+  // only one of them was a tick anybody could observe.
+  nextTick(callback, ...args);
+}
+
+function processExit(...given: [] | [code: number | string | null | undefined]): never {
+  if (given.length !== 0) process.exitCode = given[0];
+
+  emitExitOnce(process, process.exitCode ?? 0);
+  return reallyExit(process.exitCode ?? 0);
+}
+
+/** Deliver the terminal lifecycle event at most once. */
+function emitExitOnce(target: Process, code: number): void {
+  if (processExiting) return;
+  processExiting = true;
+  target.emit("exit", code);
+}
+
+function setUncaughtExceptionCaptureCallback(fn: ((error: unknown) => void) | null): void {
+  if (fn === null) {
+    captureCallback = null;
+    return;
+  }
+  if (typeof fn !== "function") {
+    throw new ERR_INVALID_ARG_TYPE("fn", ["Function", "null"], fn);
+  }
+  if (captureCallback !== null) {
+    throw new ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET();
+  }
+  captureCallback = fn;
+}
+
+function hasUncaughtExceptionCaptureCallback(): boolean {
+  return captureCallback !== null;
+}
+
+function fatalException(error: unknown, fromPromise = false): boolean {
+  // If a monitor, capture callback, or uncaughtException listener throws, the
+  // runtime must treat that as a failure of the fatal-error handler. It must
+  // not feed the new error through the same user handlers a second time. Node
+  // terminates that path with its internal-handler-failure code.
+  if (handlingFatalException) throw error;
+  handlingFatalException = true;
+
+  const origin = fromPromise ? "unhandledRejection" : "uncaughtException";
+  process.emit("uncaughtExceptionMonitor", error, origin);
+  if (captureCallback !== null) {
+    captureCallback(error);
+    handlingFatalException = false;
+    return true;
+  }
+  if (process.emit("uncaughtException", error, origin)) {
+    handlingFatalException = false;
+    return true;
+  }
+
+  // Native code performs the actual termination after a false return, but the
+  // TypeScript half owns the observable state transition first. In particular,
+  // a prior exitCode of 99 must not reach the exit listener for an uncaught
+  // exception: Node reports and stores 1.
+  try {
+    if (!processExiting) {
+      process.exitCode = 1;
+      emitExitOnce(process, 1);
+    }
+  } catch {
+    // There is no second recovery path while handling the process's final
+    // uncaught exception. The native boundary will terminate after false.
+  }
+  handlingFatalException = false;
+  return false;
+}
+
+function processExecve(
+  execPath: string,
+  args: readonly string[] = [],
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): never {
+  if (!execveWarningEmitted) {
+    execveWarningEmitted = true;
+    process.emitWarning(
       "process.execve is an experimental feature and might change at any time",
       "ExperimentalWarning",
     );
-    if (this.platform === "win32") {
-      throw new ERR_FEATURE_UNAVAILABLE_ON_PLATFORM("process.execve");
+  }
+  if (process.platform === "win32") {
+    throw new ERR_FEATURE_UNAVAILABLE_ON_PLATFORM("process.execve");
+  }
+  validateString(execPath, "execPath");
+  validateArray(args, "args");
+  for (let i = 0; i < args.length; i++) {
+    const argument = args[i];
+    if (typeof argument !== "string" || argument.includes("\u0000")) {
+      throw new ERR_INVALID_ARG_VALUE(`args[${i}]`, argument, "must be a string without null bytes");
     }
-    validateString(execPath, "execPath");
-    validateArray(args, "args");
-    for (let i = 0; i < args.length; i++) {
-      const argument = args[i];
-      if (typeof argument !== "string" || argument.includes("\u0000")) {
-        throw new ERR_INVALID_ARG_VALUE(`args[${i}]`, argument, "must be a string without null bytes");
-      }
-    }
-
-    validateObject(environment, "env");
-    const keys = Object.keys(environment);
-    const pairs = new Array<string>(keys.length);
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      if (key === undefined) throw new Error(`missing environment key at index ${i}`);
-      const value = environment[key];
-      // A null byte would truncate the variable at the C boundary, so a name
-      // or value containing one is refused rather than silently cut in half.
-      if (typeof value !== "string" || key.includes("\u0000") || value.includes("\u0000")) {
-        throw new ERR_INVALID_ARG_VALUE(
-          "env",
-          environment,
-          "must be an object with string keys and values without null bytes",
-        );
-      }
-      pairs[i] = `${key}=${value}`;
-    }
-
-    nts_process_execve(execPath, args, pairs);
   }
 
-  loadEnvFile(path = ".env"): void {
-    validateString(path, "path");
-    const result = nts_process_load_env_file(path);
-    if (result !== 0) throw uvException(result, "open", path);
-    refreshEnvironment();
+  validateObject(environment, "env");
+  const keys = Object.keys(environment);
+  const pairs = new Array<string>(keys.length);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key === undefined) throw new Error(`missing environment key at index ${i}`);
+    const value = environment[key];
+    // A null byte would truncate the variable at the C boundary, so a name or
+    // value containing one is refused rather than silently cut in half.
+    if (typeof value !== "string" || key.includes("\u0000") || value.includes("\u0000")) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "env",
+        environment,
+        "must be an object with string keys and values without null bytes",
+      );
+    }
+    pairs[i] = `${key}=${value}`;
   }
 
-  /** Write past every stream and every hook, for debugging the streams. */
-  _rawDebug(...args: unknown[]): void {
-    nts_process_raw_debug(args.map((a) => String(a)).join(" "));
-  }
+  return nts_process_execve(execPath, args, pairs);
 }
+
+function loadEnvFile(path = ".env"): void {
+  validateString(path, "path");
+  const result = nts_process_load_env_file(path);
+  if (result !== 0) throw uvException(result, "open", path);
+  refreshEnvironment();
+}
+
+function rawDebug(...args: unknown[]): void {
+  nts_process_raw_debug(format(...args));
+}
+
+let execveWarningEmitted = false;
 
 /** One metadata table, parsed. */
 function metadata(name: string): Record<string, unknown> {
@@ -553,20 +579,6 @@ const process = new Process();
 
 setProcessWarningHandler(process.emitWarning);
 process.on("warning", onWarningFor(process));
-
-nts_process_on_before_exit((code) => {
-  process.emit("beforeExit", process.exitCode ?? code);
-});
-
-// Guarded by the same flag `exit()` sets, because both paths lead here: a
-// program that calls `process.exit` emits from there and then really exits,
-// and the loop running dry emits from here. Exactly one of them is the first,
-// and `exit` is documented to fire once.
-nts_process_on_exit((code) => {
-  if (process._exiting) return;
-  process._exiting = true;
-  process.emit("exit", process.exitCode ?? code);
-});
 
 export default process;
 export { process, Process };

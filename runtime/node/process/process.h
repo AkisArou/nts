@@ -37,11 +37,11 @@ double nts_process_setgroups(NtsArray *ids, NtsArray *names);
 
 /* Process accounting. */
 double nts_process_uptime(void);
-NtsArray *nts_process_cpu_usage(void);
-NtsArray *nts_process_thread_cpu_usage(void);
-NtsArray *nts_process_memory_usage(void);
-double nts_process_rss(void);
-NtsArray *nts_process_resource_usage(void);
+double nts_process_cpu_usage(NtsArray *values);
+double nts_process_thread_cpu_usage(NtsArray *values);
+double nts_process_memory_usage(NtsArray *values);
+double nts_process_rss(NtsArray *values);
+double nts_process_resource_usage(NtsArray *values);
 double nts_process_available_memory(void);
 double nts_process_constrained_memory(void);
 void nts_process_raw_debug(NtsString *message);

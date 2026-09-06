@@ -1,27 +1,19 @@
-# Each of these spawns a real `node` and asserts on what the child printed or
-# what status it exited with. The child is node running node's own `process`,
-# so the assertion is about node's binary; there is no way to install our
-# module into a process we did not start.
-#
-# `test-process-kill-null.js` also spawns, but the child is only a signal target;
-# every assertion calls our in-process `process.kill`, so it remains applicable.
-test-process-argv-0.js: spawns node to see what argv[0] the child reports
-test-process-exec-argv.js: spawns node with flags and reads back execArgv
-test-process-execpath.js: spawns node at its own execPath
-test-process-ppid.js: spawns node and compares the child's ppid to our pid
-test-process-execve-abort.js: spawns node to watch a process image be replaced
-test-process-remove-all-signal-listeners.js: spawns node and signals it
-test-process-really-exit.js: spawns node to observe a monkey-patched exit
-test-process-uncaught-exception-monitor.js: spawns node to read its exit status
-test-process-raw-debug.js: spawns node and reads the child's raw stderr
-test-process-exit-after-fetch-throw.js: spawns node and reads its exit code
-test-process-exit-code.js: spawns node once per exit-code case
-test-process-exit-code-validation.js: spawns node once per invalid exit code
-test-process-external-stdio-close.js: spawns node with its stdio closed
-test-process-external-stdio-close-spawn.js: spawns node with its stdio closed
+# Direct self-spawns are routed back through the conformance runner. These
+# remaining files require a process-host facility the current environment does
+# not expose, or mix an ordinary typed contract with a Section 13 assertion.
+test-process-exit-code.js: mixed language non-goal (§13); the final case dynamically removes process._fatalException to observe Node bootstrap status 6, while local/exit-code-static.js retains the ten ordinary exit and uncaught-exception cases
+test-process-exit-code-validation.js: mixed language non-goal (§13); deletes process.exitCode to inspect descriptor non-configurability, while local/exit-code-validation-static.js retains all value normalization and exit cases
+test-process-kill-pid.js: mixed language non-goal (§13); its valid-case table dynamically replaces process._kill, while local/kill-validation.js retains argument validation and test-process-kill-null.js retains real signal delivery
+test-process-raw-debug.js: mixed language non-goal (§13); dynamically replaces process.nextTick and stderr.write, while local/raw-debug-format.js retains formatting and direct native-sink behavior
+test-process-really-exit.js: language non-goal (§13); its sole assertion dynamically replaces the undocumented process.reallyExit method
+test-process-emitwarning.js: mixed language non-goal (§13); replaces Error.toString on individual instances, while local/emitwarning-static.js retains all statically representable overload, event, detail, and validation cases
+test-process-warning.js: mixed language non-goal (§13); replaces stderr.write and Error.toString at runtime, while local/warning-policy.js retains non-Error suppression, deprecation suppression/throw, default type, and detail behavior
+test-process-remove-all-signal-listeners.js: active-environment gap; needs signal watchers so the first SIGINT emits on the typed process and removing its last listener restores default OS termination
+test-process-external-stdio-close.js: active-environment gap; the routed fork needs child IPC message delivery and process.disconnect on the substituted process
+test-process-external-stdio-close-spawn.js: active-environment gap; the routed IPC spawn needs child IPC message delivery and process.disconnect on the substituted process
 test-process-getgroups.js: treats an absent getgroups as success even on POSIX, so empty-module sabotage is hollow; the same `id -G` oracle runs without that optional guard in local/getgroups.js
-test-process-redirect-warnings.js: spawns node with --redirect-warnings
-test-process-redirect-warnings-env.js: spawns node with NODE_REDIRECT_WARNINGS
+test-process-redirect-warnings.js: active-environment gap; the routed child needs startup-option normalization and a warning-file sink for --redirect-warnings
+test-process-redirect-warnings-env.js: active-environment gap; the routed child needs startup environment policy and a warning-file sink for NODE_REDIRECT_WARNINGS
 
 # `execve` replaces the process image. A test that calls it successfully does
 # not fail the runner, it *ends* it -- the kernel loads another program over
@@ -50,6 +42,7 @@ test-process-dlopen-error-message-crash.js: process.dlopen loads Node-ABI native
 test-process-dlopen-undefined-exports.js: process.dlopen loads Node-ABI native addons through Node's private module loader
 test-process-domain-segfault.js: V8 regression test only assigns legacy process.domain and has no observable process assertion
 test-process-prototype.js: inspects the process prototype chain and constructor property descriptor
+test-process-ref-unref.js: language non-goal (§13); the public API accepts any and dynamically dispatches Symbol.for('nodejs.ref'/'nodejs.unref') hooks with string-named fallbacks
 
 # `process.env` is a V8 interceptor: arbitrary property get/set/delete/define
 # operations call getenv/setenv and even change the engine timezone. NTS has no
@@ -81,10 +74,10 @@ test-process-versions.js: asserts property descriptors for every version entry, 
 test-process-default.js: harness limitation; dynamically imports host node:process rather than the substituted module, while dynamic import itself remains required compiler work
 
 # These calls deliberately terminate the conformance child before it can
-# report a verdict. The non-terminating exit state machine remains covered by
-# upstream tests and local/exit-recursion.js.
-test-process-exit-from-before-exit.js: process.exit terminates the runner from a beforeExit listener
-test-process-exit-recursive.js: process.exit terminates the runner from an exit listener
+# report a verdict. Focused parent/child fixtures preserve the exact terminating
+# behavior rather than replacing the native exit operation.
+test-process-exit-from-before-exit.js: runner limitation; process.exit terminates the runner from a beforeExit listener, covered by local/exit-from-before-exit.js
+test-process-exit-recursive.js: runner limitation; recursive process.exit terminates the runner from an exit listener, covered by local/exit-recursion.js
 
 # JavaScript source-map cache toggling belongs to Node/V8's code-generation
 # engine. NTS emits native debug information and has no eval/generated-JS source
@@ -101,4 +94,4 @@ test-process-threadCpuUsage-worker-threads.js: worker copies use host node:proce
 # three cannot provide a non-hollow verdict against the supported static API.
 test-memory-usage.js: requires V8-specific external/ArrayBuffer heap accounting; the supported NTS allocation record is isolated in local/resource-accounting.js, while `memoryUsage.rss` is covered by the applicable EMFILE fixture
 test-next-tick-domain.js: only proves that loading host node:domain does not replace a function; an absent nextTick passes unchanged under sabotage
-test-next-tick-when-exiting.js: calls process.exit, which terminates the conformance child before it can report a verdict
+test-next-tick-when-exiting.js: runner limitation; process.exit terminates before the verdict, while local/next-tick-when-exiting.js retains the typed _exiting transition and nextTick suppression during exit

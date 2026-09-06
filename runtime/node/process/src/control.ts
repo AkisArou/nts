@@ -3,9 +3,7 @@
 //
 // The split in this file is between what talks to the kernel and what decides
 // whether to. The deciding lives here; the parts that also have to read or
-// emit on the process object itself -- `kill`, `exit` -- are in `main.ts`,
-// because node makes both monkey-patchable through `process._kill` and
-// `process.reallyExit` and its own tests rely on that.
+// emit on the process object itself -- `kill`, `exit` -- are in `main.ts`.
 
 import {
   ERR_INVALID_ARG_TYPE,
@@ -23,8 +21,8 @@ declare function nts_process_chdir(directory: string): number;
 declare function nts_process_umask(mask: number): number;
 declare function nts_process_umask_read(): number;
 declare function nts_process_kill(pid: number, signal: number): number;
-declare function nts_process_abort(): void;
-declare function nts_process_really_exit(code: number): void;
+declare function nts_process_abort(): never;
+declare function nts_process_really_exit(code: number): never;
 
 declare function nts_process_getuid(): number;
 declare function nts_process_getgid(): number;
@@ -96,7 +94,7 @@ export function umask(mask?: number | string): number {
  */
 export function signalNumber(signal: string | number | null | undefined): number {
   if (typeof signal === "number" && signal === (signal | 0)) return signal;
-  const name = signal === undefined || signal === null ? "SIGTERM" : signal;
+  const name = signal || "SIGTERM";
   if (typeof name !== "string") throw new ERR_UNKNOWN_SIGNAL(String(name));
   const number = constants.signals[name];
   if (number === undefined) throw new ERR_UNKNOWN_SIGNAL(String(name));
@@ -113,11 +111,7 @@ export const rawKill = nts_process_kill;
  * that calls this has decided its state is not worth preserving and that
  * someone should look at why.
  */
-export function abort(): never {
-  nts_process_abort();
-  // Unreachable, and the runtime knows: `nts_process_abort` does not return.
-  throw new Error("process.abort did not abort");
-}
+export const abort = nts_process_abort;
 
 export const reallyExit = nts_process_really_exit;
 
@@ -181,7 +175,7 @@ export function setegid(value: number | string): void {
   applyId(nts_process_setegid, value, "id", "setegid", "Group");
 }
 
-export function setgroups(groups: (number | string)[]): void {
+export function setgroups(groups: readonly (number | string)[]): void {
   validateArray(groups, "groups");
   const ids = new Array<number>(groups.length);
   const names = new Array<string>(groups.length);

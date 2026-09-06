@@ -70,28 +70,46 @@ globalThis.nts_process_set_title = (title) => { host.title = title; };
 globalThis.nts_process_allowed_env_flags = () => [...host.allowedNodeEnvironmentFlags];
 
 globalThis.nts_process_uptime = () => host.uptime();
-globalThis.nts_process_cpu_usage = () => {
+globalThis.nts_process_cpu_usage = (values) => errnoOf(() => {
   const { user, system } = host.cpuUsage();
-  return [user, system];
-};
-globalThis.nts_process_thread_cpu_usage = () => {
+  values[0] = user;
+  values[1] = system;
+});
+globalThis.nts_process_thread_cpu_usage = (values) => errnoOf(() => {
   const { user, system } = host.threadCpuUsage();
-  return [user, system];
-};
-globalThis.nts_process_memory_usage = () => {
+  values[0] = user;
+  values[1] = system;
+});
+globalThis.nts_process_memory_usage = (values) => errnoOf(() => {
   const m = host.memoryUsage();
-  return [m.rss, m.heapTotal, m.heapUsed, m.external, m.arrayBuffers];
-};
-globalThis.nts_process_rss = () => host.memoryUsage.rss();
-globalThis.nts_process_resource_usage = () => {
+  values[0] = m.rss;
+  values[1] = m.heapTotal;
+  values[2] = m.heapUsed;
+  values[3] = m.external;
+  values[4] = m.arrayBuffers;
+});
+globalThis.nts_process_rss = (values) => errnoOf(() => {
+  values[0] = host.memoryUsage.rss();
+});
+globalThis.nts_process_resource_usage = (values) => errnoOf(() => {
   const r = host.resourceUsage();
-  return [
-    r.userCPUTime, r.systemCPUTime, r.maxRSS, r.sharedMemorySize,
-    r.unsharedDataSize, r.unsharedStackSize, r.minorPageFault, r.majorPageFault,
-    r.swappedOut, r.fsRead, r.fsWrite, r.ipcSent, r.ipcReceived,
-    r.signalsCount, r.voluntaryContextSwitches, r.involuntaryContextSwitches,
-  ];
-};
+  values[0] = r.userCPUTime;
+  values[1] = r.systemCPUTime;
+  values[2] = r.maxRSS;
+  values[3] = r.sharedMemorySize;
+  values[4] = r.unsharedDataSize;
+  values[5] = r.unsharedStackSize;
+  values[6] = r.minorPageFault;
+  values[7] = r.majorPageFault;
+  values[8] = r.swappedOut;
+  values[9] = r.fsRead;
+  values[10] = r.fsWrite;
+  values[11] = r.ipcSent;
+  values[12] = r.ipcReceived;
+  values[13] = r.signalsCount;
+  values[14] = r.voluntaryContextSwitches;
+  values[15] = r.involuntaryContextSwitches;
+});
 globalThis.nts_process_available_memory = () => host.availableMemory();
 globalThis.nts_process_constrained_memory = () => host.constrainedMemory();
 

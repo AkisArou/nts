@@ -98,10 +98,14 @@ NtsArray *nts_process_env_keys(void) {
 double nts_process_pid(void) { return (double)uv_os_getpid(); }
 
 NtsString *nts_platform(void) {
-#if defined(__linux__)
+#if defined(__ANDROID__)
+    return nts_string_from_utf8("android", 7);
+#elif defined(__linux__)
     return nts_string_from_utf8("linux", 5);
 #elif defined(__APPLE__)
     return nts_string_from_utf8("darwin", 6);
+#elif defined(__CYGWIN__)
+    return nts_string_from_utf8("cygwin", 6);
 #elif defined(_WIN32)
     return nts_string_from_utf8("win32", 5);
 #elif defined(__FreeBSD__)
@@ -112,8 +116,12 @@ NtsString *nts_platform(void) {
     return nts_string_from_utf8("sunos", 5);
 #elif defined(_AIX)
     return nts_string_from_utf8("aix", 3);
+#elif defined(__HAIKU__)
+    return nts_string_from_utf8("haiku", 5);
+#elif defined(__NetBSD__)
+    return nts_string_from_utf8("netbsd", 6);
 #else
-    return nts_string_from_utf8("unknown", 7);
+#error "unsupported Node platform"
 #endif
 }
 

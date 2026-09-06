@@ -1,8 +1,7 @@
 'use strict';
 
-// Pinned Node test/parallel/test-process-exit-recursive.js, placed behind a
-// parent process so the subject is allowed to terminate and its status remains
-// observable. No method replacement is needed.
+// Pinned Node test/parallel/test-process-exit-from-before-exit.js, placed
+// behind a parent so the immediate terminating behavior is observable.
 const common = require('../../../../third_party/node/test/common');
 const assert = require('assert');
 
@@ -17,11 +16,9 @@ if (process.argv[2] === undefined) {
   );
 } else {
   const exit = process.exit;
-  let exits = 0;
-  process.on('exit', (code) => {
-    assert.strictEqual(exits++, 0);
-    assert.strictEqual(code, 1);
+  process.on('beforeExit', common.mustCall(() => {
+    setTimeout(common.mustNotCall(), 5);
     exit(0);
-  });
-  exit(1);
+    assert.fail('process.exit() returned');
+  }));
 }

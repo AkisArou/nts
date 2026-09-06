@@ -19,7 +19,7 @@ runtime/node/
     shape.mjs         the object node's tests see as `require('<module>')`
     test-pattern      a regex, when node does not name the tests `test-<module>-*`
     not-applicable    `file: reason`, for tests that assert on node's binary
-    test/*.js         focused coverage for supported parts of mixed upstream tests
+    test/*.js         focused coverage for mixed or runner-terminating upstream tests
 ```
 
 ## Four rules, and what each is for
@@ -83,4 +83,6 @@ name the independent test that keeps the supported behavior covered.
 
 Focused files under `test/` are reported as `local/<name>` and must cite the
 pinned upstream test whose applicable behavior they preserve. They are a last
-resort for mixed files, not a replacement for an upstream failure.
+resort for a mixed file, or for an operation such as `process.exit()` that must
+terminate the test child and therefore needs an outer observer; they are not a
+replacement for an ordinary upstream failure.

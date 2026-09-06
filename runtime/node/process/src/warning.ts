@@ -27,7 +27,7 @@ export interface WarningTarget {
   argv0: string;
   pid: number;
   release: { name: string };
-  stderr: { write(text: string): unknown };
+  stderr: { write(text: string): boolean };
 }
 
 /** The extra fields node hangs on a warning beyond what `Error` has. */
@@ -60,6 +60,7 @@ function createWarning(
   type: string | undefined,
   code: string | undefined,
   ctor: CallableFunction | undefined,
+  defaultCtor: CallableFunction,
   detail: string | undefined,
 ): Warning {
   const warning: Warning = new Error(message);
@@ -69,7 +70,7 @@ function createWarning(
   // The stack starts *above* whoever raised it. A user reading a deprecation
   // wants the line that called the deprecated thing, not the four frames of
   // machinery that produced the message.
-  captureStackTrace(warning, ctor ?? emitWarningFor);
+  captureStackTrace(warning, ctor ?? defaultCtor);
   return warning;
 }
 
@@ -82,10 +83,8 @@ function createWarning(
  * spelled less clearly.
  */
 export function emitWarningFor(target: WarningTarget) {
-  // A `const` arrow rather than a named function expression: the name is
-  // inferred from the binding, so `process.emitWarning.name` is still
-  // `emitWarning`, and an arrow needs no `this` of its own -- which this body
-  // never uses.
+  // An arrow needs no `this` of its own: all process state is explicit in the
+  // captured, statically typed target.
   const emitWarning = (
     warning: string | Error,
     type?: string | WarningOptions | CallableFunction,
@@ -129,7 +128,14 @@ export function emitWarningFor(target: WarningTarget) {
 
     let built: Warning;
     if (typeof warning === "string") {
-      built = createWarning(warning, typeName, codeName, selectedCtor, detail);
+      built = createWarning(
+        warning,
+        typeName,
+        codeName,
+        selectedCtor,
+        emitWarning,
+        detail,
+      );
     } else if (warning instanceof Error) {
       built = warning;
     } else {
@@ -156,6 +162,11 @@ export function emitWarningFor(target: WarningTarget) {
   return emitWarning;
 }
 
+/** A warning's text, including a statically declared Error override. */
+function describe(warning: Warning): string {
+  return warning.toString();
+}
+
 /**
  * The default `warning` listener: print it to stderr.
  *
@@ -163,32 +174,6 @@ export function emitWarningFor(target: WarningTarget) {
  * own handler and calls `process.removeAllListeners('warning')` gets silence,
  * which is the documented way to turn warnings off from inside.
  */
-/**
- * A warning's text, however badly the warning behaves.
- *
- * The object came from the program, and a program is allowed to hand over an
- * `Error` subclass whose `toString` is null or throws. Node checks the type
- * and gets the first case; the second takes the printer down with it, which
- * node's own test only avoids by running with `--no-warnings` so the printer
- * is not installed. A handler whose job is to report a problem must not become
- * a second one, so both are handled here.
- */
-function describe(warning: Warning): string {
-  if (typeof warning.toString === "function") {
-    try {
-      return `${warning.toString()}`;
-    } catch {
-      // Fall through to the inherited one, which cannot be broken from
-      // outside.
-    }
-  }
-  const name = warning.name === undefined ? "Error" : String(warning.name);
-  const message = warning.message === undefined ? "" : String(warning.message);
-  if (name === "") return message;
-  if (message === "") return name;
-  return `${name}: ${message}`;
-}
-
 export function onWarningFor(target: WarningTarget) {
   let helperShown = false;
 
@@ -212,13 +197,21 @@ export function onWarningFor(target: WarningTarget) {
     if (!trace && !helperShown) {
       helperShown = true;
       const flag = isDeprecation ? "--trace-deprecation" : "--trace-warnings";
-      message += `\n(Use \`${target.argv0 || "node"} ${flag} ...\` to show where the warning was created)`;
+      message += `\n(Use \`${executableName(target.argv0)} ${flag} ...\` to show where the warning was created)`;
     }
 
-    // Through the process object rather than a captured stream: node's own
-    // tests replace `process.stderr.write` to capture what a warning printed,
-    // and a captured reference would write past them.
+    // Through the process object's typed stream, which is also the sink a
+    // custom process host supplies.
     target.stderr.write(`${message}\n`);
   };
   return onWarning;
+}
+
+/** Basename without Windows' executable suffix, as Node prints in its hint. */
+function executableName(argv0: string): string {
+  if (argv0.length === 0) return "node";
+  const slash = Math.max(argv0.lastIndexOf("/"), argv0.lastIndexOf("\\"));
+  let name = argv0.slice(slash + 1);
+  if (name.endsWith(".exe")) name = name.slice(0, -4);
+  return name || "node";
 }

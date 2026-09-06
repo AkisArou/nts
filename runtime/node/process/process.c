@@ -41,14 +41,22 @@ static double system_error(void) {
 double nts_process_ppid(void) { return (double)uv_os_getppid(); }
 
 NtsString *nts_process_arch(void) {
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(_M_X64)
     return utf8("x64");
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
     return utf8("arm64");
-#elif defined(__arm__)
+#elif defined(__loongarch64) || defined(__loongarch64__)
+    return utf8("loong64");
+#elif defined(__arm__) || defined(_M_ARM)
     return utf8("arm");
-#elif defined(__i386__)
+#elif defined(__i386__) || defined(_M_IX86)
     return utf8("ia32");
+#elif defined(__mips__)
+#if defined(__MIPSEL__) || defined(__MIPSEL) || defined(_MIPSEL)
+    return utf8("mipsel");
+#else
+    return utf8("mips");
+#endif
 #elif defined(__riscv) && __riscv_xlen == 64
     return utf8("riscv64");
 #elif defined(__powerpc64__)
@@ -56,7 +64,7 @@ NtsString *nts_process_arch(void) {
 #elif defined(__s390x__)
     return utf8("s390x");
 #else
-    return utf8("unknown");
+#error "unsupported Node architecture"
 #endif
 }
 
@@ -335,18 +343,17 @@ NtsArray *nts_process_getgroups(void) {
 
 /* ------------------------------------------------------------- accounting */
 
-static NtsArray *cpu_usage(int result, const uv_rusage_t *usage) {
-    NtsArray *answer = number_array(2);
-    nts_node_set_errno(result);
-    if (result == 0) {
-        NTS_ITEMS(answer, double)[0] =
-            1000000.0 * (double)usage->ru_utime.tv_sec +
-            (double)usage->ru_utime.tv_usec;
-        NTS_ITEMS(answer, double)[1] =
-            1000000.0 * (double)usage->ru_stime.tv_sec +
-            (double)usage->ru_stime.tv_usec;
-    }
-    return answer;
+static int numeric_output(NtsArray *values, size_t length, double **fields) {
+    if (values == NULL || values->header.length != length) return UV_EINVAL;
+    *fields = NTS_ITEMS(values, double);
+    return 0;
+}
+
+static void fill_cpu_usage(double *fields, const uv_rusage_t *usage) {
+    fields[0] = 1000000.0 * (double)usage->ru_utime.tv_sec +
+                (double)usage->ru_utime.tv_usec;
+    fields[1] = 1000000.0 * (double)usage->ru_stime.tv_sec +
+                (double)usage->ru_stime.tv_usec;
 }
 
 double nts_process_uptime(void) {
@@ -356,31 +363,48 @@ double nts_process_uptime(void) {
     return (double)(now - started) / 1000000000.0;
 }
 
-NtsArray *nts_process_cpu_usage(void) {
+double nts_process_cpu_usage(NtsArray *values) {
+    double *fields = NULL;
+    int output_error = numeric_output(values, 2, &fields);
+    if (output_error != 0) return (double)output_error;
     uv_rusage_t usage;
     int result = uv_getrusage(&usage);
-    return cpu_usage(result, &usage);
+    if (result != 0) return (double)result;
+    fill_cpu_usage(fields, &usage);
+    return 0;
 }
 
-NtsArray *nts_process_thread_cpu_usage(void) {
+double nts_process_thread_cpu_usage(NtsArray *values) {
+    double *fields = NULL;
+    int output_error = numeric_output(values, 2, &fields);
+    if (output_error != 0) return (double)output_error;
     uv_rusage_t usage;
     int result = uv_getrusage_thread(&usage);
-    return cpu_usage(result, &usage);
+    if (result != 0) return (double)result;
+    fill_cpu_usage(fields, &usage);
+    return 0;
 }
 
-double nts_process_rss(void) {
+double nts_process_rss(NtsArray *values) {
+    double *fields = NULL;
+    int output_error = numeric_output(values, 1, &fields);
+    if (output_error != 0) return (double)output_error;
     size_t rss = 0;
     int result = uv_resident_set_memory(&rss);
-    nts_node_set_errno(result);
-    return result == 0 ? (double)rss : 0;
+    if (result != 0) return (double)result;
+    fields[0] = (double)rss;
+    return 0;
 }
 
-NtsArray *nts_process_memory_usage(void) {
-    NtsArray *answer = number_array(5);
-    double rss = nts_process_rss();
+double nts_process_memory_usage(NtsArray *values) {
+    double *fields = NULL;
+    int output_error = numeric_output(values, 5, &fields);
+    if (output_error != 0) return (double)output_error;
+    size_t rss = 0;
+    int result = uv_resident_set_memory(&rss);
+    if (result != 0) return (double)result;
     double managed = (double)nts_live_bytes();
-    double *fields = NTS_ITEMS(answer, double);
-    fields[0] = rss;
+    fields[0] = (double)rss;
     // NTS providers account managed bytes directly rather than exposing a V8
     // heap capacity. The closest faithful meanings are therefore the bytes
     // currently owned for both heapTotal and heapUsed. NTS arrays live in that
@@ -389,17 +413,17 @@ NtsArray *nts_process_memory_usage(void) {
     fields[2] = managed;
     fields[3] = 0;
     fields[4] = 0;
-    return answer;
+    return 0;
 }
 
-NtsArray *nts_process_resource_usage(void) {
+double nts_process_resource_usage(NtsArray *values) {
+    double *fields = NULL;
+    int output_error = numeric_output(values, 16, &fields);
+    if (output_error != 0) return (double)output_error;
     uv_rusage_t usage;
     int result = uv_getrusage(&usage);
-    NtsArray *answer = number_array(16);
-    nts_node_set_errno(result);
-    if (result != 0) return answer;
+    if (result != 0) return (double)result;
 
-    double *fields = NTS_ITEMS(answer, double);
     fields[0] = 1000000.0 * (double)usage.ru_utime.tv_sec +
                 (double)usage.ru_utime.tv_usec;
     fields[1] = 1000000.0 * (double)usage.ru_stime.tv_sec +
@@ -418,7 +442,7 @@ NtsArray *nts_process_resource_usage(void) {
     fields[13] = (double)usage.ru_nsignals;
     fields[14] = (double)usage.ru_nvcsw;
     fields[15] = (double)usage.ru_nivcsw;
-    return answer;
+    return 0;
 }
 
 double nts_process_available_memory(void) {
