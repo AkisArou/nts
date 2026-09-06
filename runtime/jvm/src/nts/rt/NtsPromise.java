@@ -18,15 +18,20 @@ public final class NtsPromise {
         promise.state = state;
         promise.settled = value;
         int n = promise.waitingCount;
+        // One lookup for the whole settlement rather than one per waiter. The
+        // hidden-parameter calling convention would remove even this; until it
+        // is built and measured, hoisting is the honest version of the same
+        // saving and costs nothing to read.
+        NtsEnv env = NtsEnv.current();
         NtsResumable first = promise.first;
         NtsResumable[] more = promise.more;
         promise.first = null;
         promise.more = null;
         promise.waitingCount = 0;
         if (n != 0) {
-            NtsLoop.microtask(first);
+            NtsEnv.microtask(env, first);
             for (int i = 0; i < n - 1; i++) {
-                NtsLoop.microtask(more[i]);
+                NtsEnv.microtask(env, more[i]);
                 more[i] = null;
             }
         }
@@ -104,7 +109,7 @@ public final class NtsPromise {
     public static void subscribe(NtsPromise promise, NtsResumable frame) {
         if (frame == null) { throw new NullPointerException("resumable frame"); }
         if (promise.state != PENDING) {
-            NtsLoop.microtask(frame);
+            NtsEnv.microtask(NtsEnv.current(), frame);
             return;
         }
         int n = promise.waitingCount;

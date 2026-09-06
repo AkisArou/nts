@@ -337,36 +337,36 @@ public final class RuntimeRegression {
         check(out.length() == 0, "settlement never resumes inline");
         NtsPromise.fulfillNumber(p, 99);
         number(NtsPromise.number(p), 42, "first settlement wins");
-        NtsLoop.drain();
+        NtsEnv.drain(NtsEnv.current());
         StringBuilder expected = new StringBuilder();
         for (int i = 0; i < 100; ++i) { expected.append(i).append(','); }
         equal(out.toString(), expected.toString(), "waiter FIFO including growth");
         out.setLength(0); NtsPromise.subscribe(p, record(out, "later"));
         check(out.length() == 0, "settled subscribe remains async");
-        NtsLoop.drain(); equal(out.toString(), "later", "settled resume");
+        NtsEnv.drain(NtsEnv.current()); equal(out.toString(), "later", "settled resume");
         NtsPromise a = NtsPromise.newPromise(), b = NtsPromise.newPromise(), c = NtsPromise.newPromise();
         double[] values = new double[4];
         NtsPromise all = NtsPromise.all(new NtsPromise[] {a, b, c, a}, values);
-        NtsPromise.fulfillNumber(c, 30); NtsPromise.fulfillNumber(b, 20); NtsLoop.drain();
+        NtsPromise.fulfillNumber(c, 30); NtsPromise.fulfillNumber(b, 20); NtsEnv.drain(NtsEnv.current());
         check(!NtsPromise.isSettled(all), "all waits for remaining input");
-        NtsPromise.fulfillNumber(a, 10); NtsLoop.drain();
+        NtsPromise.fulfillNumber(a, 10); NtsEnv.drain(NtsEnv.current());
         check(NtsPromise.isSettled(all), "all fulfilled");
         equal(Arrays.toString(values), "[10.0, 20.0, 30.0, 10.0]", "all input order and duplicate inputs");
         a = NtsPromise.newPromise(); b = NtsPromise.newPromise();
         Object[] refs = new Object[2];
         all = NtsPromise.all(new NtsPromise[] {a, b}, refs);
-        NtsPromise.fulfillTagged(b, "b", NtsValue.STRING); NtsPromise.fulfillTagged(a, "a", NtsValue.STRING); NtsLoop.drain();
+        NtsPromise.fulfillTagged(b, "b", NtsValue.STRING); NtsPromise.fulfillTagged(a, "a", NtsValue.STRING); NtsEnv.drain(NtsEnv.current());
         equal(Arrays.toString(refs), "[a, b]", "all references input order");
         a = NtsPromise.newPromise(); b = NtsPromise.newPromise();
         NtsPromise race = NtsPromise.race(new NtsPromise[] {a, b});
-        NtsPromise.reject(b, "failure"); NtsPromise.fulfillVoid(a); NtsLoop.drain();
+        NtsPromise.reject(b, "failure"); NtsPromise.fulfillVoid(a); NtsEnv.drain(NtsEnv.current());
         check(NtsPromise.isRejected(race), "race first rejection");
         check(NtsPromise.isSettled(NtsPromise.all(new NtsPromise[0], new double[0])), "empty all fulfilled");
         check(!NtsPromise.isSettled(NtsPromise.race(new NtsPromise[0])), "empty race pending");
         out.setLength(0);
-        NtsLoop.tick(record(out, "T"));
-        NtsLoop.microtask(new NtsResumable() { public void resume() { out.append('M'); NtsLoop.tick(record(out, "t")); } });
-        NtsLoop.microtask(record(out, "m")); NtsLoop.drain();
+        NtsEnv.tick(NtsEnv.current(), record(out, "T"));
+        NtsEnv.microtask(NtsEnv.current(), new NtsResumable() { public void resume() { out.append('M'); NtsEnv.tick(NtsEnv.current(), record(out, "t")); } });
+        NtsEnv.microtask(NtsEnv.current(), record(out, "m")); NtsEnv.drain(NtsEnv.current());
         equal(out.toString(), "TMmt", "tick/microtask checkpoint ordering");
     }
     private static void testTimers() {
@@ -378,32 +378,32 @@ public final class RuntimeRegression {
             final int id = i;
             int delay = random.nextInt(300);
             expected.add(new int[] {delay, i});
-            ids[i] = NtsLoop.postDelayed(new NtsCallback() { public void call() { actual.add(id); } }, delay, false);
+            ids[i] = NtsEnv.postDelayed(NtsEnv.current(), new NtsCallback() { public void call() { actual.add(id); } }, delay, false);
         }
         boolean[] cancelled = new boolean[ids.length];
-        for (int i = 0; i < 3000; ++i) { int at = random.nextInt(ids.length); NtsLoop.cancelDelayed(ids[at]); cancelled[at] = true; }
-        NtsLoop.cancelDelayed(Double.NaN); NtsLoop.cancelDelayed(-1); NtsLoop.cancelDelayed(0.5);
+        for (int i = 0; i < 3000; ++i) { int at = random.nextInt(ids.length); NtsEnv.cancelDelayed(NtsEnv.current(), ids[at]); cancelled[at] = true; }
+        NtsEnv.cancelDelayed(NtsEnv.current(), Double.NaN); NtsEnv.cancelDelayed(NtsEnv.current(), -1); NtsEnv.cancelDelayed(NtsEnv.current(), 0.5);
         Collections.sort(expected, new Comparator<int[]>() {
             public int compare(int[] a, int[] b) { return a[0] != b[0] ? Integer.compare(a[0], b[0]) : Integer.compare(a[1], b[1]); }
         });
-        NtsLoop.drain();
+        NtsEnv.drain(NtsEnv.current());
         int position = 0;
         for (int[] entry : expected) { if (!cancelled[entry[1]]) { check(actual.get(position++) == entry[1], "heap timer order"); } }
         check(position == actual.size(), "timer cancellation count");
         final double[] repeatId = new double[1];
         final int[] fired = new int[1];
-        repeatId[0] = NtsLoop.postDelayed(new NtsCallback() {
-            public void call() { if (++fired[0] == 10000) { NtsLoop.cancelDelayed(repeatId[0]); } }
+        repeatId[0] = NtsEnv.postDelayed(NtsEnv.current(), new NtsCallback() {
+            public void call() { if (++fired[0] == 10000) { NtsEnv.cancelDelayed(NtsEnv.current(), repeatId[0]); } }
         }, 0, true);
-        NtsLoop.drain(); check(fired[0] == 10000, "interval self-cancellation");
+        NtsEnv.drain(NtsEnv.current()); check(fired[0] == 10000, "interval self-cancellation");
         final StringBuilder out = new StringBuilder();
-        NtsLoop.postDelayed(new NtsCallback() { public void call() {
-            out.append('A'); NtsLoop.microtask(record(out, "m"));
-            NtsLoop.postDelayed(new NtsCallback() { public void call() { out.append('C'); } }, 0, false);
+        NtsEnv.postDelayed(NtsEnv.current(), new NtsCallback() { public void call() {
+            out.append('A'); NtsEnv.microtask(NtsEnv.current(), record(out, "m"));
+            NtsEnv.postDelayed(NtsEnv.current(), new NtsCallback() { public void call() { out.append('C'); } }, 0, false);
         } }, 0, false);
-        NtsLoop.postDelayed(new NtsCallback() { public void call() { out.append('B'); } }, 0, false);
-        NtsLoop.drain(); equal(out.toString(), "AmBC", "timer reentrancy and checkpoints");
-        check(!NtsLoop.step(), "empty loop");
+        NtsEnv.postDelayed(NtsEnv.current(), new NtsCallback() { public void call() { out.append('B'); } }, 0, false);
+        NtsEnv.drain(NtsEnv.current()); equal(out.toString(), "AmBC", "timer reentrancy and checkpoints");
+        check(!NtsEnv.step(NtsEnv.current()), "empty loop");
     }
     public static void main(String[] args) throws Exception {
         testBigInt(); System.out.println("bigint randomized tests passed");

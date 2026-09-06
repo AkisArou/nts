@@ -96,7 +96,7 @@ public final class Check {
     private static void showSettled(String name, int at, NtsPromise promise) {
         int budget = 1000000;
         while (!NtsPromise.isSettled(promise) && budget > 0) {
-            if (!NtsLoop.step()) { break; }
+            if (!NtsEnv.step(NtsEnv.current())) { break; }
             --budget;
         }
         if (budget == 0) { System.out.println(name + " " + at + " starved"); return; }

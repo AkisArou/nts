@@ -55,6 +55,14 @@ public final class NtsInbox {
     private Slot head;
     private final AtomicInteger credits;
     private final int capacity;
+    /**
+     * The lane to wake when a completion arrives, or null while nothing parks.
+     *
+     * <p>Set once by the owner before any producer exists, so it needs no
+     * synchronization of its own: the same publication edge that makes the
+     * producer's writes visible makes this visible to the producer.
+     */
+    private volatile Thread owner;
 
     private NtsInbox(int capacity) {
         this.capacity = capacity;
@@ -112,9 +120,19 @@ public final class NtsInbox {
         // `getAndSet` then a volatile write to the previous node's link. The
         // consumer may briefly see a gap between the two, which `drain`
         // handles by stopping rather than by spinning.
-        Slot previous = slot.owner.tail.getAndSet(slot);
+        NtsInbox inbox = slot.owner;
+        Slot previous = inbox.tail.getAndSet(slot);
         previous.next = slot;
+        // Wake a parked owner. `unpark` on a running thread leaves a permit
+        // and costs almost nothing; on a parked one it is the whole point.
+        // A `parked` flag would skip the call in the common case and is a
+        // classic race to get wrong, so it is not here and is not measured.
+        Thread lane = inbox.owner;
+        if (lane != null) { java.util.concurrent.locks.LockSupport.unpark(lane); }
     }
+
+    /** Name the lane that {@link #post} should wake. Called once, by it. */
+    public static void ownedBy(NtsInbox it, Thread lane) { it.owner = lane; }
 
     /**
      * Return a credit without posting: cancellation, or a drop during close.

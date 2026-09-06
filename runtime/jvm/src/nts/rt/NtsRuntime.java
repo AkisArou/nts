@@ -156,9 +156,9 @@ public final class NtsRuntime {
             System.out.flush(); System.err.println("nts: a timer callback that is not callable");
             System.err.flush(); System.exit(1); return 0.0;
         }
-        return NtsLoop.postDelayed((NtsCallback) callback, delayMs, repeating);
+        return NtsEnv.postDelayed(NtsEnv.current(), (NtsCallback) callback, delayMs, repeating);
     }
-    public static void clearTimeout(double id) { NtsLoop.cancelDelayed(id); }
+    public static void clearTimeout(double id) { NtsEnv.cancelDelayed(NtsEnv.current(), id); }
     public static void cellReady(boolean ready, String name) {
         if (ready) { return; }
         System.out.flush(); System.err.println("nts: `" + name + "` was read before its declaration ran");
