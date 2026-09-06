@@ -37,36 +37,20 @@ export interface PushOptions extends PullOptions {
   backpressure?: BackpressurePolicy;
 }
 
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(reason?: unknown): void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = (): void => {};
-  let reject: (reason?: unknown) => void = (): void => {};
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-interface PendingWrite extends Deferred<void> {
+interface PendingWrite extends PromiseWithResolvers<void> {
   readonly chunks: ByteBatch;
 }
 
 class PushQueue {
   readonly #slots = new RingBuffer<ByteBatch>();
   readonly #pendingWrites = new RingBuffer<PendingWrite>();
-  readonly #pendingReads = new RingBuffer<Deferred<IteratorResult<ByteBatch>>>();
-  #pendingDrains = new RingBuffer<Deferred<boolean>>();
+  readonly #pendingReads = new RingBuffer<PromiseWithResolvers<IteratorResult<ByteBatch>>>();
+  #pendingDrains = new RingBuffer<PromiseWithResolvers<boolean>>();
   #writerState: WriterState = "open";
   #consumerState: ConsumerState = "active";
   #error: unknown = null;
   #bytesWritten = 0;
-  #pendingEnd: Deferred<number> | null = null;
+  #pendingEnd: PromiseWithResolvers<number> | null = null;
   readonly #budget: number;
   readonly #backpressure: BackpressurePolicy;
   readonly #signal?: StreamAbortSignal;
@@ -95,14 +79,17 @@ class PushQueue {
     if (
       (this.#backpressure === "strict" || this.#backpressure === "unbounded") &&
       this.#bufferedBytes >= this.#budget
-    ) return false;
+    )
+      return false;
     return true;
   }
 
   canWriteSync(): boolean {
-    return this.#writerState === "open" &&
+    return (
+      this.#writerState === "open" &&
       this.#consumerState === "active" &&
-      this.#bufferedBytes < this.#budget;
+      this.#bufferedBytes < this.#budget
+    );
   }
 
   writeSync(chunks: ByteBatch): boolean {
@@ -144,7 +131,7 @@ class PushQueue {
     if (this.#backpressure === "strict" && this.#pendingWrites.length >= 1) {
       throw new ERR_INVALID_STATE_RANGE(
         "Backpressure violation: too many pending writes. " +
-        "Await each write() call to respect backpressure.",
+          "Await each write() call to respect backpressure.",
       );
     }
     if (this.#backpressure !== "strict" && this.#backpressure !== "unbounded") {
@@ -154,7 +141,7 @@ class PushQueue {
   }
 
   #createPendingWrite(chunks: ByteBatch, signal?: StreamAbortSignal): Promise<void> {
-    const pending = deferred<void>();
+    const pending = Promise.withResolvers<void>();
     const entry: PendingWrite = {
       chunks,
       promise: pending.promise,
@@ -225,14 +212,24 @@ class PushQueue {
     }
   }
 
-  get totalBytesWritten(): number { return this.#bytesWritten; }
-  get error(): unknown { return this.#error; }
-  get writerState(): WriterState { return this.#writerState; }
-  get pendingEndPromise(): Promise<number> | null { return this.#pendingEnd?.promise ?? null; }
-  setPendingEnd(pending: Deferred<number>): void { this.#pendingEnd = pending; }
+  get totalBytesWritten(): number {
+    return this.#bytesWritten;
+  }
+  get error(): unknown {
+    return this.#error;
+  }
+  get writerState(): WriterState {
+    return this.#writerState;
+  }
+  get pendingEndPromise(): Promise<number> | null {
+    return this.#pendingEnd?.promise ?? null;
+  }
+  setPendingEnd(pending: PromiseWithResolvers<number>): void {
+    this.#pendingEnd = pending;
+  }
 
   waitForDrain(): Promise<boolean> {
-    const pending = deferred<boolean>();
+    const pending = Promise.withResolvers<boolean>();
     this.#pendingDrains.push(pending);
     return pending.promise;
   }
@@ -252,7 +249,7 @@ class PushQueue {
       return Promise.resolve({ value: undefined, done: true });
     }
     if (this.#writerState === "errored") return Promise.reject(this.#error);
-    const pending = deferred<IteratorResult<ByteBatch>>();
+    const pending = Promise.withResolvers<IteratorResult<ByteBatch>>();
     this.#pendingReads.push(pending);
     return pending.promise;
   }
@@ -343,13 +340,13 @@ class PushQueue {
 
   #resolvePendingDrains(canWrite: boolean): void {
     const drains = this.#pendingDrains;
-    this.#pendingDrains = new RingBuffer<Deferred<boolean>>();
+    this.#pendingDrains = new RingBuffer<PromiseWithResolvers<boolean>>();
     while (drains.length > 0) drains.shift()?.resolve(canWrite);
   }
 
   #rejectPendingDrains(error: unknown): void {
     const drains = this.#pendingDrains;
-    this.#pendingDrains = new RingBuffer<Deferred<boolean>>();
+    this.#pendingDrains = new RingBuffer<PromiseWithResolvers<boolean>>();
     while (drains.length > 0) drains.shift()?.reject(error);
   }
 
@@ -381,7 +378,9 @@ export class PushWriter {
     return canWrite ? Promise.resolve(true) : this.#queue.waitForDrain();
   }
 
-  get canWrite(): boolean | null { return this.#queue.canWrite; }
+  get canWrite(): boolean | null {
+    return this.#queue.canWrite;
+  }
 
   write(chunk: string | Uint8Array, options?: WriterOptions): Promise<void> {
     const signal = getWriterSignal(options);
@@ -425,7 +424,7 @@ export class PushWriter {
 
     let pending = this.#queue.pendingEndPromise;
     if (pending === null) {
-      const created = deferred<number>();
+      const created = Promise.withResolvers<number>();
       this.#queue.setPendingEnd(created);
       pending = created.promise;
     }
@@ -434,11 +433,8 @@ export class PushWriter {
     return this.#waitForEnd(pending, signal);
   }
 
-  async #waitForEnd(
-    pending: Promise<number>,
-    signal: StreamAbortSignal,
-  ): Promise<number> {
-    const aborted = deferred<number>();
+  async #waitForEnd(pending: Promise<number>, signal: StreamAbortSignal): Promise<number> {
+    const aborted = Promise.withResolvers<number>();
     const onAbort = (): void => aborted.reject(signal.reason ?? new AbortError());
     signal.addEventListener("abort", onAbort, { once: true });
     try {
@@ -505,10 +501,9 @@ export interface PushPair {
 }
 
 function isPushOptions(value: unknown): value is PushOptions {
-  return value !== null &&
-    typeof value === "object" &&
-    !("transform" in value) &&
-    !("write" in value);
+  return (
+    value !== null && typeof value === "object" && !("transform" in value) && !("write" in value)
+  );
 }
 
 export function push(...args: unknown[]): PushPair {
@@ -525,10 +520,11 @@ export function push(...args: unknown[]): PushPair {
   const queue = new PushQueue(options);
   const writer = new PushWriter(queue);
   const rawReadable = new PushReadable(queue);
-  const readable = transforms.length === 0
-    ? rawReadable
-    : options.signal === undefined
-      ? pull(rawReadable, ...transforms)
-      : pull(rawReadable, ...transforms, { signal: options.signal });
+  const readable =
+    transforms.length === 0
+      ? rawReadable
+      : options.signal === undefined
+        ? pull(rawReadable, ...transforms)
+        : pull(rawReadable, ...transforms, { signal: options.signal });
   return { writer, readable };
 }

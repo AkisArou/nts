@@ -10,24 +10,14 @@ import {
   ERR_INVALID_STATE_RANGE,
   ERR_STREAM_WRITE_AFTER_END,
 } from "../../../internal/errors.ts";
-import {
-  validateInteger,
-  validateObject,
-} from "../../../internal/validators.ts";
+import { validateInteger, validateObject } from "../../../internal/validators.ts";
 import { addAbortSignalNoValidate } from "../add-abort-signal.ts";
 import { eos } from "../end-of-stream.ts";
 import { Readable } from "../readable.ts";
 import type { ReadableOptions } from "../readable.ts";
 import { Writable } from "../writable.ts";
-import type {
-  BufferedWrite,
-  WritableOptions,
-  WriteCallback,
-} from "../writable.ts";
-import {
-  classicReadableSource,
-  isClassicReadable,
-} from "./classic-source.ts";
+import type { BufferedWrite, WritableOptions, WriteCallback } from "../writable.ts";
+import { classicReadableSource, isClassicReadable } from "./classic-source.ts";
 import { from } from "./from.ts";
 import { drainableProtocol, hasToAsyncStreamable, toAsyncStreamable } from "./types.ts";
 import {
@@ -49,22 +39,6 @@ declare function nts_enqueue_microtask(callback: () => void): void;
 
 const DEFAULT_READABLE_HIGH_WATER_MARK = 64 * 1024;
 const DEFAULT_WRITABLE_HIGH_WATER_MARK = 16_384;
-
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(reason?: unknown): void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = (): void => {};
-  let reject: (reason?: unknown) => void = (): void => {};
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
 
 const fromReadableCache = new WeakMap<object, AsyncByteStream>();
 
@@ -97,22 +71,22 @@ export interface ToReadableOptions {
   signal?: StreamAbortSignal;
 }
 
-function readableOptions(value: unknown): Required<Pick<ToReadableOptions, "highWaterMark">> &
-  Pick<ToReadableOptions, "signal"> {
+function readableOptions(
+  value: unknown,
+): Required<Pick<ToReadableOptions, "highWaterMark">> & Pick<ToReadableOptions, "signal"> {
   if (value === undefined) return { highWaterMark: DEFAULT_READABLE_HIGH_WATER_MARK };
   validateObject(value, "options");
-  const highWaterMark = "highWaterMark" in value && value.highWaterMark !== undefined
-    ? value.highWaterMark
-    : DEFAULT_READABLE_HIGH_WATER_MARK;
+  const highWaterMark =
+    "highWaterMark" in value && value.highWaterMark !== undefined
+      ? value.highWaterMark
+      : DEFAULT_READABLE_HIGH_WATER_MARK;
   validateInteger(highWaterMark, "options.highWaterMark", 0);
   const signal = "signal" in value ? value.signal : undefined;
   validateReadableSignal(signal);
   return { highWaterMark, signal };
 }
 
-function validateReadableSignal(
-  signal: unknown,
-): asserts signal is StreamAbortSignal | undefined {
+function validateReadableSignal(signal: unknown): asserts signal is StreamAbortSignal | undefined {
   if (
     signal !== undefined &&
     (signal === null || typeof signal !== "object" || !("aborted" in signal))
@@ -124,7 +98,7 @@ function validateReadableSignal(
 class AsyncReadableController {
   readonly #iterator: AsyncIterator<unknown>;
   #readable: Readable | null = null;
-  #backpressure: Deferred<void> | null = null;
+  #backpressure: PromiseWithResolvers<void> | null = null;
   #pumping = false;
   #done = false;
 
@@ -190,7 +164,7 @@ class AsyncReadableController {
             throw new ERR_INVALID_ARG_TYPE("chunk", "Uint8Array", chunk);
           }
           if (!readable.push(chunk)) {
-            this.#backpressure = deferred<void>();
+            this.#backpressure = Promise.withResolvers<void>();
             await this.#backpressure.promise;
             if (this.#done) return;
           }
@@ -302,10 +276,7 @@ interface ClassicWritableLike {
   readonly writableObjectMode?: boolean;
   write(chunk: Uint8Array): boolean;
   end(): unknown;
-  on<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
+  on<Args extends unknown[]>(event: string, listener: (...args: Args) => unknown): unknown;
   removeListener<Args extends unknown[]>(
     event: string,
     listener: (...args: Args) => unknown,
@@ -316,14 +287,16 @@ interface ClassicWritableLike {
 }
 
 function isClassicWritable(value: unknown): value is ClassicWritableLike {
-  return value !== null &&
+  return (
+    value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     "write" in value &&
     typeof value.write === "function" &&
     "on" in value &&
     typeof value.on === "function" &&
     "removeListener" in value &&
-    typeof value.removeListener === "function";
+    typeof value.removeListener === "function"
+  );
 }
 
 class DrainWaiter {
@@ -347,14 +320,10 @@ class ClassicWritableWriter implements AsyncWriter {
   readonly #onDrain = (): void => this.#settleWaiters(true);
   readonly #onError = (error: unknown): void => this.#settleWaiters(false, error);
 
-  constructor(
-    writable: ClassicWritableLike,
-    backpressure: BackpressurePolicy,
-  ) {
+  constructor(writable: ClassicWritableLike, backpressure: BackpressurePolicy) {
     this.#writable = writable;
     this.#backpressure = backpressure;
-    this.#highWaterMark = writable.writableHighWaterMark ??
-      DEFAULT_WRITABLE_HIGH_WATER_MARK;
+    this.#highWaterMark = writable.writableHighWaterMark ?? DEFAULT_WRITABLE_HIGH_WATER_MARK;
   }
 
   get canWrite(): boolean | null {
@@ -370,10 +339,7 @@ class ClassicWritableWriter implements AsyncWriter {
     return false;
   }
 
-  write(
-    chunk: string | Uint8Array,
-    options?: WriterOptions,
-  ): Promise<void> {
+  write(chunk: string | Uint8Array, options?: WriterOptions): Promise<void> {
     getWriterSignal(options);
     if (!this.#isWritable()) {
       return Promise.reject(new ERR_STREAM_WRITE_AFTER_END());
@@ -387,10 +353,12 @@ class ClassicWritableWriter implements AsyncWriter {
     }
 
     if (this.#backpressure === "strict" && this.#isFull()) {
-      return Promise.reject(new ERR_INVALID_STATE_RANGE(
-        "Backpressure violation: buffer is full. " +
-        "Await each write() call to respect backpressure.",
-      ));
+      return Promise.reject(
+        new ERR_INVALID_STATE_RANGE(
+          "Backpressure violation: buffer is full. " +
+            "Await each write() call to respect backpressure.",
+        ),
+      );
     }
     if (this.#backpressure === "drop-newest" && this.#isFull()) {
       this.#totalBytes += bytes.byteLength;
@@ -417,10 +385,12 @@ class ClassicWritableWriter implements AsyncWriter {
       return Promise.reject(new ERR_STREAM_WRITE_AFTER_END());
     }
     if (this.#backpressure === "strict" && this.#isFull()) {
-      return Promise.reject(new ERR_INVALID_STATE_RANGE(
-        "Backpressure violation: buffer is full. " +
-        "Await each write() call to respect backpressure.",
-      ));
+      return Promise.reject(
+        new ERR_INVALID_STATE_RANGE(
+          "Backpressure violation: buffer is full. " +
+            "Await each write() call to respect backpressure.",
+        ),
+      );
     }
     if (this.#backpressure === "drop-newest" && this.#isFull()) {
       for (let i = 0; i < chunks.length; i++) {
@@ -459,7 +429,7 @@ class ClassicWritableWriter implements AsyncWriter {
       return Promise.resolve(this.#totalBytes);
     }
 
-    const pending = deferred<number>();
+    const pending = Promise.withResolvers<number>();
     if (!this.#writable.writableEnded) this.#writable.end();
     eos(this.#writable, { writable: true, readable: false }, (error) => {
       this.#cleanup(error);
@@ -493,18 +463,20 @@ class ClassicWritableWriter implements AsyncWriter {
     if (!this.#isWritable()) return null;
     if (!this.#isFull()) return Promise.resolve(true);
     return new Promise<boolean>((resolve) => {
-      this.#waiters.push(new DrainWaiter(
-        (): void => resolve(true),
-        (): void => resolve(false),
-      ));
+      this.#waiters.push(
+        new DrainWaiter(
+          (): void => resolve(true),
+          (): void => resolve(false),
+        ),
+      );
       this.#installListeners();
     });
   }
 
   #isWritable(): boolean {
-    return !this.#writable.destroyed &&
-      !this.#writable.writableFinished &&
-      !this.#writable.writableEnded;
+    return (
+      !this.#writable.destroyed && !this.#writable.writableFinished && !this.#writable.writableEnded
+    );
   }
 
   #isFull(): boolean {
@@ -524,11 +496,8 @@ class ClassicWritableWriter implements AsyncWriter {
   }
 
   #waitForDrain(): Promise<void> {
-    const pending = deferred<void>();
-    this.#waiters.push(new DrainWaiter(
-      (): void => pending.resolve(undefined),
-      pending.reject,
-    ));
+    const pending = Promise.withResolvers<void>();
+    this.#waiters.push(new DrainWaiter((): void => pending.resolve(undefined), pending.reject));
     this.#installListeners();
     return pending.promise;
   }
@@ -566,10 +535,7 @@ const fromWritableCache = new WeakMap<
 >();
 
 /** Convert a classic Writable into a cached bytes-only Writer adapter. */
-export function fromWritable(
-  writable: unknown,
-  options: unknown = {},
-): ClassicWritableWriter {
+export function fromWritable(writable: unknown, options: unknown = {}): ClassicWritableWriter {
   if (!isClassicWritable(writable)) {
     throw new ERR_INVALID_ARG_TYPE("writable", "Writable", writable);
   }
@@ -579,9 +545,7 @@ export function fromWritable(
   validateBackpressure(backpressure);
 
   if (writable.writableObjectMode) {
-    throw new ERR_INVALID_STATE(
-      "Cannot create a stream/iter Writer from an object-mode Writable",
-    );
+    throw new ERR_INVALID_STATE("Cannot create a stream/iter Writer from an object-mode Writable");
   }
   if (backpressure === "drop-oldest") {
     throw new ERR_INVALID_ARG_VALUE(
@@ -616,11 +580,7 @@ export function toWritable(writer: unknown): Writable {
     throw new ERR_INVALID_ARG_TYPE("writer", "Writer", writer);
   }
 
-  const write = (
-    chunk: unknown,
-    encoding: string | undefined,
-    callback: WriteCallback,
-  ): void => {
+  const write = (chunk: unknown, encoding: string | undefined, callback: WriteCallback): void => {
     const bytes = writerChunk(chunk, encoding);
     if (writer.writeSync !== undefined) {
       try {
@@ -634,10 +594,7 @@ export function toWritable(writer: unknown): Writable {
       }
     }
     try {
-      Promise.resolve(writer.write(bytes)).then(
-        (): void => callback(),
-        callback,
-      );
+      Promise.resolve(writer.write(bytes)).then((): void => callback(), callback);
     } catch (error) {
       callback(error);
     }
@@ -665,10 +622,7 @@ export function toWritable(writer: unknown): Writable {
       if (writer.writev === undefined) {
         throw new ERR_INVALID_STATE("Writer does not implement writev");
       }
-      Promise.resolve(writer.writev(chunks)).then(
-        (): void => callback(),
-        callback,
-      );
+      Promise.resolve(writer.writev(chunks)).then((): void => callback(), callback);
     } catch (error) {
       callback(error);
     }
@@ -691,10 +645,7 @@ export function toWritable(writer: unknown): Writable {
       }
     }
     try {
-      Promise.resolve(writer.end()).then(
-        (): void => callback(),
-        callback,
-      );
+      Promise.resolve(writer.end()).then((): void => callback(), callback);
     } catch (error) {
       callback(error);
     }

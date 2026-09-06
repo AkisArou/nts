@@ -138,10 +138,7 @@ interface NodeReadable {
   readonly readableHighWaterMark?: number;
   pause(): unknown;
   resume(): unknown;
-  on<Args extends unknown[]>(
-    event: string | symbol,
-    listener: (...args: Args) => unknown,
-  ): unknown;
+  on<Args extends unknown[]>(event: string | symbol, listener: (...args: Args) => unknown): unknown;
   destroy(error?: unknown): unknown;
 }
 
@@ -149,10 +146,7 @@ interface NodeWritable {
   readonly writableObjectMode?: boolean;
   readonly writableHighWaterMark?: number;
   readonly writableNeedDrain?: boolean;
-  on<Args extends unknown[]>(
-    event: string | symbol,
-    listener: (...args: Args) => unknown,
-  ): unknown;
+  on<Args extends unknown[]>(event: string | symbol, listener: (...args: Args) => unknown): unknown;
   write(chunk: unknown): boolean;
   end(): unknown;
   destroy(error?: unknown): unknown;
@@ -162,63 +156,76 @@ type ReadableConstructor = new (options?: ReadableOptions) => Readable;
 type WritableConstructor = new (options?: WritableOptions) => Writable;
 type DuplexConstructor = new (options?: DuplexOptions) => Duplex;
 
-interface Deferred {
-  readonly promise: Promise<void>;
-  resolve(): void;
-  reject(reason?: unknown): void;
-}
-
-function deferred(): Deferred {
-  let resolvePromise: (() => void) | null = null;
-  let rejectPromise: ((reason?: unknown) => void) | null = null;
-  const promise = new Promise<void>((resolve, reject) => {
-    resolvePromise = resolve;
-    rejectPromise = reject;
-  });
-  return {
-    promise,
-    resolve: (): void => resolvePromise?.(),
-    reject: (reason?: unknown): void => rejectPromise?.(reason),
-  };
-}
-
 function isWebReadResult(value: unknown): value is WebReadResult {
-  return value !== null && typeof value === "object" &&
-    "done" in value && typeof value.done === "boolean";
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "done" in value &&
+    typeof value.done === "boolean"
+  );
 }
 
 function isWebReader(value: unknown): value is WebReader {
-  return value !== null && typeof value === "object" &&
-    "closed" in value && value.closed instanceof Promise &&
-    "read" in value && typeof value.read === "function" &&
-    "cancel" in value && typeof value.cancel === "function";
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "closed" in value &&
+    value.closed instanceof Promise &&
+    "read" in value &&
+    typeof value.read === "function" &&
+    "cancel" in value &&
+    typeof value.cancel === "function"
+  );
 }
 
 function isWebWriter(value: unknown): value is WebWriter {
-  return value !== null && typeof value === "object" &&
-    "ready" in value && value.ready instanceof Promise &&
-    "closed" in value && value.closed instanceof Promise &&
-    "write" in value && typeof value.write === "function" &&
-    "close" in value && typeof value.close === "function" &&
-    "abort" in value && typeof value.abort === "function";
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "ready" in value &&
+    value.ready instanceof Promise &&
+    "closed" in value &&
+    value.closed instanceof Promise &&
+    "write" in value &&
+    typeof value.write === "function" &&
+    "close" in value &&
+    typeof value.close === "function" &&
+    "abort" in value &&
+    typeof value.abort === "function"
+  );
 }
 
 function isNodeReadable(value: unknown): value is NodeReadable {
-  return value !== null && typeof value === "object" &&
-    "_readableState" in value && value._readableState !== null &&
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "_readableState" in value &&
+    value._readableState !== null &&
     typeof value._readableState === "object" &&
-    "pause" in value && typeof value.pause === "function" &&
-    "resume" in value && typeof value.resume === "function" &&
-    "on" in value && typeof value.on === "function" &&
-    "destroy" in value && typeof value.destroy === "function";
+    "pause" in value &&
+    typeof value.pause === "function" &&
+    "resume" in value &&
+    typeof value.resume === "function" &&
+    "on" in value &&
+    typeof value.on === "function" &&
+    "destroy" in value &&
+    typeof value.destroy === "function"
+  );
 }
 
 function isNodeWritable(value: unknown): value is NodeWritable {
-  return value !== null && typeof value === "object" &&
-    "write" in value && typeof value.write === "function" &&
-    "end" in value && typeof value.end === "function" &&
-    "on" in value && typeof value.on === "function" &&
-    "destroy" in value && typeof value.destroy === "function";
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "write" in value &&
+    typeof value.write === "function" &&
+    "end" in value &&
+    typeof value.end === "function" &&
+    "on" in value &&
+    typeof value.on === "function" &&
+    "destroy" in value &&
+    typeof value.destroy === "function"
+  );
 }
 
 function byteSize(chunk: unknown): number {
@@ -256,10 +263,7 @@ export function newReadableFromWeb(
   let closed = false;
   let readable: Readable;
 
-  const finishDestroy = (
-    error: unknown,
-    callback: (error?: unknown) => void,
-  ): void => {
+  const finishDestroy = (error: unknown, callback: (error?: unknown) => void): void => {
     try {
       callback(error);
     } catch (thrown) {
@@ -345,10 +349,10 @@ export function newReadableToWeb(
   const highWaterMark = streamReadable.readableHighWaterMark;
   const strategy = byteStream
     ? { highWaterMark }
-    : options?.strategy ?? {
-      highWaterMark,
-      size: objectMode ? (): number => 1 : byteSize,
-    };
+    : (options?.strategy ?? {
+        highWaterMark,
+        size: objectMode ? (): number => 1 : byteSize,
+      });
   const web = new ReadableStream(source, strategy);
 
   let cleanup = (): void => {};
@@ -373,9 +377,7 @@ export function newReadableToWeb(
     streamReadable.pause();
     streamReadable.on("data", (value: unknown) => {
       if (controller === null) return;
-      const chunk = value instanceof Uint8Array && !objectMode
-        ? new Uint8Array(value)
-        : value;
+      const chunk = value instanceof Uint8Array && !objectMode ? new Uint8Array(value) : value;
       controller.enqueue(chunk);
       if ((controller.desiredSize ?? 1) <= 0) streamReadable.pause();
     });
@@ -425,18 +427,20 @@ export function newWritableFromWeb(
       _encoding: string | undefined,
       callback: (error?: unknown) => void,
     ): void => {
-      writer.ready.then(() => writer.write(chunk)).then(
-        () => finish(callback),
-        (error: unknown) => finish(callback, error),
-      );
+      writer.ready
+        .then(() => writer.write(chunk))
+        .then(
+          () => finish(callback),
+          (error: unknown) => finish(callback, error),
+        );
     },
     writev: (chunks: BufferedWrite[], callback: (error?: unknown) => void): void => {
-      writer.ready.then(
-        () => Promise.all(chunks.map((entry) => writer.write(entry.chunk))),
-      ).then(
-        () => finish(callback),
-        (error: unknown) => finish(callback, error),
-      );
+      writer.ready
+        .then(() => Promise.all(chunks.map((entry) => writer.write(entry.chunk))))
+        .then(
+          () => finish(callback),
+          (error: unknown) => finish(callback, error),
+        );
     },
     destroy: (error: unknown, callback: (error?: unknown) => void): void => {
       if (closed) {
@@ -490,8 +494,8 @@ export function newWritableToWeb(streamWritable: unknown): WebWritableStream {
   }
 
   let controller: WritableController | null = null;
-  let backpressure: Deferred | null = null;
-  let closing: Deferred | null = null;
+  let backpressure: PromiseWithResolvers<void> | null = null;
+  let closing: PromiseWithResolvers<void> | null = null;
 
   const onDrain = (): void => {
     backpressure?.resolve();
@@ -525,7 +529,7 @@ export function newWritableToWeb(streamWritable: unknown): WebWritableStream {
       let chunk = value;
       if (!objectMode && chunk instanceof ArrayBuffer) chunk = new Uint8Array(chunk);
       if (streamWritable.writableNeedDrain || !streamWritable.write(chunk)) {
-        const wait = deferred();
+        const wait = Promise.withResolvers<void>();
         backpressure = wait;
         if (!streamWritable.writableNeedDrain) wait.resolve();
         return wait.promise.then(() => {
@@ -538,7 +542,7 @@ export function newWritableToWeb(streamWritable: unknown): WebWritableStream {
     },
     close: (): Promise<void> => {
       if (closing === null && !isWritableEnded(streamWritable)) {
-        closing = deferred();
+        closing = Promise.withResolvers<void>();
         streamWritable.end();
         return closing.promise;
       }
@@ -628,18 +632,20 @@ export function newDuplexFromWeb(
       _encoding: string | undefined,
       callback: (error?: unknown) => void,
     ): void => {
-      writer.ready.then(() => writer.write(chunk)).then(
-        () => finish(callback),
-        (error: unknown) => finish(callback, error),
-      );
+      writer.ready
+        .then(() => writer.write(chunk))
+        .then(
+          () => finish(callback),
+          (error: unknown) => finish(callback, error),
+        );
     },
     writev: (chunks: BufferedWrite[], callback: (error?: unknown) => void): void => {
-      writer.ready.then(
-        () => Promise.all(chunks.map((entry) => writer.write(entry.chunk))),
-      ).then(
-        () => finish(callback),
-        (error: unknown) => finish(callback, error),
-      );
+      writer.ready
+        .then(() => Promise.all(chunks.map((entry) => writer.write(entry.chunk))))
+        .then(
+          () => finish(callback),
+          (error: unknown) => finish(callback, error),
+        );
     },
     final: (callback: (error?: unknown) => void): void => {
       if (writableClosed) {
@@ -655,7 +661,9 @@ export function newDuplexFromWeb(
       const cancel = readableClosed ? Promise.resolve() : reader.cancel(error);
       const close = writableClosed
         ? Promise.resolve()
-        : error == null ? writer.close() : writer.abort(error);
+        : error == null
+          ? writer.close()
+          : writer.abort(error);
       Promise.allSettled([cancel, close]).then(() => finish(callback, error));
     },
   });
@@ -682,13 +690,12 @@ export function newDuplexFromWeb(
   return duplex;
 }
 
-export function newDuplexToWeb(
-  duplex: unknown,
-  options?: DuplexToWebOptions,
-): WebDuplexPair {
+export function newDuplexToWeb(duplex: unknown, options?: DuplexToWebOptions): WebDuplexPair {
   if (
-    duplex === null || typeof duplex !== "object" ||
-    !("_readableState" in duplex) || !("_writableState" in duplex)
+    duplex === null ||
+    typeof duplex !== "object" ||
+    !("_readableState" in duplex) ||
+    !("_writableState" in duplex)
   ) {
     throw new ERR_INVALID_ARG_TYPE("duplex", "stream.Duplex", duplex);
   }

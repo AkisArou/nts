@@ -8,18 +8,11 @@ import {
   ERR_INVALID_STATE_RANGE,
   ERR_INVALID_STATE_TYPE,
 } from "../../../internal/errors.ts";
-import {
-  validateInteger,
-  validateObject,
-} from "../../../internal/validators.ts";
+import { validateInteger, validateObject } from "../../../internal/validators.ts";
 import { pull } from "./pull.ts";
 import { from } from "./from.ts";
 import { RingBuffer } from "./ring-buffer.ts";
-import {
-  broadcastProtocol,
-  drainableProtocol,
-  hasBroadcastProtocol,
-} from "./types.ts";
+import { broadcastProtocol, drainableProtocol, hasBroadcastProtocol } from "./types.ts";
 import {
   type AsyncByteStream,
   type BackpressurePolicy,
@@ -40,31 +33,13 @@ const resolvedVoid = Promise.resolve();
 const doneResult: IteratorResult<ByteBatch> = { value: undefined, done: true };
 const donePromise = Promise.resolve(doneResult);
 
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  resolve(value: T): void;
-  reject(reason?: unknown): void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve: (value: T) => void = (): void => {};
-  let reject: (reason?: unknown) => void = (): void => {};
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
 interface ParsedBroadcastOptions {
   readonly budget: number;
   readonly backpressure: BackpressurePolicy;
   readonly signal?: StreamAbortSignal;
 }
 
-function validateSignal(
-  signal: unknown,
-): asserts signal is StreamAbortSignal | undefined {
+function validateSignal(signal: unknown): asserts signal is StreamAbortSignal | undefined {
   if (
     signal !== undefined &&
     (signal === null || typeof signal !== "object" || !("aborted" in signal))
@@ -75,13 +50,13 @@ function validateSignal(
 
 function parseOptions(options: unknown): ParsedBroadcastOptions {
   validateObject(options, "options");
-  const budget = "budget" in options && options.budget !== undefined
-    ? options.budget
-    : DEFAULT_BUDGET;
+  const budget =
+    "budget" in options && options.budget !== undefined ? options.budget : DEFAULT_BUDGET;
   validateInteger(budget, "options.budget", MINIMUM_BUDGET);
-  const backpressure = "backpressure" in options && options.backpressure !== undefined
-    ? options.backpressure
-    : "strict";
+  const backpressure =
+    "backpressure" in options && options.backpressure !== undefined
+      ? options.backpressure
+      : "strict";
   validateBackpressure(backpressure);
   const signal = "signal" in options ? options.signal : undefined;
   validateSignal(signal);
@@ -98,7 +73,7 @@ class BroadcastConsumerState {
   cursor: number;
   resolve: ((result: IteratorResult<ByteBatch>) => void) | null = null;
   reject: ((reason?: unknown) => void) | null = null;
-  readonly pending = new RingBuffer<Deferred<IteratorResult<ByteBatch>>>();
+  readonly pending = new RingBuffer<PromiseWithResolvers<IteratorResult<ByteBatch>>>();
   detached = false;
 
   constructor(cursor: number) {
@@ -222,7 +197,7 @@ export class BroadcastController {
       return donePromise;
     }
 
-    const pending = deferred<IteratorResult<ByteBatch>>();
+    const pending = Promise.withResolvers<IteratorResult<ByteBatch>>();
     if (state.resolve !== null) {
       state.pending.push(pending);
     } else {
@@ -282,16 +257,11 @@ export class BroadcastController {
     if (size === 0) return true;
 
     if (this.#bufferedBytes >= this.#options.budget) {
-      if (
-        this.#options.backpressure === "strict" ||
-        this.#options.backpressure === "unbounded"
-      ) return false;
+      if (this.#options.backpressure === "strict" || this.#options.backpressure === "unbounded")
+        return false;
       if (this.#options.backpressure === "drop-newest") return true;
 
-      while (
-        this.#bufferedBytes >= this.#options.budget &&
-        this.#buffer.length > 0
-      ) {
+      while (this.#bufferedBytes >= this.#options.budget && this.#buffer.length > 0) {
         const removed = this.#buffer.shift();
         if (removed !== undefined) this.#bufferedBytes -= batchByteSize(removed);
         this.#bufferStart++;
@@ -355,10 +325,10 @@ export class BroadcastController {
   canWrite(): boolean | null {
     if (this.#ended || this.#cancelled) return null;
     if (
-      (this.#options.backpressure === "strict" ||
-        this.#options.backpressure === "unbounded") &&
+      (this.#options.backpressure === "strict" || this.#options.backpressure === "unbounded") &&
       this.#bufferedBytes >= this.#options.budget
-    ) return false;
+    )
+      return false;
     return true;
   }
 
@@ -367,10 +337,8 @@ export class BroadcastController {
     if (batch === undefined) throw new Error("broadcast buffer cursor is out of range");
     const cursor = state.cursor;
     state.cursor++;
-    if (
-      cursor === this.#cachedMinCursor &&
-      --this.#cachedMinCursorConsumers === 0
-    ) this.#tryTrimBuffer();
+    if (cursor === this.#cachedMinCursor && --this.#cachedMinCursorConsumers === 0)
+      this.#tryTrimBuffer();
     return batch;
   }
 
@@ -416,10 +384,8 @@ export class BroadcastController {
     }
     this.#buffer.trimFront(trimCount);
     this.#bufferStart = this.#cachedMinCursor;
-    if (
-      this.#onBufferDrained !== null &&
-      this.#bufferedBytes < this.#options.budget
-    ) this.#onBufferDrained();
+    if (this.#onBufferDrained !== null && this.#bufferedBytes < this.#options.budget)
+      this.#onBufferDrained();
   }
 
   #recomputeMinCursor(): void {
@@ -452,10 +418,7 @@ class DrainWaiter {
   readonly resolve: (canWrite: boolean) => void;
   readonly reject: (reason?: unknown) => void;
 
-  constructor(
-    resolve: (canWrite: boolean) => void,
-    reject: (reason?: unknown) => void,
-  ) {
+  constructor(resolve: (canWrite: boolean) => void, reject: (reason?: unknown) => void) {
     this.resolve = resolve;
     this.reject = reject;
   }
@@ -464,13 +427,13 @@ class DrainWaiter {
 class PendingBroadcastWrite {
   chunks: ByteBatch | null;
   readonly promise: Promise<void>;
-  readonly #deferred: Deferred<void>;
+  readonly #deferred: PromiseWithResolvers<void>;
   #signal: StreamAbortSignal | null = null;
   #onAbort: (() => void) | null = null;
 
   constructor(chunks: ByteBatch) {
     this.chunks = chunks;
-    this.#deferred = deferred<void>();
+    this.#deferred = Promise.withResolvers<void>();
     this.promise = this.#deferred.promise;
   }
 
@@ -526,7 +489,7 @@ export class BroadcastWriter {
     const canWrite = this.canWrite;
     if (canWrite === null) return null;
     if (canWrite) return Promise.resolve(true);
-    const pending = deferred<boolean>();
+    const pending = Promise.withResolvers<boolean>();
     this.#pendingDrains.push(new DrainWaiter(pending.resolve, pending.reject));
     return pending.promise;
   }
@@ -546,10 +509,7 @@ export class BroadcastWriter {
     return this.#writeSlow([chunk], signal);
   }
 
-  writev(
-    chunks: readonly (string | Uint8Array)[],
-    options?: WriterOptions,
-  ): Promise<void> {
+  writev(chunks: readonly (string | Uint8Array)[], options?: WriterOptions): Promise<void> {
     if (!Array.isArray(chunks)) {
       throw new ERR_INVALID_ARG_TYPE("chunks", "Array", chunks);
     }
@@ -648,13 +608,10 @@ export class BroadcastWriter {
       this.#addWrittenBytes(converted);
       return;
     }
-    if (
-      this.#broadcast.backpressurePolicy === "strict" &&
-      this.#pendingWrites.length >= 1
-    ) {
+    if (this.#broadcast.backpressurePolicy === "strict" && this.#pendingWrites.length >= 1) {
       throw new ERR_INVALID_STATE_RANGE(
         "Backpressure violation: too many pending writes. " +
-        "Await each write() call to respect backpressure.",
+          "Await each write() call to respect backpressure.",
       );
     }
     const pending = new PendingBroadcastWrite(converted);
@@ -760,10 +717,7 @@ function broadcastFrom(
   input: unknown,
   options?: unknown,
 ): BroadcastPair<BroadcastWriter, BroadcastController>;
-function broadcastFrom(
-  input: unknown,
-  options?: unknown,
-): BroadcastPair<object, object> {
+function broadcastFrom(input: unknown, options?: unknown): BroadcastPair<object, object> {
   if (hasBroadcastProtocol(input)) {
     const result = input[broadcastProtocol](options);
     if (result === null || typeof result !== "object") {
@@ -778,9 +732,10 @@ function broadcastFrom(
 
   const source = from(input);
   const result = broadcast(options);
-  const signal = options !== null && typeof options === "object" && "signal" in options
-    ? options.signal
-    : undefined;
+  const signal =
+    options !== null && typeof options === "object" && "signal" in options
+      ? options.signal
+      : undefined;
   validateSignal(signal);
   void pumpBroadcast(source, result.writer, signal).catch((): void => {});
   return result;
