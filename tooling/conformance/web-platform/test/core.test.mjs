@@ -2662,6 +2662,87 @@ test("Iterator always releases its lock when underlying cancellation rejects", a
   await assert.rejects(iterator.return(), /cancel failed/);
   assert.equal(stream.locked, false);
 });
+test("Readable stream iteration serializes requests and releases its lock synchronously", async () => {
+  const releases = [];
+  let next = 0;
+  const stream = new ReadableStream(
+    {
+      async pull(controller) {
+        const release = Promise.withResolvers();
+        releases.push(release);
+        await release.promise;
+        controller.enqueue(next++);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const iterator = stream.values();
+  const first = iterator.next();
+  const second = iterator.next();
+  await tick();
+  assert.equal(releases.length, 1);
+
+  releases[0].resolve();
+  assert.deepEqual(await first, { done: false, value: 0 });
+  await tick();
+  assert.equal(releases.length, 2);
+  releases[1].resolve();
+  assert.deepEqual(await second, { done: false, value: 1 });
+  await tick();
+
+  const returned = iterator.return("finished");
+  assert.equal(stream.locked, false);
+  assert.deepEqual(await returned, { done: true, value: "finished" });
+  assert.deepEqual(await iterator.next(), { done: true, value: undefined });
+});
+test("ReadableStream.from is demand-driven and closes its iterator with the cancel reason", async () => {
+  const returnGate = Promise.withResolvers();
+  const cancelReason = new Error("cancelled");
+  const events = [];
+  const iterator = {
+    next() {
+      assert.equal(this, iterator);
+      events.push("next");
+      return Promise.resolve({ done: false, value: events.length });
+    },
+    async return(reason) {
+      assert.equal(this, iterator);
+      events.push(["return", reason]);
+      await returnGate.promise;
+      return { done: true };
+    },
+  };
+  const iterable = {
+    [Symbol.asyncIterator]() {
+      assert.equal(this, iterable);
+      events.push("open");
+      return iterator;
+    },
+  };
+
+  const stream = ReadableStream.from(iterable);
+  assert.deepEqual(events, ["open"]);
+  await tick();
+  assert.deepEqual(events, ["open"]);
+  const reader = stream.getReader();
+  assert.deepEqual(await reader.read(), { done: false, value: 2 });
+
+  let canceled = false;
+  const cancellation = reader.cancel(cancelReason).then(() => {
+    canceled = true;
+  });
+  await tick();
+  assert.equal(canceled, false);
+  assert.deepEqual(events, ["open", "next", ["return", cancelReason]]);
+  returnGate.resolve();
+  await cancellation;
+  assert.equal(canceled, true);
+
+  const promisedValues = ReadableStream.from([Promise.resolve("a"), Promise.resolve("b")]);
+  const values = [];
+  for await (const value of promisedValues) values.push(value);
+  assert.deepEqual(values, ["a", "b"]);
+});
 test("Response.clone retains an immutable redirect header guard", () => {
   const clone = makeRedirectResponse("https://example.test/").clone();
   assert.throws(() => clone.headers.set("x", "y"));

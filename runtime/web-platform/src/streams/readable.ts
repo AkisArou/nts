@@ -38,6 +38,29 @@ export interface ReadableStreamGetReaderOptions {
   mode?: unknown;
 }
 
+export interface ReadableStreamIteratorOptions {
+  preventCancel?: unknown;
+}
+
+type IteratorResultLike<T> =
+  | { readonly done?: false; readonly value: T }
+  | { readonly done: true; readonly value?: unknown };
+
+interface IteratorLike<T> {
+  next(this: IteratorLike<T>): IteratorResultLike<T> | PromiseLike<IteratorResultLike<T>>;
+  return?:
+    | ((
+        this: IteratorLike<T>,
+        reason: unknown,
+      ) => IteratorResultLike<unknown> | PromiseLike<IteratorResultLike<unknown>>)
+    | null;
+}
+
+interface ReadableStreamFromIterable<T> {
+  [Symbol.asyncIterator]?: ((this: ReadableStreamFromIterable<T>) => IteratorLike<T>) | null;
+  [Symbol.iterator]?: ((this: ReadableStreamFromIterable<T>) => IteratorLike<T>) | null;
+}
+
 export interface StreamPipeOptions {
   preventAbort?: unknown;
   preventCancel?: unknown;
@@ -153,6 +176,34 @@ export class ReadableStream<T> {
       },
       (error) => this.fail(error),
     );
+  }
+
+  static from<T>(asyncIterable: AsyncIterable<T> | Iterable<T | PromiseLike<T>>): ReadableStream<T>;
+  static from<T>(asyncIterable: ReadableStreamFromIterable<T>): ReadableStream<T> {
+    const asyncIteratorMethod = asyncIterable[Symbol.asyncIterator];
+    if (asyncIteratorMethod !== undefined && asyncIteratorMethod !== null) {
+      if (typeof asyncIteratorMethod !== "function") {
+        throw new TypeError("ReadableStream.from input has a non-callable async iterator");
+      }
+      const iterator = asyncIteratorMethod.call(asyncIterable);
+      if (iterator === null || typeof iterator !== "object") {
+        throw new TypeError("ReadableStream.from async iterator must be an object");
+      }
+      return readableStreamFromIterator(iterator, true);
+    }
+
+    const iteratorMethod = asyncIterable[Symbol.iterator];
+    if (iteratorMethod === undefined || iteratorMethod === null) {
+      throw new TypeError("ReadableStream.from input must be an async iterable or iterable");
+    }
+    if (typeof iteratorMethod !== "function") {
+      throw new TypeError("ReadableStream.from input has a non-callable iterator");
+    }
+    const iterator = iteratorMethod.call(asyncIterable);
+    if (iterator === null || typeof iterator !== "object") {
+      throw new TypeError("ReadableStream.from iterator must be an object");
+    }
+    return readableStreamFromIterator(iterator, false);
   }
 
   get locked(): boolean {
@@ -413,36 +464,202 @@ export class ReadableStream<T> {
   tee(): [ReadableStream<T>, ReadableStream<T>] {
     return tee(this);
   }
-  async *values(options: { preventCancel?: boolean } = {}): AsyncGenerator<T, void, unknown> {
-    const reader = this.getReader();
-    let ended = false;
-    try {
-      while (true) {
-        const result = await reader.read();
-        if (result.done) {
-          ended = true;
-          return;
-        }
-        yield result.value;
-      }
-    } finally {
-      try {
-        if (!ended && !options.preventCancel) {
-          await reader.cancel();
-        }
-      } finally {
-        reader.releaseLock();
-      }
-    }
+
+  values(options: ReadableStreamIteratorOptions | null = {}): AsyncIterableIterator<T> {
+    requireDictionary(options, "ReadableStream iterator options");
+    const preventCancel = options === null ? false : coerceToBoolean(options.preventCancel);
+    return new ReadableStreamAsyncIterator(this, preventCancel);
   }
 
-  [Symbol.asyncIterator](): AsyncGenerator<T, void, unknown> {
-    return this.values();
+  [Symbol.asyncIterator](
+    options: ReadableStreamIteratorOptions | null = {},
+  ): AsyncIterableIterator<T> {
+    return this.values(options);
   }
 
   get [Symbol.toStringTag](): "ReadableStream" {
     return "ReadableStream";
   }
+}
+
+type AsyncIteratorRequest<T> =
+  | {
+      readonly kind: "next";
+      readonly result: PromiseWithResolvers<IteratorResult<T, unknown>>;
+    }
+  | {
+      readonly kind: "return";
+      readonly value: unknown;
+      readonly result: PromiseWithResolvers<IteratorResult<T, unknown>>;
+    };
+
+class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
+  #stream: ReadableStream<T> | null;
+  #reader: ReadableStreamDefaultReader<T> | null;
+  readonly #preventCancel: boolean;
+  readonly #requests = new Fifo<AsyncIteratorRequest<T>>();
+  #processing = false;
+
+  constructor(stream: ReadableStream<T>, preventCancel: boolean) {
+    this.#stream = stream;
+    this.#reader = new ReadableStreamDefaultReader(stream);
+    this.#preventCancel = preventCancel;
+  }
+
+  next(): Promise<IteratorResult<T, unknown>> {
+    const result = Promise.withResolvers<IteratorResult<T, unknown>>();
+    this.#requests.enqueue({ kind: "next", result });
+    this.#process();
+    return result.promise;
+  }
+
+  return(value?: unknown): Promise<IteratorResult<T, unknown>> {
+    const result = Promise.withResolvers<IteratorResult<T, unknown>>();
+    this.#requests.enqueue({ kind: "return", value, result });
+    this.#process();
+    return result.promise;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterableIterator<T> {
+    return this;
+  }
+
+  #process(): void {
+    if (this.#processing) {
+      return;
+    }
+    this.#processing = true;
+    void this.#drain();
+  }
+
+  async #drain(): Promise<void> {
+    while (!this.#requests.empty) {
+      const request = this.#requests.dequeue();
+      if (request === undefined) {
+        break;
+      }
+      if (request.kind === "next") {
+        await this.#next(request.result);
+      } else {
+        await this.#return(request.value, request.result);
+      }
+    }
+    this.#processing = false;
+    if (!this.#requests.empty) {
+      this.#process();
+    }
+  }
+
+  async #next(result: PromiseWithResolvers<IteratorResult<T, unknown>>): Promise<void> {
+    const stream = this.#stream;
+    const reader = this.#reader;
+    if (stream === null || reader === null) {
+      result.resolve({ done: true, value: undefined });
+      return;
+    }
+
+    try {
+      const read = await stream.read(reader);
+      if (read.done) {
+        this.#release();
+        result.resolve({ done: true, value: undefined });
+      } else {
+        result.resolve({ done: false, value: read.value });
+      }
+    } catch (error) {
+      this.#release();
+      result.reject(error);
+    }
+  }
+
+  async #return(
+    value: unknown,
+    result: PromiseWithResolvers<IteratorResult<T, unknown>>,
+  ): Promise<void> {
+    const stream = this.#stream;
+    const reader = this.#reader;
+    if (stream === null || reader === null) {
+      result.resolve({ done: true, value });
+      return;
+    }
+
+    const cancellation = this.#preventCancel ? Promise.resolve() : stream.cancelInternal(value);
+    this.#release();
+    try {
+      await cancellation;
+      result.resolve({ done: true, value });
+    } catch (error) {
+      result.reject(error);
+    }
+  }
+
+  #release(): void {
+    const stream = this.#stream;
+    const reader = this.#reader;
+    if (stream !== null && reader !== null) {
+      stream.release(reader);
+    }
+    this.#stream = null;
+    this.#reader = null;
+  }
+}
+
+class ReadableStreamIteratorSource<T> implements UnderlyingSource<T> {
+  readonly #iterator: IteratorLike<T>;
+  readonly #next: IteratorLike<T>["next"];
+  readonly #isAsync: boolean;
+  #finished = false;
+
+  constructor(iterator: IteratorLike<T>, isAsync: boolean) {
+    const next = iterator.next;
+    if (typeof next !== "function") {
+      throw new TypeError("ReadableStream.from iterator has no callable next method");
+    }
+    this.#iterator = iterator;
+    this.#next = next;
+    this.#isAsync = isAsync;
+  }
+
+  async pull(controller: ReadableStreamDefaultController<T>): Promise<void> {
+    const iteration = await this.#next.call(this.#iterator);
+    if (iteration === null || typeof iteration !== "object") {
+      throw new TypeError("ReadableStream.from iterator result must be an object");
+    }
+    if (iteration.done) {
+      this.#finished = true;
+      controller.close();
+      return;
+    }
+    const value = this.#isAsync ? iteration.value : await iteration.value;
+    controller.enqueue(value);
+  }
+
+  async cancel(reason: unknown): Promise<void> {
+    if (this.#finished) {
+      return;
+    }
+    this.#finished = true;
+    const returnMethod = this.#iterator.return;
+    if (returnMethod === undefined || returnMethod === null) {
+      return;
+    }
+    if (typeof returnMethod !== "function") {
+      throw new TypeError("ReadableStream.from iterator has a non-callable return method");
+    }
+    const result = await returnMethod.call(this.#iterator, reason);
+    if (result === null || typeof result !== "object") {
+      throw new TypeError("ReadableStream.from iterator return result must be an object");
+    }
+  }
+}
+
+function readableStreamFromIterator<T>(
+  iterator: IteratorLike<T>,
+  isAsync: boolean,
+): ReadableStream<T> {
+  return new ReadableStream(new ReadableStreamIteratorSource(iterator, isAsync), {
+    highWaterMark: 0,
+  });
 }
 
 const readableControllerKey: unique symbol = Symbol("construct ReadableStreamDefaultController");

@@ -902,3 +902,43 @@ Failure output now retains host error stacks, so an upstream assertion points to
 fixture and promise branch rather than collapsing to a message with no location.
 The live NTS frontier is 441 primary `NTS1001` refusals, 77 `NTS1003` cascades, zero
 JVM-backend refusals, the same type-only-edge `NTS1004`, and no invalid HIR.
+
+Readable-stream async iteration is now an explicit serialized request state machine
+rather than a native async generator. It acquires the default reader synchronously,
+orders concurrent `next()` and `return()` requests, releases the lock at the
+specified terminal step, waits for cancellation without retaining the lock, and
+preserves the stream error only for the request that observes it. The options
+dictionary uses Web IDL truth-value conversion, including for direct calls through
+`Symbol.asyncIterator`.
+
+`ReadableStream.from()` now opens the async protocol in preference to the sync
+protocol, captures iterator methods once with their specified receiver, pulls only
+in response to demand, awaits values supplied by a synchronous iterator, and
+validates every iterator and iterator-result boundary. Cancellation invokes and
+awaits `return(reason)` while normal exhaustion does not close an already-complete
+iterator. A mutation changing its high-water mark from zero to one made the focused
+local test observe `next()` before any read, proving that the no-prefetch assertion
+is live. The complete local Node-host suite passes 146/146.
+
+Two complete unchanged pinned fixtures, `async-iterator.any.js` and `from.any.js`,
+add 89 cases. All `ReadableStream.from()` cases and every behavioral async-iterator
+case pass, for 88/89 in this tranche. The remaining structural case requires the
+Web-IDL-generated iterator prototype to inherit from `%AsyncIteratorPrototype%` and
+to own enumerable `next` and `return` methods without `throw`. A TypeScript class
+cannot express that reflective prototype/descriptor shape, and the governing
+profile explicitly rejects prototype and descriptor manipulation in shared source.
+The mismatch therefore remains visible instead of adding `Object.setPrototypeOf`
+or `Object.defineProperty` as a host-only workaround. Together with the existing
+writable explicit-receiver failure, the aggregate pinned result is 1066/1068.
+Because the tested APIs are imported from the host realm while fixtures execute in
+a VM realm, the harness installs the host `Object` intrinsic before checking
+ordinary iterator-result prototypes; this removes a harness-only realm mismatch but
+does not manufacture the missing async-iterator prototype.
+
+The root TypeScript solution remains green and the new Streams source contains no
+`any`, assertion cast, proxy, reflection, descriptor, or prototype workaround. The
+live NTS frontier is 461 primary `NTS1001` refusals, 79 `NTS1003` cascades, zero
+JVM-backend refusals, the same type-only-edge `NTS1004`, and no invalid HIR. The
+movement from 441/77 is the final-form iterator protocol, promise capability,
+generic class/interface, and explicit-receiver source becoming visible; it is a
+dependency inventory rather than implementation progress in the compiler.

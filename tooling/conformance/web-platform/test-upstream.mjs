@@ -108,6 +108,9 @@ function createWptContext(path, pending) {
     Int16Array,
     Int32Array,
     MessageChannel,
+    // The APIs under test are host-realm modules, so the ordinary objects they
+    // return must be compared with that same realm's intrinsic prototype.
+    Object,
     Promise,
     RangeError,
     ReadableStream,
