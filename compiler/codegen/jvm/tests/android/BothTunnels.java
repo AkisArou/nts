@@ -414,6 +414,142 @@ public final class BothTunnels {
     }
 
     /**
+     * A short write, and a caller that loops, on **both** providers.
+     *
+     * <p>Neither primitive can produce a partial write naturally --
+     * `OutputStream.write` writes everything or throws -- so the shared
+     * `writeAll` loop above them would have its body executed once, ever, on
+     * every platform. Both now have the same deterministic fragment knob, and
+     * this drives the same case through each.
+     *
+     * <p>The assertion is on the *bytes*, not only the count. A fragmented
+     * write that delivered the right number from the wrong offset would satisfy
+     * a count-only check exactly.
+     */
+    static void partialWrites(ExecutorService lane, Echo echo) throws Exception {
+        byte[] payload = new byte[60];
+        for (int i = 0; i < payload.length; i++) { payload[i] = (byte) ('a' + (i % 26)); }
+
+        // nts.rt
+        NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 32);
+        NtsEnv previous = NtsEnv.enterEnv(env);
+        NtsSocket.fragmentWritesAt(7);
+        int runtimeCalls = 0;
+        try {
+            Result connected = new Result();
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 4000,
+                connected, connected);
+            NtsEnv.drain(env);
+            check(connected.name == null, "nts.rt connect failed: " + connected.name);
+            double handle = connected.value;
+            int at = 0;
+            while (at < payload.length) {
+                Result wrote = new Result();
+                NtsSocket.write(env, NtsEnv.launch(env), handle, payload, at,
+                    payload.length - at, wrote, wrote);
+                NtsEnv.drain(env);
+                if (wrote.name != null) { check(false, "nts.rt write: " + wrote.message); break; }
+                at += (int) wrote.value;
+                runtimeCalls++;
+            }
+            byte[] back = new byte[payload.length];
+            int filled = 0;
+            while (filled < back.length) {
+                Result read = new Result();
+                NtsSocket.read(env, NtsEnv.launch(env), handle, back, filled,
+                    back.length - filled, read, read);
+                NtsEnv.drain(env);
+                if (read.name != null || read.value <= 0) { break; }
+                filled += (int) read.value;
+            }
+            check(java.util.Arrays.equals(back, payload),
+                "nts.rt: the bytes came back different through a fragmented write");
+            NtsSocket.close(handle);
+        } finally {
+            NtsSocket.fragmentWritesAt(0);
+            NtsEnv.close(env);
+            NtsEnv.leaveEnv(env, previous);
+        }
+
+        // org.nts.web
+        int androidCalls = 0;
+        try (NetworkPrimitives api = primitives(lane)) {
+            api.fragmentWritesAt(7);
+            final CompletableFuture<Outcome> opened = new CompletableFuture<Outcome>();
+            final int[] handle = { 0 };
+            api.connect("127.0.0.1", echo.port(), false, 4000,
+                new NetworkPrimitives.ConnectCallback() {
+                    @Override public void success(int id) {
+                        handle[0] = id;
+                        opened.complete(new Outcome(true, null, null));
+                    }
+                    @Override public void failure(String name, String message) {
+                        opened.complete(new Outcome(false, name, message));
+                    }
+                });
+            Outcome open = opened.get(20, TimeUnit.SECONDS);
+            check(open.ok, "org.nts.web connect failed: " + open);
+            int at = 0;
+            while (at < payload.length) {
+                final CompletableFuture<Integer> wrote = new CompletableFuture<Integer>();
+                api.write(handle[0], payload, at, payload.length - at,
+                    new NetworkPrimitives.WriteCallback() {
+                        @Override public void success(int written) { wrote.complete(written); }
+                        @Override public void failure(String name, String message) {
+                            wrote.completeExceptionally(new IOException(name + ": " + message));
+                        }
+                    });
+                int n = wrote.get(20, TimeUnit.SECONDS);
+                check(n >= 1 && n <= payload.length - at,
+                    "org.nts.web wrote " + n + ", outside the 1..length the contract allows");
+                at += n;
+                androidCalls++;
+            }
+            // Bounded, and the bound is not politeness. A provider that
+            // reported a full write after a short one leaves the reader waiting
+            // for bytes that were never sent -- and an unbounded loop turns
+            // that into a twenty-second hang and a stack trace where a named
+            // failure belongs. The sabotage produced exactly that.
+            byte[] back = new byte[payload.length];
+            int filled = 0;
+            for (int attempt = 0; attempt < 40 && filled < back.length; attempt++) {
+                final CompletableFuture<byte[]> chunk = new CompletableFuture<byte[]>();
+                api.read(handle[0], back.length - filled, new NetworkPrimitives.ReadCallback() {
+                    @Override public void success(byte[] bytes, boolean eof) { chunk.complete(bytes); }
+                    @Override public void failure(String name, String message) {
+                        chunk.completeExceptionally(new IOException(name));
+                    }
+                });
+                byte[] got;
+                try {
+                    got = chunk.get(2, TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException nothingMore) {
+                    break;
+                }
+                if (got.length == 0) { break; }
+                System.arraycopy(got, 0, back, filled, got.length);
+                filled += got.length;
+            }
+            check(filled == back.length,
+                "org.nts.web read back " + filled + " of " + back.length
+                + " -- a provider that reported a full write after a short one leaves exactly "
+                + "this many bytes unsent");
+            check(java.util.Arrays.equals(back, payload),
+                "org.nts.web: the bytes came back different through a fragmented write");
+            api.closeSocket(handle[0]);
+        }
+
+        // The property both share, and the one that makes the case be the case.
+        check(runtimeCalls > 1 && androidCalls > 1,
+            "the slice went in one call on " + (runtimeCalls > 1 ? "org.nts.web" : "nts.rt")
+            + " -- the fragment knob did nothing there, so it exercised the same path as an "
+            + "ordinary write");
+        check(runtimeCalls == androidCalls,
+            "the two providers fragmented differently: nts.rt took " + runtimeCalls
+            + " calls and org.nts.web took " + androidCalls + " for the same slice and cap");
+    }
+
+    /**
      * The pair, on both. The proxy is on `127.0.0.1` and the certificate names
      * `localhost`, so verification against the proxy inverts the first case.
      *
@@ -499,6 +635,7 @@ public final class BothTunnels {
         try {
             tunnelled(lane, echo);
             cancelledReachesNoPeer(lane);
+            partialWrites(lane, echo);
             refused(lane, echo, "HTTP/1.1 407 Proxy Authentication Required", "407");
             refused(lane, echo, "HTTP/1.1 502 Bad Gateway", "502");
             verified(lane, secure);
@@ -510,7 +647,7 @@ public final class BothTunnels {
             secure.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("both tunnels: plain, cancellation, 407, 502, verification -- %d checks, %d failures%n", checks, failures);
+        System.out.printf("both tunnels: plain, cancellation, partial writes, 407, 502, verification -- %d checks, %d failures%n", checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }

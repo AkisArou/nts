@@ -712,7 +712,7 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     // The **count**, not only the zero: a suite that stopped running half its
     // cases reports no failures perfectly well. Same assertion as `PASS: 11`
     // above, which is where the idea came from and where it stopped.
-    assert!(said.ends_with("21 checks, 0 failures"), "{said}");
+    assert!(said.ends_with("37 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -291,8 +291,13 @@ public final class NetworkPrimitives implements AutoCloseable {
         try {
             writes.execute(() -> {
                 try {
-                    connection.socket.getOutputStream().write(bytes, offset, length);
-                    connection.writing.set(false); complete(() -> callback.success(length));
+                    // At most `fragment` bytes, and never zero: the contract is
+                    // `1..data.length`, so a short write still makes progress
+                    // and a caller looping on it terminates.
+                    int cap = fragment;
+                    int wrote = cap > 0 && cap < length ? cap : length;
+                    connection.socket.getOutputStream().write(bytes, offset, wrote);
+                    connection.writing.set(false); complete(() -> callback.success(wrote));
                 } catch (IOException | RuntimeException error) {
                     connection.writing.set(false); complete(() -> callback.failure(error.getClass().getSimpleName(), message(error)));
                 }
@@ -301,6 +306,26 @@ public final class NetworkPrimitives implements AutoCloseable {
             connection.writing.set(false); complete(() -> callback.failure("RejectedExecutionException", "Write worker capacity exhausted"));
         }
     }
+    /**
+     * Cap every write at this many bytes, so this provider reports **partial**
+     * writes. Zero means write whatever it is given.
+     *
+     * <p>`OutputStream.write` writes everything or throws, so this primitive
+     * naturally always reports the full count -- and the shared `writeAll` loop
+     * above it, which exists precisely to handle a short write, would have its
+     * body executed once, ever, on every platform. The shared contract permits
+     * `1..data.length` because a real `send(2)` on a full send buffer returns
+     * short, and no provider here could produce one.
+     *
+     * <p>Test and corpus use, matching `nts.rt.NtsSocket.fragmentWritesAt`, so
+     * the same partial-write case can be driven through both providers rather
+     * than through whichever one happens to have the knob. Deterministic rather
+     * than random: a corpus that exercises it stays an oracle.
+     */
+    public void fragmentWritesAt(int bytes) { fragment = Math.max(0, bytes); }
+
+    private volatile int fragment;
+
     public void closeSocket(int handle) {
         Connection connection = sockets.remove(handle);
         if (connection == null || !connection.closed.compareAndSet(false, true)) return;
