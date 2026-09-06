@@ -96,6 +96,19 @@ export function validateArray(
   }
 }
 
+export function validateStringArray(
+  value: unknown,
+  name: string,
+): asserts value is string[] {
+  validateArray(value, name);
+  for (let index = 0; index < value.length; index++) {
+    const element: unknown = value[index];
+    if (typeof element !== "string") {
+      throw new ERR_INVALID_ARG_TYPE(`${name}[${index}]`, "string", element);
+    }
+  }
+}
+
 export function validateInteger(
   value: unknown,
   name: string,

@@ -24,7 +24,9 @@ import { nextTick } from "../../internal/tick.ts";
 import { deprecate } from "../../internal/deprecate.ts";
 import {
   validateBoolean, validateFunction, validateNumber, validateObject, validateOneOf, validateString,
+  validateStringArray,
 } from "../../internal/validators.ts";
+import { myersDiff } from "../../internal/assert/myers-diff.ts";
 import { isNodeStream, isReadableStream, isWritableStream } from "../../internal/streams/utils.ts";
 import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
@@ -68,6 +70,9 @@ export function debuglogEnabled(section: string): boolean {
   return enabledSections.includes(section.toUpperCase());
 }
 
+/** Legacy name; Node exposes the same function value, not a wrapper. */
+export const debug = debuglog;
+
 const processSignalNames: readonly string[] = nts_process_signal_names();
 
 /** POSIX exit status for a process terminated by a named signal. */
@@ -80,6 +85,29 @@ export function convertProcessSignalToExitCode(signalCode: unknown): number {
     validateOneOf(signalCode, "signalCode", processSignalNames);
   }
   return exitCode;
+}
+
+export type DiffEntry = [operation: -1 | 0 | 1, value: string];
+type DiffInput = string | readonly string[];
+
+function validateDiffInput(
+  value: unknown,
+  name: "actual" | "expected",
+): asserts value is DiffInput {
+  if (Array.isArray(value)) {
+    validateStringArray(value, name);
+  } else {
+    validateString(value, name);
+  }
+}
+
+/** The shortest insertion/deletion script from `actual` to `expected`. */
+export function diff(actual: DiffInput, expected: DiffInput): DiffEntry[];
+export function diff(actual: unknown, expected: unknown): DiffEntry[] {
+  if (actual === expected) return [];
+  validateDiffInput(actual, "actual");
+  validateDiffInput(expected, "expected");
+  return myersDiff(actual, expected).reverse();
 }
 
 declare function nts_debug_write(text: string): number;
@@ -148,26 +176,45 @@ export function toUSVString(str: string): string {
  * The callback is appended after the caller's arguments and settles one
  * promise, preserving the original receiver.
  */
-type CallbackTakingFunction = (
-  this: unknown,
-  ...args: unknown[]
-) => unknown;
+type ResultCallback<Result, Failure = unknown> = (
+  error: Failure,
+  value: Result,
+) => void;
 
-type PromisifiedFunction = (
-  this: unknown,
-  ...args: unknown[]
-) => Promise<unknown>;
+type NoResultCallback<Failure = unknown> = (error?: Failure) => void;
 
+export function promisify<
+  This,
+  Args extends unknown[],
+  Result,
+  Failure = unknown,
+>(
+  original: (
+    this: This,
+    ...args: [...Args, callback: ResultCallback<Result, Failure>]
+  ) => unknown,
+): (this: This, ...args: Args) => Promise<Result>;
+export function promisify<
+  This,
+  Args extends unknown[],
+  Failure = unknown,
+>(
+  original: (
+    this: This,
+    ...args: [...Args, callback: NoResultCallback<Failure>]
+  ) => unknown,
+): (this: This, ...args: Args) => Promise<void>;
 export function promisify(
-  original: CallbackTakingFunction,
-): PromisifiedFunction {
+  original: unknown,
+): CallableFunction {
   validateFunction(original, "original");
+  const callable = original;
 
   function promisified(this: unknown, ...args: unknown[]): Promise<unknown> {
     return new Promise((resolve, reject) => {
       // Node's callbacks are `(err, value)`, so the promise settles on the
       // first argument and resolves with the second.
-      original.call(
+      callable.call(
         this,
         ...args,
         (err: unknown, value: unknown) => {
@@ -213,6 +260,18 @@ function callbackifyOnRejected(reason: unknown, cb: (err: unknown) => void): voi
  * for the same reason node's own do -- a throw from it reaches
  * `uncaughtException` rather than the promise machinery.
  */
+export function callbackify<This, Args extends unknown[]>(
+  original: (this: This, ...args: Args) => PromiseLike<void>,
+): (
+  this: This,
+  ...args: [...Args, callback: NoResultCallback]
+) => void;
+export function callbackify<This, Args extends unknown[], Result>(
+  original: (this: This, ...args: Args) => PromiseLike<Result>,
+): (
+  this: This,
+  ...args: [...Args, callback: ResultCallback<Result>]
+) => void;
 export function callbackify(
   original: (this: unknown, ...args: unknown[]) => PromiseLike<unknown>,
 ): (...args: unknown[]) => void {
@@ -232,7 +291,7 @@ export function callbackify(
 }
 
 
-export const isArray = Array.isArray;
+export const isArray: (value: unknown) => value is unknown[] = Array.isArray;
 
 export default {
   inspect,
@@ -241,9 +300,11 @@ export default {
   isDeepStrictEqual,
   types,
   deprecate,
+  debug,
   debuglog,
   debuglogEnabled,
   convertProcessSignalToExitCode,
+  diff,
   stripVTControlCharacters,
   toUSVString,
   promisify,

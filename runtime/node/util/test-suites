@@ -1,2 +1,3 @@
+parallel/test-diff.js
 parallel/test-uv-errno.js
 parallel/test-uv-errmap.js

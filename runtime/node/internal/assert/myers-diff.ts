@@ -32,6 +32,7 @@ export const kOperations: Operations = {
 
 export type Operation = (typeof kOperations)[keyof typeof kOperations];
 export type Edit = [Operation, string];
+export type StringSequence = ArrayLike<string>;
 
 /**
  * Two lines are equal, optionally ignoring a trailing comma.
@@ -58,8 +59,8 @@ function areLinesEqual(actual: string, expected: string, checkCommaDisparity: bo
  * backtrack produces and saves reversing an array that is only ever printed.
  */
 export function myersDiff(
-  actual: readonly string[],
-  expected: readonly string[],
+  actual: StringSequence,
+  expected: StringSequence,
   checkCommaDisparity = false,
 ): Edit[] {
   const actualLength = actual.length;
@@ -125,8 +126,8 @@ export function myersDiff(
 
 function backtrack(
   trace: readonly Int32Array[],
-  actual: readonly string[],
-  expected: readonly string[],
+  actual: StringSequence,
+  expected: StringSequence,
   checkCommaDisparity: boolean,
 ): Edit[] {
   const actualLength = actual.length;
