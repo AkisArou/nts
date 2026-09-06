@@ -1742,6 +1742,30 @@ void nts_environment_leave(NtsEnvironmentScope *scope);
  * asks for one still has exactly one. */
 NtsEnvironment *nts_environment_current(void);
 
+/* The Web-platform runtime this environment owns.
+ *
+ * One managed reference, because the contract gives an environment its
+ * "host capabilities, task/microtask queues, recursion depth, external-work
+ * liveness, close state, **and Web-platform runtime**" -- and that last one is
+ * a TypeScript object, so the environment needs a slot for it and compiled
+ * code needs typed access to that slot. This is what replaces a module-level
+ * `let` in shared TypeScript, which would be shared by every environment in
+ * the process -- the bug the seam exists to prevent, and one that works
+ * perfectly until the second environment exists.
+ *
+ * Installing retains; installing over releases the previous; closing the
+ * environment releases what it holds. Reading before installation aborts
+ * rather than answering null -- the choice `nts_require_host` makes, and it
+ * keeps the declared TypeScript return non-nullable so bootstrap does not
+ * depend on the absence representation.
+ *
+ * `NtsHeader *` here, and the class the program declared at the call site:
+ * these are in `erases_class` and `erases_result` for the reason
+ * `nts_promise_fulfill_reference` is. The runtime stores one reference slot
+ * and cannot name a class the program invented. */
+void nts_environment_install_platform(NtsHeader *runtime);
+NtsHeader *nts_environment_platform(void);
+
 /* A second environment, and its close.
  *
  * `destroy` refuses one that is current, one that is the default, and one that

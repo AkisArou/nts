@@ -185,6 +185,10 @@ struct NtsEnvironment {
   NtsQueue microtask_queue;
   NtsQueue tick_queue;
   NtsMap *symbol_registry;
+  /* The Web-platform runtime, as one managed reference. Not traced by the
+     cycle collector: an environment is not an `NtsHeader` and cannot be part
+     of a cycle, so this is a root rather than an edge. */
+  NtsHeader *platform;
 
   /* Every live environment, so a process-wide diagnostic can sum them. Read
    * only at a safe point by a lane that has coordinated with the owners; it is
@@ -221,6 +225,24 @@ void nts_environment_leave(NtsEnvironmentScope *scope) {
 }
 
 NtsEnvironment *nts_environment_current(void) { return nts_env; }
+
+void nts_environment_install_platform(NtsHeader *runtime) {
+  /* Retain first, so installing a value over itself is not a release followed
+     by a use of what it just freed. */
+  nts_retain(runtime);
+  NtsHeader *previous = nts_env->platform;
+  nts_env->platform = runtime;
+  nts_release(previous);
+}
+
+NtsHeader *nts_environment_platform(void) {
+  if (!nts_env->platform) {
+    fprintf(stderr,
+            "nts: the Web-platform runtime was read before it was installed\n");
+    abort();
+  }
+  return nts_env->platform;
+}
 
 /* A second environment, for a host that runs more than one.
  *
@@ -259,6 +281,25 @@ void nts_environment_destroy(NtsEnvironment *environment) {
   if (environment == &nts_default_environment) {
     fprintf(stderr, "nts: the default environment is not destroyable\n");
     abort();
+  }
+  /* Give up what the environment owns, then collect, and only then ask
+     whether anything is left.
+
+     The collection is not tidiness. A release that takes a count to zero does
+     *not* free an object the candidate buffer is holding -- it paints it black
+     and leaves it, because freeing memory the buffer still points at is how
+     the collector's own use-after-free happened. So an environment whose last
+     references were dropped normally still has objects the buffer has not been
+     through, and the liveness check below would call that a leak and abort on
+     a program that did everything right. */
+  {
+    NtsEnvironmentScope scope = nts_environment_enter(environment);
+    if (environment->platform) {
+      nts_release(environment->platform);
+      environment->platform = 0;
+    }
+    nts_collect_cycles();
+    nts_environment_leave(&scope);
   }
   if (environment->allocated != environment->reclaimed) {
     fprintf(stderr,

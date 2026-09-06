@@ -124,6 +124,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_enqueue_microtask", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
     Signature { name: "nts_enqueue_tick", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
     Signature { name: "nts_enter", returns: "void", params: &[], attributes: &[] },
+    Signature { name: "nts_environment_install_platform", returns: "void", params: &["ptr"], attributes: &[] },
+    Signature { name: "nts_environment_platform", returns: "ptr", params: &[], attributes: &[] },
     Signature { name: "nts_has_pending_work", returns: "zeroext i1", params: &[], attributes: &[] },
     Signature { name: "nts_host_install", returns: "void", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_index_fn", returns: "i32", params: &["ptr", "double"], attributes: &[] },

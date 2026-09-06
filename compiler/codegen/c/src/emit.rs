@@ -497,7 +497,8 @@ fn literal_name(literals: &[String], text: &str) -> String {
 fn erases_class(callee: &str, at: usize) -> bool {
     matches!(
         (callee, at),
-        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1) | ("nts_set_timeout", 0)
+        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1)
+            | ("nts_set_timeout" | "nts_environment_install_platform", 0)
     )
 }
 
@@ -514,7 +515,7 @@ fn erases_class(callee: &str, at: usize) -> bool {
 /// payload is the first one C objects to, which is a warning about how narrow
 /// the accident of a passing test can be.
 fn erases_result(callee: &str) -> bool {
-    matches!(callee, "nts_promise_reference")
+    matches!(callee, "nts_promise_reference" | "nts_environment_platform")
 }
 
 /// A call: static, external, or through the receiver's dispatch table.
