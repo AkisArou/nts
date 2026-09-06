@@ -208,11 +208,10 @@ export class WebSocket extends EventTarget {
               new Uint8Array(buffer).set(incoming.data);
               data = buffer;
             }
-            const event = new MessageEvent<WebSocketData>(
-              "message",
+            const event = new MessageEvent<WebSocketData>("message", {
               data,
-              this.context.urls.parse(this.url).origin,
-            );
+              origin: this.context.urls.parse(this.url).origin,
+            });
             this.dispatchEvent(event);
           } finally {
             resolve();
@@ -295,7 +294,11 @@ export class WebSocket extends EventTarget {
         const error = new Event("error");
         this.dispatchEvent(error);
       }
-      const close = new CloseEvent("close", info.code, info.reason, info.wasClean);
+      const close = new CloseEvent("close", {
+        code: info.code,
+        reason: info.reason,
+        wasClean: info.wasClean,
+      });
       this.dispatchEvent(close);
     });
   }

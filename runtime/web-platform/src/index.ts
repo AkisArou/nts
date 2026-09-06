@@ -2,8 +2,15 @@ export { DOMException } from "./core/errors.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 
-export { CloseEvent, Event, EventTarget, MessageEvent } from "./core/events.ts";
-export type { EventInit, EventListener, ListenerOptions } from "./core/events.ts";
+export { CloseEvent, ErrorEvent, Event, EventTarget, MessageEvent } from "./core/events.ts";
+export type {
+  CloseEventInit,
+  ErrorEventInit,
+  EventInit,
+  EventListener,
+  ListenerOptions,
+  MessageEventInit,
+} from "./core/events.ts";
 
 export { TextDecoder, TextEncoder } from "./core/encoding.ts";
 export type { TextDecoderOptions } from "./core/encoding.ts";

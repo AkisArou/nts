@@ -1,14 +1,16 @@
 import { DOMException } from "./errors.ts";
 
 export interface EventInit {
+  bubbles?: boolean;
   cancelable?: boolean;
+  composed?: boolean;
 }
 
 export class Event {
   readonly type: string;
+  readonly bubbles: boolean;
   readonly cancelable: boolean;
-  readonly bubbles = false;
-  readonly composed = false;
+  readonly composed: boolean;
   readonly isTrusted = false;
   defaultPrevented = false;
   target: EventTarget | null = null;
@@ -19,7 +21,9 @@ export class Event {
 
   constructor(type: string, init: EventInit = {}) {
     this.type = type;
+    this.bubbles = init.bubbles ?? false;
     this.cancelable = init.cancelable ?? false;
+    this.composed = init.composed ?? false;
   }
 
   preventDefault(): void {
@@ -31,6 +35,7 @@ export class Event {
   stopImmediatePropagation(): void {
     this.immediateStopped = true;
   }
+
   /** @internal */ begin(target: EventTarget): void {
     if (this.dispatching) {
       throw new DOMException("Event is already dispatching or uninitialized", "InvalidStateError");
@@ -41,11 +46,13 @@ export class Event {
     this.currentTarget = target;
     this.eventPhase = 2;
   }
+
   /** @internal */ end(): void {
     this.dispatching = false;
     this.currentTarget = null;
     this.eventPhase = 0;
   }
+
   /** @internal */ get stopped(): boolean {
     return this.immediateStopped;
   }
@@ -70,6 +77,7 @@ interface ListenerRecord {
   once: boolean;
   removed: boolean;
 }
+
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
@@ -134,6 +142,7 @@ export class EventTarget {
     }
     return !event.defaultPrevented;
   }
+
   /** Property handlers occupy their registration position, just like ordinary listeners. */
   protected setHandler<Target extends EventTarget, E extends Event>(
     target: Target,
@@ -155,15 +164,35 @@ export class EventTarget {
   }
 }
 
-export class MessageEvent<T> extends Event {
-  readonly data: T;
-  readonly origin: string;
+export interface MessageEventInit<T> extends EventInit {
+  data?: T | null;
+  lastEventId?: string;
+  origin?: string;
+  ports?: readonly EventTarget[];
+  source?: EventTarget | null;
+}
 
-  constructor(type: string, data: T, origin = "") {
-    super(type);
-    this.data = data;
-    this.origin = origin;
+export class MessageEvent<T = unknown> extends Event {
+  readonly data: T | null;
+  readonly lastEventId: string;
+  readonly origin: string;
+  readonly ports: readonly EventTarget[];
+  readonly source: EventTarget | null;
+
+  constructor(type: string, init: MessageEventInit<T> = {}) {
+    super(type, init);
+    this.data = init.data === undefined ? null : init.data;
+    this.lastEventId = init.lastEventId ?? "";
+    this.origin = init.origin ?? "";
+    this.ports = init.ports?.slice() ?? [];
+    this.source = init.source ?? null;
   }
+}
+
+export interface CloseEventInit extends EventInit {
+  code?: number;
+  reason?: string;
+  wasClean?: boolean;
 }
 
 export class CloseEvent extends Event {
@@ -171,10 +200,35 @@ export class CloseEvent extends Event {
   readonly reason: string;
   readonly wasClean: boolean;
 
-  constructor(type: string, code = 0, reason = "", wasClean = false) {
-    super(type);
-    this.code = code;
-    this.reason = reason;
-    this.wasClean = wasClean;
+  constructor(type: string, init: CloseEventInit = {}) {
+    super(type, init);
+    this.code = init.code ?? 0;
+    this.reason = init.reason ?? "";
+    this.wasClean = init.wasClean ?? false;
+  }
+}
+
+export interface ErrorEventInit extends EventInit {
+  colno?: number;
+  error?: unknown;
+  filename?: string;
+  lineno?: number;
+  message?: string;
+}
+
+export class ErrorEvent extends Event {
+  readonly colno: number;
+  readonly error: unknown;
+  readonly filename: string;
+  readonly lineno: number;
+  readonly message: string;
+
+  constructor(type: string, init: ErrorEventInit = {}) {
+    super(type, init);
+    this.colno = init.colno ?? 0;
+    this.error = init.error ?? null;
+    this.filename = init.filename ?? "";
+    this.lineno = init.lineno ?? 0;
+    this.message = init.message ?? "";
   }
 }

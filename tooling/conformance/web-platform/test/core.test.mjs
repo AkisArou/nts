@@ -9,8 +9,11 @@ import {
   ReadableStream,
   AbortController,
   AbortSignal,
+  CloseEvent,
   Event,
   EventTarget,
+  ErrorEvent,
+  MessageEvent,
   TextEncoder,
   TextDecoder,
   Blob,
@@ -61,6 +64,55 @@ const makeRedirectResponse = (url, status = 302) =>
   Response.redirect(url, status, api.requestContext.urls);
 const utf8 = new TextEncoder();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test("Web event constructors consume typed init dictionaries", () => {
+  const source = new EventTarget();
+  const port = new EventTarget();
+  const ports = [port];
+  const message = new MessageEvent("message", {
+    bubbles: true,
+    composed: true,
+    data: "payload",
+    lastEventId: "42",
+    origin: "https://example.test",
+    ports,
+    source,
+  });
+  ports.length = 0;
+  assert.equal(message.bubbles, true);
+  assert.equal(message.cancelable, false);
+  assert.equal(message.composed, true);
+  assert.equal(message.data, "payload");
+  assert.equal(message.lastEventId, "42");
+  assert.equal(message.origin, "https://example.test");
+  assert.deepEqual(message.ports, [port]);
+  assert.equal(message.source, source);
+
+  const close = new CloseEvent("close", { code: 1000, reason: "done", wasClean: true });
+  assert.equal(close.code, 1000);
+  assert.equal(close.reason, "done");
+  assert.equal(close.wasClean, true);
+
+  const cause = new Error("boom");
+  const error = new ErrorEvent("error", {
+    colno: 7,
+    error: cause,
+    filename: "module.ts",
+    lineno: 3,
+    message: "boom",
+  });
+  assert.equal(error.colno, 7);
+  assert.equal(error.error, cause);
+  assert.equal(error.filename, "module.ts");
+  assert.equal(error.lineno, 3);
+  assert.equal(error.message, "boom");
+
+  const defaults = new MessageEvent("message");
+  assert.equal(defaults.data, null);
+  assert.equal(defaults.origin, "");
+  assert.deepEqual(defaults.ports, []);
+  assert.equal(defaults.source, null);
+});
 
 for (const pairs of [
   [],
