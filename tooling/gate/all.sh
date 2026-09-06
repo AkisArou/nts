@@ -464,9 +464,15 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # **113 of 113 — equal to the corpus.** The plan set the target at 86 of 87,
+  # **114 of 114 — equal to the corpus.** The plan set the target at 86 of 87,
   # which was the LLVM floor the day it was written; the corpus has grown by
-  # twenty-three since and this lane refuses nothing in it.
+  # twenty-four since and this lane refuses nothing in it.
+  #
+  # `array-buffer` arrived with `ManagedType::Buffer` and cost five cases out of
+  # 841 before it agreed, all of one rule: `ToIndex` truncates *toward zero*, so
+  # `slice(-0.5)` starts at the beginning and `Math.floor` starts one back from
+  # the end -- and `transfer(NaN)` is an empty buffer rather than an unchanged
+  # one, because NaN is zero here and not "no argument".
   #
   # The last two came off in an afternoon and neither was a design. A `Date` is
   # a `double` and an identity; a symbol is a description and an identity. Both
@@ -502,7 +508,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # javac's 25. Materialising the same three booleans in the reference, one
   # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
   #
-  backend_examples 113 "through the JVM backend" ); }
+  backend_examples 114 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

@@ -271,6 +271,33 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // runs, and deletes the check rather than adding a second one.
         "nts_set_timeout" => (RUNTIME, "setTimeout", "(Lnts/rt/NtsCallback;DDZ)D"),
         "nts_clear_timeout" => (RUNTIME, "clearTimeout", "(D)V"),
+        // `ArrayBuffer`. One class for fixed and resizable both, and the
+        // maximum reserved at construction -- the same shape the C runtime
+        // keeps, for the same reason: a reserved block makes `resize` an
+        // assignment rather than a reallocation, so a view never has to ask
+        // where the bytes went.
+        //
+        // `byteLength` on a detached buffer answers zero rather than refusing,
+        // because that is what the specification reports and `detached` is the
+        // question with the answer.
+        "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),
+        "nts_buffer_new" => (types::BUFFER, "allocate", "(D)Lnts/rt/NtsBuffer;"),
+        "nts_buffer_new_resizable" => {
+            (types::BUFFER, "allocateResizable", "(DD)Lnts/rt/NtsBuffer;")
+        }
+        "nts_buffer_byte_length" => (types::BUFFER, "byteLength", "(Lnts/rt/NtsBuffer;)D"),
+        "nts_buffer_max_byte_length" => {
+            (types::BUFFER, "maxByteLength", "(Lnts/rt/NtsBuffer;)D")
+        }
+        "nts_buffer_resizable" => (types::BUFFER, "resizable", "(Lnts/rt/NtsBuffer;)Z"),
+        "nts_buffer_detached" => (types::BUFFER, "detached", "(Lnts/rt/NtsBuffer;)Z"),
+        "nts_buffer_slice" => {
+            (types::BUFFER, "slice", "(Lnts/rt/NtsBuffer;DD)Lnts/rt/NtsBuffer;")
+        }
+        "nts_buffer_resize" => (types::BUFFER, "resize", "(Lnts/rt/NtsBuffer;D)V"),
+        "nts_buffer_transfer" => {
+            (types::BUFFER, "transfer", "(Lnts/rt/NtsBuffer;DZ)Lnts/rt/NtsBuffer;")
+        }
         // A symbol is a description and an identity. `keyFor` walks the
         // registry rather than keeping a reverse index, which is `runtime/c`'s
         // choice and its reason: `Symbol.keyFor` is the rare direction and a

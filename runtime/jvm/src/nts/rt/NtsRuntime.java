@@ -170,7 +170,8 @@ public final class NtsRuntime {
         System.out.flush(); System.err.println("nts: `" + name + "` was read before its declaration ran");
         System.err.flush(); System.exit(1);
     }
-    private static String numberText(double value) {
+    /** Package-visible: the buffer and view classes report lengths the same way. */
+    static String numberText(double value) {
         if (value == (long) value && Math.abs(value) < 1e15) { return Long.toString((long) value); }
         return String.format("%g", value);
     }

@@ -22,6 +22,30 @@ fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
+/// The runtime jar, copied somewhere this process owns.
+///
+/// Three sessions share this checkout and `runtime_jar.rs` rewrites
+/// `runtime/jvm/nts-runtime.jar` **in place**, so a driver that reads the
+/// checked-in path directly can be handed a half-written archive. That fails as
+/// a `ZipException` or a missing class, in whichever suite happened to be
+/// running at the moment, and it looks exactly like the thing under test being
+/// broken -- which cost another session a run before the cause was found.
+///
+/// Copied once per test binary, so the artifact is immutable for the run.
+/// `OnceLock` rather than an `exists` check because cargo runs these in
+/// parallel threads and two of them racing on the same destination is the same
+/// half-written file one layer down.
+fn runtime_jar() -> PathBuf {
+    static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    JAR.get_or_init(|| {
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
+        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+    })
+    .clone()
+}
+
 fn tool(name: &str) -> Option<PathBuf> {
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let path = PathBuf::from(home).join("bin").join(name);
@@ -42,8 +66,7 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-env-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let jar = runtime_jar();
 
     let compiled = Command::new(&javac)
         .arg("--release")
@@ -99,8 +122,7 @@ fn closing_under_arriving_completions_loses_nothing() {
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-close-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let jar = runtime_jar();
     let compiled = Command::new(&javac)
         .arg("--release")
         .arg("8")

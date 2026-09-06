@@ -178,6 +178,15 @@ pub const MAP: &str = "nts/rt/NtsMap";
 pub const DATE: &str = "nts/rt/NtsDate";
 /// A symbol: a description and an identity, and five operations.
 pub const SYMBOL: &str = "nts/rt/NtsSymbol";
+
+/// An `ArrayBuffer`: a `byte[]` that is null once detached, its length, and
+/// its maximum. One class whether or not it is resizable -- `transfer` moves a
+/// resizable buffer's bytes into a fixed one, so the two are not different
+/// types to anything that holds a result.
+pub const BUFFER: &str = "nts/rt/NtsBuffer";
+
+/// A `DataView`: a buffer, an offset, and a length that may track the buffer's.
+pub const VIEW: &str = "nts/rt/NtsDataView";
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
 
 /// The 128-bit integer, which the JVM has no primitive for.
@@ -269,6 +278,15 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // is a class, and `NtsMap` keys it by reference through the `default`
         // arm of `sameKey` rather than through any tagged one.
         HirType::Managed(ManagedType::Symbol) => nts_jvm_emitter::descriptor::object(SYMBOL),
+        // An `ArrayBuffer`: bytes, and the two things that can happen to them.
+        //
+        // **One class for fixed and resizable both**, which is the question the
+        // placeholder here declined to answer. A separate class for each would
+        // make `transfer` change a buffer's *type* -- it can hand a resizable
+        // buffer's contents to a fixed one -- so a variable holding the result
+        // would have no single class, and every view would need two shapes to
+        // point at. Resizability is a field.
+        HirType::Managed(ManagedType::Buffer) => nts_jvm_emitter::descriptor::object(BUFFER),
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
@@ -288,6 +306,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::String
             | ManagedType::Symbol
             | ManagedType::Date
+            | ManagedType::Buffer
             | ManagedType::Array(_)
             | ManagedType::Map(..)
             | ManagedType::Set(_)
@@ -340,7 +359,25 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
-            _ => return None,
+            HirType::Managed(ManagedType::Buffer) => VType::Object(BUFFER.to_owned()),
+            // **No catch-all**, and the missing one here cost a day of the wrong
+            // diagnosis. `descriptor` says of its own last arm that every
+            // `ManagedType` is spelled out so adding a variant upstream is a
+            // compile error rather than a silent refusal -- and this function,
+            // which decides the *same* thing for a local slot, had a `_` that
+            // quietly answered `None`. So `ManagedType::Buffer` arrived,
+            // `descriptor` was updated, and every function holding a buffer
+            // still refused with "a value of unrepresentable type" pointing at
+            // a type the backend could by then represent perfectly well.
+            //
+            // The scalars cannot reach here -- `kind` already answered `Ref` --
+            // but they are listed rather than swept up, because a `_` that is
+            // unreachable today is the one that catches the next variant.
+            HirType::Bool
+            | HirType::Int { .. }
+            | HirType::Float { .. }
+            | HirType::Void
+            | HirType::Never => return None,
         },
     })
 }
@@ -356,6 +393,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::String) => "a string".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
+        HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),
         // The element, because the one message that most needs this is two
         // arrays that differ only in it -- `an array` twice says nothing about
         // why the two would not agree.

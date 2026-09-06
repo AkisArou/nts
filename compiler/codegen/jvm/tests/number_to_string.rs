@@ -42,6 +42,30 @@ fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
+/// The runtime jar, copied somewhere this process owns.
+///
+/// Three sessions share this checkout and `runtime_jar.rs` rewrites
+/// `runtime/jvm/nts-runtime.jar` **in place**, so a driver that reads the
+/// checked-in path directly can be handed a half-written archive. That fails as
+/// a `ZipException` or a missing class, in whichever suite happened to be
+/// running at the moment, and it looks exactly like the thing under test being
+/// broken -- which cost another session a run before the cause was found.
+///
+/// Copied once per test binary, so the artifact is immutable for the run.
+/// `OnceLock` rather than an `exists` check because cargo runs these in
+/// parallel threads and two of them racing on the same destination is the same
+/// half-written file one layer down.
+fn runtime_jar() -> PathBuf {
+    static JAR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    JAR.get_or_init(|| {
+        let source = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+            .map_or_else(|| repository().join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+        let mine = std::env::temp_dir().join(format!("nts-runtime-{}.jar", std::process::id()));
+        if std::fs::copy(&source, &mine).is_ok() { mine } else { source }
+    })
+    .clone()
+}
+
 fn tool(name: &str) -> Option<PathBuf> {
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let path = PathBuf::from(home).join("bin").join(name);
@@ -61,15 +85,13 @@ fn every_double_prints_the_characters_node_prints() {
     let (Some(javac), Some(java), Some(node)) = (tool("javac"), tool("java"), tool("node")) else {
         return;
     };
-    let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-n2s-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
 
     // `NTS_JVM_RUNTIME_JAR` for the same reason the sabotage test uses it: to
     // break this check on purpose without editing the checked-in artifact,
     // which another session may be building against at the same moment.
-    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let jar = runtime_jar();
     let driver = dir.join("Sweep.java");
     std::fs::write(
         &driver,
