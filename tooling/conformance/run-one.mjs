@@ -411,7 +411,7 @@ try {
       // failure is not evidence that the test measures this module.
       const shaped = siblingShapeModule ? siblingShapeModule.shape(siblingExports) : siblingExports;
       if (requestedSubpath === null) siblings.set(name, shaped);
-      const siblingSubpaths = siblingShapeModule?.subpaths?.(siblingExports) ?? null;
+      const siblingSubpaths = siblingShapeModule?.subpaths?.(siblingExports, shaped) ?? null;
       if (siblingSubpaths !== null) {
         for (const [id, implementation] of Object.entries(siblingSubpaths)) {
           if (requestedSubpath === null || id === requestedSubpath) {
