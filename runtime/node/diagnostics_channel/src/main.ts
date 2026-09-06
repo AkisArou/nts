@@ -26,17 +26,18 @@ export interface Store {
 
 export type Transform = (message: unknown) => unknown;
 
-function defaultTransform(data: unknown): unknown {
-  return data;
+function isTransform(value: unknown): value is Transform {
+  return typeof value === "function";
 }
 
-/** Invoke a callback with the receiver and argument tuple supplied by the caller. */
-function apply<A extends unknown[], T>(
-  fn: (...args: A) => T,
-  thisArg: unknown,
-  args: A,
-): T {
-  return fn.apply(thisArg, args);
+function runTransform(transform: unknown, data: unknown): unknown {
+  if (transform === undefined) return data;
+  if (!isTransform(transform)) {
+    // `bindStore` deliberately does not validate this argument. Node reports a
+    // bad transform asynchronously when the next `runStores` tries to use it.
+    throw new TypeError("transform is not a function");
+  }
+  return transform(data);
 }
 
 /**
@@ -46,14 +47,18 @@ function apply<A extends unknown[], T>(
  * its first subscriber arrives and its last leaves, so that the common case --
  * publishing to a channel nobody listens to -- reaches a `publish` that is an
  * empty function. That is a V8 inline-cache trick with no semantic content,
- * and it is the reason node also has to define `Symbol.hasInstance`. One class
- * with a `#subscribers` array that is empty until someone subscribes says the
- * same thing; the branch in `publish` costs a length check.
+ * and it is the reason node also has to define `Symbol.hasInstance`. A static
+ * class cannot change its method table at runtime. It keeps both collections
+ * absent until first use instead, so creating an inactive channel allocates
+ * neither an array nor a Map and `publish` is one undefined check.
  */
 export class Channel {
   readonly name: string | symbol;
-  #subscribers: Subscriber[] = [];
-  #stores = new Map<Store, Transform>();
+  #subscribers: Subscriber[] | undefined;
+  // The public TypeScript contract admits only Transform. JavaScript can still
+  // bind another value, and pinned Node retains it until `runStores`, where the
+  // attempted call is reported on the next tick rather than during binding.
+  #stores: Map<Store, unknown> | undefined;
   /** Set when a native channel of the same name is linked to this one. */
   _index: number | undefined = undefined;
 
@@ -63,37 +68,53 @@ export class Channel {
   }
 
   get hasSubscribers(): boolean {
-    return this.#subscribers.length > 0 || this.#stores.size > 0;
+    return (this.#subscribers?.length ?? 0) > 0 || (this.#stores?.size ?? 0) > 0;
   }
 
   subscribe(subscription: Subscriber): void {
     validateFunction(subscription, "subscription");
     // A fresh array rather than a push, so that a subscriber added or removed
     // during a `publish` does not change the list that publish is walking.
-    this.#subscribers = [...this.#subscribers, subscription];
+    const subscribers = this.#subscribers;
+    this.#subscribers = subscribers === undefined
+      ? [subscription]
+      : [...subscribers, subscription];
     channels.incRef(this.name);
   }
 
   unsubscribe(subscription: Subscriber): boolean {
-    const index = this.#subscribers.indexOf(subscription);
+    const subscribers = this.#subscribers;
+    if (subscribers === undefined) return false;
+    const index = subscribers.indexOf(subscription);
     if (index === -1) return false;
-    this.#subscribers = [
-      ...this.#subscribers.slice(0, index),
-      ...this.#subscribers.slice(index + 1),
-    ];
+    if (subscribers.length === 1) {
+      this.#subscribers = undefined;
+    } else {
+      this.#subscribers = [
+        ...subscribers.slice(0, index),
+        ...subscribers.slice(index + 1),
+      ];
+    }
     channels.decRef(this.name);
     return true;
   }
 
   bindStore(store: Store, transform?: Transform): void {
-    if (!this.#stores.has(store)) {
+    let stores = this.#stores;
+    if (stores === undefined) {
+      stores = new Map<Store, unknown>();
+      this.#stores = stores;
+      channels.incRef(this.name);
+    } else if (!stores.has(store)) {
       channels.incRef(this.name);
     }
-    this.#stores.set(store, transform ?? defaultTransform);
+    stores.set(store, transform);
   }
 
   unbindStore(store: Store): boolean {
-    if (!this.#stores.delete(store)) return false;
+    const stores = this.#stores;
+    if (stores === undefined || !stores.delete(store)) return false;
+    if (stores.size === 0) this.#stores = undefined;
     channels.decRef(this.name);
     return true;
   }
@@ -107,6 +128,7 @@ export class Channel {
    */
   publish(message?: unknown): void {
     const subscribers = this.#subscribers;
+    if (subscribers === undefined) return;
     for (let i = 0; i < subscribers.length; i++) {
       const subscriber = subscribers[i];
       if (subscriber === undefined) continue;
@@ -130,17 +152,23 @@ export class Channel {
     thisArg?: unknown,
     ...args: A
   ): T {
+    const stores = this.#stores;
+    if (stores === undefined) {
+      if (this.#subscribers !== undefined) this.publish(message);
+      return fn.apply(thisArg, args);
+    }
+
     let run = (): T => {
       this.publish(message);
       return fn.apply(thisArg, args);
     };
 
-    for (const [store, transform] of this.#stores.entries()) {
+    for (const [store, transform] of stores.entries()) {
       const next = run;
       run = (): T => {
         let context: unknown;
         try {
-          context = transform(message);
+          context = runTransform(transform, message);
         } catch (err) {
           // A broken transform must not lose the call it was wrapping.
           triggerUncaughtException(err);
@@ -354,14 +382,14 @@ export class TracingChannel {
     ...args: A
   ): T {
     if (!this.hasSubscribers) {
-      return apply(fn, thisArg, args);
+      return fn.apply(thisArg, args);
     }
 
     const { start, end, error } = this;
 
     return start.runStores(context, () => {
       try {
-        const result = apply(fn, thisArg, args);
+        const result = fn.apply(thisArg, args);
         context["result"] = result;
         return result;
       } catch (err) {
@@ -387,7 +415,7 @@ export class TracingChannel {
     ...args: A
   ): Promise<T> {
     if (!this.hasSubscribers) {
-      return apply(fn, thisArg, args);
+      return fn.apply(thisArg, args);
     }
 
     const { start, end, asyncStart, asyncEnd, error } = this;
@@ -409,7 +437,7 @@ export class TracingChannel {
 
     return start.runStores(context, () => {
       try {
-        let promise = apply(fn, thisArg, args);
+        let promise = fn.apply(thisArg, args);
         // A thenable is not a promise, and `then` on it is not ours to trust.
         if (!(promise instanceof Promise)) {
           promise = Promise.resolve(promise);
