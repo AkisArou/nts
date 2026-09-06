@@ -14,16 +14,31 @@ test-process-external-stdio-close-spawn.js: active-environment gap; the routed I
 test-process-getgroups.js: treats an absent getgroups as success even on POSIX, so empty-module sabotage is hollow; the same `id -G` oracle runs without that optional guard in local/getgroups.js
 test-process-redirect-warnings.js: active-environment gap; the routed child needs startup-option normalization and a warning-file sink for --redirect-warnings
 test-process-redirect-warnings-env.js: active-environment gap; the routed child needs startup environment policy and a warning-file sink for NODE_REDIRECT_WARNINGS
+test-process-warnings.mjs: runtime blocker; the process host does not yet expose its normalized --no-warnings/--no-deprecation/repeated --disable-warning/NODE_OPTIONS snapshot, while local/warning-policy.js retains direct warning emission and writable policy behavior
 
-# `execve` replaces the process image. A test that calls it successfully does
-# not fail the runner, it *ends* it -- the kernel loads another program over
-# this one, and whatever the runner still had to report goes with it. There is
-# no in-process form of that. `test-process-execve-validation.js` is left in:
-# every one of its calls is expected to throw before reaching the system call.
-test-process-execve.js: replaces the process image, taking the runner with it
-test-process-execve-no-args.js: replaces the process image
-test-process-execve-on-exit.js: replaces the process image from an exit handler
-test-process-execve-socket.js: replaces the process image with an open socket
+# The API itself is implemented in its final WeakRef/FinalizationRegistry form,
+# and local/finalization.js retains every process-local upstream fixture. The
+# remaining upstream cases require an independent runtime registry inside a
+# Worker, which a single-environment addon must refuse rather than share.
+test-process-finalization.mjs: cross-module integration; Worker-local process.finalization needs one isolated runtime per Node Environment, while local/finalization.js retains exit, beforeExit, GC cleanup, unregister, and argument validation
+
+# A dynamically selected builtin has no object type or static link target. The
+# final implementation depends on the planned runtime module registry plus a
+# generic object-handle representation; neither exists in the current ABI.
+test-process-get-builtin.mjs: runtime blocker; getBuiltinModule needs the planned runtime builtin-module registry and heterogeneous object handles rather than the current link-time module graph
+
+# Successful `execve` replaces the inner runner. The outer local observer can
+# still grade the replacement's status, arguments, environment, lifecycle, and
+# descriptor inheritance; local/execve-success.js retains those public cases.
+# The unchanged fixtures cannot be used because they exec their vendored `.js`
+# path, which the checkout's root `type: module` then reinterprets as ESM.
+# `test-process-execve-validation.js` stays directly applicable because every
+# call throws before reaching the replacement boundary. The no-argument test
+# remains enrolled and reports Node's own environment skip when its `nop`
+# fixture binary is unavailable.
+test-process-execve.js: harness/package boundary; after replacing the inner runner, the root `type: module` reinterprets this CommonJS `.js` fixture as ESM; local/execve-success.js retains argv, environment, and successful replacement
+test-process-execve-on-exit.js: harness/package boundary; after replacing the inner runner, the root `type: module` reinterprets this CommonJS `.js` fixture as ESM; local/execve-success.js retains the no-exit-event contract
+test-process-execve-socket.js: harness/package boundary; after replacing the inner runner, the root `type: module` reinterprets this CommonJS `.js` fixture as ESM; local/execve-success.js retains close-on-exec socket behavior
 test-process-execve-permission-fail.js: needs --permission to deny the call
 test-process-execve-permission-granted.js: needs --permission to allow the call
 test-process-execve-worker-threads.js: needs worker_threads to be the caller

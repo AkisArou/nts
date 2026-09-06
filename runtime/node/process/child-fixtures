@@ -2,3 +2,12 @@
 # through the conformance runner instead of silently using Node's builtin.
 fixtures/uncaught-exceptions/uncaught-monitor1.js
 fixtures/uncaught-exceptions/uncaught-monitor2.js
+
+# The non-Worker process.finalization fixtures are ESM children. Their parent
+# test also exercises Worker-local registries, which the single-environment
+# addon cannot claim; local/finalization.js retains these process-local cases.
+fixtures/process/before-exit.mjs
+fixtures/process/close.mjs
+fixtures/process/finalization-cleanup.mjs
+fixtures/process/gc-not-close.mjs
+fixtures/process/unregister.mjs

@@ -192,12 +192,14 @@ function judgeWhenQuiet() {
   const onBeforeExit = () => {
     rounds++;
     if (peekPending().length > 0 && rounds < SETTLE_ROUNDS) {
-      // A native handle can queue its final JavaScript event while ceasing to
-      // keep the loop alive. In that case Node enters `beforeExit` before the
-      // queued event is delivered. Keep one host-immediate turn alive so the
-      // event and its implementation ticks can run, then judge the next quiet
-      // round. Merely returning here does not cause another `beforeExit`.
-      hostSetImmediate(() => {});
+      // Work scheduled by an earlier `beforeExit` listener has not necessarily
+      // run yet. In particular, a next tick runs after every listener in this
+      // round, and must not itself make Node emit `beforeExit` again. Check once
+      // the host tick queue has drained; only a still-pending native event needs
+      // an immediate to keep the loop alive for another round.
+      hostProcess.nextTick(() => {
+        if (peekPending().length > 0) hostSetImmediate(() => {});
+      });
       return;
     }
     finish();
@@ -462,14 +464,18 @@ if (existsSync(childFixturesPath)) {
     .filter((line) => line.length > 0 && !line.startsWith("#"))) {
     const child = resolvePath(nodeTestRoot, childName);
     const withinTestTree = relative(nodeTestRoot, child);
-    if (withinTestTree.startsWith("..") || isAbsolute(withinTestTree) || !child.endsWith(".js")) {
+    if (
+      withinTestTree.startsWith("..") ||
+      isAbsolute(withinTestTree) ||
+      !/\.m?js$/.test(child)
+    ) {
       throw new Error(`invalid declared child fixture: ${childName}`);
     }
     declaredChildFixtures.add(child);
   }
 }
 
-function commonJsNodeTestTarget(candidate, cwd) {
+function nodeTestTarget(candidate, cwd) {
   if (typeof candidate !== "string") return null;
   const target = resolvePath(cwd, candidate);
   const withinNodeTests = relative(nodeTestRoot, target);
@@ -478,7 +484,7 @@ function commonJsNodeTestTarget(candidate, cwd) {
     (!withinNodeTests.startsWith("..") && !isAbsolute(withinNodeTests)) ||
     (!withinLocalTests.startsWith("..") && !isAbsolute(withinLocalTests));
   if (
-    !target.endsWith(".js") ||
+    !/\.m?js$/.test(target) ||
     (dirname(target) !== dirname(resolvePath(file)) && !declaredChildFixtures.has(target)) ||
     !belongsToKnownTestTree
   ) {
@@ -512,22 +518,22 @@ function nestedChildOptions(options) {
 }
 
 /**
- * Preserve the subject and Node's CommonJS test-runner mode when a fixture
- * forks itself, another fixture in the same suite directory, or a helper the
- * module explicitly declares in `child-fixtures`.
+ * Preserve the subject and Node's per-file test-runner mode when a fixture
+ * forks itself, another fixture in the same suite directory, or a JavaScript
+ * helper the module explicitly declares in `child-fixtures`.
  *
  * Re-entering this runner prevents two false behaviors at once: the root ESM
- * package cannot reinterpret an upstream `.js` fixture, and the child cannot
- * silently switch from the implementation under test to Node's builtin. The
- * explicit manifest keeps an unrelated child or test-infrastructure worker on
- * Node's implementation.
+ * package cannot reinterpret an upstream CommonJS fixture, and either module
+ * mode keeps the implementation under test instead of silently switching to
+ * Node's builtin. The explicit manifest keeps unrelated programs on Node's
+ * implementation.
  */
 function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
   const hasArgs = Array.isArray(argsOrOptions);
   const args = hasArgs ? argsOrOptions : [];
   const options = hasArgs ? maybeOptions : argsOrOptions;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
-  const target = commonJsNodeTestTarget(modulePath, cwd);
+  const target = nodeTestTarget(modulePath, cwd);
 
   if (target !== null) {
     return realChildProcess.fork(
@@ -551,8 +557,8 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
   if (shellRoute !== null) {
     return realChildProcess.spawn(command, shellRoute.args, shellRoute.options);
   }
-  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
-  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
+  const fixtureIndex = args.findIndex((argument) => nodeTestTarget(argument, cwd) !== null);
+  const target = nodeTestTarget(args[fixtureIndex], cwd);
 
   if (
     isNodeExecutable(command) &&
@@ -590,8 +596,8 @@ function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
   if (shellRoute !== null) {
     return realChildProcess.spawnSync(command, shellRoute.args, shellRoute.options);
   }
-  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
-  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
+  const fixtureIndex = args.findIndex((argument) => nodeTestTarget(argument, cwd) !== null);
+  const target = nodeTestTarget(args[fixtureIndex], cwd);
 
   if (
     isNodeExecutable(command) &&
@@ -645,7 +651,7 @@ function routedShellInvocation(command, environment, cwd) {
       !Object.hasOwn(environment, nodeName) ||
       !Object.hasOwn(environment, targetName) ||
       !isNodeExecutable(environment[nodeName]) ||
-      commonJsNodeTestTarget(environment[targetName], cwd) === null
+      nodeTestTarget(environment[targetName], cwd) === null
     ) {
       continue;
     }
@@ -727,8 +733,8 @@ function execFileInfrastructure(file, argsOrOptionsOrCallback, optionsOrCallback
   const options = callbackOnly ? undefined : second;
   const callback = callbackOnly ? second : hasArgs ? maybeCallback : optionsOrCallback;
   const cwd = typeof options?.cwd === "string" ? options.cwd : hostProcess.cwd();
-  const fixtureIndex = args.findIndex((argument) => commonJsNodeTestTarget(argument, cwd) !== null);
-  const target = commonJsNodeTestTarget(args[fixtureIndex], cwd);
+  const fixtureIndex = args.findIndex((argument) => nodeTestTarget(argument, cwd) !== null);
+  const target = nodeTestTarget(args[fixtureIndex], cwd);
 
   if (
     isNodeExecutable(file) &&
@@ -794,9 +800,10 @@ const childProcessInfrastructure = {
  */
 class CommonJsFixtureWorker extends realWorkerThreads.Worker {
   constructor(filename, options = {}) {
-    const target = options.eval === true
+    const candidate = options.eval === true
       ? null
-      : commonJsNodeTestTarget(filename, hostProcess.cwd());
+      : nodeTestTarget(filename, hostProcess.cwd());
+    const target = candidate?.endsWith(".js") ? candidate : null;
     if (target === null) {
       super(filename, options);
       return;

@@ -16,6 +16,7 @@
 import { EventEmitter } from "../../events/src/main.ts";
 import { stderr, stdout } from "../../internal/stdio.ts";
 import { env, refreshEnvironment } from "./env.ts";
+import { createProcessFinalization } from "./finalization.ts";
 import { emitWarningFor, onWarningFor } from "./warning.ts";
 import {
   availableMemory,
@@ -366,16 +367,7 @@ class Process extends EventEmitter {
 
   abort = abort;
 
-  kill(pid: number, signal?: string | number): true {
-    // `!=` on purpose: node accepts a numeric string here, and the check is
-    // "does this round-trip through a 32-bit integer", not "is this a number".
-    if (pid != (pid | 0)) {
-      throw new ERR_INVALID_ARG_TYPE("pid", "number", pid);
-    }
-    const err = rawKill(pid, signalNumber(signal));
-    if (err) throw exceptionWithHostPort(err, "kill");
-    return true;
-  }
+  kill = processKill;
 
   /**
    * Ask the process to end.
@@ -400,6 +392,9 @@ class Process extends EventEmitter {
   initgroups = initgroups;
 
   emitWarning = emitWarningFor(this);
+
+  /** Weakly-held resource cleanup at the process lifecycle boundaries. */
+  readonly finalization = createProcessFinalization(this);
 
   /**
    * What is currently keeping the loop from exiting, by name.
@@ -468,6 +463,17 @@ function processNextTick<A extends unknown[]>(callback: (...args: A) => void, ..
   // made `process.nextTick` and the internal one two different things, and
   // only one of them was a tick anybody could observe.
   nextTick(callback, ...args);
+}
+
+function processKill(pid: number, signal?: string | number): true {
+  // `!=` on purpose: node accepts a numeric string here, and the check is
+  // "does this round-trip through a 32-bit integer", not "is this a number".
+  if (pid != (pid | 0)) {
+    throw new ERR_INVALID_ARG_TYPE("pid", "number", pid);
+  }
+  const err = rawKill(pid, signalNumber(signal));
+  if (err) throw exceptionWithHostPort(err, "kill");
+  return true;
 }
 
 function processExit(...given: [] | [code: number | string | null | undefined]): never {
