@@ -286,6 +286,6 @@ fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
         "the HTTP/gzip integration failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+    assert!(said.ends_with("6 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }

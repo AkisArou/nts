@@ -101,6 +101,13 @@ fn every_producer_publishes_and_every_credit_returns() {
         "the inbox stress failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+    // The **counts**, not only the zeros. A vector file that generated nothing
+    // prints `0 vectors, 0 chunk/output combinations, 0 mismatches` and would
+    // satisfy an assertion on the last number alone -- which is the same hole
+    // as a suite that stopped running reporting no failures.
+    assert!(
+        said.ends_with("16 producers x 200 rounds published, credits balanced, 0 failures"),
+        "{said}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

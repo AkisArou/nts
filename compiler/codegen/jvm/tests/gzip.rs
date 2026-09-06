@@ -133,7 +133,11 @@ fn run(driver: &str) -> Option<String> {
 #[test]
 fn every_split_of_every_stream_decodes_to_the_same_bytes() {
     let Some(said) = run("Drive") else { return };
-    assert!(said.ends_with("0 mismatches"), "{said}");
+    // The **counts**, not only the zeros. A vector file that generated nothing
+    // prints `0 vectors, 0 chunk/output combinations, 0 mismatches` and would
+    // satisfy an assertion on the last number alone -- which is the same hole
+    // as a suite that stopped running reporting no failures.
+    assert!(said.ends_with("10 vectors, 400 chunk/output combinations, 0 mismatches"), "{said}");
 }
 
 /// The half that proves the first half can fail.
@@ -146,5 +150,5 @@ fn every_split_of_every_stream_decodes_to_the_same_bytes() {
 #[test]
 fn every_corruption_is_refused_rather_than_absorbed() {
     let Some(said) = run("Sabotage") else { return };
-    assert!(said.ends_with("0 accepted"), "{said}");
+    assert!(said.ends_with("9 corruptions, 0 accepted"), "{said}");
 }
