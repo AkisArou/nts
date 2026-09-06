@@ -1810,6 +1810,19 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * `state` says rejected only after the pointer is stored -- and a null answers
  * `undefined`, which is what a `catch` of one would see. */
 NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
+/* Reject with a reason that arrives erased.
+ *
+ * `nts_promise_reject` takes an `NtsHeader *` because a reason is always a
+ * reference. A **rethrow** does not have one: it has whatever
+ * `nts_promise_reason` handed back, which is erased because `catch (e)` is
+ * `unknown` -- and a `finally` that spans an `await` has to reject with exactly
+ * that value after running.
+ *
+ * So this takes the tagged form and reads the reference out of it. A value that
+ * is not a reference cannot arise -- it came from a rejection, and a rejection
+ * carries one -- and if one did, rejecting with nothing is what a rejection
+ * with no reason already means. */
+void nts_promise_reject_value(NtsPromise *promise, NtsValue reason);
 
 /* --- Combinators (docs/async.md 5b) ----------------------------------------
  *

@@ -56,16 +56,10 @@ export async function consumed(xs: AsyncIterable<number>): Promise<number> {
   return total;
 }
 
-// A `finally` has to run on every path out of the try, including the one where
-// the function suspended and came back with an exception -- which is the
-// exception state machine rather than the value one.
-export async function guarded(p: Promise<number>): Promise<number> {
-  try {
-    return await p;
-  } finally {
-    // Nothing here: it is spanning the `await` that is refused, not the body.
-  }
-}
+// A `finally` that spans an `await` **landed** -- see `examples/async-finally`.
+// It was here because a rejection leaves the `try` on a path no `throw` wrote,
+// and the `finally` has to run on it; the answer is a handler synthesised where
+// the source wrote none.
 
 // A promise settled *with* a promise: adoption. The outer one subscribes to
 // the inner, waits, and takes its value -- two extra ticks that any

@@ -10420,6 +10420,29 @@ impl<'a> FuncBuilder<'a> {
         let thrown_ty = self.values[value.0 as usize].ty.clone();
 
         let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+        self.throw_erased(id, value, erased, &thrown_ty)
+    }
+
+    /// Throw a value that has already been computed and erased.
+    ///
+    /// Split out of [`Self::lower_throw`] because a **rethrow** has no
+    /// expression to lower: `try { await p } finally { … }` runs the `finally`
+    /// on the rejection path and then goes on rejecting with the reason the
+    /// promise carried, and that value arrives from `nts_promise_reason`
+    /// already erased.
+    ///
+    /// `value` is the unerased form where there is one, because rejecting a
+    /// promise wants the reference and printing an uncaught throw wants the
+    /// `message` field. A rethrow has only the erased form, and passes it for
+    /// both -- the runtime reads the reference out of the tag.
+    fn throw_erased(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        erased: ValueId,
+        thrown_ty: &HirType,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
 
         // A `throw` with a handler in this function is a jump to it and nothing
         // more. The value rides the edge as a block argument, so it never
@@ -10482,10 +10505,27 @@ impl<'a> FuncBuilder<'a> {
         // writing one into that slot would be a pointer the collector follows.
         if let Some(result) = self.async_result.clone() {
             if !matches!(thrown_ty, HirType::Managed(_)) {
-                return Err(self.unsupported(
-                    id,
-                    "an `async` function throwing something that is not a reference",
-                ));
+                // Except an **erased** one, which is what a rethrow has: a
+                // `finally` that spans an `await` runs and then rejects with
+                // whatever `nts_promise_reason` handed back, and that is
+                // `unknown` because `catch (e)` is. The runtime reads the
+                // reference out of the tag rather than this guessing a type
+                // for it -- a reason is always a reference, and the one place
+                // that knows which is the header.
+                if *thrown_ty != HirType::Erased {
+                    return Err(self.unsupported(
+                        id,
+                        "an `async` function throwing something that is not a reference",
+                    ));
+                }
+                self.runtime_call(
+                    "nts_promise_reject_value",
+                    vec![result.promise, erased],
+                    HirType::Void,
+                    origin,
+                );
+                self.terminate(Terminator::Return(Some(result.promise)));
+                return Ok(());
             }
             self.runtime_call(
                 "nts_promise_reject",
@@ -10506,7 +10546,7 @@ impl<'a> FuncBuilder<'a> {
         // classes: any object with a string `message` renders, which covers
         // every `class MyError extends Error` without needing to know that any
         // of them is one.
-        let detail = match message_field(&self.layouts, &thrown_ty) {
+        let detail = match message_field(&self.layouts, thrown_ty) {
             Some(field) => self.push(
                 OpKind::FieldGet {
                     object: value,
@@ -11118,6 +11158,95 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// `try { … } finally { … }`, with no `catch`.
+    ///
+    /// A `throw` in the body finds the `finally` on the exit stack and whatever
+    /// encloses that, so it needs nothing from here — the body is lowered as it
+    /// stands and `run_finallys_to` does the rest.
+    ///
+    /// A **rejected `await`** is the exception. It leaves the `try` on a path
+    /// no `throw` wrote, and the `finally` has to run on it: node runs it, and
+    /// this compiler did not, which was a wrong answer rather than a gap. So a
+    /// handler is synthesised where the source wrote none —
+    ///
+    /// ```text
+    /// try { … } finally { F }   ->   try { … } catch (e) { F; throw e } finally { F }
+    /// ```
+    ///
+    /// — which is what explicit cleanup means and what `run_finallys_to`
+    /// already does for every other abrupt exit. It is built only when a
+    /// rejection recorded itself, so a `try`/`finally` around code that cannot
+    /// reject leaves nothing behind.
+    ///
+    /// The `finally` is taken **off** the exit stack while its own copy is
+    /// lowered here, for the reason `run_finallys_to` takes it off: the rethrow
+    /// at the end must run whatever encloses this `try`, and not this one
+    /// again.
+    fn lower_unguarded(&mut self, id: NodeId, body: NodeId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let entry = self.bindings.clone();
+        self.exits.push(Exit::Handler(Handler {
+            block: None,
+            edges: Vec::new(),
+            rejections: Vec::new(),
+        }));
+        let lowered = self.lower_statement(body);
+        let Some(Exit::Handler(frame)) = self.exits.pop() else {
+            unreachable!("pushed immediately above")
+        };
+        lowered?;
+
+        let body_tail = self.current;
+        let body_open = !self.is_terminated();
+        let body_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+
+        let Some(handler) = frame.block else {
+            // Nothing rejected and nothing threw here, so there is no path this
+            // `try` needs a copy of the `finally` for.
+            self.bindings = body_bindings;
+            return Ok(());
+        };
+
+        let thrown = self.open_handler(handler, &frame, &entry, &origin);
+        self.switch_to(handler);
+        // Its own copy of the `finally`, and then the rethrow. Both with this
+        // `try`'s `finally` off the stack: the copy is being written here, and
+        // the rethrow belongs to whatever encloses.
+        let floor = self
+            .exits
+            .iter()
+            .rposition(|exit| matches!(exit, Exit::Finally(_)));
+        let above = floor.map(|at| self.exits.split_off(at));
+        let cleanup = self.finally_of(id).map(|body| self.lower_statement(body));
+        let rethrow = if self.is_terminated() {
+            // The `finally` left by itself -- a `return` or a `throw` in it
+            // replaces the completion on its way out, which is what the
+            // language says.
+            Ok(())
+        } else {
+            self.throw_erased(id, thrown, thrown, &HirType::Erased)
+        };
+        if let Some(above) = above {
+            self.exits.extend(above);
+        }
+        cleanup.transpose()?;
+        rethrow?;
+
+        self.bindings = body_bindings;
+        self.current = body_tail;
+        if !body_open {
+            self.terminate(Terminator::Unreachable);
+        }
+        Ok(())
+    }
+
+    /// The `finally` body of a `try`, where it has one.
+    fn finally_of(&mut self, id: NodeId) -> Option<NodeId> {
+        let parts = self.children(id);
+        let last = *parts.last()?;
+        (parts.len() >= 2 && self.kind_of(last) == Some(syntax::BLOCK)).then_some(last)
+    }
+
     /// The `try` and its `catch`, with whatever `finally` encloses them already
     /// on the exit stack.
     fn lower_guarded(
@@ -11127,10 +11256,7 @@ impl<'a> FuncBuilder<'a> {
         clause: Option<NodeId>,
     ) -> Result<(), Diagnostic> {
         let Some(clause) = clause else {
-            // `try { … } finally { … }`. Nothing catches, so the body is lowered
-            // as it stands -- a `throw` in it finds the `finally` on the stack
-            // and whatever encloses that.
-            return self.lower_statement(body);
+            return self.lower_unguarded(id, body);
         };
         let clause_parts = self.children(clause);
         let Some(&handler_body) = clause_parts.last() else {
@@ -19296,13 +19422,14 @@ const fn logical_assignment(token: u16) -> Option<Logical> {
 ///   to survive being resumed from both a consumer and an awaited promise.
 /// - `for await` is a loop whose *iteration protocol* suspends, so the
 ///   suspension points are inside machinery the source never wrote.
-/// - A `finally` that spans an `await` has to run on every path out of the try,
-///   including the one where the function suspended and was resumed with an
-///   exception -- which is the exception state machine, not the value one.
+/// - A `finally` that spans a **`yield`** is iterator closing: a `for...of`
+///   left by `break` calls `gen.return()`, which resumes the generator inside
+///   its `try` and runs the `finally`. Nothing here does that -- an abandoned
+///   walk simply stops calling the resumption.
 ///
-/// Conservative in the safe direction: any `await` anywhere inside a `try` that
-/// has a `finally` is refused, rather than only those on a path the `finally`
-/// could observe. A narrower rule is a proof this lowering has not written.
+/// A `finally` that spans an `await` is **not** on this list any more: a
+/// rejection is an edge into a handler, and `lower_unguarded` synthesises the
+/// handler a `try`/`finally` never wrote.
 fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static str> {
     let node = snapshot.nodes.get(id.0 as usize)?;
     let asynchronous = node
@@ -19321,12 +19448,6 @@ fn refused_by_name(snapshot: &SemanticSnapshot, id: NodeId) -> Option<&'static s
             && has_child_of_kind(snapshot, child, syntax::AWAIT_KEYWORD)
         {
             found = Some("a `for await` loop");
-        }
-        if kind == Some(syntax::TRY_STATEMENT)
-            && has_finally(snapshot, child)
-            && contains_kind(snapshot, child, syntax::AWAIT_EXPRESSION)
-        {
-            found = Some("a `finally` that spans an `await`");
         }
         // The same for a `yield`, and it is **iterator closing**: a `for...of`
         // left by `break` or `return` calls `gen.return()` on the way out,

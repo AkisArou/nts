@@ -178,6 +178,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_promise_reason", returns: "{ i32, i64 }", params: &["ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_promise_reference", returns: "ptr", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_promise_reject", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_promise_reject_value", returns: "void", params: &["ptr", "i32", "i64"], attributes: &[] },
     Signature { name: "nts_promise_reject_with", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_promise_subscribe", returns: "void", params: &["ptr", "ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
     Signature { name: "nts_promise_value", returns: "{ i32, i64 }", params: &["ptr"], attributes: &[] },

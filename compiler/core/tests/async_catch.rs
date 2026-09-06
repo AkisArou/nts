@@ -154,3 +154,73 @@ fn a_rejection_carries_the_handlers_parameters() {
     );
     assert_eq!(rejection.reason_at, 0, "the reason is pushed first");
 }
+
+/// A `try`/`finally` with no `catch` gets a handler synthesised for it.
+///
+/// A rejected `await` leaves the `try` on a path no `throw` wrote, and the
+/// `finally` has to run on it. So `lower_unguarded` builds the handler the
+/// source never wrote:
+///
+/// ```text
+/// try { … } finally { F }  ->  try { … } catch (e) { F; throw e } finally { F }
+/// ```
+///
+/// which is what explicit cleanup means, and what `run_finallys_to` already
+/// does for every other abrupt exit.
+#[test]
+fn a_finally_with_no_catch_still_receives_the_rejection() {
+    let Some(lowered) = lowered("async-finally") else {
+        return;
+    };
+    let found = awaits(&lowered, "cleanedOnly");
+    assert_eq!(found.len(), 1, "one `await`: {found:?}");
+    assert!(
+        found[0].is_some(),
+        "its rejection reaches the synthesised handler: {found:?}",
+    );
+}
+
+/// And one built only where something can reject.
+///
+/// The pair, and it is not decoration: a handler block with no predecessors is
+/// one the verifier rejects, so synthesising unconditionally makes every
+/// defensive `try`/`finally` an invalid function. `onceNotTwice` has a
+/// `try`/`finally` whose only abrupt exit is a `throw`, which needs no
+/// synthesised handler because `run_finallys_to` already covers it.
+#[test]
+fn a_finally_around_nothing_that_rejects_synthesises_nothing() {
+    let Some(lowered) = lowered("async-finally") else {
+        return;
+    };
+    let func = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "plainCleanup")
+        .expect("exported from examples/async-finally");
+
+    // Every block reachable from the entry. A handler nothing jumps to is a
+    // block with no predecessors, and this is the smallest thing that says so
+    // — the whole-program verifier runs after passes that would have removed
+    // it, so it cannot.
+    let mut seen = vec![false; func.blocks.len()];
+    let mut pending = vec![0usize];
+    while let Some(at) = pending.pop() {
+        if std::mem::replace(&mut seen[at], true) {
+            continue;
+        }
+        for target in func.blocks[at].terminator.successors() {
+            pending.push(target.0 as usize);
+        }
+    }
+    let orphans: Vec<usize> = seen
+        .iter()
+        .enumerate()
+        .filter(|(_, reached)| !**reached)
+        .map(|(at, _)| at)
+        .collect();
+    assert!(
+        orphans.is_empty(),
+        "a `try`/`finally` with nothing to catch leaves no block behind: {orphans:?}",
+    );
+}
