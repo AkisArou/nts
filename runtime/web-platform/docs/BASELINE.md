@@ -98,8 +98,8 @@ initializer without modifying the upstream test.
 
 ## Current integration evidence
 
-At `d79e9e7`, the repository TypeScript build passes, the Node-host suite passes
-95/95 with zero skipped, and the unchanged WPT slice passes 35/35. The additional
+At `9779ffb`, the repository TypeScript build passes, the Node-host suite passes
+98/98 with zero skipped, and the unchanged WPT slice passes 39/39. The additional
 local cases cover protocol parsing, Web IDL conversion, MIME/body behavior,
 cancellation, pool shutdown, TLS, canonical event initialization, and Blob
 view/slice behavior; they do not turn host execution into evidence for a compiled
@@ -115,6 +115,13 @@ behaviors with calls rejected by the TypeScript API itself, including `null` for
 `string` parameter and numbers in `BlobPart[]`. Fractional Web IDL slice conversion,
 view copying, and immutability therefore remain focused typed differential tests;
 they are not substitutes for an otherwise applicable whole upstream file.
+
+The WPT slice also consumes the complete unchanged
+`streams/readable-streams/floating-point-total-queue-size.any.js` fixture from
+Node's pinned Streams checkout. Its four cases preserve the specification's exact
+double-precision queue arithmetic: subtraction clamps a negative total to zero but
+does not erase a small positive residue merely because the queue became empty. The
+manifest verifies the independent Streams revision and the fixture's Git blob.
 
 `tooling/conformance/web-platform/check.sh` performs one fresh host emit before both
 the local and upstream suites. Direct execution of `test-upstream.mjs` performs its
@@ -144,6 +151,18 @@ check reports 183 primary refusals, 39 cascades, zero JVM-backend refusals, and 
 invalid HIR. Four primary messages disappeared while one additional dependent path
 became reachable; this is a changed diagnostic frontier caused by the intended
 parser architecture, not evidence that four general language features were closed.
+
+At `9779ffb`, the default readable-stream state machine uses a head-indexed pending
+read queue rather than quadratic `Array.shift()` delivery. Strategy size callbacks
+are invoked without an accidental stream receiver, tee branches use the standard
+one-chunk demand, and source close/error is observed even when no branch currently
+has a read pending. A branch canceled before its source errors now fulfills its
+cancellation promise while the active branch receives the source error. The
+original tee and Fetch-transfer streams deliberately remain locked after terminal
+state, matching Node; releasing those readers as cleanup is observably wrong. The
+live NTS check reports 195 primary refusals, 39 cascades, zero JVM-backend refusals,
+and no invalid HIR. As above, the changed refusal count is a diagnostic frontier
+for final-form source, not a completed-feature count.
 
 The common C runtime now has an `NtsEnvironment` and scoped current-environment ABI,
 but shared TypeScript cannot yet obtain its environment-owned Web dependencies.
