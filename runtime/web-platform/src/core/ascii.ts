@@ -33,6 +33,14 @@ export function trimHTTPWhitespace(value: string): string {
   return start === 0 && end === value.length ? value : value.slice(start, end);
 }
 
+export function trimTrailingHTTPWhitespace(value: string): string {
+  let end = value.length;
+
+  while (end > 0 && isHTTPWhitespace(value.charCodeAt(end - 1))) end--;
+
+  return end === value.length ? value : value.slice(0, end);
+}
+
 export function trimASCIIWhitespace(value: string): string {
   let start = 0;
   let end = value.length;

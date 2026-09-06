@@ -1,13 +1,13 @@
 import { ReadableStream, bytesStream, tee, transfer } from "../streams/readable.ts";
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
-import { trimHTTPWhitespace } from "../core/ascii.ts";
 import type { RandomSource } from "../provider/ports.ts";
 import { Blob } from "../forms/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
+import { parseMIMEType } from "../forms/mime.ts";
 
 export type BodyInit =
   | string
@@ -189,15 +189,14 @@ export abstract class Body {
     return new Blob([await this.bytes()], { type: this.contentType() ?? "" });
   }
   async formData(): Promise<FormData> {
-    const contentType = trimHTTPWhitespace(
-      (this.contentType() ?? "").split(";")[0] ?? "",
-    ).toLowerCase();
-    if (contentType === "multipart/form-data")
-      return decodeMultipart(await this.bytes(), this.contentType() ?? "");
-    if (contentType !== "application/x-www-form-urlencoded")
+    const bytes = await this.bytes();
+    const mime = parseMIMEType(this.contentType() ?? "");
+
+    if (mime?.essence === "multipart/form-data") return decodeMultipart(bytes, mime);
+    if (mime?.essence !== "application/x-www-form-urlencoded")
       throw new TypeError("Unsupported form Content-Type");
     const result = new FormData();
-    for (const [name, value] of new URLSearchParams(await this.text())) result.append(name, value);
+    for (const [name, value] of new URLSearchParams(decodeUTF8(bytes))) result.append(name, value);
     return result;
   }
   protected abstract contentType(): string | null;

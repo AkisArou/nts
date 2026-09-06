@@ -35,6 +35,7 @@ import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
+const NativeResponse = globalThis.Response;
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
@@ -495,6 +496,46 @@ test("Malformed multipart never returns a partial form", async () => {
         headers: [["content-type", "multipart/form-data; boundary=b"]],
       }).formData(),
     );
+  }
+});
+test("Body.formData uses MIME parsing, consumes failures, and gives files the specified type", async () => {
+  const multipart =
+    '--b\r\nContent-Disposition: form-data; name="x"; filename="a.txt"\r\n\r\ny\r\n--b--';
+
+  for (const contentType of [
+    "multipart/form-data; broken; boundary=b",
+    'multipart/form-data; boundary="b"junk',
+  ]) {
+    const actual = await makeResponse(multipart, {
+      headers: [["content-type", contentType]],
+    }).formData();
+    const expected = await new NativeResponse(multipart, {
+      headers: [["content-type", contentType]],
+    }).formData();
+    const actualFile = actual.get("x");
+    const expectedFile = expected.get("x");
+
+    assert.equal(actualFile.name, expectedFile.name);
+    assert.equal(actualFile.type, expectedFile.type);
+    assert.equal(await actualFile.text(), await expectedFile.text());
+  }
+
+  for (const contentType of [
+    "multipart/form-data; boundary= b",
+    "\fapplication/x-www-form-urlencoded",
+    "\u00a0application/x-www-form-urlencoded",
+  ]) {
+    const payload = contentType.startsWith("multipart") ? multipart : "x=y";
+    const response = makeResponse(payload, {
+      headers: [["content-type", contentType]],
+    });
+    const expected = new NativeResponse(payload, {
+      headers: [["content-type", contentType]],
+    });
+
+    await assert.rejects(response.formData());
+    await assert.rejects(expected.formData());
+    assert.equal(response.bodyUsed, expected.bodyUsed);
   }
 });
 test("Abort event-handler insertion order, replacement, receiver and dispatch phase", () => {

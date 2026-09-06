@@ -4,7 +4,8 @@ import { LimitError } from "../core/errors.ts";
 import { isToken } from "../fetch/headers.ts";
 import { FormData } from "./form-data.ts";
 import { File } from "./blob.ts";
-import { parseParameterized } from "./mime.ts";
+import { parseContentDisposition } from "./mime.ts";
+import type { MIMEType } from "./mime.ts";
 
 export interface MultipartDecodeLimits {
   maxParts?: number;
@@ -42,14 +43,13 @@ function at(bytes: Uint8Array, position: number, a: number, b: number): boolean 
 /** Materializing Body.formData() parser, not an implicit network buffer. */
 export function decodeMultipart(
   bytes: Uint8Array,
-  contentType: string,
+  mime: MIMEType,
   limits: MultipartDecodeLimits = {},
 ): FormData {
-  const mime = parseParameterized(contentType);
   const boundary = mime.parameters.get("boundary");
 
   if (
-    mime.value !== "multipart/form-data" ||
+    mime.essence !== "multipart/form-data" ||
     boundary === undefined ||
     boundary.length < 1 ||
     boundary.length > 70 ||
@@ -86,7 +86,7 @@ export function decodeMultipart(
     if (end < 0 || end - offset > (limits.maxPartHeaderBytes ?? 16384))
       throw new LimitError("Multipart headers missing or too large");
     let disposition: string | null = null;
-    let type = "application/octet-stream";
+    let type = "text/plain";
     for (const line of decodeUTF8(bytes.subarray(offset, end)).split("\r\n")) {
       const colon = line.indexOf(":");
       const name = line.slice(0, colon).toLowerCase();
@@ -106,7 +106,7 @@ export function decodeMultipart(
       }
     }
     if (disposition === null) throw new TypeError("Missing multipart Content-Disposition");
-    const parameters = parseParameterized(disposition);
+    const parameters = parseContentDisposition(disposition);
     const name = parameters.parameters.get("name");
     if (parameters.value !== "form-data" || name === undefined)
       throw new TypeError("Invalid multipart disposition");
