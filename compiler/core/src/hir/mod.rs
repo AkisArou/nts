@@ -1837,6 +1837,37 @@ pub fn prepare_with(
 /// declared in the header, and a dispatch already tolerates a hole — the tables
 /// emit a null where an implementation is missing, which is the same thing this
 /// does for the other kind of call.
+/// Remove class ids from an [`OpKind::InstanceOf`] that no layout claims.
+///
+/// A comparison is against a *descriptor*, and a type with no layout has none —
+/// so it names no object that can exist and contributes no test.
+///
+/// The lowering cannot filter these itself: `"k" in value` over an `object`
+/// asks every object type in the snapshot whether it declares `k`, and most of
+/// a snapshot's types are never built. Layouts are collected as functions are
+/// lowered, so the complete set exists only here.
+///
+/// It matters because the two backends disagreed about an id with no layout.
+/// The C emitter resolves each to a layout and silently drops the misses; the
+/// JVM emitter refuses — `NTS4001 an instanceof against an unknown class` —
+/// which is the better behaviour and which turned a working program on one lane
+/// into a declined one on the other. Filtering here means neither has to have
+/// an opinion, and the silent drop becomes unreachable rather than load-bearing.
+fn drop_classes_without_layouts(program: &mut Program) {
+    let known: rustc_hash::FxHashSet<ClassId> = program
+        .layouts
+        .iter()
+        .flat_map(|layout| layout.types.iter().copied())
+        .collect();
+    for func in &mut program.funcs {
+        for op in &mut func.values {
+            if let OpKind::InstanceOf { classes, .. } = &mut op.kind {
+                classes.retain(|class| known.contains(class));
+            }
+        }
+    }
+}
+
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
         // A function about to be split by `suspend` provides two names: its
@@ -1936,6 +1967,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // Before anything looks at the program: a function that calls a refused one
     // has a call to nothing in it.
     drop_callers_of_refused(&mut lowered);
+    drop_classes_without_layouts(&mut lowered.program);
     // Before anything looks at the shape of a function: a suspension rewrites
     // one function into two and moves its locals into a frame, and every
     // analysis after this should see the result rather than the source.

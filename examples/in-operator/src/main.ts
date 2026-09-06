@@ -175,3 +175,61 @@ export function theBaseItselfDoesNot(n: number): number {
   const v: Base | Unrelated = n > 0 ? new Base(1) : new Unrelated(3);
   return ("extra" in v ? 10 : 0) + ("common" in v ? 100 : 0);
 }
+
+// `"k" in value` where `value` is **`object`** and nothing narrower.
+//
+// This is how a program duck-types an `unknown`, and it is the shape every one
+// of the 67 sites in `runtime/node` is written in:
+//
+//     value !== null && typeof value === "object" && "message" in value
+//
+// The `typeof` guard is what makes it sound. `"k" in 5` throws in JavaScript,
+// and a value that reaches the `in` has already been proved an object *by the
+// program* — which is why an unguarded `unknown` is still refused: the type
+// says so, and this compiler is not the one doing the proving.
+//
+// The candidate set is then every object type the program has, which is the
+// same closed-world argument the union arms get: a compiled program gains no
+// types. Not every *class* — an object literal typed by an interface has a
+// layout and no entry in the hierarchy, and asking the hierarchy answered
+// `false` for `"label" in { label: "l" }` on 20 of 29 cases.
+
+interface Labelled {
+  label: string;
+}
+
+class Messaged {
+  message = "m";
+}
+
+class Coded {
+  code = 1;
+}
+
+function hasLabel(value: unknown): boolean {
+  return value !== null && typeof value === "object" && "label" in value;
+}
+
+function hasMessage(value: unknown): boolean {
+  return value !== null && typeof value === "object" && "message" in value;
+}
+
+export function duckTypedAgainstAClass(n: number): number {
+  const v: unknown = n > 0 ? new Messaged() : new Coded();
+  return (hasMessage(v) ? 1 : 0) + (hasLabel(v) ? 10 : 0);
+}
+
+// The literal, which is the half the hierarchy could not see.
+export function duckTypedAgainstALiteral(n: number): number {
+  const lit: Labelled = { label: "l" };
+  const v: unknown = n > 0 ? lit : new Coded();
+  return (hasLabel(v) ? 1 : 0) + (hasMessage(v) ? 10 : 0);
+}
+
+// And a value that is *not* an object at all, which the guard rejects before
+// the `in` runs — so the compiled program never reaches a test JavaScript
+// would have thrown for.
+export function duckTypedAgainstANumber(n: number): number {
+  const v: unknown = n;
+  return (hasMessage(v) ? 1 : 0) + (hasLabel(v) ? 10 : 0) + 100;
+}

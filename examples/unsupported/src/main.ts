@@ -239,3 +239,21 @@ function callsAnAmbientOverload(p: Platform, n: number): number {
   return p.read(n);
 }
 void callsAnAmbientOverload;
+
+// `"then" in value` on an `object`, which a natively represented type answers
+// for.
+//
+// `"k" in value` over an `object` is answered from the closed set of types
+// declaring `k` — but `object` includes an array, a `Map`, a `Set`, a `Promise`
+// and a `Date`, none of which has a layout to find a name on. So a set built
+// from the layouts answers *false* for them, and for their own property names
+// JavaScript answers true.
+//
+// `then` is the one that bites, and it is why the list is named rather than
+// derived: four sites in `runtime/node` ask it, and it is exactly how a program
+// tests for a thenable. A `Promise` reaching one of them would be told it is
+// not one.
+function isThenable(value: unknown): boolean {
+  return value !== null && typeof value === "object" && "then" in value;
+}
+void isThenable;

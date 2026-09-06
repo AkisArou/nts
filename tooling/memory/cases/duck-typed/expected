@@ -1,0 +1,36 @@
+ideal 0
+allocated 0
+because Argued before measuring, and the first argument was wrong -- see below.
+because
+because Allocations: none. Seventeen objects, each dying with the iteration
+because that made it, so escape analysis puts each in the frame in turn --
+because the same shape `upcast` and `imported-instanceof` read zero for.
+because
+because Operations: none, by the rule `closure-capture` states. The three
+because tests reach nothing: two read a tag out of a value already in hand,
+because and the third reads a header field and compares a pointer against a
+because static descriptor. None takes a reference to its subject.
+because
+because ## The field is a number, and that is a finding rather than a choice
+because
+because Written first with `message = "m"`, this read **35 operations** against
+because the zero argued here. Four controls, each one line from the last:
+because
+because   a string field, no erasure          0
+because   a string field, erased, one class   0
+because   two classes joined, erased         26   <- the cause
+because   the same with no call at all       26
+because
+because So it is neither the string nor the erasure nor the call. It is the
+because **join**: two frame-placed objects of different classes reaching one
+because erased slot. The emitted C says why -- `nts_value_retain` on a value
+because whose payload is `NTS_IMMORTAL` frame storage, the object's field
+because teardown moved to just after the erase, and a release in each arm of
+because the test. Every one is a no-op at run time and every one is a call.
+because
+because That is record 0091's finding a fourth time -- counting an object
+because escape analysis has already put in the frame -- in a place `rc` does
+because not look: it has a frame rule for a *store* and none for an `Erase`.
+because Named work with a 26-operation reproduction, and not this feature's:
+because the shape predates it and `imported-instanceof` avoids it only by
+because joining two objects of one class.

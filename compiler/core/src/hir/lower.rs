@@ -3448,7 +3448,25 @@ fn representation_of(
         // `Error` nor `Uint8Array` is ever decomposed -- see `super::builtin`
         // for why the first cannot be -- so both arrive structured and would
         // otherwise have no representation at all.
-        TypeKind::Structured { .. } => {
+        TypeKind::Structured { flags } => {
+
+            // TypeScript's `object`: not a primitive, and nothing further.
+            //
+            // An erased value, because that is what "some object, which one is
+            // not known" *is* here -- a tag and a payload, the same
+            // representation `unknown` gets, in a type that has ruled the
+            // primitives out. Nothing narrower is available: the whole content
+            // of the type is the absence of a guarantee.
+            //
+            // It is what `typeof value === "object"` narrows an `unknown` to,
+            // so it is the type at every duck-typing site in `runtime/node` --
+            // **344 occurrences across 36 sites** as a parameter alone, where it
+            // read `a parameter of unrepresentable type (a structured type
+            // (flags 0x20000))`.
+            const NON_PRIMITIVE: u32 = 0x0002_0000;
+            if *flags == NON_PRIMITIVE {
+                return Some(HirType::Erased);
+            }
             let name = named(snapshot, ty)?;
             if let Some(element) = super::builtin::typed_array_element(name) {
                 HirType::Managed(ManagedType::Array(Box::new(element)))
@@ -5225,6 +5243,17 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// Whether an object type declares no member at all.
+    ///
+    /// `{}` is the one that matters: the checker narrows `unknown` to it after
+    /// `!== null`, and it names no shape.
+    fn declares_nothing(&self, ty: TypeId) -> bool {
+        matches!(
+            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Object { properties }) if properties.is_empty()
+        )
+    }
+
     /// A read of an erased binding at the type the checker narrowed it to.
     ///
     /// This is the whole of `Unerase`, and it is one function on purpose. The
@@ -5267,6 +5296,29 @@ impl<'a> FuncBuilder<'a> {
         // the erased value flowed into a multiplication typed `f64` and the
         // backend cast a struct to a double. Refused instead, by the arm below.
         if want == HirType::Void {
+            return Ok(value);
+        }
+        // Narrowed to `{}`, which is the checker saying *not null and not
+        // undefined* rather than naming a shape. There is nothing to read
+        // through it -- it declares no member -- so the narrowing buys nothing,
+        // and it is not free: an unerase is a claim that the value *is* one of
+        // these, and `{}` is a type no object belongs to.
+        //
+        // On a lane with pointers that claim is unchecked and invisible. The
+        // JVM says it out loud:
+        //
+        //     java.lang.ClassCastException: class nts.gen.Messaged cannot be
+        //     cast to class nts.gen.Type117
+        //
+        // where `Type117` is `{}`. Third time this project has recorded a lie
+        // about a type that only the checked-cast backend could see.
+        //
+        // Anonymous, because a *named* empty class is a real class with real
+        // instances -- `class Empty {}` -- and narrowing to one is ordinary.
+        if let HirType::Managed(ManagedType::Object(object)) = &want
+            && self.declares_nothing(*object)
+            && named(self.snapshot, *object).is_none()
+        {
             return Ok(value);
         }
         if !readable_back(&want) {
@@ -10431,6 +10483,148 @@ impl<'a> FuncBuilder<'a> {
     /// answer is a refusal rather than a slot that is always there.
     ///
     /// A union arm that is not an object type, because `"a" in 5` throws.
+    /// TypeScript's `object`: not a primitive, and nothing further.
+    ///
+    /// `TypeFlags.NonPrimitive`, which the schema carries as a structured type
+    /// with that one flag. It is what `typeof value === "object"` narrows an
+    /// `unknown` to, and it is the type at 67 of the `in` sites in
+    /// `runtime/node` and 36 more where it is a parameter.
+    fn is_the_object_type(&self, ty: TypeId) -> bool {
+        const NON_PRIMITIVE: u32 = 0x0002_0000;
+        matches!(
+            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Structured { flags }) if *flags == NON_PRIMITIVE
+        )
+    }
+
+    /// A property a **natively represented** type answers `in` for.
+    ///
+    /// The boundary of the whole-program answer below, and the reason it is a
+    /// list rather than a rule: `object` includes an array, a `Map`, a `Set`, a
+    /// `Promise` and a `Date`, none of which has a layout in `program.layouts`
+    /// -- so a set built from the layouts alone answers *false* for them, and
+    /// for these names JavaScript answers true.
+    ///
+    /// `"then" in promise` is the one that bites: four of the sites ask it, and
+    /// it is exactly how a program tests for a thenable.
+    ///
+    /// Named individually, and conservatively. A name missing from this list is
+    /// a wrong answer; a name here that need not be costs one refusal.
+    fn a_native_type_declares(key: &str) -> bool {
+        matches!(
+            key,
+            // An array, a string and a typed array.
+            "length"
+                // A `Map` and a `Set`.
+                | "size"
+                // A `Promise`, and how every thenable test is written.
+                | "then"
+                | "catch"
+                | "finally"
+                // A typed array over a buffer.
+                | "buffer"
+                | "byteLength"
+                | "byteOffset"
+                // A function, which `typeof v === "function"` admits beside
+                // `object` at several of these sites.
+                | "name"
+                | "call"
+                | "apply"
+                | "bind"
+        )
+    }
+
+    /// `"k" in value` where the value is `object` and nothing narrower.
+    ///
+    /// Every class the program declares is a candidate, and the ones declaring
+    /// `k` are the answer -- the same closed set `instanceof` compares against,
+    /// computed from a wider starting point. A compiled program gains no
+    /// classes, so the set is complete when the binary is built.
+    ///
+    /// The `typeof` guard in front of these sites is what makes it sound: `"k"
+    /// in 5` throws in JavaScript, and a value that reached here has already
+    /// been proved an object by the source. That is the *program's* proof
+    /// rather than this compiler's, and it is why an unguarded `unknown` is
+    /// still refused -- the type says so.
+    fn lower_in_over_every_class(
+        &mut self,
+        id: NodeId,
+        rhs: NodeId,
+        key: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        if Self::a_native_type_declares(key) {
+            return Err(self.unsupported(
+                rhs,
+                &format!(
+                    "an `in` naming `{key}` on an `object`, which a natively represented type \
+                     answers for -- an array, a `Map`, a `Promise` and a `Date` are all `object` \
+                     and none of them has a layout to find the name on"
+                ),
+            ));
+        }
+        // Every object type the program has, not every *class*: an object
+        // literal typed by an interface has a layout and no entry in the
+        // hierarchy, and asking the hierarchy answered `false` for
+        // `"label" in { label: "l" }` -- 20 of 29 cases against node, from a
+        // fixture written to check exactly this.
+        //
+        // A type with no layout costs nothing: the emitter resolves each id to
+        // a layout and drops the ones that have none, so an object type nothing
+        // ever built contributes no comparison.
+        let mut declaring: Vec<TypeId> = Vec::new();
+        let candidates: Vec<TypeId> = (0..self.snapshot.types.len())
+            .filter_map(|at| u32::try_from(at).ok().map(TypeId))
+            .collect();
+        for class in candidates {
+            match self.declares(class, key) {
+                Declares::Always => declaring.push(class),
+                // An optional property is refused for a *union* arm and is
+                // refused here for the same reason: the slot exists whether or
+                // not it was written, and `{}` and `{ k: undefined }` disagree.
+                Declares::Optionally => {
+                    // Sound, and the honest cost of the whole-program answer:
+                    // with the value typed `object`, an instance of *any* type
+                    // can reach here, so one that declares the key optionally
+                    // makes the question unanswerable -- including it answers
+                    // true for a property that was never written and excluding
+                    // it answers false for one that was.
+                    //
+                    // 165 sites in `runtime/node`, and the type is named
+                    // because that is what makes it actionable: the fix is at
+                    // the declaration, and "some class" points at nothing.
+                    let who = named(self.snapshot, class)
+                        .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned);
+                    return Err(self.unsupported(
+                        rhs,
+                        &format!(
+                            "an `in` naming `{key}` on an `object`, which `{who}` declares \
+                             optionally -- its slot exists here whether or not it was \
+                             written, so no test of the value can say which"
+                        ),
+                    ));
+                }
+                Declares::Never | Declares::NotAnObject => {}
+            }
+        }
+        declaring.sort_unstable_by_key(|ty| ty.0);
+        declaring.dedup();
+
+        let value = self.lower_expression(rhs)?;
+        let origin = self.origin(id);
+        let value = match self.values[value.0 as usize].ty {
+            HirType::Erased => value,
+            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
+        };
+        Ok(self.push(
+            OpKind::InstanceOf {
+                value,
+                classes: declaring,
+            },
+            HirType::Bool,
+            origin,
+        ))
+    }
+
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
         let Some(key) = self.literal_key(lhs) else {
             return Err(self.unsupported(
@@ -10441,6 +10635,18 @@ impl<'a> FuncBuilder<'a> {
         let Some(ty) = self.snapshot.node_types.get(&rhs).copied() else {
             return Err(self.unsupported(rhs, "an `in` on a value with no type"));
         };
+        // TypeScript's `object`, which is what every one of these sites narrows
+        // to: `value !== null && typeof value === "object" && "message" in value`
+        // is how a program duck-types an `unknown`, and it is 67 sites in
+        // `runtime/node` -- the most of any refusal there.
+        //
+        // The candidate set is then **every class the program has**, which is
+        // the same closed-world argument the arms get and for the same reason:
+        // a compiled program gains no classes. So this is not a different
+        // operation, it is the same one with a wider set.
+        if self.is_the_object_type(ty) {
+            return self.lower_in_over_every_class(id, rhs, &key);
+        }
         let members = match &self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Union(members)) => members.clone(),
             Some(_) => vec![ty],

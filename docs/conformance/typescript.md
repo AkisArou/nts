@@ -58,6 +58,9 @@ a backlog.
 | ✅ | logical | `&& \|\| !` |
 | ✅ | `in` with a literal key | the set of types declaring the property comes from the static type, so it is `instanceof` with a different question: a constant where every arm or no arm declares it, a class test where some do |
 | ✗ | `in` naming an **optional** property, or with a computed key | two reasons, both about the *key* rather than the operator. An optional property's slot exists here whether or not it was written, and JavaScript distinguishes `{}` from `{ x: undefined }` — a presence bit separate from the tag would answer it. A computed key leaves no set to test against, which needs the descriptor property table this design exists to avoid. Both refuse by name, so `"y" in o` on the same object is unaffected |
+| ✅ | `in` over **`object`** — `value !== null && typeof value === "object" && "k" in value`, which is how a program duck-types an `unknown` and is **67 sites in `runtime/node`**, the most of any refusal there. The candidate set is every object *type* the program has, by the same closed-world argument the union arms get; the `typeof` guard in front is what makes it sound, and an unguarded `unknown` is still refused because the type says so. Not every *class* — an object literal typed by an interface has a layout and no hierarchy entry, and asking the hierarchy answered `false` for `"label" in { label: "l" }`. Record 0164 |
+| ✗ | `in` over `object` naming a key a **natively represented** type answers for — `then`, `length`, `size`, `buffer`, `name`. An array, a `Map`, a `Promise` and a `Date` are all `object` and none has a layout to find a name on, so a set built from the layouts answers false where JavaScript answers true. `"then" in v` is the one that bites: it is how every thenable test is written |
+| ✗ | `in` over `object` naming a key **some type declares optionally** — 165 sites. Sound and the honest cost of the whole-program answer: with the value typed `object` an instance of any type can reach the test, so one that declares the key optionally makes it unanswerable in both directions. The refusal names the type, because the fix is at the declaration |
 | ✅ | unary | `+x -x`, `++ --` prefix and postfix |
 | ✅ | compound assignment | `+= -= *= /= %= **= &= \|= ^= <<= >>= >>>=` |
 | ✅ | conditional | `c ? a : b`, nested |
@@ -367,6 +370,8 @@ inherits. The key was the sole blocker, checked rather than assumed:
 
 | | |
 |---|---|
+| ✅ | **`object`** as a type — a parameter, a field or a local. An erased value, because "some object, which one is not known" *is* a tag and a payload; nothing narrower exists, since the whole content of the type is the absence of a guarantee. **344 occurrences across 36 sites** in `runtime/node` as a parameter alone. Record 0164 |
+| ✅ | `unknown` narrowed to **`{}`** by a `!== null`, which is declined rather than read through. `{}` is the checker saying *not null and not undefined* rather than naming a shape: it declares no member, so the narrowing buys nothing, and an unerase to it is a claim that the value is one of those — about a type no object belongs to. Unchecked on a lane with pointers; `ClassCastException` on the one that checks |
 | ✅ | `Symbol()`, with a description or without — every call a fresh identity, because `Symbol("a") === Symbol("a")` is false |
 | ✅ | `Symbol.for` and `Symbol.keyFor` — one symbol per key for the life of the runtime. The registry's strong reference is the specification's rule rather than a leak, and is the whole difference from `Symbol()` |
 | ✅ | `typeof` answering `"symbol"`, `===` by address, a symbol in a field, and `Map`/`Set` keyed by one or by `string \| symbol` |

@@ -193,3 +193,136 @@ fn in_on_an_optional_property_is_refused_by_name() {
         "a computed key is refused separately: {reasons:?}",
     );
 }
+
+/// `"k" in value` where the value is `object` and nothing narrower.
+///
+/// The shape every duck-typing site is written in — `value !== null && typeof
+/// value === "object" && "k" in value` — and 67 sites in `runtime/node`, the
+/// most of any refusal there. The candidate set is every object type the
+/// program has, which is the same closed-world argument the union arms get.
+///
+/// The `typeof` guard is what makes it sound: `"k" in 5` throws, and the value
+/// has been proved an object by the *program* before the test runs. An
+/// unguarded `unknown` is still refused, because the type says so.
+#[test]
+fn an_object_becomes_a_test_against_every_class_declaring_it() {
+    let Some(lowered) = lowered("in-operator") else {
+        return;
+    };
+    // The helpers are not exported, so they are found among all functions
+    // rather than by an export's name.
+    let sets: Vec<usize> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter(|func| func.name == "hasLabel" || func.name == "hasMessage")
+        .flat_map(class_tests)
+        .collect();
+    assert_eq!(sets.len(), 2, "one class test in each helper: {sets:?}");
+    assert!(
+        sets.iter().all(|len| *len > 0),
+        "and each names the types declaring its key: {sets:?}",
+    );
+}
+
+/// The candidate set is every object *type*, not every class.
+///
+/// An object literal typed by an interface has a layout and no entry in the
+/// hierarchy. Asking the hierarchy answered `false` for `"label" in { label:
+/// "l" }` — 20 of 29 cases against node, from a fixture written to check
+/// exactly this and nothing else.
+#[test]
+fn an_object_literals_type_is_a_candidate() {
+    let Some(lowered) = lowered("in-operator") else {
+        return;
+    };
+    // `Labelled` is an interface: nothing constructs it with `new`, and the
+    // only value of it in the program is a literal. So the class test in
+    // `hasLabel` names a type the hierarchy does not have, and a set built from
+    // the hierarchy would be empty.
+    let sets: Vec<usize> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter(|func| func.name == "hasLabel")
+        .flat_map(class_tests)
+        .collect();
+    assert_eq!(sets.len(), 1, "one class test in `hasLabel`: {sets:?}");
+    assert!(
+        sets[0] > 0,
+        "`label` is declared only by an interface and the literal that satisfies it, \
+         neither of which is in the hierarchy -- a candidate set built from the \
+         hierarchy is empty here, which is the wrong answer this test exists for: {sets:?}",
+    );
+    // More than one, and that is the type table rather than a mistake: a
+    // structural type reaches the checker under several ids -- the interface's,
+    // the literal's inferred type, the annotation's -- and every one of them
+    // declares `label`. They resolve to the same layout, so the emitted test is
+    // over descriptors and not over ids.
+}
+
+/// Narrowing to `{}` is declined.
+///
+/// The checker narrows `unknown` to the empty object type after `!== null`, and
+/// unerasing to it is a claim that the value *is* one of those — about a type
+/// no object belongs to. Unchecked and invisible on a lane with pointers; the
+/// JVM says `ClassCastException: nts.gen.Messaged cannot be cast to
+/// nts.gen.Type117`.
+///
+/// There is nothing to read through it either: it declares no member, so the
+/// narrowing buys exactly nothing in exchange for the lie.
+#[test]
+fn an_unknown_is_not_narrowed_to_the_empty_object_type() {
+    let Some(lowered) = lowered("in-operator") else {
+        return;
+    };
+    for name in ["hasLabel", "hasMessage"] {
+        let Some(helper) = lowered.program.funcs.iter().find(|func| func.name == name) else {
+            continue;
+        };
+        let unerased: Vec<&hir::HirType> = helper
+            .values
+            .iter()
+            .filter(|op| matches!(op.kind, OpKind::Unerase { .. }))
+            .map(|op| &op.ty)
+            .collect();
+        assert!(
+            unerased.is_empty(),
+            "`{name}` reads the tag rather than claiming a shape: {unerased:?}",
+        );
+    }
+}
+
+/// A key a natively represented type answers for is refused, by name.
+///
+/// `object` includes an array, a `Map`, a `Set`, a `Promise` and a `Date`, and
+/// none of them has a layout to find a name on — so a set built from the
+/// layouts answers `false` for them, and for their own property names
+/// JavaScript answers `true`.
+///
+/// `then` is the one that bites: four sites in `runtime/node` ask it, and it is
+/// how a program tests for a thenable. Without this the compiled program tells
+/// a `Promise` it is not one, and agrees with node on every case that does not
+/// happen to pass a promise.
+#[test]
+fn a_key_a_native_type_answers_for_is_refused() {
+    let Some(lowered) = lowered("unsupported") else {
+        return;
+    };
+    let said: Vec<&str> = lowered
+        .diagnostics
+        .iter()
+        .map(|d| d.message.as_str())
+        .filter(|message| message.contains("natively represented"))
+        .collect();
+    assert_eq!(
+        said.len(),
+        1,
+        "`\"then\" in value` names the boundary rather than answering: {:?}",
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+    );
+}
