@@ -1132,7 +1132,25 @@ void nts_bounds(double index, uint32_t length) {
 /* The shared part: everything but deciding what the elements start as. */
 static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
                                     double length) {
-  if (!(length >= 0.0 && length <= 4294967295.0 &&
+  /* **2^31 - 1, not 2^32 - 1**, and the narrower bound is what makes the
+   * compiler's type for a length honest rather than convenient.
+   *
+   * `NtsHeader.length` is a `uint32_t`, so the storage would hold twice this.
+   * What the *compiler* wants is for `array.len` to be an `int32`: an `i64`
+   * length makes the loop counter that compares against it an `i64` too, and
+   * that is a shape neither backend's optimiser will treat as a counted loop --
+   * measured at **13.1x** on `benches/cases/elementwise` against the same loop
+   * with an `int` counter, and 32% on `array-predicates`.
+   *
+   * Signed rather than unsigned because unsigned buys precision about an array
+   * no lane can allocate -- 2^31 doubles is 16 GB in one block, and the JVM's
+   * own `MAX_ARRAY` is 2^31 - 9 -- and costs an unsigned comparison where a
+   * signed one would do.
+   *
+   * So the type is not a claim about a hypothetical array. It is a consequence
+   * of this refusal, which is the same shape as the bigint upper endpoint: a
+   * bound the program cannot cross, stated where it is enforced. */
+  if (!(length >= 0.0 && length <= NTS_MAX_LENGTH &&
         length == (double)(uint32_t)length)) {
     fprintf(stderr, NTS_REFUSED "%g is not a valid array length\n", length);
     abort();
@@ -1833,6 +1851,20 @@ __attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
  * nowhere to stage. `nts_str_alloc` is what remains: the case where the units
  * arrive as `uint16_t` and the width is still a question. */
 NtsString *nts_str_raw(uint32_t length, int wide) {
+  /* The same 2^31 - 1 bound `nts_array_allocate` enforces, and for the same
+   * reason: `hir::flow` gives `OpKind::Length` an `int32` fact, and that
+   * operation covers a string's length as well as an array's. A string this
+   * runtime could build past the bound would make the fact false, and a false
+   * fact about a length is a loop counter that wraps.
+   *
+   * Every string is made here or by a caller that goes through here, so this is
+   * the one place it has to hold. 2^31 units is 2 GB one-byte or 4 GB wide;
+   * node's own maximum string is smaller than either. */
+  if (length > (uint32_t)NTS_MAX_LENGTH) {
+    fprintf(stderr, NTS_REFUSED "a string of %u code units is too long\n",
+            length);
+    abort();
+  }
   size_t width = wide ? 2u : 1u;
   NtsString *out =
       (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);

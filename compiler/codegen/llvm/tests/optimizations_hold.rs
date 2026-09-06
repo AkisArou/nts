@@ -85,13 +85,27 @@ fn optimized(case: &str, module: &str) -> Option<String> {
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// A loop counter bounded by a length is an integer, not a double.
+/// A loop counter bounded by a length is an **`i32`**, not a double and not an
+/// `i64`.
 ///
-/// `xs.length` is a `uint32_t`, so a counter compared against it is not
-/// provably an `int32` -- and left a `double` every index becomes an `fptoui`
-/// of a floating-point induction variable, which LLVM's scalar evolution
-/// cannot model. `benches/cases/elementwise` was 4.95x hand-written C++ and is
-/// 1.25x.
+/// Left a `double`, every index is an `fptoui` of a floating-point induction
+/// variable, which LLVM's scalar evolution cannot model.
+/// `benches/cases/elementwise` was 4.95x hand-written C++ and is 1.25x.
+///
+/// # Why `i32` specifically, and why this used to accept either
+///
+/// It asserted `phi i64 || phi i32` and passed whichever came out, so the
+/// difference between them was invisible to it — and the difference is the
+/// whole of what a counted loop is. An `i64` induction variable gets no
+/// range-check elimination, no unrolling and no vectorisation from either
+/// optimiser. The JVM session measured it by writing the same loop over the
+/// same `double[]` twice, differing only in the counter: **13.1x**, 0.67
+/// instructions per element against 8.8.
+///
+/// It is an `i32` because `hir::facts::MAX_LENGTH` bounds a length at
+/// `2^31 - 2` and the runtime refuses past it — so this assertion is what
+/// connects that refusal to the thing it was made for, and reverting the bound
+/// fails here rather than nowhere.
 #[test]
 fn a_length_bounded_counter_is_an_integer() {
     let Some((module, _)) = rendered(
@@ -103,8 +117,9 @@ fn a_length_bounded_counter_is_an_integer() {
         return;
     };
     assert!(
-        module.contains("phi i64") || module.contains("phi i32"),
-        "the counter went back to a double:\n{module}"
+        module.contains("phi i32"),
+        "the counter is not an `i32` -- a wider one is not a counted loop to \
+         either optimiser, which is worth 13.1x on the JVM lane:\n{module}"
     );
     assert!(
         !module.contains("fptoui double"),
@@ -202,16 +217,26 @@ fn a_proven_index_costs_no_check() {
 /// The control for the test above: a shape that *does* carry a check.
 ///
 /// An assertion that something is absent is only worth having if it can see the
-/// thing when it is there. Coercing the bound with `| 0` is exactly that shape
-/// -- it breaks the connection `hir::bounds` needs and puts two checks back per
-/// iteration -- so if this stops finding one, the test above has stopped
-/// meaning anything and both need looking at rather than only this one.
+/// thing when it is there.
+///
+/// # This control used to be `xs.length | 0`, and stopped working
+///
+/// Coercing the bound with `| 0` broke the connection `hir::bounds` needs and
+/// put two checks back per iteration. It does not any more, and the reason is a
+/// *win*: `hir::facts::MAX_LENGTH` bounds a length at `2^31 - 2`, so `| 0` --
+/// which is `ToInt32` -- is the identity on a value already proven inside the
+/// int32 range, and `simplify` removes it. The connection survives and the
+/// check stays eliminated.
+///
+/// So the control found no check and failed, correctly: the shape it was
+/// controlling for had stopped existing. A bound that is not related to the
+/// array at all is one the analysis genuinely cannot connect, which is what a
+/// control for this needs to be.
 #[test]
 fn the_check_for_a_check_can_see_one() {
     let Some((module, _)) = rendered(
         "control",
-        "export function total(xs: number[]): number {\n\
-         const n = xs.length | 0;\n\
+        "export function total(xs: number[], n: number): number {\n\
          let t = 0;\n\
          for (let i = 0; i < n; i++) { t = t + xs[i]; }\n\
          return t;\n}",

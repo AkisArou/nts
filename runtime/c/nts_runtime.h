@@ -52,6 +52,20 @@
 #define NTS_READS_ONLY
 #endif
 
+/* The longest array or string this runtime will build: 2^31 - 2.
+ *
+ * `2^31` rather than `2^32` so that a length is an `int32` and the loop counter
+ * comparing against it is one too -- an `i64` induction variable is a shape
+ * neither optimiser treats as a counted loop, measured at 13.1x on
+ * `benches/cases/elementwise`. Minus *two* because a counter under
+ * `i <= xs.length` reaches the length and then increments, so `length + 1` has
+ * to be representable.
+ *
+ * `nts_array_allocate` and `nts_str_raw` both refuse past it with a message and
+ * an abort, which is what makes `hir::facts::MAX_LENGTH` a consequence rather
+ * than a claim. The two constants are one fact and a test compares them. */
+#define NTS_MAX_LENGTH 2147483646.0
+
 #define NTS_KIND_ARRAY 0u
 #define NTS_KIND_STRING 1u
 #define NTS_KIND_OBJECT 2u

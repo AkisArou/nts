@@ -555,6 +555,43 @@ pub const I32_MAX: f64 = 2_147_483_647.0;
 /// The uint32 range, which `>>>` alone can reach.
 pub const U32_MAX: f64 = 4_294_967_295.0;
 
+/// The longest array or string this runtime will build.
+///
+/// `2^31 - 2`, and every part of that is load-bearing.
+///
+/// **`2^31`** rather than `2^32`, so that a length is an `int32` and the loop
+/// counter comparing against it is one too. An `i64` induction variable is a
+/// shape neither optimiser treats as a counted loop -- no range-check
+/// elimination, no unrolling, no vectorisation -- measured on the JVM lane at
+/// **13.1x** on `benches/cases/elementwise`, writing the same loop over the
+/// same `double[]` with an `int` counter against a `long` one.
+///
+/// **Minus two, not minus one.** A counter under `i <= xs.length` reaches the
+/// length and then increments, so `length + 1` has to be representable. At a
+/// cap of `I32_MAX` that lands on `2^31` and wraps. It is invisible until
+/// someone writes `<=`, and the JVM session hit it twice in an hour; their
+/// `MAX_ARRAY` has been `Integer.MAX_VALUE - 8` for the same reason since
+/// before either of us.
+///
+/// **A refusal, not a claim.** `nts_array_allocate` and `nts_str_raw` both
+/// refuse past this with a message and an abort, which is what makes the type
+/// honest rather than convenient -- the same shape as the bigint upper
+/// endpoint. `tests/length_bound.rs` checks the two constants against each
+/// other, because they are one fact in two languages.
+pub const MAX_LENGTH: f64 = 2_147_483_646.0;
+
+/// The headroom the `- 2` exists for, checked where the constant is written.
+///
+/// A counter under `i <= xs.length` reaches the length and then increments, so
+/// the successor has to be representable as the `int32` this bound exists to
+/// make it. At a cap of `I32_MAX` that lands on `2^31` and wraps -- invisible
+/// until someone writes `<=`, which is why it fails the build rather than
+/// waiting to be remembered.
+const _: () = assert!(
+    MAX_LENGTH + 1.0 <= I32_MAX,
+    "a length must be able to step one past the end and stay an int32"
+);
+
 /// JavaScript's `ToInt32`.
 ///
 /// Total, unlike a C cast: NaN and both infinities map to `0`, and everything

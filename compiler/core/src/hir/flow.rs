@@ -715,7 +715,24 @@ fn transfer_op(
         // is what lets a scan by code unit stay in integers.
         OpKind::StringUnitAt { checked, .. } => Facts::new(0.0, 65535.0, true, *checked, false),
         OpKind::Length(array) => {
-            let bound = Facts::new(0.0, facts::U32_MAX, true, false, false);
+            // `I32_MAX`, and the runtime enforces it: `nts_array_allocate`
+            // refuses a length past 2^31 - 1 with a message and an abort, the
+            // same shape as the bigint upper endpoint. So this is a
+            // consequence of a refusal rather than a claim about an array that
+            // could exist.
+            //
+            // What it buys is the loop counter. A length bounded by `U32_MAX`
+            // is not provably an `int32`, so the counter comparing against it
+            // is an `i64` -- and an `i64` induction variable is a shape neither
+            // optimiser treats as a counted loop. No range-check elimination,
+            // no unrolling, no vectorisation. Measured on the JVM lane at
+            // **13.1x** on `elementwise`, writing the same loop over the same
+            // `double[]` with an `int` counter against a `long` one, and 32% on
+            // `array-predicates`. `elementwise`'s own comment predicted it in
+            // the LLVM vocabulary: an index left wider than an `int32` "makes
+            // every index an `fptoui` of a floating-point induction variable --
+            // which LLVM's scalar evolution cannot model".
+            let bound = Facts::new(0.0, facts::MAX_LENGTH, true, false, false);
             match &func.values[array.0 as usize].kind {
                 // Only while nothing can have grown it: an array handed to a
                 // call may come back longer, and the object does not move so
