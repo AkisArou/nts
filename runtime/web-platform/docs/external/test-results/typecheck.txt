@@ -1,0 +1,4 @@
+
+> @nts/web-platform@0.1.0 check
+> tsc -p tsconfig.standalone.json --noEmit && tsc -p tsconfig.node.json --noEmit
+

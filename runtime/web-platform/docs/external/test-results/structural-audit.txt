@@ -1,0 +1,5 @@
+
+> @nts/web-platform@0.1.0 audit
+> node tools/audit.mjs
+
+31 shared TypeScript files checked; 0 structural violations

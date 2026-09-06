@@ -1,0 +1,77 @@
+{
+  "date": "2026-09-06",
+  "repositorySnapshot": "bf5a6824c9bfd76fb3a30006fc4fea0665fe25dd",
+  "profile": "typed-non-browser-networking-integration-baseline",
+  "versions": {
+    "node": "22.16.0",
+    "typescript": "5.8.3",
+    "typesNode": "25.1.0",
+    "java": "21.0.11",
+    "javac": "21.0.11",
+    "javaReleaseTarget": 8,
+    "openssl": "3.5.5"
+  },
+  "checks": [
+    {
+      "command": "npm run check",
+      "exitCode": 0,
+      "log": "test-results/typecheck.txt"
+    },
+    {
+      "command": "npm test",
+      "exitCode": 0,
+      "tests": 80,
+      "passed": 80,
+      "failed": 0,
+      "skipped": 0,
+      "log": "test-results/node-tests.txt"
+    },
+    {
+      "command": "npm run audit",
+      "exitCode": 0,
+      "sharedFiles": 31,
+      "violations": 0,
+      "log": "test-results/structural-audit.txt"
+    },
+    {
+      "command": "bash tools/test-java.sh",
+      "exitCode": 0,
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "log": "test-results/java-tests.txt"
+    },
+    {
+      "command": "bash tools/build-java.sh",
+      "exitCode": 0,
+      "log": "test-results/java-build.txt"
+    },
+    {
+      "command": "node tools/test-upstream.mjs",
+      "exitCode": 1,
+      "tests": 9,
+      "passed": 8,
+      "failed": 1,
+      "skipped": 0,
+      "log": "test-results/upstream-tests.txt",
+      "failure": "Headers dictionary initialization outside typed input profile",
+      "fullUpstreamHarness": false
+    }
+  ],
+  "notRun": [
+    "NTS HIR/native/JVM compiler",
+    "existing project URL integration",
+    "native libuv/FFI glue",
+    "Android SDK/Gradle/D8/R8",
+    "Android emulator/device",
+    "complete pinned Node v24.20.0 suite",
+    "full WPT",
+    "Autobahn",
+    "large-scale fuzzing",
+    "independent security audit",
+    "comparative performance benchmarks",
+    "clean network npm install"
+  ],
+  "globalFetchWebSocketSabotageInNetworkTests": true,
+  "npmRuntimeDependencies": []
+}

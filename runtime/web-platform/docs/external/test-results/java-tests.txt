@@ -1,0 +1,12 @@
+ok 1 - TCP bytes, EOF, callback lane and repeated read/write scheduling
+ok 2 - Overlapping read rejection and close interrupting blocked I/O
+ok 3 - Android cleartext policy applied before network I/O
+ok 4 - Throwing policy cannot leak connection capacity
+ok 5 - Connection capacity enforcement
+ok 6 - Platform secure randomness primitive smoke test
+ok 7 - Task lane, timer firing and cancellation after expiry before delivery
+ok 8 - TLS with private root and hostname verification
+ok 9 - Untrusted TLS certificate rejected
+ok 10 - Trusted certificate with wrong hostname rejected
+ok 11 - Stalled TLS handshake times out and releases capacity
+PASS: 11 Java integration tests

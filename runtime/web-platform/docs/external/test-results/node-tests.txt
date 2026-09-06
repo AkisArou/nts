@@ -1,0 +1,498 @@
+
+> @nts/web-platform@0.1.0 test
+> npm run build && node --test tests/*.test.mjs
+
+
+> @nts/web-platform@0.1.0 build
+> tsc -p tsconfig.node.json
+
+TAP version 13
+# Subtest: Headers differential: []
+ok 1 - Headers differential: []
+  ---
+  duration_ms: 1.999483
+  type: 'test'
+  ...
+# Subtest: Headers differential: [["X-A"," 1 "],["x-a","2"],["Set-Cookie","a=1"],["Set-Cookie","b=2"]]
+ok 2 - Headers differential: [["X-A"," 1 "],["x-a","2"],["Set-Cookie","a=1"],["Set-Cookie","b=2"]]
+  ---
+  duration_ms: 0.922784
+  type: 'test'
+  ...
+# Subtest: Headers differential: [["z",""],["a","a\\tb"],["a","c"]]
+ok 3 - Headers differential: [["z",""],["a","a\\tb"],["a","c"]]
+  ---
+  duration_ms: 0.300415
+  type: 'test'
+  ...
+# Subtest: Fetch-standard duplicate Cookie uses comma, unlike the Node host oracle
+ok 4 - Fetch-standard duplicate Cookie uses comma, unlike the Node host oracle
+  ---
+  duration_ms: 0.140334
+  type: 'test'
+  ...
+# Subtest: Headers validation, guard and raw ownership
+ok 5 - Headers validation, guard and raw ownership
+  ---
+  duration_ms: 0.819586
+  type: 'test'
+  ...
+# Subtest: Headers live iteration observes insertion and removal
+ok 6 - Headers live iteration observes insertion and removal
+  ---
+  duration_ms: 0.674213
+  type: 'test'
+  ...
+# Subtest: UTF-8 encode and encodeInto match host including lone surrogates
+ok 7 - UTF-8 encode and encodeInto match host including lone surrogates
+  ---
+  duration_ms: 2.005904
+  type: 'test'
+  ...
+# Subtest: UTF-8 decoder differential over all split positions and malformed sequences
+ok 8 - UTF-8 decoder differential over all split positions and malformed sequences
+  ---
+  duration_ms: 2.073065
+  type: 'test'
+  ...
+# Subtest: UTF-8 seeded differential fuzz
+ok 9 - UTF-8 seeded differential fuzz
+  ---
+  duration_ms: 9.858091
+  type: 'test'
+  ...
+# Subtest: Abort reason identity and independent internal cancellation
+ok 10 - Abort reason identity and independent internal cancellation
+  ---
+  duration_ms: 1.02671
+  type: 'test'
+  ...
+# Subtest: AbortSignal.any selects the first reason and detaches
+ok 11 - AbortSignal.any selects the first reason and detaches
+  ---
+  duration_ms: 0.419085
+  type: 'test'
+  ...
+# Subtest: EventTarget once, receiver, removal while dispatching
+ok 12 - EventTarget once, receiver, removal while dispatching
+  ---
+  duration_ms: 0.251137
+  type: 'test'
+  ...
+# Subtest: Pull streams honor locking and do not prefetch at zero HWM
+ok 13 - Pull streams honor locking and do not prefetch at zero HWM
+  ---
+  duration_ms: 9.710478
+  type: 'test'
+  ...
+# Subtest: Stream cancellation settles pending read even while underlying pull awaits
+ok 14 - Stream cancellation settles pending read even while underlying pull awaits
+  ---
+  duration_ms: 0.438872
+  type: 'test'
+  ...
+# Subtest: Body use, locking, transfer, clone and realm identity
+ok 15 - Body use, locking, transfer, clone and realm identity
+  ---
+  duration_ms: 3.620443
+  type: 'test'
+  ...
+# Subtest: A null body stays unused after repeated consumption
+ok 16 - A null body stays unused after repeated consumption
+  ---
+  duration_ms: 0.193182
+  type: 'test'
+  ...
+# Subtest: Cloned byte streams are isolated from mutation
+ok 17 - Cloned byte streams are isolated from mutation
+  ---
+  duration_ms: 0.424388
+  type: 'test'
+  ...
+# Subtest: Explicit clone backlog cap errors rather than silently buffering indefinitely
+ok 18 - Explicit clone backlog cap errors rather than silently buffering indefinitely
+  ---
+  duration_ms: 0.613378
+  type: 'test'
+  ...
+# Subtest: Request method, credentials URL, GET body and stream duplex validation
+ok 19 - Request method, credentials URL, GET body and stream duplex validation
+  ---
+  duration_ms: 0.583513
+  type: 'test'
+  ...
+# Subtest: Response static factories, immutable redirects, JSON and no-content statuses
+ok 20 - Response static factories, immutable redirects, JSON and no-content statuses
+  ---
+  duration_ms: 0.65661
+  type: 'test'
+  ...
+# Subtest: Blob immutability, slices, File and form serialization
+ok 21 - Blob immutability, slices, File and form serialization
+  ---
+  duration_ms: 3.511343
+  type: 'test'
+  ...
+# Subtest: URLSearchParams differential and URL-encoded body consumption
+ok 22 - URLSearchParams differential and URL-encoded body consumption
+  ---
+  duration_ms: 1.168013
+  type: 'test'
+  ...
+# Subtest: RFC 6455 handshake test vector and random keys
+ok 23 - RFC 6455 handshake test vector and random keys
+  ---
+  duration_ms: 2.301178
+  type: 'test'
+  ...
+# Subtest: Frame codec length 0
+ok 24 - Frame codec length 0
+  ---
+  duration_ms: 0.57591
+  type: 'test'
+  ...
+# Subtest: Frame codec length 1
+ok 25 - Frame codec length 1
+  ---
+  duration_ms: 0.176103
+  type: 'test'
+  ...
+# Subtest: Frame codec length 125
+ok 26 - Frame codec length 125
+  ---
+  duration_ms: 0.35672
+  type: 'test'
+  ...
+# Subtest: Frame codec length 126
+ok 27 - Frame codec length 126
+  ---
+  duration_ms: 0.196071
+  type: 'test'
+  ...
+# Subtest: Frame codec length 65535
+ok 28 - Frame codec length 65535
+  ---
+  duration_ms: 9.678447
+  type: 'test'
+  ...
+# Subtest: Frame codec length 65536
+ok 29 - Frame codec length 65536
+  ---
+  duration_ms: 6.615504
+  type: 'test'
+  ...
+# Subtest: Frame rejects nonminimal length, masking, reserved bits and bad controls
+ok 30 - Frame rejects nonminimal length, masking, reserved bits and bad controls
+  ---
+  duration_ms: 4.149748
+  type: 'test'
+  ...
+# Subtest: Header HTTP whitespace normalization, non-breaking space and embedded newline rejection
+ok 31 - Header HTTP whitespace normalization, non-breaking space and embedded newline rejection
+  ---
+  duration_ms: 0.263869
+  type: 'test'
+  ...
+# Subtest: Multipart roundtrip preserves duplicate text entries, binary files and UTF-8 names
+ok 32 - Multipart roundtrip preserves duplicate text entries, binary files and UTF-8 names
+  ---
+  duration_ms: 2.358227
+  type: 'test'
+  ...
+# Subtest: Multipart quoted boundary, preamble/epilogue and boundary-like payload
+ok 33 - Multipart quoted boundary, preamble/epilogue and boundary-like payload
+  ---
+  duration_ms: 0.393915
+  type: 'test'
+  ...
+# Subtest: Malformed multipart never returns a partial form
+ok 34 - Malformed multipart never returns a partial form
+  ---
+  duration_ms: 0.84117
+  type: 'test'
+  ...
+# Subtest: Abort event-handler insertion order, replacement, receiver and dispatch phase
+ok 35 - Abort event-handler insertion order, replacement, receiver and dispatch phase
+  ---
+  duration_ms: 0.636562
+  type: 'test'
+  ...
+# Subtest: onabort can be stopped by an earlier listener without stopping internal abort algorithms
+ok 36 - onabort can be stopped by an earlier listener without stopping internal abort algorithms
+  ---
+  duration_ms: 0.166392
+  type: 'test'
+  ...
+# Subtest: Released reader.closed rejects even if the previous closed promise was fulfilled
+ok 37 - Released reader.closed rejects even if the previous closed promise was fulfilled
+  ---
+  duration_ms: 0.142149
+  type: 'test'
+  ...
+# Subtest: Iterator always releases its lock when underlying cancellation rejects
+ok 38 - Iterator always releases its lock when underlying cancellation rejects
+  ---
+  duration_ms: 0.26472
+  type: 'test'
+  ...
+# Subtest: Response.clone retains an immutable redirect header guard
+ok 39 - Response.clone retains an immutable redirect header guard
+  ---
+  duration_ms: 0.231974
+  type: 'test'
+  ...
+# Subtest: HTTP POST, duplicate Set-Cookie, real response identity and connection reuse
+ok 40 - HTTP POST, duplicate Set-Cookie, real response identity and connection reuse
+  ---
+  duration_ms: 27.383822
+  type: 'test'
+  ...
+# Subtest: Incremental chunked upload and response with trailers
+ok 41 - Incremental chunked upload and response with trailers
+  ---
+  duration_ms: 6.064832
+  type: 'test'
+  ...
+# Subtest: Redirect 301 method/body semantics
+ok 42 - Redirect 301 method/body semantics
+  ---
+  duration_ms: 4.999797
+  type: 'test'
+  ...
+# Subtest: Redirect 302 method/body semantics
+ok 43 - Redirect 302 method/body semantics
+  ---
+  duration_ms: 4.999679
+  type: 'test'
+  ...
+# Subtest: Redirect 303 method/body semantics
+ok 44 - Redirect 303 method/body semantics
+  ---
+  duration_ms: 5.471808
+  type: 'test'
+  ...
+# Subtest: Redirect 307 method/body semantics
+ok 45 - Redirect 307 method/body semantics
+  ---
+  duration_ms: 5.547295
+  type: 'test'
+  ...
+# Subtest: Redirect 308 method/body semantics
+ok 46 - Redirect 308 method/body semantics
+  ---
+  duration_ms: 3.976457
+  type: 'test'
+  ...
+# Subtest: Cross-origin redirect removes sensitive credentials
+ok 47 - Cross-origin redirect removes sensitive credentials
+  ---
+  duration_ms: 4.966938
+  type: 'test'
+  ...
+# Subtest: Manual and error redirect modes, looping redirects, nonreplayable 307
+ok 48 - Manual and error redirect modes, looping redirects, nonreplayable 307
+  ---
+  duration_ms: 26.778971
+  type: 'test'
+  ...
+# Subtest: Abort before dispatch preserves reason identity
+ok 49 - Abort before dispatch preserves reason identity
+  ---
+  duration_ms: 0.702155
+  type: 'test'
+  ...
+# Subtest: Abort during headers and after response delivery cancels sockets and body
+ok 50 - Abort during headers and after response delivery cancels sockets and body
+  ---
+  duration_ms: 3.394436
+  type: 'test'
+  ...
+# Subtest: Pending read abort and response cancellation settle without draining
+ok 51 - Pending read abort and response cancellation settle without draining
+  ---
+  duration_ms: 2.810753
+  type: 'test'
+  ...
+# Subtest: Early response interrupts an upload awaiting a producer
+ok 52 - Early response interrupts an upload awaiting a producer
+  ---
+  duration_ms: 1.809122
+  type: 'test'
+  ...
+# Subtest: HEAD and null-body status handling
+ok 53 - HEAD and null-body status handling
+  ---
+  duration_ms: 1.957737
+  type: 'test'
+  ...
+# Subtest: Native compression primitive: gzip
+ok 54 - Native compression primitive: gzip
+  ---
+  duration_ms: 6.693963
+  type: 'test'
+  ...
+# Subtest: Native compression primitive: deflate
+ok 55 - Native compression primitive: deflate
+  ---
+  duration_ms: 2.893252
+  type: 'test'
+  ...
+# Subtest: Native compression primitive: br
+ok 56 - Native compression primitive: br
+  ---
+  duration_ms: 5.619158
+  type: 'test'
+  ...
+# Subtest: Reversed coding stack, decompression errors, consumption byte cap
+ok 57 - Reversed coding stack, decompression errors, consumption byte cap
+  ---
+  duration_ms: 7.419691
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: TE+CL
+ok 58 - Reject malformed HTTP: TE+CL
+  ---
+  duration_ms: 1.456229
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: different Content-Length
+ok 59 - Reject malformed HTTP: different Content-Length
+  ---
+  duration_ms: 1.015898
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: folded header
+ok 60 - Reject malformed HTTP: folded header
+  ---
+  duration_ms: 2.003038
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: truncated fixed body
+ok 61 - Reject malformed HTTP: truncated fixed body
+  ---
+  duration_ms: 1.263303
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: bad chunk size
+ok 62 - Reject malformed HTTP: bad chunk size
+  ---
+  duration_ms: 1.063825
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: missing chunk terminator
+ok 63 - Reject malformed HTTP: missing chunk terminator
+  ---
+  duration_ms: 1.298589
+  type: 'test'
+  ...
+# Subtest: Reject malformed HTTP: framing trailer
+ok 64 - Reject malformed HTTP: framing trailer
+  ---
+  duration_ms: 1.763362
+  type: 'test'
+  ...
+# Subtest: Partial header reads, informational responses, chunk extensions and wire order
+ok 65 - Partial header reads, informational responses, chunk extensions and wire order
+  ---
+  duration_ms: 5.454556
+  type: 'test'
+  ...
+# Subtest: Content-Length mismatch and header injection rejected before connecting
+ok 66 - Content-Length mismatch and header injection rejected before connecting
+  ---
+  duration_ms: 0.529851
+  type: 'test'
+  ...
+# Subtest: HTTP timeouts, queued acquisition cancellation and pool shutdown
+ok 67 - HTTP timeouts, queued acquisition cancellation and pool shutdown
+  ---
+  duration_ms: 63.469946
+  type: 'test'
+  ...
+# Subtest: ConnectionPool.close interrupts an outstanding connector
+ok 68 - ConnectionPool.close interrupts an outstanding connector
+  ---
+  duration_ms: 0.512714
+  type: 'test'
+  ...
+# Subtest: WebSocket masked sends, independent echo, subprotocol, clean close
+ok 69 - WebSocket masked sends, independent echo, subprotocol, clean close
+  ---
+  duration_ms: 5.119406
+  type: 'test'
+  ...
+# Subtest: WebSocket fragmented UTF-8 with interleaved ping and pong
+ok 70 - WebSocket fragmented UTF-8 with interleaved ping and pong
+  ---
+  duration_ms: 1.986361
+  type: 'test'
+  ...
+# Subtest: WebSocket binary snapshots, ordered sends, application send fragmentation
+ok 71 - WebSocket binary snapshots, ordered sends, application send fragmentation
+  ---
+  duration_ms: 2.726635
+  type: 'test'
+  ...
+# Subtest: WebSocket rejects invalid accept
+ok 72 - WebSocket rejects invalid accept
+  ---
+  duration_ms: 1.484072
+  type: 'test'
+  ...
+# Subtest: WebSocket rejects unsolicited extension
+ok 73 - WebSocket rejects unsolicited extension
+  ---
+  duration_ms: 1.33326
+  type: 'test'
+  ...
+# Subtest: WebSocket rejects unsolicited protocol
+ok 74 - WebSocket rejects unsolicited protocol
+  ---
+  duration_ms: 1.279969
+  type: 'test'
+  ...
+# Subtest: WebSocket protocol failure: invalid UTF-8
+ok 75 - WebSocket protocol failure: invalid UTF-8
+  ---
+  duration_ms: 3.35403
+  type: 'test'
+  ...
+# Subtest: WebSocket protocol failure: masked server frame
+ok 76 - WebSocket protocol failure: masked server frame
+  ---
+  duration_ms: 1.459828
+  type: 'test'
+  ...
+# Subtest: WebSocket protocol failure: oversize message
+ok 77 - WebSocket protocol failure: oversize message
+  ---
+  duration_ms: 1.8381
+  type: 'test'
+  ...
+# Subtest: WebSocket protocol failure: fragment count
+ok 78 - WebSocket protocol failure: fragment count
+  ---
+  duration_ms: 1.378927
+  type: 'test'
+  ...
+# Subtest: WebSocket close timeout, close during connect, runtime shutdown
+ok 79 - WebSocket close timeout, close during connect, runtime shutdown
+  ---
+  duration_ms: 32.563204
+  type: 'test'
+  ...
+# Subtest: TLS: HTTPS and WSS trust validation, custom root and hostname mismatch
+ok 80 - TLS: HTTPS and WSS trust validation, custom root and hostname mismatch
+  ---
+  duration_ms: 131.317208
+  type: 'test'
+  ...
+1..80
+# tests 80
+# suites 0
+# pass 80
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 491.881061

@@ -1,0 +1,5 @@
+NTS Web Platform integration package
+Newly generated implementation, adapters, test runner and documentation: Apache-2.0.
+Third-party WPT test files retain their contributors' copyright and BSD-3-Clause
+license in third_party/wpt/LICENSE.md. No endorsement by WPT, Node.js, Android or
+OpenAI is implied.

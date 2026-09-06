@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/web-platform-tests/wpt",
+  "retrieved": "2026-09-06",
+  "pinType": "Git blob SHA-1 (content addressed)",
+  "files": {
+    "fetch/api/headers/headers-combine.any.js": "4f3b6d11df97481c4593ec69ae3432692d4749f4",
+    "fetch/api/headers/headers-normalize.any.js": "68cf5b85f3acb7fcfe6275ffa0c4d37843ac2935",
+    "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  }
+}

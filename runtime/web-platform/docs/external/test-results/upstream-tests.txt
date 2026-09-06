@@ -1,0 +1,11 @@
+PASS fetch/api/headers/headers-combine.any.js :: Create headers using same name for different values
+PASS fetch/api/headers/headers-combine.any.js :: Check delete and has methods when using same name for different values
+PASS fetch/api/headers/headers-combine.any.js :: Check set methods when called with already used name
+PASS fetch/api/headers/headers-combine.any.js :: Check append methods when called with already used name
+PASS fetch/api/headers/headers-combine.any.js :: Iterate combined values
+PASS fetch/api/headers/headers-combine.any.js :: Iterate combined values in sorted order
+FAIL fetch/api/headers/headers-normalize.any.js :: Create headers with not normalized values
+  TypeError: entries is not iterable
+PASS fetch/api/headers/headers-normalize.any.js :: Check append method with not normalized values
+PASS fetch/api/headers/headers-normalize.any.js :: Check set method with not normalized values
+{"upstreamTests":9,"passed":8,"failed":1}

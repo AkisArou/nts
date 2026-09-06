@@ -4,6 +4,7 @@
   "references": [
     { "path": "./tooling/config" },
     { "path": "./examples/library" },
-    { "path": "./runtime/node" }
+    { "path": "./runtime/node" },
+    { "path": "./runtime/web-platform" }
   ]
 }
