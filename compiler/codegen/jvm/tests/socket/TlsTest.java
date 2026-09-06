@@ -4,6 +4,8 @@ import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
 import javax.net.ssl.SSLSocket;
 import nts.rt.NtsEnv;
+import nts.rt.NtsNumberCallback;
+import nts.rt.NtsTextPairCallback;
 import nts.rt.NtsSocket;
 
 /**
@@ -50,12 +52,18 @@ public final class TlsTest {
         void close() { stop = true; try { listener.close(); } catch (IOException ignored) { /* stopping */ } }
     }
 
-    static final class Result implements NtsSocket.Completion {
+    /**
+     * The two closures a completion is now, held together for the test's
+     * convenience -- which is exactly what generated code does *not* do: two
+     * separate closures arrive, and this class exists only so a test can
+     * assert on both halves at once.
+     */
+    static final class Result implements NtsNumberCallback, NtsTextPairCallback {
         double value = Double.NaN;
         String name;
         String message;
-        @Override public void ok(double v) { value = v; }
-        @Override public void failed(String n, String m) { name = n; message = m; }
+        @Override public void call(double v) { value = v; }
+        @Override public void call(String n, String m) { name = n; message = m; }
     }
 
     static Result connect(String host, int port) {
@@ -63,7 +71,7 @@ public final class TlsTest {
         NtsEnv previous = NtsEnv.enterEnv(env);
         try {
             Result result = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), host, port, true, 4000, result);
+            NtsSocket.connect(env, NtsEnv.launch(env), host, port, true, 4000, result, result);
             NtsEnv.drain(env);
             if (!Double.isNaN(result.value) && result.name == null) { NtsSocket.close(result.value); }
             return result;

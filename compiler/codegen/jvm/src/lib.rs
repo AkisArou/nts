@@ -316,19 +316,20 @@ fn object_class(
     // forwarder, and the reason promises are not blocked behind the closure
     // base question: this relationship is created here rather than recovered
     // from the IR.
-    // A layout whose dispatched method is `()V` is something the runtime can
-    // call without knowing its class, which is what a timer callback has to
-    // be. Decided from the *descriptor* rather than from a list of class
-    // names, so it stays true of whatever the lowering names a closure next.
-    if layout.methods.iter().flatten().any(|name| {
-        program
-            .funcs
-            .iter()
-            .find(|func| &func.name == name)
-            .and_then(|func| instance_descriptor(program, func))
-            .is_some_and(|descriptor| descriptor == "()V")
-    }) {
-        builder.interfaces.push(types::CALLBACK.to_owned());
+    // A layout whose dispatched `call` has a shape the ABI names is something
+    // the runtime can call without knowing its class, which is what every
+    // callback into generated code has to be. Decided from the *descriptor*
+    // rather than from a list of class names, so it stays true of whatever the
+    // lowering names a closure next.
+    //
+    // **The member name is part of the key, and used not to be.** The old rule
+    // asked only whether some dispatched method was `()V`, so a class with an
+    // ordinary `reset(): void` was told it implemented `NtsCallback` and did
+    // not -- an `AbstractMethodError` waiting for the first caller to reach it
+    // through the interface, and one the verifier does not catch because
+    // interface implementation is checked at the call, not at load.
+    for interface in callback_interfaces(program, layout) {
+        builder.interfaces.push(interface.to_owned());
     }
     if let Some(resume) = resumes(program, layout) {
         builder.interfaces.push(types::RESUMABLE.to_owned());
@@ -437,6 +438,37 @@ fn render(
 /// error. `signatures::specialize` pinning anything a dispatch table names and
 /// `unerase::narrow_returns` excluding `dispatched` are what make them agree
 /// today, so the agreement is **checked here** rather than assumed.
+/// The `nts.rt` interfaces this layout implements, from the shape of its
+/// dispatched `call`.
+///
+/// Deduplicated, because two slots can name one function -- a class inheriting
+/// a callback and redeclaring it would otherwise list the interface twice, and
+/// a duplicate entry in `interfaces` is a class file the verifier rejects.
+fn callback_interfaces(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+) -> Vec<&'static str> {
+    let mut found: Vec<&'static str> = Vec::new();
+    for name in layout.methods.iter().flatten() {
+        if hierarchy::member_name(name) != "call" {
+            continue;
+        }
+        let Some(interface) = program
+            .funcs
+            .iter()
+            .find(|func| &func.name == name)
+            .and_then(|func| instance_descriptor(program, func))
+            .and_then(|descriptor| types::callback_interface(&descriptor))
+        else {
+            continue;
+        };
+        if !found.contains(&interface) {
+            found.push(interface);
+        }
+    }
+    found
+}
+
 fn dispatch_forwarders(
     program: &Program,
     layout: &nts_core::hir::Layout,

@@ -4,6 +4,8 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import nts.rt.NtsEnv;
+import nts.rt.NtsNumberCallback;
+import nts.rt.NtsTextPairCallback;
 import nts.rt.NtsInbox;
 import nts.rt.NtsSocket;
 
@@ -45,14 +47,20 @@ public final class SocketTest {
     }
 
     /** One completion, recorded with the thread that delivered it. */
-    static final class Result implements NtsSocket.Completion {
+    /**
+     * The two closures a completion is now, held together for the test's
+     * convenience -- which is exactly what generated code does *not* do: two
+     * separate closures arrive, and this class exists only so a test can
+     * assert on both halves at once.
+     */
+    static final class Result implements NtsNumberCallback, NtsTextPairCallback {
         double value = Double.NaN;
         String name;
         String message;
         Thread lane;
         int settled;
-        @Override public void ok(double v) { value = v; lane = Thread.currentThread(); settled++; }
-        @Override public void failed(String n, String m) {
+        @Override public void call(double v) { value = v; lane = Thread.currentThread(); settled++; }
+        @Override public void call(String n, String m) {
             name = n; message = m; lane = Thread.currentThread(); settled++;
         }
     }
@@ -62,7 +70,7 @@ public final class SocketTest {
         NtsEnv previous = NtsEnv.enterEnv(env);
         try {
             Result connected = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected);
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected, connected);
             NtsEnv.drain(env);
             check(connected.settled == 1, "connect settled " + connected.settled + " times");
             check(connected.name == null, "connect failed: " + connected.name + " " + connected.message);
@@ -72,14 +80,14 @@ public final class SocketTest {
 
             byte[] sent = "the quick brown fox".getBytes("UTF-8");
             Result written = new Result();
-            NtsSocket.write(env, NtsEnv.launch(env), handle, sent, 0, sent.length, written);
+            NtsSocket.write(env, NtsEnv.launch(env), handle, sent, 0, sent.length, written, written);
             NtsEnv.drain(env);
             check(written.name == null, "write failed: " + written.name + " " + written.message);
             check(written.value == sent.length, "wrote " + written.value + " of " + sent.length);
 
             byte[] back = new byte[64];
             Result read = new Result();
-            NtsSocket.read(env, NtsEnv.launch(env), handle, back, 0, back.length, read);
+            NtsSocket.read(env, NtsEnv.launch(env), handle, back, 0, back.length, read, read);
             NtsEnv.drain(env);
             check(read.name == null, "read failed: " + read.name + " " + read.message);
             check(read.value == sent.length, "read " + read.value + " of " + sent.length);
@@ -102,14 +110,14 @@ public final class SocketTest {
         NtsEnv previous = NtsEnv.enterEnv(env);
         try {
             Result connected = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected);
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected, connected);
             NtsEnv.drain(env);
             final double handle = connected.value;
 
             byte[] into = new byte[16];
             Result read = new Result();
             // Nothing was written, so the peer says nothing and this blocks.
-            NtsSocket.read(env, NtsEnv.launch(env), handle, into, 0, into.length, read);
+            NtsSocket.read(env, NtsEnv.launch(env), handle, into, 0, into.length, read, read);
             Thread closer = new Thread(new Runnable() {
                 @Override public void run() {
                     try { Thread.sleep(50); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -139,7 +147,7 @@ public final class SocketTest {
             NtsInbox.Slot only = NtsEnv.launch(env);
             check(only != null, "the first credit was refused");
             Result refused = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, refused);
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, refused, refused);
             check(refused.settled == 1, "a refused launch settled " + refused.settled + " times");
             check("Backpressure".equals(refused.name),
                 "a refused launch reported " + refused.name);
@@ -159,7 +167,7 @@ public final class SocketTest {
         double handle;
         try {
             Result connected = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected);
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, connected, connected);
             NtsEnv.drain(env);
             handle = connected.value;
             check(NtsSocket.openCount() >= 1, "the connection was not registered");

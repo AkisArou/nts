@@ -78,6 +78,43 @@ pub const CALLBACK: &str = "nts/rt/NtsCallback";
 
 pub const RESUMABLE: &str = "nts/rt/NtsResumable";
 
+/// The callback ABI: a descriptor, and the `nts.rt` interface a generated class
+/// with that shape implements.
+///
+/// **Keyed by descriptor, not by name.** A runtime that reached a closure by
+/// its class would name `nts/gen/Closure7`, and the 7 counts closures in source
+/// order -- so adding a line somewhere else in the program renames the thing
+/// the runtime calls. Naming the shape instead is stable under every edit that
+/// does not change the shape, which is the property an ABI needs.
+///
+/// It is deliberately not a grid over argument kinds. A generated family of
+/// `NtsCall_DLD` interfaces would cover shapes nothing uses and would still
+/// miss the first one that mattered; each entry here exists because a fixed
+/// intrinsic takes it, and the drift test asserts the Java side agrees.
+pub const CALLBACKS: &[(&str, &str)] = &[
+    ("()V", CALLBACK),
+    ("(D)V", "nts/rt/NtsNumberCallback"),
+    ("(Ljava/lang/String;)V", "nts/rt/NtsTextCallback"),
+    ("(Ljava/lang/String;Ljava/lang/String;)V", "nts/rt/NtsTextPairCallback"),
+    ("([BDD)V", "nts/rt/NtsBytesCallback"),
+];
+
+/// The interface a class whose `call` has this descriptor implements, if any.
+#[must_use]
+pub fn callback_interface(descriptor: &str) -> Option<&'static str> {
+    CALLBACKS.iter().find(|(shape, _)| *shape == descriptor).map(|&(_, name)| name)
+}
+
+/// Whether this is one of the callback interfaces, which is what decides
+/// whether an argument may be coerced into it rather than refused.
+#[must_use]
+pub fn is_callback_interface(descriptor: &str) -> bool {
+    CALLBACKS.iter().any(|(_, name)| descriptor.len() == name.len() + 2
+        && descriptor.starts_with('L')
+        && descriptor.ends_with(';')
+        && &descriptor[1..descriptor.len() - 1] == *name)
+}
+
 /// The program a backend is rendering, and the one whole-program fact that
 /// changes how a type is spelled.
 ///

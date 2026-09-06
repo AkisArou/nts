@@ -56,12 +56,18 @@ import javax.net.ssl.SSLSocketFactory;
  * which is also the publication edge that makes the bytes it read visible.
  */
 public final class NtsSocket {
-    /** What a completed operation reports back to the owner lane. */
-    public interface Completion {
-        /** Bytes read or written, or the handle for a connect. `-1` is EOF. */
-        void ok(double value);
-        void failed(String name, String message);
-    }
+    // A completion used to be one two-method interface, `ok` and `failed`,
+    // and that interface was **structurally impossible for generated code to
+    // implement**: a TypeScript closure lowers to a class with exactly one
+    // `call`, so a Java interface with two methods can only ever be written by
+    // hand. The transport was reachable from Java and from nothing else, which
+    // is not what a reference transport is for.
+    //
+    // So a completion is two closures -- `NtsNumberCallback` for the count or
+    // handle, `NtsTextPairCallback` for a code and a message -- each of which
+    // is one `call` and is attached to a matching closure by descriptor. The
+    // shape is now the shape TypeScript can hand over, and the split was
+    // forced by the ABI rather than chosen for taste.
 
     private static final class Connection {
         final Socket socket;
@@ -166,23 +172,25 @@ public final class NtsSocket {
         if (c != null) { closeQuietly(c); }
     }
 
-    private static void submit(NtsEnv env, NtsInbox.Slot slot, Runnable body, Completion done) {
+    private static void submit(NtsEnv env, NtsInbox.Slot slot, Runnable body,
+                               NtsTextPairCallback failed) {
         try {
             pool().execute(body);
         } catch (RejectedExecutionException full) {
             // The queue is bounded, so this is reachable, and the credit is
             // still ours to return -- no platform work was ever created.
             NtsEnv.cancel(env, slot);
-            done.failed("QueueFull", "the I/O queue is full");
+            failed.call("QueueFull", "the I/O queue is full");
         }
     }
 
     /** Post a result to the owner lane through the slot reserved for it. */
-    private static void finish(NtsInbox.Slot slot, final Completion done,
+    private static void finish(NtsInbox.Slot slot,
+                               final NtsNumberCallback ok, final NtsTextPairCallback failed,
                                final double value, final String name, final String message) {
         NtsInbox.post(slot, new NtsResumable() {
             @Override public void resume() {
-                if (name == null) { done.ok(value); } else { done.failed(name, message); }
+                if (name == null) { ok.call(value); } else { failed.call(name, message); }
             }
         });
     }
@@ -196,10 +204,10 @@ public final class NtsSocket {
     public static void connect(
         final NtsEnv env, final NtsInbox.Slot slot,
         final String host, final double port, final boolean secure,
-        final double timeoutMs, final Completion done
+        final double timeoutMs, final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            done.failed("Backpressure", "no completion credit was available");
+            failed.call("Backpressure", "no completion credit was available");
             return;
         }
         submit(env, slot, new Runnable() {
@@ -232,16 +240,16 @@ public final class NtsSocket {
                     socket.setTcpNoDelay(true);
                     Connection c = new Connection(socket, socket.getInputStream(), socket.getOutputStream());
                     double handle = register(c);
-                    finish(slot, done, handle, null, null);
-                } catch (IOException failed) {
+                    finish(slot, ok, failed, handle, null, null);
+                } catch (IOException problem) {
                     if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* failed */ } }
-                    finish(slot, done, 0, failed.getClass().getSimpleName(), String.valueOf(failed.getMessage()));
-                } catch (RuntimeException failed) {
+                    finish(slot, ok, failed, 0, problem.getClass().getSimpleName(), String.valueOf(problem.getMessage()));
+                } catch (RuntimeException problem) {
                     if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* failed */ } }
-                    finish(slot, done, 0, failed.getClass().getSimpleName(), String.valueOf(failed.getMessage()));
+                    finish(slot, ok, failed, 0, problem.getClass().getSimpleName(), String.valueOf(problem.getMessage()));
                 }
             }
-        }, done);
+        }, failed);
     }
 
     /**
@@ -254,48 +262,50 @@ public final class NtsSocket {
      */
     public static void read(
         final NtsEnv env, final NtsInbox.Slot slot, final double handle,
-        final byte[] into, final double offset, final double length, final Completion done
+        final byte[] into, final double offset, final double length,
+        final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            done.failed("Backpressure", "no completion credit was available");
+            failed.call("Backpressure", "no completion credit was available");
             return;
         }
         final Connection c = lookup(handle);
         if (c == null || c.closed) {
             NtsEnv.cancel(env, slot);
-            done.failed("Closed", "the connection is closed");
+            failed.call("Closed", "the connection is closed");
             return;
         }
         submit(env, slot, new Runnable() {
             @Override public void run() {
                 try {
                     int n = c.in.read(into, (int) offset, (int) length);
-                    finish(slot, done, n, null, null);
-                } catch (IOException failed) {
+                    finish(slot, ok, failed, n, null, null);
+                } catch (IOException problem) {
                     if (c.closed) {
-                        finish(slot, done, 0, "Aborted", "the connection was closed");
+                        finish(slot, ok, failed, 0, "Aborted", "the connection was closed");
                     } else {
-                        finish(slot, done, 0, failed.getClass().getSimpleName(),
-                            String.valueOf(failed.getMessage()));
+                        finish(slot, ok, failed, 0, problem.getClass().getSimpleName(),
+                            String.valueOf(problem.getMessage()));
                     }
                 }
             }
-        }, done);
+        }, failed);
     }
 
     /** Write `length` bytes, reporting how many went out. */
     public static void write(
         final NtsEnv env, final NtsInbox.Slot slot, final double handle,
-        final byte[] from, final double offset, final double length, final Completion done
+        final byte[] from, final double offset, final double length,
+        final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            done.failed("Backpressure", "no completion credit was available");
+            failed.call("Backpressure", "no completion credit was available");
             return;
         }
         final Connection c = lookup(handle);
         if (c == null || c.closed) {
             NtsEnv.cancel(env, slot);
-            done.failed("Closed", "the connection is closed");
+            failed.call("Closed", "the connection is closed");
             return;
         }
         submit(env, slot, new Runnable() {
@@ -303,17 +313,17 @@ public final class NtsSocket {
                 try {
                     c.out.write(from, (int) offset, (int) length);
                     c.out.flush();
-                    finish(slot, done, length, null, null);
-                } catch (IOException failed) {
+                    finish(slot, ok, failed, length, null, null);
+                } catch (IOException problem) {
                     if (c.closed) {
-                        finish(slot, done, 0, "Aborted", "the connection was closed");
+                        finish(slot, ok, failed, 0, "Aborted", "the connection was closed");
                     } else {
-                        finish(slot, done, 0, failed.getClass().getSimpleName(),
-                            String.valueOf(failed.getMessage()));
+                        finish(slot, ok, failed, 0, problem.getClass().getSimpleName(),
+                            String.valueOf(problem.getMessage()));
                     }
                 }
             }
-        }, done);
+        }, failed);
     }
 
     /** Open connections, for a close-race test to assert against. */

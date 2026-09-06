@@ -151,12 +151,18 @@ public final class NtsRuntime {
         }
         System.out.flush(); System.err.println(line); System.err.flush(); System.exit(1);
     }
-    public static double setTimeout(Object callback, double slot, double delayMs, boolean repeating) {
-        if (!(callback instanceof NtsCallback)) {
-            System.out.flush(); System.err.println("nts: a timer callback that is not callable");
-            System.err.flush(); System.exit(1); return 0.0;
-        }
-        return NtsEnv.postDelayed(NtsEnv.current(), (NtsCallback) callback, delayMs, repeating);
+    /**
+     * The callback arrives typed, so there is nothing here to check.
+     *
+     * <p>This took an `Object` and asked `instanceof`, killing the process when
+     * the answer was no -- a check that can only run once a wrong program is
+     * already running, and one that existed because the descriptor promised
+     * nothing. The backend now refuses at build time and the parameter says
+     * what it takes, which is the same guarantee arriving early enough to be
+     * useful.
+     */
+    public static double setTimeout(NtsCallback callback, double slot, double delayMs, boolean repeating) {
+        return NtsEnv.postDelayed(NtsEnv.current(), callback, delayMs, repeating);
     }
     public static void clearTimeout(double id) { NtsEnv.cancelDelayed(NtsEnv.current(), id); }
     public static void cellReady(boolean ready, String name) {

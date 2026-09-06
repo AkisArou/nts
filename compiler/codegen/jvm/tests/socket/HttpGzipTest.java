@@ -7,6 +7,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.zip.GZIPOutputStream;
 import nts.rt.NtsEnv;
+import nts.rt.NtsNumberCallback;
+import nts.rt.NtsTextPairCallback;
 import nts.rt.NtsGzip;
 import nts.rt.NtsSocket;
 
@@ -78,12 +80,18 @@ public final class HttpGzipTest {
         void close() { stop = true; try { listener.close(); } catch (IOException ignored) { /* stopping */ } }
     }
 
-    static final class Result implements NtsSocket.Completion {
+    /**
+     * The two closures a completion is now, held together for the test's
+     * convenience -- which is exactly what generated code does *not* do: two
+     * separate closures arrive, and this class exists only so a test can
+     * assert on both halves at once.
+     */
+    static final class Result implements NtsNumberCallback, NtsTextPairCallback {
         double value = Double.NaN;
         String name;
         String message;
-        @Override public void ok(double v) { value = v; }
-        @Override public void failed(String n, String m) { name = n; message = m; }
+        @Override public void call(double v) { value = v; }
+        @Override public void call(String n, String m) { name = n; message = m; }
     }
 
     public static void main(String[] args) throws Exception {
@@ -103,7 +111,7 @@ public final class HttpGzipTest {
         String contentLength = null;
         try {
             Result connected = new Result();
-            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", server.port(), false, 4000, connected);
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", server.port(), false, 4000, connected, connected);
             NtsEnv.drain(env);
             check(connected.name == null, "connect failed: " + connected.name + " " + connected.message);
             double handle = connected.value;
@@ -111,7 +119,7 @@ public final class HttpGzipTest {
             byte[] request = ("GET / HTTP/1.1\r\nHost: localhost\r\n"
                 + "Accept-Encoding: gzip\r\nConnection: close\r\n\r\n").getBytes("ISO-8859-1");
             Result sent = new Result();
-            NtsSocket.write(env, NtsEnv.launch(env), handle, request, 0, request.length, sent);
+            NtsSocket.write(env, NtsEnv.launch(env), handle, request, 0, request.length, sent, sent);
             NtsEnv.drain(env);
             check(sent.name == null, "request write failed: " + sent.name);
 
@@ -123,7 +131,7 @@ public final class HttpGzipTest {
             boolean inHead = true;
             for (;;) {
                 Result read = new Result();
-                NtsSocket.read(env, NtsEnv.launch(env), handle, chunk, 0, chunk.length, read);
+                NtsSocket.read(env, NtsEnv.launch(env), handle, chunk, 0, chunk.length, read, read);
                 NtsEnv.drain(env);
                 if (read.name != null || read.value <= 0) { break; }
                 int at = 0;

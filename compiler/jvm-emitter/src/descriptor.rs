@@ -27,6 +27,30 @@ pub fn words(descriptor: &str) -> u16 {
     }
 }
 
+/// The parameter descriptors of a method descriptor, in order.
+///
+/// Built on the same walker `call_effect` uses, so the two cannot disagree
+/// about where one parameter ends and the next begins -- which is the whole
+/// reason this module parses rather than being told.
+#[must_use]
+pub fn parameters(descriptor: &str) -> Option<Vec<&str>> {
+    let bytes = descriptor.as_bytes();
+    if bytes.first() != Some(&b'(') {
+        return None;
+    }
+    let mut at = 1;
+    let mut found = Vec::new();
+    while at < bytes.len() && bytes[at] != b')' {
+        let (length, _) = field_length(&bytes[at..])?;
+        found.push(descriptor.get(at..at + length)?);
+        at += length;
+    }
+    if at >= bytes.len() {
+        return None;
+    }
+    Some(found)
+}
+
 /// The stack effect of a call: words popped for the parameters, words pushed
 /// for the result.
 ///

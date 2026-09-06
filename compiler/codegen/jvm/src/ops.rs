@@ -261,7 +261,15 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // `NtsCallback` and is reached by name -- and is still in the
         // signature, because disagreeing with that table about an entry point
         // is how one backend gets a conversion the others do not.
-        "nts_set_timeout" => (RUNTIME, "setTimeout", "(Ljava/lang/Object;DDZ)D"),
+        //
+        // **The callback is typed, and used to be `Object`.** The runtime asked
+        // `instanceof NtsCallback` and killed the process when the answer was
+        // no, which is a check that can only run once the program is already
+        // wrong -- and one that had to exist because the descriptor promised
+        // nothing. Declaring the interface moves the same question to the
+        // verifier, where it is answered for every call before any of them
+        // runs, and deletes the check rather than adding a second one.
+        "nts_set_timeout" => (RUNTIME, "setTimeout", "(Lnts/rt/NtsCallback;DDZ)D"),
         "nts_clear_timeout" => (RUNTIME, "clearTimeout", "(D)V"),
         // A symbol is a description and an identity. `keyFor` walks the
         // registry rather than keeping a reverse index, which is `runtime/c`'s
@@ -955,6 +963,101 @@ impl Emitter<'_> {
             code.check_cast(origin, pool, &want);
         }
         Ok(())
+    }
+
+    /// The arguments of an external call, each brought to the type the
+    /// descriptor declares for it.
+    fn push_arguments(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        args: &[ValueId],
+        descriptor: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let parameters = nts_jvm_emitter::descriptor::parameters(descriptor);
+        for (at, &arg) in args.iter().enumerate() {
+            self.load(code, pool, arg)?;
+            if let Some(want) = parameters.as_ref().and_then(|list| list.get(at)).copied() {
+                self.coerce_callback(code, pool, arg, want, origin)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The argument a fixed intrinsic declared as a callback interface,
+    /// brought to that type on the stack.
+    ///
+    /// **The verifier is no help here and it is worth saying why.** JVMS
+    /// 4.10.1.2 makes every class assignable to every interface without
+    /// loading either -- interface conformance is checked at the *call*, by
+    /// `invokeinterface`, not at the boundary. So a descriptor naming
+    /// `NtsCallback` is a statement of intent that nothing enforces, and a
+    /// program handing a `Point` to `setTimeout` would verify, link, and fail
+    /// with an `IncompatibleClassChangeError` from inside the runtime.
+    ///
+    /// That error is the one the differential cannot read: `stopped()` finds a
+    /// refusal by its `nts:` line, so a JVM stack trace out of a helper is a
+    /// **defect** on a case the other lanes decline cleanly. So the check is
+    /// here, at build time, where it is a refusal naming the type.
+    ///
+    /// An erased argument is the one shape that needs instructions: the
+    /// reference is inside the box, and a `checkcast` on the way out puts the
+    /// failure at the boundary with the class in the message rather than at
+    /// the first invocation with neither.
+    fn coerce_callback(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        arg: ValueId,
+        want: &str,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        if !types::is_callback_interface(want) {
+            return Ok(());
+        }
+        let ty = self.ty(arg).clone();
+        if let HirType::Erased = ty {
+            code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
+            code.check_cast(origin, pool, &want[1..want.len() - 1]);
+            return Ok(());
+        }
+        let implements = types::descriptor(self.shape, &ty)
+            .and_then(|descriptor| {
+                let class = descriptor.strip_prefix('L')?.strip_suffix(';')?.to_owned();
+                self.shape
+                    .program
+                    .layouts
+                    .iter()
+                    .find(|layout| types::class_name(layout) == class)
+            })
+            .is_some_and(|layout| {
+                layout.methods.iter().flatten().any(|name| {
+                    crate::hierarchy::member_name(name) == "call"
+                        && self
+                            .shape
+                            .program
+                            .funcs
+                            .iter()
+                            .find(|func| &func.name == name)
+                            .and_then(|func| {
+                                crate::instance_descriptor(self.shape.program, func)
+                            })
+                            .and_then(|descriptor| types::callback_interface(&descriptor))
+                            == Some(&want[1..want.len() - 1])
+                })
+            });
+        if implements {
+            return Ok(());
+        }
+        Err(refuse(
+            self.func,
+            &format!(
+                "{} where a callback of shape `{}` was declared",
+                types::describe(&ty),
+                &want[1..want.len() - 1]
+            ),
+        ))
     }
 
     fn object_new(
@@ -2993,9 +3096,7 @@ impl Emitter<'_> {
                         ),
                     ));
                 };
-                for &arg in args {
-                    self.load(code, pool, arg)?;
-                }
+                self.push_arguments(code, pool, args, &descriptor, origin)?;
                 code.invoke_static(origin, pool, owner, member, &descriptor);
                 let returns = descriptor.rsplit(')').next().unwrap_or("").to_owned();
                 let returns = returns.as_str();
