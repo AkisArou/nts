@@ -81,8 +81,8 @@ the provider imports Node TCP, TLS, timer, random and compression primitives and
 host-level conformance infrastructure. It is neither the native Node-compatible
 provider under `runtime/node` nor an implementation used by the mobile targets.
 
-At the integrated tree, using the repository's TypeScript `7.0.2`, Node declarations
-`24.13.3`, and Node `v24.20.0`:
+At the initial integrated tree, using the repository's TypeScript `7.0.2`, Node
+declarations `24.13.3`, and Node `v24.20.0`:
 
 | Command                                                   | Result                   |
 | --------------------------------------------------------- | ------------------------ |
@@ -95,3 +95,26 @@ changed construction: it creates the same canonical `Request`, `Response`, and
 remain replaced by throwing values. The WPT fixtures are unchanged and hash-checked;
 the integrated implementation now passes the previously failing dictionary
 initializer without modifying the upstream test.
+
+## Current integration evidence
+
+At `0304954`, the repository TypeScript build passes, the Node-host suite passes
+91/91 with zero skipped, and the unchanged WPT slice passes 9/9. The additional
+cases cover protocol parsing, Web IDL conversion, MIME/body behavior, cancellation,
+pool shutdown, TLS, and canonical event initialization; they do not turn host
+execution into evidence for a compiled provider.
+
+The shared source now uses `Promise.withResolvers()` directly instead of retaining
+the external `Deferred` substitute. At `0304954`, the NTS check reports 186 primary
+lowering refusals, 40 cascades, and zero `NTS4xxx` JVM-backend refusals. Seventy-three
+emitted primary messages mention an unrepresentable `PromiseWithResolvers` property;
+that count includes repeated specialized layouts and is one compiler/runtime feature
+blocker, not 73 independent missing features. The final-form source remains in place
+while that prerequisite is implemented.
+
+The common C runtime now has an `NtsEnvironment` and scoped current-environment ABI,
+but shared TypeScript cannot yet obtain its environment-owned Web dependencies.
+Consequently the explicit context arguments still visible on `Request`, `Response`,
+`WebSocket`, and `AbortSignal.timeout` are transitional and are not the intended
+public signatures. Removing them requires the typed current-environment/constructor
+entry seam; process-global mutable state is not an acceptable substitute.
