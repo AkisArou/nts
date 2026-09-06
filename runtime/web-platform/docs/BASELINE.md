@@ -208,3 +208,21 @@ differential with two calls where Node and the implementation require one. The l
 NTS check reports 198 primary refusals, 41 cascades, zero JVM-backend refusals, and
 no invalid HIR; this is another final-source frontier, not a claim that its language
 dependencies are implemented.
+
+At `61b2b5c`, `Event` carries the complete state needed by a non-tree event target:
+the four standard phase constants on the constructor and instances, read-only state
+accessors, `srcElement`, `composedPath()`, `cancelBubble`, `returnValue`,
+`initEvent()`, and the distinct propagation, immediate-propagation, passive and
+canceled flags. Ordinary propagation stopping still permits later listeners on the
+same target; immediate stopping does not. Dispatch clears both propagation flags
+and the path while retaining cancellation and the target, and initialization resets
+the mutable initialization state without changing `composed`. This follows the DOM
+dispatch state machine where Node's deliberately smaller host `Event` differs. The
+environment-relative `timeStamp` remains blocked on the typed current-environment
+clock seam; assigning a process-global host clock here would violate the integration
+contract. The Node-host suite passes 101/101 and the unchanged WPT slice remains
+52/52. A mutation that failed to retire the immediate-stop flag made the focused
+redispatch assertion fail with zero calls instead of one. The live NTS check reports
+200 primary refusals, 41 cascades, zero JVM-backend refusals, and no invalid HIR. The
+two additional primaries are the already-planned general class-value dependency
+exposed by canonical `Event` constant references, not a backend regression.
