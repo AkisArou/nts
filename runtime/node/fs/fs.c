@@ -385,7 +385,11 @@ double nts_fs_close(double fd) {
 static NtsArray *read_from_descriptor(double fd, double length,
                                       int64_t position) {
   size_t size = (size_t)length;
-  char *data = malloc(size > 0 ? size : 1);
+  if (size == 0) {
+    nts_node_set_errno(0);
+    return empty_doubles();
+  }
+  char *data = malloc(size);
   if (data == NULL) {
     nts_node_set_errno(UV_ENOMEM);
     return nts_array_new(&nts_node_desc_double, 0);
