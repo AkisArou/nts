@@ -3,7 +3,7 @@ import { AbortController } from "../core/abort.ts";
 import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
-import { utf8 } from "../core/encoding.ts";
+import { utf8Length } from "../core/utf8.ts";
 import { toClampedUnsignedShort, toUSVString } from "../core/webidl.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { isToken } from "../fetch/headers.ts";
@@ -17,7 +17,7 @@ import type {
 
 export type WebSocketData = string | Blob | ArrayBuffer;
 
-export type WebSocketSendData = string | Blob | Uint8Array | ArrayBuffer;
+export type WebSocketSendData = string | Blob | ArrayBuffer | ArrayBufferView;
 
 export interface WebSocketContext {
   urls: URLParser;
@@ -227,10 +227,14 @@ export class WebSocket extends EventTarget {
     let pending: PendingSend;
     if (typeof data === "string") {
       const value = toUSVString(data);
-      pending = { value, size: utf8.encode(value).length };
+      pending = { value, size: utf8Length(value) };
     } else if (data instanceof Blob) pending = { value: data, size: data.size };
     else {
-      const bytes = data instanceof Uint8Array ? data.slice() : new Uint8Array(data.slice(0));
+      const source =
+        data instanceof ArrayBuffer
+          ? new Uint8Array(data)
+          : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+      const bytes = source.slice();
       pending = { value: bytes, size: bytes.length };
     }
     this.amount += pending.size;
@@ -265,7 +269,7 @@ export class WebSocket extends EventTarget {
     if (closeCode !== undefined && closeCode !== 1000 && (closeCode < 3000 || closeCode > 4999)) {
       throw new DOMException("Close code must be 1000 or 3000..4999", "InvalidAccessError");
     }
-    if (utf8.encode(closeReason).length > 123)
+    if (utf8Length(closeReason) > 123)
       throw new DOMException("Close reason exceeds 123 UTF-8 bytes", "SyntaxError");
     if (this.state === this.CLOSING || this.state === this.CLOSED) return;
     if (this.state === this.CONNECTING) {

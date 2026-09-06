@@ -382,3 +382,19 @@ invalid HIR. Relative to the preceding 237/36 inventory, the only primary-messag
 movement is one fewer hierarchy diagnostic for `unsubscribe` and three additional
 observations of the existing unrepresentable `PromiseWithResolvers.result`
 property; the queue introduces no new underlying compiler dependency.
+
+WebSocket `send()` now accepts the complete `ArrayBufferView` branch of the
+standard `BufferSource` union rather than only `Uint8Array`. It snapshots exactly
+the view's `byteOffset`/`byteLength` range, so `DataView` and non-byte typed arrays
+cannot expose unrelated prefix/suffix bytes or later backing mutation. Text and
+close-reason sizing now call the canonical allocation-free `utf8Length()` routine
+instead of allocating a byte array that the transport would immediately encode a
+second time. The exact same-task `bufferedAmount` assertion is 10 for `hello 💙`,
+not its eight UTF-16 code units. A wrong-zero-offset mutation sends
+`99,1,2,3`/`99,99,5,6` instead of the two expected four-byte view ranges, and a
+code-unit-count mutation reports 8 instead of 10. The Node-host suite passes
+115/115 and the pinned WPT slice remains 95/95. The live NTS frontier remains 239
+primary refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR. The
+broader final signature replaces an `instanceof`-representation refusal with the
+already-planned `ArrayBufferView` union-representation refusal; it adds no new
+underlying compiler dependency.

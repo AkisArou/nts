@@ -657,7 +657,7 @@ suite("WebSocket masked sends, independent echo, subprotocol, clean close", asyn
   assert.equal(ws.protocol, "chat");
   const message = new Promise((resolve) => (ws.onmessage = resolve));
   ws.send("hello 💙");
-  assert.ok(ws.bufferedAmount > 0);
+  assert.equal(ws.bufferedAmount, 10);
   assert.equal((await message).data, "hello 💙");
   ws.close(1000, "bye");
   const closed = await e.closed;
@@ -756,6 +756,46 @@ suite("WebSocket binary snapshots, ordered sends, application send fragmentation
   );
   ws.close();
   await e.closed;
+});
+suite("WebSocket snapshots the exact byte range of every ArrayBufferView", async (t) => {
+  let parts = [];
+  const s = await websocketServer(t, (socket) =>
+    peerParser(socket, (incoming) => {
+      if (incoming.opcode === 8) {
+        socket.end(frame(8, incoming.payload));
+        return;
+      }
+      if (incoming.opcode !== 0) parts = [];
+      parts.push(incoming.payload);
+      if (incoming.fin) socket.write(frame(2, Buffer.concat(parts)));
+    }),
+  );
+  const api = runtime(t);
+  const ws = api.createWebSocket(s.url);
+  ws.binaryType = "arraybuffer";
+  const events = wsEvents(ws);
+  await events.opened;
+  const received = [];
+  const complete = new Promise((resolve) => {
+    ws.onmessage = (event) => {
+      received.push(new Uint8Array(event.data));
+      if (received.length === 2) resolve();
+    };
+  });
+
+  const dataViewBacking = Uint8Array.of(99, 1, 2, 3, 4, 99);
+  ws.send(new DataView(dataViewBacking.buffer, 1, 4));
+  dataViewBacking.fill(8);
+
+  const wideViewBacking = Uint8Array.of(99, 99, 5, 6, 7, 8, 99, 99);
+  ws.send(new Uint16Array(wideViewBacking.buffer, 2, 2));
+  wideViewBacking.fill(9);
+
+  assert.equal(ws.bufferedAmount, 8);
+  await complete;
+  assert.deepEqual(received, [Uint8Array.of(1, 2, 3, 4), Uint8Array.of(5, 6, 7, 8)]);
+  ws.close();
+  await events.closed;
 });
 for (const [name, options] of [
   ["invalid accept", { badAccept: true }],
