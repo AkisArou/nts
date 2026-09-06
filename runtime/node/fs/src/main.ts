@@ -167,6 +167,10 @@ export interface ReadOptions {
   position?: number | bigint | null | undefined;
 }
 
+type ReadSyncArguments =
+  | [options?: ReadOptions | null]
+  | [offset: number | undefined, length?: number, position?: unknown];
+
 /** Named arguments accepted by the current `writeSync` overload. */
 export interface WriteOptions {
   offset?: number | undefined;
@@ -303,9 +307,7 @@ export function readSync(
 export function readSync(
   fd: number,
   buffer: Buffer,
-  offsetOrOptions?: number | ReadOptions | null,
-  suppliedLength?: number,
-  suppliedPosition?: unknown,
+  ...given: ReadSyncArguments
 ): number {
   if (!(buffer instanceof Uint8Array)) {
     throw new ERR_INVALID_ARG_TYPE("buffer", ["Buffer", "TypedArray", "DataView"], buffer);
@@ -314,7 +316,10 @@ export function readSync(
   let offset: number;
   let length: number;
   let position: unknown;
-  if (arguments.length <= 3 || typeof offsetOrOptions === "object") {
+  const offsetOrOptions = given[0];
+  const suppliedLength = given.length > 1 ? given[1] : undefined;
+  const suppliedPosition = given.length > 2 ? given[2] : undefined;
+  if (given.length <= 1 || typeof offsetOrOptions === "object") {
     if (offsetOrOptions !== undefined && offsetOrOptions !== null) {
       // Besides validating the JS boundary, this rejects arrays while still
       // accepting Node's historical boxed-string options object.
