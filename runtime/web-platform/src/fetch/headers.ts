@@ -16,19 +16,34 @@ interface HeaderGroup {
   readonly values: string[];
 }
 
+function compareHeaderGroups(left: HeaderGroup, right: HeaderGroup): number {
+  if (left.name < right.name) {
+    return -1;
+  }
+  return left.name > right.name ? 1 : 0;
+}
+
 export function isToken(value: string): boolean {
-  if (value.length === 0) return false;
+  if (value.length === 0) {
+    return false;
+  }
 
   for (let i = 0; i < value.length; ++i) {
     const c = value.charCodeAt(i);
-    if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) continue;
-    if (!"!#$%&'*+-.^_`|~".includes(value.charAt(i))) return false;
+    if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
+      continue;
+    }
+    if (!"!#$%&'*+-.^_`|~".includes(value.charAt(i))) {
+      return false;
+    }
   }
   return true;
 }
 
 export function normalizeName(name: string): string {
-  if (!isToken(name)) throw new TypeError("Invalid HTTP header name");
+  if (!isToken(name)) {
+    throw new TypeError("Invalid HTTP header name");
+  }
   return name.toLowerCase();
 }
 
@@ -39,8 +54,9 @@ export function normalizeValue(value: string): string {
 
   for (let i = 0; i < normalized.length; ++i) {
     const c = normalized.charCodeAt(i);
-    if (c > 255 || c === 0 || c === 10 || c === 13)
+    if (c > 255 || c === 0 || c === 10 || c === 13) {
       throw new TypeError("Invalid HTTP header value");
+    }
   }
   return normalized;
 }
@@ -54,17 +70,26 @@ export class Headers {
   private guard: HeaderGuard = "none";
   private sortedCache: HeaderEntry[] | null = null;
 
-  constructor(init: HeadersInit = []) {
+  constructor(init?: HeadersInit) {
+    if (init === undefined) {
+      return;
+    }
     if (isHeaderSequence(init)) {
-      for (const [name, value] of init) this.append(name, value);
+      for (const [name, value] of init) {
+        this.append(name, value);
+      }
       return;
     }
 
-    for (const [name, value] of Object.entries(init)) this.append(name, value);
+    for (const [name, value] of Object.entries(init)) {
+      this.append(name, value);
+    }
   }
 
   private writable(): void {
-    if (this.guard === "immutable") throw new TypeError("Headers are immutable");
+    if (this.guard === "immutable") {
+      throw new TypeError("Headers are immutable");
+    }
   }
 
   append(name: string, value: string): void {
@@ -83,13 +108,16 @@ export class Headers {
     let found = false;
     const next: HeaderEntry[] = [];
     for (const entry of this.list) {
-      if (entry[0] !== key) next.push(entry);
-      else if (!found) {
+      if (entry[0] !== key) {
+        next.push(entry);
+      } else if (!found) {
         next.push([key, normalized]);
         found = true;
       }
     }
-    if (!found) next.push([key, normalized]);
+    if (!found) {
+      next.push([key, normalized]);
+    }
     this.list = next;
   }
 
@@ -97,7 +125,13 @@ export class Headers {
     const key = normalizeName(name);
     this.writable();
     this.sortedCache = null;
-    this.list = this.list.filter((entry) => entry[0] !== key);
+    const retained: HeaderEntry[] = [];
+    for (const entry of this.list) {
+      if (entry[0] !== key) {
+        retained.push(entry);
+      }
+    }
+    this.list = retained;
   }
 
   get(name: string): string | null {
@@ -105,7 +139,9 @@ export class Headers {
     let result: string | null = null;
 
     for (const entry of this.list) {
-      if (entry[0] !== key) continue;
+      if (entry[0] !== key) {
+        continue;
+      }
       result = result === null ? entry[1] : result + ", " + entry[1];
     }
     return result;
@@ -113,14 +149,21 @@ export class Headers {
 
   has(name: string): boolean {
     const key = normalizeName(name);
-    return this.list.some((entry) => entry[0] === key);
+    for (const entry of this.list) {
+      if (entry[0] === key) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getSetCookie(): string[] {
     const values: string[] = [];
 
     for (const entry of this.list) {
-      if (entry[0] === "set-cookie") values.push(entry[1]);
+      if (entry[0] === "set-cookie") {
+        values.push(entry[1]);
+      }
     }
     return values;
   }
@@ -129,7 +172,9 @@ export class Headers {
   raw(): HeaderEntry[] {
     const result: HeaderEntry[] = [];
 
-    for (const entry of this.list) result.push([entry[0], entry[1]]);
+    for (const entry of this.list) {
+      result.push([entry[0], entry[1]]);
+    }
     return result;
   }
 
@@ -143,7 +188,9 @@ export class Headers {
   }
 
   private sorted(): HeaderEntry[] {
-    if (this.sortedCache !== null) return this.sortedCache;
+    if (this.sortedCache !== null) {
+      return this.sortedCache;
+    }
     const grouped = new Map<string, HeaderGroup>();
 
     for (const entry of this.list) {
@@ -156,15 +203,17 @@ export class Headers {
       group.values.push(entry[1]);
     }
 
-    const groups = Array.from(grouped.values()).sort((left, right) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-    );
+    const groups = Array.from(grouped.values()).sort(compareHeaderGroups);
     const result: HeaderEntry[] = [];
 
     for (const group of groups) {
-      if (group.name === "set-cookie")
-        for (const value of group.values) result.push([group.name, value]);
-      else result.push([group.name, group.values.join(", ")]);
+      if (group.name === "set-cookie") {
+        for (const value of group.values) {
+          result.push([group.name, value]);
+        }
+      } else {
+        result.push([group.name, group.values.join(", ")]);
+      }
     }
     this.sortedCache = result;
     return result;
@@ -175,24 +224,32 @@ export class Headers {
     let index = 0;
     while (true) {
       const entry = this.sorted()[index++];
-      if (entry === undefined) return;
+      if (entry === undefined) {
+        return;
+      }
       yield [entry[0], entry[1]];
     }
   }
 
   *keys(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) yield entry[0];
+    for (const entry of this.entries()) {
+      yield entry[0];
+    }
   }
 
   *values(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) yield entry[1];
+    for (const entry of this.entries()) {
+      yield entry[1];
+    }
   }
 
   forEach(
     callback: (this: unknown, value: string, name: string, parent: Headers) => void,
     thisArg?: unknown,
   ): void {
-    for (const entry of this.entries()) callback.call(thisArg, entry[1], entry[0], this);
+    for (const entry of this.entries()) {
+      callback.call(thisArg, entry[1], entry[0], this);
+    }
   }
 
   [Symbol.iterator](): Generator<HeaderEntry, void, unknown> {
