@@ -31,8 +31,17 @@ if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
   }
 }
 
-const { Blob, Event, EventTarget, File, Headers, ReadableStream, TextDecoder, TextEncoder } =
-  await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
+const {
+  AbortController,
+  Blob,
+  Event,
+  EventTarget,
+  File,
+  Headers,
+  ReadableStream,
+  TextDecoder,
+  TextEncoder,
+} = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 
 let passed = 0;
 let failed = 0;
@@ -59,6 +68,7 @@ function reportFailure(path, name, error) {
 
 function createWptContext(path, pending) {
   const context = createContext({
+    AbortController,
     ArrayBuffer,
     Blob,
     DataView,
@@ -71,6 +81,7 @@ function createWptContext(path, pending) {
     ReadableStream,
     TextDecoder,
     TextEncoder,
+    TypeError,
     Uint8Array,
     WebSocket: class {
       constructor() {
@@ -90,8 +101,48 @@ function createWptContext(path, pending) {
     assert_not_equals(actual, expected, message) {
       assert.notStrictEqual(actual, expected, message);
     },
+    assert_throws_js(constructor, callback, message) {
+      assert.throws(callback, constructor, message);
+    },
     assert_true(value, message) {
       assert.equal(value, true, message);
+    },
+    assert_unreached(message) {
+      assert.fail(message);
+    },
+    async_test(fn, name) {
+      const capability = Promise.withResolvers();
+      const timer = setTimeout(
+        () => capability.reject(new Error(`Upstream async test timed out: ${name}`)),
+        5000,
+      );
+      const test = {
+        done() {
+          capability.resolve();
+        },
+        step_func(callback) {
+          return (...args) => {
+            try {
+              return callback(...args);
+            } catch (error) {
+              capability.reject(error);
+              return undefined;
+            }
+          };
+        },
+      };
+      try {
+        fn(test);
+      } catch (error) {
+        capability.reject(error);
+      }
+      const result = capability.promise
+        .finally(() => clearTimeout(timer))
+        .then(
+          () => reportPass(path, name),
+          (error) => reportFailure(path, name, error),
+        );
+      pending.push(result);
     },
     fetch() {
       throw new Error("Host/network fetch is not an oracle in these tests");

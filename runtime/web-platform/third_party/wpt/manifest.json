@@ -21,6 +21,8 @@
     },
     "tests": {
       "dom/events/AddEventListenerOptions-once.any.js": "b4edd4345c5e3431d77a6ed56dc573d4000f4c43",
+      "dom/events/AddEventListenerOptions-passive.any.js": "8e59cf5b379f2e806fa52b82d87dd09f90c212d7",
+      "dom/events/AddEventListenerOptions-signal.any.js": "e6a34261594bcaf43057fc46ed734bcf105d68ee",
       "dom/events/EventTarget-add-remove-listener.any.js": "b1d7ffb3e07fbe2038f0e33a8e63173edf12234c",
       "dom/events/EventTarget-addEventListener.any.js": "e22da4aff850a2f0042c5ecda4c844cc1852f2ec",
       "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",

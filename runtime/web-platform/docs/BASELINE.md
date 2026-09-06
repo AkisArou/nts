@@ -269,3 +269,15 @@ to 58/58, and the Node-host suite passes 105/105. A mutation that used the event
 target as the listener-object receiver made the focused differential fail. The live
 NTS frontier remains 208 primary refusals, 40 cascades, zero JVM-backend refusals,
 and no invalid HIR; this final-form listener union adds no new refusal.
+
+The complete unchanged DOM Events `AddEventListenerOptions` passive and signal
+fixtures are now pinned and run with the shared `AbortController`, `Event`, and
+`EventTarget`. They cover option observation, truth-value conversion, passive
+cancellation, duplicate equivalence, nested once dispatch, abort-driven removal,
+and explicit null-signal rejection. The deliberately small harness gained only the
+assertion and bounded `async_test` primitives those fixtures require. The immutable
+upstream slice passes 74/74 and the Node-host suite remains 105/105. The live NTS
+check reports 209 primary refusals, 40 cascades, zero JVM-backend refusals, and no
+invalid HIR. The additional primary says `subscribe` is absent from
+`EventListenerSignal` even though that interface declares it; it is recorded as a
+frontend dependency rather than hidden by weakening the typed signal contract.

@@ -205,6 +205,15 @@ function listenerOption(value: boolean | undefined): boolean {
   return value ? true : false;
 }
 
+function validateListenerSignal(signal: EventListenerSignal | undefined): void {
+  if (
+    signal !== undefined &&
+    (signal === null || typeof signal !== "object" || typeof signal.subscribe !== "function")
+  ) {
+    throw new TypeError("signal must be an AbortSignal");
+  }
+}
+
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
@@ -223,6 +232,7 @@ export class EventTarget {
     const capture = typeof options === "boolean" ? options : listenerOption(options.capture);
     const passive = typeof options === "boolean" ? false : listenerOption(options.passive);
     const signal = typeof options === "boolean" ? undefined : options.signal;
+    validateListenerSignal(signal);
     if (callback === null) return;
     if (signal?.aborted) return;
     if (
