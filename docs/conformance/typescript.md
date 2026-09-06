@@ -1549,7 +1549,7 @@ The whole global object, host additions excluded. `∅` rows are §13, not backl
 | text | `String.prototype` ◐ | `RegExp` | |
 | indexed | `Array` ◐, eight typed arrays ◐ | `Array` statics, `Uint8ClampedArray`, `Float16Array`, `BigInt64Array`, `BigUint64Array` | |
 | keyed | | `Map`, `Set`, `WeakMap`, `WeakSet` | |
-| structured | `ArrayBuffer` ◐ — length, maximum, `resizable`, `detached`, `slice`, `resize`, `transfer`, `transferToFixedLength` | `DataView`, `JSON`, `Atomics`, `SharedArrayBuffer` | |
+| structured | `ArrayBuffer` ◐ — length, maximum, `resizable`, `detached`, `slice`, `resize`, `transfer`, `transferToFixedLength`. `DataView` ◐ — construction over a buffer, tracking and fixed windows, `buffer`, `byteOffset`, `byteLength`, and every `get`/`set` for the eight numeric widths with explicit endianness | `DataView`'s `BigInt64`/`BigUint64` pair, `JSON`, `Atomics`, `SharedArrayBuffer` | `DataView` is `ManagedType::DataView`, which carries nothing: its width is chosen per *access* by the method called, so `getUint8` and `getFloat64` are two calls on one type rather than two types. The bigint pair waits on a bigint that can cross the runtime boundary as a value |
 | memory | | `WeakRef`, `FinalizationRegistry` | |
 | control | `Promise` ◐ — the constructor, `all`, `race` | `Iterator`, generator objects | |
 | internationalization | | | `Intl` — ECMA-402, a separate specification |

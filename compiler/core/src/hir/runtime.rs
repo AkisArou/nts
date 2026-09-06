@@ -315,6 +315,20 @@ pub const READS_ONLY: &[&str] = &[
     "nts_buffer_detached",
     "nts_buffer_max_byte_length",
     "nts_buffer_resizable",
+    // A view reads its buffer and does not retain it: `byteLength` on a
+    // tracking view is a subtraction, `byteOffset` a field, and `buffer` hands
+    // back a reference the view already holds.
+    "nts_dataview_buffer",
+    "nts_dataview_byte_length",
+    "nts_dataview_byte_offset",
+    "nts_dataview_get_float32",
+    "nts_dataview_get_float64",
+    "nts_dataview_get_int16",
+    "nts_dataview_get_int32",
+    "nts_dataview_get_int8",
+    "nts_dataview_get_uint16",
+    "nts_dataview_get_uint32",
+    "nts_dataview_get_uint8",
     "nts_date_value",
     "nts_is_class",
     "nts_promise_reason",

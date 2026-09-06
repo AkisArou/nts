@@ -227,6 +227,23 @@ typedef struct NtsBuffer {
   bool resizable;
 } NtsBuffer;
 
+/* A `DataView`: a window on an `NtsBuffer` with explicit endianness.
+ *
+ * The buffer rather than its bytes, because `transfer` replaces the block and a
+ * view holding the pointer would keep reading the old one -- silently, and only
+ * for programs that transfer.
+ *
+ * `tracks` is the two-argument constructor: no length was given, so the view is
+ * whatever remains and shortens when the buffer does. One runtime distinction
+ * rather than two types, which is why `DataView` carries no payload in HIR. */
+typedef struct NtsDataView {
+  NtsHeader header;
+  NtsBuffer *buffer;
+  size_t offset;
+  size_t length;
+  bool tracks;
+} NtsDataView;
+
 typedef struct NtsSymbol {
   NtsHeader header;
   /* `Symbol()` with no argument has none, which is a different value from
@@ -866,6 +883,58 @@ void nts_buffer_resize(NtsBuffer *buffer, double byte_length);
  * which is the point of them. */
 NTS_ALLOCATES_OR_NULL NtsBuffer *
 nts_buffer_transfer(NtsBuffer *buffer, double byte_length, bool fixed);
+
+/* A view over the whole of what remains, which shortens when the buffer does. */
+NTS_ALLOCATES_OR_NULL NtsDataView *nts_dataview_over(NtsBuffer *buffer,
+                                                     double byte_offset);
+/* A view of a fixed length, which does not. */
+NTS_ALLOCATES_OR_NULL NtsDataView *nts_dataview_part(NtsBuffer *buffer,
+                                                     double byte_offset,
+                                                     double byte_length);
+
+NTS_READS_ONLY NtsBuffer *nts_dataview_buffer(const NtsDataView *view);
+NTS_READS_ONLY double nts_dataview_byte_offset(const NtsDataView *view);
+/* Computed, not stored: a tracking view over a buffer that has shrunk reports
+ * what is left, and a detached one reports zero. */
+NTS_READS_ONLY double nts_dataview_byte_length(const NtsDataView *view);
+
+/* Every accessor. The width and the signedness are in the *name* rather than in
+ * the type, which is the whole of what makes a `DataView` different from a
+ * typed array: one type, sixteen operations.
+ *
+ * `little_endian` has no default here -- the lowering supplies `false` when the
+ * argument is absent, because that is where the language's default lives. */
+/* No `little_endian` on the one-byte accessors: a single byte has no byte
+ * order and the language's own signatures do not take one. */
+NTS_READS_ONLY double nts_dataview_get_int8(const NtsDataView *view, double at);
+NTS_READS_ONLY double nts_dataview_get_uint8(const NtsDataView *view, double at);
+NTS_READS_ONLY double nts_dataview_get_int16(const NtsDataView *view, double at,
+                                             bool little_endian);
+NTS_READS_ONLY double nts_dataview_get_uint16(const NtsDataView *view,
+                                              double at, bool little_endian);
+NTS_READS_ONLY double nts_dataview_get_int32(const NtsDataView *view, double at,
+                                             bool little_endian);
+NTS_READS_ONLY double nts_dataview_get_uint32(const NtsDataView *view,
+                                              double at, bool little_endian);
+NTS_READS_ONLY double nts_dataview_get_float32(const NtsDataView *view,
+                                               double at, bool little_endian);
+NTS_READS_ONLY double nts_dataview_get_float64(const NtsDataView *view,
+                                               double at, bool little_endian);
+
+void nts_dataview_set_int8(NtsDataView *view, double at, double value);
+void nts_dataview_set_uint8(NtsDataView *view, double at, double value);
+void nts_dataview_set_int16(NtsDataView *view, double at, double value,
+                            bool little_endian);
+void nts_dataview_set_uint16(NtsDataView *view, double at, double value,
+                             bool little_endian);
+void nts_dataview_set_int32(NtsDataView *view, double at, double value,
+                            bool little_endian);
+void nts_dataview_set_uint32(NtsDataView *view, double at, double value,
+                             bool little_endian);
+void nts_dataview_set_float32(NtsDataView *view, double at, double value,
+                              bool little_endian);
+void nts_dataview_set_float64(NtsDataView *view, double at, double value,
+                              bool little_endian);
 
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);
