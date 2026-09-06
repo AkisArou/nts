@@ -1,5 +1,6 @@
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
+import { coerceToUSVString } from "../core/webidl.ts";
 import { Blob } from "../file/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
@@ -11,8 +12,8 @@ import { bytesStream, ReadableStream, tee, transfer } from "../streams/readable.
 
 export type BodyInit =
   | string
-  | Uint8Array
   | ArrayBuffer
+  | ArrayBufferView
   | Blob
   | FormData
   | URLSearchParams
@@ -79,7 +80,12 @@ export class BodyState {
     } else if (input instanceof Blob) {
       blob = input;
       type = input.type || null;
-    } else blob = new Blob([input]);
+    } else if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) {
+      blob = new Blob([input]);
+    } else {
+      type = "text/plain;charset=UTF-8";
+      blob = new Blob([utf8.encode(coerceToUSVString(input))]);
+    }
     return new BodyState(blob.stream(), type, blob.size, blob, policy);
   }
 

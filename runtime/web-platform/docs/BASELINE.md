@@ -507,3 +507,26 @@ primitive strings statically. Eleven new cascades are the visible call graph fro
 header users through the shared boundary conversion; they are not eleven separate
 features. The source remains in final form and depends on the planned intersection
 and boundary-string-conversion lowering rather than weakening either contract.
+
+`Response` now applies Web IDL conversion before semantic validation. Status values
+use the default `unsigned short` conversion before the 200..599 range check, so
+fractional, string-like, wrapped, null-like, non-finite, BigInt, and Symbol inputs
+take the specified conversion or failure path rather than being validated as if they
+were already TypeScript numbers. Status text uses the shared `ByteString` boundary
+before the HTTP reason-phrase validation, and a null or undefined init dictionary is
+empty while primitive dictionaries fail. `BodyInit` now names the complete
+`ArrayBufferView` family instead of the `Uint8Array` special case. Runtime scalar
+bodies take the union's USV-string fallback and acquire
+`text/plain;charset=UTF-8`; symbols still fail string conversion.
+
+A differential covers fractional, string, wrapped, null-like, non-finite, BigInt,
+Symbol, and object-conversion cases against the Node host. Removing the scalar
+body's content type makes the focused test fail with `null` instead of
+`text/plain;charset=UTF-8`, proving that the assertion observes the conversion
+branch. The Node-host suite passes 120/120 and the pinned WPT slice remains 95/95.
+The live NTS frontier is 245 primary refusals, 53 cascades, zero JVM-backend
+refusals, and no invalid HIR. Relative to 243/53, the two additional primaries are
+the two shared numeric helpers now using JavaScript `ToNumber` (`+value`) before
+their typed Web IDL conversion. That operator support is a compiler dependency;
+validating pretyped numbers or using `Number()` would change BigInt semantics and
+is not an acceptable source workaround.

@@ -12,10 +12,11 @@ function roundTiesToEven(value: number): number {
 }
 
 function unsignedInteger(value: number, modulus: number): number {
-  if (!Number.isFinite(value) || value === 0) {
+  const number = +value;
+  if (!Number.isFinite(number) || number === 0) {
     return 0;
   }
-  const integer = value < 0 ? Math.ceil(value) : Math.floor(value);
+  const integer = number < 0 ? Math.ceil(number) : Math.floor(number);
   if (integer === 0) {
     return 0;
   }
@@ -35,27 +36,29 @@ export function toUnsignedLong(value: number): number {
 
 /** Convert a number using Web IDL's `[Clamp] unsigned short` rules. */
 export function toClampedUnsignedShort(value: number): number {
-  if (Number.isNaN(value) || value <= 0) {
+  const number = +value;
+  if (Number.isNaN(number) || number <= 0) {
     return 0;
   }
-  if (value >= 65_535) {
+  if (number >= 65_535) {
     return 65_535;
   }
-  return roundTiesToEven(value);
+  return roundTiesToEven(number);
 }
 
 /** Convert a number using Web IDL's `[Clamp] long long` rules. */
 export function toClampedLongLong(value: number): number {
-  if (Number.isNaN(value)) {
+  const number = +value;
+  if (Number.isNaN(number)) {
     return 0;
   }
-  if (value <= Number.MIN_SAFE_INTEGER) {
+  if (number <= Number.MIN_SAFE_INTEGER) {
     return Number.MIN_SAFE_INTEGER;
   }
-  if (value >= Number.MAX_SAFE_INTEGER) {
+  if (number >= Number.MAX_SAFE_INTEGER) {
     return Number.MAX_SAFE_INTEGER;
   }
-  return roundTiesToEven(value);
+  return roundTiesToEven(number);
 }
 
 /** Convert a TypeScript string to a Web IDL scalar-value string. */

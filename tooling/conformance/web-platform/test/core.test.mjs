@@ -1148,6 +1148,35 @@ test("Response static factories, immutable redirects, JSON and no-content status
   assert.throws(() => redirect.headers.set("a", "b"));
   for (const status of [204, 205, 304]) assert.throws(() => makeResponse("", { status }));
 });
+test("Response applies Web IDL conversion before validation and body extraction", async () => {
+  for (const input of [200.9, "201", 65_536 + 204, 65_536 + 599]) {
+    const actual = makeResponse(null, { status: input });
+    const expected = new NativeResponse(null, { status: input });
+    assert.equal(actual.status, expected.status, String(input));
+  }
+  for (const input of [null, NaN, Infinity, -1, 199.9, 65_536 + 199]) {
+    assert.throws(() => makeResponse(null, { status: input }), undefined, String(input));
+  }
+
+  for (const input of [42, true, null, { toString: () => "Reason" }]) {
+    const actual = makeResponse(null, { statusText: input });
+    const expected = new NativeResponse(null, { statusText: input });
+    assert.equal(actual.statusText, expected.statusText, String(input));
+  }
+  for (const input of ["\u20ac", Symbol("status")]) {
+    assert.throws(() => makeResponse(null, { statusText: input }), undefined, String(input));
+  }
+
+  for (const input of [42, true, 1n, { toString: () => "object body" }]) {
+    const actual = makeResponse(input);
+    const expected = new NativeResponse(input);
+    assert.equal(await actual.text(), await expected.text(), String(input));
+    assert.equal(actual.headers.get("content-type"), expected.headers.get("content-type"));
+  }
+  assert.throws(() => makeResponse(Symbol("body")));
+  assert.throws(() => makeResponse(null, 1));
+  assert.equal(makeResponse(null, null).status, 200);
+});
 test("Blob immutability, slices, File and form serialization", async () => {
   const bytes = Uint8Array.of(1, 2, 3);
   const blob = new Blob([bytes]);

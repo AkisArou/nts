@@ -1,3 +1,4 @@
+import { coerceToByteString, toUnsignedShort } from "../core/webidl.ts";
 import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import { Body, BodyState, standardBodyPolicy } from "./body.ts";
@@ -24,6 +25,16 @@ const noRandom: RandomSource = {
 
 const defaultContext: ResponseContext = { random: noRandom, bodyPolicy: standardBodyPolicy };
 
+function convertResponseInit(init: ResponseInit | null | undefined): ResponseInit {
+  if (init === undefined || init === null) {
+    return {};
+  }
+  if (typeof init !== "object" && typeof init !== "function") {
+    throw new TypeError("Response init must be a dictionary");
+  }
+  return init;
+}
+
 export function nullBodyStatus(status: number): boolean {
   return status === 101 || status === 103 || status === 204 || status === 205 || status === 304;
 }
@@ -41,15 +52,22 @@ export class Response extends Body {
   private wasRedirected = false;
   private responseType: "default" | "basic" | "error" = "default";
 
+  constructor(body?: BodyInit | null, init?: ResponseInit);
+  /** @internal */ constructor(
+    body: BodyInit | null | undefined,
+    init: ResponseInit | null | undefined,
+    context: ResponseContext,
+  );
   constructor(
     body: BodyInit | null = null,
-    init: ResponseInit = {},
+    init: ResponseInit | null = {},
     context: ResponseContext = defaultContext,
   ) {
-    const status = init.status ?? 200;
-    if (!Number.isInteger(status) || status < 200 || status > 599)
-      throw new RangeError("Response status must be 200..599");
-    const statusText = init.statusText ?? "";
+    const convertedInit = convertResponseInit(init);
+    const status = convertedInit.status === undefined ? 200 : toUnsignedShort(convertedInit.status);
+    if (status < 200 || status > 599) throw new RangeError("Response status must be 200..599");
+    const statusText =
+      convertedInit.statusText === undefined ? "" : coerceToByteString(convertedInit.statusText);
     for (let i = 0; i < statusText.length; ++i) {
       const c = statusText.charCodeAt(i);
       if ((c < 0x20 && c !== 9) || c > 255 || c === 0x7f) throw new TypeError("Invalid statusText");
@@ -57,7 +75,7 @@ export class Response extends Body {
     if (body !== null && nullBodyStatus(status))
       throw new TypeError("This response status cannot have a body");
     const state = BodyState.extract(body, context.random, context.bodyPolicy);
-    const headers = new Headers(init.headers);
+    const headers = new Headers(convertedInit.headers);
     if (!headers.has("content-type") && state.type !== null)
       headers.set("content-type", state.type);
     super(state);
