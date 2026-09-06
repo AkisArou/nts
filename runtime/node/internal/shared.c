@@ -69,9 +69,13 @@ static char *linux_command_line(size_t *length) {
             }
             bytes = larger;
         }
-        size_t received = fread(bytes + used, 1, capacity - used, file);
+        size_t available = capacity - used;
+        size_t received = fread(bytes + used, 1, available, file);
         used += received;
-        if (received == 0) break;
+        /* A short fread reached EOF or an error. Do not issue another read on
+         * an errored stream: after an I/O error its file position may be
+         * indeterminate, and retrying there is undefined by stdio. */
+        if (received < available) break;
     }
     bool failed = ferror(file) != 0;
     fclose(file);

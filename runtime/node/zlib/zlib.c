@@ -832,7 +832,12 @@ static uint32_t nts_zlib_to_uint32(double value) {
 static bool nts_zlib_apply_parameters(NtsZlibEngine *engine,
                                       const NtsArray *keys,
                                       const NtsArray *values) {
-  uint32_t count = keys == NULL ? 0 : keys->header.length;
+  /* No key table means there is nothing to apply. Return before forming an
+   * elements pointer: NTS_ITEMS(NULL, ...) is undefined even when the loop
+   * below would execute zero times. */
+  if (keys == NULL)
+    return true;
+  uint32_t count = keys->header.length;
   if (values == NULL || values->header.length < count) {
     nts_zlib_set_error(engine, Z_STREAM_ERROR,
                        "Parameter key/value length mismatch", "Z_STREAM_ERROR");
