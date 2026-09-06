@@ -185,3 +185,42 @@ the honest one to publish is arguable. What is not arguable is that this record
 claimed the row was a win when it is the largest unexplained loss among the
 small rows, and that it did so by reading the counter that flattered.
 
+---
+
+## Third reading: it is not memory and it is not prediction
+
+The counters, under the lock, same fixed-count driver, per call of 4,096
+iterations:
+
+| | instructions | cycles | branch-misses | stalls |
+| --- | ---: | ---: | ---: | ---: |
+| hand-written Java | 39,722 | 8,282 | 2 | 0 |
+| ours | 36,961 | 11,573 | **0** | 0 |
+
+**Zero branch misses on our side and two on theirs**, and the stall counters
+read zero for both — this CPU does not supply `stalled-cycles-backend` or
+`-frontend`, so those are an absence of data rather than an absence of stalls,
+and they are reported here as such.
+
+What is left is 2.83 cycles an iteration against 2.02, with **no misprediction
+and no memory event to attribute it to**. Nine instructions an iteration on our
+side and 9.7 on theirs. So it is the critical path: our chain through
+`total ^ counted.get() ^ (flagged.get() ? 1 : 0)` is about **0.8 cycles longer
+per iteration** than the reference's, and neither counter can say which
+operation adds it.
+
+And one hypothesis died before it was written up. I had this as the `Box<number>`
+field being an `f64` while the reference's `Box<Integer>` holds an int — a width
+mismatch forcing `i2d` on store and `d2i` on read. The prepared HIR says
+`field.get %0.0 : i32`. Specialization narrowed the field; the inner loop is
+pure `i32` with no conversion in it at all, and the three `convert : f64` in the
+function are the entry guard and the return.
+
+Which also settles the reference: `Box<Integer>` is *matched* to what this lane
+holds, not narrower than it, so the rule against a narrow field does not bite
+here.
+
+0.8 cycles an iteration on a 1.68 us row is half a microsecond, and naming the
+operation needs `-XX:+PrintAssembly` rather than another counter. It is the
+smallest unexplained thing on the board and it is written down as unexplained.
+

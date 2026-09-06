@@ -1279,6 +1279,30 @@ fn jvm_case(
     // loop-invariant argument lets the JIT hoist the whole call out of the timed
     // loop and report an impressive zero.
     let mut driver = String::from("public final class Case {\n");
+    // Top-level code, before anything is timed.
+    //
+    // The native driver has called `module__init` since the day the defect was
+    // found; this one never did, and the two were written apart. A benchmark
+    // whose module-level state is never initialised measures a program whose
+    // globals are all null, and for most cases that is a *different program*
+    // that happens to compute the same answer -- which is why it stood.
+    //
+    // `symbol-keyed-map` is where it stopped being invisible: five module-level
+    // `Symbol()` bindings, all null, so every key compared equal, the map held
+    // one entry, and both lookups returned the last value written. 4096 x 8
+    // against node's 4096 x 2.5. The harness's cross-lane checksum caught it on
+    // the first run where the answer moved.
+    //
+    // A static initialiser rather than the native lane's `if (!ready)`: class
+    // initialisation runs once, before `main`, and outside the measured region
+    // entirely.
+    if program.funcs.iter().any(|func| func.name == hir::lower::MODULE_INIT) {
+        let _ = writeln!(
+            driver,
+            "    static {{ nts.gen.Program.{}(); }}",
+            nts_codegen_jvm::body::method_name(hir::lower::MODULE_INIT)
+        );
+    }
     let mut passed = Vec::new();
     for (at, value) in arguments.iter().enumerate() {
         let _ = writeln!(driver, "    private static volatile double in{at} = {value};");
