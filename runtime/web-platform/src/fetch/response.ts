@@ -1,7 +1,7 @@
 import { coerceToByteString, toUnsignedShort } from "../core/webidl.ts";
 import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
-import { Body, BodyState, standardBodyPolicy } from "./body.ts";
+import { Body, BodyState, convertBodyInit, standardBodyPolicy } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
 import type { HeaderEntry, HeadersInit } from "./headers.ts";
@@ -25,14 +25,29 @@ const noRandom: RandomSource = {
 
 const defaultContext: ResponseContext = { random: noRandom, bodyPolicy: standardBodyPolicy };
 
-function convertResponseInit(init: ResponseInit | null | undefined): ResponseInit {
+interface ConvertedResponseInit {
+  readonly headers: Headers | undefined;
+  readonly status: number;
+  readonly statusText: string;
+}
+
+function convertResponseInit(init: ResponseInit | null | undefined): ConvertedResponseInit {
   if (init === undefined || init === null) {
-    return {};
+    return { headers: undefined, status: 200, statusText: "" };
   }
   if (typeof init !== "object" && typeof init !== "function") {
     throw new TypeError("Response init must be a dictionary");
   }
-  return init;
+
+  // Web IDL converts dictionary members in lexicographic order. Constructing
+  // Headers here also consumes and converts an iterable before `status` is read.
+  const headerInit = init.headers;
+  const headers = headerInit === undefined ? undefined : new Headers(headerInit);
+  const statusValue = init.status;
+  const status = statusValue === undefined ? 200 : toUnsignedShort(statusValue);
+  const statusTextValue = init.statusText;
+  const statusText = statusTextValue === undefined ? "" : coerceToByteString(statusTextValue);
+  return { headers, status, statusText };
 }
 
 export function nullBodyStatus(status: number): boolean {
@@ -63,19 +78,20 @@ export class Response extends Body {
     init: ResponseInit | null = {},
     context: ResponseContext = defaultContext,
   ) {
+    // Web IDL converts arguments left to right before the constructor algorithm.
+    const convertedBody = convertBodyInit(body);
     const convertedInit = convertResponseInit(init);
-    const status = convertedInit.status === undefined ? 200 : toUnsignedShort(convertedInit.status);
+    const status = convertedInit.status;
     if (status < 200 || status > 599) throw new RangeError("Response status must be 200..599");
-    const statusText =
-      convertedInit.statusText === undefined ? "" : coerceToByteString(convertedInit.statusText);
+    const statusText = convertedInit.statusText;
     for (let i = 0; i < statusText.length; ++i) {
       const c = statusText.charCodeAt(i);
       if ((c < 0x20 && c !== 9) || c > 255 || c === 0x7f) throw new TypeError("Invalid statusText");
     }
-    if (body !== null && nullBodyStatus(status))
+    if (convertedBody !== null && convertedBody !== undefined && nullBodyStatus(status))
       throw new TypeError("This response status cannot have a body");
-    const state = BodyState.extract(body, context.random, context.bodyPolicy);
-    const headers = new Headers(convertedInit.headers);
+    const state = BodyState.fromConvertedBody(convertedBody, context.random, context.bodyPolicy);
+    const headers = convertedInit.headers ?? new Headers();
     if (!headers.has("content-type") && state.type !== null)
       headers.set("content-type", state.type);
     super(state);

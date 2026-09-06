@@ -530,3 +530,33 @@ the two shared numeric helpers now using JavaScript `ToNumber` (`+value`) before
 their typed Web IDL conversion. That operator support is a compiler dependency;
 validating pretyped numbers or using `Number()` would change BigInt semantics and
 is not an acceptable source workaround.
+
+`Request` and `Response` now separate Web IDL conversion from their constructor
+algorithms. Request input is converted to a USV string before its init dictionary;
+the dictionary then reads and converts `body`, `credentials`, `duplex`, `headers`,
+`method`, `redirect`, and `signal` in lexicographic member order before parsing the
+URL. Response converts its body first and then `headers`, `status`, and `statusText`.
+Header iterables are consumed at the member's conversion point, and every property
+is read exactly once. Null or undefined dictionaries are empty; primitive
+dictionaries fail. Methods use `ByteString` before token/forbidden-method checks,
+and supported enums use `DOMString` before membership checks. Request inputs and
+scalar bodies use `USVString`, while a non-null signal is branded as the canonical
+`AbortSignal`.
+
+Body conversion does not consume streams or copy buffer sources. Materialization is
+a distinct internal operation, so a long scalar string is normalized exactly once
+rather than rescanned merely to preserve argument ordering. The differential covers
+input and method conversion, invalid dictionaries, one-shot property access, eager
+header-iterator consumption, body content type, and the exact observable order on
+both constructors. Moving Response status conversion ahead of headers makes the
+focused test report `body,status,headers,...` instead of the specified sequence.
+
+The Node-host suite passes 121/121 and the pinned WPT slice remains 95/95. The live
+NTS frontier is 247 primary refusals, 57 cascades, zero JVM-backend refusals, and no
+invalid HIR. Relative to 245/53, the net two-primary increase consists of three
+final-form body-union/nullability observations replacing one now-concrete converted
+Headers property. The four new cascades are the visible calls from the three enum
+converters into `DOMString` conversion and from public method normalization into
+`ByteString` conversion. They expose the planned union and boundary-conversion work;
+they are not separate runtime features and were not hidden with altered source
+semantics.

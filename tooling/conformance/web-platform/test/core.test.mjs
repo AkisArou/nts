@@ -1134,6 +1134,88 @@ test("Request method, credentials URL, GET body and stream duplex validation", (
     /duplex/,
   );
 });
+test("Request converts its Web IDL arguments and dictionary in observable order", async () => {
+  for (const input of [42, true, null, undefined]) {
+    assert.throws(() => makeRequest(input), undefined, String(input));
+    assert.throws(() => new NativeRequest(input), undefined, String(input));
+  }
+  const convertedInput = { toString: () => "http://example.test/x" };
+  assert.equal(makeRequest(convertedInput).url, new NativeRequest(convertedInput).url);
+  assert.throws(() => makeRequest(Symbol("input")));
+
+  for (const method of [42, true, null, { toString: () => "custom" }]) {
+    const actual = makeRequest("http://example.test", { method });
+    const expected = new NativeRequest("http://example.test", { method });
+    assert.equal(actual.method, expected.method, String(method));
+  }
+  for (const method of ["\u00e9", "\u20ac", Symbol("method")]) {
+    assert.throws(() => makeRequest("http://example.test", { method }), undefined, String(method));
+  }
+  assert.throws(() => makeRequest("http://example.test", 1));
+  assert.equal(makeRequest("http://example.test", null).method, "GET");
+
+  const order = [];
+  const request = makeRequest(
+    {
+      toString() {
+        order.push("input");
+        return "http://example.test";
+      },
+    },
+    {
+      get body() {
+        order.push("body");
+        return {
+          toString() {
+            order.push("body conversion");
+            return "payload";
+          },
+        };
+      },
+      get credentials() {
+        order.push("credentials");
+        return undefined;
+      },
+      get duplex() {
+        order.push("duplex");
+        return "half";
+      },
+      get headers() {
+        order.push("headers");
+        return (function* () {
+          order.push("header iteration");
+          yield ["x-order", "1"];
+        })();
+      },
+      get method() {
+        order.push("method");
+        return "POST";
+      },
+      get redirect() {
+        order.push("redirect");
+        return undefined;
+      },
+      get signal() {
+        order.push("signal");
+        return undefined;
+      },
+    },
+  );
+  assert.deepEqual(order, [
+    "input",
+    "body",
+    "body conversion",
+    "credentials",
+    "duplex",
+    "headers",
+    "header iteration",
+    "method",
+    "redirect",
+    "signal",
+  ]);
+  assert.equal(await request.text(), "payload");
+  assert.equal(request.headers.get("content-type"), "text/plain;charset=UTF-8");
+});
 test("Response static factories, immutable redirects, JSON and no-content statuses", async () => {
   const r = Response.json({ ok: true });
   assert.ok(r instanceof Response);
@@ -1176,6 +1258,35 @@ test("Response applies Web IDL conversion before validation and body extraction"
   assert.throws(() => makeResponse(Symbol("body")));
   assert.throws(() => makeResponse(null, 1));
   assert.equal(makeResponse(null, null).status, 200);
+
+  const order = [];
+  const response = makeResponse(
+    {
+      toString() {
+        order.push("body");
+        return "payload";
+      },
+    },
+    {
+      get headers() {
+        order.push("headers");
+        return (function* () {
+          order.push("header iteration");
+          yield ["x-order", "1"];
+        })();
+      },
+      get status() {
+        order.push("status");
+        return 201;
+      },
+      get statusText() {
+        order.push("statusText");
+        return "Created";
+      },
+    },
+  );
+  assert.deepEqual(order, ["body", "headers", "header iteration", "status", "statusText"]);
+  assert.equal(await response.text(), "payload");
 });
 test("Blob immutability, slices, File and form serialization", async () => {
   const bytes = Uint8Array.of(1, 2, 3);

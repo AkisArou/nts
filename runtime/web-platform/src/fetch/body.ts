@@ -29,6 +29,24 @@ export const standardBodyPolicy: BodyPolicy = {
   maxCloneBufferBytes: Infinity,
 };
 
+/** Convert the Web IDL `BodyInit?` union without consuming streams or copying buffers. */
+export function convertBodyInit(input: BodyInit | null | undefined): BodyInit | null | undefined {
+  if (input === undefined || input === null) {
+    return input;
+  }
+  if (
+    input instanceof ReadableStream ||
+    input instanceof URLSearchParams ||
+    input instanceof FormData ||
+    input instanceof Blob ||
+    input instanceof ArrayBuffer ||
+    ArrayBuffer.isView(input)
+  ) {
+    return input;
+  }
+  return coerceToUSVString(input);
+}
+
 /** Internal body representation: replay source is separate from one-shot stream state. */
 export class BodyState {
   stream: ReadableStream<Uint8Array> | null;
@@ -55,7 +73,8 @@ export class BodyState {
     return new BodyState(null, null, 0, null, policy);
   }
 
-  static extract(
+  /** @internal Materialize a body whose Web IDL union conversion already ran. */
+  static fromConvertedBody(
     input: BodyInit | null | undefined,
     random: RandomSource,
     policy: BodyPolicy,
@@ -80,11 +99,8 @@ export class BodyState {
     } else if (input instanceof Blob) {
       blob = input;
       type = input.type || null;
-    } else if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) {
-      blob = new Blob([input]);
     } else {
-      type = "text/plain;charset=UTF-8";
-      blob = new Blob([utf8.encode(coerceToUSVString(input))]);
+      blob = new Blob([input]);
     }
     return new BodyState(blob.stream(), type, blob.size, blob, policy);
   }
