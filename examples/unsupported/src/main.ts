@@ -142,34 +142,13 @@ export function inWithAComputedKey(n: number): number {
   return key in o ? 1 : 0;
 }
 
-// A method with no body that is not `abstract`.
+// A `void` expression, which discards its operand and evaluates to
+// `undefined`.
 //
-// An overload signature declares a shape the implementation below satisfies;
-// there is no code for it and there is not meant to be. `abstract` means the
-// same thing about the *body* and something different about the call: an
-// abstract method's slot is filled by every subclass, so a declaration with an
-// unreachable body is honest. An overload signature's is not — the call goes to
-// the implementation, and emitting a function for the signature would be one
-// that can be reached and does nothing.
-class Overloaded {
-  pick(a: number): number;
-  pick(a: number, b: number): number;
-  pick(a: number, b?: number): number {
-    return b === undefined ? a : a + b;
-  }
-}
-
-// Not exported, and that is about this file's test rather than about the
-// feature. A caller of a refused method is refused too, by
-// `drop_callers_of_refused` -- but that runs after lowering, and
-// `an_unsupported_construct_is_refused_rather_than_skipped` reads the lowering's
-// own output to check that nothing was *silently skipped*. A two-stage refusal
-// there would read as a survivor. The class above is refused either way, which
-// is what this case is for.
-function overloadCaller(n: number): number {
-  return new Overloaded().pick(n, 1);
-}
-void overloadCaller;
+// This block used to be an **overload signature**, which landed: a signature is
+// skipped rather than refused, because the implementation beside it answers
+// every call. `examples/overloads` covers it. The `void` stayed, because
+// nothing else here is one and because the caller below still needs it.
 
 // `Object.keys` over a type with an optional property.
 //
@@ -234,3 +213,29 @@ export function tableForEachTakingTheTable(n: number): number {
   });
   return total;
 }
+
+// An **ambient** class's overloaded method. Two declarations, neither with a
+// body, and no implementation beside them — which is legal TypeScript and the
+// one shape that separates an overload signature from a method whose code this
+// lowering could not find.
+//
+// A signature is skipped rather than refused, because the implementation beside
+// it answers every call. Skipping on the *name* alone drops these two as well,
+// and `work` then reports NTS1003 — "which was refused above" — with nothing
+// refused above.
+declare class Platform {
+  read(a: number): number;
+  read(a: number, b: number): number;
+}
+
+// Not exported, for the reason the overload set here used to state: a caller of
+// a refused method is refused too, by `drop_callers_of_refused` -- but that runs
+// after lowering, and
+// `an_unsupported_construct_is_refused_rather_than_skipped` reads the lowering's
+// own output to check that nothing was *silently skipped*. A two-stage refusal
+// there would read as a survivor. The declarations above are refused either
+// way, which is what this case is for.
+function callsAnAmbientOverload(p: Platform, n: number): number {
+  return p.read(n);
+}
+void callsAnAmbientOverload;

@@ -1,0 +1,23 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none. Every value here is a number, and an overload set is
+because erased before anything is emitted -- the checker picks a signature and
+because the call is built against the implementation beside it, which is the
+because same function an unoverloaded call would reach. There is nothing to
+because allocate for the choosing.
+because
+because The one argument that is *not* a bare double is the omitted `b`, which
+because is `Erased` because the implementation declares it optional. An erased
+because number is a tag and a payload in registers, not a box, and this is what
+because says so: a lowering that boxed it would read four per iteration.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. Nothing here is a
+because reference, so there is nothing for a count to reach.
+because
+because The rest overload is deliberately absent. Its empty array per call is
+because one allocation each and record 0092 measured that shape at 17/17, with
+because a floor of zero that cannot be reached while `ArrayNew` carries no
+because `frame` flag. Neither number could be written here honestly.

@@ -134,15 +134,17 @@ fn the_overrides_have_bodies() {
 
 /// A method with no body that is *not* abstract is still refused.
 ///
-/// Overload signatures are the case, and they are refused *with their
-/// implementation* rather than alone. Refusing the signatures by themselves left
-/// the implementation lowered and the call sites resolving against whichever
-/// signature TypeScript picked — whose parameter list is not the
-/// implementation's — and produced invalid HIR from a program every refusal had
-/// been reported for. A refusal that leaves a broken artifact is worse than no
-/// refusal, because the diagnostics say the compiler noticed.
+/// An overload signature is no longer one of those: it is skipped, because the
+/// implementation beside it answers every call. What is left here is the shape
+/// that separates them — an **ambient** class declaring two same-named methods
+/// and no implementation, which is legal TypeScript and which this compiler
+/// genuinely cannot emit.
+///
+/// The fixture that used to be here was an overloaded method with its
+/// implementation, refused as a set. It landed, and moved to
+/// `examples/overloads`; the test moved with it.
 #[test]
-fn an_overloaded_method_is_refused_with_its_implementation() {
+fn a_bodiless_method_with_no_implementation_is_refused() {
     let Some(lowered) = lowered("unsupported") else {
         return;
     };
@@ -151,14 +153,12 @@ fn an_overloaded_method_is_refused_with_its_implementation() {
         .iter()
         .map(|diagnostic| diagnostic.message.as_str())
         .collect();
-    // Three: two signatures and the implementation. All of them, because the
-    // implementation surviving is the case that produced invalid HIR.
     let refused = reasons
         .iter()
-        .filter(|reason| reason.contains("an overloaded method"))
+        .filter(|reason| reason.contains("a method without a body"))
         .count();
     assert_eq!(
-        refused, 3,
-        "both signatures and the implementation: {reasons:?}",
+        refused, 2,
+        "both of `declare class Platform`'s: {reasons:?}",
     );
 }

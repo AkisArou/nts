@@ -1497,6 +1497,13 @@ fn lower_class(
                 continue;
             }
             let mut builder = shared.builder(snapshot, substitution.clone(), String::new());
+            // An overload signature declares a call shape and has no body. The
+            // implementation beside it is the one member emitted, and every
+            // call resolving to a signature is built against that one -- so
+            // there is nothing here to lower and nothing absent to report.
+            if builder.is_an_overload_signature(class, member) {
+                continue;
+            }
             match builder.lower_method_of(class, member, instance) {
                 Ok(func) => lowered.program.funcs.push(func),
                 Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -4770,17 +4777,33 @@ impl<'a> FuncBuilder<'a> {
     /// already substituted, so the layout needs nothing; what needs the
     /// substitution this builder carries is the body, whose nodes are shared
     /// with every other copy.
-    /// Whether this member is the implementation behind overload signatures.
+    /// Whether this member is an overload *signature* rather than a method.
     ///
-    /// Detected from the *siblings* rather than from the member itself: an
-    /// overload implementation looks exactly like an ordinary method, and what
-    /// makes it one is that another member of the same class shares its name and
-    /// has no body. `abstract` is excluded, which is the whole reason this is a
-    /// separate question -- an abstract method in a base and an implementation
-    /// in a subclass are two classes, so they are never siblings, and an
-    /// abstract declaration beside its own implementation is not legal
-    /// TypeScript.
-    fn is_an_overload(&mut self, class: NodeId, member: NodeId) -> bool {
+    /// A declaration of a call shape, with the implementation beside it. It is
+    /// not a member to emit and it is not a gap either -- every call resolving
+    /// to it is built against the implementation, by `implementation_of`, and
+    /// answers correctly. So it is **skipped**, the way a `static` member is
+    /// skipped on a class's second copy, rather than refused.
+    ///
+    /// It was refused for one afternoon, in words that named it accurately, and
+    /// the words were the problem: NTS1001 is what this compiler cannot do, and
+    /// 83 sites in `runtime/node` then reported a gap for something handled
+    /// exactly. A plain overloaded *function*'s signatures had never said
+    /// anything, so the two paths disagreed about the same construct.
+    ///
+    /// From the *siblings* rather than from the member itself, because a
+    /// signature looks exactly like a method whose body this lowering failed to
+    /// find. What separates them is that a same-named sibling has the body.
+    /// `abstract` is excluded on both sides: an abstract method is meant to have
+    /// none, and an abstract declaration beside its own implementation is not
+    /// legal TypeScript.
+    fn is_an_overload_signature(&mut self, class: NodeId, member: NodeId) -> bool {
+        let modifiers = self.node(member).modifiers;
+        if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT)
+            || self.has_a_body(member)
+        {
+            return false;
+        }
         let Some(name) = self.member_key(member) else {
             return false;
         };
@@ -4790,23 +4813,9 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .filter(|sibling| *sibling != member)
             .collect();
-        for sibling in siblings {
-            if self.member_key(sibling).as_deref() != Some(name.as_str()) {
-                continue;
-            }
-            let modifiers = self.node(sibling).modifiers;
-            if modifiers.contains(nts_semantic_schema::DeclarationModifiers::ABSTRACT) {
-                continue;
-            }
-            let has_body = self
-                .children(sibling)
-                .into_iter()
-                .any(|child| self.kind_of(child) == Some(syntax::BLOCK));
-            if !has_body {
-                return true;
-            }
-        }
-        false
+        siblings.into_iter().any(|sibling| {
+            self.member_key(sibling).as_deref() == Some(name.as_str()) && self.has_a_body(sibling)
+        })
     }
 
     /// The name a member is declared under, for comparing two of them.
@@ -4827,27 +4836,25 @@ impl<'a> FuncBuilder<'a> {
     /// does nothing. The call goes to the implementation below it.
     fn method_body(
         &mut self,
-        class: NodeId,
         member: NodeId,
         is_abstract: bool,
     ) -> Result<Option<NodeId>, Diagnostic> {
-        // An overload *implementation* is refused, not only its signatures.
+        // The overload *signatures* do not reach here at all: `lower_class`
+        // skips them. The **implementation** is lowered, and used to be refused
+        // with them.
         //
-        // Refusing the signatures alone left the implementation lowered and the
-        // call sites resolving against the signature TypeScript picked, whose
-        // parameter list is not the implementation's: `pick(a: number)` beside
-        // `pick(a: number, b?: number) { .. }` gave
-        // `CallArgumentCount { expected: 3, found: 2 }` -- invalid HIR from a
-        // program every refusal had been reported for. A refusal that leaves a
-        // broken artifact is worse than no refusal, because the diagnostics say
-        // the compiler noticed.
-        if self.is_an_overload(class, member) {
-            return Err(self.unsupported(
-                member,
-                "an overloaded method, whose call sites resolve against a signature that is not \
-                 the implementation's",
-            ));
-        }
+        // Refusing only the signatures was tried first and left invalid HIR:
+        // call sites resolved against the signature TypeScript picked, whose
+        // parameter list is not the implementation's, so `pick(a: number)`
+        // beside `pick(a: number, b?: number) { .. }` gave
+        // `CallArgumentCount { expected: 3, found: 2 }`. The implementation was
+        // then refused too, and the whole method disappeared.
+        //
+        // What was missing is at the *call* rather than here. `implementation_of`
+        // walks from the signature the checker resolved to the declaration that
+        // has the body, so a call is built against the parameter list the
+        // emitted function actually has -- and the omitted arguments fill in
+        // exactly as they do for any other optional parameter.
         let body = self
             .children(member)
             .into_iter()
@@ -4856,6 +4863,10 @@ impl<'a> FuncBuilder<'a> {
         match (body, is_abstract) {
             (Some(body), _) => Ok(Some(body)),
             (None, true) => Ok(None),
+            // An overload *signature* never reaches here: `lower_class` skips
+            // it, because it is a declaration rather than a member whose code
+            // is missing. What is left is a method this lowering could not find
+            // the body of, which is a gap and says so.
             (None, false) => Err(self.unsupported(member, "a method without a body")),
         }
     }
@@ -5033,7 +5044,7 @@ impl<'a> FuncBuilder<'a> {
 
         self.store_parameter_properties(&declared)?;
 
-        let body = self.method_body(class, member, is_abstract)?;
+        let body = self.method_body(member, is_abstract)?;
 
         // A constructor returns nothing. It could return the instance -- it has
         // one in hand -- but the caller allocated that instance and already
@@ -5749,6 +5760,35 @@ impl<'a> FuncBuilder<'a> {
     /// signature rather than from the argument.
     fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
         let target = self.snapshot.call_targets.get(&call)?;
+        // **The implementation's parameter, where the checker resolved the call
+        // to an overload signature.**
+        //
+        // The emitted function is the implementation's, so its parameter is the
+        // slot an argument is going into. Reading the resolved signature gave
+        // two wrong answers on one program: `p.pick(n)` matched
+        // `pick(a: number)` and found no parameter at index 1 at all, so the
+        // omitted argument was refused as having "nowhere to put `undefined`";
+        // and `p.pick(n, 2)` matched `pick(a: number, b: number)` and coerced
+        // to an `f64` where the implementation's `b?: number` is erased --
+        // `CallArgumentType { at: 2, expected: Erased, found: Float }`.
+        //
+        // From the declaration's own node type rather than from a signature,
+        // because the checker gives the implementation's declaration the
+        // *overloaded* type: its call signatures are the overloads, so asking
+        // for it hands back one of the things being corrected for.
+        if let Some(callee) = target.callee {
+            let implementation = self.implementation_of(callee);
+            if implementation != callee
+                && let Some(parameter) = self
+                    .children(implementation)
+                    .into_iter()
+                    .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+                    .nth(at)
+                && let Some(ty) = self.snapshot.node_types.get(&parameter)
+            {
+                return self.represent(*ty);
+            }
+        }
         let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
         self.represent(signature.parameters.get(at)?.ty)
     }
@@ -6783,12 +6823,16 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Vec<ValueId>, Diagnostic> {
         // Where the callee's rest parameter starts, if it has one. Everything
         // from there is one array rather than one argument each.
+        //
+        // The **implementation's** rest, where the call resolved to an overload
+        // signature: `total(a: number, b: number)` sits beside
+        // `total(a: number, ...rest: number[])` and has no rest of its own, so
+        // asking the resolved signature gathered nothing and a bare number
+        // reached a parameter wanting an array.
         let rest = self
-            .snapshot
-            .call_targets
-            .get(&call)
-            .and_then(|target| self.snapshot.signatures.get(target.signature.0 as usize))
-            .and_then(|signature| signature.parameters.iter().position(|p| p.rest));
+            .parameter_shapes(call)
+            .iter()
+            .position(|(_, rest)| *rest);
 
         let mut args = Vec::new();
         for (at, argument) in arguments.iter().enumerate() {
@@ -6942,6 +6986,99 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The declaration that has the body, for a callee that may be an overload
+    /// signature.
+    ///
+    /// TypeScript resolves a call to whichever *signature* it matched, and the
+    /// signatures of an overloaded method are separate declarations with no
+    /// bodies. Only one of them is emitted -- the implementation -- so a call
+    /// built against the resolved signature's parameter list is built against
+    /// the wrong one: `pick(a: number)` beside `pick(a: number, b?: number)`
+    /// gives a call of two arguments to a function of three.
+    ///
+    /// The walk is over the declaration's siblings by name, which is the same
+    /// relation `is_an_overload` reads. A declaration that already has a body
+    /// is its own implementation and returns unchanged, so this is the identity
+    /// for every call that is not to an overload.
+    fn implementation_of(&self, callee: NodeId) -> NodeId {
+        let has_body = |node: NodeId| {
+            self.children(node)
+                .into_iter()
+                .any(|child| self.kind_of(child) == Some(syntax::BLOCK))
+        };
+        if has_body(callee) {
+            return callee;
+        }
+        let named = |node: NodeId| {
+            self.children(node)
+                .into_iter()
+                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
+                .and_then(|child| self.node(child).text.clone())
+        };
+        let (Some(parent), Some(name)) = (self.syntactic_parent(callee), named(callee)) else {
+            return callee;
+        };
+        self.children(parent)
+            .into_iter()
+            .find(|sibling| {
+                *sibling != callee
+                    && has_body(*sibling)
+                    && named(*sibling).as_deref() == Some(name.as_str())
+            })
+            .unwrap_or(callee)
+    }
+
+    /// Whether each parameter of the function a call reaches is optional and
+    /// whether it is a rest, in order.
+    ///
+    /// From the resolved signature ordinarily. From the **implementation's
+    /// syntax** where the checker resolved the call to an overload signature,
+    /// because only the implementation is emitted and its list is the one an
+    /// argument list has to match.
+    ///
+    /// Off the syntax rather than off a signature, because the checker gives
+    /// the implementation's declaration node the *overloaded* type -- its call
+    /// signatures are the overloads, so asking `node_types` for it hands back
+    /// one of the things being corrected for. The implementation's own list
+    /// exists in exactly one place that is not an overload: the declaration.
+    fn parameter_shapes(&self, call: NodeId) -> Vec<(bool, bool)> {
+        let Some(target) = self.snapshot.call_targets.get(&call) else {
+            return Vec::new();
+        };
+        if let Some(callee) = target.callee {
+            let implementation = self.implementation_of(callee);
+            if implementation != callee {
+                return self
+                    .children(implementation)
+                    .into_iter()
+                    .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+                    .map(|param| {
+                        let children = self.children(param);
+                        let rest = children
+                            .iter()
+                            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
+                        let optional = self.default_of(param).is_some()
+                            || children
+                                .iter()
+                                .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN));
+                        (optional, rest)
+                    })
+                    .collect();
+            }
+        }
+        self.snapshot
+            .signatures
+            .get(target.signature.0 as usize)
+            .map(|signature| {
+                signature
+                    .parameters
+                    .iter()
+                    .map(|parameter| (parameter.optional, parameter.rest))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// What a call has to supply for a parameter its argument list did not
     /// reach.
     ///
@@ -6959,14 +7096,20 @@ impl<'a> FuncBuilder<'a> {
         let Some(target) = self.snapshot.call_targets.get(&call) else {
             return Vec::new();
         };
-        let Some(signature) = self.snapshot.signatures.get(target.signature.0 as usize) else {
-            return Vec::new();
-        };
-        // The declaration's parameter list, where there is one. The signature
-        // is what the verifier counts against, but the *default expression*
-        // only exists in the syntax.
-        let declared: Vec<NodeId> = target
-            .callee
+        // **The implementation's parameter list, not the one the checker
+        // resolved to.**
+        //
+        // TypeScript matches a call against whichever *overload signature*
+        // fits, and those are separate declarations with no bodies. Only the
+        // implementation is emitted, so its list is the one a call has to be
+        // built against: `p.pick(n)` matches `pick(a: number)` and lands on
+        // `Picker#pick(this, a, b)`, which is where
+        // `CallArgumentCount { expected: 3, found: 2 }` came from.
+        let implementation = target.callee.map(|callee| self.implementation_of(callee));
+        // The declaration's parameter list, where there is one. A shape says
+        // *that* a parameter has a default; the default **expression** only
+        // exists in the syntax.
+        let declared: Vec<NodeId> = implementation
             .map(|callee| {
                 self.children(callee)
                     .into_iter()
@@ -6974,8 +7117,9 @@ impl<'a> FuncBuilder<'a> {
                     .collect()
             })
             .unwrap_or_default();
+        let parameters = self.parameter_shapes(call);
         let mut omitted = Vec::new();
-        for (at, parameter) in signature.parameters.iter().enumerate().skip(provided) {
+        for (at, (optional, rest)) in parameters.into_iter().enumerate().skip(provided) {
             // The rest is `lower_arguments`'s to fill, not this function's:
             // filling it here would build the array it is supposed to collect,
             // and everything after a rest is inside it. So this stops and the
@@ -6985,7 +7129,7 @@ impl<'a> FuncBuilder<'a> {
             // declaration, which stopped being true when rest parameters
             // landed. The `break` stayed correct and the reason for it did not,
             // and the gap between them was one missing empty array.
-            if parameter.rest {
+            if rest {
                 break;
             }
             let declaration = declared.get(at).copied();
@@ -6998,7 +7142,7 @@ impl<'a> FuncBuilder<'a> {
             // overload's signature and the implementation's parameter list are
             // two different lists, and passing against the wrong one would put
             // the arity out in the other direction.
-            if parameter.optional && (target.callee.is_none() || declaration.is_some()) {
+            if optional && (target.callee.is_none() || declaration.is_some()) {
                 omitted.push(Omitted::Absent);
             }
         }
@@ -15679,9 +15823,18 @@ impl<'a> FuncBuilder<'a> {
         // "Inside" means *defined* here, not merely declared here. A
         // `declare function` has a declaration node and no body, and calling it
         // directly would name a function this program never emits.
+        // Through `implementation_of`, because an *overload signature* has no
+        // body and the implementation beside it does. Asking the resolved
+        // declaration directly called an overloaded function external and
+        // emitted only a prototype for it: `undefined reference to 'pick'` from
+        // the linker, on a program that reported no refusal at all.
+        //
+        // Methods did not have this because a method call takes its name from
+        // the hierarchy rather than from the declaration; a plain function has
+        // only the declaration to ask.
         let defined = target
             .callee
-            .is_some_and(|declaration| self.has_a_body(declaration));
+            .is_some_and(|declaration| self.has_a_body(self.implementation_of(declaration)));
 
         // A callee with no declaration in the compiled set at all. A `declare
         // function` the *program* wrote is an FFI import and stays external --

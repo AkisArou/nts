@@ -138,7 +138,7 @@ counter, not by reading the emitted C.
 | ✅ | a function declared **inside a body**, including one called above its own declaration and two that call each other — the walk visits every declaration in the file, so hoisting falls out rather than being arranged. One that reads a local of the function around it is a closure, and is refused by name |
 | ✗ | a nested function whose name is already taken at the top level — the namespace is flat, so both are refused. The name is not qualified by the function it is written in |
 | ✅ | optional parameters, default parameters | including a default that **reads the parameters before it**. JavaScript evaluates a default in the callee's scope and this compiler evaluates it at the call, which is the same moment and a different scope — so the caller binds the callee's names to the arguments it has already computed, for the length of one expression, and puts them back after. A default reading a *later* parameter is TS2372 and never arrives. Record 0116 |
-| ✅ | overload signatures |
+| ✅ | **overload signatures**, on a method and on a plain function. TypeScript matches a call against whichever signature fits and those are separate declarations with no bodies, so everything a call is built from — its arity, each argument's representation, where a rest begins, and whether the callee is defined at all — comes from the **implementation** beside them. This row read ✅ while methods were refused by name at **56 sites** and a plain overloaded function link-errored with `undefined reference`, which is the first false row this ledger has been caught holding. Record 0153 |
 | ✅ | generics, including constrained; monomorphized per instantiation |
 | ✅ | higher-order functions and closures that only *read* what they capture |
 | ✅ | a **named function used as a value** — one static instance, so identity holds |
@@ -1940,7 +1940,7 @@ nothing fails loudly when they are.
 | ✅ | host loop, task posting, thread-ownership assertions |
 | ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one |
 | ✗ | a regular-expression engine |
-| ✗ | date and time |
+| ◐ | **a time value** — `nts_date_new`, `nts_date_value` and the `TimeClip` normalisation, three entry points and a `double`. No **clock** and no **calendar**: a wall clock is a capability this runtime does not have, and the field extraction that would need one is §2's `Date` rows. The JVM runtime carries the same three, and `examples/dates` agrees with node on 174 cases through it. This row read ✗ while `nts_time_clip` was in `runtime/c` — the second false row found in this file today, and found by looking rather than by anything that runs |
 | ✗ | shared memory and an agent model — the threading primitives above are the runtime's own task posting, and `Atomics` needs more than they provide |
 | ∅ | a property map, a prototype chain, a metaobject protocol — §13 |
 
