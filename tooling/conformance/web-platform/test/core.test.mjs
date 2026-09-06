@@ -345,6 +345,53 @@ test("EventTarget once, receiver, removal while dispatching", () => {
   target.dispatchEvent(new Event("x"));
   assert.equal(calls, 1);
 });
+test("EventTarget signal and passive listener options match Node", () => {
+  const target = new EventTarget();
+  const first = new AbortController();
+  const duplicate = new AbortController();
+  let calls = 0;
+  const listener = () => calls++;
+
+  target.addEventListener("signal", listener, { signal: first.signal });
+  target.addEventListener("signal", listener, { signal: duplicate.signal });
+  duplicate.abort();
+  target.dispatchEvent(new Event("signal"));
+  assert.equal(calls, 1);
+  first.abort();
+  target.dispatchEvent(new Event("signal"));
+  assert.equal(calls, 1);
+
+  const alreadyAborted = new AbortController();
+  alreadyAborted.abort();
+  target.addEventListener("signal", listener, { signal: alreadyAborted.signal });
+  target.dispatchEvent(new Event("signal"));
+  assert.equal(calls, 1);
+
+  const duringDispatch = new AbortController();
+  target.addEventListener("ordered", () => duringDispatch.abort());
+  target.addEventListener("ordered", listener, { signal: duringDispatch.signal });
+  target.dispatchEvent(new Event("ordered"));
+  assert.equal(calls, 1);
+
+  for (const [EventClass, EventTargetClass] of [
+    [Event, EventTarget],
+    [globalThis.Event, globalThis.EventTarget],
+  ]) {
+    const passiveTarget = new EventTargetClass();
+    const event = new EventClass("passive", { cancelable: true });
+    passiveTarget.addEventListener("passive", (current) => current.preventDefault(), {
+      passive: true,
+    });
+    assert.equal(passiveTarget.dispatchEvent(event), true);
+    assert.equal(event.defaultPrevented, false);
+  }
+
+  const activeTarget = new EventTarget();
+  const activeEvent = new Event("active", { cancelable: true });
+  activeTarget.addEventListener("active", (event) => event.preventDefault());
+  assert.equal(activeTarget.dispatchEvent(activeEvent), false);
+  assert.equal(activeEvent.defaultPrevented, true);
+});
 test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   let pulls = 0;
   const stream = new ReadableStream(

@@ -18,6 +18,7 @@ export class Event {
   eventPhase = 0;
   private dispatching = false;
   private immediateStopped = false;
+  private passiveListener = false;
 
   constructor(type: string, init: EventInit = {}) {
     this.type = type;
@@ -27,7 +28,7 @@ export class Event {
   }
 
   preventDefault(): void {
-    if (this.cancelable) this.defaultPrevented = true;
+    if (this.cancelable && !this.passiveListener) this.defaultPrevented = true;
   }
 
   stopPropagation(): void {}
@@ -49,8 +50,13 @@ export class Event {
 
   /** @internal */ end(): void {
     this.dispatching = false;
+    this.passiveListener = false;
     this.currentTarget = null;
     this.eventPhase = 0;
+  }
+
+  /** @internal */ setPassiveListener(passive: boolean): void {
+    this.passiveListener = passive;
   }
 
   /** @internal */ get stopped(): boolean {
@@ -68,6 +74,14 @@ export interface EventHandlerSlot<Target extends EventTarget, E extends Event> {
 export interface ListenerOptions {
   once?: boolean;
   capture?: boolean;
+  passive?: boolean;
+  signal?: EventListenerSignal;
+}
+
+/** The AbortSignal operations EventTarget needs, without a runtime import cycle. */
+export interface EventListenerSignal {
+  readonly aborted: boolean;
+  subscribe(callback: () => void): () => void;
 }
 
 interface ListenerRecord {
@@ -75,7 +89,9 @@ interface ListenerRecord {
   callback: EventListener;
   capture: boolean;
   once: boolean;
+  passive: boolean;
   removed: boolean;
+  unsubscribeAbort: (() => void) | null;
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
@@ -95,6 +111,9 @@ export class EventTarget {
     if (callback === null) return;
     const capture = typeof options === "boolean" ? options : (options.capture ?? false);
     const once = typeof options === "boolean" ? false : (options.once ?? false);
+    const passive = typeof options === "boolean" ? false : (options.passive ?? false);
+    const signal = typeof options === "boolean" ? undefined : options.signal;
+    if (signal?.aborted) return;
     if (
       this.listeners.some(
         (item) =>
@@ -105,7 +124,19 @@ export class EventTarget {
       )
     )
       return;
-    this.listeners.push({ type, callback, capture, once, removed: false });
+    const listener: ListenerRecord = {
+      type,
+      callback,
+      capture,
+      once,
+      passive,
+      removed: false,
+      unsubscribeAbort: null,
+    };
+    this.listeners.push(listener);
+    if (signal !== undefined) {
+      listener.unsubscribeAbort = signal.subscribe(() => this.removeRecord(listener));
+    }
   }
 
   removeEventListener(
@@ -115,8 +146,10 @@ export class EventTarget {
   ): void {
     const capture = typeof options === "boolean" ? options : (options.capture ?? false);
     for (const item of this.listeners) {
-      if (item.type === type && item.callback === callback && item.capture === capture)
-        item.removed = true;
+      if (item.type === type && item.callback === callback && item.capture === capture) {
+        this.removeRecord(item);
+        return;
+      }
     }
   }
 
@@ -126,19 +159,27 @@ export class EventTarget {
       const snapshot = this.listeners.slice();
       for (const item of snapshot) {
         if (item.removed || item.type !== event.type) continue;
-        if (item.once) item.removed = true;
+        if (item.once) this.removeRecord(item);
+        event.setPassiveListener(item.passive);
         try {
           item.callback.call(this, event);
         } catch (error) {
           this.report(error);
+        } finally {
+          event.setPassiveListener(false);
         }
         if (event.stopped) break;
       }
     } finally {
       event.end();
-      for (let i = this.listeners.length - 1; i >= 0; --i) {
-        if (this.listeners[i]?.removed) this.listeners.splice(i, 1);
+      let write = 0;
+      for (let read = 0; read < this.listeners.length; read++) {
+        const listener = this.listeners[read];
+        if (listener !== undefined && !listener.removed) {
+          this.listeners[write++] = listener;
+        }
       }
+      this.listeners.length = write;
     }
     return !event.defaultPrevented;
   }
@@ -161,6 +202,14 @@ export class EventTarget {
       };
       target.addEventListener(type, slot.listener);
     }
+  }
+
+  private removeRecord(listener: ListenerRecord): void {
+    if (listener.removed) return;
+    listener.removed = true;
+    const unsubscribe = listener.unsubscribeAbort;
+    listener.unsubscribeAbort = null;
+    unsubscribe?.();
   }
 }
 
