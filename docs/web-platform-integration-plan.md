@@ -315,12 +315,16 @@ optimization:
    differential lane and may not be reclassified without first replacing every
    sabotage assertion that depends on it with an equally visible failure signal.
 
-Reference-count arithmetic is not a cross-provider proof of retirement. On a
-collector-backed provider, callback ownership and completion-storage retirement are
-verified through reachability: retain a weak reference in the test, close the source
-and environment, force/await collection under a bounded test protocol, and assert
-that it clears. An empty provider-specific diagnostic-counter set never means there
-is no ownership invariant to verify.
+Reference-count arithmetic is not a cross-provider proof of retirement. A provider
+that does not emit reference counting—the JVM lane and the C lane under `NoGc`—has
+no retain/release evidence to inspect. JVM callback ownership and completion-storage
+retirement are verified through reachability: retain a weak reference in the test,
+close the source and environment, force/await collection under a bounded test
+protocol, and assert that it clears. C `NoGc` never frees its bump allocation and
+therefore cannot prove deallocation or balanced ownership; it verifies functional
+source/task retirement, while the corresponding ownership proof runs under the C/
+LLVM reference-counting provider. An empty provider-specific diagnostic-counter set
+never means there is no ownership invariant to verify.
 
 ## Typed arrays, `ArrayBuffer`, and `DataView`
 
@@ -352,11 +356,15 @@ helpers are candidates, not decisions. Instruction counting such as “eight byt
 loads for a `Float64Array` element” is **argued**, not a benchmark.
 
 Before choosing and landing a representation, record the distinct current floors at
-`74b9de9`: LLVM 113, LLVM-RC 113, and JVM 112 in the backend gate; 115/115 in the
-separately counted examples step; 41 `bench-agree` cases; and 61 memory cases. There
-are 124 example directories, which is not itself a lane floor. Also record all
-typed-array examples across four lanes, `bytes`, `elementwise`, `node-utf8`, and
-applicable `runtime/node` uses. After the change:
+`74b9de9`: LLVM 113, LLVM-RC 113, and JVM 112 in the backend gate; 41
+`bench-agree` cases; and 61 memory cases. The separate examples step has no numeric
+floor: every comparable example must agree, so its requirement automatically scales
+with the corpus. There are 124 example directories at this baseline, which is not
+itself a lane floor. A direct planning-time JVM run found 112 of 113 comparable
+examples agreeing; `async-finally` is the sole miss and needs the known
+`nts_promise_reject_value` JVM runtime helper plus its fixed-external entry, not a new
+design. Also record all typed-array examples across four lanes, `bytes`,
+`elementwise`, `node-utf8`, and applicable `runtime/node` uses. After the change:
 
 - all existing floors remain green;
 - add `ArrayBuffer` and `DataView` examples;
@@ -581,6 +589,9 @@ with independent review/tests rather than introducing an architectural workaroun
 - Tests that replace host `fetch`, `WebSocket`, `node:http`, and `node:https` with
   failing sentinels where those APIs must not be delegated.
 - Constructor identity between globals and Node module exports.
+- Callback/storage ownership is proved in the C/LLVM reference-counting lane;
+  `NoGc` separately proves logical task/source retirement and is never treated as
+  evidence of deallocation merely because its retain/release counters stay zero.
 - Emit/HIR verification and the main gate without emitter panics.
 
 ### JVM and Android validation
@@ -590,8 +601,8 @@ with independent review/tests rather than introducing an architectural workaroun
 - Wrong-environment/cross-thread sabotage, completion saturation, close liveness,
   virtual-vs-monotonic time, cancellation, and retained callback/byte ownership.
 - Collector reachability coverage proving callbacks and completion storage become
-  unreachable after terminal close, using weak references rather than applying C
-  retain/release arithmetic to the JVM.
+  unreachable after terminal close, using weak references because this provider
+  emits no reference counting.
 - TLS SNI/hostname/trust sabotage, gzip CRC/trailer corruption, and unsupported
   encoding behavior.
 - Java artifact reproducibility and platform ratchets, then release D8/R8 and API-26
@@ -632,9 +643,10 @@ The integration is done only when all of the following are true:
   realm/prototype/property-map/compiler-gap workarounds;
 - every reachable shared integration entry produces valid HIR and the required
   native and JVM artifacts without primary refusals belonging to this plan;
-- the final refusal inventory is measured again with the same grouping method,
-  compared explicitly with the planning baseline of 179 primary and 52 cascading
-  refusals, and every remaining refusal is named with its owner and reason;
+- the final refusal inventory is measured again over the same input, compared
+  explicitly with the planning baseline of 179 primary and 52 cascading refusals,
+  regrouped by underlying feature rather than diagnostic message, and every
+  remaining refusal is named with its owner and reason;
 - native N-API and JVM/Android paths execute the shared Fetch/WebSocket protocols
   through their real typed primitives and owning environments;
 - typed-array aliases, callback lifetimes, completion credits, close behavior, time
@@ -644,9 +656,12 @@ The integration is done only when all of the following are true:
 - the applicable pinned Node, WPT, Autobahn, repository gate, memory, differential,
   platform, and security suites are green, with genuine Section 13 exclusions still
   explicit rather than counted as passes;
-- the protected floors are at least LLVM 113/113, LLVM-RC 113/113, JVM 112/112,
-  examples 115/115, `bench-agree` 41/41, and memory 61/61; floors may rise but may
-  not be lowered to satisfy this plan;
+- the protected numeric floors are at least LLVM 113/113, LLVM-RC 113/113, JVM
+  112/112, `bench-agree` 41/41, and memory 61/61; floors may rise but may not be
+  lowered to satisfy this plan;
+- the non-numeric examples gate continues to require every comparable example in
+  the current corpus to agree; a fixed historical count cannot substitute for that
+  scaling requirement;
 - Android release artifacts pass the agreed API/reproducibility/D8/R8/device gates;
 - comparative performance has been measured in context and any regression is either
   fixed or explicitly reviewed with evidence; and
