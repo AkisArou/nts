@@ -15,6 +15,7 @@
 //   mustCall / mustNotCall ours; the runner checks the tallies at the end
 //   invalidArgTypeHelper   node's, verbatim, test/common/index.js:802
 //   spawnPromisified       node's, with the runner's subject-preserving spawn
+//   nodeProcessAborted     node's, verbatim, test/common/index.js:604
 //   getTTYfd               node's, verbatim, test/common/index.js
 //   allowGlobals, ...      no-ops; they configure node's own leak checker
 
@@ -123,6 +124,17 @@ function runWithInvalidFD(func) {
   throw new Skip("Could not generate an invalid fd");
 }
 
+/** Whether a child status is one of Node's platform abort spellings. */
+function nodeProcessAborted(exitCode, signal) {
+  const expectedSignals = ["SIGILL", "SIGTRAP", "SIGABRT"];
+  const expectedExitCodes = hostProcess.platform === "win32"
+    ? [0x80000003, 134]
+    : [132, 133, 134];
+  return signal !== null
+    ? expectedSignals.includes(signal)
+    : expectedExitCodes.includes(exitCode);
+}
+
 /** Expectations not yet satisfied, without clearing them. */
 export function peekPending() {
   return pending.filter((p) =>
@@ -227,6 +239,7 @@ export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
     getTTYfd,
     runWithInvalidFD,
     spawnPromisified,
+    nodeProcessAborted,
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
     isMainThread: true,
