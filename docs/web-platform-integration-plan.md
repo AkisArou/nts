@@ -260,8 +260,8 @@ The common environment contract is:
    concurrent diagnostic snapshot must coordinate with owner lanes rather than race
    their plain counters. Diagnostics never affect program semantics, ownership,
    scheduling, capabilities, lifecycle, or close. The existing 61 memory cases,
-   13 C runtime tests, and differential leak check keep their process-wide
-   observation contract through aggregation on read.
+   eight C runtime tests (of 13 test files), and differential leak check keep their
+   process-wide observation contract through aggregation on read.
 
 The environment seam therefore enforces an existing performance premise rather
 than adding a new one: `nts_retain` and the diagnostic hot paths already use plain,
@@ -274,7 +274,10 @@ eventually run or drop it. A one-shot task consumes that ownership when it runs;
 repeating task holds it across invocations and returns it only when dropped. Releasing
 a repeating callback after each invocation can free it underneath the still-active
 handle while leaving aggregate traces apparently balanced, so this rule is part of
-correctness rather than an implementation detail.
+correctness rather than an implementation detail. The current JVM timer already
+follows it: its timer object retains the callback for the handle lifetime and removes
+the timer/callback references on terminal retirement. Tests protect that behavior
+from a future per-invocation-release "optimization."
 
 ### Completion reservations
 
@@ -311,6 +314,13 @@ optimization:
    or AddressSanitizer. The `TimedOut` verdict is a contract owned by the JVM/
    differential lane and may not be reclassified without first replacing every
    sabotage assertion that depends on it with an equally visible failure signal.
+
+Reference-count arithmetic is not a cross-provider proof of retirement. On a
+collector-backed provider, callback ownership and completion-storage retirement are
+verified through reachability: retain a weak reference in the test, close the source
+and environment, force/await collection under a bounded test protocol, and assert
+that it clears. An empty provider-specific diagnostic-counter set never means there
+is no ownership invariant to verify.
 
 ## Typed arrays, `ArrayBuffer`, and `DataView`
 
@@ -579,6 +589,9 @@ with independent review/tests rather than introducing an architectural workaroun
   alone are insufficient.
 - Wrong-environment/cross-thread sabotage, completion saturation, close liveness,
   virtual-vs-monotonic time, cancellation, and retained callback/byte ownership.
+- Collector reachability coverage proving callbacks and completion storage become
+  unreachable after terminal close, using weak references rather than applying C
+  retain/release arithmetic to the JVM.
 - TLS SNI/hostname/trust sabotage, gzip CRC/trailer corruption, and unsupported
   encoding behavior.
 - Java artifact reproducibility and platform ratchets, then release D8/R8 and API-26
