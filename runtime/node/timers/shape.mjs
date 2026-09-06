@@ -5,6 +5,16 @@
 // convenience but the main path, and the module export is the secondary one.
 
 export function shape(exports) {
+  // `timers/promises` is imported as an ESM namespace, whose enumerable keys
+  // are sorted. Node's CommonJS subpath installs the three operations first
+  // and the scheduler object last; preserve both that observable order and
+  // identity with the value exposed through `timers.promises`.
+  const promises = {
+    setTimeout: exports.promises.setTimeout,
+    setImmediate: exports.promises.setImmediate,
+    setInterval: exports.promises.setInterval,
+    scheduler: exports.promises.scheduler,
+  };
   return {
     setTimeout: exports.setTimeout,
     clearTimeout: exports.clearTimeout,
@@ -12,13 +22,13 @@ export function shape(exports) {
     clearImmediate: exports.clearImmediate,
     setInterval: exports.setInterval,
     clearInterval: exports.clearInterval,
-    promises: exports.promises,
+    promises,
   };
 }
 
 /** The promise-returning timer API is a public Node subpath. */
-export function subpaths(exports) {
-  return { "timers/promises": exports.promises };
+export function subpaths(_exports, underTest) {
+  return { "timers/promises": underTest.promises };
 }
 
 /**
