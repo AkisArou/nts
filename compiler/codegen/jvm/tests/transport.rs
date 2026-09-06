@@ -163,3 +163,39 @@ fn tls_refuses_a_certificate_that_names_another_host() {
     assert!(said.ends_with("0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The pieces composed, and the observable the production adapter must match.
+///
+/// Each part is tested alone above. This proves they hold together: a response
+/// dribbled seven bytes at a time, decoded by a state machine that never sees a
+/// whole frame, with every completion crossing the inbox.
+///
+/// And it records what the **reference** adapter exposes. A platform HTTP client
+/// that decompresses transparently strips `Content-Encoding` and rewrites
+/// `Content-Length` while doing it, so the same response yields different
+/// observable headers depending on which adapter fetched it. The reference
+/// hands back the wire headers unchanged; the OkHttp adapter has to produce the
+/// same pair, and that cross-adapter assertion is what this half sets up.
+#[test]
+fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let jar = jar();
+    let dir = std::env::temp_dir().join(format!("nts-httpgzip-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    compile(&javac, &jar, &dir, "HttpGzipTest");
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("HttpGzipTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the HTTP/gzip integration failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(said.ends_with("0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
