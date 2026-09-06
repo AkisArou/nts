@@ -1,4 +1,5 @@
-import { decodeUTF8, utf8, toUSVString } from "../core/encoding.ts";
+import { decodeUTF8, utf8 } from "../core/encoding.ts";
+import { toUSVString } from "../core/webidl.ts";
 
 export type SearchParamEntry = readonly [name: string, value: string];
 

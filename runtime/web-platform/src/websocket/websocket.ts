@@ -4,7 +4,7 @@ import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
 import { utf8 } from "../core/encoding.ts";
-import { toClampedUnsignedShort, toScalarValueString } from "../core/webidl.ts";
+import { toClampedUnsignedShort, toUSVString } from "../core/webidl.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/ports.ts";
 import { isToken } from "../fetch/headers.ts";
 import { Blob } from "../forms/blob.ts";
@@ -227,7 +227,7 @@ export class WebSocket extends EventTarget {
       throw new DOMException("WebSocket is still connecting", "InvalidStateError");
     let pending: PendingSend;
     if (typeof data === "string") {
-      const value = toScalarValueString(data);
+      const value = toUSVString(data);
       pending = { value, size: utf8.encode(value).length };
     } else if (data instanceof Blob) pending = { value: data, size: data.size };
     else {
@@ -262,7 +262,7 @@ export class WebSocket extends EventTarget {
 
   close(code?: number, reason = ""): void {
     const closeCode = code === undefined ? undefined : toClampedUnsignedShort(code);
-    const closeReason = toScalarValueString(reason);
+    const closeReason = toUSVString(reason);
     if (closeCode !== undefined && closeCode !== 1000 && (closeCode < 3000 || closeCode > 4999)) {
       throw new DOMException("Close code must be 1000 or 3000..4999", "InvalidAccessError");
     }

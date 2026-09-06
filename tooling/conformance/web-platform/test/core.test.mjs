@@ -27,7 +27,7 @@ import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platfo
 import { parseChunkSize } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/parser.js";
 import {
   toClampedUnsignedShort,
-  toScalarValueString,
+  toUSVString,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/webidl.js";
 import {
   closePayload,
@@ -507,7 +507,7 @@ test("Web IDL conversions clamp with ties-to-even and replace lone surrogates", 
   ]) {
     assert.equal(toClampedUnsignedShort(input), expected);
   }
-  assert.equal(toScalarValueString("a\ud800b\udc00c\ud83d\udc99"), "a\ufffdb\ufffdc\ud83d\udc99");
+  assert.equal(toUSVString("a\ud800b\udc00c\ud83d\udc99"), "a\ufffdb\ufffdc\ud83d\udc99");
 });
 test("HTTP chunk extensions follow the RFC 9112 grammar", () => {
   for (const [line, expected] of [

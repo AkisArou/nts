@@ -1,4 +1,5 @@
-import { concatBytes, decodeUTF8, utf8, toUSVString } from "../core/encoding.ts";
+import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
+import { toUSVString } from "../core/webidl.ts";
 import { ReadableStream } from "../streams/readable.ts";
 
 export type BlobPart = string | Uint8Array | ArrayBuffer | Blob;

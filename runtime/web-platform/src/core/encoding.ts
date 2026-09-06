@@ -2,22 +2,6 @@ import { utf8Length, utf8Write } from "./utf8.ts";
 import { trimASCIIWhitespace } from "./ascii.ts";
 
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
-export function toUSVString(input: string): string {
-  let result = "";
-
-  for (let i = 0; i < input.length; i++) {
-    const code = input.charCodeAt(i);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const low = input.charCodeAt(i + 1);
-      if (low >= 0xdc00 && low <= 0xdfff) {
-        result += input.slice(i, i + 2);
-        i++;
-      } else result += "\ufffd";
-    } else result += code >= 0xdc00 && code <= 0xdfff ? "\ufffd" : input.charAt(i);
-  }
-  return result;
-}
-
 export class TextEncoder {
   readonly encoding = "utf-8";
 

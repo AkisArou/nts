@@ -12,7 +12,7 @@ export function toClampedUnsignedShort(value: number): number {
 }
 
 /** Convert a TypeScript string to a Web IDL scalar-value string. */
-export function toScalarValueString(value: string): string {
+export function toUSVString(value: string): string {
   let result = "";
   let runStart = 0;
 
