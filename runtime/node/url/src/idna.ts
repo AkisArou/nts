@@ -22,7 +22,10 @@
 // the Web Platform Tests corpus, which this passes in full -- 891 of 891 --
 // so the gap is real but unmeasured rather than known to be empty.
 
-import { toASCII as punycodeToASCII, toUnicode as punycodeToUnicode } from "../../punycode/src/codec.ts";
+import {
+  toASCII as punycodeToASCII,
+  toUnicode as punycodeToUnicode,
+} from "../../punycode/src/codec.ts";
 
 /**
  * Characters UTS-46 removes rather than maps.

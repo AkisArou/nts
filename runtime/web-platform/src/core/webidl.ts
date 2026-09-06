@@ -60,3 +60,8 @@ export function toUSVString(value: string): string {
 
   return runStart === 0 ? value : result + value.slice(runStart);
 }
+
+/** Apply JavaScript string coercion before the typed `USVString` conversion. */
+export function coerceToUSVString(value: unknown): string {
+  return toUSVString(`${value}`);
+}

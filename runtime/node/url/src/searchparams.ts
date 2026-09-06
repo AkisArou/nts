@@ -11,12 +11,16 @@
 // object with two views of it, and both directions have to work.
 
 import {
-  ERR_ARG_NOT_ITERABLE, ERR_INVALID_THIS, ERR_INVALID_TUPLE, ERR_MISSING_ARGS,
+  ERR_ARG_NOT_ITERABLE,
+  ERR_INVALID_THIS,
+  ERR_INVALID_TUPLE,
+  ERR_MISSING_ARGS,
 } from "../../internal/errors.ts";
 import { validateFunction } from "../../internal/validators.ts";
 import { inUrlencodedPercentEncodeSet, percentEncodeScalar } from "./parser.ts";
 import { unescape } from "../../querystring/src/main.ts";
 import { customInspectSymbol, inspect, type InspectOptions } from "../../util/src/inspect.ts";
+import { coerceToUSVString, toUSVString } from "../../../web-platform/src/core/webidl.ts";
 
 /** The owner to tell when the list changes, if there is one. */
 export interface SearchParamsOwner {
@@ -56,10 +60,7 @@ export function parseUrlencoded(input: string): Array<[string, string]> {
       name = sequence.slice(0, at);
       value = sequence.slice(at + 1);
     }
-    output[outputIndex++] = [
-      decodeFormComponent(name),
-      decodeFormComponent(value),
-    ];
+    output[outputIndex++] = [decodeFormComponent(name), decodeFormComponent(value)];
   }
   return output;
 }
@@ -92,9 +93,11 @@ function decodeFormComponent(input: string): string {
 }
 
 function isAsciiHexCode(code: number): boolean {
-  return (code >= 0x30 && code <= 0x39) ||
+  return (
+    (code >= 0x30 && code <= 0x39) ||
     (code >= 0x41 && code <= 0x46) ||
-    (code >= 0x61 && code <= 0x66);
+    (code >= 0x61 && code <= 0x66)
+  );
 }
 
 function serializeFormComponent(str: string): string {
@@ -134,16 +137,13 @@ export type SearchParamsInit =
   | Record<string, string>
   | Iterable<readonly [string, string]>;
 
-/** Web IDL's `USVString`: stringify, then replace every lone surrogate. */
-function toUSVString(value: unknown): string {
-  return `${value}`.toWellFormed();
-}
-
 function isIterable(value: unknown): value is Iterable<unknown> {
-  return value !== null &&
+  return (
+    value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     Symbol.iterator in value &&
-    typeof value[Symbol.iterator] === "function";
+    typeof value[Symbol.iterator] === "function"
+  );
 }
 
 function isUnknownArray(value: unknown): value is unknown[] {
@@ -151,8 +151,7 @@ function isUnknownArray(value: unknown): value is unknown[] {
 }
 
 function isPropertyRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null &&
-    (typeof value === "object" || typeof value === "function");
+  return value !== null && (typeof value === "object" || typeof value === "function");
 }
 
 export class URLSearchParams {
@@ -166,7 +165,7 @@ export class URLSearchParams {
     if (typeof init === "string") {
       // A leading `?` is dropped, so that `new URLSearchParams(url.search)`
       // does what it obviously means.
-      const text = init.toWellFormed();
+      const text = toUSVString(init);
       this.#list = parseUrlencoded(text.startsWith("?") ? text.slice(1) : text);
       return;
     }
@@ -185,7 +184,7 @@ export class URLSearchParams {
     if ((typeof init !== "object" && typeof init !== "function") || init === null) {
       // Per WebIDL union resolution the argument is coerced to a string, so
       // `new URLSearchParams(null)` is the query `null=` rather than empty.
-      this.#list = parseUrlencoded(toUSVString(init));
+      this.#list = parseUrlencoded(coerceToUSVString(init));
       return;
     }
     if (Symbol.iterator in init) {
@@ -197,7 +196,7 @@ export class URLSearchParams {
           if (pair.length !== 2) {
             throw new ERR_INVALID_TUPLE("query pair", "an iterable [name, value] tuple");
           }
-          this.#list.push([toUSVString(pair[0]), toUSVString(pair[1])]);
+          this.#list.push([coerceToUSVString(pair[0]), coerceToUSVString(pair[1])]);
           continue;
         }
         if (!isIterable(pair)) {
@@ -207,7 +206,7 @@ export class URLSearchParams {
         let name = "";
         let value = "";
         for (const element of pair) {
-          const converted = toUSVString(element);
+          const converted = coerceToUSVString(element);
           if (length === 0) name = converted;
           if (length === 1) value = converted;
           length++;
@@ -222,8 +221,8 @@ export class URLSearchParams {
     if (isPropertyRecord(init)) {
       const visited = new Map<string, number>();
       for (const key of Object.keys(init)) {
-        const name = key.toWellFormed();
-        const value = toUSVString(init[key]);
+        const name = toUSVString(key);
+        const value = coerceToUSVString(init[key]);
         const index = visited.get(name);
         if (index === undefined) {
           visited.set(name, this.#list.length);
@@ -251,10 +250,7 @@ export class URLSearchParams {
     const owner = this.#owner;
     if (owner === null) return;
     const query = owner.currentQuery();
-    replaceListContents(
-      this.#list,
-      query === null ? [] : parseUrlencoded(query),
-    );
+    replaceListContents(this.#list, query === null ? [] : parseUrlencoded(query));
   }
 
   #update(): void {
@@ -295,7 +291,7 @@ export class URLSearchParams {
     }
     const name = given[0];
     const value = given[1];
-    this.#list.push([toUSVString(name), toUSVString(value)]);
+    this.#list.push([coerceToUSVString(name), coerceToUSVString(value)]);
     this.#update();
   }
 
@@ -311,12 +307,12 @@ export class URLSearchParams {
     }
     const name = given[0];
     const value = given[1];
-    const wanted = toUSVString(name);
+    const wanted = coerceToUSVString(name);
     const list = this.#list;
     const length = list.length;
     let write = 0;
     if (value !== undefined) {
-      const wantedValue = toUSVString(value);
+      const wantedValue = coerceToUSVString(value);
       for (let index = 0; index < length; index++) {
         const pair = list[index];
         if (pair === undefined) continue;
@@ -344,7 +340,7 @@ export class URLSearchParams {
       throw new ERR_MISSING_ARGS("name");
     }
     const name = given[0];
-    const wanted = toUSVString(name);
+    const wanted = coerceToUSVString(name);
     for (const pair of this.#list) {
       if (pair[0] === wanted) return pair[1];
     }
@@ -358,7 +354,7 @@ export class URLSearchParams {
       throw new ERR_MISSING_ARGS("name");
     }
     const name = given[0];
-    const wanted = toUSVString(name);
+    const wanted = coerceToUSVString(name);
     let count = 0;
     for (let index = 0; index < this.#list.length; index++) {
       const pair = this.#list[index];
@@ -381,9 +377,9 @@ export class URLSearchParams {
     }
     const name = given[0];
     const value = given[1];
-    const wanted = toUSVString(name);
+    const wanted = coerceToUSVString(name);
     if (value !== undefined) {
-      const wantedValue = toUSVString(value);
+      const wantedValue = coerceToUSVString(value);
       for (let index = 0; index < this.#list.length; index++) {
         const pair = this.#list[index];
         if (pair !== undefined && pair[0] === wanted && pair[1] === wantedValue) {
@@ -414,8 +410,8 @@ export class URLSearchParams {
     }
     const name = given[0];
     const value = given[1];
-    const wanted = toUSVString(name);
-    const wantedValue = toUSVString(value);
+    const wanted = coerceToUSVString(name);
+    const wantedValue = coerceToUSVString(value);
     const list = this.#list;
     const length = list.length;
     let found = false;
@@ -524,9 +520,8 @@ export class URLSearchParams {
     const entries = new Array<string>(this.#list.length);
     for (let i = 0; i < this.#list.length; i++) {
       const pair = this.#list[i];
-      entries[i] = pair === undefined
-        ? ""
-        : `${inspect(pair[0], options)} => ${inspect(pair[1], options)}`;
+      entries[i] =
+        pair === undefined ? "" : `${inspect(pair[0], options)} => ${inspect(pair[1], options)}`;
     }
     if (entries.length === 0) return "URLSearchParams {}";
     const inline = entries.join(", ");
@@ -669,11 +664,8 @@ class URLSearchParamsIteratorImpl implements URLSearchParamsIterator<IteratorVal
       return { value: undefined, done: true };
     }
     this.#index++;
-    const value: IteratorValue = this.#kind === "key"
-      ? pair[0]
-      : this.#kind === "value"
-      ? pair[1]
-      : [pair[0], pair[1]];
+    const value: IteratorValue =
+      this.#kind === "key" ? pair[0] : this.#kind === "value" ? pair[1] : [pair[0], pair[1]];
     return { value, done: false };
   }
 
@@ -701,16 +693,12 @@ function inspectIterator(
   for (let i = start; i < list.length; i++) {
     const pair = list[i];
     if (pair === undefined) continue;
-    const value: string | [string, string] = kind === "key"
-      ? pair[0]
-      : kind === "value"
-      ? pair[1]
-      : [pair[0], pair[1]];
+    const value: string | [string, string] =
+      kind === "key" ? pair[0] : kind === "value" ? pair[1] : [pair[0], pair[1]];
     entries[i - start] = inspect(value, options);
   }
   const inline = entries.join(", ");
-  const body = inline.length > (options.breakLength ?? 80)
-    ? `\n  ${entries.join(",\n  ")}`
-    : ` ${inline}`;
+  const body =
+    inline.length > (options.breakLength ?? 80) ? `\n  ${entries.join(",\n  ")}` : ` ${inline}`;
   return `URLSearchParams Iterator {${body} }`;
 }

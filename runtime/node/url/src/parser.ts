@@ -23,6 +23,7 @@
 
 import { ERR_INVALID_URL } from "../../internal/errors.ts";
 import { decodeIn } from "../../buffer/src/encodings.ts";
+import { utf8Length, utf8Write } from "../../../web-platform/src/core/utf8.ts";
 import { domainToASCII } from "./idna.ts";
 
 export function isSpecialScheme(scheme: string): boolean {
@@ -41,12 +42,16 @@ export function isSpecialScheme(scheme: string): boolean {
 
 function defaultPort(scheme: string): number | null {
   switch (scheme) {
-    case "ftp": return 21;
+    case "ftp":
+      return 21;
     case "http":
-    case "ws": return 80;
+    case "ws":
+      return 80;
     case "https":
-    case "wss": return 443;
-    default: return null;
+    case "wss":
+      return 443;
+    default:
+      return null;
   }
 }
 
@@ -68,9 +73,7 @@ export interface UrlRecord {
   fragment: string | null;
 }
 
-export function hasOpaquePath(
-  url: UrlRecord,
-): url is UrlRecord & { path: string } {
+export function hasOpaquePath(url: UrlRecord): url is UrlRecord & { path: string } {
   return typeof url.path === "string";
 }
 
@@ -173,8 +176,7 @@ function splitCodePoints(input: string): string[] {
 
 /** `C:` or `C|` — the shape that makes a Windows drive letter. */
 function isWindowsDriveLetter(s: string): boolean {
-  return s.length === 2 && isAsciiAlpha(s.charCodeAt(0)) &&
-    (s[1] === ":" || s[1] === "|");
+  return s.length === 2 && isAsciiAlpha(s.charCodeAt(0)) && (s[1] === ":" || s[1] === "|");
 }
 
 /** The same, but only `C:` counts once the URL is normalised. */
@@ -184,8 +186,11 @@ function isNormalizedWindowsDriveLetter(s: string): boolean {
 
 function startsWithWindowsDriveLetter(input: string, at: number): boolean {
   const rest = input.length - at;
-  return rest >= 2 && isWindowsDriveLetter(input.slice(at, at + 2)) &&
-    (rest === 2 || "/\\?#".includes(input[at + 2] ?? ""));
+  return (
+    rest >= 2 &&
+    isWindowsDriveLetter(input.slice(at, at + 2)) &&
+    (rest === 2 || "/\\?#".includes(input[at + 2] ?? ""))
+  );
 }
 
 function isSingleDot(segment: string): boolean {
@@ -217,18 +222,23 @@ export function percentEncodeScalar(codePoint: number): string {
     return percentEncodedByte(codePoint);
   }
   if (codePoint < 0x800) {
-    return percentEncodedByte(0xc0 | (codePoint >> 6)) +
-      percentEncodedByte(0x80 | (codePoint & 0x3f));
+    return (
+      percentEncodedByte(0xc0 | (codePoint >> 6)) + percentEncodedByte(0x80 | (codePoint & 0x3f))
+    );
   }
   if (codePoint < 0x10000) {
-    return percentEncodedByte(0xe0 | (codePoint >> 12)) +
+    return (
+      percentEncodedByte(0xe0 | (codePoint >> 12)) +
       percentEncodedByte(0x80 | ((codePoint >> 6) & 0x3f)) +
-      percentEncodedByte(0x80 | (codePoint & 0x3f));
+      percentEncodedByte(0x80 | (codePoint & 0x3f))
+    );
   }
-  return percentEncodedByte(0xf0 | (codePoint >> 18)) +
+  return (
+    percentEncodedByte(0xf0 | (codePoint >> 18)) +
     percentEncodedByte(0x80 | ((codePoint >> 12) & 0x3f)) +
     percentEncodedByte(0x80 | ((codePoint >> 6) & 0x3f)) +
-    percentEncodedByte(0x80 | (codePoint & 0x3f));
+    percentEncodedByte(0x80 | (codePoint & 0x3f))
+  );
 }
 
 function upperHexDigit(value: number): string {
@@ -243,36 +253,9 @@ function lowerHexDigit(value: number): string {
   return String.fromCharCode(value < 10 ? 0x30 + value : 0x61 + value - 10);
 }
 
-function utf8ByteLength(str: string): number {
-  let length = 0;
-  for (const ch of str) {
-    const c = ch.codePointAt(0) ?? 0;
-    length += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
-  }
-  return length;
-}
-
 function utf8Bytes(str: string): Uint8Array {
-  const out = new Uint8Array(utf8ByteLength(str));
-  let offset = 0;
-  for (const ch of str) {
-    const c = ch.codePointAt(0) ?? 0;
-    if (c < 0x80) {
-      out[offset++] = c;
-    } else if (c < 0x800) {
-      out[offset++] = 0xc0 | (c >> 6);
-      out[offset++] = 0x80 | (c & 0x3f);
-    } else if (c < 0x10000) {
-      out[offset++] = 0xe0 | (c >> 12);
-      out[offset++] = 0x80 | ((c >> 6) & 0x3f);
-      out[offset++] = 0x80 | (c & 0x3f);
-    } else {
-      out[offset++] = 0xf0 | (c >> 18);
-      out[offset++] = 0x80 | ((c >> 12) & 0x3f);
-      out[offset++] = 0x80 | ((c >> 6) & 0x3f);
-      out[offset++] = 0x80 | (c & 0x3f);
-    }
-  }
+  const out = new Uint8Array(utf8Length(str));
+  utf8Write(out, str, 0, out.length);
   return out;
 }
 
@@ -290,13 +273,25 @@ function inC0ControlPercentEncodeSet(c: number): boolean {
 }
 
 function inFragmentPercentEncodeSet(c: number): boolean {
-  return inC0ControlPercentEncodeSet(c) ||
-    c === 0x20 || c === 0x22 || c === 0x3c || c === 0x3e || c === 0x60;
+  return (
+    inC0ControlPercentEncodeSet(c) ||
+    c === 0x20 ||
+    c === 0x22 ||
+    c === 0x3c ||
+    c === 0x3e ||
+    c === 0x60
+  );
 }
 
 function inQueryPercentEncodeSet(c: number): boolean {
-  return inC0ControlPercentEncodeSet(c) ||
-    c === 0x20 || c === 0x22 || c === 0x23 || c === 0x3c || c === 0x3e;
+  return (
+    inC0ControlPercentEncodeSet(c) ||
+    c === 0x20 ||
+    c === 0x22 ||
+    c === 0x23 ||
+    c === 0x3c ||
+    c === 0x3e
+  );
 }
 
 function inSpecialQueryPercentEncodeSet(c: number): boolean {
@@ -304,20 +299,27 @@ function inSpecialQueryPercentEncodeSet(c: number): boolean {
 }
 
 function inPathPercentEncodeSet(c: number): boolean {
-  return inQueryPercentEncodeSet(c) ||
-    c === 0x3f || c === 0x5e || c === 0x60 || c === 0x7b || c === 0x7d;
+  return (
+    inQueryPercentEncodeSet(c) || c === 0x3f || c === 0x5e || c === 0x60 || c === 0x7b || c === 0x7d
+  );
 }
 
 function inUserinfoPercentEncodeSet(c: number): boolean {
-  return inPathPercentEncodeSet(c) ||
-    c === 0x2f || c === 0x3a || c === 0x3b || c === 0x3d || c === 0x40 ||
-    (c >= 0x5b && c <= 0x5e) || c === 0x7c;
+  return (
+    inPathPercentEncodeSet(c) ||
+    c === 0x2f ||
+    c === 0x3a ||
+    c === 0x3b ||
+    c === 0x3d ||
+    c === 0x40 ||
+    (c >= 0x5b && c <= 0x5e) ||
+    c === 0x7c
+  );
 }
 
 /** Everything a URL component may not carry when it stands on its own. */
 function inComponentPercentEncodeSet(c: number): boolean {
-  return inUserinfoPercentEncodeSet(c) ||
-    (c >= 0x24 && c <= 0x26) || c === 0x2b || c === 0x2c;
+  return inUserinfoPercentEncodeSet(c) || (c >= 0x24 && c <= 0x26) || c === 0x2b || c === 0x2c;
 }
 
 /**
@@ -328,8 +330,7 @@ function inComponentPercentEncodeSet(c: number): boolean {
  * and those characters have meant something in some of it.
  */
 export function inUrlencodedPercentEncodeSet(c: number): boolean {
-  return inComponentPercentEncodeSet(c) ||
-    c === 0x21 || (c >= 0x27 && c <= 0x29) || c === 0x7e;
+  return inComponentPercentEncodeSet(c) || c === 0x21 || (c >= 0x27 && c <= 0x29) || c === 0x7e;
 }
 
 /**
@@ -362,8 +363,13 @@ export function percentDecodeBytes(input: string): Uint8Array {
     const byte = raw[i];
     const firstHex = raw[i + 1];
     const secondHex = raw[i + 2];
-    if (byte === 0x25 && firstHex !== undefined && secondHex !== undefined &&
-        isAsciiHexDigit(firstHex) && isAsciiHexDigit(secondHex)) {
+    if (
+      byte === 0x25 &&
+      firstHex !== undefined &&
+      secondHex !== undefined &&
+      isAsciiHexDigit(firstHex) &&
+      isAsciiHexDigit(secondHex)
+    ) {
       decodedLength -= 2;
       i += 2;
     }
@@ -376,8 +382,13 @@ export function percentDecodeBytes(input: string): Uint8Array {
     if (byte === undefined) break;
     const firstHex = raw[i + 1];
     const secondHex = raw[i + 2];
-    if (byte === 0x25 && firstHex !== undefined && secondHex !== undefined &&
-        isAsciiHexDigit(firstHex) && isAsciiHexDigit(secondHex)) {
+    if (
+      byte === 0x25 &&
+      firstHex !== undefined &&
+      secondHex !== undefined &&
+      isAsciiHexDigit(firstHex) &&
+      isAsciiHexDigit(secondHex)
+    ) {
       bytes[output++] = asciiDigitValue(firstHex) * 16 + asciiDigitValue(secondHex);
       i += 2;
     } else {
@@ -749,8 +760,15 @@ type State = (typeof State)[keyof typeof State];
 
 /** Which component `parse` was asked to start at, when overriding a setter. */
 export type StateOverride =
-  | "scheme" | "username" | "password" | "hostname" | "port"
-  | "pathname" | "search" | "hash" | "host";
+  | "scheme"
+  | "username"
+  | "password"
+  | "hostname"
+  | "port"
+  | "pathname"
+  | "search"
+  | "hash"
+  | "host";
 
 function newRecord(): UrlRecord {
   return {
@@ -775,8 +793,12 @@ function shortenPath(url: UrlRecord): void {
   if (path.length === 0) return;
   // A Windows drive letter is not a path segment that `..` can climb out of.
   const first = path[0];
-  if (url.scheme === "file" && path.length === 1 &&
-      first !== undefined && isNormalizedWindowsDriveLetter(first)) {
+  if (
+    url.scheme === "file" &&
+    path.length === 1 &&
+    first !== undefined &&
+    isNormalizedWindowsDriveLetter(first)
+  ) {
     return;
   }
   path.pop();
@@ -1030,7 +1052,10 @@ export function basicUrlParse(
           break;
         }
         if (
-          c === undefined || c === "/" || c === "?" || c === "#" ||
+          c === undefined ||
+          c === "/" ||
+          c === "?" ||
+          c === "#" ||
           (isSpecialScheme(url.scheme) && c === "\\")
         ) {
           if (atSignSeen && buffer === "") return fail();
@@ -1060,7 +1085,10 @@ export function basicUrlParse(
           break;
         }
         if (
-          c === undefined || c === "/" || c === "?" || c === "#" ||
+          c === undefined ||
+          c === "/" ||
+          c === "?" ||
+          c === "#" ||
           (isSpecialScheme(url.scheme) && c === "\\")
         ) {
           pointer--;
@@ -1088,8 +1116,12 @@ export function basicUrlParse(
           break;
         }
         if (
-          c === undefined || c === "/" || c === "?" || c === "#" ||
-          (isSpecialScheme(url.scheme) && c === "\\") || isOverride
+          c === undefined ||
+          c === "/" ||
+          c === "?" ||
+          c === "#" ||
+          (isSpecialScheme(url.scheme) && c === "\\") ||
+          isOverride
         ) {
           if (buffer !== "") {
             const port = Number(buffer);
@@ -1155,9 +1187,11 @@ export function basicUrlParse(
           const firstBaseSegment = basePath[0];
           // `/x` against `file://h/C:/a` keeps the drive: on Windows an
           // absolute path is absolute within a drive, not above it.
-          if (!startsWithWindowsDriveLetter(input, pointer) &&
-              firstBaseSegment !== undefined &&
-              isNormalizedWindowsDriveLetter(firstBaseSegment)) {
+          if (
+            !startsWithWindowsDriveLetter(input, pointer) &&
+            firstBaseSegment !== undefined &&
+            isNormalizedWindowsDriveLetter(firstBaseSegment)
+          ) {
             hierarchicalPath(url).push(firstBaseSegment);
           }
         }
@@ -1223,7 +1257,8 @@ export function basicUrlParse(
       }
 
       case State.Path: {
-        const atEnd = c === undefined ||
+        const atEnd =
+          c === undefined ||
           c === "/" ||
           (isSpecialScheme(url.scheme) && c === "\\") ||
           (!isOverride && (c === "?" || c === "#"));
@@ -1302,8 +1337,8 @@ export function basicUrlParse(
 
       case State.Fragment: {
         if (c !== undefined) {
-          url.fragment = (url.fragment ?? "") +
-            utf8PercentEncodeString(c, inFragmentPercentEncodeSet);
+          url.fragment =
+            (url.fragment ?? "") + utf8PercentEncodeString(c, inFragmentPercentEncodeSet);
         }
         break;
       }

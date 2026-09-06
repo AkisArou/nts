@@ -48,10 +48,7 @@ function rejectEncodedSeparators(pathname: string, url: URL, windows: boolean): 
       );
     }
     if (windows && pathname[n + 1] === "5" && third === 99) {
-      throw new ERR_INVALID_FILE_URL_PATH(
-        "must not include encoded \\ or / characters",
-        url,
-      );
+      throw new ERR_INVALID_FILE_URL_PATH("must not include encoded \\ or / characters", url);
     }
   }
 }
@@ -139,9 +136,7 @@ function encodePathChars(filepath: string, windows: boolean): string {
       code === 0x7e || // ~
       code === 0x7f ||
       (!windows && code === CHAR_BACKWARD_SLASH);
-    encoded += unsafeAscii
-      ? `%${code.toString(16).toUpperCase().padStart(2, "0")}`
-      : character;
+    encoded += unsafeAscii ? `%${code.toString(16).toUpperCase().padStart(2, "0")}` : character;
   }
   return encoded;
 }
@@ -172,7 +167,7 @@ export function pathToFileURL(filepath: string, options?: FileUrlOptions): URL {
   validateString(filepath, "path");
   const windows = options?.windows ?? isWindowsPlatform();
   const isUNC = windows && filepath.startsWith("\\\\");
-  let resolved = isUNC ? filepath : (windows ? win32.resolve(filepath) : posix.resolve(filepath));
+  let resolved = isUNC ? filepath : windows ? win32.resolve(filepath) : posix.resolve(filepath);
 
   const isExtendedLocalPath =
     windows && resolved.startsWith("\\\\?\\") && !resolved.startsWith("\\\\?\\UNC\\");

@@ -15,11 +15,7 @@
 // look like premature optimisation and are not: `url.parse` is on the hot path
 // of every HTTP server written before 2018.
 
-import {
-  ERR_INVALID_ARG_TYPE,
-  ERR_INVALID_URI,
-  ERR_INVALID_URL,
-} from "../../internal/errors.ts";
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_URI, ERR_INVALID_URL } from "../../internal/errors.ts";
 import { validateObject, validateString } from "../../internal/validators.ts";
 import {
   parse as parseQuery,
@@ -57,24 +53,25 @@ const CHAR_NO_BREAK_SPACE = 160;
 const CHAR_ZERO_WIDTH_NOBREAK_SPACE = 0xfeff;
 
 function isAsciiProtocolCode(code: number): boolean {
-  return (code >= 0x30 && code <= 0x39) ||
+  return (
+    (code >= 0x30 && code <= 0x39) ||
     (code >= 0x41 && code <= 0x5a) ||
     (code >= 0x61 && code <= 0x7a) ||
-    code === 0x2b || code === 0x2d || code === 0x2e;
+    code === 0x2b ||
+    code === 0x2d ||
+    code === 0x2e
+  );
 }
 
 function leadingProtocol(input: string): string | null {
   let end = 0;
   while (end < input.length && isAsciiProtocolCode(input.charCodeAt(end))) end++;
-  return end > 0 && input.charCodeAt(end) === CHAR_COLON
-    ? input.slice(0, end + 1)
-    : null;
+  return end > 0 && input.charCodeAt(end) === CHAR_COLON ? input.slice(0, end + 1) : null;
 }
 
 /** Whether `//user@host` has non-empty text on both sides of the first `@`. */
 function startsWithCredentialHost(input: string): boolean {
-  if (input.charCodeAt(0) !== CHAR_FORWARD_SLASH ||
-      input.charCodeAt(1) !== CHAR_FORWARD_SLASH) {
+  if (input.charCodeAt(0) !== CHAR_FORWARD_SLASH || input.charCodeAt(1) !== CHAR_FORWARD_SLASH) {
     return false;
   }
 
@@ -90,11 +87,19 @@ function startsWithCredentialHost(input: string): boolean {
 }
 
 function isEcmaWhitespace(code: number): boolean {
-  return (code >= 0x09 && code <= 0x0d) ||
-    code === 0x20 || code === 0xa0 || code === 0x1680 ||
+  return (
+    (code >= 0x09 && code <= 0x0d) ||
+    code === 0x20 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
     (code >= 0x2000 && code <= 0x200a) ||
-    code === 0x2028 || code === 0x2029 || code === 0x202f ||
-    code === 0x205f || code === 0x3000 || code === 0xfeff;
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
 }
 
 interface SimplePath {
@@ -104,9 +109,10 @@ interface SimplePath {
 
 /** A path with no scheme, host or fragment: the common case, taken whole. */
 function parseSimplePath(input: string): SimplePath | null {
-  if (input.charCodeAt(0) !== CHAR_FORWARD_SLASH ||
-      (input.charCodeAt(1) === CHAR_FORWARD_SLASH &&
-       input.charCodeAt(2) === CHAR_FORWARD_SLASH)) {
+  if (
+    input.charCodeAt(0) !== CHAR_FORWARD_SLASH ||
+    (input.charCodeAt(1) === CHAR_FORWARD_SLASH && input.charCodeAt(2) === CHAR_FORWARD_SLASH)
+  ) {
     return null;
   }
 
@@ -128,9 +134,7 @@ function trailingPort(host: string): string | null {
     if (code < 0x30 || code > 0x39) break;
     colon--;
   }
-  return colon >= 0 && host.charCodeAt(colon) === CHAR_COLON
-    ? host.slice(colon)
-    : null;
+  return colon >= 0 && host.charCodeAt(colon) === CHAR_COLON ? host.slice(colon) : null;
 }
 
 const hostnameMaxLen = 255;
@@ -262,9 +266,8 @@ export class Url {
     for (let i = 0, inWs = false, split = false; i < url.length; ++i) {
       const code = url.charCodeAt(i);
 
-      const isWs = code < 33 ||
-        code === CHAR_NO_BREAK_SPACE ||
-        code === CHAR_ZERO_WIDTH_NOBREAK_SPACE;
+      const isWs =
+        code < 33 || code === CHAR_NO_BREAK_SPACE || code === CHAR_ZERO_WIDTH_NOBREAK_SPACE;
       if (start === -1) {
         if (isWs) continue;
         lastPos = start = i;
@@ -323,9 +326,7 @@ export class Url {
         this.pathname = simplePath.pathname;
         if (simplePath.search !== null) {
           this.search = simplePath.search;
-          this.query = parseQueryString
-            ? parseQuery(this.search.slice(1))
-            : this.search.slice(1);
+          this.query = parseQueryString ? parseQuery(this.search.slice(1)) : this.search.slice(1);
         } else if (parseQueryString) {
           this.search = null;
           // Compiled records have no prototype, so an empty typed record is
@@ -348,8 +349,8 @@ export class Url {
     // -- that is how a browser resolves a protocol-relative reference.
     let slashes = false;
     if (slashesDenoteHost || proto || startsWithCredentialHost(rest)) {
-      slashes = rest.charCodeAt(0) === CHAR_FORWARD_SLASH &&
-        rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
+      slashes =
+        rest.charCodeAt(0) === CHAR_FORWARD_SLASH && rest.charCodeAt(1) === CHAR_FORWARD_SLASH;
       if (slashes && !(proto && isJavascriptProtocol(lowerProto ?? ""))) {
         rest = rest.slice(2);
         this.slashes = true;
@@ -575,7 +576,8 @@ export class Url {
       result.protocol = relative.protocol;
       if (
         !relative.host &&
-        relative.protocol !== "file" && relative.protocol !== "file:" &&
+        relative.protocol !== "file" &&
+        relative.protocol !== "file:" &&
         !isJavascriptProtocol(relative.protocol)
       ) {
         const relPath = (relative.pathname || "").split("/");
@@ -633,7 +635,7 @@ export class Url {
         }
         relative.host = null;
       }
-      mustEndAbs &&= (relPath[0] === "" || srcPath[0] === "");
+      mustEndAbs &&= relPath[0] === "" || srcPath[0] === "";
     }
 
     if (isRelAbs) {
@@ -663,9 +665,8 @@ export class Url {
         result.hostname = result.host = srcPath.shift() ?? null;
         // The credentials can end up stuck in the host, as in
         // `resolveObject('mailto:local1@domain1', 'local2@domain2')`.
-        const authInHost = result.host && result.host.indexOf("@") > 0
-          ? result.host.split("@")
-          : false;
+        const authInHost =
+          result.host && result.host.indexOf("@") > 0 ? result.host.split("@") : false;
         if (authInHost) {
           result.auth = authInHost.shift() ?? null;
           result.host = result.hostname = authInHost.shift() ?? null;
@@ -691,8 +692,8 @@ export class Url {
     // anything else does not.
     let last = srcPath[srcPath.length - 1];
     const hasTrailingSlash =
-      (((result.host || relative.host || srcPath.length > 1) &&
-        (last === "." || last === "..")) || last === "");
+      ((result.host || relative.host || srcPath.length > 1) && (last === "." || last === "..")) ||
+      last === "";
 
     // Backwards, so that removing a segment does not disturb the ones not yet
     // examined. `up` counts the `..` that walked past the root.
@@ -724,14 +725,17 @@ export class Url {
       srcPath.push("");
     }
 
-    const isAbsolute = srcPath[0] === "" || (srcPath[0] !== undefined && srcPath[0].charAt(0) === "/");
+    const isAbsolute =
+      srcPath[0] === "" || (srcPath[0] !== undefined && srcPath[0].charAt(0) === "/");
 
     if (noLeadingSlashes) {
-      result.hostname = result.host =
-        isAbsolute ? "" : srcPath.length ? srcPath.shift() ?? "" : "";
-      const authInHost = result.host && result.host.indexOf("@") > 0
-        ? result.host.split("@")
-        : false;
+      result.hostname = result.host = isAbsolute
+        ? ""
+        : srcPath.length
+          ? (srcPath.shift() ?? "")
+          : "";
+      const authInHost =
+        result.host && result.host.indexOf("@") > 0 ? result.host.split("@") : false;
       if (authInHost) {
         result.auth = authInHost.shift() ?? null;
         result.host = result.hostname = authInHost.shift() ?? null;
@@ -794,11 +798,11 @@ function formatLegacyUrl(url: LegacyUrlLike): string {
   if (url.host) {
     host = auth + url.host;
   } else if (url.hostname) {
-    host = auth + (
-      url.hostname.includes(":") && !isIpv6Hostname(url.hostname)
+    host =
+      auth +
+      (url.hostname.includes(":") && !isIpv6Hostname(url.hostname)
         ? `[${url.hostname}]`
-        : url.hostname
-    );
+        : url.hostname);
     if (url.port) {
       host += `:${url.port}`;
     }
@@ -848,8 +852,10 @@ function formatLegacyUrl(url: LegacyUrlLike): string {
 }
 
 function isIpv6Hostname(hostname: string): boolean {
-  return hostname.charCodeAt(0) === CHAR_LEFT_SQUARE_BRACKET &&
-    hostname.charCodeAt(hostname.length - 1) === CHAR_RIGHT_SQUARE_BRACKET;
+  return (
+    hostname.charCodeAt(0) === CHAR_LEFT_SQUARE_BRACKET &&
+    hostname.charCodeAt(hostname.length - 1) === CHAR_RIGHT_SQUARE_BRACKET
+  );
 }
 
 let warnInvalidPort = true;
@@ -865,7 +871,8 @@ let warnInvalidPort = true;
 function getHostname(self: Url, rest: string, hostname: string, url: string): string {
   for (let i = 0; i < hostname.length; ++i) {
     const code = hostname.charCodeAt(i);
-    const isValid = code !== CHAR_FORWARD_SLASH &&
+    const isValid =
+      code !== CHAR_FORWARD_SLASH &&
       code !== CHAR_BACKWARD_SLASH &&
       code !== CHAR_HASH &&
       code !== CHAR_QUESTION_MARK &&
@@ -894,19 +901,132 @@ function getHostname(self: Url, rest: string, hostname: string, url: string): st
  * parsed, and upstream measured the difference.
  */
 const escapedCodes: string[] = [
-  /* 0 - 9 */ "", "", "", "", "", "", "", "", "", "%09",
-  /* 10 - 19 */ "%0A", "", "", "%0D", "", "", "", "", "", "",
-  /* 20 - 29 */ "", "", "", "", "", "", "", "", "", "",
-  /* 30 - 39 */ "", "", "%20", "", "%22", "", "", "", "", "%27",
-  /* 40 - 49 */ "", "", "", "", "", "", "", "", "", "",
-  /* 50 - 59 */ "", "", "", "", "", "", "", "", "", "",
-  /* 60 - 69 */ "%3C", "", "%3E", "", "", "", "", "", "", "",
-  /* 70 - 79 */ "", "", "", "", "", "", "", "", "", "",
-  /* 80 - 89 */ "", "", "", "", "", "", "", "", "", "",
-  /* 90 - 99 */ "", "", "%5C", "", "%5E", "", "%60", "", "", "",
-  /* 100 - 109 */ "", "", "", "", "", "", "", "", "", "",
-  /* 110 - 119 */ "", "", "", "", "", "", "", "", "", "",
-  /* 120 - 125 */ "", "", "", "%7B", "%7C", "%7D",
+  /* 0 - 9 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "%09",
+  /* 10 - 19 */ "%0A",
+  "",
+  "",
+  "%0D",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 20 - 29 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 30 - 39 */ "",
+  "",
+  "%20",
+  "",
+  "%22",
+  "",
+  "",
+  "",
+  "",
+  "%27",
+  /* 40 - 49 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 50 - 59 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 60 - 69 */ "%3C",
+  "",
+  "%3E",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 70 - 79 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 80 - 89 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 90 - 99 */ "",
+  "",
+  "%5C",
+  "",
+  "%5E",
+  "",
+  "%60",
+  "",
+  "",
+  "",
+  /* 100 - 109 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 110 - 119 */ "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  /* 120 - 125 */ "",
+  "",
+  "",
+  "%7B",
+  "%7C",
+  "%7D",
 ];
 
 function autoEscapeStr(rest: string): string {
@@ -930,12 +1050,18 @@ function autoEscapeStr(rest: string): string {
  * `! - . _ ~ ' ( ) * :` and the alphanumerics.
  */
 function isUnescapedAuthCode(code: number): boolean {
-  return (code >= 0x30 && code <= 0x39) ||
+  return (
+    (code >= 0x30 && code <= 0x39) ||
     (code >= 0x41 && code <= 0x5a) ||
     (code >= 0x61 && code <= 0x7a) ||
-    code === 0x21 || (code >= 0x27 && code <= 0x2a) ||
-    code === 0x2d || code === 0x2e || code === 0x3a ||
-    code === 0x5f || code === 0x7e;
+    code === 0x21 ||
+    (code >= 0x27 && code <= 0x2a) ||
+    code === 0x2d ||
+    code === 0x2e ||
+    code === 0x3a ||
+    code === 0x5f ||
+    code === 0x7e
+  );
 }
 
 function upperHexDigit(code: number): string {
@@ -965,13 +1091,13 @@ function encodeAuth(str: string): string {
 
     if (c < 0x800) {
       lastPos = i + 1;
-      out += percentEncodedByte(0xc0 | (c >> 6)) +
-        percentEncodedByte(0x80 | (c & 0x3f));
+      out += percentEncodedByte(0xc0 | (c >> 6)) + percentEncodedByte(0x80 | (c & 0x3f));
       continue;
     }
     if (c < 0xd800 || c >= 0xe000) {
       lastPos = i + 1;
-      out += percentEncodedByte(0xe0 | (c >> 12)) +
+      out +=
+        percentEncodedByte(0xe0 | (c >> 12)) +
         percentEncodedByte(0x80 | ((c >> 6) & 0x3f)) +
         percentEncodedByte(0x80 | (c & 0x3f));
       continue;
@@ -984,7 +1110,8 @@ function encodeAuth(str: string): string {
     const c2 = str.charCodeAt(i) & 0x3ff;
     lastPos = i + 1;
     c = 0x10000 + (((c & 0x3ff) << 10) | c2);
-    out += percentEncodedByte(0xf0 | (c >> 18)) +
+    out +=
+      percentEncodedByte(0xf0 | (c >> 18)) +
       percentEncodedByte(0x80 | ((c >> 12) & 0x3f)) +
       percentEncodedByte(0x80 | ((c >> 6) & 0x3f)) +
       percentEncodedByte(0x80 | (c & 0x3f));
@@ -1097,7 +1224,7 @@ function formatWhatwg(
 function domainToUnicodeHost(host: string): string {
   // Only a Punycode label has anything to decode; anything else comes back
   // unchanged, so this is safe to apply unconditionally.
-  return host.startsWith("[") ? host : (domainToUnicode(host) || host);
+  return host.startsWith("[") ? host : domainToUnicode(host) || host;
 }
 
 export function resolve(source: string, relative: string): string {

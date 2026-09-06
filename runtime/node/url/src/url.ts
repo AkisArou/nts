@@ -31,6 +31,7 @@ import {
   revokeObjectURL as revokeBlobObjectURL,
 } from "../../buffer/src/blob.ts";
 import { customInspectSymbol, inspect, type InspectOptions } from "../../util/src/inspect.ts";
+import { coerceToUSVString } from "../../../web-platform/src/core/webidl.ts";
 
 export class URL implements SearchParamsOwner {
   #record: UrlRecord;
@@ -43,10 +44,9 @@ export class URL implements SearchParamsOwner {
     }
     const input = given[0];
     const base = given[1];
-    const baseString = base === undefined ? undefined
-      : base instanceof URL ? base.href
-      : toUSVString(base);
-    this.#record = parseUrl(toUSVString(input), baseString);
+    const baseString =
+      base === undefined ? undefined : base instanceof URL ? base.href : coerceToUSVString(base);
+    this.#record = parseUrl(coerceToUSVString(input), baseString);
     this.#searchParams = new URLSearchParams();
     this.#searchParams.bindToOwner(this);
   }
@@ -59,10 +59,9 @@ export class URL implements SearchParamsOwner {
     }
     const input = given[0];
     const base = given[1];
-    const text = toUSVString(input);
-    const baseString = base === undefined ? undefined
-      : base instanceof URL ? base.href
-      : toUSVString(base);
+    const text = coerceToUSVString(input);
+    const baseString =
+      base === undefined ? undefined : base instanceof URL ? base.href : coerceToUSVString(base);
     try {
       return new URL(text, baseString);
     } catch {
@@ -77,10 +76,9 @@ export class URL implements SearchParamsOwner {
     }
     const input = given[0];
     const base = given[1];
-    const text = toUSVString(input);
-    const baseString = base === undefined ? undefined
-      : base instanceof URL ? base.href
-      : toUSVString(base);
+    const text = coerceToUSVString(input);
+    const baseString =
+      base === undefined ? undefined : base instanceof URL ? base.href : coerceToUSVString(base);
     return URL.parse(text, baseString) !== null;
   }
 
@@ -114,7 +112,7 @@ export class URL implements SearchParamsOwner {
     // A whole new URL, so the parse is unconditional and a failure throws --
     // unlike every other setter, because there is nothing left to keep.
     URL.#mutationBrandCheck(this);
-    this.#record = parseUrl(toUSVString(value));
+    this.#record = parseUrl(coerceToUSVString(value));
     this.#searchParams.refreshFromOwner();
   }
 
@@ -140,7 +138,7 @@ export class URL implements SearchParamsOwner {
   }
 
   set protocol(value: string) {
-    basicUrlParse(`${toUSVString(value)}:`, null, this.#record, "scheme");
+    basicUrlParse(`${coerceToUSVString(value)}:`, null, this.#record, "scheme");
   }
 
   get username(): string {
@@ -150,7 +148,7 @@ export class URL implements SearchParamsOwner {
   set username(value: string) {
     // A URL with no host has nowhere to put credentials.
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    this.#record.username = percentEncodeUserinfo(toUSVString(value));
+    this.#record.username = percentEncodeUserinfo(coerceToUSVString(value));
   }
 
   get password(): string {
@@ -159,7 +157,7 @@ export class URL implements SearchParamsOwner {
 
   set password(value: string) {
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    this.#record.password = percentEncodeUserinfo(toUSVString(value));
+    this.#record.password = percentEncodeUserinfo(coerceToUSVString(value));
   }
 
   get host(): string {
@@ -168,7 +166,7 @@ export class URL implements SearchParamsOwner {
 
   set host(value: string) {
     if (hasOpaquePath(this.#record)) return;
-    basicUrlParse(toUSVString(value), null, this.#record, "host");
+    basicUrlParse(coerceToUSVString(value), null, this.#record, "host");
   }
 
   get hostname(): string {
@@ -177,7 +175,7 @@ export class URL implements SearchParamsOwner {
 
   set hostname(value: string) {
     if (hasOpaquePath(this.#record)) return;
-    basicUrlParse(toUSVString(value), null, this.#record, "hostname");
+    basicUrlParse(coerceToUSVString(value), null, this.#record, "hostname");
   }
 
   get port(): string {
@@ -186,7 +184,7 @@ export class URL implements SearchParamsOwner {
 
   set port(value: string) {
     if (cannotHaveCredentialsOrPort(this.#record)) return;
-    const text = toUSVString(value);
+    const text = coerceToUSVString(value);
     if (text === "") {
       this.#record.port = null;
       return;
@@ -201,7 +199,7 @@ export class URL implements SearchParamsOwner {
   set pathname(value: string) {
     if (hasOpaquePath(this.#record)) return;
     this.#record.path = [];
-    basicUrlParse(toUSVString(value), null, this.#record, "pathname");
+    basicUrlParse(coerceToUSVString(value), null, this.#record, "pathname");
   }
 
   get search(): string {
@@ -211,7 +209,7 @@ export class URL implements SearchParamsOwner {
   }
 
   set search(value: string) {
-    let text = toUSVString(value);
+    let text = coerceToUSVString(value);
     if (text === "") {
       this.#record.query = null;
     } else {
@@ -234,7 +232,7 @@ export class URL implements SearchParamsOwner {
   }
 
   set hash(value: string) {
-    let text = toUSVString(value);
+    let text = coerceToUSVString(value);
     if (text === "") {
       this.#record.fragment = null;
       return;
@@ -259,7 +257,8 @@ export class URL implements SearchParamsOwner {
       return this;
     }
     const params = this.#searchParams[customInspectSymbol](depth - 1, options);
-    return `URL {\n` +
+    return (
+      `URL {\n` +
       `  href: ${inspect(this.href, options)},\n` +
       `  origin: ${inspect(this.origin, options)},\n` +
       `  protocol: ${inspect(this.protocol, options)},\n` +
@@ -272,7 +271,8 @@ export class URL implements SearchParamsOwner {
       `  search: ${inspect(this.search, options)},\n` +
       `  searchParams: ${params},\n` +
       `  hash: ${inspect(this.hash, options)}\n` +
-      `}`;
+      `}`
+    );
   }
 
   static #brandCheck(value: unknown): asserts value is URL {
@@ -288,11 +288,6 @@ export class URL implements SearchParamsOwner {
       );
     }
   }
-}
-
-/** Web IDL's `USVString`: stringify, then replace every lone surrogate. */
-function toUSVString(value: unknown): string {
-  return `${value}`.toWellFormed();
 }
 
 /**

@@ -20,6 +20,4 @@ export { URLSearchParams } from "./searchparams.ts";
 export { fileURLToPath, pathToFileURL, urlToHttpOptions } from "./fileurl.ts";
 export { domainToASCII, domainToUnicode };
 
-export {
-  Url, parse, format, resolve, resolveObject,
-} from "./legacy.ts";
+export { Url, parse, format, resolve, resolveObject } from "./legacy.ts";
