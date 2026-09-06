@@ -1,0 +1,28 @@
+ideal 17
+allocated 34
+because Argued before measuring.
+because
+because Allocations: thirty-four, two per iteration. A buffer is an `NtsBuffer`
+because struct and a separate block of bytes, and each is counted by its own
+because `nts_note_allocation` -- the block the way a grown array's block is,
+because taken where it is taken and given back in `nts_free_storage`.
+because
+because The separation is not an efficiency. An array's elements sit inline
+because after its header, and a buffer's bytes cannot: a resizable buffer
+because changes length, and a view over it must not be invalidated by the
+because bytes moving. So the second allocation is what the view model costs
+because before a single view exists, and this is where that price is written
+because down rather than argued about.
+because
+because Operations: seventeen. The buffer is owned where it is produced and
+because released where it dies, one iteration later, which is the shape a
+because value that lives and dies inside one block already has -- there is
+because nothing for the elision to remove.
+because
+because What this case is really guarding is that the seventeen are *there*.
+because A buffer that escape analysis placed in the frame would read zero
+because operations and look better, and would never reach `nts_free` -- so
+because `nts_free_storage` would never run and every one of those `calloc`
+because blocks would leak. Frame storage is correct for a struct that owns
+because nothing and wrong for one that owns a heap block. No answer this
+because program computes would change; only the leak check would see it.

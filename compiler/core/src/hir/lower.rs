@@ -3186,6 +3186,16 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Date));
     }
 
+    // An `ArrayBuffer`, for the same reason and on the same terms: it carries
+    // no element type, so there is nothing further to read. What varies about
+    // a buffer is its length and whether it is resizable, and both are runtime
+    // state rather than representation -- `ArrayBuffer` is one TypeScript type
+    // whether or not `maxByteLength` was passed, so a parameter declared
+    // `ArrayBuffer` may be either and the type cannot say which.
+    if named(snapshot, ty) == Some("ArrayBuffer") {
+        return Some(HirType::Managed(ManagedType::Buffer));
+    }
+
     // A provided error class used as a **value**. `lib.d.ts` declares
     // `TypeError` as a variable of type `TypeErrorConstructor`, so this is the
     // type a name's own mention has and the type a slot holding one is declared
@@ -14368,6 +14378,7 @@ impl<'a> FuncBuilder<'a> {
                 Some(self.lower_new_promise(id, ty, &payload))
             }
             HirType::Managed(ManagedType::Date) => Some(self.lower_new_date(id)),
+            HirType::Managed(ManagedType::Buffer) => Some(self.lower_new_buffer(id)),
             _ => None,
         }
     }
@@ -14403,6 +14414,221 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Date),
             &origin,
         ))
+    }
+
+    /// `new ArrayBuffer(n)` and `new ArrayBuffer(n, { maxByteLength: m })`.
+    ///
+    /// The length is `ToIndex`, which is two rules that look like one: the
+    /// value truncates toward zero, and *then* the result must be a
+    /// non-negative integer below 2^53. Guarding the raw argument gets the
+    /// boundary wrong in a way node makes visible -- `new ArrayBuffer(-0.5)`
+    /// is **0** and `new ArrayBuffer(-1.5)` is a `RangeError`, because the
+    /// first truncates to `-0` and the second to `-1`.
+    ///
+    /// So the test is `n <= -1`, not `n < 0`, and it needs no truncation
+    /// operation to be exact. `NaN` fails both comparisons and is allowed
+    /// through, which is right: `ToIntegerOrInfinity(NaN)` is zero and node
+    /// gives an empty buffer.
+    fn lower_new_buffer(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        let arguments = self.arguments_of(id);
+        let Some(first) = arguments.first() else {
+            // `new ArrayBuffer()` is a `TypeError` in the language rather than
+            // a zero-length buffer, and the checker rejects it before here.
+            return Err(self.unsupported(id, "a `new ArrayBuffer` with no length"));
+        };
+        let length = self.lower_expression(*first)?;
+        let length = self.coerce(length, &HirType::NUMBER, id)?;
+        self.guard_buffer_length(id, length, "Invalid array buffer length")?;
+        let origin = self.origin(id);
+
+        let Some(options) = arguments.get(1) else {
+            let buffer = self.call_runtime(
+                "nts_buffer_new",
+                vec![length],
+                HirType::Managed(ManagedType::Buffer),
+                &origin,
+            );
+            self.guard_allocated(id, buffer)?;
+            return Ok(buffer);
+        };
+        // Read at the construction site rather than lowered as a value: the
+        // options object has no representation and is not one -- it is
+        // syntax the constructor reads one property out of. An options bag
+        // that is not written here is refused rather than guessed at.
+        let Some(max_node) = self.literal_option(*options, "maxByteLength") else {
+            return Err(self.unsupported(
+                id,
+                "a `new ArrayBuffer` whose second argument is not an object literal \
+                 writing `maxByteLength`",
+            ));
+        };
+        let max = self.lower_expression(max_node)?;
+        let max = self.coerce(max, &HirType::NUMBER, id)?;
+        // The maximum has its own sentence. Node checks the length first and
+        // says "Invalid array buffer length", then the maximum and says
+        // "Invalid array buffer max length" -- and a program can tell which it
+        // got, so the order and the wording are both observable.
+        self.guard_buffer_length(id, max, "Invalid array buffer max length")?;
+        // And a length above its own maximum is the maximum's complaint, not
+        // the length's: `new ArrayBuffer(8, { maxByteLength: 4 })` reports the
+        // max message even though the length is what is out of range.
+        //
+        // Compared TRUNCATED, which is the whole of `ToIndex` being two rules
+        // rather than one. Against the raw values this rejected three shapes
+        // node accepts -- `(0, -0.5)`, `(0.5, 0)` and `(3.7, 3)` -- because
+        // `0 > -0.5` and `0.5 > 0` and `3.7 > 3` are all true and every one of
+        // them is a comparison the language never makes. What it compares is
+        // 0 with 0, 0 with 0, and 3 with 3.
+        // `nts_to_index` rather than a `Trunc`, because `ToIndex` calls NaN
+        // zero and truncation does not. With `Trunc`, `new ArrayBuffer(1, {
+        // maxByteLength: NaN })` compared 1 against NaN, which is false the
+        // way every comparison with NaN is false, and the `RangeError` node
+        // raises simply did not happen. The same helper decides the allocation
+        // size, so the two cannot drift apart about what a length is.
+        let length_index = self.call_runtime(
+            "nts_to_index",
+            vec![length],
+            HirType::NUMBER,
+            &origin,
+        );
+        let max_index = self.call_runtime("nts_to_index", vec![max], HirType::NUMBER, &origin);
+        let over = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: length_index,
+                rhs: max_index,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(id, over, "RangeError", "Invalid array buffer max length")?;
+        let buffer = self.call_runtime(
+            "nts_buffer_new_resizable",
+            vec![length, max],
+            HirType::Managed(ManagedType::Buffer),
+            &origin,
+        );
+        self.guard_allocated(id, buffer)?;
+        Ok(buffer)
+    }
+
+    /// A length the language allows and the machine cannot give.
+    ///
+    /// The runtime answers null rather than aborting, because node answers a
+    /// `RangeError` -- and a *different* one from the length check, because
+    /// they are different failures: "Invalid array buffer length" is what the
+    /// specification refuses, and "Array buffer allocation failed" is what this
+    /// machine could not do. Node's own boundary between them moves with how
+    /// much memory it has, which is why this compiler implements the rule and
+    /// lets the allocation be the allocation.
+    fn guard_allocated(&mut self, id: NodeId, buffer: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let null = self.push(
+            OpKind::ConstNull,
+            HirType::Managed(ManagedType::Buffer),
+            origin.clone(),
+        );
+        let failed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: buffer,
+                rhs: null,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(id, failed, "RangeError", "Array buffer allocation failed")
+    }
+
+    /// One property of an object literal written at a call site.
+    ///
+    /// For an options bag, which is syntax rather than a value: `{ maxByteLength: 16 }`
+    /// has no layout and never becomes an object.
+    fn literal_option(&self, options: NodeId, name: &str) -> Option<NodeId> {
+        if self.kind_of(options) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            return None;
+        }
+        self.children(options).into_iter().find_map(|member| {
+            if self.kind_of(member) != Some(syntax::PROPERTY_ASSIGNMENT) {
+                return None;
+            }
+            match self.children(member).as_slice() {
+                [key, value] if self.literal_name(*key).as_deref() == Some(name) => Some(*value),
+                _ => None,
+            }
+        })
+    }
+
+    /// `ToIndex`, as the two comparisons that decide it.
+    ///
+    /// The upper bound is the specification's 2^53, not an allocation limit.
+    /// Node refuses much earlier -- 54,800,031,720 bytes on the machine this
+    /// was measured on, with a *different* message -- and that bound is the
+    /// amount of memory it can get rather than anything the language says. A
+    /// compiler cannot match a number that depends on how much RAM is free, so
+    /// it implements the rule and lets allocation failure be allocation
+    /// failure.
+    fn guard_buffer_length(
+        &mut self,
+        id: NodeId,
+        length: ValueId,
+        message: &str,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let minus_one = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
+        let negative = self.push(
+            OpKind::Binary {
+                op: BinOp::Le,
+                lhs: length,
+                rhs: minus_one,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let throwing = self.new_block();
+        let second = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: negative,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: second,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(second);
+        let limit = self.push(
+            OpKind::ConstFloat(9_007_199_254_740_992.0),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let too_large = self.push(
+            OpKind::Binary {
+                op: BinOp::Ge,
+                lhs: length,
+                rhs: limit,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: too_large,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(throwing);
+        self.throw_provided_error(id, "RangeError", message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
     }
 
     /// `new Promise<T>(executor)`.
@@ -15091,6 +15317,13 @@ impl<'a> FuncBuilder<'a> {
         value: ValueId,
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
+        if matches!(
+            self.values[value.0 as usize].ty,
+            HirType::Managed(ManagedType::Buffer)
+        ) {
+            return self.buffer_property(id, value, member_name);
+        }
+
         if let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[value.0 as usize].ty.clone()
         {
@@ -16431,6 +16664,13 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_date_method(id, receiver, *member, arguments);
         }
 
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::Buffer)
+        ) {
+            return self.lower_buffer_method(id, receiver, *member, arguments);
+        }
+
         let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[receiver.0 as usize].ty.clone()
         else {
@@ -16451,6 +16691,281 @@ impl<'a> FuncBuilder<'a> {
     /// needs a timezone database this compiler does not carry and which would
     /// make the same program answer differently on two machines -- so it is a
     /// refusal with a reason rather than a gap.
+    /// The four an `ArrayBuffer` has.
+    ///
+    /// By name, so that a member this compiler does not provide is a refusal
+    /// naming it rather than a read of whatever an object layout holds at that
+    /// offset -- a buffer has no layout to read.
+    fn buffer_property(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        // A detached buffer reports zero for both lengths rather than
+        // throwing, which is what makes `detached` the question with the
+        // answer rather than a thing to check before asking.
+        let (helper, ty) = match member_name {
+            "byteLength" => ("nts_buffer_byte_length", HirType::NUMBER),
+            "maxByteLength" => ("nts_buffer_max_byte_length", HirType::NUMBER),
+            "resizable" => ("nts_buffer_resizable", HirType::Bool),
+            "detached" => ("nts_buffer_detached", HirType::Bool),
+            other => {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`ArrayBuffer.{other}`, which this compiler does not provide"),
+                ));
+            }
+        };
+        Ok(self.call_runtime(helper, vec![value], ty, &origin))
+    }
+
+    /// `slice`, `resize`, `transfer` and `transferToFixedLength`.
+    ///
+    /// Every one of these has a state precondition the specification states as
+    /// a throw, and the runtime cannot throw -- so each is a branch here. That
+    /// is the same division `"x".repeat(-1)` settled: the helper does the work
+    /// and the lowering owns what the language refuses.
+    fn lower_buffer_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = self
+            .literal_name(member)
+            .ok_or_else(|| self.unsupported(id, "an `ArrayBuffer` member the program computes"))?;
+        let origin = self.origin(id);
+        match name.as_str() {
+            // Copies. Detached is a `TypeError`; the endpoints are relative
+            // indices and clamp, which is not an error at all.
+            "slice" => {
+                self.guard_attached(id, receiver, "slice")?;
+                let from = match arguments.first() {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        self.coerce(value, &HirType::NUMBER, id)?
+                    }
+                    None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+                };
+                // Absent means "to the end", and the length is the end. Read
+                // from the buffer rather than spelled as a constant, because
+                // a resizable one's length is not known here.
+                let to = match arguments.get(1) {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        self.coerce(value, &HirType::NUMBER, id)?
+                    }
+                    None => self.call_runtime(
+                        "nts_buffer_byte_length",
+                        vec![receiver],
+                        HirType::NUMBER,
+                        &origin,
+                    ),
+                };
+                let slice = self.call_runtime(
+                    "nts_buffer_slice",
+                    vec![receiver, from, to],
+                    HirType::Managed(ManagedType::Buffer),
+                    &origin,
+                );
+                // A slice allocates, so it can fail the way a construction
+                // can. Node raises the same `RangeError` for it.
+                self.guard_allocated(id, slice)?;
+                Ok(slice)
+            }
+            // Both detach the source, which is the whole point of them, and
+            // both refuse a source that is already detached. They differ only
+            // in whether the result keeps the resizable state.
+            "transfer" | "transferToFixedLength" => {
+                self.guard_attached(id, receiver, &name)?;
+                let length = match arguments.first() {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        let value = self.coerce(value, &HirType::NUMBER, id)?;
+                        self.guard_buffer_length(id, value, "Invalid array buffer length")?;
+                        value
+                    }
+                    None => self.call_runtime(
+                        "nts_buffer_byte_length",
+                        vec![receiver],
+                        HirType::NUMBER,
+                        &origin,
+                    ),
+                };
+                let fixed = self.push(
+                    OpKind::ConstBool(name == "transferToFixedLength"),
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                let moved = self.call_runtime(
+                    "nts_buffer_transfer",
+                    vec![receiver, length, fixed],
+                    HirType::Managed(ManagedType::Buffer),
+                    &origin,
+                );
+                self.guard_allocated(id, moved)?;
+                Ok(moved)
+            }
+            // A `TypeError` on a fixed or detached buffer, and a `RangeError`
+            // for a length outside the reserved maximum. Two classes, because
+            // the language distinguishes "this buffer cannot do that" from
+            // "that is not a length it could have".
+            "resize" => {
+                self.guard_resizable(id, receiver)?;
+                let Some(node) = arguments.first() else {
+                    return Err(self.unsupported(id, "an `ArrayBuffer.resize` with no length"));
+                };
+                let length = self.lower_expression(*node)?;
+                let length = self.coerce(length, &HirType::NUMBER, id)?;
+                self.guard_within_maximum(id, receiver, length)?;
+                Ok(self.call_runtime(
+                    "nts_buffer_resize",
+                    vec![receiver, length],
+                    HirType::Void,
+                    &origin,
+                ))
+            }
+            other => Err(self.unsupported(
+                id,
+                &format!("`ArrayBuffer.{other}`, which this compiler does not provide"),
+            )),
+        }
+    }
+
+    /// Throw a `TypeError` where `condition` holds.
+    ///
+    /// The shape every buffer precondition has: a runtime predicate, a branch,
+    /// and a provided error built here because the helper that would know has
+    /// no way to raise one.
+    fn refuse_when(
+        &mut self,
+        id: NodeId,
+        condition: ValueId,
+        class: &str,
+        message: &str,
+    ) -> Result<(), Diagnostic> {
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: condition,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(throwing);
+        self.throw_provided_error(id, class, message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
+    fn guard_attached(
+        &mut self,
+        id: NodeId,
+        buffer: ValueId,
+        what: &str,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let detached = self.call_runtime(
+            "nts_buffer_detached",
+            vec![buffer],
+            HirType::Bool,
+            &origin,
+        );
+        let message =
+            format!("Cannot perform ArrayBuffer.prototype.{what} on a detached ArrayBuffer");
+        self.refuse_when(id, detached, "TypeError", &message)
+    }
+
+    /// A fixed buffer and a detached one are the same refusal, and node gives
+    /// them the same message: `resize` is a method the receiver does not
+    /// support rather than a length it cannot reach.
+    fn guard_resizable(&mut self, id: NodeId, buffer: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let resizable = self.call_runtime(
+            "nts_buffer_resizable",
+            vec![buffer],
+            HirType::Bool,
+            &origin,
+        );
+        let fixed = self.push(
+            OpKind::Unary {
+                op: UnOp::Not,
+                operand: resizable,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(
+            id,
+            fixed,
+            "TypeError",
+            "Method ArrayBuffer.prototype.resize called on incompatible receiver",
+        )
+    }
+
+    fn guard_within_maximum(
+        &mut self,
+        id: NodeId,
+        buffer: ValueId,
+        length: ValueId,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let maximum = self.call_runtime(
+            "nts_buffer_max_byte_length",
+            vec![buffer],
+            HirType::NUMBER,
+            &origin,
+        );
+        // Above the maximum, or below zero -- and compared as `ToIndex` values
+        // for the reason the constructor's comparison is: `resize(3.7)` on a
+        // buffer whose maximum is 3 is legal and resizes to 3, while `3.7 > 3`
+        // is true and would refuse it. The maximum needs no conversion; it is
+        // already a byte count.
+        let length_index =
+            self.call_runtime("nts_to_index", vec![length], HirType::NUMBER, &origin);
+        let over = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: length_index,
+                rhs: maximum,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.refuse_when(
+            id,
+            over,
+            "RangeError",
+            "ArrayBuffer.prototype.resize: Invalid length parameter",
+        )?;
+        let minus_one = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
+        let under = self.push(
+            OpKind::Binary {
+                op: BinOp::Le,
+                lhs: length,
+                rhs: minus_one,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(
+            id,
+            under,
+            "RangeError",
+            "ArrayBuffer.prototype.resize: Invalid length parameter",
+        )
+    }
+
     fn lower_date_method(
         &mut self,
         id: NodeId,

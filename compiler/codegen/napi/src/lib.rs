@@ -76,6 +76,13 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // `Date`, which is a construction on the other side rather than a
         // handle to this one. Refused rather than marshalled as its number.
         HirType::Managed(ManagedType::Date) => None,
+        // An `ArrayBuffer`'s bytes could cross -- N-API has
+        // `napi_create_external_arraybuffer` for exactly this shape -- but
+        // handing them over means deciding who owns them afterwards, and a
+        // buffer that both sides may resize or detach is a lifetime question
+        // rather than a marshalling one. Refused until that is answered, not
+        // because it is hard to convert.
+        HirType::Managed(ManagedType::Buffer) => None,
         // HIR currently does not retain the distinction between a declared
         // `string[]` parameter and a `...strings: string[]` rest parameter.
         // Treating both as rest made an ordinary array parameter receive all
@@ -156,6 +163,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::String) => "string".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "Date".to_owned(),
+        HirType::Managed(ManagedType::Buffer) => "ArrayBuffer".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => {
             "a function".to_owned()
@@ -199,6 +207,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
         HirType::Managed(ManagedType::Date) => "NtsDate *".to_owned(),
+        HirType::Managed(ManagedType::Buffer) => "NtsBuffer *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's
         // representation is in the type for the compiler's benefit, and the C

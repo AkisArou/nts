@@ -1736,8 +1736,6 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         // the same reason a closure does, and the reason both sit below the
         // object range rather than inside it.
         HirType::Managed(ManagedType::Symbol) => Some(("NTS_TAG_SYMBOL", "reference")),
-        // A date answers `"object"` to `typeof`, like any other object.
-        HirType::Managed(ManagedType::Date) => Some(("NTS_TAG_OBJECT", "reference")),
         // Every object shares one tag. `typeof` cannot tell two classes apart
         // -- it answers "object" for both -- and which class it is comes from
         // the header the payload points at, which is where the collector and
@@ -1752,9 +1750,15 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         HirType::Managed(ManagedType::Object(ty)) if nts_core::hir::is_closure_type(*ty) => {
             Some(("NTS_TAG_FUNCTION", "reference"))
         }
-        HirType::Managed(ManagedType::Object(_) | ManagedType::Array(_)) => {
-            Some(("NTS_TAG_OBJECT", "reference"))
-        }
+        // A date and an array buffer answer `"object"` too, and carry the same
+        // header, so they join the arm rather than repeat it. Below the
+        // closure guard because that one is narrower.
+        HirType::Managed(
+            ManagedType::Object(_)
+            | ManagedType::Array(_)
+            | ManagedType::Date
+            | ManagedType::Buffer,
+        ) => Some(("NTS_TAG_OBJECT", "reference")),
         _ => None,
     }
 }
@@ -1818,6 +1822,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::String) => "NtsString *",
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
+        HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
         // One runtime type whatever it carries. The payload's representation is
         // in the HIR type for the compiler's sake -- it says which
         // `nts_promise_fulfill_*` to emit -- and the C sees a tagged union, so

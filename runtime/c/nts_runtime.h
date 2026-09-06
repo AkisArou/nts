@@ -46,9 +46,16 @@
  */
 #if defined(__GNUC__) || defined(__clang__)
 #define NTS_ALLOCATES __attribute__((malloc, returns_nonnull))
+/* Allocates, and may fail. `returns_nonnull` is deliberately absent: it is a
+ * promise to the optimiser, and a caller's null check is dead code the moment
+ * the promise is made. A buffer whose bytes could not be had answers null and
+ * the lowering turns that into the `RangeError` node raises, so the check must
+ * survive being compiled. */
+#define NTS_ALLOCATES_OR_NULL __attribute__((malloc))
 #define NTS_READS_ONLY __attribute__((pure))
 #else
 #define NTS_ALLOCATES
+#define NTS_ALLOCATES_OR_NULL
 #define NTS_READS_ONLY
 #endif
 
@@ -71,6 +78,10 @@
 #define NTS_KIND_OBJECT 2u
 #define NTS_KIND_MAP 3u
 #define NTS_KIND_SYMBOL 4u
+/* An `ArrayBuffer`. Its own kind rather than an object's, because it owns a
+ * block that is not part of its struct and `nts_free_storage` recognises what
+ * to give back by kind -- the same reason an array and a map have one. */
+#define NTS_KIND_BUFFER 5u
 
 typedef struct NtsDescriptor {
   uint32_t kind;
@@ -181,6 +192,40 @@ typedef struct NtsDate {
   NtsHeader header;
   double ms;
 } NtsDate;
+
+/* An `ArrayBuffer`: a byte length and the bytes.
+ *
+ * The bytes are a separate allocation rather than a tail, for the reason
+ * `NtsArray::elements` is a pointer: a view over this buffer must not be
+ * invalidated by the object moving, and a resizable buffer would move if its
+ * bytes were inline.
+ *
+ * A RESIZABLE BUFFER RESERVES ITS MAXIMUM AT CONSTRUCTION. `maxByteLength` is
+ * declared and bounded, so reserving it makes the block's address stable for
+ * the buffer's whole life -- `resize` then moves `length` and nothing else,
+ * and a view never has to re-read where the bytes are. The alternative is
+ * reallocating on resize, which is less memory and costs every view an
+ * indirection per element access to find a block that may have moved. The
+ * views are the hot path and the buffers are not.
+ *
+ * `bytes` is null exactly when the buffer is detached, which is the one state
+ * every accessor has to check and the reason detachment needs no flag.
+ *
+ * The block is 16-byte aligned. `NtsArray`'s static assertion covers elements
+ * that sit inline after a header and says nothing about these, and a view is
+ * spec-required to work at a `byteOffset` that is not a multiple of its
+ * element width -- so the alignment that can be guaranteed is guaranteed here,
+ * where the block is allocated. */
+typedef struct NtsBuffer {
+  NtsHeader header;
+  unsigned char *bytes;
+  size_t length;
+  /* What was reserved: `maxByteLength` for a resizable buffer, and equal to
+   * `length` for a fixed one. `resizable` is not a separate flag because
+   * `ArrayBuffer.prototype.resizable` is exactly this question. */
+  size_t reserved_bytes;
+  bool resizable;
+} NtsBuffer;
 
 typedef struct NtsSymbol {
   NtsHeader header;
@@ -765,6 +810,62 @@ NTS_ALLOCATES NtsString *nts_symbol_to_string(const NtsSymbol *symbol);
 NTS_ALLOCATES NtsDate *nts_date_new(double ms);
 /* `getTime()` and `valueOf()`, which are the same operation under two names. */
 NTS_READS_ONLY double nts_date_value(const NtsDate *date);
+
+/* `ArrayBuffer`.
+ *
+ * The lengths are `double` because that is what the language hands over, and
+ * because every other length in this header is. What the runtime does NOT do
+ * is decide whether a length is acceptable: `new ArrayBuffer(-1)` is a
+ * `RangeError`, a detached buffer's `slice` is a `TypeError`, and both are
+ * emitted by the lowering as branches -- the same division `"x".repeat(-1)`
+ * settled. A runtime that threw would need an exception mechanism it does not
+ * have, and the checks would then be somewhere the differential cannot see
+ * them being skipped.
+ *
+ * So these take arguments the caller has already made legal, and the two that
+ * clamp -- `slice`'s endpoints -- clamp the way `nts_array_slice` does, because
+ * relative indices are not an error in the language. */
+/* `ToIndex` as a number: truncate toward zero, and call NaN zero.
+ *
+ * Exposed because the *comparison* needs it too, not only the allocation.
+ * `new ArrayBuffer(1, { maxByteLength: NaN })` is a `RangeError` -- the
+ * maximum is zero and the length is one -- and comparing the raw values gets
+ * it wrong in the quiet direction, because every comparison with NaN is false
+ * and the throw simply does not happen. */
+NTS_READS_ONLY double nts_to_index(double value);
+/* NOTE: this CLAMPS where `ToIndex` THROWS. `-1` and `-1.5` come back as zero
+ * rather than as a `RangeError`, because raising one is not something a
+ * runtime here can do. Every caller is guarded at the lowering *before* the
+ * call -- `n <= -1` refuses first -- so nothing reaches this that the language
+ * would have rejected. A new caller that skips that guard turns
+ * `new ArrayBuffer(-1)` into an empty buffer, silently. */
+
+NTS_ALLOCATES_OR_NULL NtsBuffer *nts_buffer_new(double byte_length);
+NTS_ALLOCATES_OR_NULL NtsBuffer *
+nts_buffer_new_resizable(double byte_length, double max_byte_length);
+
+/* Zero once detached, which is what the specification reports rather than an
+ * error -- `detached` is the question with the answer. */
+NTS_READS_ONLY double nts_buffer_byte_length(const NtsBuffer *buffer);
+NTS_READS_ONLY double nts_buffer_max_byte_length(const NtsBuffer *buffer);
+NTS_READS_ONLY bool nts_buffer_resizable(const NtsBuffer *buffer);
+NTS_READS_ONLY bool nts_buffer_detached(const NtsBuffer *buffer);
+
+/* A new fixed buffer holding the bytes between the clamped endpoints. Never
+ * shares storage: `slice` is specified to copy, which is the whole difference
+ * between it and a view's `subarray`. */
+NTS_ALLOCATES_OR_NULL NtsBuffer *nts_buffer_slice(const NtsBuffer *buffer,
+                                                  double from, double to);
+
+/* In place, and the address of the bytes does not change -- the maximum was
+ * reserved at construction. Growth zeroes what it exposes. */
+void nts_buffer_resize(NtsBuffer *buffer, double byte_length);
+
+/* Move the bytes into a new buffer and detach this one. `fixed` chooses
+ * between `transfer` and `transferToFixedLength`; both detach the source,
+ * which is the point of them. */
+NTS_ALLOCATES_OR_NULL NtsBuffer *
+nts_buffer_transfer(NtsBuffer *buffer, double byte_length, bool fixed);
 
 NTS_ALLOCATES NtsString *nts_concat(const NtsString *a, const NtsString *b);
 bool nts_string_eq(const NtsString *a, const NtsString *b);

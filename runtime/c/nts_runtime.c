@@ -516,6 +516,18 @@ static void nts_free_storage(NtsHeader *object) {
     map->index = 0;
     return;
   }
+  /* The bytes an `ArrayBuffer` owns. A transferred buffer already gave them
+   * back and says so by having none. */
+  if (object->descriptor->kind == NTS_KIND_BUFFER) {
+    NtsBuffer *buffer = (NtsBuffer *)object;
+    if (buffer->bytes) {
+      nts_env->bytes_held -= buffer->reserved_bytes;
+      nts_env->reclaimed++;
+      free(buffer->bytes);
+      buffer->bytes = 0;
+    }
+    return;
+  }
   if (object->descriptor->kind != NTS_KIND_ARRAY) {
     return;
   }
@@ -3903,6 +3915,188 @@ NtsDate *nts_date_new(double ms) {
 
 double nts_date_value(const NtsDate *date) {
   return date ? date->ms : (double)NAN;
+}
+
+/* `ArrayBuffer`.
+ *
+ * No references, so nothing to trace and no cycle to take part in -- the same
+ * shape as a date, over bytes instead of a double. Its own kind so that
+ * `nts_free_storage` gives the block back; an object's kind would have leaked
+ * every byte, which is precisely the bug `nts_free_storage` exists because of.
+ *
+ * `size` is the struct alone. The block is counted separately, where it is
+ * taken and where it is given back, for the same reason a grown array's is. */
+static const NtsDescriptor nts_desc_buffer = {
+    NTS_KIND_BUFFER,
+    (uint32_t)sizeof(NtsBuffer),
+    0u,
+    0u,
+    0,
+    0,
+    "ArrayBuffer",
+    0u,
+    0,
+};
+
+/* A byte count, from a double the lowering has already made legal.
+ *
+ * `(size_t)value` is undefined for a negative, a NaN, or anything past the
+ * type's range, and undefined here is not academic: `new ArrayBuffer(-0.5)` is
+ * a legal empty buffer in the language, and casting it directly asked for
+ * 9,223,372,036,854,775,808 bytes and aborted. The lowering guards what the
+ * language *refuses* -- `-1.5` is a `RangeError` -- and what is left for this
+ * to do is make the conversion of everything it allows defined.
+ *
+ * `!(value >= 1.0)` rather than `value < 1.0` so that NaN takes the zero
+ * branch instead of falling through it. */
+double nts_to_index(double value) {
+  /* `!(value >= 1.0)` rather than `value < 1.0` so that NaN takes the zero
+     branch instead of falling through it. Everything in `(-1, 1)` is zero
+     after truncation, including `-0.5` and `-0.0`. */
+  if (!(value >= 1.0)) {
+    return 0.0;
+  }
+  return trunc(value);
+}
+
+static size_t nts_buffer_index(double value) {
+  /* One rule, one place: the size and the comparison must agree about what a
+     length *is*, and they disagreed once already. */
+  return (size_t)nts_to_index(value);
+}
+
+/* One place, so the two constructors cannot disagree about what a buffer is.
+ *
+ * `reserved` is what the block holds and `length` is what the buffer says it
+ * has; they differ only for a resizable buffer that has not been grown to its
+ * maximum. Zeroed, because a fresh `ArrayBuffer` reads as zeroes and a caller
+ * must never see what the allocator last put there. */
+static NtsBuffer *nts_buffer_make(size_t length, size_t reserved,
+                                  bool resizable) {
+  /* The bytes first, so that a failure has nothing to undo. Allocating the
+     struct first and bailing out afterwards leaks it and leaves `bytes_held`
+     counting a buffer nobody can reach -- and `nts_live_bytes` reporting a
+     program that failed cleanly as one that leaked.
+
+     One byte for an empty buffer, so that the bytes pointer is null if and
+     only if the buffer is detached. A zero-length `calloc` may return null,
+     and a `new ArrayBuffer(0)` that reported itself detached would be wrong
+     about the one state every accessor branches on. */
+  unsigned char *bytes = (unsigned char *)calloc(reserved ? reserved : 1u, 1u);
+  if (!bytes) {
+    /* Null rather than abort, because node answers this with a `RangeError`
+       and the lowering turns the null into one. A length the *language*
+       refuses never arrives here; this is a length the language allows and
+       the machine does not, which node reports as "Array buffer allocation
+       failed" -- a different sentence from "Invalid array buffer length", on
+       purpose. */
+    return 0;
+  }
+  NtsBuffer *buffer = (NtsBuffer *)nts_alloc(sizeof(NtsBuffer));
+  buffer->header.descriptor = &nts_desc_buffer;
+  buffer->header.reserved = 1;
+  buffer->header.flags = 0;
+  buffer->header.length = 0;
+  buffer->length = length;
+  buffer->reserved_bytes = reserved;
+  buffer->resizable = resizable;
+  buffer->bytes = bytes;
+  nts_env->bytes_held += reserved;
+  nts_note_allocation();
+  /* The block, counted the way a grown array's is: taken here, given back in
+   * `nts_free_storage`. */
+  nts_note_allocation();
+  return buffer;
+}
+
+NtsBuffer *nts_buffer_new(double byte_length) {
+  size_t length = nts_buffer_index(byte_length);
+  return nts_buffer_make(length, length, false);
+}
+
+NtsBuffer *nts_buffer_new_resizable(double byte_length,
+                                    double max_byte_length) {
+  /* The maximum is reserved now. See the note on `NtsBuffer`: it is what makes
+   * the block's address stable, so a view never re-reads where the bytes are
+   * and `resize` is an assignment. */
+  return nts_buffer_make(nts_buffer_index(byte_length),
+                         nts_buffer_index(max_byte_length), true);
+}
+
+double nts_buffer_byte_length(const NtsBuffer *buffer) {
+  if (!buffer || !buffer->bytes) {
+    return 0;
+  }
+  return (double)buffer->length;
+}
+
+double nts_buffer_max_byte_length(const NtsBuffer *buffer) {
+  if (!buffer || !buffer->bytes) {
+    return 0;
+  }
+  /* A fixed buffer answers with its own length, which is what the
+   * specification says rather than a convenience: `maxByteLength` on a
+   * non-resizable buffer is its `byteLength`. */
+  return (double)buffer->reserved_bytes;
+}
+
+bool nts_buffer_resizable(const NtsBuffer *buffer) {
+  return buffer && buffer->bytes && buffer->resizable;
+}
+
+bool nts_buffer_detached(const NtsBuffer *buffer) {
+  return !buffer || !buffer->bytes;
+}
+
+NtsBuffer *nts_buffer_slice(const NtsBuffer *buffer, double from, double to) {
+  /* `nts_str_clamp` is what every relative-index endpoint in this file uses,
+     and a buffer's are the same rule: negative counts from the end. */
+  uint32_t length = (uint32_t)nts_buffer_byte_length(buffer);
+  uint32_t start = nts_str_clamp(from, length, 1);
+  uint32_t end = nts_str_clamp(to, length, 1);
+  size_t count = end > start ? (size_t)(end - start) : 0u;
+  NtsBuffer *slice = nts_buffer_make(count, count, false);
+  if (slice && count && buffer && buffer->bytes) {
+    memcpy(slice->bytes, buffer->bytes + (size_t)start, count);
+  }
+  return slice;
+}
+
+void nts_buffer_resize(NtsBuffer *buffer, double byte_length) {
+  if (!buffer || !buffer->bytes) {
+    return;
+  }
+  size_t length = nts_buffer_index(byte_length);
+  /* Growth exposes bytes nobody wrote, and the specification says they are
+   * zero. They were zero when the block was reserved, but a previous `resize`
+   * down and up again would otherwise show what the shrunk region held. */
+  if (length > buffer->length) {
+    memset(buffer->bytes + buffer->length, 0, length - buffer->length);
+  }
+  buffer->length = length;
+}
+
+NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
+                               bool fixed) {
+  size_t length = nts_buffer_index(byte_length);
+  NtsBuffer *moved = nts_buffer_make(
+      length, fixed ? length : (buffer ? buffer->reserved_bytes : length),
+      !fixed && buffer && buffer->resizable);
+  if (moved && buffer && buffer->bytes) {
+    size_t carried = buffer->length < length ? buffer->length : length;
+    memcpy(moved->bytes, buffer->bytes, carried);
+    /* Detached, which is the observable point of a transfer. The block goes
+     * back now rather than at death: a transferred buffer may be held for a
+     * long time by something that only ever asks whether it is detached. */
+    nts_env->bytes_held -= buffer->reserved_bytes;
+    nts_env->reclaimed++;
+    free(buffer->bytes);
+    buffer->bytes = 0;
+    buffer->length = 0;
+    buffer->reserved_bytes = 0;
+    buffer->resizable = false;
+  }
+  return moved;
 }
 
 /* Symbols.

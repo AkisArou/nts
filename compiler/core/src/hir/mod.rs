@@ -197,6 +197,19 @@ pub enum ManagedType {
     /// than a generated one, so a layout for it would have a field nothing may
     /// read.
     Date,
+    /// An `ArrayBuffer`: a byte length and the bytes.
+    ///
+    /// Carrying nothing, on the same standard as [`ManagedType::Date`]. A
+    /// buffer has no element type -- that is the whole distinction between it
+    /// and the views over it, which *do* carry one and which read the same
+    /// bytes at different widths.
+    ///
+    /// The bytes are the backing a typed-array view points at, so the
+    /// alignment guarantee lives here rather than in the view. `NtsArray`'s
+    /// static assertion protects *inline* elements only, and a view's elements
+    /// are not inline; a `Float64Array` reading a buffer that began at an
+    /// 8-byte boundary is the case that cost `elementwise` 33%.
+    Buffer,
     /// A symbol: an interned cell whose **address is its identity**.
     ///
     /// Carrying nothing, because there is nothing to carry. A symbol has no
