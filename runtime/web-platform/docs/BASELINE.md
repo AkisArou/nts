@@ -658,3 +658,30 @@ four required/optional rest-tuple representation observations. The one net casca
 is the now-explicit decoder-label call into shared `DOMString` conversion. These are
 the typed-memory and boundary-conversion prerequisites already owned by the plan;
 the source does not narrow the API to what the current lowering can represent.
+
+`Blob` now owns one provider-neutral immutable-storage model for memory-backed and
+reopenable externally backed data. Public buffer sources are copied once, while
+Blob composition and slicing share immutable stored ranges. External construction,
+composition, and slicing remain lazy; every consumer opens an independent exact
+range, reads in bounded chunks, and closes it on success, read failure, or stream
+cancellation. `bytes()` and `arrayBuffer()` allocate one result buffer rather than
+repeatedly concatenating, memory-backed `text()` preserves UTF-8 decoder state
+across stored-part boundaries, and memory streams never expose Blob-owned storage.
+The internal provider seam preserves already-decided metadata so a target API such
+as Node's `fs.openAsBlob` can retain its own media-type behavior without putting a
+filesystem into shared code.
+
+The host suite passes 130/130 and the unchanged pinned WPT slice remains 211/211.
+A deliberately weakened external-stream bound accepted a 65,537-byte chunk after
+requesting 65,536 and made the focused test fail with a missing expected rejection;
+the restored implementation rejects the provider violation with `NotReadableError`
+and closes the reader. The root TypeScript solution build remains green, and the
+source contains no `any`, assertion cast, proxy, reflection, or prototype mutation.
+
+The live NTS frontier is 270 primary refusals, 62 cascades, zero JVM-backend
+refusals, and no invalid HIR. Relative to 260/58, the new final-form storage model
+exposes ten net lowering refusals and four call-graph cascades around the external
+reader interfaces, iterable Blob parts, typed-array views/copies, and asynchronous
+cleanup. Those are instances of the plan's existing interface/hierarchy,
+iteration, typed-memory, and async representation prerequisites; the storage API
+was not weakened or made eager to suppress them.

@@ -24,6 +24,7 @@ import {
   URLSearchParams,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { encodeMultipart } from "../node_modules/.tsbuild/host/runtime/web-platform/src/forms/multipart.js";
+import { _createBlobFromExternalSource } from "../node_modules/.tsbuild/host/runtime/web-platform/src/file/blob.js";
 import {
   bytesStream,
   tee,
@@ -1675,6 +1676,129 @@ test("Blob consumes its iterable once and decodes across immutable chunk boundar
   assert.equal(blob.size, 4);
   assert.equal(await blob.text(), "€!");
   assert.equal(iterations, 1);
+});
+test("Blob provider storage reopens exact ranges and composes without materializing", async () => {
+  const bytes = new TextEncoder().encode("0123456789");
+  const opened = [];
+  const closed = [];
+  const source = {
+    size: bytes.length,
+    open(start, length) {
+      opened.push([start, length]);
+      let position = start;
+      const end = start + length;
+      let isClosed = false;
+      return {
+        async read(maximumBytes) {
+          assert.equal(isClosed, false);
+          if (position === end) return undefined;
+          const count = Math.min(maximumBytes, 2, end - position);
+          const chunk = bytes.slice(position, position + count);
+          position += count;
+          return chunk;
+        },
+        async close() {
+          if (!isClosed) {
+            isClosed = true;
+            closed.push([start, length]);
+          }
+        },
+      };
+    },
+  };
+
+  const stored = _createBlobFromExternalSource(source, "TEXT/PLAIN");
+  assert.equal(stored.size, 10);
+  assert.equal(stored.type, "TEXT/PLAIN");
+  assert.equal(opened.length, 0, "construction must not read provider storage");
+
+  const composed = new Blob(["<", stored.slice(2, 8), ">"]);
+  assert.equal(opened.length, 0, "composition and slicing must remain lazy");
+  assert.equal(await composed.text(), "<234567>");
+  assert.deepEqual(opened, [[2, 6]]);
+  assert.deepEqual(closed, [[2, 6]]);
+  assert.equal(await composed.text(), "<234567>");
+  assert.deepEqual(opened, [
+    [2, 6],
+    [2, 6],
+  ]);
+  assert.deepEqual(closed, opened);
+
+  const reader = composed.stream().getReader();
+  const streamed = [];
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    streamed.push(...result.value);
+  }
+  assert.equal(new TextDecoder().decode(Uint8Array.from(streamed)), "<234567>");
+  assert.deepEqual(opened, [
+    [2, 6],
+    [2, 6],
+    [2, 6],
+  ]);
+  assert.deepEqual(closed, opened);
+});
+test("Blob provider storage rejects short reads and always closes its reader", async () => {
+  let closes = 0;
+  const blob = _createBlobFromExternalSource({
+    size: 4,
+    open() {
+      return {
+        read() {
+          return Promise.resolve(undefined);
+        },
+        close() {
+          closes++;
+          return Promise.resolve();
+        },
+      };
+    },
+  });
+
+  await assert.rejects(blob.bytes(), (error) => {
+    assert(error instanceof DOMException);
+    assert.equal(error.name, "NotReadableError");
+    return true;
+  });
+  assert.equal(closes, 1);
+
+  const overRead = _createBlobFromExternalSource({
+    size: 65_537,
+    open() {
+      return {
+        read(maximumBytes) {
+          return Promise.resolve(new Uint8Array(maximumBytes + 1));
+        },
+        close() {
+          closes++;
+          return Promise.resolve();
+        },
+      };
+    },
+  });
+  await assert.rejects(overRead.stream().getReader().read(), (error) => {
+    assert(error instanceof DOMException);
+    assert.equal(error.name, "NotReadableError");
+    return true;
+  });
+  assert.equal(closes, 2);
+});
+test("Blob memory streams bound chunks and never expose immutable storage", async () => {
+  const source = new Uint8Array(65_536 * 2 + 3);
+  source.fill(7);
+  const blob = new Blob([source]);
+  source.fill(9);
+  const reader = blob.stream().getReader();
+  const lengths = [];
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    lengths.push(result.value.length);
+    result.value.fill(1);
+  }
+  assert.deepEqual(lengths, [65_536, 65_536, 3]);
+  assert.equal((await blob.bytes())[0], 7);
 });
 test("URLSearchParams differential and URL-encoded body consumption", async () => {
   for (const text of [
