@@ -98,8 +98,8 @@ initializer without modifying the upstream test.
 
 ## Current integration evidence
 
-At `2e9a6c3`, the repository TypeScript build passes, the Node-host suite passes
-92/92 with zero skipped, and the unchanged WPT slice passes 35/35. The additional
+At `d79e9e7`, the repository TypeScript build passes, the Node-host suite passes
+95/95 with zero skipped, and the unchanged WPT slice passes 35/35. The additional
 local cases cover protocol parsing, Web IDL conversion, MIME/body behavior,
 cancellation, pool shutdown, TLS, canonical event initialization, and Blob
 view/slice behavior; they do not turn host execution into evidence for a compiled
@@ -133,9 +133,17 @@ while that prerequisite is implemented.
 At `1b91c18`, after the canonical Blob began accepting every `ArrayBufferView` and
 using final Web IDL `[Clamp] long long` slice conversion, the same command reports
 187 primary lowering refusals, 38 cascades, zero `NTS4xxx` JVM-backend refusals, and
-no invalid HIR. That is the current in-tree implementation baseline. The changed
+no invalid HIR. That was the Blob integration baseline. The changed
 count reflects intended source reaching a different diagnostic frontier; it is not
 itself progress or regression.
+
+At `d79e9e7`, the production HTTP/1 parser replaced regular-expression status and
+`Content-Length` parsing, generic `Number.parseInt`, comma-list callbacks, and a
+temporary `Headers` object per wire field with explicit bounded parsing. The live
+check reports 183 primary refusals, 39 cascades, zero JVM-backend refusals, and no
+invalid HIR. Four primary messages disappeared while one additional dependent path
+became reachable; this is a changed diagnostic frontier caused by the intended
+parser architecture, not evidence that four general language features were closed.
 
 The common C runtime now has an `NtsEnvironment` and scoped current-environment ABI,
 but shared TypeScript cannot yet obtain its environment-owned Web dependencies.
