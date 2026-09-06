@@ -4,6 +4,12 @@ import {
   ERR_ZSTD_INVALID_PARAM,
 } from "../../internal/errors.ts";
 
+/** Binary storage accepted by the zlib engines without a text conversion. */
+export type BinaryInput =
+  | ArrayBuffer
+  | SharedArrayBuffer
+  | ArrayBufferView<ArrayBufferLike>;
+
 export type ParameterFamily = "brotli" | "zstd";
 
 interface CompressionParameters {
@@ -35,6 +41,7 @@ export function parameterArrays(
   validateCompressionParameters(params);
 
   const names = Object.keys(params);
+  const seen = new Set<number>();
   const keys = new Array<number>(names.length);
   const values = new Array<number>(names.length);
   for (let i = 0; i < names.length; i++) {
@@ -42,12 +49,13 @@ export function parameterArrays(
     const key = +originalName;
     if (
       !Number.isInteger(key) ||
-      String(key) !== originalName ||
       key < 0 ||
-      key > maximum
+      key > maximum ||
+      seen.has(key)
     ) {
       invalidParameter(family, originalName);
     }
+    seen.add(key);
     const value = params[originalName];
     if (typeof value !== "number" && typeof value !== "boolean") {
       throw new ERR_INVALID_ARG_TYPE("options.params[key]", "number", value);

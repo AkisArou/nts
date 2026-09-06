@@ -30,19 +30,27 @@ import {
   validateBoolean,
   validateFunction,
   validateInteger,
+  validateUint32,
 } from "../../internal/validators.ts";
 import * as C from "./constants.ts";
 import { zlibCodeForStatus } from "./error-code.ts";
-import { byteView, optionalByteView, parameterArrays } from "./options.ts";
+import {
+  byteView,
+  optionalByteView,
+  parameterArrays,
+  type BinaryInput,
+} from "./options.ts";
 export * as iter from "./iter.ts";
 
 export * as constants from "./constants.ts";
 export { codes } from "./constants.ts";
+export type { BinaryInput } from "./options.ts";
 
-export type BinaryInput =
-  | ArrayBuffer
-  | SharedArrayBuffer
-  | ArrayBufferView<ArrayBufferLike>;
+/** Input accepted by one-shot compression and decompression functions. */
+export type InputType = string | BinaryInput;
+
+/** Input accepted by the CRC-32 checksum helper. */
+export type ChecksumInput = string | ArrayBufferView<ArrayBufferLike>;
 
 /**
  * `flush` means two different things and both are spelled the same.
@@ -55,21 +63,33 @@ export type BinaryInput =
  * cannot be confused, and the stream options are built explicitly below rather
  * than spread.
  */
-export interface ZlibOptions extends Omit<TransformOptions, "flush" | "transform"> {
+interface CompressionStreamOptions extends Omit<TransformOptions, "flush" | "transform"> {
   flush?: number | undefined;
   finishFlush?: number | undefined;
   chunkSize?: number | undefined;
+  dictionary?: BinaryInput | undefined;
+  info?: boolean | undefined;
+  maxOutputLength?: number | undefined;
+  rejectGarbageAfterEnd?: boolean | undefined;
+}
+
+export interface ZlibOptions extends CompressionStreamOptions {
   windowBits?: number | undefined;
   level?: number | undefined;
   memLevel?: number | undefined;
   strategy?: number | undefined;
-  dictionary?: BinaryInput | undefined;
-  info?: boolean | undefined;
-  maxOutputLength?: number | undefined;
+}
+
+export interface BrotliOptions extends CompressionStreamOptions {
+  params?: Readonly<Record<number, number | boolean>> | undefined;
+}
+
+export interface ZstdOptions extends CompressionStreamOptions {
   params?: Readonly<Record<number, number | boolean>> | undefined;
   pledgedSrcSize?: number | undefined;
-  rejectGarbageAfterEnd?: boolean | undefined;
 }
+
+interface EngineOptions extends ZlibOptions, BrotliOptions, ZstdOptions {}
 
 /** A number in range, or the default if it was not given at all. */
 function finiteOrDefault(value: unknown, name: string, byDefault: number): number {
@@ -112,7 +132,7 @@ function minimumOrDefault(
   return number;
 }
 
-function rejectGarbageAfterEnd(options?: ZlibOptions): boolean {
+function rejectGarbageAfterEnd(options?: CompressionStreamOptions): boolean {
   const value = options?.rejectGarbageAfterEnd;
   if (value === undefined) return false;
   validateBoolean(value, "options.rejectGarbageAfterEnd");
@@ -203,6 +223,21 @@ interface PausedNativeWrite {
 const emptyNativeInput = new Uint8Array(0);
 
 /**
+ * Pinned Node ignores an invalid Zstandard dictionary instead of rejecting it.
+ * Brotli and zlib deliberately keep their stricter public validation.
+ */
+function zstdDictionary(value: unknown): Uint8Array {
+  if (
+    value instanceof ArrayBuffer ||
+    value instanceof SharedArrayBuffer ||
+    ArrayBuffer.isView(value)
+  ) {
+    return byteView(value, "options.dictionary");
+  }
+  return emptyNativeInput;
+}
+
+/**
  * The stream every compressor and decompressor is.
  *
  * A `Transform`, because that is exactly what compression is: bytes in, other
@@ -227,7 +262,7 @@ export class ZlibBase extends Transform {
   #pausedWrite: PausedNativeWrite | null = null;
 
   constructor(
-    options: ZlibOptions | undefined,
+    options: CompressionStreamOptions | undefined,
     handle: number,
     defaults: FlushDefaults,
   ) {
@@ -683,7 +718,7 @@ const brotliDefaults = {
 const BROTLI_ENCODER_PARAM_MAX = C.BROTLI_PARAM_NDIRECT;
 
 function parameterTable(
-  options: ZlibOptions | undefined,
+  options: BrotliOptions | ZstdOptions | undefined,
   mode: number,
 ): [number[], number[]] {
   if (mode === C.BROTLI_ENCODE || mode === C.BROTLI_DECODE) {
@@ -696,7 +731,7 @@ function parameterTable(
   );
 }
 
-function pledgedSourceSize(options: ZlibOptions | undefined): number {
+function pledgedSourceSize(options: ZstdOptions | undefined): number {
   const value = options?.pledgedSrcSize;
   if (value === undefined) return -1;
   validateInteger(value, "options.pledgedSrcSize", 0);
@@ -704,7 +739,7 @@ function pledgedSourceSize(options: ZlibOptions | undefined): number {
 }
 
 export class Brotli extends ZlibBase {
-  constructor(options: ZlibOptions | undefined, mode: number) {
+  constructor(options: BrotliOptions | undefined, mode: number) {
     const [keys, values] = parameterTable(options, mode);
     const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
     const handle = nts_zlib_create_params(
@@ -723,12 +758,12 @@ export class Brotli extends ZlibBase {
 }
 
 export class BrotliCompress extends Brotli {
-  constructor(options?: ZlibOptions) {
+  constructor(options?: BrotliOptions) {
     super(options, C.BROTLI_ENCODE);
   }
 }
 export class BrotliDecompress extends Brotli {
-  constructor(options?: ZlibOptions) {
+  constructor(options?: BrotliOptions) {
     super(options, C.BROTLI_DECODE);
   }
 }
@@ -745,9 +780,9 @@ const zstdDefaults = {
 } satisfies FlushDefaults;
 
 export class Zstd extends ZlibBase {
-  constructor(options: ZlibOptions | undefined, mode: number) {
+  constructor(options: ZstdOptions | undefined, mode: number) {
     const [keys, values] = parameterTable(options, mode);
-    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
+    const dictionary = zstdDictionary(options?.dictionary);
     const handle = nts_zlib_create_params(
       mode,
       keys,
@@ -764,12 +799,12 @@ export class Zstd extends ZlibBase {
 }
 
 export class ZstdCompress extends Zstd {
-  constructor(options?: ZlibOptions) {
+  constructor(options?: ZstdOptions) {
     super(options, C.ZSTD_COMPRESS);
   }
 }
 export class ZstdDecompress extends Zstd {
-  constructor(options?: ZlibOptions) {
+  constructor(options?: ZstdOptions) {
     super(options, C.ZSTD_DECOMPRESS);
   }
 }
@@ -782,7 +817,10 @@ export interface CompressionResult {
 }
 
 export type OneShotResult = Buffer | CompressionResult;
-type OneShotCallback = (error: unknown, result?: OneShotResult) => void;
+export type CompressCallback = (
+  error: Error | null,
+  result?: OneShotResult,
+) => void;
 
 function asBytes(input: unknown, name: string): Uint8Array {
   if (typeof input === "string") return Buffer.from(input);
@@ -822,7 +860,7 @@ function zlibArguments(mode: number, options?: ZlibOptions): ZlibArguments {
   };
 }
 
-function finishFlushForMode(mode: number, options?: ZlibOptions): number {
+function finishFlushForMode(mode: number, options?: CompressionStreamOptions): number {
   const defaults = mode === C.BROTLI_ENCODE || mode === C.BROTLI_DECODE
     ? brotliDefaults
     : (mode === C.ZSTD_COMPRESS || mode === C.ZSTD_DECOMPRESS
@@ -844,7 +882,7 @@ function finishFlushForMode(mode: number, options?: ZlibOptions): number {
   );
 }
 
-function engineForMode(mode: number, options?: ZlibOptions): ZlibBase {
+function engineForMode(mode: number, options?: EngineOptions): ZlibBase {
   switch (mode) {
     case C.DEFLATE: return new Deflate(options);
     case C.INFLATE: return new Inflate(options);
@@ -861,7 +899,7 @@ function engineForMode(mode: number, options?: ZlibOptions): ZlibBase {
   }
 }
 
-function maximumOutputLength(options?: ZlibOptions): number {
+function maximumOutputLength(options?: CompressionStreamOptions): number {
   return inRangeOrDefault(
     options?.maxOutputLength,
     "options.maxOutputLength",
@@ -885,14 +923,16 @@ function throwOneShotError(maximumOutput: number): void {
   throw new ZlibError(nts_zlib_last_error_message(), status, code);
 }
 
-function oneShotSync(mode: number, input: unknown, options?: ZlibOptions): OneShotResult {
+function oneShotSync(mode: number, input: InputType, options?: EngineOptions): OneShotResult {
   const bytes = asBytes(input, "buffer");
   let output: Uint8Array;
   let maximum: number;
 
   if (mode >= C.BROTLI_DECODE) {
     const [keys, values] = parameterTable(options, mode);
-    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
+    const dictionary = mode === C.ZSTD_COMPRESS || mode === C.ZSTD_DECOMPRESS
+      ? zstdDictionary(options?.dictionary)
+      : optionalByteView(options?.dictionary, "options.dictionary");
     const sourceSize = mode === C.ZSTD_COMPRESS ? pledgedSourceSize(options) : -1;
     const finishFlush = finishFlushForMode(mode, options);
     const rejectTrailingGarbage = rejectGarbageAfterEnd(options);
@@ -942,12 +982,12 @@ function oneShotSync(mode: number, input: unknown, options?: ZlibOptions): OneSh
 
 function oneShot(
   mode: number,
-  input: unknown,
-  options: ZlibOptions | OneShotCallback | undefined,
-  callback?: OneShotCallback,
+  input: InputType,
+  options: EngineOptions | CompressCallback | undefined,
+  callback?: CompressCallback,
 ): void {
   let completion = callback;
-  let compressionOptions: ZlibOptions | undefined;
+  let compressionOptions: EngineOptions | undefined;
   if (typeof options === "function") {
     completion = options;
     compressionOptions = undefined;
@@ -963,6 +1003,10 @@ function oneShot(
     try {
       result = oneShotSync(mode, input, compressionOptions);
     } catch (error) {
+      // Every failure produced by this statically typed implementation is an
+      // Error. Preserve an out-of-contract thrown value instead of lying to a
+      // typed callback about it.
+      if (!(error instanceof Error)) throw error;
       completion(error);
       return;
     }
@@ -974,91 +1018,190 @@ function oneShot(
 }
 
 export function deflate(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function deflate(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function deflate(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.DEFLATE, input, options, callback); }
-export function deflateSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function deflateSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.DEFLATE, input, options);
 }
 export function inflate(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function inflate(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function inflate(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.INFLATE, input, options, callback); }
-export function inflateSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function inflateSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.INFLATE, input, options);
 }
 export function gzip(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function gzip(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function gzip(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.GZIP, input, options, callback); }
-export function gzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function gzipSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.GZIP, input, options);
 }
 export function gunzip(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function gunzip(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function gunzip(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.GUNZIP, input, options, callback); }
-export function gunzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function gunzipSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.GUNZIP, input, options);
 }
 export function deflateRaw(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function deflateRaw(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function deflateRaw(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.DEFLATERAW, input, options, callback); }
-export function deflateRawSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function deflateRawSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.DEFLATERAW, input, options);
 }
 export function inflateRaw(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function inflateRaw(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function inflateRaw(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.INFLATERAW, input, options, callback); }
-export function inflateRawSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function inflateRawSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.INFLATERAW, input, options);
 }
 export function unzip(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function unzip(
+  input: InputType,
+  options: ZlibOptions,
+  callback: CompressCallback,
+): void;
+export function unzip(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.UNZIP, input, options, callback); }
-export function unzipSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function unzipSync(input: InputType, options?: ZlibOptions): OneShotResult {
   return oneShotSync(C.UNZIP, input, options);
 }
 export function brotliCompress(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function brotliCompress(
+  input: InputType,
+  options: BrotliOptions,
+  callback: CompressCallback,
+): void;
+export function brotliCompress(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.BROTLI_ENCODE, input, options, callback); }
-export function brotliCompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function brotliCompressSync(input: InputType, options?: BrotliOptions): OneShotResult {
   return oneShotSync(C.BROTLI_ENCODE, input, options);
 }
 export function brotliDecompress(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function brotliDecompress(
+  input: InputType,
+  options: BrotliOptions,
+  callback: CompressCallback,
+): void;
+export function brotliDecompress(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.BROTLI_DECODE, input, options, callback); }
-export function brotliDecompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function brotliDecompressSync(input: InputType, options?: BrotliOptions): OneShotResult {
   return oneShotSync(C.BROTLI_DECODE, input, options);
 }
 export function zstdCompress(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function zstdCompress(
+  input: InputType,
+  options: ZstdOptions,
+  callback: CompressCallback,
+): void;
+export function zstdCompress(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.ZSTD_COMPRESS, input, options, callback); }
-export function zstdCompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function zstdCompressSync(input: InputType, options?: ZstdOptions): OneShotResult {
   return oneShotSync(C.ZSTD_COMPRESS, input, options);
 }
 export function zstdDecompress(
-  input: unknown,
-  options?: ZlibOptions | OneShotCallback,
-  callback?: OneShotCallback,
+  input: InputType,
+  callback: CompressCallback,
+): void;
+export function zstdDecompress(
+  input: InputType,
+  options: ZstdOptions,
+  callback: CompressCallback,
+): void;
+export function zstdDecompress(
+  input: InputType,
+  options?: EngineOptions | CompressCallback,
+  callback?: CompressCallback,
 ): void { oneShot(C.ZSTD_DECOMPRESS, input, options, callback); }
-export function zstdDecompressSync(input: unknown, options?: ZlibOptions): OneShotResult {
+export function zstdDecompressSync(input: InputType, options?: ZstdOptions): OneShotResult {
   return oneShotSync(C.ZSTD_DECOMPRESS, input, options);
 }
 
@@ -1069,10 +1212,10 @@ export const createGunzip = (o?: ZlibOptions) => new Gunzip(o);
 export const createDeflateRaw = (o?: ZlibOptions) => new DeflateRaw(o);
 export const createInflateRaw = (o?: ZlibOptions) => new InflateRaw(o);
 export const createUnzip = (o?: ZlibOptions) => new Unzip(o);
-export const createBrotliCompress = (o?: ZlibOptions) => new BrotliCompress(o);
-export const createBrotliDecompress = (o?: ZlibOptions) => new BrotliDecompress(o);
-export const createZstdCompress = (o?: ZlibOptions) => new ZstdCompress(o);
-export const createZstdDecompress = (o?: ZlibOptions) => new ZstdDecompress(o);
+export const createBrotliCompress = (o?: BrotliOptions) => new BrotliCompress(o);
+export const createBrotliDecompress = (o?: BrotliOptions) => new BrotliDecompress(o);
+export const createZstdCompress = (o?: ZstdOptions) => new ZstdCompress(o);
+export const createZstdDecompress = (o?: ZstdOptions) => new ZstdDecompress(o);
 
 /**
  * The CRC-32 of some bytes, optionally continuing a previous value.
@@ -1081,9 +1224,12 @@ export const createZstdDecompress = (o?: ZlibOptions) => new ZstdDecompress(o);
  * a compression function. It is a checksum for accidental corruption and not
  * for anything adversarial.
  */
-export function crc32(input: string | Buffer, initial = 0): number {
+export function crc32(input: ChecksumInput, initial = 0): number {
   if (typeof input !== "string" && !(input instanceof Buffer) && !ArrayBuffer.isView(input)) {
     throw new ERR_INVALID_ARG_TYPE("data", ["string", "Buffer", "TypedArray", "DataView"], input);
   }
+  validateUint32(initial, "value");
+  // Node normalizes negative zero before crossing the native boundary.
+  initial += 0;
   return nts_crc32(asBytes(input, "data"), initial);
 }

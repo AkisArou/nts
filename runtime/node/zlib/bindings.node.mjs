@@ -338,4 +338,6 @@ globalThis.nts_zlib_last_status = () => lastInitializationError?.errno ?? 0;
 globalThis.nts_zlib_last_error_message = () => lastInitializationError?.message ?? "";
 globalThis.nts_zlib_last_error_code = () => lastInitializationError?.code ?? "";
 
-globalThis.nts_crc32 = (input, initial) => zlib.crc32(Buffer.from(input), initial);
+// The TypeScript layer owns Node's public validation. Coerce here as the C
+// boundary does so the host stand-in cannot make a missing validation pass.
+globalThis.nts_crc32 = (input, initial) => zlib.crc32(Buffer.from(input), initial >>> 0);

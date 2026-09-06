@@ -26,7 +26,11 @@ import {
 import { Buffer } from "../../buffer/src/main.ts";
 import * as C from "./constants.ts";
 import { zlibCodeForStatus } from "./error-code.ts";
-import { optionalByteView, parameterArrays } from "./options.ts";
+import {
+  optionalByteView,
+  parameterArrays,
+  type BinaryInput,
+} from "./options.ts";
 
 const DEFAULT_OUTPUT_SIZE = 65_536;
 const NO_PLEDGED_SOURCE_SIZE = -1;
@@ -34,6 +38,34 @@ const MAXIMUM_ONE_SHOT_OUTPUT = 0xffff_ffff;
 
 type EngineFamily = "zlib" | "brotli" | "zstd";
 type SyncTransformSource = Iterable<ByteBatch | null>;
+
+/** Options common to every iterable compression engine. */
+export interface IteratorCompressionOptions {
+  chunkSize?: number | undefined;
+  dictionary?: BinaryInput | undefined;
+}
+
+/** Deflate, inflate, gzip, and gunzip tuning. */
+export interface IteratorZlibOptions extends IteratorCompressionOptions {
+  windowBits?: number | undefined;
+  level?: number | undefined;
+  memLevel?: number | undefined;
+  strategy?: number | undefined;
+}
+
+/** Brotli's numeric parameter table. */
+export interface IteratorBrotliOptions extends IteratorCompressionOptions {
+  params?: Readonly<Record<number, number | boolean>> | undefined;
+}
+
+/** Zstandard's numeric parameter table and optional source-size pledge. */
+export interface IteratorZstdOptions extends IteratorCompressionOptions {
+  params?: Readonly<Record<number, number | boolean>> | undefined;
+  pledgedSrcSize?: number | undefined;
+}
+
+interface IteratorEngineOptions
+  extends IteratorZlibOptions, IteratorBrotliOptions, IteratorZstdOptions {}
 
 interface TransformConfiguration {
   readonly mode: number;
@@ -63,38 +95,6 @@ class IteratorZlibError extends Error {
   }
 }
 
-function chunkSizeProperty(options: object): unknown {
-  return "chunkSize" in options ? options.chunkSize : undefined;
-}
-
-function dictionaryProperty(options: object): unknown {
-  return "dictionary" in options ? options.dictionary : undefined;
-}
-
-function paramsProperty(options: object): unknown {
-  return "params" in options ? options.params : undefined;
-}
-
-function pledgedSourceSizeProperty(options: object): unknown {
-  return "pledgedSrcSize" in options ? options.pledgedSrcSize : undefined;
-}
-
-function windowBitsProperty(options: object): unknown {
-  return "windowBits" in options ? options.windowBits : undefined;
-}
-
-function levelProperty(options: object): unknown {
-  return "level" in options ? options.level : undefined;
-}
-
-function memLevelProperty(options: object): unknown {
-  return "memLevel" in options ? options.memLevel : undefined;
-}
-
-function strategyProperty(options: object): unknown {
-  return "strategy" in options ? options.strategy : undefined;
-}
-
 function numberInRange(
   value: unknown,
   name: string,
@@ -102,9 +102,14 @@ function numberInRange(
   maximum: number,
   defaultValue: number,
 ): number {
-  if (value === undefined) return defaultValue;
-  if (typeof value !== "number" || Number.isNaN(value)) {
+  if (value === undefined || (typeof value === "number" && Number.isNaN(value))) {
+    return defaultValue;
+  }
+  if (typeof value !== "number") {
     throw new ERR_INVALID_ARG_TYPE(name, "number", value);
+  }
+  if (!Number.isFinite(value)) {
+    throw new ERR_OUT_OF_RANGE(name, "a finite number", value);
   }
   if (value < minimum || value > maximum) {
     throw new ERR_OUT_OF_RANGE(name, `>= ${minimum} and <= ${maximum}`, value);
@@ -112,11 +117,16 @@ function numberInRange(
   return value;
 }
 
-function outputSize(options: object): number {
-  const value = chunkSizeProperty(options);
-  if (value === undefined) return DEFAULT_OUTPUT_SIZE;
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function outputSize(options: IteratorEngineOptions): number {
+  const value = options.chunkSize;
+  if (value === undefined || (typeof value === "number" && Number.isNaN(value))) {
+    return DEFAULT_OUTPUT_SIZE;
+  }
+  if (typeof value !== "number") {
     throw new ERR_INVALID_ARG_TYPE("options.chunkSize", "number", value);
+  }
+  if (!Number.isFinite(value)) {
+    throw new ERR_OUT_OF_RANGE("options.chunkSize", "a finite number", value);
   }
   if (value < C.Z_MIN_CHUNK) {
     throw new ERR_OUT_OF_RANGE("options.chunkSize", `>= ${C.Z_MIN_CHUNK}`, value);
@@ -126,10 +136,13 @@ function outputSize(options: object): number {
 
 function brotliParameters(
   mode: number,
-  options: object,
+  options: IteratorEngineOptions,
 ): [number[], number[]] {
-  const params = paramsProperty(options);
-  const [userKeys, userValues] = parameterArrays(params, C.BROTLI_PARAM_NDIRECT, "brotli");
+  const [userKeys, userValues] = parameterArrays(
+    options.params,
+    C.BROTLI_PARAM_NDIRECT,
+    "brotli",
+  );
   if (mode !== C.BROTLI_ENCODE) return [userKeys, userValues];
 
   // Defaults precede user values so a repeated key has Node's last-write-wins
@@ -149,27 +162,29 @@ function brotliParameters(
 
 function zstdParameters(
   mode: number,
-  options: object,
+  options: IteratorEngineOptions,
 ): [number[], number[]] {
-  const params = paramsProperty(options);
   return parameterArrays(
-    params,
+    options.params,
     mode === C.ZSTD_COMPRESS ? 402 : C.ZSTD_d_windowLogMax,
     "zstd",
   );
 }
 
-function pledgedSourceSize(mode: number, options: object): number {
+function pledgedSourceSize(mode: number, options: IteratorEngineOptions): number {
   if (mode !== C.ZSTD_COMPRESS) return NO_PLEDGED_SOURCE_SIZE;
-  const value = pledgedSourceSizeProperty(options);
+  const value = options.pledgedSrcSize;
   if (value === undefined) return NO_PLEDGED_SOURCE_SIZE;
   validateInteger(value, "options.pledgedSrcSize", 0);
   return value;
 }
 
-function parseConfiguration(mode: number, options: object): TransformConfiguration {
+function parseConfiguration(
+  mode: number,
+  options: IteratorEngineOptions,
+): TransformConfiguration {
   const chunkSize = outputSize(options);
-  const dictionary = optionalByteView(dictionaryProperty(options), "options.dictionary");
+  const dictionary = optionalByteView(options.dictionary, "options.dictionary");
 
   if (mode === C.BROTLI_ENCODE || mode === C.BROTLI_DECODE) {
     const [parameterKeys, parameterValues] = brotliParameters(mode, options);
@@ -209,7 +224,7 @@ function parseConfiguration(mode: number, options: object): TransformConfigurati
     };
   }
 
-  const windowBitsValue = windowBitsProperty(options);
+  const windowBitsValue = options.windowBits;
   let windowBits: number;
   if (
     windowBitsValue === 0 &&
@@ -232,7 +247,7 @@ function parseConfiguration(mode: number, options: object): TransformConfigurati
     finishFlag: C.Z_FINISH,
     chunkSize,
     level: numberInRange(
-      levelProperty(options),
+      options.level,
       "options.level",
       C.Z_MIN_LEVEL,
       C.Z_MAX_LEVEL,
@@ -240,14 +255,14 @@ function parseConfiguration(mode: number, options: object): TransformConfigurati
     ),
     windowBits,
     memLevel: numberInRange(
-      memLevelProperty(options),
+      options.memLevel,
       "options.memLevel",
       C.Z_MIN_MEMLEVEL,
       C.Z_MAX_MEMLEVEL,
       9,
     ),
     strategy: numberInRange(
-      strategyProperty(options),
+      options.strategy,
       "options.strategy",
       C.Z_DEFAULT_STRATEGY,
       C.Z_FIXED,
@@ -426,9 +441,9 @@ function oneShot(
 class AsyncCompressionTransform {
   readonly [kValidatedTransform] = true;
   readonly #mode: number;
-  readonly #options: object;
+  readonly #options: IteratorEngineOptions;
 
-  constructor(mode: number, options: object) {
+  constructor(mode: number, options: IteratorEngineOptions) {
     this.#mode = mode;
     this.#options = options;
   }
@@ -471,9 +486,9 @@ class AsyncCompressionTransform {
 
 class SyncCompressionTransform {
   readonly #mode: number;
-  readonly #options: object;
+  readonly #options: IteratorEngineOptions;
 
-  constructor(mode: number, options: object) {
+  constructor(mode: number, options: IteratorEngineOptions) {
     this.#mode = mode;
     this.#options = options;
   }
@@ -487,76 +502,114 @@ class SyncCompressionTransform {
   }
 }
 
-function asyncTransform(mode: number, options: unknown): AsyncCompressionTransform {
+function asyncTransform(
+  mode: number,
+  options: IteratorEngineOptions,
+): AsyncCompressionTransform {
   validateObject(options, "options");
   return new AsyncCompressionTransform(mode, options);
 }
 
-function syncTransform(mode: number, options: unknown): SyncCompressionTransform {
+function syncTransform(
+  mode: number,
+  options: IteratorEngineOptions,
+): SyncCompressionTransform {
   validateObject(options, "options");
   return new SyncCompressionTransform(mode, options);
 }
 
-export function compressGzip(options: unknown = {}): AsyncCompressionTransform {
+export function compressGzip(
+  options: IteratorZlibOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.GZIP, options);
 }
 
-export function compressDeflate(options: unknown = {}): AsyncCompressionTransform {
+export function compressDeflate(
+  options: IteratorZlibOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.DEFLATE, options);
 }
 
-export function compressBrotli(options: unknown = {}): AsyncCompressionTransform {
+export function compressBrotli(
+  options: IteratorBrotliOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.BROTLI_ENCODE, options);
 }
 
-export function compressZstd(options: unknown = {}): AsyncCompressionTransform {
+export function compressZstd(
+  options: IteratorZstdOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.ZSTD_COMPRESS, options);
 }
 
-export function decompressGzip(options: unknown = {}): AsyncCompressionTransform {
+export function decompressGzip(
+  options: IteratorZlibOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.GUNZIP, options);
 }
 
-export function decompressDeflate(options: unknown = {}): AsyncCompressionTransform {
+export function decompressDeflate(
+  options: IteratorZlibOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.INFLATE, options);
 }
 
-export function decompressBrotli(options: unknown = {}): AsyncCompressionTransform {
+export function decompressBrotli(
+  options: IteratorBrotliOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.BROTLI_DECODE, options);
 }
 
-export function decompressZstd(options: unknown = {}): AsyncCompressionTransform {
+export function decompressZstd(
+  options: IteratorZstdOptions = {},
+): AsyncCompressionTransform {
   return asyncTransform(C.ZSTD_DECOMPRESS, options);
 }
 
-export function compressGzipSync(options: unknown = {}): SyncCompressionTransform {
+export function compressGzipSync(
+  options: IteratorZlibOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.GZIP, options);
 }
 
-export function compressDeflateSync(options: unknown = {}): SyncCompressionTransform {
+export function compressDeflateSync(
+  options: IteratorZlibOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.DEFLATE, options);
 }
 
-export function compressBrotliSync(options: unknown = {}): SyncCompressionTransform {
+export function compressBrotliSync(
+  options: IteratorBrotliOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.BROTLI_ENCODE, options);
 }
 
-export function compressZstdSync(options: unknown = {}): SyncCompressionTransform {
+export function compressZstdSync(
+  options: IteratorZstdOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.ZSTD_COMPRESS, options);
 }
 
-export function decompressGzipSync(options: unknown = {}): SyncCompressionTransform {
+export function decompressGzipSync(
+  options: IteratorZlibOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.GUNZIP, options);
 }
 
-export function decompressDeflateSync(options: unknown = {}): SyncCompressionTransform {
+export function decompressDeflateSync(
+  options: IteratorZlibOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.INFLATE, options);
 }
 
-export function decompressBrotliSync(options: unknown = {}): SyncCompressionTransform {
+export function decompressBrotliSync(
+  options: IteratorBrotliOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.BROTLI_DECODE, options);
 }
 
-export function decompressZstdSync(options: unknown = {}): SyncCompressionTransform {
+export function decompressZstdSync(
+  options: IteratorZstdOptions = {},
+): SyncCompressionTransform {
   return syncTransform(C.ZSTD_DECOMPRESS, options);
 }
