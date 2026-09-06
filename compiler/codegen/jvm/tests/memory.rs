@@ -207,6 +207,11 @@ fn the_vectors_reach_the_cases_they_claim() {
         "bigview bu64 ffffffffffffffff",
         "bigread bi64",
         "bigtrack-odd 1",
+        // `set` and `copyWithin`, whose only hard case is the overlap: a
+        // forward loop is right for every non-overlapping input.
+        "copywithin 2 0 5 0102010203040508",
+        "setshared 1 010201020304050607080b0c0d0e0f10",
+        "refuses setpast",
         // The NaN payload, which is the only vector that can tell the raw bit
         // accessors from the canonicalising ones.
         "trip f64 16 be 7ff0000000000001",

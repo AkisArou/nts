@@ -85,4 +85,34 @@ public final class NtsViewU64 extends NtsView {
         int to = relative(end, n);
         for (int i = from; i < to; i++) { setAt(view, i, v); }
     }
+
+    /**
+     * A bigint element is not a `double`, and mixing is a `TypeError` in the
+     * language rather than a conversion -- *"Cannot mix BigInt and other
+     * types"*. So the generic bulk operations refuse here rather than lose the
+     * top bits silently, and the bigint views have their own {@link #set} and
+     * inherit `copyWithin`, which moves bytes and does not care what they mean.
+     */
+    @Override double readAt(int index) {
+        throw new NtsRefusal("a TypeError: cannot mix BigInt and other types");
+    }
+
+    @Override void writeAt(int index, double value) {
+        throw new NtsRefusal("a TypeError: cannot mix BigInt and other types");
+    }
+
+    /** Elementwise, and the same-buffer case reads from a snapshot. */
+    public static void set(NtsViewU64 view, NtsViewU64 source, double offset) {
+        NtsBuffer.alive(view.buffer);
+        NtsBuffer.alive(source.buffer);
+        int at = NtsBuffer.toIndex(offset, "offset");
+        int taken = count(source);
+        if (at + (long) taken > count(view)) {
+            throw new NtsRefusal("a RangeError: " + taken + " elements at " + at
+                + " is past the end of a " + count(view) + " element view");
+        }
+        long[] snapshot = new long[taken];
+        for (int i = 0; i < taken; i++) { snapshot[i] = read64(source.buffer.bytes, atInt(source, i)); }
+        for (int i = 0; i < taken; i++) { write64(view.buffer.bytes, atInt(view, at + i), snapshot[i]); }
+    }
 }

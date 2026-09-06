@@ -77,4 +77,8 @@ public final class NtsViewF64 extends NtsView {
         int to = relative(end, n);
         for (int i = from; i < to; i++) { set(view, i, v); }
     }
+
+    @Override double readAt(int index) { return getAt(this, index); }
+
+    @Override void writeAt(int index, double value) { setAt(this, index, value); }
 }

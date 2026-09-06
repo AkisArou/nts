@@ -326,6 +326,72 @@ for (const [name, Kind, width] of VIEWS) {
   out.push(`track-odd ${tracking.length}`);
 }
 
+// `set` and `copyWithin`, whose whole difficulty is the overlapping case. A
+// forward loop is correct for every non-overlapping input and wrong for the
+// rest, which is the same shape as `Math.floor` for `ToIntegerOrInfinity` and
+// `Math.round` for the clamped rule: right on everything a test contains unless
+// the test was written to look for it.
+{
+  const moves = [[2, 0, 5], [0, 2, 8], [3, 3, 3], [1, 0, 7], [-3, -6, -1], [0, 0, 8], [6, 0, 4]];
+  for (const [to, from, end] of moves) {
+    const b = new ArrayBuffer(8);
+    const v = new Uint8Array(b);
+    v.set([1, 2, 3, 4, 5, 6, 7, 8]);
+    v.copyWithin(to, from, end);
+    out.push(`copywithin ${to} ${from} ${end} ${hex(v)}`);
+  }
+  for (const [to, from, end] of moves) {
+    const b = new ArrayBuffer(16);
+    const v = new Uint16Array(b);
+    for (let i = 0; i < 8; i++) v[i] = (i + 1) * 0x0101;
+    v.copyWithin(to, from, end);
+    out.push(`copywithin16 ${to} ${from} ${end} ${hex(new Uint8Array(b))}`);
+  }
+}
+{
+  // Cross-type `set`, into separate buffers and into a shared one.
+  const source = new ArrayBuffer(8);
+  new Uint8Array(source).set([1, 2, 3, 4, 250, 251, 252, 253]);
+  for (const [name, Kind] of VIEWS) {
+    if (Kind === Uint8ClampedArray) continue;         // its conversion is covered above
+    // Nine elements of the widest type, so eight source elements fit at
+    // offset one for every element size in the table.
+    const into = new ArrayBuffer(72);
+    new Uint8Array(into).fill(0xa5);
+    const target = new Kind(into);
+    target.set(new Uint8Array(source), 1);
+    out.push(`setinto ${name} ${hex(new Uint8Array(into))}`);
+  }
+  for (const at of [0, 1, 2, 3]) {
+    const shared = new ArrayBuffer(16);
+    new Uint8Array(shared).set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    const wide = new Uint16Array(shared);
+    wide.set(new Uint16Array(shared, 0, 4), at);
+    out.push(`setshared ${at} ${hex(new Uint8Array(shared))}`);
+  }
+  // Past the end refuses rather than truncating.
+  attemptSet();
+}
+function attemptSet() {
+  const into = new ArrayBuffer(8);
+  const target = new Uint8Array(into);
+  // Same word order as `attempt` uses everywhere else in this file.
+  attempt('setpast', () => target.set(new Uint8Array(3), 6));
+  attempt('setfits', () => target.set(new Uint8Array(3), 5));
+}
+{
+  // Bigint views move bytes the same way and refuse to mix.
+  const b = new ArrayBuffer(32);
+  const v = new BigInt64Array(b);
+  v.set([1n, 2n, 3n, 4n]);
+  v.copyWithin(1, 0, 3);
+  out.push(`bigcopywithin ${hex(new Uint8Array(b))}`);
+  const c = new ArrayBuffer(32);
+  const w = new BigUint64Array(c);
+  w.set(new BigUint64Array([9n, 8n, 7n]), 1);
+  out.push(`bigset ${hex(new Uint8Array(c))}`);
+}
+
 // What must fail. Node's error *text* is not comparable across engines, so
 // only the fact is compared -- but the fact is the part that matters: an access
 // that should throw and does not is a read past the end of the storage, which

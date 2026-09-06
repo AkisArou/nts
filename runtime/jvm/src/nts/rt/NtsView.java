@@ -69,6 +69,82 @@ public abstract class NtsView {
     /** Bytes per element. */
     public final int width() { return 1 << shift; }
 
+    /**
+     * One element, virtually, so the bulk operations below can be written once.
+     *
+     * <p>Virtual dispatch is wrong for `get` on a hot path and right here:
+     * `set` and `copyWithin` move whole ranges, so the call is amortised over
+     * an element each and the alternative is nine copies of the same loop. The
+     * per-element accessors stay static and monomorphic.
+     */
+    abstract double readAt(int index);
+
+    abstract void writeAt(int index, double value);
+
+    /**
+     * `copyWithin`, which is a **move** and not a copy.
+     *
+     * <p>The source and the destination are the same buffer by construction, so
+     * an overlapping range must read as if it had been copied through a
+     * temporary -- `copyWithin(2, 0, 5)` on `1..8` is `1,2,1,2,3,4,5,8` and not
+     * `1,2,1,2,1,2,1,8`. `System.arraycopy` is specified to behave that way and
+     * a hand-written forward loop is not, which is the whole of the difference
+     * and is invisible on any non-overlapping input.
+     */
+    public static void copyWithin(NtsView view, double target, double start, double end) {
+        NtsBuffer.alive(view.buffer);
+        int n = count(view);
+        int to = relative(target, n);
+        int from = relative(start, n);
+        int last = relative(end, n);
+        int taken = Math.min(last - from, n - to);
+        if (taken <= 0) { return; }
+        System.arraycopy(view.buffer.bytes, view.offset + (from << view.shift),
+            view.buffer.bytes, view.offset + (to << view.shift), taken << view.shift);
+    }
+
+    /**
+     * `set`: copy every element of `source` into `view` starting at `offset`,
+     * converting per element.
+     *
+     * <p>**The same-buffer case reads from a snapshot.** Two views over one
+     * buffer can overlap at different element widths, and the specification
+     * says the source is read as it was before the write began. Converting in
+     * place would let an element already written be read back as a source
+     * element -- `u16.set(u16over(sameBuffer, 0, 2), 1)` is the case, and it is
+     * wrong only when the ranges overlap.
+     *
+     * <p>Past the end is a `RangeError` rather than a truncated copy, which is
+     * the one place a typed array does refuse rather than ignore.
+     */
+    public static void set(NtsView view, NtsView source, double offset) {
+        NtsBuffer.alive(view.buffer);
+        NtsBuffer.alive(source.buffer);
+        int at = NtsBuffer.toIndex(offset, "offset");
+        int taken = count(source);
+        if (at + (long) taken > count(view)) {
+            throw new NtsRefusal("a RangeError: " + taken + " elements at " + at
+                + " is past the end of a " + count(view) + " element view");
+        }
+        if (view.buffer == source.buffer) {
+            double[] snapshot = new double[taken];
+            for (int i = 0; i < taken; i++) { snapshot[i] = source.readAt(i); }
+            for (int i = 0; i < taken; i++) { view.writeAt(at + i, snapshot[i]); }
+            return;
+        }
+        for (int i = 0; i < taken; i++) { view.writeAt(at + i, source.readAt(i)); }
+    }
+
+    /** `indexOf`, and `-1` where there is none. Strict equality, so NaN is never found. */
+    public static double indexOf(NtsView view, double value, double from) {
+        NtsBuffer.alive(view.buffer);
+        int n = count(view);
+        for (int i = relative(from, n); i < n; i++) {
+            if (view.readAt(i) == value) { return i; }
+        }
+        return -1;
+    }
+
     public static NtsBuffer buffer(NtsView view) { return view.buffer; }
     public static double byteOffset(NtsView view) { return view.offset; }
 

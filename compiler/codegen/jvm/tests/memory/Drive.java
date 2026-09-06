@@ -218,6 +218,7 @@ public final class Drive {
             + (int) NtsBuffer.byteLength(fixed));
 
         views();
+        bulk();
         refusals();
         System.out.print(OUT);
     }
@@ -418,6 +419,71 @@ public final class Drive {
             b.append(pad(Integer.toHexString(bytes[from + i] & 0xFF), 2));
         }
         return b.toString();
+    }
+
+    static final int[][] MOVES = {
+        {2, 0, 5}, {0, 2, 8}, {3, 3, 3}, {1, 0, 7}, {-3, -6, -1}, {0, 0, 8}, {6, 0, 4},
+    };
+
+    static void bulk() {
+        for (int[] move : MOVES) {
+            NtsBuffer b = NtsBuffer.allocate(8);
+            byte[] bytes = NtsBuffer.storage(b);
+            for (int i = 0; i < 8; i++) { bytes[i] = (byte) (i + 1); }
+            NtsViewU8 v = NtsViewU8.over(b, 0);
+            NtsView.copyWithin(v, move[0], move[1], move[2]);
+            line("copywithin " + move[0] + " " + move[1] + " " + move[2] + " " + hex(b));
+        }
+        for (int[] move : MOVES) {
+            NtsBuffer b = NtsBuffer.allocate(16);
+            NtsViewU16 v = NtsViewU16.over(b, 0);
+            for (int i = 0; i < 8; i++) { NtsViewU16.set(v, i, (i + 1) * 0x0101); }
+            NtsView.copyWithin(v, move[0], move[1], move[2]);
+            line("copywithin16 " + move[0] + " " + move[1] + " " + move[2] + " " + hex(b));
+        }
+
+        NtsBuffer source = NtsBuffer.allocate(8);
+        byte[] src = NtsBuffer.storage(source);
+        int[] pattern = { 1, 2, 3, 4, 250, 251, 252, 253 };
+        for (int i = 0; i < 8; i++) { src[i] = (byte) pattern[i]; }
+        for (int k = 0; k < VIEWS.length; k++) {
+            if (VIEWS[k].equals("u8c")) { continue; }
+            NtsBuffer into = NtsBuffer.allocate(72);
+            java.util.Arrays.fill(NtsBuffer.storage(into), (byte) 0xa5);
+            NtsView target = make(VIEWS[k], into, 0);
+            NtsView.set(target, NtsViewU8.over(source, 0), 1);
+            line("setinto " + VIEWS[k] + " " + hex(into));
+        }
+        for (int at = 0; at < 4; at++) {
+            NtsBuffer shared = NtsBuffer.allocate(16);
+            byte[] bytes = NtsBuffer.storage(shared);
+            for (int i = 0; i < 16; i++) { bytes[i] = (byte) (i + 1); }
+            NtsViewU16 wide = NtsViewU16.over(shared, 0);
+            NtsView.set(wide, NtsViewU16.part(shared, 0, 4), at);
+            line("setshared " + at + " " + hex(shared));
+        }
+        final NtsBuffer into = NtsBuffer.allocate(8);
+        final NtsViewU8 target = NtsViewU8.over(into, 0);
+        attempt("setpast", new Attempt() {
+            public void run() { NtsView.set(target, NtsViewU8.of(3), 6); }
+        });
+        attempt("setfits", new Attempt() {
+            public void run() { NtsView.set(target, NtsViewU8.of(3), 5); }
+        });
+
+        NtsBuffer big = NtsBuffer.allocate(32);
+        NtsViewI64 bv = NtsViewI64.over(big, 0);
+        for (int i = 0; i < 4; i++) { NtsViewI64.set(bv, i, NtsBigInt.fromLong(i + 1)); }
+        NtsView.copyWithin(bv, 1, 0, 3);
+        line("bigcopywithin " + hex(big));
+        NtsBuffer target64 = NtsBuffer.allocate(32);
+        NtsViewU64 tv = NtsViewU64.over(target64, 0);
+        NtsViewU64 from = NtsViewU64.of(3);
+        NtsViewU64.set(from, 0, NtsBigInt.fromLong(9));
+        NtsViewU64.set(from, 1, NtsBigInt.fromLong(8));
+        NtsViewU64.set(from, 2, NtsBigInt.fromLong(7));
+        NtsViewU64.set(tv, from, 1);
+        line("bigset " + hex(target64));
     }
 
     interface Attempt { void run(); }

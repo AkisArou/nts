@@ -88,6 +88,15 @@ Three conversion rules that are each other's near-misses: integer views store
 `0.5` is `0`. `Math.round` agrees with it on every input except the exact
 halves.
 
+`set` and `copyWithin` move ranges rather than elements, and their only hard
+case is the overlapping one -- a forward loop is correct for every
+non-overlapping input. `copyWithin` is `System.arraycopy`, which is specified to
+behave as if copied through a temporary; `set` snapshots the source when the two
+views share a buffer, because two views can overlap at different element widths
+and the source is read as it was before the write began. Mixing a bigint view
+with a numeric one is a `TypeError` rather than a conversion, so the generic
+bulk path refuses there and the bigint views have their own.
+
 Out of bounds **refuses**. JavaScript reads out of bounds as `undefined` and
 writes by doing nothing; `nts_bounds` already refuses for ordinary arrays, and a
 typed array behaving differently would be a second answer to one question.
