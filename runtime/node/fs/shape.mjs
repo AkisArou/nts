@@ -4,6 +4,16 @@ export function shape(exports) {
   module.Stats = callableStats(exports.Stats);
   module.ReadStream = callableReadStream(exports.ReadStream);
   module.WriteStream = callableWriteStream(exports.WriteStream);
+  // Node retains these old names as separately writable CommonJS accessors.
+  // Mutable export-object properties are outside the typed runtime model; the
+  // ordinary read path is a direct alias to the same two constructors.
+  module.FileReadStream = module.ReadStream;
+  module.FileWriteStream = module.WriteStream;
+  // Linux exposes the two platform-unavailable operations as enumerable
+  // properties whose value is undefined; omitting the keys changes namespace
+  // enumeration and permission allowlists even though neither is callable.
+  module.lchmod = undefined;
+  module.lchmodSync = undefined;
   // Function properties are a Node compatibility shape. The ordinary
   // realpath functions walk components in TypeScript; only `.native` takes
   // libuv's direct resolver.

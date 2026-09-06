@@ -15,6 +15,11 @@ static _Thread_local int last_errno = 0;
 
 double nts_errno(void) { return (double)last_errno; }
 
+void nts_sleep(double milliseconds) {
+    if (milliseconds <= 0.0) return;
+    uv_sleep((unsigned int)milliseconds);
+}
+
 static NtsString *node_empty_string(void) {
     return nts_string_from_utf8("", 0);
 }

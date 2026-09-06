@@ -21,6 +21,7 @@ const hostClearImmediate = globalThis.clearImmediate;
 
 const require = createRequire(import.meta.url);
 const hostSystemErrors = require("node:util").getSystemErrorMap();
+const sleepCell = new Int32Array(new SharedArrayBuffer(4));
 
 // Read at call time, not captured: node's tests replace `process.stdout.write`
 // to see what was printed, and a captured reference would miss the
@@ -53,6 +54,7 @@ globalThis.nts_process_emit_warning_object = (_message, _name, warning) => {
 globalThis.nts_hrtime_ns = () => process.hrtime.bigint();
 globalThis.nts_process_is_exiting = () => Boolean(process._exiting);
 globalThis.nts_next_tick = (callback, args) => { process.nextTick(callback, ...(args ?? [])); };
+globalThis.nts_sleep = (milliseconds) => { Atomics.wait(sleepCell, 0, 0, milliseconds); };
 
 globalThis.nts_debug_write = (text) => { process.stderr.write(text); return 0; };
 globalThis.nts_platform = () => process.platform;

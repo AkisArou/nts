@@ -47,7 +47,7 @@ import {
   BigIntStats,
   Dirent,
   numberStatFs,
-  StatFs,
+  type StatFs,
   Stats,
   type StatOptions,
   type StatFsOptions,
@@ -126,7 +126,7 @@ import {
   type SymlinkType,
 } from "./options.ts";
 
-export { Stats, StatFs, Dirent, constants };
+export { Stats, Dirent, constants };
 export type { BigIntStats } from "./stats.ts";
 export { BigIntStats as _BigIntStats } from "./stats.ts";
 export type { ReadFileBuffer, ReadFileOptions, RmdirOptions, RmOptions } from "./options.ts";
@@ -153,7 +153,9 @@ export type { CopyOptions, CopySyncOptions } from "./cp-common.ts";
 export type { GlobExclude, GlobOptions, GlobPatternInput } from "./glob.ts";
 
 export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
-export { FSWatcher, StatWatcher, watch, watchFile, unwatchFile } from "./watchers.ts";
+export { Utf8Stream } from "./utf8-stream.ts";
+export type { Utf8StreamOptions } from "./utf8-stream.ts";
+export { watch, watchFile, unwatchFile } from "./watchers.ts";
 export type {
   BigIntStatsListener,
   StatsListener,
@@ -380,10 +382,16 @@ export function writeSync(
   position?: number | null,
   encoding?: string | null,
 ): number;
+/** Legacy spelling used by Node's own internal UTF-8 writer. */
+export function writeSync(
+  fd: number,
+  data: string,
+  encoding?: string | null,
+): number;
 export function writeSync(
   fd: number,
   data: Buffer | Uint8Array | string,
-  offsetOrOptions: number | WriteOptions | null = null,
+  offsetOrOptions: number | string | WriteOptions | null = null,
   lengthOrEncoding?: number | string | null,
   position: number | null = null,
 ): number {
@@ -400,7 +408,9 @@ export function writeSync(
   // of the second argument, as node tells them apart.
   let buffer: Uint8Array;
   if (typeof data === "string") {
-    const encodingName = typeof lengthOrEncoding === "string" ? lengthOrEncoding : "utf8";
+    const encodingName = typeof lengthOrEncoding === "string"
+      ? lengthOrEncoding
+      : (typeof offsetOrOptions === "string" ? offsetOrOptions : "utf8");
     const encoding = requireTextEncoding(encodingName, "encoding");
     if (encoding === "hex" && data.length % 2 !== 0) {
       throw new ERR_INVALID_ARG_VALUE(
@@ -421,7 +431,7 @@ export function writeSync(
     if (typeof offsetOrOptions === "object" && offsetOrOptions !== null) {
       throw new ERR_INVALID_ARG_TYPE("position", "integer", offsetOrOptions);
     }
-    at = offsetOrOptions;
+    at = typeof offsetOrOptions === "string" ? null : offsetOrOptions;
   } else if (typeof offsetOrOptions === "object") {
     if (offsetOrOptions !== null) validateObject(offsetOrOptions, "options");
     start = offsetOrOptions?.offset ?? 0;
@@ -430,6 +440,9 @@ export function writeSync(
     validateInteger(start, "offset", 0);
     validateWriteBounds(start, count, buffer.length);
   } else {
+    if (typeof offsetOrOptions === "string") {
+      throw new ERR_INVALID_ARG_TYPE("offset", "integer", offsetOrOptions);
+    }
     start = offsetOrOptions ?? 0;
     count = typeof lengthOrEncoding === "number" ? lengthOrEncoding : buffer.length - start;
     at = position;

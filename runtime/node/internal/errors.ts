@@ -964,7 +964,8 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
   override readonly code = "ERR_INVALID_ARG_VALUE";
 
   constructor(name: string, value: unknown, reason = "is invalid") {
-    super(`The property '${name}' ${reason}. Received ${inspectValue(value)}`);
+    const kind = name.includes(".") ? "property" : "argument";
+    super(`The ${kind} '${name}' ${reason}. Received ${inspectValue(value)}`);
     this.name = "RangeError";
   }
 }

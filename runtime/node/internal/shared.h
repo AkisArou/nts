@@ -49,6 +49,9 @@ const NtsNodeSignalConstant *nts_node_signal_constants(size_t *count);
 NtsArray *nts_process_signal_names(void);
 double nts_process_signal_exit_code(NtsString *signal_code);
 
+/** Block the calling thread; used only by synchronous retry paths. */
+void nts_sleep(double milliseconds);
+
 /** Process invocation identity shared by `node:process` and argument parsing. */
 NtsArray *nts_process_argv(void);
 NtsString *nts_process_argv0(void);
