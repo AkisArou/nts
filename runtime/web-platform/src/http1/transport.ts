@@ -36,6 +36,10 @@ export interface Http1Options extends PoolOptions {
   maxInformational?: number;
 }
 
+function isForbiddenTrailerName(name: string): boolean {
+  return name === "content-length" || name === "host" || name === "transfer-encoding";
+}
+
 export function addressOf(
   url: URLRecord,
   connectTimeoutMs: number,
@@ -255,7 +259,7 @@ export class Http1Transport implements FetchTransport {
                 if (remaining === 0) {
                   const trailers = await readHeaderFields(lease.reader, this.limits);
                   for (const [name] of trailers)
-                    if (["content-length", "transfer-encoding", "host"].includes(name))
+                    if (isForbiddenTrailerName(name))
                       throw new ProtocolError("Forbidden framing trailer");
                   finish(reusable);
                   controller.close();

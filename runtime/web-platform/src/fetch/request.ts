@@ -33,7 +33,18 @@ export function normalizeMethod(method: string): string {
 
   if (upper === "CONNECT" || upper === "TRACE" || upper === "TRACK")
     throw new TypeError("Forbidden HTTP method");
-  return ["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"].includes(upper) ? upper : method;
+  return isNormalizedMethod(upper) ? upper : method;
+}
+
+function isNormalizedMethod(method: string): boolean {
+  return (
+    method === "DELETE" ||
+    method === "GET" ||
+    method === "HEAD" ||
+    method === "OPTIONS" ||
+    method === "POST" ||
+    method === "PUT"
+  );
 }
 
 export function validateNetworkURL(url: URLRecord): void {

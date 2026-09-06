@@ -8,15 +8,13 @@ import { BodyState } from "./body.ts";
 import { Headers } from "./headers.ts";
 import { Request, validateNetworkURL } from "./request.ts";
 import type { RequestContext, RequestInit } from "./request.ts";
-import { nullBodyStatus, Response } from "./response.ts";
+import { isRedirectStatus, nullBodyStatus, Response } from "./response.ts";
 import type {
   ContentDecoder,
   FetchTransport,
   TransportRequest,
   TransportResponse,
 } from "./transport.ts";
-
-const redirects = new Set([301, 302, 303, 307, 308]);
 
 function checkURL(url: URLRecord): void {
   validateNetworkURL(url);
@@ -168,7 +166,7 @@ export class FetchClient {
             throw new TypeError("Invalid final HTTP response status");
           const responseHeaders = new Headers(raw.headers);
           const location = responseHeaders.get("location");
-          if (redirects.has(raw.status) && location !== null && request.redirect !== "manual") {
+          if (isRedirectStatus(raw.status) && location !== null && request.redirect !== "manual") {
             if (request.redirect === "error")
               throw new TypeError("Redirect disallowed by request policy");
             if (count >= this.maxRedirects) throw new TypeError("Too many redirects");

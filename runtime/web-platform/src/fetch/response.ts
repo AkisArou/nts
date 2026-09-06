@@ -28,6 +28,10 @@ export function nullBodyStatus(status: number): boolean {
   return status === 101 || status === 103 || status === 204 || status === 205 || status === 304;
 }
 
+export function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
 export class Response extends Body {
   private readonly context: ResponseContext;
   private responseStatus: number;
@@ -116,8 +120,7 @@ export class Response extends Body {
   }
 
   static redirect(url: string, status: number, urls: URLParser): Response {
-    if (![301, 302, 303, 307, 308].includes(status))
-      throw new RangeError("Invalid redirect status");
+    if (!isRedirectStatus(status)) throw new RangeError("Invalid redirect status");
     const absolute = urls.parse(url).href;
     const result = new Response(null, { status, headers: [["location", absolute]] });
     result.headers.makeImmutable();
