@@ -138,7 +138,17 @@ public final class SocketTest {
         }
     }
 
-    /** No credit means no socket, and the failure arrives before any exists. */
+    /**
+     * No credit means no socket -- and the failure still arrives as a task.
+     *
+     * <p>The middle assertion is the point and it used to be the opposite one.
+     * A refused launch is known before `connect` returns, so reporting it there
+     * was the obvious thing and it is wrong: a program would see `Backpressure`
+     * at one position in the task order and `ECONNREFUSED` at another, so its
+     * output would depend on **which** failure happened rather than on the fact
+     * that one did. Node never calls a completion inline and node is the
+     * oracle.
+     */
     static void backpressure(Echo echo) throws Exception {
         NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 1);
         NtsEnv previous = NtsEnv.enterEnv(env);
@@ -148,15 +158,173 @@ public final class SocketTest {
             check(only != null, "the first credit was refused");
             Result refused = new Result();
             NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000, refused, refused);
+            check(refused.settled == 0,
+                "a refused launch reported inline, before connect returned");
+            // The held credit goes back *before* the drain, and it has to: an
+            // environment with one outstanding completion and no timer is not
+            // idle, so `drain` parks waiting for work that in this test is
+            // never coming. That is the monotonic liveness rule doing its job
+            // -- the environment cannot tell a credit a test is sitting on from
+            // a socket read in flight, and it must not exit on either.
+            NtsEnv.cancel(env, only);
+            NtsEnv.drain(env);
             check(refused.settled == 1, "a refused launch settled " + refused.settled + " times");
             check("Backpressure".equals(refused.name),
                 "a refused launch reported " + refused.name);
             check(NtsSocket.openCount() == before, "a refused launch opened a socket anyway");
-            NtsEnv.cancel(env, only);
             check(NtsEnv.outstanding(env) == 0.0, "backpressure leaked liveness");
         } finally {
             NtsEnv.close(env);
             NtsEnv.leaveEnv(env, previous);
+        }
+    }
+
+    /**
+     * A listener that never accepts, so its backlog fills and the next connect
+     * hangs.
+     *
+     * <p>Cancelling a connect needs a connect that is still running, and on
+     * loopback a real one finishes faster than a test can react. A full accept
+     * queue is the way to get one deterministically without depending on a
+     * routable blackhole address or on the machine having a network at all:
+     * once the queue is full the kernel stops completing handshakes, and the
+     * client sits in `connect` until its timeout.
+     */
+    /**
+     * Accepts everything and counts it. The peer's view of whether a cancelled
+     * connect happened.
+     */
+    static final class Counting implements Runnable {
+        final ServerSocket listener;
+        volatile int accepted;
+        volatile boolean stop;
+        Counting() throws IOException {
+            listener = new ServerSocket(0, 16, java.net.InetAddress.getByName("127.0.0.1"));
+        }
+        int port() { return listener.getLocalPort(); }
+        @Override public void run() {
+            while (!stop) {
+                try (Socket peer = listener.accept()) { accepted++; }
+                catch (IOException closing) { if (stop) { return; } }
+            }
+        }
+        void close() { stop = true; try { listener.close(); } catch (IOException ignored) { /* stopping */ } }
+    }
+
+    static final class Deaf {
+        final ServerSocket listener;
+        Deaf() throws IOException {
+            listener = new ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
+        }
+        int port() { return listener.getLocalPort(); }
+        void close() { try { listener.close(); } catch (IOException ignored) { /* stopping */ } }
+    }
+
+    /**
+     * A cancelled connect settles once, as a cancellation, and leaves nothing
+     * open.
+     *
+     * <p>`Cancelled` rather than `SocketException: Socket closed`: cancelling a
+     * blocking connect *is* closing the socket under the worker, so the
+     * worker's own view of the failure names the mechanism and not the cause,
+     * and a deliberate abort would be indistinguishable from a peer that
+     * dropped the connection.
+     */
+    static void connectCancel() throws Exception {
+        Deaf deaf = new Deaf();
+        Counting counting = new Counting();
+        Thread counter = new Thread(counting, "counting");
+        counter.setDaemon(true);
+        counter.start();
+        java.util.List<Socket> filling = new java.util.ArrayList<Socket>();
+        NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 8);
+        NtsEnv previous = NtsEnv.enterEnv(env);
+        try {
+            // Fill the accept queue. The count is deliberately generous: what
+            // matters is that the *next* connect hangs, and the exact depth at
+            // which a kernel stops completing handshakes is not a contract.
+            for (int i = 0; i < 8; i++) {
+                Socket filler = new Socket();
+                try {
+                    filler.connect(new java.net.InetSocketAddress("127.0.0.1", deaf.port()), 200);
+                    filling.add(filler);
+                } catch (IOException full) { break; }
+            }
+            double before = NtsSocket.openCount();
+
+            // **Cancelled while it is running.** The worker has to be *inside*
+            // `Socket.connect` for this to test what it says, and it very
+            // nearly did not: cancelling immediately after `connect` returns
+            // wins the scheduling race almost every time, the worker sees the
+            // flag before it has a socket, and the `Cancelled` that comes back
+            // was never routed through the close-under-the-worker path at all.
+            // The sabotage caught it -- removing that path left the suite green
+            // -- so the wait is here, and the assertion after it is what makes
+            // the wait honest rather than decorative.
+            Result running = new Result();
+            double first = NtsSocket.connect(
+                env, NtsEnv.launch(env), "127.0.0.1", deaf.port(), false, 20000, running, running);
+            check(first > 0, "connect did not return a cancellable request");
+            Thread.sleep(200);
+            check(running.settled == 0,
+                "the deaf listener did not hold the connect open -- its accept queue was "
+                + "not full, so this cancels nothing that is running");
+
+            // **Cancelled before the worker reaches it**, which is a different
+            // path: there is no socket to close, so the worker has to notice
+            // the flag itself when it starts.
+            //
+            // Submitted *while the first is still blocked*, and that is what
+            // makes it deterministic rather than a race. The pool has one core
+            // thread and a queue of 256, so a `ThreadPoolExecutor` puts the
+            // second task in the queue rather than starting a thread for it --
+            // it cannot begin until the first completes. Cancelling it after
+            // the drain, as this first did, gives it a free thread and it runs
+            // immediately; the sabotage caught that too.
+            //
+            // **The assertion is that the peer never saw it**, and that is the
+            // second thing the sabotage taught. Checking the error name proves
+            // nothing here: `fail` reports `Cancelled` for anything that was
+            // cancelled, so a connect that ran anyway, reached the server and
+            // then timed out still comes back saying `Cancelled`. The
+            // pre-start check is not about the message. It is about a request
+            // the program withdrew not arriving at the far end -- which a
+            // counting listener can see and the completion cannot.
+            Result early = new Result();
+            double second = NtsSocket.connect(
+                env, NtsEnv.launch(env), "127.0.0.1", counting.port(), false, 1500, early, early);
+            NtsSocket.cancelConnect(second);
+            check(early.settled == 0, "a queued connect settled before anything ran");
+
+            NtsSocket.cancelConnect(first);
+            NtsSocket.cancelConnect(first);
+            NtsEnv.drain(env);
+            check(running.settled == 1, "a cancelled connect settled " + running.settled + " times");
+            check("Cancelled".equals(running.name),
+                "a connect cancelled in flight reported " + running.name + ": " + running.message);
+            check(early.settled == 1, "an early-cancelled connect settled " + early.settled + " times");
+            check("Cancelled".equals(early.name),
+                "a connect cancelled before it started reported " + early.name + ": " + early.message);
+            check(counting.accepted == 0,
+                "a connect cancelled before it started still reached the peer "
+                + counting.accepted + " time(s)");
+
+            check(NtsSocket.openCount() == before,
+                "a cancelled connect left " + (NtsSocket.openCount() - before) + " connection(s) open");
+            check(NtsEnv.outstanding(env) == 0.0, "a cancelled connect leaked liveness");
+            // An id nobody issued, and ones already retired. Both are ordinary
+            // for an adapter that cancels on a signal it does not own.
+            NtsSocket.cancelConnect(first);
+            NtsSocket.cancelConnect(second);
+            NtsSocket.cancelConnect(9999);
+            NtsSocket.cancelConnect(0);
+            NtsSocket.cancelConnect(-1);
+        } finally {
+            NtsEnv.close(env);
+            NtsEnv.leaveEnv(env, previous);
+            for (Socket filler : filling) { try { filler.close(); } catch (IOException ignored) { /* done */ } }
+            deaf.close();
+            counting.close();
         }
     }
 
@@ -189,12 +357,13 @@ public final class SocketTest {
             roundTrip(echo, owner);
             cancellation(echo);
             backpressure(echo);
+            connectCancel();
             shutdownCloses(echo);
         } finally {
             echo.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("socket: round trip, lanes, cancellation, backpressure, shutdown -- %d failures%n",
+        System.out.printf("socket: round trip, lanes, cancellation, backpressure, connect cancel, shutdown -- %d failures%n",
             failures);
         if (failures != 0) { System.exit(1); }
     }

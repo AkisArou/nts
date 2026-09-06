@@ -148,6 +148,109 @@ public final class NtsSocket {
         }
     }
 
+    /**
+     * A connect in flight, and the only thing cancelling one can reach.
+     *
+     * <p>Cancellation of a blocking connect is `Socket.close` from another
+     * thread, which is why the socket has to be published here the moment it
+     * exists rather than kept in the worker's local. The two fields are guarded
+     * by this object's monitor because the race is the ordinary one and it is
+     * not benign: the canceller sets the flag and reads a socket the worker has
+     * not stored yet, while the worker stores the socket and reads a flag the
+     * canceller has not set yet, and the connection stays open for the rest of
+     * the process.
+     *
+     * <p>What cancellation cannot reach is name resolution. `InetSocketAddress`
+     * resolves before any socket exists, on the worker, and nothing interrupts
+     * a resolver -- so an abort during DNS is a completion that arrives anyway
+     * and is discarded, which is why the bounded pool is load-bearing rather
+     * than tidy.
+     */
+    private static final class Request {
+        boolean cancelled;
+        Socket socket;
+    }
+
+    private static final ArrayList<Request> PENDING = new ArrayList<Request>();
+
+    private static double reserve(Request request) {
+        synchronized (PENDING) {
+            for (int i = 0; i < PENDING.size(); i++) {
+                if (PENDING.get(i) == null) { PENDING.set(i, request); return i + 1; }
+            }
+            PENDING.add(request);
+            return PENDING.size();
+        }
+    }
+
+    private static void retire(double id) {
+        int at = (int) id - 1;
+        synchronized (PENDING) {
+            if (at >= 0 && at < PENDING.size()) { PENDING.set(at, null); }
+        }
+    }
+
+    /**
+     * Cancel a connect. Idempotent, and safe from any lane.
+     *
+     * <p>A late success is still a success as far as the operating system is
+     * concerned, so this closes the socket if there is one and the completion
+     * reports `Cancelled` -- the credit comes back either way. An adapter that
+     * has already rejected its promise ignores the completion; what it must not
+     * do is leak the connection, and that is this method's job rather than the
+     * adapter's.
+     */
+    public static void cancelConnect(double id) {
+        int at = (int) id - 1;
+        Request request;
+        synchronized (PENDING) {
+            if (at < 0 || at >= PENDING.size()) { return; }
+            request = PENDING.get(at);
+        }
+        if (request == null) { return; }
+        Socket socket;
+        synchronized (request) {
+            if (request.cancelled) { return; }
+            request.cancelled = true;
+            socket = request.socket;
+        }
+        if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* cancelling */ } }
+    }
+
+    /**
+     * Report a synchronous failure the way an asynchronous one arrives.
+     *
+     * <p>Backpressure, a full queue and a closed handle are all known before
+     * this returns, and calling the callback here would deliver them **inline,
+     * before the caller has its handle back**. That is not just untidy: a
+     * program would observe `Backpressure` in a different position in the task
+     * order than `ECONNREFUSED`, so its output would depend on which failure
+     * occurred rather than only on the fact that one did. Node never does this
+     * and node is the oracle, so neither does this.
+     */
+    private static void later(NtsEnv env, final NtsTextPairCallback failed,
+                              final String name, final String message) {
+        NtsEnv.tick(env, new NtsResumable() {
+            @Override public void resume() { failed.call(name, message); }
+        });
+    }
+
+    /**
+     * Hand the socket to the canceller, or report that it is already too late.
+     *
+     * <p>Returns false when the cancel landed first, which is the case the
+     * check after the handshake cannot cover: a cancel before the socket
+     * existed has nothing to close, so the worker has to be the one that
+     * notices.
+     */
+    private static boolean publish(Request request, Socket socket) {
+        synchronized (request) {
+            if (request.cancelled) { return false; }
+            request.socket = socket;
+            return true;
+        }
+    }
+
     private static Connection lookup(double handle) {
         int at = (int) handle - 1;
         synchronized (TABLE) {
@@ -180,7 +283,7 @@ public final class NtsSocket {
             // The queue is bounded, so this is reachable, and the credit is
             // still ours to return -- no platform work was ever created.
             NtsEnv.cancel(env, slot);
-            failed.call("QueueFull", "the I/O queue is full");
+            later(env, failed, "QueueFull", "the I/O queue is full");
         }
     }
 
@@ -201,15 +304,17 @@ public final class NtsSocket {
      * <p>The caller reserves the completion credit before calling; a `null`
      * slot means the environment refused the launch and no socket is created.
      */
-    public static void connect(
+    public static double connect(
         final NtsEnv env, final NtsInbox.Slot slot,
         final String host, final double port, final boolean secure,
         final double timeoutMs, final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            failed.call("Backpressure", "no completion credit was available");
-            return;
+            later(env, failed, "Backpressure", "no completion credit was available");
+            return 0;
         }
+        final Request request = new Request();
+        final double id = reserve(request);
         submit(env, slot, new Runnable() {
             @Override public void run() {
                 Socket socket = null;
@@ -226,30 +331,77 @@ public final class NtsSocket {
                             Collections.<SNIServerName>singletonList(new SNIHostName(host));
                         params.setServerNames(names);
                         ssl.setSSLParameters(params);
+                        socket = ssl;
+                        if (!publish(request, ssl)) {
+                            retire(id);
+                            finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
+                            return;
+                        }
                         ssl.connect(new InetSocketAddress(host, (int) port), millis);
                         // The handshake is deferred until the first I/O, so a
                         // name mismatch would surface inside a later read
                         // rather than here. Forcing it now puts the failure
                         // where the caller asked for a connection.
                         ssl.startHandshake();
-                        socket = ssl;
                     } else {
                         socket = new Socket();
+                        if (!publish(request, socket)) {
+                            retire(id);
+                            finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
+                            return;
+                        }
                         socket.connect(new InetSocketAddress(host, (int) port), millis);
                     }
                     socket.setTcpNoDelay(true);
+                    // A cancel that arrived while the handshake was running has
+                    // already closed this socket, or is about to. Either way
+                    // the connection is not handed to the program: registering
+                    // it first and closing it after would put a live handle in
+                    // the table for as long as the two threads disagree.
+                    boolean cancelled;
+                    synchronized (request) { cancelled = request.cancelled; }
+                    if (cancelled) {
+                        try { socket.close(); } catch (IOException ignored) { /* cancelled */ }
+                        retire(id);
+                        finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
+                        return;
+                    }
                     Connection c = new Connection(socket, socket.getInputStream(), socket.getOutputStream());
                     double handle = register(c);
+                    retire(id);
                     finish(slot, ok, failed, handle, null, null);
                 } catch (IOException problem) {
-                    if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* failed */ } }
-                    finish(slot, ok, failed, 0, problem.getClass().getSimpleName(), String.valueOf(problem.getMessage()));
+                    fail(request, id, socket, slot, ok, failed, problem);
                 } catch (RuntimeException problem) {
-                    if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* failed */ } }
-                    finish(slot, ok, failed, 0, problem.getClass().getSimpleName(), String.valueOf(problem.getMessage()));
+                    fail(request, id, socket, slot, ok, failed, problem);
                 }
             }
         }, failed);
+        return id;
+    }
+
+    /**
+     * The one failure path both catch clauses need, and the one place a
+     * cancellation is told apart from a fault.
+     *
+     * <p>Cancelling a blocking connect closes the socket under the worker, so
+     * the worker's own view of it is `SocketException: Socket closed` -- a
+     * message that names the mechanism and not the cause. Reporting that would
+     * make a deliberate abort indistinguishable from a connection the peer
+     * dropped, in the one situation where the program already knows the answer.
+     */
+    private static void fail(Request request, double id, Socket socket, NtsInbox.Slot slot,
+                             NtsNumberCallback ok, NtsTextPairCallback failed, Exception problem) {
+        if (socket != null) { try { socket.close(); } catch (IOException ignored) { /* failing */ } }
+        boolean cancelled;
+        synchronized (request) { cancelled = request.cancelled; }
+        retire(id);
+        if (cancelled) {
+            finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
+        } else {
+            finish(slot, ok, failed, 0, problem.getClass().getSimpleName(),
+                String.valueOf(problem.getMessage()));
+        }
     }
 
     /**
@@ -266,13 +418,13 @@ public final class NtsSocket {
         final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            failed.call("Backpressure", "no completion credit was available");
+            later(env, failed, "Backpressure", "no completion credit was available");
             return;
         }
         final Connection c = lookup(handle);
         if (c == null || c.closed) {
             NtsEnv.cancel(env, slot);
-            failed.call("Closed", "the connection is closed");
+            later(env, failed, "Closed", "the connection is closed");
             return;
         }
         submit(env, slot, new Runnable() {
@@ -299,13 +451,13 @@ public final class NtsSocket {
         final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
-            failed.call("Backpressure", "no completion credit was available");
+            later(env, failed, "Backpressure", "no completion credit was available");
             return;
         }
         final Connection c = lookup(handle);
         if (c == null || c.closed) {
             NtsEnv.cancel(env, slot);
-            failed.call("Closed", "the connection is closed");
+            later(env, failed, "Closed", "the connection is closed");
             return;
         }
         submit(env, slot, new Runnable() {
