@@ -8,6 +8,8 @@ export type {
   ErrorEventInit,
   EventInit,
   EventListener,
+  EventListenerObject,
+  EventListenerOrEventListenerObject,
   ListenerOptions,
   MessageEventInit,
 } from "./core/events.ts";

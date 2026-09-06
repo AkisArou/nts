@@ -167,6 +167,12 @@ export class Event {
 
 export type EventListener = (this: EventTarget, event: Event) => void;
 
+export interface EventListenerObject {
+  handleEvent(event: Event): void;
+}
+
+export type EventListenerOrEventListenerObject = EventListener | EventListenerObject;
+
 export interface EventHandlerSlot<Target extends EventTarget, E extends Event> {
   callback: ((this: Target, event: E) => void) | null;
   listener: EventListener | null;
@@ -187,12 +193,16 @@ export interface EventListenerSignal {
 
 interface ListenerRecord {
   type: string;
-  callback: EventListener;
+  callback: EventListenerOrEventListenerObject;
   capture: boolean;
   once: boolean;
   passive: boolean;
   removed: boolean;
   unsubscribeAbort: (() => void) | null;
+}
+
+function listenerOption(value: boolean | undefined): boolean {
+  return value ? true : false;
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
@@ -206,14 +216,14 @@ export class EventTarget {
 
   addEventListener(
     type: string,
-    callback: EventListener | null,
+    callback: EventListenerOrEventListenerObject | null,
     options: ListenerOptions | boolean = {},
   ): void {
-    if (callback === null) return;
-    const capture = typeof options === "boolean" ? options : (options.capture ?? false);
-    const once = typeof options === "boolean" ? false : (options.once ?? false);
-    const passive = typeof options === "boolean" ? false : (options.passive ?? false);
+    const once = typeof options === "boolean" ? false : listenerOption(options.once);
+    const capture = typeof options === "boolean" ? options : listenerOption(options.capture);
+    const passive = typeof options === "boolean" ? false : listenerOption(options.passive);
     const signal = typeof options === "boolean" ? undefined : options.signal;
+    if (callback === null) return;
     if (signal?.aborted) return;
     if (
       this.listeners.some(
@@ -242,10 +252,11 @@ export class EventTarget {
 
   removeEventListener(
     type: string,
-    callback: EventListener | null,
+    callback: EventListenerOrEventListenerObject | null,
     options: ListenerOptions | boolean = {},
   ): void {
-    const capture = typeof options === "boolean" ? options : (options.capture ?? false);
+    if (callback === null) return;
+    const capture = typeof options === "boolean" ? options : listenerOption(options.capture);
     for (const item of this.listeners) {
       if (item.type === type && item.callback === callback && item.capture === capture) {
         this.removeRecord(item);
@@ -265,7 +276,11 @@ export class EventTarget {
           if (item.once) this.removeRecord(item);
           event.setPassiveListener(item.passive);
           try {
-            item.callback.call(this, event);
+            if (typeof item.callback === "function") {
+              item.callback.call(this, event);
+            } else {
+              item.callback.handleEvent(event);
+            }
           } catch (error) {
             this.report(error);
           } finally {

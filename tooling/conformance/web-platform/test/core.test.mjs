@@ -452,6 +452,70 @@ test("EventTarget once, receiver, removal while dispatching", () => {
   target.dispatchEvent(new Event("x"));
   assert.equal(calls, 1);
 });
+test("EventTarget listener objects resolve handleEvent at dispatch time", () => {
+  for (const [EventClass, EventTargetClass] of [
+    [Event, EventTarget],
+    [globalThis.Event, globalThis.EventTarget],
+  ]) {
+    const calls = [];
+    const target = new EventTargetClass();
+    const listener = {
+      handleEvent(event) {
+        assert.equal(this, listener);
+        calls.push("first:" + event.type);
+      },
+    };
+
+    target.addEventListener("object", listener);
+    target.addEventListener("object", listener);
+    target.dispatchEvent(new EventClass("object"));
+    listener.handleEvent = function (event) {
+      assert.equal(this, listener);
+      calls.push("second:" + event.type);
+    };
+    target.dispatchEvent(new EventClass("object"));
+    target.removeEventListener("object", listener);
+    target.dispatchEvent(new EventClass("object"));
+
+    const callable = function () {
+      calls.push("function");
+    };
+    callable.handleEvent = () => calls.push("wrong");
+    target.addEventListener("function", callable);
+    target.dispatchEvent(new EventClass("function"));
+    assert.deepEqual(calls, ["first:object", "second:object", "function"]);
+  }
+});
+test("EventTarget reads listener options with Web IDL timing", () => {
+  const trace = (EventTargetClass) => {
+    const reads = [];
+    const options = {
+      get capture() {
+        reads.push("capture");
+        return false;
+      },
+      get once() {
+        reads.push("once");
+        return false;
+      },
+      get passive() {
+        reads.push("passive");
+        return false;
+      },
+      get signal() {
+        reads.push("signal");
+        return undefined;
+      },
+    };
+    const target = new EventTargetClass();
+    target.addEventListener("options", null, options);
+    reads.push("remove");
+    target.removeEventListener("options", null, options);
+    return reads;
+  };
+
+  assert.deepEqual(trace(EventTarget), trace(globalThis.EventTarget));
+});
 test("EventTarget signal and passive listener options match Node", () => {
   const target = new EventTarget();
   const first = new AbortController();

@@ -256,3 +256,16 @@ compiler dependency introduced by the final-form algorithm: assigning the compac
 length back to the private array is not lowered yet. That blocker was reported to the
 compiler lane; rebuilding a second array would hide it by restoring the avoidable
 allocation this change removes.
+
+`EventTarget` now accepts the standard statically typed listener-object form in
+addition to callback functions. It resolves `handleEvent` for each dispatch, calls
+it with the listener object as receiver, and retains object identity for duplicate
+registration and removal; callable listeners still take precedence over a property
+of the same name. The public boundary also observes listener-option dictionaries at
+the Web IDL-defined time, including when `addEventListener()` receives a null
+callback, while `removeEventListener()` with a null callback does not inspect its
+options. Two more complete unchanged DOM Events WPT fixtures raise the pinned slice
+to 58/58, and the Node-host suite passes 105/105. A mutation that used the event
+target as the listener-object receiver made the focused differential fail. The live
+NTS frontier remains 208 primary refusals, 40 cascades, zero JVM-backend refusals,
+and no invalid HIR; this final-form listener union adds no new refusal.
