@@ -726,11 +726,7 @@ public final class NtsRuntime {
     }
     public static int bounds(int length, int index) {
         return index >= 0 && index < length ? index : outside(index, length);
-    }
-    public static int bounds(int length, long index) {
-        return index >= 0L && index < length ? (int) index : outside((double) index, length);
-    }
-    /**
+    }    /**
      * The refusal an out-of-range subscript raises, callable from the array
      * classes so their reads need one call rather than two.
      *

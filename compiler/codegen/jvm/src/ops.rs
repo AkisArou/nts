@@ -1507,17 +1507,19 @@ impl Emitter<'_> {
                 // same lesson at `bounds` -- worth 4.56x there -- and the
                 // growable wrapper was never given the overloads to learn it
                 // with.
-                let subscript = match self.kind_of(*index)? {
-                    Kind::Int => Kind::Int,
-                    Kind::Long => Kind::Long,
-                    _ => Kind::Double,
-                };
+                // `I` or `D`, and no `J`. An `i64` subscript had an overload of
+                // its own while `array.len` was an `i64` and every counter
+                // bounded by one followed it -- record 0138, worth 4.56x when
+                // the `double` form was the only way in. A length is an `i32`
+                // now, so nothing in 109 examples or 50 bench cases reaches a
+                // wide subscript, and one that did would take the `double` path
+                // and answer identically: an array is at most `2^31 - 2` long,
+                // so every `long` the rounding could disturb is one the bounds
+                // check refuses anyway.
+                let subscript =
+                    if self.kind_of(*index)? == Kind::Int { Kind::Int } else { Kind::Double };
                 self.push_as(code, pool, *index, subscript, origin)?;
-                let at = match subscript {
-                    Kind::Int => "I",
-                    Kind::Long => "J",
-                    _ => "D",
-                };
+                let at = if subscript == Kind::Int { "I" } else { "D" };
                 code.invoke_static(
                     origin,
                     pool,
@@ -1624,7 +1626,7 @@ impl Emitter<'_> {
         // it sat at 39.28ms against hand-written Java's 7.97ms *after* the
         // integral path was built -- the fix existed and did not cover it.
         let kind = self.kind_of(index)?;
-        let integral = matches!(kind, Kind::Int | Kind::Long);
+        let integral = kind == Kind::Int;
         // The array is already on the stack, so `dup` it for the length rather
         // than loading it again -- which is why `bounds` takes the length
         // first. The reloaded version emitted `aload 11; aload 11; arraylength`
@@ -1635,11 +1637,7 @@ impl Emitter<'_> {
         // The length stays an `int` in both forms: widening it only to compare
         // against a double costs an instruction per access and buys nothing --
         // `index < length` promotes the `int` for free.
-        let descriptor = match kind {
-            Kind::Int => "(II)I",
-            Kind::Long => "(IJ)I",
-            _ => "(ID)I",
-        };
+        let descriptor = if integral { "(II)I" } else { "(ID)I" };
         code.invoke_static(origin, pool, RUNTIME, "bounds", descriptor);
         Ok(())
     }
@@ -2095,30 +2093,7 @@ impl Emitter<'_> {
         {
             return Ok(Placed::OnStack);
         }
-        // The mirror: an `i32` widened to an `i64` that `narrow` decided to keep
-        // in an `int` slot has nothing left to do. Guarded on the declared types
-        // being exactly that widening, because `Convert` between a float and an
-        // integer is a truncation and skipping *that* would be a wrong answer.
-        if self.narrowed.contains(&value)
-            && matches!(self.ty(operand), HirType::Int { bits, .. } if *bits <= 32)
-            && matches!(result, HirType::Int { bits: 64, .. })
-        {
-            return Ok(Placed::OnStack);
-        }
         let from = self.ty(operand).clone();
-        // `convert` is written in declared types, so what it is handed has to be
-        // in one. A narrowed `i64` is on the stack as an `int` and a widened
-        // `i32` as a `double`; putting the operand back in its declaration is
-        // the crossing, and without it `convert %66 : f64` emitted `l2d` over an
-        // `int` and the emitter's accounting caught it one instruction later.
-        if let Some(declared) = types::kind(&from) {
-            let held = self.kind_of(operand)?;
-            if held != declared {
-                convert_kind(code, origin, held, declared).ok_or_else(|| {
-                    refuse(self.func, &format!("a {held:?} operand where a {declared:?} was declared"))
-                })?;
-            }
-        }
         self.convert(code, pool, &from, result, origin)?;
         Ok(Placed::OnStack)
     }

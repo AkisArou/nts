@@ -44,7 +44,6 @@ pub mod body;
 pub mod hierarchy;
 pub mod ops;
 pub mod types;
-mod narrow;
 mod unbox;
 pub mod widen;
 
