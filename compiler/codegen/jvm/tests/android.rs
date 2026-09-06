@@ -247,6 +247,8 @@ struct Pinned {
     artifact: String,
     version: String,
     sha256: String,
+    scope: String,
+    repository: String,
 }
 
 /// The pins, read from the file that is also the SBOM.
@@ -260,12 +262,18 @@ fn pinned() -> Vec<Pinned> {
         .filter(|line| !line.trim_start().starts_with('#') && !line.trim().is_empty())
         .filter_map(|line| {
             let mut fields = line.split('\t');
-            Some(Pinned {
+            let pin = Pinned {
                 group: fields.next()?.to_owned(),
                 artifact: fields.next()?.to_owned(),
                 version: fields.next()?.to_owned(),
                 sha256: fields.next()?.to_owned(),
-            })
+                scope: {
+                    let _license = fields.next()?;
+                    fields.next()?.to_owned()
+                },
+                repository: fields.next()?.to_owned(),
+            };
+            Some(pin)
         })
         .collect()
 }
@@ -365,16 +373,21 @@ fn the_digest_this_test_uses_is_the_one_everyone_else_means() {
 /// is a fact about this machine; getting different bytes from it is a fact
 /// about the supply chain, and the two must not look alike.
 fn dependencies() -> Option<Vec<PathBuf>> {
+    fetch(&["runtime"])
+}
+
+fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
     let curl = tool("curl")?;
     let cache = std::env::temp_dir().join("nts-okhttp-deps");
     std::fs::create_dir_all(&cache).ok()?;
     let mut jars = Vec::new();
-    for pin in pinned() {
+    for pin in pinned().into_iter().filter(|pin| scopes.contains(&pin.scope.as_str())) {
         let name = format!("{}-{}.jar", pin.artifact, pin.version);
         let path = cache.join(&name);
         if !path.exists() {
             let url = format!(
-                "https://repo1.maven.org/maven2/{}/{}/{}/{name}",
+                "{}/{}/{}/{}/{name}",
+                pin.repository,
                 pin.group.replace('.', "/"),
                 pin.artifact,
                 pin.version
@@ -509,6 +522,92 @@ fn the_pinned_dependencies_dex_at_the_same_api_floor() {
         "the dependency dex does not mention OkHttp's own client class, so whatever it \
          contains is not what was pinned"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// R8 shrinks the library and the keep rules are what stops it shrinking the
+/// part an FFI reaches.
+///
+/// D8 only translates; R8 also *removes*, and what it removes is whatever it
+/// cannot see a path to. Every entry point of this library is called from
+/// outside Java, so R8 sees a path to none of them -- `consumer-rules.pro` is
+/// the whole reason the artifact still has a surface after shrinking, and a
+/// rule that stops matching is silent until something calls the method that is
+/// no longer there.
+///
+/// So the assertion is that the kept classes survive **and** that the internals
+/// do not: `NetworkPrimitives$Connection` and `$TimerEntry` are private and
+/// must be gone, because a run where R8 removed nothing at all would satisfy
+/// "the kept classes are still here" without shrinking anything.
+#[test]
+fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
+    let (Some(javac), Some(java), Some((tools, platform))) = (tool("javac"), tool("java"), sdk())
+    else {
+        return;
+    };
+    let Some(r8) = fetch(&["tool"]).and_then(|jars| jars.into_iter().next()) else { return };
+    let dir = std::env::temp_dir().join(format!("nts-r8-{}", std::process::id()));
+    let classes = dir.join("classes");
+    let out = dir.join("out");
+    std::fs::create_dir_all(&classes).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+
+    let mut compile = Command::new(&javac);
+    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&platform).arg("-d").arg(&classes);
+    for path in sources(&android().join("src/main")).into_iter().chain(sources(&android().join("src/android"))) {
+        compile.arg(path);
+    }
+    let built = compile.output().unwrap();
+    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+
+    let mut shrink = Command::new(&java);
+    shrink
+        .arg("-cp")
+        .arg(&r8)
+        .args(["com.android.tools.r8.R8", "--release", "--min-api", "26", "--lib"])
+        .arg(&platform)
+        .arg("--pg-conf")
+        .arg(android().join("consumer-rules.pro"))
+        .arg("--output")
+        .arg(&out);
+    for path in sources_of(&classes) {
+        shrink.arg(path);
+    }
+    let ran = shrink.output().unwrap();
+    assert!(
+        ran.status.success(),
+        "R8 refused the library:\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+
+    let dumped = Command::new(tools.join("dexdump"))
+        .arg("-d")
+        .arg(out.join("classes.dex"))
+        .output()
+        .unwrap();
+    let listing = String::from_utf8_lossy(&dumped.stdout);
+    for kept in [
+        "Lorg/nts/web/NetworkPrimitives;",
+        "Lorg/nts/web/AndroidNetworking;",
+        "Lorg/nts/web/NetworkPrimitives$ConnectCallback;",
+        "Lorg/nts/web/NetworkPrimitives$ReadCallback;",
+        "Lorg/nts/web/NetworkPrimitives$WriteCallback;",
+        "Lorg/nts/web/NetworkPrimitives$CleartextPolicy;",
+    ] {
+        assert!(
+            listing.contains(kept),
+            "R8 removed {kept}, which `consumer-rules.pro` keeps. Nothing in Java calls it -- \
+             the callers are on the other side of an FFI -- so a keep rule that stops matching \
+             is silent until something calls a method that is no longer there"
+        );
+    }
+    for gone in ["Lorg/nts/web/NetworkPrimitives$Connection;", "Lorg/nts/web/NetworkPrimitives$TimerEntry;"] {
+        assert!(
+            !listing.contains(gone),
+            "R8 kept {gone}, which is private and reached only from inside. A run that removed \
+             nothing would pass every assertion above without shrinking anything"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

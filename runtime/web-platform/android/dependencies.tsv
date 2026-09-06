@@ -16,7 +16,19 @@
 # and desugar predictably; a third-party jar is reviewed on its own terms and
 # passes through D8 like any other dependency.
 #
-# group	artifact	version	sha256	license	purl
-com.squareup.okhttp3	okhttp	4.12.0	b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0	Apache-2.0	pkg:maven/com.squareup.okhttp3/okhttp@4.12.0
-com.squareup.okio	okio-jvm	3.6.0	67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412	Apache-2.0	pkg:maven/com.squareup.okio/okio-jvm@3.6.0
-org.jetbrains.kotlin	kotlin-stdlib	1.8.21	042a1cd1ac976cdcfe5eb63f1d8e0b0b892c9248e15a69c8cfba495d546ea52a	Apache-2.0	pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@1.8.21
+# `scope` is `runtime` for anything that ships inside the APK and `tool` for
+# anything that only builds it. R8 is a tool: it rewrites the artifact and is
+# not in it, so it is pinned for reproducibility rather than reviewed as a
+# dependency -- but a build tool that can be swapped silently is a supply-chain
+# problem of exactly the same shape, which is why it is in the same file.
+#
+# `repository` because they are not all in one place. R8 is published to
+# Google's Maven and not to Central, and a fetcher that assumed one host would
+# quietly fail over to "cannot reach the network" for an artifact that is
+# simply somewhere else.
+#
+# group	artifact	version	sha256	license	scope	repository
+com.squareup.okhttp3	okhttp	4.12.0	b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0	Apache-2.0	runtime	https://repo1.maven.org/maven2
+com.squareup.okio	okio-jvm	3.6.0	67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412	Apache-2.0	runtime	https://repo1.maven.org/maven2
+org.jetbrains.kotlin	kotlin-stdlib	1.8.21	042a1cd1ac976cdcfe5eb63f1d8e0b0b892c9248e15a69c8cfba495d546ea52a	Apache-2.0	runtime	https://repo1.maven.org/maven2
+com.android.tools	r8	8.13.23	e3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81	BSD-3-Clause	tool	https://maven.google.com

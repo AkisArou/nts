@@ -70,6 +70,40 @@ run EnvTest
 run CloseRaceTest
 run Stress
 
+# And again against an R8-shrunk library, which is what actually ships. D8 only
+# translates; R8 also removes, and every entry point here is called from
+# outside Java, so R8 can see a path to none of them -- `consumer-rules.pro` is
+# the only reason the artifact still has a surface. Running the same suite
+# against the shrunk output is the difference between the rules being present
+# and the rules being right.
+#
+# Uses the jar the Rust suite pins and caches; skipped rather than fetched here,
+# because a shell script downloading a build tool is a supply-chain decision
+# that belongs where the digests are.
+r8=$(ls "${TMPDIR:-/tmp}"/nts-okhttp-deps/r8-*.jar 2>/dev/null | tail -1)
+if [ -n "$r8" ]; then
+  mkdir -p "$work/shrunk" "$work/testonly"
+  # shellcheck disable=SC2046
+  java -cp "$r8" com.android.tools.r8.R8 --release --min-api 26 --lib "$platform" \
+    --pg-conf "$here/runtime/web-platform/android/consumer-rules.pro" \
+    --output "$work/shrunk" \
+    $(find "$work/classes" -path '*org/nts/web/*' -name '*.class')
+  javac --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
+    "$here"/runtime/web-platform/android/src/test/java/org/nts/web/*.java
+  # shellcheck disable=SC2046
+  "$tools/d8" --min-api 26 --lib "$platform" --output "$work/testonly" \
+    $(find "$work/testonly" -name '*.class')
+  adb push "$work/shrunk/classes.dex" /data/local/tmp/nts-shrunk.dex > /dev/null
+  adb push "$work/testonly/classes.dex" /data/local/tmp/nts-testonly.dex > /dev/null
+  echo "--- org.nts.web.NetworkPrimitivesTest, against the R8-shrunk library"
+  out=$(adb shell "CLASSPATH=/data/local/tmp/nts-testonly.dex:/data/local/tmp/nts-shrunk.dex app_process /data/local/tmp org.nts.web.NetworkPrimitivesTest /data/local/tmp/store.p12" 2>&1)
+  echo "$out"
+  case "$out" in *"PASS:"*) ;; *) failed=1 ;; esac
+  adb shell rm -f /data/local/tmp/nts-shrunk.dex /data/local/tmp/nts-testonly.dex
+else
+  echo "--- no cached R8; run \`cargo test -p nts-codegen-jvm --test android\` first to pin and fetch it"
+fi
+
 adb shell rm -f /data/local/tmp/nts-device.dex /data/local/tmp/store.p12
 [ "$failed" -eq 0 ] || { echo "device run failed"; exit 1; }
 echo "device: every suite green on ART"
