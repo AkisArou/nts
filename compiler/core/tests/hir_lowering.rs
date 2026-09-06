@@ -867,6 +867,51 @@ fn instanceof_is_a_comparison_against_a_closed_set() {
     );
 }
 
+/// `instanceof` against a class reached through an **import**.
+///
+/// A reference to an imported name resolves to a symbol declared at the import
+/// site, and a class's type is filed under the *declaration's* symbol. Looking
+/// the alias up in the type table found nothing, and the refusal said "an
+/// `instanceof` against something this compiler has no class for" — of a class
+/// it had laid out one file away. 18 sites in `runtime/node`, `chunk instanceof
+/// Buffer` among them.
+///
+/// Both halves are the test. The subclass must answer to the imported **base**
+/// as well, which is what separates following the alias from finding any type
+/// that happens to share the name: `Counter` and `Base` are two symbols in one
+/// module and the hierarchy has to relate them after the hop.
+#[test]
+fn instanceof_follows_an_import_alias() {
+    let Some(lowered) = lowered("cross-file-class") else {
+        return;
+    };
+    assert!(
+        !lowered
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("instanceof")),
+        "the class is one import away: {:?}",
+        lowered
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+    );
+
+    let against_base = func(&lowered, "isABase")
+        .values
+        .iter()
+        .find_map(|op| match &op.kind {
+            OpKind::InstanceOf { classes, .. } => Some(classes.len()),
+            _ => None,
+        })
+        .expect("`v instanceof Base` lowers to the operation");
+    assert!(
+        against_base >= 2,
+        "the imported base admits the imported subclass as well as itself",
+    );
+}
+
 #[test]
 fn an_optional_call_evaluates_its_arguments_only_in_the_present_arm() {
     let Some(lowered) = lowered("optional-access") else {

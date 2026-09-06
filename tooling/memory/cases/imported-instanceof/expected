@@ -1,0 +1,21 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none. Seventeen objects, each dying with the iteration
+because that made it -- nothing stores one, returns one, or hands one to
+because anything that could keep it -- so escape analysis puts each in the
+because frame in turn. `upcast` reads 0 for the same shape and the same
+because reason, and it erases its subject too.
+because
+because Operations: none, by the rule `closure-capture` states -- an allocation
+because floor of zero forces an operation floor of zero. Beyond that there is
+because nothing here for a count to reach: `instanceof` reads a header field
+because and compares it with the address of a static descriptor. It does not
+because take a reference to its subject, and a value that is not a reference
+because at all fails the tag test before the header is touched.
+because
+because What the case is for is the shape of that answer rather than its cost.
+because A lowering that asked the runtime to build something -- a class token,
+because a boxed answer -- or that retained the subject for the length of the
+because test would read non-zero here, and would still agree with node.

@@ -8829,13 +8829,33 @@ impl<'a> FuncBuilder<'a> {
             // struct here and still an Array in the language.
             TypeKind::Array(_) | TypeKind::Tuple(_) => true,
             // Anything the checker has left open cannot be decided here, and a
-            // guess would be a wrong answer rather than a missing one. A tag
-            // test is what this needs, and the tag does not distinguish an
-            // array from an object yet.
+            // guess would be a wrong answer rather than a missing one.
+            //
+            // **Not for want of a runtime test**, which is what this said for
+            // as long as it has existed. The test is available and was built:
+            // an erased value carries a reference tag, a header carries a
+            // descriptor, and `NtsDescriptor::kind` already separates an array
+            // from an object. It was written, and then measured against the
+            // thing it would have to answer.
+            //
+            // What blocks it is that `number[]` and `Float64Array` are **one
+            // representation here** -- `Managed(Array(Float { bits: 64 }))`,
+            // one `nts_desc_double`, one address -- and node answers `true` for
+            // the first and `false` for the second. Nor does the element type
+            // separate them: `elements` narrows an integer-only `number[]` to
+            // `i32`, which is also `Int32Array`.
+            //
+            // So this is a *precision* loss rather than a missing capability,
+            // and it is recorded as one in `typescript.md` section 16. Closing
+            // it means carrying the distinction into the HIR type, which is
+            // what `ManagedType::Array` deliberately does not do.
             TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) => {
                 return Err(self.unsupported(
                     id,
-                    "`Array.isArray` of a value whose type is open, which needs a runtime tag",
+                    "`Array.isArray` of a value whose type is open -- a runtime test can see \
+                     that it is an array and cannot see whether it is a *typed* one, because \
+                     `number[]` and `Float64Array` are one representation here and node \
+                     answers differently for them",
                 ));
             }
             // Everything else is not an Array -- including a `Uint8Array`,
@@ -10537,6 +10557,13 @@ impl<'a> FuncBuilder<'a> {
         let Some(symbol) = self.node(rhs).symbol else {
             return Err(self.unsupported(rhs, "an `instanceof` whose right side is not a class"));
         };
+        // Through the import alias, because a reference to an imported name
+        // resolves to a symbol declared at the *import site* and the class's
+        // type is filed under the declaration's. `chunk instanceof Buffer` in
+        // `net`, where `Buffer` is `buffer`'s class, searched the type table for
+        // the alias's symbol, found nothing, and reported it as a class this
+        // compiler does not have -- of a class it had laid out.
+        let symbol = self.denoted_symbol(symbol);
         // The class's *instance* type. The right operand names the constructor,
         // whose type is not the type of what `new` produces, so it is found by
         // the symbol both share -- and by the symbol rather than by the name,
