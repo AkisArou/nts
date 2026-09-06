@@ -426,14 +426,6 @@ try {
   hostProcess.exit(0);
 }
 
-// Unix-domain socket paths have a small fixed kernel limit (108 bytes on
-// Linux). Node's own common helper therefore makes PIPE relative to cwd; an
-// absolute workspace path can exceed the limit before the test adds its own
-// suffix.
-const common = makeCommon(
-  relative(hostProcess.cwd(), tmpdir.resolve(`node-test.${hostProcess.pid}.sock`)),
-  join(ROOT, "third_party/node/test/common"),
-);
 const realRequire = createRequire(import.meta.url);
 const nodeTestRoot = join(ROOT, "third_party/node/test");
 const testModuleCache = new Map();
@@ -657,6 +649,17 @@ const workerThreadsInfrastructure = {
   ...realWorkerThreads,
   Worker: CommonJsFixtureWorker,
 };
+
+// Unix-domain socket paths have a small fixed kernel limit (108 bytes on
+// Linux). Node's own common helper therefore makes PIPE relative to cwd; an
+// absolute workspace path can exceed the limit before the test adds its own
+// suffix. Its process helper receives our routed spawn so declared subject
+// fixtures cannot silently fall back to Node's builtin implementation.
+const common = makeCommon(
+  relative(hostProcess.cwd(), tmpdir.resolve(`node-test.${hostProcess.pid}.sock`)),
+  join(ROOT, "third_party/node/test/common"),
+  spawnInfrastructure,
+);
 
 /** Node's `test/common/countdown`, attached to this runner's call tally. */
 class Countdown {

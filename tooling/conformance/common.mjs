@@ -14,6 +14,7 @@
 //   skip                   ours; raises so the runner can count it
 //   mustCall / mustNotCall ours; the runner checks the tallies at the end
 //   invalidArgTypeHelper   node's, verbatim, test/common/index.js:802
+//   spawnPromisified       node's, with the runner's subject-preserving spawn
 //   getTTYfd               node's, verbatim, test/common/index.js
 //   allowGlobals, ...      no-ops; they configure node's own leak checker
 
@@ -134,8 +135,29 @@ export function checkPending() {
   return missed;
 }
 
-export function makeCommon(pipePath, nodeCommonDirectory = "") {
+export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
   const warningHandlers = new Map();
+
+  /** Node's promise wrapper, using the runner's child-process routing. */
+  function spawnPromisified(...args) {
+    let stderr = "";
+    let stdout = "";
+
+    const child = spawn(...args);
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (data) => { stderr += data; });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (data) => { stdout += data; });
+
+    return new Promise((resolve, reject) => {
+      child.on("close", (code, signal) => {
+        resolve({ code, signal, stderr, stdout });
+      });
+      child.on("error", (code, signal) => {
+        reject({ code, signal, stderr, stdout });
+      });
+    });
+  }
 
   function expectedWarning(name, expected, code) {
     let properties;
@@ -204,6 +226,7 @@ export function makeCommon(pipePath, nodeCommonDirectory = "") {
     localhostIPv4: "127.0.0.1",
     getTTYfd,
     runWithInvalidFD,
+    spawnPromisified,
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
     isMainThread: true,
