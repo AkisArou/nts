@@ -133,6 +133,133 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The Android SDK's `d8`, `android.jar` and a build-tools directory that has
+/// both, or `None`.
+fn sdk() -> Option<(PathBuf, PathBuf)> {
+    let home = PathBuf::from(std::env::var_os("ANDROID_HOME").or_else(|| std::env::var_os("ANDROID_SDK_ROOT"))?);
+    let platform = std::fs::read_dir(home.join("platforms")).ok()?
+        .flatten()
+        .map(|entry| entry.path().join("android.jar"))
+        .filter(|jar| jar.exists())
+        .max()?;
+    let tools = std::fs::read_dir(home.join("build-tools")).ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.join("d8").exists())
+        .max()?;
+    Some((tools, platform))
+}
+
+/// Both artifacts survive `d8` at the API floor they claim, and neither keeps
+/// an `invoke-custom` after it.
+///
+/// # Why the dex is where this is asked and not the class file
+///
+/// `runtime_jar.rs` already asserts `nts-runtime.jar` has no `invokedynamic`,
+/// which is the rule that keeps the Android path open. The Android library
+/// **does** have some -- it is written with lambdas -- and that is not a
+/// violation of the same rule, because it is not the same artifact and not the
+/// same question. The question for a library that ships through AGP is what
+/// comes out of D8, and the answer is measured here rather than argued:
+///
+///     android library   38 classes,  222 methods, 0 invoke-custom
+///     nts-runtime.jar   45 classes,  807 methods, 0 invoke-custom
+///
+/// D8 desugars every lambda into a class even at `--min-api 26`, where
+/// `invoke-custom` would have been legal. So "free of accidental
+/// invokedynamic" is true of both shipped artifacts by different routes: one
+/// never has any, and the other's do not survive the toolchain.
+///
+/// The class *names* are checked too. A `d8` that produced an empty dex would
+/// satisfy "zero invoke-custom" perfectly.
+#[test]
+fn both_artifacts_dex_at_api_26_with_no_invoke_custom() {
+    let (Some(javac), Some((tools, platform))) = (tool("javac"), sdk()) else { return };
+    let root = repository();
+    let dir = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
+    let classes = dir.join("classes");
+    std::fs::create_dir_all(&classes).unwrap();
+
+    // Compiled against `android.jar` on the *classpath* with the JDK's own
+    // boot classes, which is what AGP does. Putting `android.jar` on the boot
+    // classpath instead fails on `LambdaMetafactory`, which the SDK does not
+    // ship because D8 is what removes the need for it.
+    let mut compile = Command::new(&javac);
+    compile.args(["--release", "8", "-Xlint:all,-options", "-Werror", "-cp"])
+        .arg(&platform)
+        .arg("-d")
+        .arg(&classes);
+    for path in sources(&android().join("src/main")) {
+        compile.arg(path);
+    }
+    for path in sources(&android().join("src/android")) {
+        compile.arg(path);
+    }
+    let built = compile.output().unwrap();
+    assert!(
+        built.status.success(),
+        "the Android source sets did not compile against the SDK:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+
+    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+
+    for (what, out, inputs) in [
+        ("the Android library", dir.join("library"), sources_of(&classes)),
+        ("nts-runtime.jar", dir.join("runtime"), vec![jar.clone()]),
+    ] {
+        std::fs::create_dir_all(&out).unwrap();
+        let mut dex = Command::new(tools.join("d8"));
+        dex.args(["--min-api", "26", "--lib"]).arg(&platform).arg("--output").arg(&out);
+        for input in &inputs {
+            dex.arg(input);
+        }
+        let ran = dex.output().unwrap();
+        assert!(
+            ran.status.success(),
+            "d8 refused {what} at API 26:\n{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+        let produced = out.join("classes.dex");
+        assert!(produced.exists(), "d8 produced no dex for {what}");
+
+        let dumped = Command::new(tools.join("dexdump")).arg("-d").arg(&produced).output().unwrap();
+        let listing = String::from_utf8_lossy(&dumped.stdout);
+        let custom = listing.matches("invoke-custom").count();
+        assert_eq!(
+            custom, 0,
+            "{what} kept {custom} invoke-custom instruction(s) after d8 --min-api 26"
+        );
+        let named = listing.matches("Lnts/rt/").count() + listing.matches("Lorg/nts/web/").count();
+        assert!(
+            named > 0,
+            "{what} dexed to something that mentions none of its own classes, so \
+             the zero above is a fact about an empty file"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Every `.class` under a directory, for handing to `d8`.
+fn sources_of(root: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(at) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&at) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|it| it == "class") {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 /// The two `CONNECT` tunnels, against one proxy, required to answer the same.
 ///
 /// `nts.rt.NtsSocket` and `org.nts.web.NetworkPrimitives` each speak it and
