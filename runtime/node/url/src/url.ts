@@ -36,10 +36,13 @@ export class URL implements SearchParamsOwner {
   #record: UrlRecord;
   #searchParams: URLSearchParams;
 
-  constructor(input: string, base?: string | URL) {
-    if (arguments.length === 0) {
+  constructor(input: string, base?: string | URL);
+  constructor(...given: [] | [input: string, base?: string | URL]) {
+    if (given.length === 0) {
       throw new ERR_MISSING_ARGS("url");
     }
+    const input = given[0];
+    const base = given[1];
     const baseString = base === undefined ? undefined
       : base instanceof URL ? base.href
       : toUSVString(base);
@@ -49,10 +52,13 @@ export class URL implements SearchParamsOwner {
   }
 
   /** `URL.parse`: the constructor, without the throw. */
-  static parse(input: string, base?: string | URL): URL | null {
-    if (arguments.length === 0) {
+  static parse(input: string, base?: string | URL): URL | null;
+  static parse(...given: [] | [input: string, base?: string | URL]): URL | null {
+    if (given.length === 0) {
       throw new ERR_MISSING_ARGS("url");
     }
+    const input = given[0];
+    const base = given[1];
     const text = toUSVString(input);
     const baseString = base === undefined ? undefined
       : base instanceof URL ? base.href
@@ -64,10 +70,13 @@ export class URL implements SearchParamsOwner {
     }
   }
 
-  static canParse(input: string, base?: string | URL): boolean {
-    if (arguments.length === 0) {
+  static canParse(input: string, base?: string | URL): boolean;
+  static canParse(...given: [] | [input: string, base?: string | URL]): boolean {
+    if (given.length === 0) {
       throw new ERR_MISSING_ARGS("url");
     }
+    const input = given[0];
+    const base = given[1];
     const text = toUSVString(input);
     const baseString = base === undefined ? undefined
       : base instanceof URL ? base.href

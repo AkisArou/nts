@@ -287,11 +287,14 @@ export class URLSearchParams {
     return this.#list.length;
   }
 
-  append(name: string, value: string): void {
+  append(name: string, value: string): void;
+  append(...given: [] | [name: string] | [name: string, value: string]): void {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 2) {
+    if (given.length < 2) {
       throw new ERR_MISSING_ARGS("name", "value");
     }
+    const name = given[0];
+    const value = given[1];
     this.#list.push([toUSVString(name), toUSVString(value)]);
     this.#update();
   }
@@ -300,11 +303,14 @@ export class URLSearchParams {
    * Remove every pair with this name, or -- when a value is given -- only the
    * pairs that also have that value.
    */
-  delete(name: string, value?: string): void {
+  delete(name: string, value?: string): void;
+  delete(...given: [] | [name: string, value?: string]): void {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 1) {
+    if (given.length < 1) {
       throw new ERR_MISSING_ARGS("name");
     }
+    const name = given[0];
+    const value = given[1];
     const wanted = toUSVString(name);
     const list = this.#list;
     const length = list.length;
@@ -331,11 +337,13 @@ export class URLSearchParams {
     this.#update();
   }
 
-  get(name: string): string | null {
+  get(name: string): string | null;
+  get(...given: [] | [name: string]): string | null {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 1) {
+    if (given.length < 1) {
       throw new ERR_MISSING_ARGS("name");
     }
+    const name = given[0];
     const wanted = toUSVString(name);
     for (const pair of this.#list) {
       if (pair[0] === wanted) return pair[1];
@@ -343,11 +351,13 @@ export class URLSearchParams {
     return null;
   }
 
-  getAll(name: string): string[] {
+  getAll(name: string): string[];
+  getAll(...given: [] | [name: string]): string[] {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 1) {
+    if (given.length < 1) {
       throw new ERR_MISSING_ARGS("name");
     }
+    const name = given[0];
     const wanted = toUSVString(name);
     let count = 0;
     for (let index = 0; index < this.#list.length; index++) {
@@ -363,11 +373,14 @@ export class URLSearchParams {
     return values;
   }
 
-  has(name: string, value?: string): boolean {
+  has(name: string, value?: string): boolean;
+  has(...given: [] | [name: string, value?: string]): boolean {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 1) {
+    if (given.length < 1) {
       throw new ERR_MISSING_ARGS("name");
     }
+    const name = given[0];
+    const value = given[1];
     const wanted = toUSVString(name);
     if (value !== undefined) {
       const wantedValue = toUSVString(value);
@@ -393,11 +406,14 @@ export class URLSearchParams {
    * is kept: a caller changing one parameter does not expect the others to
    * move.
    */
-  set(name: string, value: string): void {
+  set(name: string, value: string): void;
+  set(...given: [] | [name: string] | [name: string, value: string]): void {
     URLSearchParams.#brandCheck(this);
-    if (arguments.length < 2) {
+    if (given.length < 2) {
       throw new ERR_MISSING_ARGS("name", "value");
     }
+    const name = given[0];
+    const value = given[1];
     const wanted = toUSVString(name);
     const wantedValue = toUSVString(value);
     const list = this.#list;
