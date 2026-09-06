@@ -44,6 +44,7 @@ import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
+const NativeRequest = globalThis.Request;
 const NativeResponse = globalThis.Response;
 const NativeFormData = globalThis.FormData;
 const NativeURLSearchParams = globalThis.URLSearchParams;
@@ -643,6 +644,31 @@ test("Multipart roundtrip preserves duplicate text entries, binary files and UTF
   const file = parsed.get("φάκελος");
   assert.equal(file.name, "δοκιμή.bin");
   assert.deepEqual(await file.bytes(), Uint8Array.of(0, 255, 13, 10));
+});
+test("Multipart serialization matches Node wire escaping and newline normalization", async () => {
+  const actualForm = new FormData();
+  actualForm.append('a\r\nb"', "x\ry\nz\r\nw");
+  actualForm.append("f", new File(["ok"], 'n\r\n".txt', { type: "text/plain" }));
+  const actual = encodeMultipart(actualForm, {
+    fill(bytes) {
+      bytes.fill(0);
+    },
+  });
+  const actualBoundary = actual.contentType.slice("multipart/form-data; boundary=".length);
+
+  const expectedForm = new NativeFormData();
+  expectedForm.append('a\r\nb"', "x\ry\nz\r\nw");
+  expectedForm.append("f", new NativeFile(["ok"], 'n\r\n".txt', { type: "text/plain" }));
+  const expectedRequest = new NativeRequest("http://example.test", {
+    method: "POST",
+    body: expectedForm,
+  });
+  const expectedType = expectedRequest.headers.get("content-type");
+  assert.ok(expectedType);
+  const expectedBoundary = expectedType.slice("multipart/form-data; boundary=".length);
+  const expected = (await expectedRequest.text()).split(expectedBoundary).join(actualBoundary);
+
+  assert.equal(await actual.blob.text(), expected);
 });
 test("Multipart quoted boundary, preamble/epilogue and boundary-like payload", async () => {
   const text =

@@ -1,7 +1,9 @@
 import type { RandomSource } from "../provider/primitives.ts";
-import { utf8 } from "../core/encoding.ts";
 import { Blob } from "../file/blob.ts";
+import type { BlobPart } from "../file/blob.ts";
 import { FormData } from "./form-data.ts";
+
+const HEX_DIGITS = "0123456789abcdef";
 
 export interface EncodedMultipart {
   blob: Blob;
@@ -23,15 +25,17 @@ export function encodeMultipart(form: FormData, random: RandomSource): EncodedMu
   random.fill(entropy);
   let boundary = "----nts-";
 
-  for (const byte of entropy) boundary += byte.toString(16).padStart(2, "0");
-  const parts: (string | Blob | Uint8Array)[] = [];
+  for (const byte of entropy) {
+    boundary += HEX_DIGITS.charAt(byte >>> 4) + HEX_DIGITS.charAt(byte & 15);
+  }
+  const parts: BlobPart[] = [];
 
   for (const [name, value] of form) {
     let header =
       "--" + boundary + '\r\nContent-Disposition: form-data; name="' + quoted(name) + '"';
     if (typeof value === "string") {
       header += "\r\n\r\n";
-      parts.push(utf8.encode(header), utf8.encode(newlines(value)), "\r\n");
+      parts.push(header, newlines(value), "\r\n");
     } else {
       header +=
         '; filename="' +
@@ -39,7 +43,7 @@ export function encodeMultipart(form: FormData, random: RandomSource): EncodedMu
         '"\r\nContent-Type: ' +
         (value.type || "application/octet-stream") +
         "\r\n\r\n";
-      parts.push(utf8.encode(header), value, "\r\n");
+      parts.push(header, value, "\r\n");
     }
   }
 
