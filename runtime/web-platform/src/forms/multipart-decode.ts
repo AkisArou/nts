@@ -1,4 +1,4 @@
-import { asciiBytes, decodeUTF8 } from "../core/encoding.ts";
+import { decodeUTF8, encodeByteString } from "../core/encoding.ts";
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { LimitError } from "../core/errors.ts";
 import { isToken } from "../fetch/headers.ts";
@@ -57,8 +57,8 @@ export function decodeMultipart(
     boundary.endsWith(" ")
   )
     throw new TypeError("Invalid multipart boundary");
-  const opening = asciiBytes("--" + boundary);
-  const marker = asciiBytes("\r\n--" + boundary);
+  const opening = encodeByteString("--" + boundary);
+  const marker = encodeByteString("\r\n--" + boundary);
   const search = new BytePattern(marker);
   const headersEnd = new BytePattern(Uint8Array.of(13, 10, 13, 10));
   let offset = 0;

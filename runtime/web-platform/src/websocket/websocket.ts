@@ -4,6 +4,7 @@ import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
 import { utf8 } from "../core/encoding.ts";
+import { toClampedUnsignedShort, toScalarValueString } from "../core/webidl.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/ports.ts";
 import { isToken } from "../fetch/headers.ts";
 import { Blob } from "../forms/blob.ts";
@@ -226,8 +227,8 @@ export class WebSocket extends EventTarget {
       throw new DOMException("WebSocket is still connecting", "InvalidStateError");
     let pending: PendingSend;
     if (typeof data === "string") {
-      const bytes = utf8.encode(data);
-      pending = { value: data, size: bytes.length };
+      const value = toScalarValueString(data);
+      pending = { value, size: utf8.encode(value).length };
     } else if (data instanceof Blob) pending = { value: data, size: data.size };
     else {
       const bytes = data instanceof Uint8Array ? data.slice() : new Uint8Array(data.slice(0));
@@ -260,14 +261,12 @@ export class WebSocket extends EventTarget {
   }
 
   close(code?: number, reason = ""): void {
-    if (
-      code !== undefined &&
-      code !== 1000 &&
-      (!Number.isInteger(code) || code < 3000 || code > 4999)
-    ) {
+    const closeCode = code === undefined ? undefined : toClampedUnsignedShort(code);
+    const closeReason = toScalarValueString(reason);
+    if (closeCode !== undefined && closeCode !== 1000 && (closeCode < 3000 || closeCode > 4999)) {
       throw new DOMException("Close code must be 1000 or 3000..4999", "InvalidAccessError");
     }
-    if (utf8.encode(reason).length > 123)
+    if (utf8.encode(closeReason).length > 123)
       throw new DOMException("Close reason exceeds 123 UTF-8 bytes", "SyntaxError");
     if (this.state === this.CLOSING || this.state === this.CLOSED) return;
     if (this.state === this.CONNECTING) {
@@ -277,9 +276,9 @@ export class WebSocket extends EventTarget {
       return;
     }
     this.state = this.CLOSING;
-    const closeCode = code ?? (reason === "" ? null : 1000);
+    const wireCode = closeCode ?? (closeReason === "" ? null : 1000);
     this.sends
-      .then(() => this.session?.close(closeCode, reason))
+      .then(() => this.session?.close(wireCode, closeReason))
       .catch((error) => this.fail(error));
   }
   private fail(_error: unknown): void {

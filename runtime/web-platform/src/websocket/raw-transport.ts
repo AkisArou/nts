@@ -1,5 +1,5 @@
 import { Headers } from "../fetch/headers.ts";
-import { asciiBytes, concatBytes, TextDecoder, utf8 } from "../core/encoding.ts";
+import { concatBytes, encodeByteString, TextDecoder, utf8 } from "../core/encoding.ts";
 import { DOMException, LimitError, ProtocolError } from "../core/errors.ts";
 import { AbortController } from "../core/abort.ts";
 import type { AbortSignal } from "../core/abort.ts";
@@ -109,7 +109,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
         "\r\n";
       if (handshake.protocols.length !== 0)
         head += "Sec-WebSocket-Protocol: " + handshake.protocols.join(", ") + "\r\n";
-      await writeAll(connection, asciiBytes(head + "\r\n"));
+      await writeAll(connection, encodeByteString(head + "\r\n"));
       const reader = new BufferedReader(connection);
       let response = await readHead(reader);
       let informational = 0;

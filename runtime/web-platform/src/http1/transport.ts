@@ -3,7 +3,7 @@ import type { FetchTransport, TransportRequest, TransportResponse } from "../fet
 import { nullBodyStatus } from "../fetch/response.ts";
 import { ReadableStream } from "../streams/readable.ts";
 import type { ReadableStreamDefaultReader } from "../streams/readable.ts";
-import { asciiBytes } from "../core/encoding.ts";
+import { encodeByteString } from "../core/encoding.ts";
 import { ProtocolError, LimitError, DOMException } from "../core/errors.ts";
 import type {
   ByteConnection,
@@ -98,7 +98,7 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
     validateWireValue(value);
     head += name + ": " + value + "\r\n";
   }
-  return { bytes: asciiBytes(head + "\r\n"), chunked };
+  return { bytes: encodeByteString(head + "\r\n"), chunked };
 }
 async function upload(
   connection: ByteConnection,
@@ -117,13 +117,13 @@ async function upload(
       if (length !== null && sent > length)
         throw new ProtocolError("Request body exceeds Content-Length");
       if (chunked)
-        await writeAll(connection, asciiBytes(result.value.length.toString(16) + "\r\n"));
+        await writeAll(connection, encodeByteString(result.value.length.toString(16) + "\r\n"));
       await writeAll(connection, result.value);
-      if (chunked) await writeAll(connection, asciiBytes("\r\n"));
+      if (chunked) await writeAll(connection, encodeByteString("\r\n"));
     }
     if (length !== null && sent !== length)
       throw new ProtocolError("Request body is shorter than Content-Length");
-    if (chunked) await writeAll(connection, asciiBytes("0\r\n\r\n"));
+    if (chunked) await writeAll(connection, encodeByteString("0\r\n\r\n"));
   } finally {
     reader.releaseLock();
   }

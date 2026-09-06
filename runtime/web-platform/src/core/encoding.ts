@@ -180,7 +180,7 @@ export function latin1(bytes: Uint8Array): string {
   return result;
 }
 
-export function asciiBytes(text: string): Uint8Array {
+export function encodeByteString(text: string): Uint8Array {
   const result = new Uint8Array(text.length);
 
   for (let i = 0; i < text.length; ++i) {

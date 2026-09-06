@@ -25,8 +25,13 @@ import {
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/io.js";
 import {
+  toClampedUnsignedShort,
+  toScalarValueString,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/webidl.js";
+import {
   closePayload,
   encodeFrame,
+  isValidWireCloseCode,
   parseClose,
   readFrame,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/codec.js";
@@ -476,6 +481,32 @@ test("Frame rejects nonminimal length, masking, reserved bits and bad controls",
   assert.deepEqual(parseClose(closePayload(1000, "Καλημέρα")), { code: 1000, reason: "Καλημέρα" });
   assert.throws(() => parseClose(Uint8Array.of(1)));
   assert.throws(() => closePayload(1006, ""));
+});
+test("WebSocket public and wire close-code domains remain distinct", () => {
+  for (const code of [1000, 1001, 1002, 1003, 1007, 1011, 1012, 1013, 1014, 3000, 4999]) {
+    assert.equal(isValidWireCloseCode(code), true, String(code));
+  }
+  for (const code of [999, 1004, 1005, 1006, 1015, 1016, 2999, 5000]) {
+    assert.equal(isValidWireCloseCode(code), false, String(code));
+  }
+
+  assert.deepEqual(parseClose(closePayload(1002, "")), { code: 1002, reason: "" });
+});
+test("Web IDL conversions clamp with ties-to-even and replace lone surrogates", () => {
+  for (const [input, expected] of [
+    [NaN, 0],
+    [-Infinity, 0],
+    [-1, 0],
+    [2998.5, 2998],
+    [2999.5, 3000],
+    [3000.5, 3000],
+    [3001.5, 3002],
+    [4999.5, 5000],
+    [Infinity, 65535],
+  ]) {
+    assert.equal(toClampedUnsignedShort(input), expected);
+  }
+  assert.equal(toScalarValueString("a\ud800b\udc00c\ud83d\udc99"), "a\ufffdb\ufffdc\ud83d\udc99");
 });
 test.after(() => api.close());
 test("Header HTTP whitespace normalization, non-breaking space and embedded newline rejection", () => {

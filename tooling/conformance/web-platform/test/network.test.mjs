@@ -540,6 +540,32 @@ suite("WebSocket masked sends, independent echo, subprotocol, clean close", asyn
   assert.equal(closed.wasClean, true);
   assert.deepEqual(e.log, ["open", "close"]);
 });
+suite("WebSocket applies Web IDL conversion before public close validation", async (t) => {
+  const s = await websocketServer(t, (socket) =>
+    peerParser(socket, (f) => {
+      if (f.opcode === 8) socket.end(frame(8, f.payload));
+      else socket.write(frame(f.opcode, f.payload, f.fin));
+    }),
+  );
+  const api = runtime(t);
+  const ws = api.createWebSocket(s.url);
+  const e = wsEvents(ws);
+  await e.opened;
+
+  assert.throws(
+    () => ws.close(4999.5),
+    (error) => error.name === "InvalidAccessError",
+  );
+  const message = new Promise((resolve) => (ws.onmessage = resolve));
+  ws.send("\ud800");
+  assert.equal((await message).data, "\ufffd");
+
+  ws.close(2999.5, "\ud800");
+  const closed = await e.closed;
+  assert.equal(closed.code, 3000);
+  assert.equal(closed.reason, "\ufffd");
+  assert.equal(closed.wasClean, true);
+});
 suite("WebSocket fragmented UTF-8 with interleaved ping and pong", async (t) => {
   let pong;
   const pongReceived = new Promise((resolve) => (pong = resolve));

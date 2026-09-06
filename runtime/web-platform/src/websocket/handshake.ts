@@ -1,4 +1,4 @@
-import { asciiBytes } from "../core/encoding.ts";
+import { encodeByteString } from "../core/encoding.ts";
 import type { RandomSource } from "../provider/ports.ts";
 import { Headers } from "../fetch/headers.ts";
 import { hasToken } from "../http1/parser.ts";
@@ -25,7 +25,7 @@ function rotate(value: number, bits: number): number {
 }
 /** SHA-1 is used ONLY for RFC 6455's fixed handshake, not for security signatures. */
 export function websocketAccept(key: string): string {
-  const input = asciiBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+  const input = encodeByteString(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
   const length = Math.ceil((input.length + 9) / 64) * 64;
   const bytes = new Uint8Array(length);
 

@@ -105,11 +105,26 @@ export function encodeFrame(
   return [header, payload];
 }
 
-export function validWireCloseCode(code: number): boolean {
-  return (
-    (code >= 3000 && code <= 4999) ||
-    [1000, 1001, 1002, 1003, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014].includes(code)
-  );
+export function isValidWireCloseCode(code: number): boolean {
+  if (code >= 3000 && code <= 4999) return true;
+
+  switch (code) {
+    case 1000:
+    case 1001:
+    case 1002:
+    case 1003:
+    case 1007:
+    case 1008:
+    case 1009:
+    case 1010:
+    case 1011:
+    case 1012:
+    case 1013:
+    case 1014:
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function closePayload(code: number | null, reason: string): Uint8Array {
@@ -118,7 +133,7 @@ export function closePayload(code: number | null, reason: string): Uint8Array {
     return new Uint8Array(0);
   }
 
-  if (!validWireCloseCode(code)) throw new ProtocolError("Invalid close code");
+  if (!isValidWireCloseCode(code)) throw new ProtocolError("Invalid close code");
   const text = utf8.encode(reason);
 
   if (text.length > 123) throw new LimitError("WebSocket close reason exceeds 123 UTF-8 bytes");
@@ -136,6 +151,6 @@ export function parseClose(payload: Uint8Array): { code: number; reason: string 
   if (payload.length === 1) throw new ProtocolError("One-byte close payload");
   const code = (payload[0] ?? 0) * 256 + (payload[1] ?? 0);
 
-  if (!validWireCloseCode(code)) throw new ProtocolError("Invalid peer close code");
+  if (!isValidWireCloseCode(code)) throw new ProtocolError("Invalid peer close code");
   return { code, reason: decodeUTF8(payload.subarray(2), true, true) };
 }
