@@ -69,6 +69,7 @@
       "streams/readable-streams/from.any.js": "2b28a05fee398c523d049c56aff190e771eb19f2",
       "streams/readable-streams/garbage-collection.any.js": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
       "streams/readable-streams/general.any.js": "eee3f62215eeb07e6a1c06d004defd98324b270e",
+      "streams/readable-streams/patched-global.any.js": "c208824c8644695771cfbe4dd4ace71ed4b49df5",
       "streams/readable-streams/reentrant-strategies.any.js": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
       "streams/readable-streams/tee.any.js": "c2c2e48230721163c09f4d4f6d1aee0c9a0a66fa",
       "streams/readable-streams/templated.any.js": "4f2440c0880bb738b9755d9df2f56882c9b8188e",

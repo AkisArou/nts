@@ -1,3 +1,11 @@
 export function ignoreRejection(promise: Promise<unknown>): void {
-  promise.catch(() => {});
+  observeRejection(promise);
+}
+
+async function observeRejection(promise: Promise<unknown>): Promise<void> {
+  try {
+    await promise;
+  } catch {
+    // The caller deliberately detached this operation.
+  }
 }

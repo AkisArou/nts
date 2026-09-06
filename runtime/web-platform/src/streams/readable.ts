@@ -10,7 +10,16 @@ import {
   type QueuingStrategy,
   type QueuingStrategySize,
 } from "./queuing-strategy.ts";
-import { WritableStream, type WritableStreamDefaultWriter } from "./writable.ts";
+import {
+  acquireWritableStreamDefaultWriter,
+  WritableStream,
+  writableStreamDefaultWriterAbort,
+  writableStreamDefaultWriterClose,
+  writableStreamDefaultWriterReady,
+  writableStreamDefaultWriterRelease,
+  writableStreamDefaultWriterWrite,
+  type WritableStreamDefaultWriter,
+} from "./writable.ts";
 
 export type ReadResult<T> = { done: false; value: T } | { done: true; value: undefined };
 
@@ -82,6 +91,25 @@ interface ConvertedPipeOptions {
 
 type StreamState = "readable" | "closed" | "errored";
 
+const defaultReadableSource = {
+  cancel: undefined,
+  pull: undefined,
+  start: undefined,
+  type: undefined,
+};
+const defaultReadableStrategy = {
+  highWaterMark: undefined,
+  size: undefined,
+};
+const defaultReaderOptions = { mode: undefined };
+const defaultPipeOptions = {
+  preventAbort: undefined,
+  preventCancel: undefined,
+  preventClose: undefined,
+  signal: undefined,
+};
+const defaultIteratorOptions = { preventCancel: undefined };
+
 function countChunk<T>(_value: T): number {
   return 1;
 }
@@ -132,7 +160,10 @@ export class ReadableStream<T> {
   #pullAgain = false;
   #isDisturbed = false;
 
-  constructor(source: UnderlyingSource<T> | null = {}, strategy: QueuingStrategy<T> | null = {}) {
+  constructor(
+    source: UnderlyingSource<T> | null = defaultReadableSource,
+    strategy: QueuingStrategy<T> | null = defaultReadableStrategy,
+  ) {
     this.#sizeOf = extractSizeAlgorithm(strategy);
     this.#highWaterMark = extractHighWaterMark(strategy, 1);
     requireDictionary(source, "Underlying source");
@@ -169,13 +200,7 @@ export class ReadableStream<T> {
       this.#clearAlgorithms();
       throw error;
     }
-    Promise.resolve(startResult).then(
-      () => {
-        this.#started = true;
-        this.#maybePull();
-      },
-      (error) => this.fail(error),
-    );
+    this.#observeStart(startResult);
   }
 
   static from<T>(asyncIterable: AsyncIterable<T> | Iterable<T | PromiseLike<T>>): ReadableStream<T>;
@@ -222,7 +247,9 @@ export class ReadableStream<T> {
     this.#isDisturbed = true;
   }
 
-  getReader(options: ReadableStreamGetReaderOptions | null = {}): ReadableStreamDefaultReader<T> {
+  getReader(
+    options: ReadableStreamGetReaderOptions | null = defaultReaderOptions,
+  ): ReadableStreamDefaultReader<T> {
     requireDictionary(options, "ReadableStream reader options");
     const mode = options?.mode;
     if (mode !== undefined) {
@@ -257,7 +284,7 @@ export class ReadableStream<T> {
 
   pipeThrough<R>(
     transform: ReadableWritablePair<R, T>,
-    options: StreamPipeOptions | null = {},
+    options: StreamPipeOptions | null = defaultPipeOptions,
   ): ReadableStream<R> {
     if (transform === null || typeof transform !== "object") {
       throw new TypeError("Stream transform must be a readable/writable pair");
@@ -272,7 +299,10 @@ export class ReadableStream<T> {
     return readable;
   }
 
-  pipeTo(destination: WritableStream<T>, options: StreamPipeOptions | null = {}): Promise<void> {
+  pipeTo(
+    destination: WritableStream<T>,
+    options: StreamPipeOptions | null = defaultPipeOptions,
+  ): Promise<void> {
     const converted = convertPipeOptions(options);
     if (!(destination instanceof WritableStream)) {
       return Promise.reject(new TypeError("Destination must be a WritableStream"));
@@ -283,9 +313,9 @@ export class ReadableStream<T> {
     if (destination.locked) {
       return Promise.reject(new TypeError("WritableStream is locked"));
     }
-    const reader = this.getReader();
-    const writer = destination.getWriter();
-    return pipeReadableToWritable(reader, writer, converted);
+    const reader = new ReadableStreamDefaultReader(this);
+    const writer = acquireWritableStreamDefaultWriter(destination);
+    return pipeReadableToWritable(this, reader, writer, converted);
   }
 
   /** @internal */ async cancelInternal(reason: unknown): Promise<void> {
@@ -398,6 +428,17 @@ export class ReadableStream<T> {
     }
     return this.#highWaterMark - this.#queue.totalSize;
   }
+
+  async #observeStart(startResult: void | PromiseLike<void>): Promise<void> {
+    try {
+      await startResult;
+      this.#started = true;
+      this.#maybePull();
+    } catch (error) {
+      this.fail(error);
+    }
+  }
+
   #maybePull(): void {
     if (!this.#started || this.#state !== "readable" || this.#closeRequested) {
       return;
@@ -423,19 +464,21 @@ export class ReadableStream<T> {
       this.fail(error);
       return;
     }
-    Promise.resolve(pullResult).then(
-      () => {
-        this.#pulling = false;
-        if (this.#pullAgain) {
-          this.#pullAgain = false;
-          this.#maybePull();
-        }
-      },
-      (error) => {
-        this.#pulling = false;
-        this.fail(error);
-      },
-    );
+    this.#observePull(pullResult);
+  }
+
+  async #observePull(pullResult: void | PromiseLike<void>): Promise<void> {
+    try {
+      await pullResult;
+      this.#pulling = false;
+      if (this.#pullAgain) {
+        this.#pullAgain = false;
+        this.#maybePull();
+      }
+    } catch (error) {
+      this.#pulling = false;
+      this.fail(error);
+    }
   }
 
   #takePending(): PromiseWithResolvers<ReadResult<T>> | undefined {
@@ -465,14 +508,16 @@ export class ReadableStream<T> {
     return tee(this);
   }
 
-  values(options: ReadableStreamIteratorOptions | null = {}): AsyncIterableIterator<T> {
+  values(
+    options: ReadableStreamIteratorOptions | null = defaultIteratorOptions,
+  ): AsyncIterableIterator<T> {
     requireDictionary(options, "ReadableStream iterator options");
     const preventCancel = options === null ? false : coerceToBoolean(options.preventCancel);
     return new ReadableStreamAsyncIterator(this, preventCancel);
   }
 
   [Symbol.asyncIterator](
-    options: ReadableStreamIteratorOptions | null = {},
+    options: ReadableStreamIteratorOptions | null = defaultIteratorOptions,
   ): AsyncIterableIterator<T> {
     return this.values(options);
   }
@@ -766,6 +811,7 @@ export class ReadableStreamDefaultReader<T> {
 }
 
 async function pipeReadableToWritable<T>(
+  source: ReadableStream<T>,
   reader: ReadableStreamDefaultReader<T>,
   writer: WritableStreamDefaultWriter<T>,
   options: ConvertedPipeOptions,
@@ -784,32 +830,34 @@ async function pipeReadableToWritable<T>(
   try {
     while (true) {
       try {
-        await waitFor(writer.ready);
+        await waitFor(writableStreamDefaultWriterReady(writer));
       } catch (error) {
         if (aborting) throw error;
-        if (!options.preventCancel) await reader.cancel(error);
+        if (!options.preventCancel) await source.cancelInternal(error);
         throw error;
       }
 
       let result: ReadResult<T>;
       try {
-        result = await waitFor(reader.read());
+        result = await waitFor(source.read(reader));
       } catch (error) {
         if (aborting) throw error;
-        if (!options.preventAbort) await writer.abort(error);
+        if (!options.preventAbort) await writableStreamDefaultWriterAbort(writer, error);
         throw error;
       }
 
       if (result.done) {
-        if (!options.preventClose) await waitFor(writer.close());
+        if (!options.preventClose) {
+          await waitFor(writableStreamDefaultWriterClose(writer));
+        }
         return;
       }
 
       try {
-        await waitFor(writer.write(result.value));
+        await waitFor(writableStreamDefaultWriterWrite(writer, result.value));
       } catch (error) {
         if (aborting) throw error;
-        if (!options.preventCancel) await reader.cancel(error);
+        if (!options.preventCancel) await source.cancelInternal(error);
         throw error;
       }
     }
@@ -817,14 +865,14 @@ async function pipeReadableToWritable<T>(
     if (!aborting) throw error;
     const reason = options.signal?.reason;
     const actions: Promise<void>[] = [];
-    if (!options.preventAbort) actions.push(writer.abort(reason));
-    if (!options.preventCancel) actions.push(reader.cancel(reason));
+    if (!options.preventAbort) actions.push(writableStreamDefaultWriterAbort(writer, reason));
+    if (!options.preventCancel) actions.push(source.cancelInternal(reason));
     await Promise.all(actions);
     throw reason;
   } finally {
     unsubscribe?.();
-    reader.releaseLock();
-    writer.releaseLock();
+    source.release(reader);
+    writableStreamDefaultWriterRelease(writer);
   }
 }
 
@@ -834,6 +882,12 @@ export interface TeeOptions<T> {
   /** Infinity is standards-shaped. A finite cap is an explicit NTS safety policy. */
   maxBufferedSize?: number;
 }
+
+const defaultTeeOptions = {
+  clone: undefined,
+  maxBufferedSize: undefined,
+  size: undefined,
+};
 
 class TeeBranch<T> {
   controller: ReadableStreamDefaultController<T> | undefined;
@@ -849,6 +903,7 @@ class TeeBranch<T> {
         },
         pull: () => owner.pull(),
         cancel: (reason) => owner.cancel(index, reason),
+        type: undefined,
       },
       { highWaterMark: 1, size },
     );
@@ -896,14 +951,19 @@ class TeeState<T> {
     if (Number.isNaN(this.limit) || this.limit < 0) {
       throw new RangeError("Invalid clone buffer limit");
     }
-    this.reader = stream.getReader();
+    this.reader = new ReadableStreamDefaultReader(stream);
     this.branches = [new TeeBranch(this, 0, this.size), new TeeBranch(this, 1, this.size)];
     ignoreRejection(this.canceled.promise);
-    const closedObservation = this.reader.closed.then(
-      () => this.sourceClosed(),
-      (error) => this.sourceErrored(error),
-    );
-    ignoreRejection(closedObservation);
+    this.observeSourceState();
+  }
+
+  private async observeSourceState(): Promise<void> {
+    try {
+      await this.reader.closed;
+      this.sourceClosed();
+    } catch (error) {
+      this.sourceErrored(error);
+    }
   }
 
   pull(): Promise<void> {
@@ -1003,14 +1063,7 @@ class TeeState<T> {
     if (this.branches[0].canceled && this.branches[1].canceled && !this.done) {
       this.retire();
       const cancellation = this.reader.cancel([this.branches[0].reason, this.branches[1].reason]);
-      cancellation.then(
-        () => {
-          this.canceled.resolve();
-        },
-        (error) => {
-          this.canceled.reject(error);
-        },
-      );
+      this.finishCancellation(cancellation);
     }
     return this.canceled.promise;
   }
@@ -1079,10 +1132,16 @@ class TeeState<T> {
       branch.fail(error);
     }
     const cancellation = this.reader.cancel(error);
-    cancellation.then(
-      () => this.canceled.resolve(),
-      (cancelError) => this.canceled.reject(cancelError),
-    );
+    this.finishCancellation(cancellation);
+  }
+
+  private async finishCancellation(cancellation: Promise<void>): Promise<void> {
+    try {
+      await cancellation;
+      this.canceled.resolve();
+    } catch (error) {
+      this.canceled.reject(error);
+    }
   }
 
   private retire(): void {
@@ -1096,7 +1155,7 @@ class TeeState<T> {
 
 export function tee<T>(
   stream: ReadableStream<T>,
-  options: TeeOptions<T> = {},
+  options: TeeOptions<T> = defaultTeeOptions,
 ): [ReadableStream<T>, ReadableStream<T>] {
   const state = new TeeState(stream, options);
   return [state.branches[0].stream, state.branches[1].stream];

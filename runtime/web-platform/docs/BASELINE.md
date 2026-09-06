@@ -942,3 +942,32 @@ JVM-backend refusals, the same type-only-edge `NTS1004`, and no invalid HIR. The
 movement from 441/77 is the final-form iterator protocol, promise capability,
 generic class/interface, and explicit-receiver source becoming visible; it is a
 dependency inventory rather than implementation progress in the compiler.
+
+The complete unchanged `streams/readable-streams/patched-global.any.js` fixture is
+now pinned by its exact upstream blob hash. All five cases pass. Default source,
+strategy, reader, pipe, iterator, and tee dictionaries use canonical objects with
+own `undefined` members, so omitted arguments never consult a poisoned
+`Object.prototype`. Tee's internal branch source likewise owns its `type` member.
+Removing that one member makes the upstream prototype-trap case fail and changes
+the aggregate from 1071/1073 to 1070/1073, proving that the trap observes the
+internal branch construction rather than only the public constructor.
+
+Streams promise observation now uses language-level `await` rather than mutable
+`Promise.prototype.then`, `catch`, or `finally` methods. Piping acquires and drives
+its reader and writer through module-owned algorithms instead of re-entering their
+public prototype methods; the first fresh run before that change passed the
+nominal pipe test but later invoked the deliberately patched `releaseLock`, which
+terminated the test process. The upstream harness now executes registered cleanup
+callbacks even after a rejected promise test and retains cross-realm error stacks,
+so prototype mutations cannot poison subsequent fixtures or erase their source
+locations.
+
+The five-case tranche is green and the aggregate pinned host result is 1071/1073.
+The only two visible failures remain the Web-IDL async-iterator prototype/descriptor
+shape and writable callback invocation with an explicit receiver. The complete
+local Node-host suite is 146/146 and the root TypeScript solution is green. The
+live compiled-source frontier is 508 primary `NTS1001` refusals, 79 `NTS1003`
+cascades, zero JVM-backend refusals, the same type-only-edge `NTS1004`, and no
+invalid HIR. These counts grew because the final-form internal pipe algorithms and
+promise observers are now visible to the compiler; they remain a dependency
+inventory rather than a claim of compiler progress.

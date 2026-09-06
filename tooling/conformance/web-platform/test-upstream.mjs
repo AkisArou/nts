@@ -76,8 +76,33 @@ function reportPass(path, name) {
 
 function reportFailure(path, name, error) {
   failed++;
-  const detail = error instanceof Error ? (error.stack ?? String(error)) : String(error);
+  const detail =
+    error !== null && typeof error === "object" && typeof error.stack === "string"
+      ? error.stack
+      : String(error);
   console.error(`FAIL ${path} :: ${name}\n  ${detail}`);
+}
+
+async function settleWithCleanups(outcome, cleanups) {
+  let failed = false;
+  let failure;
+  try {
+    await outcome;
+  } catch (error) {
+    failed = true;
+    failure = error;
+  }
+  for (let index = cleanups.length - 1; index >= 0; index--) {
+    try {
+      await cleanups[index]();
+    } catch (error) {
+      if (!failed) {
+        failed = true;
+        failure = error;
+      }
+    }
+  }
+  if (failed) throw failure;
 }
 
 function createWptContext(path, pending) {
@@ -266,7 +291,11 @@ function createWptContext(path, pending) {
     },
     promise_test(fn, name) {
       const asynchronousFailure = Promise.withResolvers();
+      const cleanups = [];
       const test = {
+        add_cleanup(cleanup) {
+          cleanups.push(cleanup);
+        },
         step(callback) {
           try {
             return callback.call(test);
@@ -300,7 +329,8 @@ function createWptContext(path, pending) {
         () => timeout.reject(new Error(`Upstream promise test timed out: ${name}`)),
         5000,
       );
-      const result = Promise.race([body, asynchronousFailure.promise, timeout.promise])
+      const outcome = Promise.race([body, asynchronousFailure.promise, timeout.promise]);
+      const result = settleWithCleanups(outcome, cleanups)
         .finally(() => clearTimeout(timer))
         .then(
           () => reportPass(path, name),

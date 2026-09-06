@@ -94,6 +94,17 @@ interface WritableWriterState<W> {
 const writableStreamState = Symbol("WritableStream state");
 const writableWriterState = Symbol("WritableStreamDefaultWriter state");
 const writableControllerKey: unique symbol = Symbol("construct WritableStreamDefaultController");
+const defaultUnderlyingSink = {
+  abort: undefined,
+  close: undefined,
+  start: undefined,
+  type: undefined,
+  write: undefined,
+};
+const defaultWritableStrategy = {
+  highWaterMark: undefined,
+  size: undefined,
+};
 
 /**
  * The Streams Standard's writable state machine. Requests and chunks are kept
@@ -166,16 +177,18 @@ class WritableStreamState<W> {
 
     const startResult = this.#invokeStart();
     this.#startAlgorithm = undefined;
-    Promise.resolve(startResult).then(
-      () => {
-        this.#started = true;
-        this.#advanceQueueIfNeeded();
-      },
-      (error) => {
-        this.#started = true;
-        this.#dealWithRejection(error);
-      },
-    );
+    this.#observeStart(startResult);
+  }
+
+  async #observeStart(startResult: void | PromiseLike<void>): Promise<void> {
+    try {
+      await startResult;
+      this.#started = true;
+      this.#advanceQueueIfNeeded();
+    } catch (error) {
+      this.#started = true;
+      this.#dealWithRejection(error);
+    }
   }
 
   get locked(): boolean {
@@ -411,26 +424,32 @@ class WritableStreamState<W> {
       throw new Error("WritableStream write queue lost its request");
     }
     this.#inFlightWriteRequest = request;
-    this.#invokeWrite(chunk).then(
-      () => {
-        request.resolve();
-        this.#inFlightWriteRequest = null;
-        this.#queue.dequeue();
-        if (!this.#closeQueuedOrInFlight() && this.#state === "writable") {
-          this.#updateBackpressure();
-        }
-        this.#advanceQueueIfNeeded();
-      },
-      (error) => {
-        request.reject(error);
-        this.#inFlightWriteRequest = null;
-        this.#queue.dequeue();
-        if (this.#state === "writable") {
-          this.#clearAlgorithms();
-        }
-        this.#dealWithRejection(error);
-      },
-    );
+    const writeResult = this.#invokeWrite(chunk);
+    this.#finishWrite(writeResult, request);
+  }
+
+  async #finishWrite(
+    writeResult: Promise<void>,
+    request: PromiseWithResolvers<void>,
+  ): Promise<void> {
+    try {
+      await writeResult;
+      request.resolve();
+      this.#inFlightWriteRequest = null;
+      this.#queue.dequeue();
+      if (!this.#closeQueuedOrInFlight() && this.#state === "writable") {
+        this.#updateBackpressure();
+      }
+      this.#advanceQueueIfNeeded();
+    } catch (error) {
+      request.reject(error);
+      this.#inFlightWriteRequest = null;
+      this.#queue.dequeue();
+      if (this.#state === "writable") {
+        this.#clearAlgorithms();
+      }
+      this.#dealWithRejection(error);
+    }
   }
 
   #processClose(): void {
@@ -443,10 +462,16 @@ class WritableStreamState<W> {
     this.#queue.dequeue();
     const closeResult = this.#invokeClose();
     this.#clearAlgorithms();
-    closeResult.then(
-      () => this.#finishInFlightClose(),
-      (error) => this.#finishInFlightCloseWithError(error),
-    );
+    this.#settleClose(closeResult);
+  }
+
+  async #settleClose(closeResult: Promise<void>): Promise<void> {
+    try {
+      await closeResult;
+      this.#finishInFlightClose();
+    } catch (error) {
+      this.#finishInFlightCloseWithError(error);
+    }
   }
 
   #finishInFlightClose(): void {
@@ -523,16 +548,17 @@ class WritableStreamState<W> {
 
     const abortResult = this.#invokeAbort(abortRequest.reason);
     this.#clearAlgorithms();
-    abortResult.then(
-      () => {
-        abortRequest.capability.resolve();
-        this.#rejectCloseAndClosed();
-      },
-      (error) => {
-        abortRequest.capability.reject(error);
-        this.#rejectCloseAndClosed();
-      },
-    );
+    this.#settleAbort(abortResult, abortRequest);
+  }
+
+  async #settleAbort(abortResult: Promise<void>, abortRequest: PendingAbortRequest): Promise<void> {
+    try {
+      await abortResult;
+      abortRequest.capability.resolve();
+    } catch (error) {
+      abortRequest.capability.reject(error);
+    }
+    this.#rejectCloseAndClosed();
   }
 
   #rejectCloseAndClosed(): void {
@@ -585,8 +611,8 @@ export class WritableStream<W = unknown> {
   readonly [writableStreamState]: WritableStreamState<W>;
 
   constructor(
-    underlyingSink: UnderlyingSink<W> = {},
-    strategy: QueuingStrategy<W | undefined> | null = {},
+    underlyingSink: UnderlyingSink<W> = defaultUnderlyingSink,
+    strategy: QueuingStrategy<W | undefined> | null = defaultWritableStrategy,
   ) {
     const sizeAlgorithm = extractSizeAlgorithm(strategy);
     const highWaterMark = extractHighWaterMark(strategy, 1);
@@ -682,6 +708,63 @@ export class WritableStreamDefaultWriter<W = unknown> {
   get [Symbol.toStringTag](): "WritableStreamDefaultWriter" {
     return "WritableStreamDefaultWriter";
   }
+}
+
+/** @internal */
+export function acquireWritableStreamDefaultWriter<W>(
+  stream: WritableStream<W>,
+): WritableStreamDefaultWriter<W> {
+  return new WritableStreamDefaultWriter(stream);
+}
+
+/** @internal */
+export function writableStreamDefaultWriterReady<W>(
+  writer: WritableStreamDefaultWriter<W>,
+): Promise<void> {
+  return writer[writableWriterState].ready.promise;
+}
+
+/** @internal */
+export function writableStreamDefaultWriterAbort<W>(
+  writer: WritableStreamDefaultWriter<W>,
+  reason: unknown,
+): Promise<void> {
+  const stream = writer[writableWriterState].stream;
+  if (stream === null) {
+    return Promise.reject(new TypeError("Writer has been released"));
+  }
+  return stream.abort(reason);
+}
+
+/** @internal */
+export function writableStreamDefaultWriterClose<W>(
+  writer: WritableStreamDefaultWriter<W>,
+): Promise<void> {
+  const stream = writer[writableWriterState].stream;
+  if (stream === null) {
+    return Promise.reject(new TypeError("Writer has been released"));
+  }
+  return stream.close();
+}
+
+/** @internal */
+export function writableStreamDefaultWriterRelease<W>(
+  writer: WritableStreamDefaultWriter<W>,
+): void {
+  const state = writer[writableWriterState];
+  state.stream?.releaseWriter(writer, state);
+}
+
+/** @internal */
+export function writableStreamDefaultWriterWrite<W>(
+  writer: WritableStreamDefaultWriter<W>,
+  chunk: W,
+): Promise<void> {
+  const stream = writer[writableWriterState].stream;
+  if (stream === null) {
+    return Promise.reject(new TypeError("Writer has been released"));
+  }
+  return stream.write(writer, chunk);
 }
 
 export class WritableStreamDefaultController<W = unknown> {
