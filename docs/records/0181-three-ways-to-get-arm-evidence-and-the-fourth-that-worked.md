@@ -46,11 +46,22 @@ generated from the keyword, on the actual target, by the actual compiler.
     llvm-objdump -h --triple=aarch64 barrier-arm64.oat
       6 .text          00000000 0000000000004000 TEXT
 
-`.text` is empty. `dex2oat` will verify for a foreign instruction set and will
-not compile for one without a boot image built for that same set, and an
-x86_64 device has no arm64 boot image. `--boot-image=/nonexistent` does not
-change it. On-device `oatdump` aborts on the arm64 file as well, being built
-for one architecture.
+`.text` is empty. `dex2oat` will *verify* for a foreign instruction set and will
+not compile for one, and on-device `oatdump` aborts on the arm64 file as well,
+being built for one architecture.
+
+Two further variants, tried after the fourth route below made it clear how much
+an arm64 disassembly would be worth -- `dmb ish` on the real target rather than
+`lock add` on this one:
+
+    --image=... --base=0x70000000 --runtime-arg -Xbootclasspath:<the dex>
+    --boot-image=/nonexistent --runtime-arg -Xbootclasspath:<the dex>
+
+Both **abort** rather than producing an empty image, which is the more honest
+failure: the arm64 compiler backend is not in the `dex2oat` that ships on an
+x86_64 device. It is not a boot-image problem to be worked around; the code
+generator is absent. Recorded so the next person does not spend the evening on
+flag combinations.
 
 ## The fourth way, which does work
 

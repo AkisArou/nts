@@ -148,6 +148,7 @@ asserted on the built client through OkHttp's own accessors instead.
 | | |
 | --- | --- |
 | `nts-runtime.jar` | reproducible, class file 52, **zero** `invokedynamic`, byte-compared against a rebuild |
+| typed memory | 3,098 oracle lines against node, by bit pattern, covering all eleven element types |
 | the Android library | class file 52, `-Xlint:all -Werror` clean, one `android.*` import in one file |
 | both, after `d8 --min-api 26` | zero `invoke-custom`; D8 desugars every lambda even where it would be legal |
 | after `r8` with `consumer-rules.pro` | the FFI surface survives, the private internals do not, and the shrunk library passes its whole suite on a device |
