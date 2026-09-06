@@ -49,9 +49,6 @@ void nts_process_execve(NtsString *path, NtsArray *arguments,
                         NtsArray *environment);
 double nts_process_load_env_file(NtsString *path);
 
-/** Names present in the host process environment. */
-NtsArray *nts_process_env_keys(void);
-
 /**
  * `initgroups(3)` with the numeric/string distinction preserved in two
  * columns. Returns 1 for an unknown user, 2 for an unknown group, or a

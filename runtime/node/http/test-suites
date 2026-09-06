@@ -1,0 +1,37 @@
+# HTTP-facing cases from Node's dedicated built-in proxy suite. HTTPS-only and
+# fetch-only files remain owned by those surfaces rather than inflating HTTP's
+# tally with host implementations.
+client-proxy/test-http-proxy-request-absolute-path-authority-match.mjs
+client-proxy/test-http-proxy-request-authority-construction.mjs
+client-proxy/test-http-proxy-request-connection-refused.mjs
+client-proxy/test-http-proxy-request-https-proxy.mjs
+client-proxy/test-http-proxy-request-invalid-char-in-options.mjs
+client-proxy/test-http-proxy-request-invalid-char-in-url.mjs
+client-proxy/test-http-proxy-request-invalid-credentials.mjs
+client-proxy/test-http-proxy-request-invalid-proxy.mjs
+client-proxy/test-http-proxy-request-invalid-url.mjs
+client-proxy/test-http-proxy-request-ipv6.mjs
+client-proxy/test-http-proxy-request-max-sockets.mjs
+client-proxy/test-http-proxy-request-no-proxy-asterisk.mjs
+client-proxy/test-http-proxy-request-no-proxy-domain.mjs
+client-proxy/test-http-proxy-request-no-proxy-ip.mjs
+client-proxy/test-http-proxy-request-no-proxy-port-specific.mjs
+client-proxy/test-http-proxy-request-no-proxy.mjs
+client-proxy/test-http-proxy-request-origin-form-path.mjs
+client-proxy/test-http-proxy-request-proxy-failure-500.mjs
+client-proxy/test-http-proxy-request-proxy-failure-hang-up.mjs
+client-proxy/test-http-proxy-request-socket-keep-alive.mjs
+client-proxy/test-http-proxy-request-validation-errors.mjs
+client-proxy/test-http-proxy-request.mjs
+client-proxy/test-http-request-proxy-post-server-failure.mjs
+client-proxy/test-http-request-proxy-post.mjs
+client-proxy/test-http-set-global-proxy-from-env-http-request-default.mjs
+client-proxy/test-http-set-global-proxy-from-env-http-request-empty.mjs
+client-proxy/test-http-set-global-proxy-from-env-http-request-restore.mjs
+client-proxy/test-http-set-global-proxy-from-env-http-request.mjs
+client-proxy/test-http-set-global-proxy-from-env-invalid-type.mjs
+client-proxy/test-http-set-global-proxy-from-env-invalid-url.mjs
+client-proxy/test-http-set-global-proxy-from-env-no-proxy.mjs
+client-proxy/test-http-set-global-proxy-from-env-override-http.mjs
+client-proxy/test-use-env-proxy-cli-http.mjs
+client-proxy/test-use-env-proxy-precedence.mjs

@@ -25,15 +25,19 @@ import {
 import { Server, createServer } from "./server.ts";
 import {
   Agent,
+  createGlobalAgent,
   globalAgent,
   readGlobalAgentBinding,
   writeGlobalAgentBinding,
 } from "./agent.ts";
 import { ClientRequest, get, request } from "./client.ts";
 import { STATUS_CODES } from "./status.ts";
-import { validateInteger } from "../../internal/validators.ts";
+import { validateInteger, validateObject } from "../../internal/validators.ts";
+import { env as processEnvironment } from "../../process/src/env.ts";
 import type { Blob } from "../../buffer/src/blob.ts";
 import type { URL } from "../../url/src/url.ts";
+import { validateProxyEnvironment } from "./proxy.ts";
+import type { ProxyEnvironment } from "./proxy.ts";
 
 interface WebEvent {
   readonly type: string;
@@ -140,6 +144,23 @@ export const WebSocket = globalThis.WebSocket;
 export function setMaxIdleHTTPParsers(max: number): void {
   validateInteger(max, "max", 1);
   setHTTPParserPoolLimit(max);
+}
+
+/**
+ * Install environment proxy routing and return a function that restores the
+ * previous HTTP agent. Fetch and HTTPS are outside the current Node profile;
+ * their environment values are still validated before any state changes.
+ */
+export function setGlobalProxyFromEnv(
+  environment: ProxyEnvironment = processEnvironment,
+): () => void {
+  validateObject(environment, "proxyEnv");
+  const { httpProxy } = validateProxyEnvironment(environment);
+  if (httpProxy === null) return () => {};
+
+  const previousAgent = globalAgent;
+  writeGlobalAgentBinding(createGlobalAgent(environment));
+  return (): void => writeGlobalAgentBinding(previousAgent);
 }
 
 export {

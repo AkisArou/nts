@@ -29,14 +29,21 @@ import {
   ERR_INVALID_URL,
   ERR_UNESCAPED_CHARACTERS,
 } from "../../internal/errors.ts";
-import { validateBoolean, validateInteger, validateOneOf } from "../../internal/validators.ts";
+import {
+  validateBoolean,
+  validateInteger,
+  validateOneOf,
+  validatePort,
+} from "../../internal/validators.ts";
 import { acquireHTTPParser, HTTPParseError, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
 import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
 import type { HTTPDuplex, OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
-import { Agent, globalAgent } from "./agent.ts";
+import { Agent, globalAgent, kProxyConfig } from "./agent.ts";
 import type { AgentConnectionOptions } from "./agent.ts";
 import { emitHttpDebugWarning } from "./debug.ts";
+import { selectProxy } from "./proxy.ts";
+import type { ProxyConfig } from "./proxy.ts";
 
 export type RequestHeaderPair = readonly [string, OutgoingHeaderValue];
 export type RequestHeaderArray = readonly (string | RequestHeaderPair)[];
@@ -54,7 +61,7 @@ export interface RequestOptions {
   headers?: RequestHeaders | undefined;
   auth?: string | undefined;
   agent?: Agent | false | undefined;
-  defaultPort?: number | undefined;
+  defaultPort?: number | string | undefined;
   timeout?: number | undefined;
   setHost?: boolean | undefined;
   setDefaultHeaders?: boolean | undefined;
@@ -109,7 +116,7 @@ function requestHeadersAreArray(headers: RequestHeaders): headers is RequestHead
   return Array.isArray(headers);
 }
 
-function requestHeaderIsPair(header: string | RequestHeaderPair): header is RequestHeaderPair {
+function requestHeaderIsPair(header: unknown): header is RequestHeaderPair {
   return Array.isArray(header);
 }
 
@@ -132,12 +139,13 @@ function applyRequestHeaderArray(
   const pairs: RequestHeaderPair[] = [];
   const first = headers[0];
   if (first !== undefined && requestHeaderIsPair(first)) {
-    for (const header of headers) {
+    for (let index = 0; index < headers.length; index++) {
+      const header = headers[index];
       if (!requestHeaderIsPair(header)) {
         throw new ERR_INVALID_ARG_VALUE(
-          "options.headers",
-          headers,
-          "must contain only name/value pairs",
+          `options.headers[${index}]`,
+          typeof header,
+          "must be an array when headers is passed as an array of pairs",
         );
       }
       request.appendHeader(header[0], header[1]);
@@ -167,6 +175,155 @@ function applyRequestHeaderArray(
     pairs.push([name, value]);
   }
   return pairs;
+}
+
+interface ProxyAuthority {
+  readonly host: string;
+  readonly port: number | string;
+}
+
+interface ValidatedProxyAuthority {
+  readonly requestBase: URL;
+  readonly requestURL: URL;
+}
+
+function hostFromHeaderPairs(headers: readonly RequestHeaderPair[]): string | undefined {
+  let host: string | undefined;
+  for (const [name, value] of headers) {
+    if (name.toLowerCase() !== "host") continue;
+    if (host !== undefined) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.headers",
+        "(redacted)",
+        "must not contain duplicate Host headers",
+      );
+    }
+    host = String(value);
+  }
+  return host;
+}
+
+function authoritiesMatch(canonicalHost: string, headerHost: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(`http://${headerHost}`);
+  } catch {
+    return false;
+  }
+  if (
+    parsed.username.length > 0 ||
+    parsed.password.length > 0 ||
+    parsed.pathname !== "/" ||
+    parsed.search.length > 0 ||
+    parsed.hash.length > 0
+  ) {
+    return false;
+  }
+  return parsed.host === canonicalHost;
+}
+
+function validateProxyAuthority(
+  path: string,
+  authority: ProxyAuthority,
+  explicitHost: string | undefined,
+  headerPairs: readonly RequestHeaderPair[] | undefined,
+): ValidatedProxyAuthority {
+  const port = validatePort(authority.port, "options.port");
+  const requestBase = new URL(`http://${authority.host}`);
+  requestBase.port = String(port);
+
+  const arrayHost = headerPairs === undefined ? undefined : hostFromHeaderPairs(headerPairs);
+  if (arrayHost !== undefined && arrayHost !== requestBase.host) {
+    throw new ERR_INVALID_ARG_VALUE(
+      "Host in options.headers",
+      arrayHost,
+      `must match the request authority (${requestBase.host})`,
+    );
+  }
+  if (headerPairs === undefined && explicitHost !== undefined) {
+    if (!authoritiesMatch(requestBase.host, explicitHost)) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "Host in options.headers",
+        explicitHost,
+        `must match the request authority (${requestBase.host})`,
+      );
+    }
+  }
+
+  let requestURL: URL;
+  let absolute = false;
+  try {
+    requestURL = new URL(path);
+    absolute = true;
+  } catch {
+    if (!path.startsWith("/")) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.path",
+        path,
+        "must be in absolute-form or start with /",
+      );
+    }
+    // Concatenate with the origin exactly as Node does. Passing `path` as a
+    // relative URL would reinterpret a leading `//` as a new authority.
+    requestURL = new URL(requestBase.origin + path);
+  }
+
+  if (absolute) {
+    if (requestURL.username.length > 0 || requestURL.password.length > 0) {
+      requestURL.username = "";
+      requestURL.password = "";
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.path",
+        requestURL.href,
+        "must not contain userinfo, use options.auth instead",
+      );
+    }
+    if (requestURL.protocol !== "http:") {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.path",
+        requestURL.protocol,
+        "must use http: scheme when specified as an absolute URL",
+      );
+    }
+    if (requestBase.host !== requestURL.host) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options.path",
+        requestURL.href,
+        `must match the request authority (${requestBase.host})`,
+      );
+    }
+  }
+
+  return { requestBase, requestURL };
+}
+
+function rewriteForProxiedHTTP(
+  request: ClientRequest,
+  proxy: ProxyConfig,
+  authority: ProxyAuthority,
+  explicitHost: string | undefined,
+  headerPairs: readonly RequestHeaderPair[] | undefined,
+): void {
+  let requestURL: URL | undefined;
+  if (request.method !== "CONNECT" && !(request.method === "OPTIONS" && request.path === "*")) {
+    const validated = validateProxyAuthority(
+      request.path,
+      authority,
+      explicitHost,
+      headerPairs,
+    );
+    if (headerPairs === undefined) {
+      const currentHost = request.getHeader("host");
+      if (currentHost !== undefined && currentHost !== validated.requestBase.host) {
+        request.setHeader("Host", validated.requestBase.host);
+      }
+    }
+    requestURL = validated.requestURL;
+  }
+
+  if (proxy.auth !== undefined) request.setHeader("proxy-authorization", proxy.auth);
+  request.setHeader("proxy-connection", request.shouldKeepAlive ? "keep-alive" : "close");
+  if (requestURL !== undefined) request.path = requestURL.href;
 }
 
 export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
@@ -254,8 +411,10 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     if (this.protocol !== expectedProtocol) {
       throw new ERR_INVALID_PROTOCOL(this.protocol, expectedProtocol);
     }
+    this.agent = selectedAgent;
     const defaultPort = opts.defaultPort || selectedAgent?.defaultPort;
-    this.#port = Number(opts.port || defaultPort || 80);
+    const port = opts.port || defaultPort || 80;
+    this.#port = Number(port);
     const timeoutOption: unknown = opts.timeout;
     this.timeout =
       timeoutOption === undefined ? undefined : getTimerDuration(timeoutOption, "timeout");
@@ -319,16 +478,17 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
 
     // `Host` identifies which site on a shared address the request is for, and
     // is mandatory in HTTP/1.1. Added unless the caller set it or opted out.
+    const explicitHost = rawHeaderArray ? undefined : this.getHeader("host");
     const setHost =
       opts.setHost !== undefined ? Boolean(opts.setHost) : opts.setDefaultHeaders !== false;
     if (!rawHeaderArray && setHost && !this.hasHeader("host")) {
-      const needsPort = this.#port !== defaultPort;
+      const needsPort = Number(port) !== defaultPort;
       const firstColon = this.host.indexOf(":");
       const hostHeader =
         firstColon !== -1 && this.host.includes(":", firstColon + 1) && !this.host.startsWith("[")
           ? `[${this.host}]`
           : this.host;
-      this.setHeader("Host", needsPort ? `${hostHeader}:${this.#port}` : hostHeader);
+      this.setHeader("Host", needsPort ? `${hostHeader}:${port}` : hostHeader);
     }
 
     const hostHeader = this.getHeader("host");
@@ -340,22 +500,44 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       this.setHeader("Authorization", `Basic ${Buffer.from(opts.auth).toString("base64")}`);
     }
 
+    const proxyAuthority = {
+      host:
+        this.host.includes(":") && !this.host.startsWith("[") ? `[${this.host}]` : this.host,
+      port,
+    };
+    const proxy =
+      selectedAgent instanceof Agent
+        ? selectProxy(selectedAgent[kProxyConfig], {
+            host: this.host,
+            port,
+            socketPath: opts.socketPath,
+          })
+        : null;
+    if (proxy !== null) {
+      rewriteForProxiedHTTP(
+        this,
+        proxy,
+        proxyAuthority,
+        typeof explicitHost === "string" ? explicitHost : undefined,
+        rawHeaderPairs,
+      );
+    }
+
     if (rawHeaderPairs !== undefined) {
       this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
       this._storeRawHeaderPairs(rawHeaderPairs);
     }
     this._setUniqueHeaders(parseUniqueHeadersOption(opts.uniqueHeaders));
 
-    this.agent = selectedAgent;
     const connectionOptions = {
       host: this.host,
-      port: this.#port,
+      port,
       lookup: opts.lookup,
       localAddress: opts.localAddress,
       localPort: opts.localPort,
       family: opts.family,
       hints: opts.hints,
-      path: opts.socketPath,
+      socketPath: opts.socketPath,
       timeout: this.timeout,
       highWaterMark: opts.highWaterMark,
     };

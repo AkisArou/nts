@@ -21,7 +21,13 @@ import type { ConnectOptions } from "../../net/src/main.ts";
 import { nextTick } from "../../internal/tick.ts";
 import { AsyncResource } from "../../async_hooks/src/resource.ts";
 import { validateNumberRange, validateOneOf } from "../../internal/validators.ts";
+import { ERR_FEATURE_UNAVAILABLE_ON_PLATFORM } from "../../internal/errors.ts";
 import type { HTTPDuplex } from "./outgoing.ts";
+import { ProxyConfig, proxyConfigFromEnvironment, selectProxy } from "./proxy.ts";
+import type { ProxyEnvironment } from "./proxy.ts";
+
+/** Internal fixed-layout field shared with the request rewriter. */
+export const kProxyConfig = Symbol("http.proxyConfig");
 
 export interface AgentConnectionOptions extends ConnectOptions {
   socketPath?: string | undefined;
@@ -52,6 +58,8 @@ export interface AgentOptions extends AgentConnectionOptions {
   /** How long a request may wait for a socket. */
   timeout?: number | undefined;
   scheduling?: "fifo" | "lifo" | undefined;
+  /** Environment variables used by Node's built-in proxy routing. */
+  proxyEnv?: ProxyEnvironment | undefined;
 }
 
 interface Pending {
@@ -98,6 +106,8 @@ export class Agent extends EventEmitter {
   #keepAliveHints = new Map<HTTPDuplex, string>();
   /** Pool lifecycle listeners, retained so an upgraded socket can detach. */
   #socketListeners = new Map<HTTPDuplex, ManagedSocketListeners>();
+  /** Parsed once at construction; ordinary agents pay only one null check. */
+  readonly [kProxyConfig]: ProxyConfig | null;
 
   constructor(options: AgentOptions = {}) {
     super();
@@ -105,6 +115,10 @@ export class Agent extends EventEmitter {
     if (this.options.noDelay === undefined) this.options.noDelay = true;
     this.defaultPort = options.defaultPort || 80;
     this.protocol = options.protocol || "http:";
+    this[kProxyConfig] =
+      options.proxyEnv === undefined
+        ? null
+        : proxyConfigFromEnvironment(options.proxyEnv, this.protocol);
     this.keepAlive = options.keepAlive ?? false;
     this.keepAliveMsecs = options.keepAliveMsecs ?? 1000;
     const timeoutBuffer = options.agentKeepAliveTimeoutBuffer;
@@ -144,7 +158,11 @@ export class Agent extends EventEmitter {
   }
 
   createConnection(options: AgentConnectionOptions, callback?: CreateSocketCallback): HTTPDuplex {
-    const socket = netConnect(options);
+    const proxy = selectProxy(this[kProxyConfig], options);
+    if (proxy?.protocol === "https:") {
+      throw new ERR_FEATURE_UNAVAILABLE_ON_PLATFORM("HTTPS proxy transport");
+    }
+    const socket = netConnect(proxy?.connectionOptions ?? options);
     if (callback !== undefined) socket.once("connect", () => callback(null, socket));
     return socket;
   }
@@ -584,8 +602,13 @@ export class Agent extends EventEmitter {
   }
 }
 
+/** Construct Node's keep-alive default, optionally with environment proxy routing. */
+export function createGlobalAgent(proxyEnv?: ProxyEnvironment): Agent {
+  return new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000, proxyEnv });
+}
+
 /** The agent `http.request` uses when the caller does not supply one. */
-export let globalAgent = new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000 });
+export let globalAgent = createGlobalAgent();
 
 /** Read the live binding when constructing Node's writable CommonJS facade. */
 export function readGlobalAgentBinding(): Agent {

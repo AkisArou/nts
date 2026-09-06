@@ -5,7 +5,12 @@
 // wrapper, and JavaScript has no types. `readFileSync(42)` has to throw the
 // error node throws, not read a file named "42".
 
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE } from "./errors.ts";
+import {
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
+  ERR_OUT_OF_RANGE,
+  ERR_SOCKET_BAD_PORT,
+} from "./errors.ts";
 
 const LINK_HEADER_VALUE = /^(?:<[^>\r\n]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
 const LINK_HEADER_EXPECTATION =
@@ -33,6 +38,24 @@ export function validateBoolean(value: unknown, name: string): asserts value is 
   if (typeof value !== "boolean") {
     throw new ERR_INVALID_ARG_TYPE(name, "boolean", value);
   }
+}
+
+/** Validate and normalize a TCP/UDP port, from Node's internal validator. */
+export function validatePort(value: unknown, name = "Port", allowZero = true): number {
+  if (typeof value !== "number" && typeof value !== "string") {
+    throw new ERR_SOCKET_BAD_PORT(name, value, allowZero);
+  }
+  const port = Number(value);
+  if (
+    (typeof value === "string" && value.trim().length === 0) ||
+    !Number.isInteger(port) ||
+    port < 0 ||
+    port > 65535 ||
+    (port === 0 && !allowZero)
+  ) {
+    throw new ERR_SOCKET_BAD_PORT(name, value, allowZero);
+  }
+  return port;
 }
 
 export function validateFunction(value: CallableFunction, name: string): void;

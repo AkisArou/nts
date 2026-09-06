@@ -39,7 +39,6 @@ import {
   ERR_IP_BLOCKED,
   ERR_MISSING_ARGS,
   ERR_OUT_OF_RANGE,
-  ERR_SOCKET_BAD_PORT,
   ERR_SOCKET_CLOSED,
   ERR_SOCKET_CLOSED_BEFORE_CONNECTION,
   ERR_SOCKET_HANDLE_ADOPTED,
@@ -50,6 +49,7 @@ import {
   validateFunction,
   validateInteger,
   validateNumber,
+  validatePort,
   validateString,
 } from "../../internal/validators.ts";
 import { isIP, isIPv4, isIPv6 } from "./address.ts";
@@ -288,22 +288,6 @@ function makeAddress(address: string, numbers: number[]): AddressInfo | undefine
   };
 }
 
-function validateSocketPort(value: unknown): number {
-  if (typeof value !== "number" && typeof value !== "string") {
-    throw new ERR_INVALID_ARG_TYPE("options.port", ["number", "string"], value);
-  }
-  const port = Number(value);
-  if (
-    (typeof value === "string" && value.trim().length === 0) ||
-    !Number.isInteger(port) ||
-    port < 0 ||
-    port > 65535
-  ) {
-    throw new ERR_SOCKET_BAD_PORT("Port", value);
-  }
-  return port;
-}
-
 function validateLookupHints(hints: number | undefined): void {
   if (hints === undefined) return;
   if (!Number.isInteger(hints) || hints < 0 || (hints & ~56) !== 0) {
@@ -414,7 +398,7 @@ export class BoundSocket {
       return;
     }
 
-    const port = validateSocketPort(options.port ?? 0);
+    const port = validatePort(options.port ?? 0);
     const ipv6Only = options.ipv6Only ?? false;
     const reusePort = options.reusePort ?? false;
     validateBoolean(ipv6Only, "options.ipv6Only");
@@ -793,7 +777,7 @@ export class Socket extends Duplex {
     const host = options.host ?? "localhost";
     const path = options.path ?? "";
     const isPipe = path !== "";
-    const port = isPipe ? 0 : validateSocketPort(options.port);
+    const port = isPipe ? 0 : validatePort(options.port);
     validateLookupHints(options.hints);
     if (options.lookup !== undefined) {
       validateFunction(options.lookup, "options.lookup");
@@ -1770,7 +1754,7 @@ export class Server extends EventEmitter {
         ? boundAddress.port
         : options.port === undefined
           ? 0
-          : validateSocketPort(options.port);
+          : validatePort(options.port);
     const isPipe = boundSocket?.isPipe ?? (path !== undefined && path !== "");
     const boundHandle = boundSocket === undefined ? -1 : consumeBoundSocket(boundSocket);
     this.#handleClosed = false;
@@ -2090,7 +2074,7 @@ function readConnectOptions(input: object): ConnectOptions {
 
   if ("localPort" in input && input.localPort !== undefined) {
     validateNumber(input.localPort, "options.localPort");
-    options.localPort = validateSocketPort(input.localPort);
+    options.localPort = validatePort(input.localPort);
   }
 
   if ("family" in input && input.family !== undefined) {

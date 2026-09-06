@@ -58,7 +58,14 @@ export interface EventTargetLike {
   removeEventListener(type: EventName, listener: Listener): void;
 }
 
-export type EventSource = EventEmitter | EventTargetLike;
+/** The EventEmitter protocol consumed by Node's module-level helpers. */
+export interface EventEmitterLike {
+  on(type: EventName, listener: Listener): unknown;
+  once(type: EventName, listener: Listener): unknown;
+  removeListener(type: EventName, listener: Listener): unknown;
+}
+
+export type EventSource = EventEmitterLike | EventTargetLike;
 
 export interface Disposable {
   [Symbol.dispose](): void;
@@ -79,6 +86,40 @@ function isEventTargetLike(value: unknown): value is EventTargetLike {
     typeof value.addEventListener === "function" &&
     "removeEventListener" in value &&
     typeof value.removeEventListener === "function";
+}
+
+function isEventEmitterLike(value: unknown): value is EventEmitterLike {
+  return value !== null && typeof value === "object" &&
+    "on" in value && typeof value.on === "function" &&
+    "once" in value && typeof value.once === "function" &&
+    "removeListener" in value && typeof value.removeListener === "function";
+}
+
+interface EventListenerSnapshotSource {
+  listeners(type: EventName): Listener[];
+}
+
+function hasEventListenerSnapshot(value: unknown): value is EventListenerSnapshotSource {
+  return value !== null && typeof value === "object" &&
+    "listeners" in value && typeof value.listeners === "function";
+}
+
+interface EventListenerCountSource {
+  listenerCount(type: EventName): number;
+}
+
+function hasEventListenerCount(value: unknown): value is EventListenerCountSource {
+  return value !== null && typeof value === "object" &&
+    "listenerCount" in value && typeof value.listenerCount === "function";
+}
+
+interface MaxListenerSource {
+  getMaxListeners(): number;
+}
+
+function hasMaxListenerGetter(value: unknown): value is MaxListenerSource {
+  return value !== null && typeof value === "object" &&
+    "getMaxListeners" in value && typeof value.getMaxListeners === "function";
 }
 
 /**
@@ -977,7 +1018,7 @@ export function getEventListeners(
   emitter: unknown,
   type: EventName,
 ): Listener[] {
-  if (eventSourceIsEmitter(emitter)) {
+  if (hasEventListenerSnapshot(emitter)) {
     return emitter.listeners(type);
   }
   if (isEventTargetLike(emitter)) {
@@ -992,7 +1033,7 @@ export function getEventListeners(
 
 export function getMaxListeners(emitter: EventSource): number;
 export function getMaxListeners(emitter: unknown): number {
-  if (eventSourceIsEmitter(emitter)) {
+  if (hasMaxListenerGetter(emitter)) {
     return emitter.getMaxListeners();
   }
   if (isEventTargetLike(emitter)) {
@@ -1012,7 +1053,7 @@ export function getMaxListeners(emitter: unknown): number {
 
 export function listenerCount(emitter: EventSource, type: EventName): number;
 export function listenerCount(emitter: unknown, type: EventName): number {
-  if (eventSourceIsEmitter(emitter)) {
+  if (hasEventListenerCount(emitter)) {
     return emitter.listenerCount(type);
   }
   if (isEventTargetLike(emitter)) {
@@ -1044,10 +1085,6 @@ type TrackedEventTarget = EventTargetLike | AbortSignalLike;
  */
 const ownedEventTargetListeners =
   new Map<TrackedEventTarget, Map<EventName, Listener[]>>();
-
-function eventSourceIsEmitter(source: unknown): source is EventEmitter {
-  return source instanceof EventEmitter;
-}
 
 function trackEventTargetListener(
   target: TrackedEventTarget,
@@ -1175,7 +1212,7 @@ function addEventSourceListener(
   listener: Listener,
   onceOnly: boolean,
 ): void {
-  if (eventSourceIsEmitter(source)) {
+  if (isEventEmitterLike(source)) {
     if (onceOnly) {
       source.once(type, listener);
     } else {
@@ -1199,7 +1236,7 @@ function removeEventSourceListener(
   type: EventName,
   listener: Listener,
 ): void {
-  if (eventSourceIsEmitter(source)) {
+  if (isEventEmitterLike(source)) {
     source.removeListener(type, listener);
     return;
   }
@@ -1243,7 +1280,7 @@ export function once(
   return new Promise<unknown[]>((resolve, reject) => {
     const eventListener = (...args: unknown[]): void => {
       removeEventSourceListener(emitter, name, eventListener);
-      if (errorListener !== undefined && eventSourceIsEmitter(emitter)) {
+      if (errorListener !== undefined && isEventEmitterLike(emitter)) {
         emitter.removeListener("error", errorListener);
       }
       if (signal !== undefined) {
@@ -1265,14 +1302,14 @@ export function once(
         }
         reject(err);
       };
-      if (eventSourceIsEmitter(emitter)) {
+      if (isEventEmitterLike(emitter)) {
         emitter.once("error", errorListener);
       }
     }
 
     const abortListener = (): void => {
       removeEventSourceListener(emitter, name, eventListener);
-      if (errorListener !== undefined && eventSourceIsEmitter(emitter)) {
+      if (errorListener !== undefined && isEventEmitterLike(emitter)) {
         emitter.removeListener("error", errorListener);
       }
       if (signal !== undefined) {
@@ -1467,7 +1504,7 @@ export function on(
       untrackEventTargetListener(signal, "abort", abortListener);
     }
     removeEventSourceListener(emitter, event, listener);
-    if (event !== "error" && eventSourceIsEmitter(emitter)) {
+    if (event !== "error" && isEventEmitterLike(emitter)) {
       emitter.removeListener("error", errorHandler);
     }
     for (const name of closeEvents) {
@@ -1513,7 +1550,7 @@ export function on(
     : (...args: unknown[]): void => eventHandler(args);
 
   addEventSourceListener(emitter, event, listener, false);
-  if (event !== "error" && eventSourceIsEmitter(emitter)) {
+  if (event !== "error" && isEventEmitterLike(emitter)) {
     emitter.on("error", errorHandler);
   }
   const closeEvents = options.close ?? [];

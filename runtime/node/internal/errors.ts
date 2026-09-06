@@ -1408,6 +1408,16 @@ export class ERR_HTTP_SOCKET_ENCODING extends NodeError {
   }
 }
 
+/** An environment proxy URL could not be parsed safely. */
+export class ERR_PROXY_INVALID_CONFIG extends NodeError {
+  override readonly code = "ERR_PROXY_INVALID_CONFIG";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "Error";
+  }
+}
+
 /** Text contains a character forbidden by the protocol field. */
 export class ERR_INVALID_CHAR extends NodeTypeError {
   override get ["constructor"](): unknown {

@@ -69,8 +69,6 @@ globalThis.nts_process_title = () => host.title;
 globalThis.nts_process_set_title = (title) => { host.title = title; };
 globalThis.nts_process_allowed_env_flags = () => [...host.allowedNodeEnvironmentFlags];
 
-globalThis.nts_process_env_keys = () => Object.keys(host.env);
-
 globalThis.nts_process_uptime = () => host.uptime();
 globalThis.nts_process_cpu_usage = () => {
   const { user, system } = host.cpuUsage();

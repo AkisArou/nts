@@ -39,6 +39,7 @@ globalThis.nts_stderr_is_tty = () => Boolean(process.stderr.isTTY);
 
 globalThis.nts_process_env = (name) => process.env[name] ?? "";
 globalThis.nts_process_env_has = (name) => process.env[name] !== undefined;
+globalThis.nts_process_env_keys = () => Object.keys(process.env);
 globalThis.nts_process_pid = () => process.pid;
 globalThis.nts_process_emit_warning_object = (_message, _name, warning) => {
   // Preserve identity: EventEmitter warnings carry `emitter`, `type`, and

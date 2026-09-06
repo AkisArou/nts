@@ -738,26 +738,6 @@ double nts_process_load_env_file(NtsString *path) {
     return (double)result;
 }
 
-NtsArray *nts_process_env_keys(void) {
-    uv_env_item_t *items = NULL;
-    int count = 0;
-    int err = uv_os_environ(&items, &count);
-    if (err != 0) {
-        nts_node_set_errno(err);
-        return nts_array_new(&nts_desc_ref, 0);
-    }
-
-    NtsArray *names = nts_array_new(&nts_desc_ref, (double)count);
-    for (int i = 0; i < count; i++) {
-        const char *name = items[i].name;
-        NTS_ITEMS(names, void *)[i] =
-            nts_string_from_utf8(name, name == NULL ? 0 : strlen(name));
-    }
-    uv_os_free_environ(items, count);
-    nts_node_set_errno(0);
-    return names;
-}
-
 static char *string_utf8(const NtsString *value) {
     size_t capacity = (size_t)value->length * 3 + 1;
     char *text = malloc(capacity);

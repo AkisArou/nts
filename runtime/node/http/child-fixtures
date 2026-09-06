@@ -1,0 +1,5 @@
+# Helpers launched by the pinned client-proxy suite. They call node:http and
+# must re-enter the conformance runner instead of silently using Node's builtin.
+fixtures/post-resource-and-log.js
+fixtures/proxy-server-worker.js
+fixtures/request-and-log.js

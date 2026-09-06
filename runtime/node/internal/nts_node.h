@@ -13,6 +13,7 @@
 NtsString *nts_process_cwd(void);
 NtsString *nts_process_env(NtsString *name);
 bool nts_process_env_has(NtsString *name);
+NtsArray *nts_process_env_keys(void);
 double nts_process_pid(void);
 NtsString *nts_platform(void);
 NtsString *nts_os_release(void);

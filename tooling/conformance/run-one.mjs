@@ -12,7 +12,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { createRequire, registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert";
 import process from "node:process";
 import { getSystemErrorMap, getSystemErrorMessage, getSystemErrorName } from "node:util";
@@ -430,7 +430,24 @@ const realRequire = createRequire(import.meta.url);
 const nodeTestRoot = join(ROOT, "third_party/node/test");
 const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
+const realWorkerThreads = realRequire("node:worker_threads");
 const conformanceRunner = join(HERE, "run-one.mjs");
+const commonJsWorkerRunner = join(HERE, "run-cjs-worker.mjs");
+const declaredChildFixtures = new Set();
+const childFixturesPath = join(moduleDir, "child-fixtures");
+if (existsSync(childFixturesPath)) {
+  for (const childName of readFileSync(childFixturesPath, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))) {
+    const child = resolvePath(nodeTestRoot, childName);
+    const withinTestTree = relative(nodeTestRoot, child);
+    if (withinTestTree.startsWith("..") || isAbsolute(withinTestTree) || !child.endsWith(".js")) {
+      throw new Error(`invalid declared child fixture: ${childName}`);
+    }
+    declaredChildFixtures.add(child);
+  }
+}
 
 function commonJsNodeTestTarget(candidate, cwd) {
   if (typeof candidate !== "string") return null;
@@ -438,7 +455,7 @@ function commonJsNodeTestTarget(candidate, cwd) {
   const withinTestTree = relative(nodeTestRoot, target);
   if (
     !target.endsWith(".js") ||
-    dirname(target) !== dirname(resolvePath(file)) ||
+    (dirname(target) !== dirname(resolvePath(file)) && !declaredChildFixtures.has(target)) ||
     withinTestTree.startsWith("..") ||
     isAbsolute(withinTestTree)
   ) {
@@ -459,13 +476,14 @@ function nestedChildOptions(options) {
 
 /**
  * Preserve the subject and Node's CommonJS test-runner mode when a fixture
- * forks itself or another fixture in the same suite directory.
+ * forks itself, another fixture in the same suite directory, or a helper the
+ * module explicitly declares in `child-fixtures`.
  *
  * Re-entering this runner prevents two false behaviors at once: the root ESM
  * package cannot reinterpret an upstream `.js` fixture, and the child cannot
  * silently switch from the implementation under test to Node's builtin. The
- * wrapper is deliberately limited to sibling `.js` tests so an intentional
- * ESM helper or unrelated child keeps ordinary `fork` semantics.
+ * explicit manifest keeps an unrelated child or test-infrastructure worker on
+ * Node's implementation.
  */
 function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
   const hasArgs = Array.isArray(argsOrOptions);
@@ -597,6 +615,39 @@ const childProcessInfrastructure = {
   fork: forkInfrastructure,
   spawn: spawnInfrastructure,
   spawnSync: spawnSyncInfrastructure,
+};
+
+/**
+ * Keep an explicitly declared CommonJS Worker fixture in CommonJS mode.
+ *
+ * These Workers are test infrastructure, not another instance of the subject:
+ * running the compiled addon in a second Node Environment would claim Worker
+ * isolation that its process-wide generated state does not provide. The small
+ * runner only restores Node's upstream module mode; the Worker otherwise uses
+ * Node's own modules and preserves all constructor options.
+ */
+class CommonJsFixtureWorker extends realWorkerThreads.Worker {
+  constructor(filename, options = {}) {
+    const target = options.eval === true
+      ? null
+      : commonJsNodeTestTarget(filename, hostProcess.cwd());
+    if (target === null) {
+      super(filename, options);
+      return;
+    }
+    super(commonJsWorkerRunner, {
+      ...options,
+      workerData: {
+        target,
+        value: options.workerData,
+      },
+    });
+  }
+}
+
+const workerThreadsInfrastructure = {
+  ...realWorkerThreads,
+  Worker: CommonJsFixtureWorker,
 };
 
 /** Node's `test/common/countdown`, attached to this runner's call tally. */
@@ -869,6 +920,10 @@ function installEsmHooks() {
   };
 
   bareModules.set(moduleName, bridge(`module:${moduleName}`, underTest));
+  bareModules.set(
+    "worker_threads",
+    bridge("infrastructure:worker_threads", workerThreadsInfrastructure),
+  );
   for (const [name, implementation] of siblings) {
     bareModules.set(name, bridge(`module:${name}`, implementation));
   }
@@ -892,7 +947,24 @@ function installEsmHooks() {
         return { url: direct, format: "module", shortCircuit: true };
       }
       const resolved = nextResolve(specifier, context);
-      const infrastructure = files.get(resolved.url);
+      let infrastructure = files.get(resolved.url);
+      // An ESM test can import a CommonJS helper directly. Node's ordinary
+      // CJS loader would execute that helper with its real `require`, which
+      // silently switches every nested dependency back to the host runtime.
+      // Give every imported `.js` helper in Node's test tree the same
+      // recursive substitution as a helper reached from a CommonJS test.
+      if (infrastructure === undefined && resolved.url.startsWith("file:")) {
+        const resolvedPath = fileURLToPath(resolved.url);
+        const withinTestTree = relative(nodeTestRoot, resolvedPath);
+        if (
+          resolvedPath.endsWith(".js") &&
+          !withinTestTree.startsWith("..") &&
+          !isAbsolute(withinTestTree)
+        ) {
+          infrastructure = bridge(`test:${resolvedPath}`, executeTestModule(resolvedPath));
+          files.set(resolved.url, infrastructure);
+        }
+      }
       return infrastructure === undefined
         ? resolved
         : { url: infrastructure, format: "module", shortCircuit: true };
@@ -931,6 +1003,7 @@ function shimmedRequire(id, fromFile) {
   if (bare === "assert" || bare === "assert/strict") return assert;
   if (bare === "test" || bare === "node:test") return countingTestRunner();
   if (bare === "child_process") return childProcessInfrastructure;
+  if (bare === "worker_threads") return workerThreadsInfrastructure;
   // A sibling the module under test shares state with. `console` publishes to
   // `diagnostics_channel`, and a test that subscribes has to reach the same
   // registry the console publishes into -- node's would be a different one and

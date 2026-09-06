@@ -75,6 +75,26 @@ bool nts_process_env_has(NtsString *name) {
     return err == 0 || err == UV_ENOBUFS;
 }
 
+NtsArray *nts_process_env_keys(void) {
+    uv_env_item_t *items = NULL;
+    int count = 0;
+    int err = uv_os_environ(&items, &count);
+    if (err != 0) {
+        nts_node_set_errno(err);
+        return nts_array_new(&nts_desc_ref, 0);
+    }
+
+    NtsArray *names = nts_array_new(&nts_desc_ref, (double)count);
+    for (int i = 0; i < count; i++) {
+        const char *name = items[i].name;
+        NTS_ITEMS(names, void *)[i] =
+            nts_string_from_utf8(name, name == NULL ? 0 : strlen(name));
+    }
+    uv_os_free_environ(items, count);
+    nts_node_set_errno(0);
+    return names;
+}
+
 double nts_process_pid(void) { return (double)uv_os_getpid(); }
 
 NtsString *nts_platform(void) {
