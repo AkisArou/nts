@@ -1263,6 +1263,36 @@ pub const fn is_closure_type(ty: TypeId) -> bool {
 /// provided error classes and the band holds sixteen.
 pub const CONSTRUCTOR_TOKENS: u32 = u32::MAX - 15;
 
+/// The band the *provided error classes* live in, when the program never named
+/// one.
+///
+/// This compiler provides `Error`, `TypeError`, `RangeError` and `URIError`,
+/// and it has to be able to **construct** one for a check the language
+/// specifies — `"x".repeat(-1)` throws a `RangeError` whether or not the
+/// program has ever written the word. The checker only interns a type the
+/// source mentions, so `type_named("RangeError")` answers `None` for most
+/// programs, and a class this compiler provides cannot depend on that.
+///
+/// Below [`CONSTRUCTOR_TOKENS`] and above everything a snapshot uses, for the
+/// reason that band gives: the counters below cannot see this one.
+///
+/// The snapshot's own id is preferred where there is one, so a program that
+/// *does* name `RangeError` gets one type and one layout — and where both
+/// arrive, `collect_layouts` merges them, because two error layouts of the same
+/// name are the same class and only two of *different* names are refused.
+pub const PROVIDED_ERRORS: u32 = CONSTRUCTOR_TOKENS - 16;
+
+/// The synthetic type of the `n`th class this compiler provides.
+#[must_use]
+pub fn provided_error_type(index: usize) -> TypeId {
+    let id = PROVIDED_ERRORS + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        u32::try_from(index).unwrap_or(u32::MAX) < 16,
+        "more provided classes than the band holds"
+    );
+    TypeId(id)
+}
+
 /// The token for the `n`th class this compiler provides.
 #[must_use]
 pub fn constructor_token(index: usize) -> TypeId {

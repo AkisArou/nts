@@ -1092,6 +1092,19 @@ pub fn verifies(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
 /// legitimate as the index one, and one of three rather than one of one.
 const REFUSED: &str = "nts: refused: ";
 
+/// And what it prints when the *program* throws and nothing catches it.
+///
+/// Neither a defect nor a refusal by this compiler: the program did what the
+/// language says, and node's driver reports the same event as `threw`. Both
+/// sides then have no answer at that index and the case is skipped, which is
+/// the pairing the two deserve.
+///
+/// It was missing because until `try`/`catch` existed every throw ended the
+/// program by construction, so an uncaught one was indistinguishable from a
+/// crash. `"x".repeat(-1)` is the first thing that throws where node also
+/// throws and both are right.
+const UNCAUGHT: &str = "nts: uncaught ";
+
 /// And what it prints when it runs out of the memory this harness allowed it.
 ///
 /// Neither a defect nor a refusal. The pool asks for a loop bound of
@@ -1162,6 +1175,7 @@ fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stop
         line.starts_with("nts:")
             && !line.starts_with(REFUSED)
             && !line.starts_with(EXHAUSTED)
+            && !line.starts_with(UNCAUGHT)
     }) {
         return Stopped::Defect(line.trim().to_owned());
     }
@@ -1270,9 +1284,9 @@ fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stop
             "the program threw rather than refusing: {thrown}"
         ));
     }
-    let said_something = complaint
-        .lines()
-        .any(|line| line.starts_with(REFUSED) || line.starts_with(EXHAUSTED));
+    let said_something = complaint.lines().any(|line| {
+        line.starts_with(REFUSED) || line.starts_with(EXHAUSTED) || line.starts_with(UNCAUGHT)
+    });
     match signal {
         Some(number) if !said_something => Stopped::Defect(format!(
             "the program was killed by signal {number} without refusing \

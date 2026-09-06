@@ -13082,6 +13082,210 @@ impl<'a> FuncBuilder<'a> {
             }
         }
     }
+    /// The trailing arguments a string method's call owes the runtime.
+    ///
+    /// `padStart(n)` and `padEnd(n)` pad with a single space, and every other
+    /// two-argument member here defaults its second to "to the end", which is
+    /// an infinity. Passing them explicitly means the runtime has one signature
+    /// rather than two and the default is written down once.
+    fn fill_string_arguments(
+        &mut self,
+        id: NodeId,
+        helper: &str,
+        arity: usize,
+        args: &mut Vec<ValueId>,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        if matches!(helper, "nts_str_pad_start" | "nts_str_pad_end") && args.len() == 2 {
+            let space = self.push(
+                OpKind::ConstString(" ".to_owned()),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            );
+            args.push(space);
+        }
+        while args.len() < arity + 1 {
+            let end = self.push(
+                OpKind::ConstFloat(f64::INFINITY),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            args.push(end);
+        }
+        if args.len() != arity + 1 {
+            return Err(self.unsupported(id, "a string method with this many arguments"));
+        }
+        Ok(())
+    }
+
+    /// `"x".repeat(n)` throws a `RangeError` for a count the language refuses.
+    ///
+    /// The specification is `ToIntegerOrInfinity(count)` and then **throw**
+    /// where that is negative or `+Infinity`. A `NaN` is not one of those:
+    /// `ToIntegerOrInfinity(NaN)` is `0`, so `"x".repeat(NaN)` is `""` and the
+    /// runtime's clamp is right about it.
+    ///
+    /// So the test is `n < 0 || n === Infinity`, and each half earns its place:
+    /// `-Infinity` is caught by the first, `-0` is not negative and must not
+    /// throw, and a `NaN` fails both, which is the answer.
+    ///
+    /// Two branches rather than one disjunction, because this IR has no boolean
+    /// `||` -- a short circuit is control flow, and `n === Infinity` is
+    /// evaluated only where `n < 0` was false, which is what the source says.
+    ///
+    /// Emitted here and not in `nts_str_repeat`, which clamped a negative count
+    /// to zero and answered `""`. That is a **wrong answer** rather than a
+    /// missing feature, and a helper cannot fix it: a handler is a block and a
+    /// `throw` is a jump this lowering writes, so nothing below it can reach
+    /// one. Aborting instead would be a different observable --
+    /// `try { s.repeat(-1) } catch {}` catches in node.
+    ///
+    /// It was invisible for as long as it existed, because the differential's
+    /// node driver died on the first synchronous throw and every case after it
+    /// went unasked. The driver was fixed and `examples/strings` went red on
+    /// five cases the same day.
+    fn guard_repeat_count(&mut self, id: NodeId, count: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let negative = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: count,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let throwing = self.new_block();
+        let second = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: negative,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: second,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(second);
+        let infinite = self.push(
+            OpKind::ConstFloat(f64::INFINITY),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let endless = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: count,
+                rhs: infinite,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: endless,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(throwing);
+        self.throw_provided_error(id, "RangeError", "Invalid count value")?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
+    /// Build one of the provided error classes and throw it, from here.
+    ///
+    /// For a check the *language* specifies and a runtime helper cannot make.
+    /// The message is a constant this compiler chooses, so there is no
+    /// expression to lower and [`Self::throw_erased`] takes the value directly
+    /// -- the same entry point a rethrow uses.
+    fn throw_provided_error(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        message: &str,
+    ) -> Result<(), Diagnostic> {
+        // The snapshot's type where the program named the class, and a
+        // synthetic one where it did not.
+        //
+        // The checker only interns what the source mentions, so
+        // `type_named("RangeError")` is `None` for most programs -- and a class
+        // this compiler *provides* cannot depend on that. `examples/strings`
+        // has no `RangeError` in it and `"x".repeat(-1)` throws one all the
+        // same.
+        //
+        // Where both exist they are one class: `collect_layouts` merges two
+        // error layouts of the same name, and refuses only two of different
+        // names.
+        let found = self
+            .type_named(class)
+            .and_then(|ty| self.provided_layout(ty).map(|layout| (ty, layout)));
+        let (ty, layout) = if let Some(found) = found {
+            found
+        } else {
+            {
+                let Some(index) = super::builtin::error_index(class) else {
+                    return Err(self.unsupported(
+                        id,
+                        &format!("a thrown `{class}`, which this compiler does not provide"),
+                    ));
+                };
+                let ty = super::provided_error_type(index);
+                let layout = Layout {
+                    types: vec![ty],
+                    name: class.to_owned(),
+                    fields: super::builtin::error_fields(),
+                    methods: vec![None; self.hierarchy.table_size()],
+                    // No base. `TypeError extends Error` is spelled where
+                    // `instanceof` needs it, and a program that never named
+                    // either has nothing to relate them for.
+                    base: None,
+                };
+                self.layouts.push(layout.clone());
+                (ty, layout)
+            }
+        };
+        let origin = self.origin(id);
+        let object = HirType::Managed(ManagedType::Object(ty));
+        self.materialize(id, &object)?;
+        let error = self.push(
+            OpKind::ObjectNew { frame: false },
+            object.clone(),
+            origin.clone(),
+        );
+        let text = HirType::Managed(ManagedType::String);
+        for (field, value) in [("message", message), ("name", class)] {
+            let Some(at) = layout.index_of(field) else {
+                continue;
+            };
+            let value = self.push(
+                OpKind::ConstString(value.to_owned()),
+                text.clone(),
+                origin.clone(),
+            );
+            self.push(
+                OpKind::FieldSet {
+                    object: error,
+                    field: at,
+                    value,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        let erased = self.push(OpKind::Erase { value: error }, HirType::Erased, origin);
+        self.throw_erased(id, error, erased, &object)
+    }
+
     /// The layout of a class this compiler provides, if `ty` names one.
     fn provided_layout(&mut self, ty: TypeId) -> Option<Layout> {
         let name = named(self.snapshot, ty)
@@ -17173,33 +17377,13 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
 
-        // `padStart(n)` and `padEnd(n)` pad with a single space. The filler
-        // below gives an omitted trailing argument the "to the end" infinity
-        // every other member here wants, and a string is not that.
-        if matches!(helper, "nts_str_pad_start" | "nts_str_pad_end") && args.len() == 2 {
-            let space = self.push(
-                OpKind::ConstString(" ".to_owned()),
-                HirType::Managed(ManagedType::String),
-                origin.clone(),
-            );
-            args.push(space);
+        // A count `repeat` will not accept throws before the helper is
+        // reached. See `guard_repeat_count`.
+        if helper == "nts_str_repeat" && args.len() == 2 {
+            self.guard_repeat_count(id, args[1])?;
         }
 
-        // An omitted trailing argument becomes the default the specification
-        // gives it, which for every two-argument member here is "to the end".
-        // Passing it explicitly means the runtime has one signature rather than
-        // two, and the default is written down once.
-        while args.len() < arity + 1 {
-            let end = self.push(
-                OpKind::ConstFloat(f64::INFINITY),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            args.push(end);
-        }
-        if args.len() != arity + 1 {
-            return Err(self.unsupported(id, "a string method with this many arguments"));
-        }
+        self.fill_string_arguments(id, helper, arity, &mut args, &origin)?;
 
         // A regular expression is a pattern `String.prototype.replace` accepts
         // and this does not. It has to be named and refused *here*: everything

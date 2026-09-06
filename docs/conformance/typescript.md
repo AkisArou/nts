@@ -1784,6 +1784,14 @@ Measured, not assumed — three of these rows were wrong on the first pass.
   `fromCodePoint`. This list said `at`, `split`, `replace` and `trim` were
   absent long after they were not.
 
+  `repeat` **throws** for a count the language refuses — negative or
+  `+Infinity`, per `ToIntegerOrInfinity` — rather than clamping it to zero and
+  answering `""`, which is what it did and which node does not. The test is at
+  the call because a runtime helper cannot throw: a handler is a block and a
+  `throw` is a jump the lowering writes. It was invisible for as long as it
+  existed, because the differential's node driver died on the first synchronous
+  throw and every case after it went unasked. Record 0175.
+
   `toLowerCase` and `toUpperCase` are there because the tables are:
   quickjs-ng's `libunicode` is vendored under `runtime/c/quickjs`, MIT, and
   emitted only

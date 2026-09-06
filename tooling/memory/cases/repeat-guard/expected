@@ -1,0 +1,23 @@
+ideal 17
+allocated 17
+because Argued before measuring.
+because
+because Allocations: seventeen, one per call, and they are `repeat`'s rather
+because than the guard's. A repeated string is a header and its units inline
+because sized to fit, so the helper allocates one and returns it; the length
+because is `n * len`, which the call site does not state, so
+because `place_allocations` has no bound to give it frame storage against.
+because Seventeen calls, seventeen strings.
+because
+because Operations: seventeen. Each string is owned where it is produced and
+because released where it dies, which is one iteration later -- and there is
+because nothing for the elision to remove, because a value that lives and
+because dies inside one block is already the shape it wants.
+because
+because What the case is for is the **guard**, which is two comparisons and a
+because branch and appears in neither number. A lowering that built the
+because `RangeError` before testing the count, or on every call rather than
+because on the path that throws, would read thirty-four here and agree with
+because node on every case -- the object would be discarded unthrown, and
+because nothing in the differential can see an allocation that changes no
+because answer.
