@@ -1,3 +1,5 @@
+import { trimHTTPWhitespace } from "../core/ascii.ts";
+
 /** Transport entries retain wire order and duplicates. Public iteration is sorted. */
 export type HeaderEntry = readonly [name: string, value: string];
 
@@ -28,23 +30,14 @@ export function normalizeName(name: string): string {
 export function normalizeValue(value: string): string {
   // Fetch trims HTTP whitespace (HTAB, LF, CR, SP) before validating embedded
   // newline bytes. String.trim() is wrong: it would also strip NBSP and FF.
-  let start = 0;
-  let end = value.length;
+  const normalized = trimHTTPWhitespace(value);
 
-  while (start < end && isHTTPWhitespace(value.charCodeAt(start))) start++;
-
-  while (end > start && isHTTPWhitespace(value.charCodeAt(end - 1))) end--;
-
-  for (let i = start; i < end; ++i) {
-    const c = value.charCodeAt(i);
+  for (let i = 0; i < normalized.length; ++i) {
+    const c = normalized.charCodeAt(i);
     if (c > 255 || c === 0 || c === 10 || c === 13)
       throw new TypeError("Invalid HTTP header value");
   }
-  return value.slice(start, end);
-}
-
-function isHTTPWhitespace(code: number): boolean {
-  return code === 9 || code === 10 || code === 13 || code === 32;
+  return normalized;
 }
 
 function isHeaderSequence(init: HeadersInit): init is Headers | HeaderSequence {

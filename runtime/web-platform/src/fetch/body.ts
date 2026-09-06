@@ -1,6 +1,7 @@
 import { ReadableStream, bytesStream, tee, transfer } from "../streams/readable.ts";
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
+import { trimHTTPWhitespace } from "../core/ascii.ts";
 import type { RandomSource } from "../provider/ports.ts";
 import { Blob } from "../forms/blob.ts";
 import { FormData } from "../forms/form-data.ts";
@@ -188,7 +189,9 @@ export abstract class Body {
     return new Blob([await this.bytes()], { type: this.contentType() ?? "" });
   }
   async formData(): Promise<FormData> {
-    const contentType = (this.contentType() ?? "").split(";")[0]?.trim().toLowerCase();
+    const contentType = trimHTTPWhitespace(
+      (this.contentType() ?? "").split(";")[0] ?? "",
+    ).toLowerCase();
     if (contentType === "multipart/form-data")
       return decodeMultipart(await this.bytes(), this.contentType() ?? "");
     if (contentType !== "application/x-www-form-urlencoded")

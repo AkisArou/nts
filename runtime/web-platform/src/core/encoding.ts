@@ -1,4 +1,5 @@
 import { utf8Length, utf8Write } from "./utf8.ts";
+import { trimASCIIWhitespace } from "./ascii.ts";
 
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export function toUSVString(input: string): string {
@@ -77,7 +78,7 @@ export class TextDecoder {
   private bomSeen = false;
 
   constructor(label = "utf-8", options: TextDecoderOptions = {}) {
-    const normalized = label.trim().toLowerCase();
+    const normalized = trimASCIIWhitespace(label).toLowerCase();
     if (normalized !== "utf-8" && normalized !== "utf8" && normalized !== "unicode-1-1-utf-8") {
       throw new RangeError("Only UTF-8 is implemented by this decoder");
     }

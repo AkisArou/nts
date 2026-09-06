@@ -1,6 +1,7 @@
 import { Headers, isToken } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import { ProtocolError, LimitError } from "../core/errors.ts";
+import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import type { BufferedReader } from "./io.ts";
 
 export interface HeadLimits {
@@ -90,7 +91,7 @@ export function contentLength(headers: Headers): number | null {
   let result: number | null = null;
 
   for (const part of raw.split(",")) {
-    const text = part.trim();
+    const text = trimHTTPTabOrSpace(part);
     if (!/^[0-9]+$/.test(text)) throw new ProtocolError("Invalid Content-Length");
     const length = Number(text);
     if (!Number.isSafeInteger(length)) throw new ProtocolError("Content-Length is too large");
@@ -106,7 +107,7 @@ export function hasToken(headers: Headers, name: string, token: string): boolean
     headers
       .get(name)
       ?.split(",")
-      .some((value) => value.trim().toLowerCase() === token) ?? false
+      .some((value) => trimHTTPTabOrSpace(value).toLowerCase() === token) ?? false
   );
 }
 
@@ -119,7 +120,7 @@ export function responseFraming(headers: Headers): {
 
   if (transferEncoding !== null) {
     if (length !== null) throw new ProtocolError("Ambiguous Transfer-Encoding and Content-Length");
-    if (transferEncoding.trim().toLowerCase() !== "chunked")
+    if (trimHTTPTabOrSpace(transferEncoding).toLowerCase() !== "chunked")
       throw new ProtocolError("Unsupported or ambiguous Transfer-Encoding");
     return { kind: "chunked", length: 0 };
   }

@@ -307,6 +307,16 @@ for (const [name, wire, headError] of [
     "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 3\r\n\r\nx",
     true,
   ],
+  [
+    "non-HTTP whitespace around Content-Length",
+    Buffer.from("HTTP/1.1 200 OK\r\nContent-Length:\xa02\r\n\r\nx", "latin1"),
+    true,
+  ],
+  [
+    "non-HTTP whitespace around Transfer-Encoding",
+    Buffer.from("HTTP/1.1 200 OK\r\nTransfer-Encoding:\xa0chunked\r\n\r\n0\r\n\r\n", "latin1"),
+    true,
+  ],
   ["folded header", "HTTP/1.1 200 OK\r\nX-Test: a\r\n b\r\n\r\n", true],
   ["truncated fixed body", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx", false],
   ["bad chunk size", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nX\r\n", false],

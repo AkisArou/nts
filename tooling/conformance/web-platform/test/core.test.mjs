@@ -453,6 +453,15 @@ test("Header HTTP whitespace normalization, non-breaking space and embedded newl
   }
   assert.throws(() => new Headers([["x", "a\r\nb"]]));
 });
+test("TextDecoder labels trim ASCII whitespace but not other Unicode whitespace", () => {
+  for (const label of ["\tutf-8\r", "\futf8\n", " unicode-1-1-utf-8 "]) {
+    assert.equal(new TextDecoder(label).encoding, new NativeDecoder(label).encoding);
+  }
+  for (const label of ["\u00a0utf-8", "utf-8\u00a0", "\u2003utf-8"]) {
+    assert.throws(() => new TextDecoder(label));
+    assert.throws(() => new NativeDecoder(label));
+  }
+});
 test("Multipart roundtrip preserves duplicate text entries, binary files and UTF-8 names", async () => {
   const form = new FormData();
   form.append("name", "first");

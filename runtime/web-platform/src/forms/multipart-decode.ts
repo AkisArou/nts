@@ -1,4 +1,5 @@
 import { asciiBytes, decodeUTF8 } from "../core/encoding.ts";
+import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { LimitError } from "../core/errors.ts";
 import { isToken } from "../fetch/headers.ts";
 import { FormData } from "./form-data.ts";
@@ -89,7 +90,7 @@ export function decodeMultipart(
     for (const line of decodeUTF8(bytes.subarray(offset, end)).split("\r\n")) {
       const colon = line.indexOf(":");
       const name = line.slice(0, colon).toLowerCase();
-      const value = line.slice(colon + 1).trim();
+      const value = trimHTTPTabOrSpace(line.slice(colon + 1));
       if (colon < 1 || !isToken(name) || /[\r\n\0]/.test(value))
         throw new TypeError("Malformed multipart part header");
       if (name === "content-disposition") {
