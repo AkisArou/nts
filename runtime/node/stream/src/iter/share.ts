@@ -6,10 +6,7 @@ import {
   ERR_INVALID_RETURN_VALUE,
   ERR_OUT_OF_RANGE,
 } from "../../../internal/errors.ts";
-import {
-  validateInteger,
-  validateObject,
-} from "../../../internal/validators.ts";
+import { validateInteger, validateObject } from "../../../internal/validators.ts";
 import { from, fromSync } from "./from.ts";
 import { pull, pullSync } from "./pull.ts";
 import { RingBuffer } from "./ring-buffer.ts";
@@ -37,37 +34,24 @@ const resolvedVoid = Promise.resolve();
 const doneResult: IteratorResult<ByteBatch> = { value: undefined, done: true };
 const donePromise = Promise.resolve(doneResult);
 
-interface DeferredVoid {
-  readonly promise: Promise<void>;
-  resolve(): void;
-}
-
-function deferredVoid(): DeferredVoid {
-  let resolve: () => void = (): void => {};
-  const promise = new Promise<void>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
 interface ParsedShareOptions {
   readonly budget: number;
   readonly backpressure: BackpressurePolicy;
   readonly signal?: StreamAbortSignal;
 }
 
-function validateSignal(
-  signal: unknown,
-): asserts signal is StreamAbortSignal | undefined {
+function validateSignal(signal: unknown): asserts signal is StreamAbortSignal | undefined {
   if (
     signal !== undefined &&
-    (signal === null || typeof signal !== "object" || !(
-      "aborted" in signal &&
-      "addEventListener" in signal &&
-      typeof signal.addEventListener === "function" &&
-      "removeEventListener" in signal &&
-      typeof signal.removeEventListener === "function"
-    ))
+    (signal === null ||
+      typeof signal !== "object" ||
+      !(
+        "aborted" in signal &&
+        "addEventListener" in signal &&
+        typeof signal.addEventListener === "function" &&
+        "removeEventListener" in signal &&
+        typeof signal.removeEventListener === "function"
+      ))
   ) {
     throw new ERR_INVALID_ARG_TYPE("options.signal", "AbortSignal", signal);
   }
@@ -75,13 +59,13 @@ function validateSignal(
 
 function parseOptions(options: unknown, allowSignal: boolean): ParsedShareOptions {
   validateObject(options, "options");
-  const budget = "budget" in options && options.budget !== undefined
-    ? options.budget
-    : DEFAULT_BUDGET;
+  const budget =
+    "budget" in options && options.budget !== undefined ? options.budget : DEFAULT_BUDGET;
   validateInteger(budget, "options.budget", MINIMUM_BUDGET);
-  const backpressure = "backpressure" in options && options.backpressure !== undefined
-    ? options.backpressure
-    : "strict";
+  const backpressure =
+    "backpressure" in options && options.backpressure !== undefined
+      ? options.backpressure
+      : "strict";
   validateBackpressure(backpressure);
 
   if (!allowSignal) return { budget, backpressure };
@@ -158,7 +142,7 @@ export class AsyncShareController {
   readonly #options: ParsedShareOptions;
   readonly #buffer = new RingBuffer<ByteBatch>();
   readonly #consumers = new Set<AsyncConsumerState>();
-  readonly #pullWaiters = new RingBuffer<DeferredVoid>();
+  readonly #pullWaiters = new RingBuffer<PromiseWithResolvers<void>>();
   #sourceIterator: AsyncIterator<ByteBatch> | null = null;
   #bufferStart = 0;
   #bufferedBytes = 0;
@@ -291,7 +275,7 @@ export class AsyncShareController {
             this.#bufferedBytes,
           );
         case "unbounded": {
-          const waiter = deferredVoid();
+          const waiter = Promise.withResolvers<void>();
           this.#pullWaiters.push(waiter);
           await waiter.promise;
           break;
@@ -309,7 +293,7 @@ export class AsyncShareController {
   async #pullFromSource(discard: boolean): Promise<void> {
     if (this.#sourceExhausted || this.#cancelled) return;
     if (this.#pulling) {
-      const waiter = deferredVoid();
+      const waiter = Promise.withResolvers<void>();
       this.#pullWaiters.push(waiter);
       await waiter.promise;
       return;
@@ -342,18 +326,13 @@ export class AsyncShareController {
     if (batch === undefined) throw new Error("share buffer cursor is out of range");
     const cursor = state.cursor;
     state.cursor++;
-    if (
-      cursor === this.#cachedMinCursor &&
-      --this.#cachedMinCursorConsumers === 0
-    ) this.#tryTrimBuffer();
+    if (cursor === this.#cachedMinCursor && --this.#cachedMinCursorConsumers === 0)
+      this.#tryTrimBuffer();
     return batch;
   }
 
   #dropOldest(): void {
-    while (
-      this.#bufferedBytes >= this.#options.budget &&
-      this.#buffer.length > 0
-    ) {
+    while (this.#bufferedBytes >= this.#options.budget && this.#buffer.length > 0) {
       const removed = this.#buffer.shift();
       if (removed !== undefined) this.#bufferedBytes -= batchByteSize(removed);
       this.#bufferStart++;
@@ -605,18 +584,13 @@ export class SyncShareController {
     if (batch === undefined) throw new Error("share buffer cursor is out of range");
     const cursor = state.cursor;
     state.cursor++;
-    if (
-      cursor === this.#cachedMinCursor &&
-      --this.#cachedMinCursorConsumers === 0
-    ) this.#tryTrimBuffer();
+    if (cursor === this.#cachedMinCursor && --this.#cachedMinCursorConsumers === 0)
+      this.#tryTrimBuffer();
     return batch;
   }
 
   #dropOldest(): void {
-    while (
-      this.#bufferedBytes >= this.#options.budget &&
-      this.#buffer.length > 0
-    ) {
+    while (this.#bufferedBytes >= this.#options.budget && this.#buffer.length > 0) {
       const removed = this.#buffer.shift();
       if (removed !== undefined) this.#bufferedBytes -= batchByteSize(removed);
       this.#bufferStart++;
@@ -676,10 +650,7 @@ export class SyncShareController {
   }
 }
 
-export function share(
-  source: unknown,
-  options: unknown = {},
-): AsyncShareController {
+export function share(source: unknown, options: unknown = {}): AsyncShareController {
   const normalized = from(source);
   const parsed = parseOptions(options, true);
   const controller = new AsyncShareController(normalized, parsed);
@@ -692,10 +663,7 @@ export function share(
   return controller;
 }
 
-export function shareSync(
-  source: unknown,
-  options: unknown = {},
-): SyncShareController {
+export function shareSync(source: unknown, options: unknown = {}): SyncShareController {
   const normalized = fromSync(source);
   return new SyncShareController(normalized, parseOptions(options, false));
 }
@@ -716,10 +684,7 @@ function shareFrom(
   input: AsyncByteStream | SyncByteStream,
   options?: unknown,
 ): AsyncShareController;
-function shareFrom(
-  input: unknown,
-  options?: unknown,
-): object | AsyncShareController {
+function shareFrom(input: unknown, options?: unknown): object | AsyncShareController {
   if (hasShareProtocol(input)) {
     const result = input[shareProtocol](options);
     if (result === null || typeof result !== "object") {
@@ -732,25 +697,15 @@ function shareFrom(
     return result;
   }
   if (isAsyncIterable(input) || isSyncIterable(input)) return share(input, options);
-  throw new ERR_INVALID_ARG_TYPE(
-    "input",
-    ["Shareable", "AsyncIterable", "Iterable"],
-    input,
-  );
+  throw new ERR_INVALID_ARG_TYPE("input", ["Shareable", "AsyncIterable", "Iterable"], input);
 }
 
 function shareFromSync<Result extends object>(
   input: SyncShareProtocolSource<Result>,
   options?: unknown,
 ): Result;
-function shareFromSync(
-  input: SyncByteStream,
-  options?: unknown,
-): SyncShareController;
-function shareFromSync(
-  input: unknown,
-  options?: unknown,
-): object | SyncShareController {
+function shareFromSync(input: SyncByteStream, options?: unknown): SyncShareController;
+function shareFromSync(input: unknown, options?: unknown): object | SyncShareController {
   if (hasShareSyncProtocol(input)) {
     const result = input[shareSyncProtocol](options);
     if (result === null || typeof result !== "object") {
@@ -763,11 +718,7 @@ function shareFromSync(
     return result;
   }
   if (isSyncIterable(input)) return shareSync(input, options);
-  throw new ERR_INVALID_ARG_TYPE(
-    "input",
-    ["SyncShareable", "Iterable"],
-    input,
-  );
+  throw new ERR_INVALID_ARG_TYPE("input", ["SyncShareable", "Iterable"], input);
 }
 
 export const Share = {

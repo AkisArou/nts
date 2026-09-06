@@ -24,11 +24,7 @@ export type SyncByteStream = Iterable<ByteBatch>;
 export type AsyncByteStream = AsyncIterable<ByteBatch>;
 export type ByteStream = SyncByteStream | AsyncByteStream;
 
-export type BackpressurePolicy =
-  | "strict"
-  | "unbounded"
-  | "drop-oldest"
-  | "drop-newest";
+export type BackpressurePolicy = "strict" | "unbounded" | "drop-oldest" | "drop-newest";
 
 export interface StreamAbortSignal extends AbortSignalLike {
   throwIfAborted?(): void;
@@ -63,22 +59,24 @@ export interface SyncWriter {
 const encoder = new TextEncoder();
 
 export function isAsyncWriter(value: unknown): value is AsyncWriter {
-  return value !== null &&
+  return (
+    value !== null &&
     typeof value === "object" &&
     "write" in value &&
-    typeof value.write === "function";
+    typeof value.write === "function"
+  );
 }
 
 export function isSyncWriter(value: unknown): value is SyncWriter {
-  return value !== null &&
+  return (
+    value !== null &&
     typeof value === "object" &&
     "writeSync" in value &&
-    typeof value.writeSync === "function";
+    typeof value.writeSync === "function"
+  );
 }
 
-function validateWriterSignal(
-  signal: unknown,
-): asserts signal is StreamAbortSignal | undefined {
+function validateWriterSignal(signal: unknown): asserts signal is StreamAbortSignal | undefined {
   if (
     signal !== undefined &&
     (signal === null || typeof signal !== "object" || !("aborted" in signal))
@@ -88,17 +86,13 @@ function validateWriterSignal(
 }
 
 /** Validate a Writer operation's options and return its cancellation signal. */
-export function getWriterSignal(
-  options?: WriterOptions,
-): StreamAbortSignal | undefined {
+export function getWriterSignal(options?: WriterOptions): StreamAbortSignal | undefined {
   const signal = options?.signal;
   validateWriterSignal(signal);
   return signal;
 }
 
-export function validateBackpressure(
-  value: unknown,
-): asserts value is BackpressurePolicy {
+export function validateBackpressure(value: unknown): asserts value is BackpressurePolicy {
   if (
     value !== "strict" &&
     value !== "unbounded" &&
@@ -132,9 +126,7 @@ export function toUint8Array(chunk: string | Uint8Array): Uint8Array {
   return chunk;
 }
 
-export function convertChunks(
-  chunks: readonly (string | Uint8Array)[],
-): ByteBatch {
+export function convertChunks(chunks: readonly (string | Uint8Array)[]): ByteBatch {
   const converted = new Array<Uint8Array>(chunks.length);
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
@@ -190,16 +182,13 @@ export async function abortableNext<T>(
   if (signal === undefined) return iterator.next();
   throwIfAborted(signal);
 
-  let rejectAbort: (reason?: unknown) => void = (): void => {};
-  const aborted = new Promise<never>((_resolve, reject) => {
-    rejectAbort = reject;
-  });
-  const onAbort = (): void => rejectAbort(signal.reason ?? new AbortError());
+  const aborted = Promise.withResolvers<never>();
+  const onAbort = (): void => aborted.reject(signal.reason ?? new AbortError());
   signal.addEventListener("abort", onAbort, { once: true });
   if (signal.aborted) onAbort();
 
   try {
-    return await Promise.race([iterator.next(), aborted]);
+    return await Promise.race([iterator.next(), aborted.promise]);
   } finally {
     signal.removeEventListener("abort", onAbort);
   }
@@ -253,25 +242,31 @@ export function yieldAbortable<T>(
 }
 
 export function isSyncIterable(value: unknown): value is Iterable<unknown> {
-  return typeof value !== "string" &&
+  return (
+    typeof value !== "string" &&
     value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     Symbol.iterator in value &&
-    typeof value[Symbol.iterator] === "function";
+    typeof value[Symbol.iterator] === "function"
+  );
 }
 
 export function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-  return value !== null &&
+  return (
+    value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     Symbol.asyncIterator in value &&
-    typeof value[Symbol.asyncIterator] === "function";
+    typeof value[Symbol.asyncIterator] === "function"
+  );
 }
 
 export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return value !== null &&
+  return (
+    value !== null &&
     (typeof value === "object" || typeof value === "function") &&
     "then" in value &&
-    typeof value.then === "function";
+    typeof value.then === "function"
+  );
 }
 
 export function wrapError(error: unknown): Error {
