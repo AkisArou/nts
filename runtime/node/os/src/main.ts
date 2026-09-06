@@ -286,9 +286,9 @@ export function networkInterfaces(): NetworkInterfaceMap {
   }
   for (const [name, count] of counts) {
     result[name] = new Array<NetworkInterfaceInfo>(count);
+    counts.set(name, 0);
   }
 
-  const positions = new Map<string, number>();
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     const address = addresses[i];
@@ -333,10 +333,10 @@ export function networkInterfaces(): NetworkInterfaceMap {
     }
 
     const list = result[name];
-    const position = positions.get(name) ?? 0;
+    const position = counts.get(name) ?? 0;
     if (list === undefined) throw new Error(`missing network-interface group ${name}`);
     list[position] = entry;
-    positions.set(name, position + 1);
+    counts.set(name, position + 1);
   }
   return result;
 }
