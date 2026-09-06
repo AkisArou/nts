@@ -284,17 +284,29 @@ fn legend(root: &Utf8Path) -> String {
         backend, so a missing JVM number is always a construct the lane \
         declines by name, and a blank would be indistinguishable from the \
         `Java` column's blank, which means nobody wrote a reference.\n\n\
-        `Java` is Are We Fast Yet's **own** hand-written Java for the same \
-        benchmark, on the same JVM in the same run — the only reference here \
-        written in the language the column beside it compiles to, which is what \
-        makes `nts (JVM)/Java` a statement about codegen with the runtime \
-        divided out. Every other ratio in this table mixes a codegen \
-        difference with an engine difference and cannot separate them. It is \
-        `--` for every case that is not a port of one of theirs, which is all \
-        but the `awfy-*` rows: writing a second implementation of `substrings` \
-        or `bytes` in Java to have something to divide by would be a \
-        correctness burden rather than a reference, which is the same reason \
-        the `C++` column has the gaps it does.\n\n\
+        `Java` is a hand-written reference for the same benchmark, on the same \
+        JVM in the same run — the only reference here written in the language \
+        the column beside it compiles to, which is what makes `nts (JVM)/Java` \
+        a statement about codegen with the runtime divided out. Every other \
+        ratio in this table mixes a codegen difference with an engine \
+        difference and cannot separate them. On the `awfy-*` rows it is Are We \
+        Fast Yet's **own** Java, unchanged; everywhere else it is a `ref.java` \
+        beside the case, whose comment says what a competent Java programmer \
+        would write and why. A reference must decline anything that costs one \
+        lane and not the other — no boxing where the subject boxes nothing, no \
+        field narrower than the f64 a TypeScript `number` is — and four of \
+        these were corrected for exactly that, in both directions.\n\n\
+        **Below about 1.10x, this column is at its resolution and should be \
+        read with the fixed-count driver rather than from here.** The number is \
+        a best-of-five, which is the right statistic against a tight \
+        distribution and a kind one against a wide one — and where a JIT \
+        settles two ways, ours is the wide one. `tooling/bench/counted.sh` \
+        calls a case's own entry point N times and again at 2N and subtracts, \
+        which removes startup and warmup and reports a median; records 0154 \
+        and 0155 are three rows that read differently under it, in both \
+        directions, one of them a loss published as a win. The `varied` notes \
+        above catch a row that is unstable *within* one invocation and cannot \
+        catch one that settles differently between them.\n\n\
         **The JVM column excludes startup, deliberately and at this lane's own \
         cost.** It is timed inside its own process after the same 20,000 warmup \
         iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, \

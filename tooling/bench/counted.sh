@@ -6,7 +6,7 @@
 # The published table is best-of-five with calibration, because that is what
 # `bench.mjs` does for node and it is what makes the columns comparable to each
 # other. It cannot resolve a small row. `generic-classes` published 1.03x and
-# then 1.16x of the same bytecode, and this said 0.91x -- record 0152.
+# then 1.16x of the same bytecode, and this said 0.91x -- record 0154.
 #
 # So: call the case's own entry point N times and again at 2N, subtract, and
 # divide. Startup and warmup are a constant and cancel; what is left is the
@@ -30,7 +30,15 @@ ours=$(sed -n 's/.*return \(nts\.gen\.Program\..*\);/\1/p' "$root/target/bench/$
 seed=$(sed -n 's/.*private static volatile double in0 = \(.*\);/\1/p' "$root/target/bench/$case.jvm/Case.java" | head -1)
 [ -n "$ours" ] || { echo "counted: no call in $case.jvm/Case.java" >&2; exit 2; }
 
-emit() { # dir, expression
+# `$2` is evaluated once per iteration; `$3` is a declaration hoisted out of the
+# loop, and it exists because the first version of this did not have it.
+#
+# The reference is a `Bench.Work` and the harness holds *one* of them, so a
+# driver writing `new Ref().run()` in the loop allocates an object the published
+# measurement does not -- and it charges that allocation to the reference alone,
+# because our side calls a static method. A bias in the reference's disfavour is
+# a bias in our favour, which is the direction that does not get noticed.
+emit() { # dir, expression, hoisted declaration
   mkdir -p "$1"
   cat > "$1/Count.java" <<JAVA
 public final class Count {
@@ -38,6 +46,7 @@ public final class Count {
     public static void main(String[] argv) {
         int n = Integer.parseInt(argv[0]);
         double sink = 0;
+        ${3:-}
         for (int i = 0; i < n; i++) { sink += $2; }
         System.out.println(sink);
     }
@@ -60,7 +69,7 @@ if [ -f "$root/benches/cases/$case/ref.java" ]; then
   cp "$root/benches/common/Bench.java" "$work/ref/"
   # AWFY references reach for classes on the vendored classpath.
   awfy=$root/target/bench/awfy-java
-  emit "$work/ref" "new Ref().run()"
+  emit "$work/ref" "ref.run()" "final Ref ref = new Ref();"
   if javac -cp "$work/ref:$awfy" -d "$work/ref" "$work/ref"/*.java >/dev/null 2>&1; then
     have_ref=yes
     refpath="$work/ref:$awfy"
@@ -89,15 +98,38 @@ report() { # label, classpath, n
   done
 }
 
-n=${NTS_COUNTED_N:-20000}
+# How many operations to measure. A fixed count cannot serve both `symbol-keys`
+# at 334 ns and `elementwise` at 61 us -- twenty thousand of the second is
+# twenty minutes -- so it is calibrated the same way it is measured: wall time
+# at a small count and at twice it, subtracted, which cancels startup and gives
+# the marginal cost of one operation.
+elapsed() { # classpath, n
+  start=$(date +%s%N)
+  java -cp "$1" Count "$2" >/dev/null 2>&1
+  echo $(( ($(date +%s%N) - start) / 1000 ))
+}
+if [ -n "${NTS_COUNTED_N:-}" ]; then
+  n=$NTS_COUNTED_N
+else
+  probe=200
+  one=$(( ($(elapsed "$work/ours:$jar" $((probe * 2))) - $(elapsed "$work/ours:$jar" $probe)) / probe ))
+  [ "$one" -lt 1 ] && one=1
+  n=$(( 500000 / one ))
+  [ "$n" -lt 500 ] && n=500
+  [ "$n" -gt 2000000 ] && n=2000000
+  echo "note: $one us an operation, measuring $n of them" >&2
+fi
 # Instructions are a count of work and do not care who else is on the machine.
 # Cycles are a duration and do, so they are worth reading only under the
 # measurement lock -- and the two disagreeing is the signal that something else
 # is running, not that the row moved.
-if [ ! -d /tmp/nts-gate/gate.lock.d ]; then
-  echo "note: nobody holds the measurement lock; cycles are comparable, instructions are trustworthy" >&2
-else
-  echo "note: the measurement lock is held; read instructions and distrust cycles" >&2
+# Which of the two numbers to believe. The directory says somebody holds the
+# measurement lock; it does not say whether that somebody is you, and the
+# script cannot tell. Instructions are a count of work and do not care either
+# way -- that is why they are here.
+if [ -d /tmp/nts-gate/gate.lock.d ]; then
+  echo "note: something holds the measurement lock. If it is not this run, the" >&2
+  echo "      cycle counts are of a busy machine; the instruction counts are not." >&2
 fi
 report ours "$work/ours:$jar" "$n"
 [ "$have_ref" = yes ] && report java "$refpath" "$n" || echo "java       -- (no reference)"
