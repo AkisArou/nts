@@ -66,7 +66,7 @@ function isHeaderSequence(init: HeadersInit): init is Headers | HeaderSequence {
 }
 
 export class Headers {
-  private list: HeaderEntry[] = [];
+  private readonly list: HeaderEntry[] = [];
   private guard: HeaderGuard = "none";
   private sortedCache: HeaderEntry[] | null = null;
 
@@ -106,45 +106,50 @@ export class Headers {
     this.writable();
     this.sortedCache = null;
     let found = false;
-    const next: HeaderEntry[] = [];
+    let write = 0;
     for (const entry of this.list) {
       if (entry[0] !== key) {
-        next.push(entry);
+        this.list[write++] = entry;
       } else if (!found) {
-        next.push([key, normalized]);
+        this.list[write++] = [key, normalized];
         found = true;
       }
     }
     if (!found) {
-      next.push([key, normalized]);
+      this.list[write++] = [key, normalized];
     }
-    this.list = next;
+    this.list.length = write;
   }
 
   delete(name: string): void {
     const key = normalizeName(name);
     this.writable();
     this.sortedCache = null;
-    const retained: HeaderEntry[] = [];
+    let write = 0;
     for (const entry of this.list) {
       if (entry[0] !== key) {
-        retained.push(entry);
+        this.list[write++] = entry;
       }
     }
-    this.list = retained;
+    this.list.length = write;
   }
 
   get(name: string): string | null {
     const key = normalizeName(name);
-    let result: string | null = null;
+    let first: string | null = null;
+    let values: string[] | null = null;
 
     for (const entry of this.list) {
       if (entry[0] !== key) {
         continue;
       }
-      result = result === null ? entry[1] : result + ", " + entry[1];
+      if (first === null) first = entry[1];
+      else {
+        if (values === null) values = [first];
+        values.push(entry[1]);
+      }
     }
-    return result;
+    return values === null ? first : values.join(", ");
   }
 
   has(name: string): boolean {

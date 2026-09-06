@@ -419,3 +419,19 @@ capabilities; Node keeps only filesystem/native-ending/object-URL provider edges
 That move remains sequenced behind the typed current-environment provider lookup and
 the full Streams/BYOB surface, rather than introducing another global constructor or
 narrowing Node's existing API to the current default-reader subset.
+
+`Headers.set()` and `Headers.delete()` now compact the exclusively owned ordered
+field list in place. A replacement remains at the first matching field's wire
+position, later duplicates disappear, and deletion truncates the live suffix without
+allocating a second list. `Headers.get()` keeps the allocation-free single-value path
+and gathers an array only after finding a duplicate, then joins once instead of
+successively rebuilding the combined string. A 2,050-field test exercises duplicate
+replacement and deletion, preserves the exact first position, and checks the final
+cardinality. Mutating the replacement branch to rewrite every duplicate leaves 683
+`target` entries instead of one, so the test proves the compaction rather than merely
+the final lookup value. The Node-host suite passes 117/117 and the pinned WPT slice
+remains 95/95. The live NTS frontier is 240 primary refusals, 36 cascades, zero
+JVM-backend refusals, and no invalid HIR. The two additional primaries are the two
+intentional `list.length = write` truncations, both instances of the existing
+array-length/property-assignment lowering gap; retaining replacement arrays merely to
+hide that temporary compiler limitation would regress the intended final form.

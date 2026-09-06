@@ -347,6 +347,26 @@ test("Headers live iteration observes insertion and removal", () => {
   };
   assert.deepEqual(consume(actual), consume(expected));
 });
+test("Headers compacts duplicate fields in place at their first wire position", () => {
+  const input = [];
+  for (let index = 0; index < 2050; index++) {
+    input.push(index % 3 === 1 ? ["target", String(index)] : [`x-${index}`, String(index)]);
+  }
+  const headers = new Headers(input);
+  const firstTarget = headers.raw().findIndex((entry) => entry[0] === "target");
+  headers.set("TARGET", "final");
+  const replaced = headers.raw();
+  assert.equal(
+    replaced.findIndex((entry) => entry[0] === "target"),
+    firstTarget,
+  );
+  assert.equal(replaced.filter((entry) => entry[0] === "target").length, 1);
+  assert.equal(headers.get("target"), "final");
+
+  headers.delete("target");
+  assert.equal(headers.has("target"), false);
+  assert.equal(headers.raw().length, 2050 - Math.floor(2050 / 3));
+});
 test("UTF-8 encode and encodeInto match host including lone surrogates", () => {
   for (const text of [
     "",
