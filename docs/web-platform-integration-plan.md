@@ -875,9 +875,10 @@ The JVM owner supplies:
   executors; and
 - provider byte-view transfer/borrow behavior matching the shared ownership ABI.
 
-NTS-owned Java source is owned by the JVM lane from its first repository commit, even
-where it lives below `runtime/web-platform/android`. Its own jar keeps the existing
-ratchets: byte-for-byte reproducible build, Java 8/class-file version 52, zero
+NTS-owned Java source lives with and is owned by the JVM lane from its first
+repository commit; it is not an adapter subtree inside the shared TypeScript
+runtime. Its own jar keeps the existing ratchets: byte-for-byte reproducible build,
+Java 8/class-file version 52, zero
 `invokedynamic`, Android API 26 compatibility, and warnings/errors enforced. The
 zero-`invokedynamic` rule protects NTS-owned Java from silently depending on newer
 compiler output; it is not a ban on bytecode that Android's D8 toolchain can desugar.

@@ -1,4 +1,4 @@
-import type { RandomSource } from "../provider/ports.ts";
+import type { RandomSource } from "../provider/primitives.ts";
 import { utf8 } from "../core/encoding.ts";
 import { Blob } from "./blob.ts";
 import { FormData } from "./form-data.ts";

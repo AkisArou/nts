@@ -1,7 +1,7 @@
 import type { EventHandlerSlot } from "./events.ts";
 import { Event, EventTarget } from "./events.ts";
 import { abortError, DOMException } from "./errors.ts";
-import type { Scheduler } from "../provider/ports.ts";
+import type { Scheduler } from "../provider/primitives.ts";
 
 interface Algorithm {
   callback: () => void;

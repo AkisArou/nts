@@ -10,7 +10,7 @@ import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
 import type { RawWebSocketOptions } from "../websocket/raw-transport.ts";
 import type { WebSocketTransport } from "../websocket/transport.ts";
 import { WebSocket } from "../websocket/websocket.ts";
-import type { PlatformPrimitives } from "./ports.ts";
+import type { PlatformPrimitives } from "./primitives.ts";
 
 export interface WebPlatformOptions {
   baseURL?: string;

@@ -1,11 +1,11 @@
-import { checkNetworkPort } from "../core/ports.ts";
+import { checkNetworkPort } from "../core/network-port.ts";
 import { AbortController } from "../core/abort.ts";
 import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
 import { utf8 } from "../core/encoding.ts";
 import { toClampedUnsignedShort, toUSVString } from "../core/webidl.ts";
-import type { Scheduler, URLParser, URLRecord } from "../provider/ports.ts";
+import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { isToken } from "../fetch/headers.ts";
 import { Blob } from "../forms/blob.ts";
 import type {

@@ -1,13 +1,13 @@
-import { ReadableStream, bytesStream, tee, transfer } from "../streams/readable.ts";
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
-import type { RandomSource } from "../provider/ports.ts";
 import { Blob } from "../forms/blob.ts";
 import { FormData } from "../forms/form-data.ts";
-import { URLSearchParams } from "../forms/search-params.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType } from "../forms/mime.ts";
+import { URLSearchParams } from "../forms/search-params.ts";
+import type { RandomSource } from "../provider/primitives.ts";
+import { bytesStream, ReadableStream, tee, transfer } from "../streams/readable.ts";
 
 export type BodyInit =
   | string
@@ -27,6 +27,7 @@ export const standardBodyPolicy: BodyPolicy = {
   maxConsumeBytes: Infinity,
   maxCloneBufferBytes: Infinity,
 };
+
 /** Internal body representation: replay source is separate from one-shot stream state. */
 export class BodyState {
   stream: ReadableStream<Uint8Array> | null;
@@ -128,6 +129,7 @@ export class BodyState {
       this.policy,
     );
   }
+
   async consume(): Promise<Uint8Array> {
     if (this.unusable) throw new TypeError("Body is already used or locked");
     if (this.stream === null) return new Uint8Array(0);
@@ -151,6 +153,7 @@ export class BodyState {
     }
   }
 }
+
 /** Common methods for Request/Response. json() returns unknown, never a fictitious caller-chosen T. */
 export abstract class Body {
   /** @internal */ protected bodyState: BodyState;
@@ -166,28 +169,31 @@ export abstract class Body {
   get bodyUsed(): boolean {
     return this.bodyState.used;
   }
+
   async bytes(): Promise<Uint8Array> {
     return this.bodyState.consume();
   }
+
   async arrayBuffer(): Promise<ArrayBuffer> {
     const bytes = await this.bytes();
     const output = new ArrayBuffer(bytes.length);
     new Uint8Array(output).set(bytes);
     return output;
   }
+
   async text(): Promise<string> {
     return decodeUTF8(await this.bytes());
   }
+
   async json(): Promise<unknown> {
     const value: unknown = JSON.parse(await this.text());
     return value;
   }
-  async jsonAs<T>(decode: (value: unknown) => T): Promise<T> {
-    return decode(await this.json());
-  }
+
   async blob(): Promise<Blob> {
     return new Blob([await this.bytes()], { type: this.contentType() ?? "" });
   }
+
   async formData(): Promise<FormData> {
     const bytes = await this.bytes();
     const mime = parseMIMEType(this.contentType() ?? "");
@@ -199,7 +205,9 @@ export abstract class Body {
     for (const [name, value] of new URLSearchParams(decodeUTF8(bytes))) result.append(name, value);
     return result;
   }
+
   protected abstract contentType(): string | null;
+
   /** @internal */ getState(): BodyState {
     return this.bodyState;
   }

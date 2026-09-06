@@ -1,5 +1,5 @@
 import type { AbortSignal } from "../core/abort.ts";
-import type { URLRecord } from "../provider/ports.ts";
+import type { URLRecord } from "../provider/primitives.ts";
 
 export type SocketMessage = { kind: "text"; data: string } | { kind: "binary"; data: Uint8Array };
 

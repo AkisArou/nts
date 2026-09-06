@@ -24,12 +24,12 @@ stays in this shared layer.
 
 ```text
 runtime/web-platform/src/index.ts       canonical public Web values and public types
-runtime/web-platform/src/provider.ts    stable typed provider/runtime boundary
+runtime/web-platform/src/provider.ts    stable provider-facing entry point
 runtime/web-platform/src/core           shared Web foundations
 runtime/web-platform/src/fetch          Fetch objects, body and policy algorithms
 runtime/web-platform/src/forms          Blob/form/multipart algorithms pending dedup
 runtime/web-platform/src/http1          portable deterministic HTTP/1 reference engine
-runtime/web-platform/src/provider       provider ports and environment-owned assembly
+runtime/web-platform/src/provider       native capability contracts and runtime assembly
 runtime/web-platform/src/streams        canonical Web Streams implementation
 runtime/web-platform/src/websocket      WebSocket API, protocol and reference engine
 

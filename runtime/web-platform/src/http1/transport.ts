@@ -11,7 +11,7 @@ import type {
   Scheduler,
   SocketConnector,
   URLRecord,
-} from "../provider/ports.ts";
+} from "../provider/primitives.ts";
 import { writeAll } from "./io.ts";
 import {
   contentLength,

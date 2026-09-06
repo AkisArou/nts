@@ -14,7 +14,7 @@ export type {
   SocketConnector,
   URLParser,
   URLRecord,
-} from "./provider/ports.ts";
+} from "./provider/primitives.ts";
 
 export type {
   ContentDecoder,
@@ -32,5 +32,5 @@ export type {
   WebSocketTransport,
 } from "./websocket/transport.ts";
 
-export { WebPlatformRuntime } from "./provider/runtime.ts";
-export type { WebPlatformOptions } from "./provider/runtime.ts";
+export { WebPlatformRuntime } from "./provider/web-platform-runtime.ts";
+export type { WebPlatformOptions } from "./provider/web-platform-runtime.ts";

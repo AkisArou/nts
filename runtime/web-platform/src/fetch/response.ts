@@ -1,9 +1,9 @@
+import type { RandomSource, URLParser } from "../provider/primitives.ts";
+import type { ReadableStream } from "../streams/readable.ts";
 import { Body, BodyState, standardBodyPolicy } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
-import type { HeadersInit, HeaderEntry } from "./headers.ts";
-import type { RandomSource, URLParser } from "../provider/ports.ts";
-import type { ReadableStream } from "../streams/readable.ts";
+import type { HeaderEntry, HeadersInit } from "./headers.ts";
 
 export interface ResponseInit {
   status?: number;
@@ -82,6 +82,7 @@ export class Response extends Body {
   get type(): "default" | "basic" | "error" {
     return this.responseType;
   }
+
   protected override contentType(): string | null {
     return this.headers.get("content-type");
   }
@@ -105,6 +106,7 @@ export class Response extends Body {
     if (this.headers.isImmutable) copy.headers.makeImmutable();
     return copy;
   }
+
   static error(): Response {
     const result = new Response();
     result.responseStatus = 0;
@@ -112,6 +114,7 @@ export class Response extends Body {
     result.headers.makeImmutable();
     return result;
   }
+
   static redirect(url: string, status: number, urls: URLParser): Response {
     if (![301, 302, 303, 307, 308].includes(status))
       throw new RangeError("Invalid redirect status");
@@ -120,6 +123,7 @@ export class Response extends Body {
     result.headers.makeImmutable();
     return result;
   }
+
   static json(data: unknown, init: ResponseInit = {}): Response {
     const text = JSON.stringify(data);
     if (text === undefined) throw new TypeError("Value is not JSON serializable");
@@ -127,6 +131,7 @@ export class Response extends Body {
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
     return new Response(text, { status: init.status, statusText: init.statusText, headers });
   }
+
   /** @internal */ static fromTransport(
     status: number,
     statusText: string,

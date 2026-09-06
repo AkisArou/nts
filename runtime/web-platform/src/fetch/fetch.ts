@@ -1,13 +1,14 @@
-import { checkNetworkPort } from "../core/ports.ts";
 import { AbortSignal } from "../core/abort.ts";
-import { networkError } from "../core/errors.ts";
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
-import type { URLRecord } from "../provider/ports.ts";
+import { networkError } from "../core/errors.ts";
+import { checkNetworkPort } from "../core/network-port.ts";
+import type { URLRecord } from "../provider/primitives.ts";
 import { ReadableStream } from "../streams/readable.ts";
-import { Request, validateNetworkURL } from "./request.ts";
-import type { RequestInit, RequestContext } from "./request.ts";
-import { Response, nullBodyStatus } from "./response.ts";
+import { BodyState } from "./body.ts";
 import { Headers } from "./headers.ts";
+import { Request, validateNetworkURL } from "./request.ts";
+import type { RequestContext, RequestInit } from "./request.ts";
+import { nullBodyStatus, Response } from "./response.ts";
 import type {
   ContentDecoder,
   FetchTransport,
@@ -65,6 +66,7 @@ function abortableDispatch(
       );
   });
 }
+
 /** Keep abort attached after fetch resolves, until the returned body terminates. */
 function abortableBody(
   source: ReadableStream<Uint8Array>,
@@ -134,6 +136,7 @@ export class FetchClient {
     this.decoder = decoder;
     this.maxRedirects = maxRedirects;
   }
+
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
     // Construction errors reject this async API; the constructor still throws synchronously.
     const request = new Request(input, init, this.context);
@@ -240,7 +243,6 @@ export class FetchClient {
     }
   };
 }
-import { BodyState } from "./body.ts";
 
 function emptyBody(context: RequestContext): BodyState {
   return BodyState.empty(context.bodyPolicy);
