@@ -881,3 +881,24 @@ false `standardBodyPolicy` temporal-dead-zone cycle. Repository TypeScript erase
 that edge, and directly importing the emitted `Response` module succeeds in the
 pinned Node runtime. This compiler module-graph defect has been reported; valid
 final-form source is retained rather than reorganized to hide a type-only edge.
+
+Readable teeing now represents concurrent demand and terminal observation as one
+explicit state machine. While a source read is in flight, another branch request
+sets a follow-up-read flag rather than disappearing into the same promise. Source
+close or error is held until the in-flight result has been cloned and delivered to
+both branches, then applied synchronously before consumer promise continuations can
+read stale queued data. This preserves the final chunk for a fast branch while an
+error still clears unread chunks from a slower branch. Removing the follow-up flag
+makes the pinned emptiest-queue case record one source pull instead of two; delaying
+terminal application by one more promise turn makes the error-propagation case
+fulfill a read that must reject.
+
+The complete unchanged `streams/readable-streams/tee.any.js` and
+`templated.any.js` fixtures, plus `rs-test-templates.js`, add 117 hash-verified
+upstream cases. All 117 pass, taking the aggregate pinned result to 978/979. The
+remaining failure is still only the writable explicit-receiver compiler dependency.
+The local Node-host suite remains 144/144 and the root TypeScript solution is green.
+Failure output now retains host error stacks, so an upstream assertion points to its
+fixture and promise branch rather than collapsing to a message with no location.
+The live NTS frontier is 441 primary `NTS1001` refusals, 77 `NTS1003` cascades, zero
+JVM-backend refusals, the same type-only-edge `NTS1004`, and no invalid HIR.

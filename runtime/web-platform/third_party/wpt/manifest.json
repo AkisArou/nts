@@ -31,6 +31,7 @@
       "common/sab.js": "a3ea610e165d0d56ef1faab2ed49186d4e03c392",
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9",
       "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
+      "streams/resources/rs-test-templates.js": "73ef0463768d23847186867fa68e968074b5fa8f",
       "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
       "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
     },
@@ -67,6 +68,8 @@
       "streams/readable-streams/garbage-collection.any.js": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
       "streams/readable-streams/general.any.js": "eee3f62215eeb07e6a1c06d004defd98324b270e",
       "streams/readable-streams/reentrant-strategies.any.js": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
+      "streams/readable-streams/tee.any.js": "c2c2e48230721163c09f4d4f6d1aee0c9a0a66fa",
+      "streams/readable-streams/templated.any.js": "4f2440c0880bb738b9755d9df2f56882c9b8188e",
       "streams/writable-streams/aborting.any.js": "9d8e80b1de63c5ae6d8377b3d56183d6ea3fb264",
       "streams/writable-streams/bad-strategies.any.js": "a1ef0791168f99186925acbe869ac8449e0f4e79",
       "streams/writable-streams/bad-underlying-sinks.any.js": "3c434ffe60ccb98f6c8eb96a06d0c61af46b283d",

@@ -76,7 +76,8 @@ function reportPass(path, name) {
 
 function reportFailure(path, name, error) {
   failed++;
-  console.error(`FAIL ${path} :: ${name}\n  ${String(error)}`);
+  const detail = error instanceof Error ? (error.stack ?? String(error)) : String(error);
+  console.error(`FAIL ${path} :: ${name}\n  ${detail}`);
 }
 
 function createWptContext(path, pending) {

@@ -666,6 +666,10 @@ class TeeState<T> {
   private readonly limit: number;
   private readonly canceled = Promise.withResolvers<void>();
   private reading: Promise<void> | null = null;
+  private readAgain = false;
+  private sourceClosePending = false;
+  private sourceErrorPending = false;
+  private sourceError: unknown;
   private done = false;
 
   constructor(stream: ReadableStream<T>, options: TeeOptions<T>) {
@@ -690,12 +694,43 @@ class TeeState<T> {
       return Promise.resolve();
     }
     if (this.reading !== null) {
+      this.readAgain = true;
       return this.reading;
     }
-    this.reading = this.readOne().finally(() => {
-      this.reading = null;
-    });
-    return this.reading;
+    const reading = this.readOne();
+    this.reading = reading;
+    this.finishReading(reading);
+    return reading;
+  }
+
+  private async finishReading(reading: Promise<void>): Promise<void> {
+    let failed = false;
+    let readError: unknown;
+    try {
+      await reading;
+    } catch (error) {
+      failed = true;
+      readError = error;
+    }
+    if (this.reading !== reading) {
+      return;
+    }
+    this.reading = null;
+    if (this.done) {
+      return;
+    }
+    if (failed) {
+      this.sourceErrored(readError);
+      return;
+    }
+    this.flushPendingSourceState();
+    if (this.done) {
+      return;
+    }
+    if (this.readAgain) {
+      this.readAgain = false;
+      this.pull();
+    }
   }
 
   private async readOne(): Promise<void> {
@@ -704,6 +739,7 @@ class TeeState<T> {
       result = await this.reader.read();
     } catch (error) {
       this.sourceErrored(error);
+      this.flushPendingSourceState();
       return;
     }
 
@@ -713,6 +749,7 @@ class TeeState<T> {
       }
       if (result.done) {
         this.sourceClosed();
+        this.flushPendingSourceState();
         return;
       }
       const sizeOf = this.size;
@@ -732,6 +769,7 @@ class TeeState<T> {
       const secondValue = second.canceled ? result.value : clone(result.value);
       first.enqueue(result.value);
       second.enqueue(secondValue);
+      this.flushPendingSourceState();
     } catch (error) {
       if (!this.done) {
         this.failTee(error);
@@ -746,7 +784,7 @@ class TeeState<T> {
       branch.reason = reason;
     }
     if (this.branches[0].canceled && this.branches[1].canceled && !this.done) {
-      this.done = true;
+      this.retire();
       const cancellation = this.reader.cancel([this.branches[0].reason, this.branches[1].reason]);
       cancellation.then(
         () => {
@@ -764,15 +802,15 @@ class TeeState<T> {
     if (this.done) {
       return;
     }
-    const reading = this.reading;
-    if (reading !== null) {
-      reading.then(
-        () => this.sourceClosed(),
-        (error) => this.sourceErrored(error),
-      );
+    if (this.reading !== null) {
+      this.sourceClosePending = true;
       return;
     }
-    this.done = true;
+    this.finishSourceClose();
+  }
+
+  private finishSourceClose(): void {
+    this.retire();
     for (const branch of this.branches) {
       branch.close();
     }
@@ -783,7 +821,16 @@ class TeeState<T> {
     if (this.done) {
       return;
     }
-    this.done = true;
+    if (this.reading !== null) {
+      this.sourceErrorPending = true;
+      this.sourceError = error;
+      return;
+    }
+    this.finishSourceError(error);
+  }
+
+  private finishSourceError(error: unknown): void {
+    this.retire();
     for (const branch of this.branches) {
       branch.fail(error);
     }
@@ -792,8 +839,25 @@ class TeeState<T> {
     this.canceled.resolve();
   }
 
+  private flushPendingSourceState(): void {
+    if (this.done) {
+      return;
+    }
+    if (this.sourceErrorPending) {
+      const error = this.sourceError;
+      this.sourceErrorPending = false;
+      this.sourceError = undefined;
+      this.finishSourceError(error);
+      return;
+    }
+    if (this.sourceClosePending) {
+      this.sourceClosePending = false;
+      this.finishSourceClose();
+    }
+  }
+
   private failTee(error: unknown): void {
-    this.done = true;
+    this.retire();
     for (const branch of this.branches) {
       branch.fail(error);
     }
@@ -802,6 +866,14 @@ class TeeState<T> {
       () => this.canceled.resolve(),
       (cancelError) => this.canceled.reject(cancelError),
     );
+  }
+
+  private retire(): void {
+    this.done = true;
+    this.readAgain = false;
+    this.sourceClosePending = false;
+    this.sourceErrorPending = false;
+    this.sourceError = undefined;
   }
 }
 
