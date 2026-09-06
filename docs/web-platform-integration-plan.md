@@ -681,11 +681,15 @@ form; it is not distorted to avoid a temporary compiler limitation.
    no Web-only parser, host delegation, unchecked cast, or mandatory second traversal
    is accepted as the final architecture.
 
-   Parse and stringify traversal must not recurse on the provider thread stack. Use
-   an explicit work stack; if a security/resource depth limit is selected after
-   measuring the pinned Node reference, it is one documented provider-independent
-   limit with the same exception on every lane. Deep input must never become a JVM
-   `StackOverflowError` on one target and a C/LLVM signal death on another.
+   Parse and stringify traversal must not recurse on the provider thread stack; both
+   use an explicit work stack so a provider stack does not choose observable
+   behavior. For parsing, the planning Node reference accepted at least one million
+   nested array levels, so there is no recursive-stack-sized Node limit to copy. If
+   NTS nonetheless selects a finite parse limit, it is a documented compatibility
+   divergence with its own conformance row. Every resource limit is one documented
+   provider-independent value with the same exception on every lane. Deep input must
+   never become a JVM `StackOverflowError` on one target and a C/LLVM signal death on
+   another.
 
    JSON number emission calls the same canonical `Number::toString` implementation
    used by `String(number)` on each provider; on C/LLVM that is the existing
@@ -699,9 +703,12 @@ form; it is not distorted to avoid a temporary compiler limitation.
    stringified rather than being normalized through UTF-8 to U+FFFD. The well-formed
    surrogate predicate is shared with `String.isWellFormed`/`String.toWellFormed`;
    the stringifier must not grow a private scan that the string built-ins later
-   duplicate. A generic JSON object's storage preserves source insertion order for
-   round-trip traversal and stringify; an unordered hash map is not a conforming
-   object case even if lookup is correct.
+   duplicate. A generic JSON object preserves the `OrdinaryOwnPropertyKeys` order
+   required by round-trip traversal and stringify: canonical array-index names from
+   `0` through `2^32 - 2` come first in ascending numeric order, followed by all
+   other string keys in insertion order. An unordered hash map or plain insertion-
+   ordered map is not a conforming object case even if lookup is correct; names such
+   as `"01"`, `"-1"`, `"1.5"`, and `"4294967295"` remain in the string-key bucket.
 
    The generic erased JSON graph necessarily materializes storage proportional to
    its data on the current JVM, while direct checked materialization can avoid
@@ -1063,9 +1070,10 @@ with independent review/tests rather than introducing an architectural workaroun
   reviver/replacer/space/`toJSON`/raw-JSON behavior, cycles and syntax errors;
   differential tests cover generic erased results and direct typed materialization,
   and `Response.json()` is proved to use the same parser. Deep nesting exercises the
-  explicit work stack and common resource failure, every number is cross-checked
-  against canonical `String(number)`, and lone-surrogate parse/stringify round-trips
-  are tested on all providers.
+  explicit work stack and common resource failure, every finite number is
+  cross-checked against canonical `String(number)`, non-finite values have their
+  separate JSON-to-`null` cases, and lone-surrogate parse/stringify round-trips are
+  tested on all providers.
 - Web Streams default/BYOB/writable/transform/piping/tee/backpressure/cancel/error and
   sync/async iteration matrices, including adversarial slow and abandoning consumers.
 - Incremental HTTP/1.1 and HTTP/2 parsing/serialization across every boundary,
