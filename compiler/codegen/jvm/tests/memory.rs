@@ -31,6 +31,20 @@
 //! the catch-all called it a refusal. That is exactly the declined-versus-
 //! defect distinction the harness rests on, so the two now print differently.
 //!
+//! # Typed arrays, and the three rules that are each other's near-misses
+//!
+//! `Int32Array` stores `ToInt32`; `Float32Array` rounds to nearest even and
+//! keeps a NaN's payload; `Uint8ClampedArray` does neither -- it clamps to
+//! 0..255 and rounds **half to even**, so `0.5` is `0` and `1.5` is `2` where
+//! `Math.round` says `1` and `2`. Those are the inputs that separate the rules
+//! and the ones a test is least likely to contain unless it is looking for
+//! them, which is why the element pool is mostly halves.
+//!
+//! A view's length is *computed*, not stored: a view built without an explicit
+//! length tracks its buffer, so it shortens when the buffer shrinks. A stored
+//! length is right until the first `resize`, which a corpus with no resizable
+//! buffers in it never reaches.
+//!
 //! Skips without a JDK or node, as the other Java suites do.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -181,6 +195,12 @@ fn every_accessor_agrees_with_node_by_bit_pattern() {
 fn the_vectors_reach_the_cases_they_claim() {
     let Some((expected, _)) = both() else { return };
     for required in [
+        // Typed arrays: the three conversion rules that are each other's
+        // near-misses, and the one shape that separates aliasing from copying.
+        "view u8c 3fe0000000000000",
+        "trip-view f32",
+        "track-odd 4",
+        "subarray 4 6",
         // The NaN payload, which is the only vector that can tell the raw bit
         // accessors from the canonicalising ones.
         "trip f64 16 be 7ff0000000000001",

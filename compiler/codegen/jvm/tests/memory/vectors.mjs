@@ -169,6 +169,101 @@ for (const [name, width, read, write] of [
   out.push(`transfer-to-fixed ${fixed.resizable} ${fixed.byteLength}`);
 }
 
+// Typed arrays. The element conversions are the content here: `ToInt32` for the
+// integer views, round-to-nearest-even for `Float32Array`, and
+// `Uint8ClampedArray`'s own rule, which is neither -- it clamps and rounds
+// **half to even**, so 0.5 is 0 and 1.5 is 2 where `Math.round` would say 1
+// and 2. Those are the inputs that separate the rules and the ones a test is
+// least likely to contain unless it is looking for them.
+const VIEWS = [
+  ["i8", Int8Array, 1], ["u8", Uint8Array, 1], ["u8c", Uint8ClampedArray, 1],
+  ["i16", Int16Array, 2], ["u16", Uint16Array, 2],
+  ["i32", Int32Array, 4], ["u32", Uint32Array, 4],
+  ["f32", Float32Array, 4], ["f64", Float64Array, 8],
+];
+
+const ELEMENTS = [
+  0, -0, 1, -1, 0.5, -0.5, 1.5, 2.5, 3.5, -1.5, -2.5, 127, 127.5, 128, 255, 255.5, 256,
+  -128, -129, 32767, 32768, 65535, 65536, 2147483647, 2147483648, 4294967295, 4294967296,
+  -2147483648, -2147483649, 1e21, -1e21, 1 / 0, -1 / 0, NaN,
+  0.1, 1.1, 16777217, 3.4028235e38, 3.4028236e38, 5e-324, 1.7976931348623157e308,
+];
+
+for (const [name, Kind, width] of VIEWS) {
+  for (const x of ELEMENTS) {
+    const backing = new ArrayBuffer(width * 3);
+    new Uint8Array(backing).fill(0xa5);
+    const view = new Kind(backing);
+    view[1] = x;
+    // The bytes, so a wrong conversion shows even where the read agrees, and
+    // the value read back, so a right conversion read wrongly shows too.
+    out.push(`view ${name} ${bits(x)} ${hex(new Uint8Array(backing))} ${bits(view[1])}`);
+  }
+}
+
+// Reading what someone else wrote: the interpretation, separate from the
+// conversion. The pattern has every sign bit and both float NaN shapes in it.
+for (const [name, Kind, width] of VIEWS) {
+  const backing = new ArrayBuffer(32);
+  new Uint8Array(backing).set(PATTERN);
+  const view = new Kind(backing);
+  const seen = [];
+  for (let i = 0; i < view.length; i++) seen.push(bits(view[i]));
+  out.push(`read ${name} ${seen.join(",")}`);
+}
+
+// Round trip: read the hostile pattern through a view and write it straight
+// back through another. The only vector here whose written value carries a NaN
+// payload -- everything in ELEMENTS is the canonical quiet NaN, so
+// `floatToIntBits` and `floatToRawIntBits` are indistinguishable without this,
+// and both were green until it existed.
+for (const [name, Kind, width] of VIEWS) {
+  const from = new ArrayBuffer(32);
+  new Uint8Array(from).set(PATTERN);
+  const source = new Kind(from);
+  const into = new ArrayBuffer(32);
+  new Uint8Array(into).fill(0xa5);
+  const target = new Kind(into);
+  for (let i = 0; i < source.length; i++) target[i] = source[i];
+  out.push(`trip-view ${name} ${hex(new Uint8Array(into))}`);
+}
+
+// Structure: offsets, subarray, slice, fill, and the tracking length.
+{
+  const backing = new ArrayBuffer(16);
+  new Uint8Array(backing).set([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+  const whole = new Uint8Array(backing);
+  const part = new Uint8Array(backing, 4, 8);
+  out.push(`shape ${whole.length} ${whole.byteOffset} ${whole.byteLength}`);
+  out.push(`shape ${part.length} ${part.byteOffset} ${part.byteLength}`);
+  const sub = part.subarray(2, 6);
+  out.push(`subarray ${sub.length} ${sub.byteOffset} ${hex(new Uint8Array(sub.buffer, sub.byteOffset, sub.length))}`);
+  const cut = part.slice(2, 6);
+  out.push(`slice ${cut.length} ${cut.byteOffset} ${cut.buffer.byteLength} ${hex(new Uint8Array(cut.buffer))}`);
+  // A slice copies, so writing the copy must not reach the original.
+  cut[0] = 99;
+  out.push(`slice-copies ${hex(new Uint8Array(backing))}`);
+  const filled = new Uint8Array(backing, 0, 8);
+  filled.fill(7, 2, 5);
+  out.push(`fill ${hex(new Uint8Array(backing))}`);
+  const u32 = new Uint32Array(backing, 8);
+  out.push(`aligned ${u32.length} ${u32.byteOffset}`);
+}
+{
+  // A tracking view over a resizable buffer, and one with a fixed length.
+  const r = new ArrayBuffer(16, { maxByteLength: 32 });
+  const tracking = new Uint16Array(r);
+  const fixed = new Uint16Array(r, 0, 4);
+  out.push(`track ${tracking.length} ${fixed.length}`);
+  r.resize(8);
+  out.push(`track-shrunk ${tracking.length}`);
+  r.resize(24);
+  out.push(`track-grown ${tracking.length}`);
+  r.resize(9);
+  // Nine bytes is four whole `Uint16` elements and half of a fifth.
+  out.push(`track-odd ${tracking.length}`);
+}
+
 // What must fail. Node's error *text* is not comparable across engines, so
 // only the fact is compared -- but the fact is the part that matters: an access
 // that should throw and does not is a read past the end of the storage, which

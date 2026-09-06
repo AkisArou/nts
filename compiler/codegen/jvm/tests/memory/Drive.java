@@ -1,6 +1,16 @@
 import nts.rt.NtsBigInt;
 import nts.rt.NtsBuffer;
 import nts.rt.NtsDataView;
+import nts.rt.NtsView;
+import nts.rt.NtsViewF32;
+import nts.rt.NtsViewF64;
+import nts.rt.NtsViewI16;
+import nts.rt.NtsViewI32;
+import nts.rt.NtsViewI8;
+import nts.rt.NtsViewU16;
+import nts.rt.NtsViewU32;
+import nts.rt.NtsViewU8;
+import nts.rt.NtsViewU8C;
 
 /**
  * The same lines the node oracle prints, from this runtime. Compared as text,
@@ -200,8 +210,141 @@ public final class Drive {
         line("transfer-to-fixed " + NtsBuffer.resizable(fixed) + " "
             + (int) NtsBuffer.byteLength(fixed));
 
+        views();
         refusals();
         System.out.print(OUT);
+    }
+
+    static final String[] VIEWS = { "i8", "u8", "u8c", "i16", "u16", "i32", "u32", "f32", "f64" };
+    static final int[] WIDTH = { 1, 1, 1, 2, 2, 4, 4, 4, 8 };
+
+    static final double[] ELEMENTS = {
+        0, -0.0, 1, -1, 0.5, -0.5, 1.5, 2.5, 3.5, -1.5, -2.5, 127, 127.5, 128, 255, 255.5, 256,
+        -128, -129, 32767, 32768, 65535, 65536, 2147483647.0, 2147483648.0, 4294967295.0,
+        4294967296.0, -2147483648.0, -2147483649.0, 1e21, -1e21,
+        Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN,
+        0.1, 1.1, 16777217.0, 3.4028235e38, 3.4028236e38, 5e-324, 1.7976931348623157e308,
+    };
+
+    /** One dispatch, so the nine element types are a table rather than nine copies. */
+    static NtsView make(String kind, NtsBuffer buffer, double offset) {
+        if (kind.equals("i8")) { return NtsViewI8.over(buffer, offset); }
+        if (kind.equals("u8")) { return NtsViewU8.over(buffer, offset); }
+        if (kind.equals("u8c")) { return NtsViewU8C.over(buffer, offset); }
+        if (kind.equals("i16")) { return NtsViewI16.over(buffer, offset); }
+        if (kind.equals("u16")) { return NtsViewU16.over(buffer, offset); }
+        if (kind.equals("i32")) { return NtsViewI32.over(buffer, offset); }
+        if (kind.equals("u32")) { return NtsViewU32.over(buffer, offset); }
+        if (kind.equals("f32")) { return NtsViewF32.over(buffer, offset); }
+        return NtsViewF64.over(buffer, offset);
+    }
+
+    static void put(NtsView view, double index, double value) {
+        if (view instanceof NtsViewI8) { NtsViewI8.set((NtsViewI8) view, index, value); }
+        else if (view instanceof NtsViewU8C) { NtsViewU8C.set((NtsViewU8C) view, index, value); }
+        else if (view instanceof NtsViewU8) { NtsViewU8.set((NtsViewU8) view, index, value); }
+        else if (view instanceof NtsViewI16) { NtsViewI16.set((NtsViewI16) view, index, value); }
+        else if (view instanceof NtsViewU16) { NtsViewU16.set((NtsViewU16) view, index, value); }
+        else if (view instanceof NtsViewI32) { NtsViewI32.set((NtsViewI32) view, index, value); }
+        else if (view instanceof NtsViewU32) { NtsViewU32.set((NtsViewU32) view, index, value); }
+        else if (view instanceof NtsViewF32) { NtsViewF32.set((NtsViewF32) view, index, value); }
+        else { NtsViewF64.set((NtsViewF64) view, index, value); }
+    }
+
+    static double got(NtsView view, double index) {
+        if (view instanceof NtsViewI8) { return NtsViewI8.get((NtsViewI8) view, index); }
+        if (view instanceof NtsViewU8C) { return NtsViewU8C.get((NtsViewU8C) view, index); }
+        if (view instanceof NtsViewU8) { return NtsViewU8.get((NtsViewU8) view, index); }
+        if (view instanceof NtsViewI16) { return NtsViewI16.get((NtsViewI16) view, index); }
+        if (view instanceof NtsViewU16) { return NtsViewU16.get((NtsViewU16) view, index); }
+        if (view instanceof NtsViewI32) { return NtsViewI32.get((NtsViewI32) view, index); }
+        if (view instanceof NtsViewU32) { return NtsViewU32.get((NtsViewU32) view, index); }
+        if (view instanceof NtsViewF32) { return NtsViewF32.get((NtsViewF32) view, index); }
+        return NtsViewF64.get((NtsViewF64) view, index);
+    }
+
+    static void views() {
+        for (int k = 0; k < VIEWS.length; k++) {
+            for (double x : ELEMENTS) {
+                NtsBuffer backing = NtsBuffer.allocate(WIDTH[k] * 3);
+                java.util.Arrays.fill(NtsBuffer.storage(backing), (byte) 0xa5);
+                NtsView view = make(VIEWS[k], backing, 0);
+                put(view, 1, x);
+                line("view " + VIEWS[k] + " " + bits(x) + " " + hex(backing) + " "
+                    + bits(got(view, 1)));
+            }
+        }
+        for (int k = 0; k < VIEWS.length; k++) {
+            NtsBuffer backing = NtsBuffer.allocate(32);
+            byte[] into = NtsBuffer.storage(backing);
+            for (int i = 0; i < PATTERN.length; i++) { into[i] = (byte) PATTERN[i]; }
+            NtsView view = make(VIEWS[k], backing, 0);
+            StringBuilder seen = new StringBuilder();
+            for (int i = 0; i < (int) NtsView.length(view); i++) {
+                if (i > 0) { seen.append(','); }
+                seen.append(bits(got(view, i)));
+            }
+            line("read " + VIEWS[k] + " " + seen);
+        }
+
+        for (int k = 0; k < VIEWS.length; k++) {
+            NtsBuffer from = NtsBuffer.allocate(32);
+            byte[] source = NtsBuffer.storage(from);
+            for (int i = 0; i < PATTERN.length; i++) { source[i] = (byte) PATTERN[i]; }
+            NtsView reading = make(VIEWS[k], from, 0);
+            NtsBuffer into = NtsBuffer.allocate(32);
+            java.util.Arrays.fill(NtsBuffer.storage(into), (byte) 0xa5);
+            NtsView writing = make(VIEWS[k], into, 0);
+            for (int i = 0; i < (int) NtsView.length(reading); i++) {
+                put(writing, i, got(reading, i));
+            }
+            line("trip-view " + VIEWS[k] + " " + hex(into));
+        }
+
+        NtsBuffer backing = NtsBuffer.allocate(16);
+        byte[] sixteen = NtsBuffer.storage(backing);
+        for (int i = 0; i < 16; i++) { sixteen[i] = (byte) (i + 1); }
+        NtsViewU8 whole = NtsViewU8.over(backing, 0);
+        NtsViewU8 part = NtsViewU8.part(backing, 4, 8);
+        line("shape " + (int) NtsView.length(whole) + " " + (int) NtsView.byteOffset(whole)
+            + " " + (int) NtsView.byteLength(whole));
+        line("shape " + (int) NtsView.length(part) + " " + (int) NtsView.byteOffset(part)
+            + " " + (int) NtsView.byteLength(part));
+        NtsViewU8 sub = NtsViewU8.subarray(part, 2, 6);
+        line("subarray " + (int) NtsView.length(sub) + " " + (int) NtsView.byteOffset(sub)
+            + " " + window(sub));
+        NtsViewU8 cut = NtsViewU8.slice(part, 2, 6);
+        line("slice " + (int) NtsView.length(cut) + " " + (int) NtsView.byteOffset(cut) + " "
+            + (int) NtsBuffer.byteLength(NtsView.buffer(cut)) + " " + hex(NtsView.buffer(cut)));
+        NtsViewU8.set(cut, 0, 99);
+        line("slice-copies " + hex(backing));
+        NtsViewU8 filled = NtsViewU8.part(backing, 0, 8);
+        NtsViewU8.fill(filled, 7, 2, 5);
+        line("fill " + hex(backing));
+        NtsViewU32 u32 = NtsViewU32.over(backing, 8);
+        line("aligned " + (int) NtsView.length(u32) + " " + (int) NtsView.byteOffset(u32));
+
+        NtsBuffer r = NtsBuffer.allocateResizable(16, 32);
+        NtsViewU16 tracking = NtsViewU16.over(r, 0);
+        NtsViewU16 fixed = NtsViewU16.part(r, 0, 4);
+        line("track " + (int) NtsView.length(tracking) + " " + (int) NtsView.length(fixed));
+        NtsBuffer.resize(r, 8);
+        line("track-shrunk " + (int) NtsView.length(tracking));
+        NtsBuffer.resize(r, 24);
+        line("track-grown " + (int) NtsView.length(tracking));
+        NtsBuffer.resize(r, 9);
+        line("track-odd " + (int) NtsView.length(tracking));
+    }
+
+    /** The bytes a view spans, which is not the whole buffer. */
+    static String window(NtsView view) {
+        byte[] bytes = NtsBuffer.storage(NtsView.buffer(view));
+        StringBuilder b = new StringBuilder();
+        int from = (int) NtsView.byteOffset(view);
+        for (int i = 0; i < (int) NtsView.byteLength(view); i++) {
+            b.append(pad(Integer.toHexString(bytes[from + i] & 0xFF), 2));
+        }
+        return b.toString();
     }
 
     interface Attempt { void run(); }
