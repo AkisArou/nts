@@ -18,6 +18,22 @@ public final class NtsMap {
     private static final NtsValue[] EMPTY_VALUES = new NtsValue[0];
     private static final long[] EMPTY_INDEX = new long[0];
     private static final NtsValue ZERO_KEY = NtsValue.ofNumber(0.0);
+    /**
+     * Below this many live entries a lookup walks insertion order instead of
+     * hashing, and the bucket array is never allocated.
+     *
+     * <p>**Eight, measured rather than guessed, and the measurement is that the
+     * threshold barely matters.** `async-profiler` put `findLinear` at 20.64%
+     * of `symbol-keyed-map` — four entries, 8,192 lookups — and setting this to
+     * zero so every lookup hashes moved that row **3.35x to 3.29x**. Two
+     * percent. The scan was where the cycles were and hashing costs nearly the
+     * same, so almost none of the 20% was removable.
+     *
+     * <p>Kept at eight because always hashing also allocates a `long[]` for
+     * every map that never grows past a handful, which `array-from` and
+     * `map-and-set` both create per call, and two percent on one row does not
+     * buy that.
+     */
     private static final int LINEAR_LIMIT = 8;
     private static final int MAX_ARRAY = Integer.MAX_VALUE - 8;
 
