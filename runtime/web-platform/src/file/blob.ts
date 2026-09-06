@@ -1,4 +1,4 @@
-import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
+import { concatBytes, TextDecoder, utf8 } from "../core/encoding.ts";
 import { toClampedLongLong, toUSVString } from "../core/webidl.ts";
 import { ReadableStream } from "../streams/readable.ts";
 
@@ -41,7 +41,7 @@ export class Blob {
   private byteLength = 0;
   readonly type: string;
 
-  constructor(parts: readonly BlobPart[] = [], options: BlobOptions = {}) {
+  constructor(parts: Iterable<BlobPart> = [], options: BlobOptions = {}) {
     this.type = mediaType(options.type ?? "");
     for (const part of parts) {
       if (part instanceof Blob) {
@@ -92,7 +92,14 @@ export class Blob {
   }
 
   text(): Promise<string> {
-    return this.bytes().then((bytes) => decodeUTF8(bytes));
+    const decoder = new TextDecoder();
+    const pieces = new Array<string>(this.chunks.length + 1);
+    for (let index = 0; index < this.chunks.length; index++) {
+      const chunk = this.chunks[index];
+      pieces[index] = chunk === undefined ? "" : decoder.decode(chunk, { stream: true });
+    }
+    pieces[this.chunks.length] = decoder.decode();
+    return Promise.resolve(pieces.join(""));
   }
 
   stream(): ReadableStream<Uint8Array> {
@@ -129,7 +136,7 @@ export class File extends Blob {
   readonly name: string;
   readonly lastModified: number;
 
-  constructor(parts: readonly BlobPart[], name: string, options: FileOptions = {}) {
+  constructor(parts: Iterable<BlobPart>, name: string, options: FileOptions = {}) {
     super(parts, options);
     this.name = toUSVString(name);
     const lastModified = options.lastModified;

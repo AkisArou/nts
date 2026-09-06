@@ -1143,6 +1143,23 @@ test("Blob copies every view and applies Web IDL slice conversion", async () => 
   assert.equal(new File([], "name", { lastModified: NaN }).lastModified, 0);
   assert.equal(new NativeFile([], "name", { lastModified: NaN }).lastModified, 0);
 });
+test("Blob consumes its iterable once and decodes across immutable chunk boundaries", async () => {
+  let iterations = 0;
+  const parts = {
+    *[Symbol.iterator]() {
+      iterations++;
+      yield Uint8Array.of(0xe2);
+      yield Uint8Array.of(0x82);
+      yield Uint8Array.of(0xac);
+      yield "!";
+    },
+  };
+  const blob = new Blob(parts);
+  assert.equal(iterations, 1);
+  assert.equal(blob.size, 4);
+  assert.equal(await blob.text(), "€!");
+  assert.equal(iterations, 1);
+});
 test("URLSearchParams differential and URL-encoded body consumption", async () => {
   for (const text of ["?a=1&a=2&x=a+b", "x=%FF%GG&=v", "a=~!*()&b=💙"]) {
     const a = new URLSearchParams(text),

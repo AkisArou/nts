@@ -398,3 +398,24 @@ primary refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR. Th
 broader final signature replaces an `instanceof`-representation refusal with the
 already-planned `ArrayBufferView` union-representation refusal; it adds no new
 underlying compiler dependency.
+
+The canonical Blob constructor now consumes the Web IDL sequence as an
+`Iterable<BlobPart>` exactly once instead of exposing an array-only substitute.
+`Blob.text()` feeds each immutable stored chunk through one streaming decoder and
+joins the resulting text, avoiding the previous full-size byte materialization
+before decoding. A split `E2 82 AC` fixture proves decoder state crosses three Blob
+parts; disabling streaming yields `���!` instead of `€!`. The Node-host suite passes
+116/116 and the pinned WPT slice remains 95/95. The live NTS frontier is 238 primary
+refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR. Compared with
+the preceding inventory, two array-of-union parameter refusals become two additional
+instances of the planned `Iterable` representation dependency, while one generic
+method-call refusal disappears; there is no new underlying dependency.
+
+This is not yet the canonical Blob reconciliation promised by the integration plan.
+The richer `runtime/node` Blob still owns provider-backed readers, native line-ending
+conversion, fuller stream types, and the Node object-URL registry. Shared ownership
+must absorb the provider-neutral storage and semantics without losing those Node
+capabilities; Node keeps only filesystem/native-ending/object-URL provider edges.
+That move remains sequenced behind the typed current-environment provider lookup and
+the full Streams/BYOB surface, rather than introducing another global constructor or
+narrowing Node's existing API to the current default-reader subset.
