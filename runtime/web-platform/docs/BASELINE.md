@@ -98,11 +98,29 @@ initializer without modifying the upstream test.
 
 ## Current integration evidence
 
-At `1b91c18`, the repository TypeScript build passes, the Node-host suite passes
-92/92 with zero skipped, and the unchanged WPT slice passes 9/9. The additional
-cases cover protocol parsing, Web IDL conversion, MIME/body behavior, cancellation,
-pool shutdown, TLS, canonical event initialization, and Blob view/slice behavior;
-they do not turn host execution into evidence for a compiled provider.
+At `2e9a6c3`, the repository TypeScript build passes, the Node-host suite passes
+92/92 with zero skipped, and the unchanged WPT slice passes 35/35. The additional
+local cases cover protocol parsing, Web IDL conversion, MIME/body behavior,
+cancellation, pool shutdown, TLS, canonical event initialization, and Blob
+view/slice behavior; they do not turn host execution into evidence for a compiled
+provider.
+
+The WPT expansion reuses five complete FileAPI fixtures and their support script
+from Node's existing pinned WPT checkout instead of creating another source copy.
+The manifest verifies Node's FileAPI revision and every consumed Git blob before
+execution. These fixtures cover `Blob.arrayBuffer()`, `Blob.bytes()`, `Blob.text()`,
+fresh result identity, concurrent reads, and slice overflow. The complete
+`Blob-slice.any.js` file is not in this applicable slice because it mixes those
+behaviors with calls rejected by the TypeScript API itself, including `null` for a
+`string` parameter and numbers in `BlobPart[]`. Fractional Web IDL slice conversion,
+view copying, and immutability therefore remain focused typed differential tests;
+they are not substitutes for an otherwise applicable whole upstream file.
+
+`tooling/conformance/web-platform/check.sh` performs one fresh host emit before both
+the local and upstream suites. Direct execution of `test-upstream.mjs` performs its
+own emit. This prevents stale generated JavaScript from making an upstream run look
+green: an intentional `Blob.text()` sabotage produced eight awaited failures and a
+nonzero exit after the fresh emit.
 
 The shared source now uses `Promise.withResolvers()` directly instead of retaining
 the external `Deferred` substitute. At `0304954`, the NTS check reports 186 primary
