@@ -688,10 +688,11 @@ function hasErrorCode(error: unknown, code: string): boolean {
     "code" in error && error.code === code;
 }
 
+export function existsSync(path: BytePathLike): boolean;
 export function existsSync(path: unknown): boolean {
-  let validatedPath: string;
+  let validatedPath: string | number[];
   try {
-    validatedPath = getValidatedPath(path);
+    validatedPath = getValidatedBytePath(path);
   } catch (error) {
     if (showExistsDeprecation && hasErrorCode(error, "ERR_INVALID_ARG_TYPE")) {
       showExistsDeprecation = false;
@@ -703,7 +704,9 @@ export function existsSync(path: unknown): boolean {
     }
     return false;
   }
-  return nts_fs_stat(validatedPath, true).length > 0;
+  return typeof validatedPath === "string"
+    ? nts_fs_stat(validatedPath, true).length > 0
+    : nts_fs_stat_bytes(validatedPath, true).length > 0;
 }
 
 export function accessSync(path: BytePathLike, mode: number | null = constants.F_OK): void {

@@ -28,7 +28,10 @@ import {
   validateNumberRange,
   validateObject,
 } from "../../internal/validators.ts";
-import type { AbortSignalLike } from "../../internal/abort.ts";
+import type {
+  AbortListener,
+  AbortSignalLike,
+} from "../../internal/abort.ts";
 import { nextTick } from "../../internal/tick.ts";
 import {
   AsyncResource,
@@ -271,6 +274,7 @@ export class EventEmitter {
   static readonly captureRejectionSymbol: typeof captureRejectionSymbol = captureRejectionSymbol;
 
   /** Module helpers are the same function values on Node's exported class. */
+  static readonly addAbortListener = addAbortListener;
   static readonly getEventListeners = getEventListeners;
   static readonly getMaxListeners = getMaxListeners;
   static readonly listenerCount = listenerCount;
@@ -293,6 +297,7 @@ export class EventEmitter {
   }
 
   /** Upstream `lib/events.js:304`. */
+  static setMaxListeners(n?: number, ...targets: EventSource[]): void;
   static setMaxListeners(
     n: number = defaultMaxListeners,
     ...targets: unknown[]
@@ -1066,9 +1071,7 @@ export function listenerCount(emitter: unknown, type: EventName): number {
   );
 }
 
-export function setMaxListeners(n?: number, ...targets: EventSource[]): void {
-  EventEmitter.setMaxListeners(n, ...targets);
-}
+export const setMaxListeners = EventEmitter.setMaxListeners;
 
 export interface OnceOptions {
   signal?: AbortSignalLike | undefined;
@@ -1185,6 +1188,10 @@ class AbortListenerDisposable implements Disposable {
 }
 
 /** Install the listener returned by `events.addAbortListener`. */
+export function addAbortListener(
+  signal: AbortSignalLike,
+  listener: AbortListener,
+): Disposable;
 export function addAbortListener(signal: unknown, listener: unknown): Disposable {
   if (signal === undefined) {
     throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);

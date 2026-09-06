@@ -49,9 +49,9 @@ export function isAnyArrayBuffer(value: unknown): value is ArrayBuffer | SharedA
   return isArrayBuffer(value) || isSharedArrayBuffer(value);
 }
 
-export function isArrayBufferView(value: unknown): value is ArrayBufferView {
-  return ArrayBuffer.isView(value);
-}
+export const isArrayBufferView: (
+  value: unknown,
+) => value is ArrayBufferView = ArrayBuffer.isView;
 
 export function isDataView(value: unknown): value is DataView {
   return value instanceof DataView;

@@ -11,13 +11,19 @@
 // the same rule this directory's `bindings.node.mjs` states about bindings,
 // applied to types.
 
+export interface AbortEventLike {
+  readonly target: AbortSignalLike | null;
+}
+
+export type AbortListener = (event: AbortEventLike) => void;
+
 export interface AbortSignalLike {
   readonly aborted: boolean;
   readonly reason: unknown;
   addEventListener(
     type: "abort",
-    listener: () => void,
+    listener: AbortListener,
     options?: { once?: boolean },
   ): void;
-  removeEventListener(type: "abort", listener: () => void): void;
+  removeEventListener(type: "abort", listener: AbortListener): void;
 }

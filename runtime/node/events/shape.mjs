@@ -9,11 +9,9 @@ export function shape(exports) {
   EventEmitter.EventEmitter = EventEmitter;
   EventEmitter.usingDomains = false;
   // `getEventListeners` and the module-level `listenerCount` are node's
-  // module-level helpers. `setMaxListeners` is *not* copied: the class already
-  // has a static of that name, and the module-level wrapper calls it — copying
-  // the wrapper over the static makes it call itself.
+  // module-level helpers. `addAbortListener` and `setMaxListeners` are not
+  // copied because their module exports are already the class's static values.
   for (const name of [
-    "addAbortListener",
     "getEventListeners",
     "getMaxListeners",
     "listenerCount",
