@@ -30,7 +30,13 @@ cd "$root"
 NTS_TSGO=${NTS_TSGO:-$root/target/tsgo}
 export NTS_TSGO
 
-[ -x target/release/nts ] || { echo "build first: cargo build --release"; exit 1; }
+# `NTS_BIN` for the reason every other step takes it: three sessions build into
+# different directories, and a hard-coded path compiles somebody else's binary's
+# output and reports a floor for code nobody is looking at. This script had the
+# path hard-coded and `jvm_sabotage.rs` found it the same afternoon, by failing
+# against a half-built binary in `target/` that was not the one under test.
+nts=${NTS_BIN:-$root/target/release/nts}
+[ -x "$nts" ] || { echo "no compiler at $nts -- build first, or set NTS_BIN"; exit 1; }
 
 # The flags `nts-bench` compiles with, minus the ones that need a link step.
 # `-Werror` is the point: a warning in generated code is a bug in the emitter,
@@ -62,7 +68,7 @@ for case in benches/cases/*/; do
     printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["%s/%s"] }\n' \
       "$root" "$root" "$case" > "$project"
   fi
-  if ! ./target/release/nts emit-c "$project" --out "$out" >"$work/log" 2>&1; then
+  if ! "$nts" emit-c "$project" --out "$out" >"$work/log" 2>&1; then
     printf '  %-22s emit-c refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1
@@ -77,7 +83,7 @@ for case in benches/cases/*/; do
     continue
   fi
 
-  if ! ./target/release/nts emit-llvm "$project" >"$out/program.ll" 2>"$work/log"; then
+  if ! "$nts" emit-llvm "$project" >"$out/program.ll" 2>"$work/log"; then
     printf '  %-22s emit-llvm refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1

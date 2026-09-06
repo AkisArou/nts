@@ -75,6 +75,18 @@ fn check(rest: &[String]) -> Result<()> {
             report.refused
         );
     }
+    if report.timeouts > 0 {
+        // Its own line, above the count, because for a long time it had no
+        // line and arrived inside the one above: a case that ran out of time
+        // was reported as the program *declining* its input. See
+        // `stopped_with` for the run that found it.
+        println!(
+            "{} case(s) ran out of time and were not finished -- not a \
+             disagreement and not a refusal; a pool value in a loop bound asks \
+             for two billion iterations and the program does what it asks",
+            report.timeouts
+        );
+    }
     if report.checked < report.expected {
         println!(
             "checked {} of {} cases; the rest were not reached (a pool \

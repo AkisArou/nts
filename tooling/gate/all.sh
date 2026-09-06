@@ -436,7 +436,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 112 "through the LLVM backend, counting" ); }
+  backend_examples 113 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -447,7 +447,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 112 "through the LLVM backend" ); }
+  backend_examples 113 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -633,6 +633,14 @@ step "jvm"     jvm
 # there arrived through a twenty-five minute benchmark run instead of here. One
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
+# And the same fifty cases *run*, against node, on the hostile pool. `benches`
+# above compiles them and says so -- "Nothing runs" -- `examples` runs the
+# examples, and `nts-bench` runs each case with one seed and compares a
+# checksum. Nothing ran a benchmark case against the oracle, and for weeks that
+# gap held a wrong answer: `absences` at pool value 2147483647, where a `u32`
+# in an `int` slot took the sign of a dividend that has none. Two minutes at
+# eight ways; see the script's header.
+step "bench-agree" ./tooling/gate/bench-agree.sh
 step "examples" ./tooling/gate/gate.sh
 # Last, and the most expensive step by some way -- about four minutes, against
 # two for everything before it. It is here rather than skipped because until it

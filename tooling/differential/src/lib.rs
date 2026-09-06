@@ -406,19 +406,29 @@ pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
 
     let mut refused = Vec::new();
     let mut aborts = Vec::new();
+    // Cases the program did not finish in time. Counted rather than filed as
+    // declines, because those are different facts; see `stopped_with`.
+    let mut timeouts = 0usize;
     // Which lane runs. The JVM is a sibling rather than a third arm of
     // `render`, because a JVM program is a directory of classes driven by
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
     let native = if Backend::from_environment()? == Backend::Jvm {
-        run_jvm(dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+        run_jvm(dir, &prepared.program, &testable, &mut refused, &mut aborts, &mut timeouts)?
     } else {
-        run_native(dir, &prepared.program, &testable, &mut refused, &mut aborts)?
+        run_native(dir, &prepared.program, &testable, &mut refused, &mut aborts, &mut timeouts)?
     };
     let engine = run_node(dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
     let mut report = report(&native, &engine, &testable, &refused, &approximate);
     report.aborts = aborts;
+    report.timeouts = timeouts;
+    // A timed-out case still has to leave a gap on this side so the node side
+    // trims to match by index -- so it goes into `refused` for *alignment* and
+    // comes back out of the count, which is a different question. Reporting it
+    // as both is how it read before: one line saying the program declined and
+    // one saying it ran out of time, about the same case.
+    report.refused = report.refused.saturating_sub(timeouts);
     Ok(report)
 }
 
@@ -1100,6 +1110,10 @@ const EXHAUSTED: &str = "nts: out of memory";
 #[derive(Debug, PartialEq, Eq)]
 enum Stopped {
     Declined,
+    /// The program did not finish inside the harness's time. Neither a verdict
+    /// nor a defect -- and, before this existed, indistinguishable from a
+    /// decline, which is the one thing the standing rule forbids.
+    TimedOut,
     Defect(String),
 }
 
@@ -1123,6 +1137,31 @@ fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
 /// verdict. An `abort()` *after* a refusal keeps its refusal line and stays a
 /// decline, which is what every bounds check does.
 fn stopped(signal: Option<i32>, complaint: &str) -> Stopped {
+    stopped_with(None, signal, complaint)
+}
+
+/// `timeout`'s own exit status when it kills the child. Not a signal on this
+/// side -- the shell tool exits with it -- so nothing in `stopped` saw it.
+const TIMED_OUT: i32 = 124;
+
+/// As [`stopped`], plus the exit code, which is the only place a timeout shows.
+///
+/// `benches/cases/absences` found the gap. Fixing an unsigned remainder made
+/// the case correct and slow -- 14.74 s for its 2.1 billion iterations -- and
+/// the harness reported **"1 case(s) the compiled program declined"**, which is
+/// the sentence it uses for a program keeping the promise its `!` made. Before
+/// the fix the case was fast and wrong; after it, slow and filed as a decline.
+/// The second state is better and is still not honest.
+///
+/// A timeout is genuinely not a verdict, and the fix is not to make it one: it
+/// is to stop it wearing another verdict's name.
+fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stopped {
+    // Before anything else, because a timed-out program usually printed
+    // nothing -- and an empty complaint is exactly what a clean decline looks
+    // like once its line has been consumed.
+    if code == Some(TIMED_OUT) {
+        return Stopped::TimedOut;
+    }
     if let Some(line) = complaint.lines().find(|line| {
         line.starts_with("nts:")
             && !line.starts_with(REFUSED)
@@ -1312,6 +1351,7 @@ fn run_native(
     testable: &[Testable],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
+    timeouts: &mut usize,
 ) -> Result<Vec<String>> {
     // Which backend renders the program.
     //
@@ -1430,7 +1470,7 @@ fn run_native(
     // such case costs every case after it. Node answers `undefined` for the same
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
-    collect_restarting(interleaved(testable).len(), refused, aborts, |from| {
+    collect_restarting(interleaved(testable).len(), refused, aborts, timeouts, |from| {
         bounded(binary.as_str())
             .arg(from.to_string())
             .output()
@@ -1454,6 +1494,7 @@ fn collect_restarting(
     total: usize,
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
+    timeouts: &mut usize,
     run_from: impl Fn(usize) -> Result<std::process::Output>,
 ) -> Result<Vec<String>> {
     let mut collected: Vec<String> = Vec::new();
@@ -1477,8 +1518,9 @@ fn collect_restarting(
         if reached == total - from {
             break;
         }
-        match stopped(signal_of(run.status), &complaint) {
+        match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
             Stopped::Declined => {}
+            Stopped::TimedOut => *timeouts += 1,
             Stopped::Defect(what) => aborts.push(what),
         }
         // The case after the last one that printed. A refusal leaves a gap on
@@ -1503,6 +1545,7 @@ fn run_jvm(
     testable: &[Testable],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
+    timeouts: &mut usize,
 ) -> Result<Vec<String>> {
     let emitted = nts_codegen_jvm::emit(program);
     for diagnostic in &emitted.diagnostics {
@@ -1582,7 +1625,7 @@ fn run_jvm(
     std::fs::write(&cases_path, cases)?;
 
     let classpath = format!("{dir}:{jar}");
-    collect_restarting(interleaved(testable).len(), refused, aborts, move |from| {
+    collect_restarting(interleaved(testable).len(), refused, aborts, timeouts, move |from| {
         bounded_jvm()
             .arg("-cp")
             .arg(&classpath)
@@ -1893,6 +1936,14 @@ pub struct Report {
     /// Aborts the compiled program ended a case on that were *not* the one a
     /// program is allowed to make. See [`EXPECTED_ABORT`].
     pub aborts: Vec<String>,
+    /// Cases the compiled program did not finish inside the harness's time.
+    ///
+    /// Its own field because it is its own fact. Reported and not fatal -- a
+    /// pool value in a loop bound asks for two billion iterations and the
+    /// program does exactly what that asks -- but never again spelled as
+    /// "declined", which is what a program keeping the promise its `!` made
+    /// does. A refused construct and an unmeasurable one must not look alike.
+    pub timeouts: usize,
 }
 
 impl Report {
@@ -1958,6 +2009,7 @@ fn report(
         approximated,
         disagreements,
         aborts: Vec::new(),
+        timeouts: 0,
     }
 }
 
