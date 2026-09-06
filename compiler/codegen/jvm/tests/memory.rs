@@ -201,6 +201,12 @@ fn the_vectors_reach_the_cases_they_claim() {
         "trip-view f32",
         "track-odd 4",
         "subarray 4 6",
+        // The bigint views, whose whole difference is the *high* word -- the
+        // low one is identical for both, and printing only that made a
+        // sign-extending unsigned read invisible.
+        "bigview bu64 ffffffffffffffff",
+        "bigread bi64",
+        "bigtrack-odd 1",
         // The NaN payload, which is the only vector that can tell the raw bit
         // accessors from the canonicalising ones.
         "trip f64 16 be 7ff0000000000001",

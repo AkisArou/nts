@@ -6,7 +6,9 @@ import nts.rt.NtsViewF32;
 import nts.rt.NtsViewF64;
 import nts.rt.NtsViewI16;
 import nts.rt.NtsViewI32;
+import nts.rt.NtsViewI64;
 import nts.rt.NtsViewI8;
+import nts.rt.NtsViewU64;
 import nts.rt.NtsViewU16;
 import nts.rt.NtsViewU32;
 import nts.rt.NtsViewU8;
@@ -29,6 +31,11 @@ public final class Drive {
         StringBuilder b = new StringBuilder();
         for (int i = s.length(); i < width; i++) { b.append('0'); }
         return b.append(s).toString();
+    }
+
+    /** Both words: the high one is the whole difference between the two views. */
+    static String big128(nts.rt.NtsBigInt v) {
+        return pad(Long.toHexString(v.hi), 16) + ":" + pad(Long.toHexString(v.lo), 16);
     }
 
     static String hex(NtsBuffer buffer) {
@@ -285,6 +292,72 @@ public final class Drive {
                 seen.append(bits(got(view, i)));
             }
             line("read " + VIEWS[k] + " " + seen);
+        }
+
+        String[] bigViews = { "bi64", "bu64" };
+        long[] bigElements = {
+            0L, 1L, -1L, 2L, -2L, 0x7fffffffffffffffL, 0x8000000000000000L,
+            0xdeadbeefcafebabeL, 0x0102030405060708L, -0x0102030405060708L,
+        };
+        for (String kind : bigViews) {
+            for (long x : bigElements) {
+                NtsBuffer backing = NtsBuffer.allocate(24);
+                java.util.Arrays.fill(NtsBuffer.storage(backing), (byte) 0xa5);
+                NtsBigInt value = NtsBigInt.fromLong(x);
+                String back;
+                if (kind.equals("bi64")) {
+                    NtsViewI64 view = NtsViewI64.over(backing, 0);
+                    NtsViewI64.set(view, 1, value);
+                    back = big128(NtsViewI64.get(view, 1));
+                } else {
+                    NtsViewU64 view = NtsViewU64.over(backing, 0);
+                    NtsViewU64.set(view, 1, value);
+                    back = big128(NtsViewU64.get(view, 1));
+                }
+                line("bigview " + kind + " " + pad(Long.toHexString(x), 16) + " "
+                    + hex(backing) + " " + back);
+            }
+        }
+        for (String kind : bigViews) {
+            NtsBuffer backing = NtsBuffer.allocate(32);
+            byte[] into = NtsBuffer.storage(backing);
+            for (int i = 0; i < PATTERN.length; i++) { into[i] = (byte) PATTERN[i]; }
+            StringBuilder seen = new StringBuilder();
+            if (kind.equals("bi64")) {
+                NtsViewI64 view = NtsViewI64.over(backing, 0);
+                for (int i = 0; i < (int) NtsView.length(view); i++) {
+                    if (i > 0) { seen.append(','); }
+                    seen.append(big128(NtsViewI64.get(view, i)));
+                }
+            } else {
+                NtsViewU64 view = NtsViewU64.over(backing, 0);
+                for (int i = 0; i < (int) NtsView.length(view); i++) {
+                    if (i > 0) { seen.append(','); }
+                    seen.append(big128(NtsViewU64.get(view, i)));
+                }
+            }
+            line("bigread " + kind + " " + seen);
+        }
+        {
+            NtsBuffer backing = NtsBuffer.allocate(32);
+            byte[] into = NtsBuffer.storage(backing);
+            for (int i = 0; i < PATTERN.length; i++) { into[i] = (byte) PATTERN[i]; }
+            NtsViewI64 whole = NtsViewI64.over(backing, 0);
+            NtsViewI64 part = NtsViewI64.part(backing, 8, 2);
+            line("bigshape " + (int) NtsView.length(whole) + " " + (int) NtsView.byteOffset(whole)
+                + " " + (int) NtsView.byteLength(whole));
+            line("bigshape " + (int) NtsView.length(part) + " " + (int) NtsView.byteOffset(part)
+                + " " + (int) NtsView.byteLength(part));
+            NtsViewI64 sub = NtsViewI64.subarray(part, 1, 2);
+            line("bigsub " + (int) NtsView.length(sub) + " " + (int) NtsView.byteOffset(sub));
+            NtsViewI64 cut = NtsViewI64.slice(part, 0, 2);
+            line("bigslice " + (int) NtsView.length(cut) + " "
+                + (int) NtsBuffer.byteLength(NtsView.buffer(cut)) + " " + hex(NtsView.buffer(cut)));
+            NtsBuffer r = NtsBuffer.allocateResizable(24, 40);
+            NtsViewU64 tracking = NtsViewU64.over(r, 0);
+            line("bigtrack " + (int) NtsView.length(tracking));
+            NtsBuffer.resize(r, 12);
+            line("bigtrack-odd " + (int) NtsView.length(tracking));
         }
 
         for (int k = 0; k < VIEWS.length; k++) {

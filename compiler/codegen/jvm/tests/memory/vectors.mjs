@@ -212,6 +212,68 @@ for (const [name, Kind, width] of VIEWS) {
   out.push(`read ${name} ${seen.join(",")}`);
 }
 
+// The two views whose element is a bigint rather than a number. Their store is
+// the *same bits* for signed and unsigned -- `asIntN` and `asUintN` of the same
+// value differ only in how they read back -- so the byte dumps must match
+// across the pair and the values must not.
+const BIG_VIEWS = [["bi64", BigInt64Array], ["bu64", BigUint64Array]];
+
+// **Both words.** A bigint is 128 bits in the runtime and the element is 64, so
+// the whole difference between the signed and unsigned views is what lands in
+// the *high* word: `ffffffffffffffff` where the top bit was set, or zero. The
+// low word is identical for both, and printing only that made the difference
+// invisible -- a sabotage that sign-extended the unsigned read left the suite
+// green.
+function big128(v) {
+  const whole = BigInt.asUintN(128, v);
+  return (whole >> 64n).toString(16).padStart(16, "0") + ":"
+    + BigInt.asUintN(64, whole).toString(16).padStart(16, "0");
+}
+const BIG_ELEMENTS = [
+  0n, 1n, -1n, 2n, -2n, 0x7fffffffffffffffn, -0x8000000000000000n,
+  0xdeadbeefcafebaben, 0x0102030405060708n, -0x0102030405060708n,
+];
+
+for (const [name, Kind] of BIG_VIEWS) {
+  for (const x of BIG_ELEMENTS) {
+    const backing = new ArrayBuffer(24);
+    new Uint8Array(backing).fill(0xa5);
+    const view = new Kind(backing);
+    view[1] = name === "bi64" ? BigInt.asIntN(64, x) : BigInt.asUintN(64, x);
+    out.push(`bigview ${name} ${BigInt.asUintN(64, x).toString(16).padStart(16, "0")} `
+      + `${hex(new Uint8Array(backing))} ${big128(view[1])}`);
+  }
+}
+
+// Reading what the pattern holds, which is where the sign matters.
+for (const [name, Kind] of BIG_VIEWS) {
+  const backing = new ArrayBuffer(32);
+  new Uint8Array(backing).set(PATTERN);
+  const view = new Kind(backing);
+  const seen = [];
+  for (let i = 0; i < view.length; i++) seen.push(big128(view[i]));
+  out.push(`bigread ${name} ${seen.join(",")}`);
+}
+
+// Structure, on an 8-byte element.
+{
+  const backing = new ArrayBuffer(32);
+  new Uint8Array(backing).set(PATTERN);
+  const whole = new BigInt64Array(backing);
+  const part = new BigInt64Array(backing, 8, 2);
+  out.push(`bigshape ${whole.length} ${whole.byteOffset} ${whole.byteLength}`);
+  out.push(`bigshape ${part.length} ${part.byteOffset} ${part.byteLength}`);
+  const sub = part.subarray(1, 2);
+  out.push(`bigsub ${sub.length} ${sub.byteOffset}`);
+  const cut = part.slice(0, 2);
+  out.push(`bigslice ${cut.length} ${cut.buffer.byteLength} ${hex(new Uint8Array(cut.buffer))}`);
+  const r = new ArrayBuffer(24, { maxByteLength: 40 });
+  const tracking = new BigUint64Array(r);
+  out.push(`bigtrack ${tracking.length}`);
+  r.resize(12);
+  out.push(`bigtrack-odd ${tracking.length}`);
+}
+
 // Round trip: read the hostile pattern through a view and write it straight
 // back through another. The only vector here whose written value carries a NaN
 // payload -- everything in ELEMENTS is the canonical quiet NaN, so
