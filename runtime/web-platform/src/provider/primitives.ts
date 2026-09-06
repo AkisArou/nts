@@ -69,4 +69,7 @@ export interface PlatformPrimitives {
   readonly random: RandomSource;
   readonly scheduler: Scheduler;
   readonly urls: URLParser;
+  readonly nativeLineEnding: "\n" | "\r\n";
+
+  wallTimeMilliseconds(): number;
 }

@@ -46,6 +46,9 @@ const {
   TextDecoder,
   TextEncoder,
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
+const { createHostNodeWebPlatform } =
+  await import("./node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js");
+const hostRuntime = createHostNodeWebPlatform();
 
 let passed = 0;
 let failed = 0;
@@ -75,6 +78,8 @@ function createWptContext(path, pending) {
     AbortController,
     AbortSignal,
     ArrayBuffer,
+    BigInt64Array,
+    BigUint64Array,
     Blob,
     CustomEvent,
     DataView,
@@ -82,8 +87,14 @@ function createWptContext(path, pending) {
     Event,
     EventTarget,
     File,
+    Float16Array,
+    Float32Array,
+    Float64Array,
+    Function,
     Headers,
     Int8Array,
+    Int16Array,
+    Int32Array,
     MessageChannel,
     Promise,
     ReadableStream,
@@ -91,6 +102,9 @@ function createWptContext(path, pending) {
     TextEncoder,
     TypeError,
     Uint8Array,
+    Uint8ClampedArray,
+    Uint16Array,
+    Uint32Array,
     WebAssembly,
     WebSocket: class {
       constructor() {
@@ -122,20 +136,30 @@ function createWptContext(path, pending) {
     assert_unreached(message) {
       assert.fail(message);
     },
-    async_test(fn, name) {
+    async_test(callbackOrName, explicitName) {
+      const callback = typeof callbackOrName === "function" ? callbackOrName : undefined;
+      const name = callback === undefined ? callbackOrName : explicitName;
       const capability = Promise.withResolvers();
       const timer = setTimeout(
         () => capability.reject(new Error(`Upstream async test timed out: ${name}`)),
         5000,
       );
       const test = {
+        step(callback) {
+          try {
+            return callback.call(test);
+          } catch (error) {
+            capability.reject(error);
+            return undefined;
+          }
+        },
         done() {
           capability.resolve();
         },
         step_func(callback) {
           return (...args) => {
             try {
-              return callback(...args);
+              return callback.call(test, ...args);
             } catch (error) {
               capability.reject(error);
               return undefined;
@@ -145,7 +169,7 @@ function createWptContext(path, pending) {
         step_func_done(callback) {
           return (...args) => {
             try {
-              callback(...args);
+              callback.call(test, ...args);
               capability.resolve();
             } catch (error) {
               capability.reject(error);
@@ -159,10 +183,12 @@ function createWptContext(path, pending) {
           return () => capability.reject(new Error(message));
         },
       };
-      try {
-        fn(test);
-      } catch (error) {
-        capability.reject(error);
+      if (callback !== undefined) {
+        try {
+          callback(test);
+        } catch (error) {
+          capability.reject(error);
+        }
       }
       const result = capability.promise
         .finally(() => clearTimeout(timer))
@@ -171,6 +197,7 @@ function createWptContext(path, pending) {
           (error) => reportFailure(path, name, error),
         );
       pending.push(result);
+      return test;
     },
     fetch() {
       throw new Error("Host/network fetch is not an oracle in these tests");
@@ -189,19 +216,33 @@ function createWptContext(path, pending) {
       pending.push(result);
     },
     test(fn, name) {
+      const cleanups = [];
+      const test = {
+        add_cleanup(cleanup) {
+          cleanups.push(cleanup);
+        },
+        step_func(callback) {
+          return (...args) => callback(...args);
+        },
+        unreached_func(message) {
+          return () => assert.fail(message);
+        },
+      };
+      let failure;
       try {
-        fn({
-          step_func(callback) {
-            return (...args) => callback(...args);
-          },
-          unreached_func(message) {
-            return () => assert.fail(message);
-          },
-        });
-        reportPass(path, name);
+        fn.call(test, test);
       } catch (error) {
-        reportFailure(path, name, error);
+        failure = error;
       }
+      for (let index = cleanups.length - 1; index >= 0; index--) {
+        try {
+          cleanups[index]();
+        } catch (error) {
+          if (failure === undefined) failure = error;
+        }
+      }
+      if (failure === undefined) reportPass(path, name);
+      else reportFailure(path, name, failure);
     },
   });
   context.globalThis = context;
@@ -253,4 +294,5 @@ for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.tests)) {
 }
 
 console.log(JSON.stringify({ upstreamTests: passed + failed, passed, failed }));
-process.exitCode = failed === 0 ? 0 : 1;
+hostRuntime.close();
+process.exit(failed === 0 ? 0 : 1);

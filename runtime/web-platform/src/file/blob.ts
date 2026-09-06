@@ -1,6 +1,14 @@
 import { DOMException } from "../core/errors.ts";
 import { type AllowSharedBufferSource, TextDecoder, utf8 } from "../core/encoding.ts";
-import { toClampedLongLong, toUSVString } from "../core/webidl.ts";
+import {
+  coerceToDOMString,
+  coerceToUSVString,
+  requireArguments,
+  requireDictionary,
+  toClampedLongLong,
+  toLongLong,
+} from "../core/webidl.ts";
+import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import {
   ReadableStream,
   type ReadableStreamDefaultController,
@@ -9,10 +17,15 @@ import {
 
 const BLOB_MAX_LENGTH = Number.MAX_SAFE_INTEGER;
 const STREAM_CHUNK_SIZE = 65_536;
+const EMPTY_BLOB_BYTES = new Uint8Array(0);
+
+declare function nts_environment_platform(): WebPlatformRuntime;
 
 export type BlobPart = string | AllowSharedBufferSource | Blob;
+export type BlobEndings = "native" | "transparent";
 
 export interface BlobOptions {
+  endings?: BlobEndings;
   type?: string;
 }
 
@@ -63,6 +76,26 @@ class ExternalBlobConstruction {
   }
 }
 
+class ConvertedBlobOptions {
+  readonly endings: BlobEndings;
+  readonly type: string;
+
+  constructor(endings: BlobEndings, type: string) {
+    this.endings = endings;
+    this.type = type;
+  }
+}
+
+class BlobPartConstruction {
+  readonly parts: readonly BlobPart[];
+  readonly options: ConvertedBlobOptions;
+
+  constructor(parts: readonly BlobPart[], options: ConvertedBlobOptions) {
+    this.parts = parts;
+    this.options = options;
+  }
+}
+
 function storedPartLength(part: StoredBlobPart): number {
   return part.length;
 }
@@ -77,9 +110,99 @@ function mediaType(input: string): string {
   return input.toLowerCase();
 }
 
-function copyBlobPart(part: string | AllowSharedBufferSource): Uint8Array<ArrayBuffer> {
+function hasIterator(value: unknown): value is Iterable<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    Symbol.iterator in value
+  );
+}
+
+function isBufferSource(value: unknown): value is AllowSharedBufferSource {
+  return (
+    value instanceof ArrayBuffer || value instanceof SharedArrayBuffer || ArrayBuffer.isView(value)
+  );
+}
+
+function convertBlobPart(value: unknown): BlobPart {
+  if (value instanceof Blob || isBufferSource(value)) {
+    return value;
+  }
+  return coerceToUSVString(value);
+}
+
+function convertBlobParts(input: unknown): BlobPart[] {
+  if (input === undefined) {
+    return [];
+  }
+  if (!hasIterator(input)) {
+    throw new TypeError("Blob parts must be a sequence");
+  }
+
+  const converted: BlobPart[] = [];
+  for (const part of input) {
+    converted.push(convertBlobPart(part));
+  }
+  return converted;
+}
+
+function convertBlobOptions(
+  options: BlobOptions | FileOptions | null | undefined,
+): ConvertedBlobOptions {
+  requireDictionary(options, "Blob options");
+  if (options === undefined || options === null) {
+    return new ConvertedBlobOptions("transparent", "");
+  }
+
+  // Inherited dictionary members are converted before FileOptions members.
+  const rawEndings = options.endings;
+  const endingsText = rawEndings === undefined ? "transparent" : coerceToDOMString(rawEndings);
+  if (endingsText !== "transparent" && endingsText !== "native") {
+    throw new TypeError("Blob options endings is not a valid enum value");
+  }
+  const rawType = options.type;
+  const type = rawType === undefined ? "" : coerceToDOMString(rawType);
+  return new ConvertedBlobOptions(endingsText, type);
+}
+
+function normalizeNativeEndings(value: string): string {
+  let first = -1;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code === 0x0a || code === 0x0d) {
+      first = index;
+      break;
+    }
+  }
+  if (first < 0) {
+    return value;
+  }
+
+  const lineEnding = nts_environment_platform().nativeLineEnding;
+  let output = value.slice(0, first);
+  let textStart = first;
+  for (let index = first; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code !== 0x0a && code !== 0x0d) {
+      continue;
+    }
+    output += value.slice(textStart, index);
+    if (code === 0x0d && value.charCodeAt(index + 1) === 0x0a) {
+      index++;
+    }
+    output += lineEnding;
+    textStart = index + 1;
+  }
+  return output + value.slice(textStart);
+}
+
+function copyBlobPart(
+  part: string | AllowSharedBufferSource,
+  endings: BlobEndings,
+): Uint8Array<ArrayBuffer> {
   if (typeof part === "string") {
-    return utf8.encode(part);
+    const value = endings === "native" ? normalizeNativeEndings(part) : part;
+    return value.length === 0 ? EMPTY_BLOB_BYTES : utf8.encode(value);
   }
 
   const source = ArrayBuffer.isView(part)
@@ -90,8 +213,7 @@ function copyBlobPart(part: string | AllowSharedBufferSource): Uint8Array<ArrayB
   return copy;
 }
 
-function normalizeSliceIndex(value: number, length: number): number {
-  const integer = toClampedLongLong(value);
+function normalizeSliceIndex(integer: number, length: number): number {
   return integer < 0 ? Math.max(length + integer, 0) : Math.min(integer, length);
 }
 
@@ -285,34 +407,45 @@ export class Blob {
   #hasExternal = false;
 
   constructor();
-  constructor(parts: Iterable<BlobPart>, options?: BlobOptions);
+  constructor(parts: Iterable<BlobPart> | undefined, options?: BlobOptions);
   constructor(parts: ExternalBlobConstruction);
+  constructor(parts: BlobPartConstruction);
   constructor(
-    parts: Iterable<BlobPart> | ExternalBlobConstruction = [],
-    options: BlobOptions = {},
+    ...args:
+      | []
+      | [parts: Iterable<BlobPart> | undefined, options?: BlobOptions | null]
+      | [parts: ExternalBlobConstruction | BlobPartConstruction]
   ) {
-    if (parts instanceof ExternalBlobConstruction) {
-      const size = parts.source.size;
+    const first = args[0];
+    if (first instanceof ExternalBlobConstruction) {
+      const size = first.source.size;
       if (!Number.isSafeInteger(size) || size < 0) {
         throw new Error("External Blob storage has an invalid size");
       }
       if (size > BLOB_MAX_LENGTH) {
         throw new RangeError("Blob exceeds the maximum supported length");
       }
-      this.#parts = size === 0 ? [] : [new ExternalBlobPart(parts.source, 0, size)];
+      this.#parts = size === 0 ? [] : [new ExternalBlobPart(first.source, 0, size)];
       this.#byteLength = size;
       // Internal providers supply already-decided metadata. This preserves
       // target APIs such as Node's `fs.openAsBlob`, whose `type` is intentionally
       // not normalized like the public Blob constructor option.
-      this.#mediaType = parts.type;
+      this.#mediaType = first.type;
       this.#hasExternal = size !== 0;
       return;
     }
 
+    const construction =
+      first instanceof BlobPartConstruction
+        ? first
+        : new BlobPartConstruction(
+            convertBlobParts(first),
+            convertBlobOptions(args.length > 1 ? args[1] : undefined),
+          );
     const stored: StoredBlobPart[] = [];
     let byteLength = 0;
     let hasExternal = false;
-    for (const part of parts) {
+    for (const part of construction.parts) {
       if (part instanceof Blob) {
         for (const source of part.#parts) {
           stored.push(source);
@@ -322,7 +455,7 @@ export class Blob {
           }
         }
       } else {
-        const bytes = copyBlobPart(part);
+        const bytes = copyBlobPart(part, construction.options.endings);
         if (bytes.length !== 0) {
           stored.push(bytes);
           byteLength += bytes.length;
@@ -335,7 +468,7 @@ export class Blob {
 
     this.#parts = stored;
     this.#byteLength = byteLength;
-    this.#mediaType = mediaType(options.type ?? "");
+    this.#mediaType = mediaType(construction.options.type);
     this.#hasExternal = hasExternal;
   }
 
@@ -361,7 +494,10 @@ export class Blob {
     return this.#mediaType;
   }
 
-  slice(start = 0, end = this.#byteLength, contentType = ""): Blob {
+  slice(...args: [start?: number, end?: number, contentType?: string]): Blob {
+    const start = args[0] === undefined ? 0 : toClampedLongLong(args[0]);
+    const end = args[1] === undefined ? this.#byteLength : toClampedLongLong(args[1]);
+    const contentType = args[2] === undefined ? "" : coerceToDOMString(args[2]);
     const from = normalizeSliceIndex(start, this.#byteLength);
     const to = normalizeSliceIndex(end, this.#byteLength);
     const span = Math.max(to - from, 0);
@@ -457,6 +593,10 @@ export class Blob {
       size: (value) => value.length,
     });
   }
+
+  get [Symbol.toStringTag](): "Blob" | "File" {
+    return "Blob";
+  }
 }
 
 /** Construct a Blob over internal reopenable storage without copying it. */
@@ -468,12 +608,23 @@ export class File extends Blob {
   readonly #fileName: string;
   readonly #modificationTime: number;
 
-  constructor(parts: Iterable<BlobPart>, name: string, options: FileOptions = {}) {
-    super(parts, options);
-    this.#fileName = toUSVString(name);
-    const lastModified = options.lastModified;
-    this.#modificationTime =
-      lastModified === undefined ? Date.now() : Number.isNaN(lastModified) ? 0 : lastModified;
+  constructor(parts: Iterable<BlobPart>, name: string, options?: FileOptions);
+  constructor(...args: [parts: Iterable<BlobPart>, name: string, options?: FileOptions | null]) {
+    requireArguments(args, 2, "File constructor");
+    const parts = convertBlobParts(args[0]);
+    const name = coerceToUSVString(args[1]);
+    const rawOptions = args[2];
+    const options = convertBlobOptions(rawOptions);
+    const rawLastModified =
+      rawOptions === undefined || rawOptions === null ? undefined : rawOptions.lastModified;
+    const lastModified =
+      rawLastModified === undefined
+        ? nts_environment_platform().wallTimeMilliseconds()
+        : toLongLong(rawLastModified);
+
+    super(new BlobPartConstruction(parts, options));
+    this.#fileName = name;
+    this.#modificationTime = lastModified;
   }
 
   get name(): string {
@@ -482,5 +633,9 @@ export class File extends Blob {
 
   get lastModified(): number {
     return this.#modificationTime;
+  }
+
+  override get [Symbol.toStringTag](): "File" {
+    return "File";
   }
 }

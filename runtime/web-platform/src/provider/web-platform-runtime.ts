@@ -37,6 +37,7 @@ export class WebPlatformRuntime {
   readonly http1: Http1Transport;
   readonly requestContext: RequestContext;
   readonly fetch: (input: string | Request, init?: RequestInit) => Promise<Response>;
+  readonly nativeLineEnding: "\n" | "\r\n";
 
   private readonly webSocketTransport: WebSocketTransport;
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
@@ -53,6 +54,7 @@ export class WebPlatformRuntime {
 
     this.primitives = primitives;
     this.options = options;
+    this.nativeLineEnding = primitives.nativeLineEnding;
     this.requestContext = {
       urls: primitives.urls,
       random: primitives.random,
@@ -82,6 +84,10 @@ export class WebPlatformRuntime {
       maxRedirects,
     );
     this.fetch = client.fetch;
+  }
+
+  wallTimeMilliseconds(): number {
+    return this.primitives.wallTimeMilliseconds();
   }
 
   createWebSocket(url: string, protocols: string | readonly string[] = []): WebSocket {

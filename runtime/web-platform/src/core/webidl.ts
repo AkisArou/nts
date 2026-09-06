@@ -89,6 +89,23 @@ export function toClampedLongLong(value: number): number {
   return roundTiesToEven(number);
 }
 
+/** Convert a number using Web IDL's default signed `long long` rules. */
+export function toLongLong(value: number): number {
+  const number = +value;
+  if (!Number.isFinite(number) || number === 0) {
+    return 0;
+  }
+
+  const integer = number < 0 ? Math.ceil(number) : Math.floor(number);
+  const modulus = 18_446_744_073_709_551_616;
+  const signedBoundary = 9_223_372_036_854_775_808;
+  let wrapped = integer % modulus;
+  if (wrapped < 0) {
+    wrapped += modulus;
+  }
+  return wrapped >= signedBoundary ? wrapped - modulus : wrapped;
+}
+
 /** Convert a TypeScript string to a Web IDL scalar-value string. */
 export function toUSVString(value: string): string {
   let result = "";

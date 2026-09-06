@@ -4,6 +4,10 @@ import { HostNodeContentDecoder } from "./node-content-decoder.ts";
 import { createHostNodePrimitives } from "./node-primitives.ts";
 import type { HostNodeSocketOptions } from "./node-primitives.ts";
 
+declare global {
+  var nts_environment_platform: () => WebPlatformRuntime;
+}
+
 export * from "./node-content-decoder.ts";
 export * from "./node-primitives.ts";
 
@@ -13,8 +17,12 @@ export function createHostNodeWebPlatform(
   sockets: HostNodeSocketOptions = {},
   reportError?: (error: unknown) => void,
 ): WebPlatformRuntime {
-  return new WebPlatformRuntime(createHostNodePrimitives(sockets, reportError), {
+  const runtime = new WebPlatformRuntime(createHostNodePrimitives(sockets, reportError), {
     ...options,
     contentDecoder: options.contentDecoder ?? new HostNodeContentDecoder(),
   });
+  // Host conformance has one active JavaScript environment. Native providers
+  // install this same typed accessor through their environment bootstrap.
+  globalThis.nts_environment_platform = (): WebPlatformRuntime => runtime;
+  return runtime;
 }

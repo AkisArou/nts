@@ -5,6 +5,7 @@ import { connect as tcpConnect, isIP } from "node:net";
 import type { Socket } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { randomFillSync } from "node:crypto";
+import { EOL } from "node:os";
 import { URL } from "node:url";
 import { setImmediate, setTimeout, clearTimeout } from "node:timers";
 import type { Readable } from "node:stream";
@@ -317,5 +318,7 @@ export function createHostNodePrimitives(
     random: hostNodeRandom,
     scheduler: new HostNodeScheduler(reportError),
     urls: hostNodeURLs,
+    nativeLineEnding: EOL === "\r\n" ? "\r\n" : "\n",
+    wallTimeMilliseconds: Date.now,
   };
 }

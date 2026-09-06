@@ -685,3 +685,35 @@ reader interfaces, iterable Blob parts, typed-array views/copies, and asynchrono
 cleanup. Those are instances of the plan's existing interface/hierarchy,
 iteration, typed-memory, and async representation prerequisites; the storage API
 was not weakened or made eager to suppress them.
+
+The File API constructor layer now performs the normative Web IDL conversions in
+their observable order. `Blob` consumes its input sequence before reading
+`endings` and `type`, converts arbitrary non-buffer parts to `USVString`, and only
+then snapshots every buffer source so option getters cannot move the copy before
+the binding algorithm says it occurs. `File` converts file bits, name, inherited
+Blob options, and `lastModified` in declaration order; `lastModified` uses signed
+Web IDL `long long` conversion and obtains its omitted default from the owning
+platform runtime's wall clock. Native newline conversion likewise reads the
+owning provider's declared line ending rather than consulting host globals from
+shared TypeScript. Blob slicing converts `[Clamp] long long` indices and its
+`DOMString` media type before operating on shared immutable ranges.
+
+The host suite passes 133/133. Three additional complete, unchanged files from
+the pinned Node WPT checkout cover the Blob constructor, Blob slicing, and the
+File constructor, expanding the immutable upstream slice from 211 to 483 tests;
+all 483 pass. Reversing `endings` and `type` conversion makes the focused mutation
+fail with the observed order `type,endings` instead of `endings,type`. The root
+TypeScript solution remains green, and the compiled shared source adds no `any`,
+assertion cast, proxy, reflection, or prototype-chain workaround. Exact reflective
+`File.length === 2` is not claimed: distinguishing an omitted required parameter
+from explicit `undefined` while retaining emitted function arity requires the
+permanent `arguments`/property-descriptor non-goals. Required-argument behavior,
+explicit-`undefined` conversion, and `Blob.length === 0` are covered directly.
+
+The live NTS frontier is 279 primary refusals, 62 cascades, zero JVM-backend
+refusals, and no invalid HIR. Relative to 270/62, the nine new primaries are exact
+instances of the existing typed-memory/view and union representation work,
+iterable/runtime-class recognition, rest-tuple representation, computed `in`, and
+the new typed platform wall-clock method. These are dependencies already owned by
+the integration plan. The final-form File API surface was not narrowed, and the
+host boundary was not moved into compiled TypeScript, to reduce that count.

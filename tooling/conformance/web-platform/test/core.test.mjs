@@ -1677,6 +1677,141 @@ test("Blob consumes its iterable once and decodes across immutable chunk boundar
   assert.equal(await blob.text(), "€!");
   assert.equal(iterations, 1);
 });
+test("Blob and File apply their complete Web IDL constructor boundaries", async () => {
+  assert.equal(Blob.length, 0);
+  assert.equal(String(new Blob()), "[object Blob]");
+  assert.equal(String(new File([], "name")), "[object File]");
+
+  for (const input of [null, true, 1, "abc", {}, new Date()]) {
+    assert.throws(() => new Blob(input), TypeError);
+  }
+  for (const options of [true, 1, "abc"]) {
+    assert.throws(() => new Blob([], options), TypeError);
+    assert.throws(() => new File([], "name", options), TypeError);
+  }
+
+  const trace = [];
+  const part = {
+    toString() {
+      trace.push("part");
+      return "\ud800";
+    },
+  };
+  const name = {
+    toString() {
+      trace.push("name");
+      return "file-\ud800";
+    },
+  };
+  const options = {};
+  for (const [member, value] of [
+    ["endings", "transparent"],
+    ["type", "TEXT/PLAIN"],
+    ["lastModified", 9.9],
+  ]) {
+    Object.defineProperty(options, member, {
+      get() {
+        trace.push(member);
+        return value;
+      },
+    });
+  }
+  const file = new File([part], name, options);
+  assert.deepEqual(trace, ["part", "name", "endings", "type", "lastModified"]);
+  assert.equal(await file.text(), "�");
+  assert.equal(file.name, "file-�");
+  assert.equal(file.type, "text/plain");
+  assert.equal(file.lastModified, 9);
+
+  assert.throws(() => new File(), TypeError);
+  assert.throws(() => new File([]), TypeError);
+  assert.equal(new File([], undefined).name, "undefined");
+  assert.equal(new File([], "name", { lastModified: NaN }).lastModified, 0);
+  assert.equal(new File([], "name", { lastModified: Infinity }).lastModified, 0);
+  assert.equal(new File([], "name", { lastModified: 2 ** 64 }).lastModified, 0);
+  assert.equal(new File([], "name", { lastModified: 2 ** 63 }).lastModified, -(2 ** 63));
+  assert.throws(() => new File([], "name", { lastModified: 1n }), TypeError);
+});
+test("Blob converts options after parts and copies buffer sources afterwards", async () => {
+  const trace = [];
+  const bytes = Uint8Array.of(1, 2, 3);
+  const parts = {
+    *[Symbol.iterator]() {
+      trace.push("parts");
+      yield bytes;
+      yield {
+        toString() {
+          trace.push("string");
+          return "x";
+        },
+      };
+    },
+  };
+  const options = {};
+  Object.defineProperties(options, {
+    endings: {
+      get() {
+        trace.push("endings");
+        bytes[0] = 9;
+        return "transparent";
+      },
+    },
+    type: {
+      get() {
+        trace.push("type");
+        return null;
+      },
+    },
+  });
+
+  const blob = new Blob(parts, options);
+  bytes.fill(7);
+  assert.deepEqual(trace, ["parts", "string", "endings", "type"]);
+  assert.equal(blob.type, "null");
+  assert.deepEqual(await blob.bytes(), Uint8Array.of(9, 2, 3, 120));
+
+  const shared = new SharedArrayBuffer(5);
+  new Uint8Array(shared).set([8, 1, 2, 3, 8]);
+  const sharedBlob = new Blob([new DataView(shared, 1, 3), shared]);
+  new Uint8Array(shared).fill(0);
+  assert.deepEqual(await sharedBlob.bytes(), Uint8Array.of(1, 2, 3, 8, 1, 2, 3, 8));
+
+  assert.throws(() => new Blob([], { endings: "invalid" }), TypeError);
+  assert.equal(new Blob([], { type: "A\u001fB" }).type, "");
+  assert.equal(new Blob([], { type: null }).type, "null");
+});
+test("Blob native endings and slice arguments use provider and Web IDL conversion", async () => {
+  const normalized = new Blob(["a\rb\r\nc\nd"], { endings: "native" });
+  assert.equal(await normalized.text(), ["a", "b", "c", "d"].join(api.nativeLineEnding));
+
+  const trace = [];
+  const value = new Blob(["abcdef"]);
+  const sliced = value.slice(
+    {
+      valueOf() {
+        trace.push("start");
+        return 1.5;
+      },
+    },
+    {
+      valueOf() {
+        trace.push("end");
+        return 4.5;
+      },
+    },
+    {
+      toString() {
+        trace.push("type");
+        return "TEXT/PLAIN";
+      },
+    },
+  );
+  assert.deepEqual(trace, ["start", "end", "type"]);
+  assert.equal(await sliced.text(), "cd");
+  assert.equal(sliced.type, "text/plain");
+  assert.equal(value.slice(0, 0, null).type, "null");
+  assert.throws(() => value.slice(0, 0, Symbol("type")), TypeError);
+});
 test("Blob provider storage reopens exact ranges and composes without materializing", async () => {
   const bytes = new TextEncoder().encode("0123456789");
   const opened = [];

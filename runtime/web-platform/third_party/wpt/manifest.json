@@ -37,9 +37,12 @@
       "encoding/textencoder-utf16-surrogates.any.js": "31657516455bd60b803600db9f36f641504d1c15",
       "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
       "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
+      "FileAPI/blob/Blob-constructor.any.js": "03155b99cb20ea34fa5167e5107141e18fc08647",
       "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
+      "FileAPI/blob/Blob-slice.any.js": "bedc8d737302a0f4c0464db103c66bfe1ca2e3e2",
       "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
       "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
+      "FileAPI/file/File-constructor.any.js": "0b0185c40bf83c5781630c72878764f2ef5588c6",
       "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66"
     }
   }
