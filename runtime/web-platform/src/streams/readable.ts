@@ -1,5 +1,5 @@
-import { Deferred, ignoreRejection } from "../core/deferred.ts";
 import { LimitError } from "../core/errors.ts";
+import { ignoreRejection } from "../core/promise.ts";
 
 export type ReadResult<T> = { done: false; value: T } | { done: true; value: undefined };
 
@@ -30,7 +30,7 @@ export class ReadableStream<T> {
   private queue: QueueEntry<T>[] = [];
   private queueHead = 0;
   private totalSize = 0;
-  private pending: Deferred<ReadResult<T>>[] = [];
+  private pending: PromiseWithResolvers<ReadResult<T>>[] = [];
   private currentReader: ReadableStreamDefaultReader<T> | null = null;
   private state: "readable" | "closed" | "errored" = "readable";
   private storedError: unknown;
@@ -119,7 +119,7 @@ export class ReadableStream<T> {
       else this.maybePull();
       return Promise.resolve({ done: false, value: entry.value });
     }
-    const result = new Deferred<ReadResult<T>>();
+    const result = Promise.withResolvers<ReadResult<T>>();
     this.pending.push(result);
     this.maybePull();
     return result.promise;
@@ -256,7 +256,8 @@ export class ReadableStreamDefaultController<T> {
 
 export class ReadableStreamDefaultReader<T> {
   private stream: ReadableStream<T> | null;
-  private closedCapability = new Deferred<void>();
+  private closedCapability = Promise.withResolvers<void>();
+  private closedState: "pending" | "fulfilled" | "rejected" = "pending";
 
   get closed(): Promise<void> {
     return this.closedCapability.promise;
@@ -268,10 +269,12 @@ export class ReadableStreamDefaultReader<T> {
     stream.attach(this);
   }
   /** @internal */ released(error: unknown): void {
-    if (this.closedCapability.settled) {
-      this.closedCapability = new Deferred<void>();
+    if (this.closedState !== "pending") {
+      this.closedCapability = Promise.withResolvers<void>();
+      this.closedState = "pending";
       ignoreRejection(this.closed);
     }
+    this.closedState = "rejected";
     this.closedCapability.reject(error);
   }
 
@@ -292,9 +295,13 @@ export class ReadableStreamDefaultReader<T> {
     this.stream = null;
   }
   /** @internal */ finish(): void {
+    if (this.closedState !== "pending") return;
+    this.closedState = "fulfilled";
     this.closedCapability.resolve();
   }
   /** @internal */ fail(error: unknown): void {
+    if (this.closedState !== "pending") return;
+    this.closedState = "rejected";
     this.closedCapability.reject(error);
   }
 }
@@ -332,7 +339,7 @@ class TeeState<T> {
   private readonly clone: (chunk: T) => T;
   private readonly size: (chunk: T) => number;
   private readonly limit: number;
-  private readonly canceled = new Deferred<void>();
+  private readonly canceled = Promise.withResolvers<void>();
   private reading: Promise<void> | null = null;
   private done = false;
 

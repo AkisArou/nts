@@ -8,7 +8,6 @@ import { randomFillSync } from "node:crypto";
 import { URL } from "node:url";
 import { setImmediate, setTimeout, clearTimeout } from "node:timers";
 import type { Readable } from "node:stream";
-import { Deferred } from "../../../runtime/web-platform/src/core/deferred.ts";
 import { DOMException } from "../../../runtime/web-platform/src/core/errors.ts";
 import type { AbortSignal } from "../../../runtime/web-platform/src/core/abort.ts";
 import type {
@@ -105,7 +104,10 @@ export class HostNodeScheduler implements Scheduler {
 /** Paused-mode reader. Node retains only its stream high-water mark when no one reads. */
 export class HostNodeReadable {
   private readonly input: Readable;
-  private pending: { max: number; result: Deferred<Uint8Array | null> } | null = null;
+  private pending: {
+    max: number;
+    result: PromiseWithResolvers<Uint8Array | null>;
+  } | null = null;
   private ended = false;
   private failed = false;
   private error: unknown;
@@ -128,7 +130,7 @@ export class HostNodeReadable {
       return Promise.reject(new TypeError("Overlapping reads are not permitted"));
     if (!Number.isInteger(max) || max < 1 || max > MAX_IO_BYTES)
       return Promise.reject(new RangeError(`Read size must be 1..${MAX_IO_BYTES}`));
-    const result = new Deferred<Uint8Array | null>();
+    const result = Promise.withResolvers<Uint8Array | null>();
     this.pending = { max, result };
     this.pump();
     return result.promise;
@@ -176,7 +178,7 @@ export class HostNodeReadable {
 export class HostNodeByteConnection implements ByteConnection {
   private readonly socket: Socket;
   private readonly reader: HostNodeReadable;
-  private writer: Deferred<number> | null = null;
+  private writer: PromiseWithResolvers<number> | null = null;
   private locallyClosed = false;
 
   constructor(socket: Socket) {
@@ -205,7 +207,7 @@ export class HostNodeByteConnection implements ByteConnection {
       return Promise.reject(new TypeError("Overlapping writes are not permitted"));
     if (data.length === 0 || data.length > MAX_IO_BYTES)
       return Promise.reject(new RangeError(`Write size must be 1..${MAX_IO_BYTES}`));
-    const result = new Deferred<number>();
+    const result = Promise.withResolvers<number>();
     this.writer = result;
     // The callback, not write()'s boolean, signals completion and ownership return.
     try {

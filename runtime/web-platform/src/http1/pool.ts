@@ -1,7 +1,6 @@
-import { Deferred } from "../core/deferred.ts";
-import { LimitError } from "../core/errors.ts";
 import { AbortController } from "../core/abort.ts";
 import type { AbortSignal } from "../core/abort.ts";
+import { LimitError } from "../core/errors.ts";
 import type {
   ByteConnection,
   CancelHandle,
@@ -30,9 +29,22 @@ interface Waiter {
   key: string;
   address: ConnectAddress;
   signal: AbortSignal;
-  result: Deferred<ConnectionLease>;
+  result: PromiseWithResolvers<ConnectionLease>;
   unsubscribe: () => void;
   started: boolean;
+  settled: boolean;
+}
+
+function resolveWaiter(waiter: Waiter, lease: ConnectionLease): void {
+  if (waiter.settled) return;
+  waiter.settled = true;
+  waiter.result.resolve(lease);
+}
+
+function rejectWaiter(waiter: Waiter, reason: unknown): void {
+  if (waiter.settled) return;
+  waiter.settled = true;
+  waiter.result.reject(reason);
 }
 
 export class ConnectionLease {
@@ -94,12 +106,13 @@ export class ConnectionPool {
       key,
       address,
       signal,
-      result: new Deferred(),
+      result: Promise.withResolvers(),
       unsubscribe: () => {},
       started: false,
+      settled: false,
     };
     waiter.unsubscribe = signal.subscribe(() => {
-      waiter.result.reject(signal.reason);
+      rejectWaiter(waiter, signal.reason);
       this.connecting.get(waiter)?.abort(signal.reason);
       if (!waiter.started) {
         this.pending = this.pending.filter((item) => item !== waiter);
@@ -129,7 +142,7 @@ export class ConnectionPool {
     for (let i = 0; i < this.pending.length;) {
       const waiter = this.pending[i];
       if (waiter === undefined) break;
-      if (waiter.result.settled) {
+      if (waiter.settled) {
         this.pending.splice(i, 1);
         waiter.unsubscribe();
         continue;
@@ -146,7 +159,7 @@ export class ConnectionPool {
         idle.timer?.cancel();
         idle.timer = null;
         waiter.unsubscribe();
-        waiter.result.resolve(new ConnectionLease(idle, this));
+        resolveWaiter(waiter, new ConnectionLease(idle, this));
         continue;
       }
       // Reclaim an unrelated idle connection before blocking on the global cap.
@@ -175,10 +188,11 @@ export class ConnectionPool {
           (connection) => {
             this.connecting.delete(waiter);
             waiter.unsubscribe();
-            if (this.closed || waiter.result.settled || waiter.signal.aborted) {
+            if (this.closed || waiter.settled || waiter.signal.aborted) {
               connection.close();
               this.changeCount(waiter.key, -1);
-              waiter.result.reject(
+              rejectWaiter(
+                waiter,
                 waiter.signal.aborted
                   ? waiter.signal.reason
                   : new TypeError("Connection pool closed"),
@@ -192,7 +206,7 @@ export class ConnectionPool {
                 timer: null,
               };
               this.records.add(record);
-              waiter.result.resolve(new ConnectionLease(record, this));
+              resolveWaiter(waiter, new ConnectionLease(record, this));
             }
             this.pump();
           },
@@ -200,7 +214,7 @@ export class ConnectionPool {
             this.connecting.delete(waiter);
             waiter.unsubscribe();
             this.changeCount(waiter.key, -1);
-            waiter.result.reject(error);
+            rejectWaiter(waiter, error);
             this.pump();
           },
         );
@@ -231,13 +245,13 @@ export class ConnectionPool {
     this.closed = true;
     for (const [waiter, controller] of this.connecting) {
       const error = new TypeError("Connection pool is closed");
-      waiter.result.reject(error);
+      rejectWaiter(waiter, error);
       controller.abort(error);
     }
     for (const record of this.records) this.drop(record);
     for (const waiter of this.pending.splice(0)) {
       waiter.unsubscribe();
-      waiter.result.reject(new TypeError("Connection pool is closed"));
+      rejectWaiter(waiter, new TypeError("Connection pool is closed"));
     }
   }
 
