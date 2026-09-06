@@ -1002,15 +1002,15 @@ export class Readable extends Stream {
     return fromIterable(flatMapOperator(this, fn, options), undefined, Readable);
   }
 
-  drop(count: unknown, options?: OperatorOptions): Readable {
+  drop(count: unknown, options: OperatorOptions | undefined = undefined): Readable {
     return fromIterable(dropOperator(this, count, options), undefined, Readable);
   }
 
-  take(count: unknown, options?: OperatorOptions): Readable {
+  take(count: unknown, options: OperatorOptions | undefined = undefined): Readable {
     return fromIterable(takeOperator(this, count, options), undefined, Readable);
   }
 
-  every(fn: MapFn, options?: OperatorOptions): Promise<boolean> {
+  every(fn: MapFn, options: OperatorOptions | undefined = undefined): Promise<boolean> {
     return everyOperator(this, fn, options);
   }
 
@@ -1030,7 +1030,7 @@ export class Readable extends Stream {
     return toArrayOperator(this, options);
   }
 
-  some(fn: MapFn, options?: OperatorOptions): Promise<boolean> {
+  some(fn: MapFn, options: OperatorOptions | undefined = undefined): Promise<boolean> {
     return someOperator(this, fn, options);
   }
 
