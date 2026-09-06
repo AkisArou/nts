@@ -11,9 +11,9 @@ test-net-socket-write-after-close.js: implementation-detail test; directly close
 test-net-listen-handle-in-cluster-1.js: active-environment gap; cluster must transfer this profile's live native server handle through worker IPC and reconstruct the typed Server in the child
 test-net-listen-handle-in-cluster-2.js: private binding/active-environment gap; constructs a Node TCPWrap through internalBinding('tcp_wrap') and asks a cluster worker to adopt it
 test-net-listen-twice.js: active-environment gap; needs cluster worker bootstrap, its NODE_CLUSTER internal-message protocol, and process.disconnect on the substituted process
-test-net-server-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
-test-net-socket-transfer-worker-http.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
-test-net-socket-transfer-worker.js: language non-goal (typescript.md section 13); requires worker structured-clone transfer hooks implemented through runtime Symbols
-test-net-transfer-guards.js: language non-goal (typescript.md section 13); directly exercises structured-clone transfer hooks implemented through runtime Symbols
+test-net-server-transfer-worker.js: temporary worker-runtime integration gap; transferring a live typed server needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
+test-net-socket-transfer-worker-http.js: temporary worker-runtime integration gap; transferring a live typed socket through an HTTP worker needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
+test-net-socket-transfer-worker.js: temporary worker-runtime integration gap; transferring a live typed socket needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
+test-net-transfer-guards.js: temporary worker-runtime integration gap; the final worker transport must enforce typed socket/server clone and transfer guards without exposing Node's private runtime-Symbol protocol
 test-net-listen-exclusive-random-ports.js: active-environment gap; needs two cluster workers with process IPC send/message delivery so each typed Server can publish its independently selected port
 test-net-socket-constructor.js: mixed active-environment/private-handle gap; its worker cases need inherited raw-fd adoption and process.disconnect, while the primary branch also wraps the private `_handle` of another socket; ordinary empty Socket/connect behavior is exercised by the applicable net suite, but public raw-fd adoption still needs a real native binding
