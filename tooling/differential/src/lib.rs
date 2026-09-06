@@ -1837,7 +1837,32 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<V
                      catch {{ process.stdout.write(`{} {at} rejected\n`); }}",
                     one.name, one.name
                 ),
-                None => writeln!(driver, "{show}({:?}, {at}, {call});", one.name),
+                // The same guard the two arms above have, for the same
+                // reason, arrived late. An uncaught throw ends the module --
+                // "one rejecting case cost every case after it" is written up
+                // there about promises, and a *synchronous* throw does exactly
+                // the same thing and had no catch at all.
+                //
+                // `benches/cases/fib` is where it showed: the pool hands it
+                // 2147483647 and node raises `RangeError: Maximum call stack
+                // size exceeded`, so the driver died at case 20 and the
+                // fourteen after it were never asked. The compiled program
+                // exhausted its stack on precisely the same five values, so
+                // both sides had nothing -- but only one of them said so, and
+                // the other silently stopped.
+                //
+                // `threw` rather than `rejected`, which is a settled promise
+                // and a different fact. Where the compiled side also refused,
+                // the line is dropped with the rest at that index and the case
+                // is skipped; where the compiled side *answered*, `threw`
+                // against a number is a disagreement, which is what a
+                // divergence between the two is supposed to look like.
+                None => writeln!(
+                    driver,
+                    "try {{ {show}({:?}, {at}, {call}); }} \
+                     catch {{ process.stdout.write(`{} {at} threw\n`); }}",
+                    one.name, one.name
+                ),
             };
         }
     }
