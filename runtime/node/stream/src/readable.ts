@@ -1020,10 +1020,9 @@ export class Readable extends Stream {
 
   reduce(
     reducer: ReduceFn,
-    initialValue?: unknown,
-    options?: OperatorOptions,
+    ...given: [] | [initialValue: unknown, options?: OperatorOptions]
   ): Promise<unknown> {
-    return reduceOperator(this, reducer, initialValue, options, arguments.length > 1);
+    return reduceOperator(this, reducer, given[0], given[1], given.length > 0);
   }
 
   toArray(options?: OperatorOptions): Promise<unknown[]> {
