@@ -263,6 +263,9 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // is how one backend gets a conversion the others do not.
         "nts_set_timeout" => (RUNTIME, "setTimeout", "(Ljava/lang/Object;DDZ)D"),
         "nts_clear_timeout" => (RUNTIME, "clearTimeout", "(D)V"),
+        // A `Date` is a `double` and an identity, and these are all of it.
+        "nts_date_new" => (types::DATE, "newDate", "(D)Lnts/rt/NtsDate;"),
+        "nts_date_value" => (types::DATE, "value", "(Lnts/rt/NtsDate;)D"),
         "nts_array_fill" => (RUNTIME, "arrayFill", "([DD)[D"),
         "nts_array_fill_bool" => (RUNTIME, "arrayFillBool", "([ZZ)[Z"),
         "nts_array_fill_ref" => (
@@ -1457,6 +1460,43 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    /// A growable-array store the middle end proved in range, as the store it
+    /// is.
+    ///
+    /// The counterpart of [`Self::proved_growable_read`], and it declines more
+    /// than that one does: `set` tests the index against `a.length` and
+    /// *grows* the array when it is past the end, so a proved index was paying
+    /// for a check, a branch and a reallocation it could not reach.
+    ///
+    /// The same C lane, too. `index_expression` returns a bare
+    /// `(uint32_t)index` for `checked: false` and `NTS_ITEMS(a)[slot] = v`
+    /// stores through it, so the two lanes write the same slot or refuse the
+    /// same program.
+    #[allow(clippy::too_many_arguments, reason = "the call site has all of it and computes none of it")]
+    fn proved_growable_store(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        array: ValueId,
+        index: ValueId,
+        value: ValueId,
+        class: &str,
+        element: &str,
+        holds: Kind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, array)?;
+        code.get_field(origin, pool, class, "items", &format!("[{element}"));
+        self.subscript(code, pool, index, origin)?;
+        if holds == Kind::Ref {
+            self.load(code, pool, value)?;
+        } else {
+            self.push_as(code, pool, value, holds, origin)?;
+        }
+        code.array_store(origin, element);
+        Ok(Placed::Stored)
+    }
+
     fn array_operation(
         &mut self,
         code: &mut Code,
@@ -1543,9 +1583,14 @@ impl Emitter<'_> {
                 }
                 Ok(Placed::OnStack)
             }
-            OpKind::ArraySet { array, index, value, .. } if self.shape.grows => {
+            OpKind::ArraySet { array, index, value, checked } if self.shape.grows => {
                 let class = self.growable_class(&self.ty(*array).clone())?;
                 let (element, holds) = self.growable_element(&self.ty(*array).clone())?;
+                if !*checked {
+                    return self.proved_growable_store(
+                        code, pool, *array, *index, *value, &class, &element, holds, origin,
+                    );
+                }
                 self.load(code, pool, *array)?;
                 self.push_as(code, pool, *index, Kind::Double, origin)?;
                 if holds == Kind::Ref {

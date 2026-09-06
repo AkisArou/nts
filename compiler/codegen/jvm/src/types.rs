@@ -137,6 +137,8 @@ fn descriptor_of_element(element: &HirType) -> Option<&'static str> {
 
 /// `Map` and `Set`, which are one table with the values left out of one of them.
 pub const MAP: &str = "nts/rt/NtsMap";
+/// A `Date`: a `double` and an identity, and the two operations that reach it.
+pub const DATE: &str = "nts/rt/NtsDate";
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
 
 /// The 128-bit integer, which the JVM has no primitive for.
@@ -216,16 +218,21 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
                 nts_jvm_emitter::descriptor::array_of(&descriptor(shape, element)?)
             }
         }
+        // A `double` and an identity, which is what the `NtsDate` struct in
+        // `nts_runtime.h` is once the collector's header is the platform's.
+        // Two operations reach it and both are about the same field; it is a
+        // class rather than a bare `double` because two `new Date(0)` are
+        // different objects and a `Date | null` needs an absence a `double`
+        // has no room for.
+        HirType::Managed(ManagedType::Date) => nts_jvm_emitter::descriptor::object(DATE),
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
         // somewhere the type system said it could not.
         //
-        // A symbol is refused here for an unrelated reason and shares the arm
-        // because the answer is the same: it is a runtime value on the C lane
-        // and not yet on this one, so it has no class to name.
-        HirType::Never
-        | HirType::Managed(ManagedType::Symbol | ManagedType::Date) => return None,
+        // A symbol is refused here because it is a runtime value on the C lane
+        // and not yet one here, so it has no class to name.
+        HirType::Never | HirType::Managed(ManagedType::Symbol) => return None,
     })
 }
 
@@ -290,6 +297,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Object(id)) => {
                 VType::Object(class_name(program.layout(*id)?))
             }
+            HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             _ => return None,
         },
     })
