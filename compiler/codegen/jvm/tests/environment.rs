@@ -98,7 +98,11 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
         "the environment test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+        // The **count**, not only the zero. A suite that stopped running half its
+    // cases reports no failures perfectly well, which is the assertion
+    // `android.rs` already makes about `PASS: 11` and the one every other
+    // driver here was missing.
+    assert!(said.ends_with("26 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -153,6 +157,10 @@ fn closing_under_arriving_completions_loses_nothing() {
         "the close race failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+        // The **count**, not only the zero. A suite that stopped running half its
+    // cases reports no failures perfectly well, which is the assertion
+    // `android.rs` already makes about `PASS: 11` and the one every other
+    // driver here was missing.
+    assert!(said.ends_with("240 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }

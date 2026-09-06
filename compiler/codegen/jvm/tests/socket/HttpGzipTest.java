@@ -29,7 +29,17 @@ import nts.rt.NtsSocket;
  */
 public final class HttpGzipTest {
     static int failures;
+    /**
+     * How many checks ran, printed beside the failures.
+     *
+     * Zero failures is satisfied by a suite that stopped running. A count is
+     * what makes that visible, and it is the same assertion `android.rs` makes
+     * about `PASS: 11` -- which I wrote and then did not apply here.
+     */
+    static int checks;
+
     static void check(boolean ok, String what) {
+        checks++;
         if (!ok) { failures++; System.out.println("FAILED: " + what); }
     }
 
@@ -187,8 +197,8 @@ public final class HttpGzipTest {
             "Content-Length was the decoded size (" + contentLength + "), not the encoded size");
 
         System.out.printf("http+gzip: %d bytes decoded from a dribbled response, "
-            + "Content-Encoding=%s Content-Length=%s -- %d failures%n",
-            got.length, contentEncoding, contentLength, failures);
+            + "Content-Encoding=%s Content-Length=%s -- %d checks, %d failures%n",
+            got.length, contentEncoding, contentLength, checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }

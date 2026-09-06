@@ -36,7 +36,17 @@ import org.nts.web.NetworkPrimitives;
  */
 public final class BothTunnels {
     static int failures;
+    /**
+     * How many checks ran, printed beside the failures.
+     *
+     * Zero failures is satisfied by a suite that stopped running. A count is
+     * what makes that visible, and it is the same assertion `android.rs` makes
+     * about `PASS: 11` -- which I wrote and then did not apply here.
+     */
+    static int checks;
+
     static void check(boolean ok, String what) {
+        checks++;
         if (!ok) { failures++; if (failures < 12) { System.out.println("FAILED: " + what); } }
     }
 
@@ -500,7 +510,7 @@ public final class BothTunnels {
             secure.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("both tunnels: plain, cancellation, 407, 502, verification -- %d failures%n", failures);
+        System.out.printf("both tunnels: plain, cancellation, 407, 502, verification -- %d checks, %d failures%n", checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }

@@ -18,7 +18,17 @@ import nts.rt.NtsResumable;
  */
 public final class CloseRaceTest {
     static int failures;
+    /**
+     * How many checks ran, printed beside the failures.
+     *
+     * Zero failures is satisfied by a suite that stopped running. A count is
+     * what makes that visible, and it is the same assertion `android.rs` makes
+     * about `PASS: 11` -- which I wrote and then did not apply here.
+     */
+    static int checks;
+
     static void check(boolean ok, String what) {
+        checks++;
         if (!ok) { failures++; if (failures < 8) { System.out.println("FAILED: " + what); } }
     }
 
@@ -79,8 +89,8 @@ public final class CloseRaceTest {
             // Vary both the width of the race and where close lands in it.
             race(4 + (round % 5) * 3, round % 7);
         }
-        System.out.printf("close race: %d rounds, no late completion, every credit returned -- %d failures%n",
-            rounds, failures);
+        System.out.printf("close race: %d rounds, no late completion, every credit returned -- %d checks, %d failures%n",
+            rounds, checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }

@@ -11,7 +11,17 @@ import nts.rt.NtsResumable;
 /** What an environment is for: isolation, two clocks, liveness, and letting go. */
 public final class EnvTest {
     static int failures;
+    /**
+     * How many checks ran, printed beside the failures.
+     *
+     * Zero failures is satisfied by a suite that stopped running. A count is
+     * what makes that visible, and it is the same assertion `android.rs` makes
+     * about `PASS: 11` -- which I wrote and then did not apply here.
+     */
+    static int checks;
+
     static void check(boolean ok, String what) {
+        checks++;
         if (!ok) { failures++; if (failures < 8) { System.out.println("FAILED: " + what); } }
     }
 
@@ -246,8 +256,8 @@ public final class EnvTest {
         cleanClose();
         waitsForExternalWork();
         closedEnvironmentLetsGo();
-        System.out.printf("environment: isolation, clocks, liveness, waiting and retirement -- %d failures%n",
-            failures);
+        System.out.printf("environment: isolation, clocks, liveness, waiting and retirement -- %d checks, %d failures%n",
+            checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }

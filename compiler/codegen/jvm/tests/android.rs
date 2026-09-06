@@ -479,7 +479,10 @@ fn okhttp_does_not_rewrite_what_the_server_sent() {
         .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
     assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(said.ends_with("0 failures"), "{said}");
+    // The **count**, not only the zero: a suite that stopped running half its
+    // cases reports no failures perfectly well. Same assertion as `PASS: 11`
+    // above, which is where the idea came from and where it stopped.
+    assert!(said.ends_with("18 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -706,7 +709,10 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
         .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
     assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(said.ends_with("0 failures"), "{said}");
+    // The **count**, not only the zero: a suite that stopped running half its
+    // cases reports no failures perfectly well. Same assertion as `PASS: 11`
+    // above, which is where the idea came from and where it stopped.
+    assert!(said.ends_with("21 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

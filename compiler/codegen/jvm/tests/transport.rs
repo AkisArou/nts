@@ -112,7 +112,11 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
         "the transport test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+        // The **count**, not only the zero. A suite that stopped running half its
+    // cases reports no failures perfectly well, which is the assertion
+    // `android.rs` already makes about `PASS: 11` and the one every other
+    // driver here was missing.
+    assert!(said.ends_with("42 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -202,7 +206,11 @@ fn a_tunnel_carries_bytes_and_keeps_the_targets_name() {
         "{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+        // The **count**, not only the zero. A suite that stopped running half its
+    // cases reports no failures perfectly well, which is the assertion
+    // `android.rs` already makes about `PASS: 11` and the one every other
+    // driver here was missing.
+    assert!(said.ends_with("23 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -238,7 +246,11 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         "the TLS test failed:\n{said}\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(said.ends_with("0 failures"), "{said}");
+        // The **count**, not only the zero. A suite that stopped running half its
+    // cases reports no failures perfectly well, which is the assertion
+    // `android.rs` already makes about `PASS: 11` and the one every other
+    // driver here was missing.
+    assert!(said.ends_with("2 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

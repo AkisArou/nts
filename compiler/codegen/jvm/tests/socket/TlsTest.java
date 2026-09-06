@@ -25,7 +25,17 @@ import nts.rt.NtsSocket;
  */
 public final class TlsTest {
     static int failures;
+    /**
+     * How many checks ran, printed beside the failures.
+     *
+     * Zero failures is satisfied by a suite that stopped running. A count is
+     * what makes that visible, and it is the same assertion `android.rs` makes
+     * about `PASS: 11` -- which I wrote and then did not apply here.
+     */
+    static int checks;
+
     static void check(boolean ok, String what) {
+        checks++;
         if (!ok) { failures++; System.out.println("FAILED: " + what); }
     }
 
@@ -99,8 +109,8 @@ public final class TlsTest {
             server.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("tls: the certificate's name is accepted and any other is refused -- %d failures%n",
-            failures);
+        System.out.printf("tls: the certificate's name is accepted and any other is refused -- %d checks, %d failures%n",
+            checks, failures);
         if (failures != 0) { System.exit(1); }
     }
 }
