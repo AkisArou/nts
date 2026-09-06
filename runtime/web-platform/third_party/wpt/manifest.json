@@ -11,6 +11,7 @@
     "root": "third_party/node/test/fixtures/wpt",
     "versionsFile": "third_party/node/test/fixtures/wpt/versions.json",
     "subsets": {
+      "dom/abort": "dc928169ee38969433af668319a73ed9196ffbee",
       "dom/events": "0a811c51619b14f78fec60ba7dd1603795ca6a21",
       "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
       "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
@@ -20,6 +21,8 @@
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
     },
     "tests": {
+      "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
+      "dom/abort/event.any.js": "eda769e8d8f39dd16e19a8d24c038e86baf1c459",
       "dom/events/AddEventListenerOptions-once.any.js": "b4edd4345c5e3431d77a6ed56dc573d4000f4c43",
       "dom/events/AddEventListenerOptions-passive.any.js": "8e59cf5b379f2e806fa52b82d87dd09f90c212d7",
       "dom/events/AddEventListenerOptions-signal.any.js": "e6a34261594bcaf43057fc46ed734bcf105d68ee",

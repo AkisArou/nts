@@ -33,12 +33,14 @@ if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
 
 const {
   AbortController,
+  AbortSignal,
   Blob,
   CustomEvent,
   Event,
   EventTarget,
   File,
   Headers,
+  DOMException,
   ReadableStream,
   TextDecoder,
   TextEncoder,
@@ -70,10 +72,12 @@ function reportFailure(path, name, error) {
 function createWptContext(path, pending) {
   const context = createContext({
     AbortController,
+    AbortSignal,
     ArrayBuffer,
     Blob,
     CustomEvent,
     DataView,
+    DOMException,
     Event,
     EventTarget,
     File,
@@ -106,6 +110,9 @@ function createWptContext(path, pending) {
     assert_throws_js(constructor, callback, message) {
       assert.throws(callback, constructor, message);
     },
+    assert_throws_exactly(expected, callback, message) {
+      assert.throws(callback, (error) => error === expected, message);
+    },
     assert_true(value, message) {
       assert.equal(value, true, message);
     },
@@ -132,6 +139,22 @@ function createWptContext(path, pending) {
             }
           };
         },
+        step_func_done(callback) {
+          return (...args) => {
+            try {
+              callback(...args);
+              capability.resolve();
+            } catch (error) {
+              capability.reject(error);
+            }
+          };
+        },
+        step_timeout(callback, delay) {
+          return setTimeout(callback, delay);
+        },
+        unreached_func(message) {
+          return () => capability.reject(new Error(message));
+        },
       };
       try {
         fn(test);
@@ -149,6 +172,7 @@ function createWptContext(path, pending) {
     fetch() {
       throw new Error("Host/network fetch is not an oracle in these tests");
     },
+    done() {},
     format_value(value) {
       return JSON.stringify(value);
     },
@@ -163,7 +187,14 @@ function createWptContext(path, pending) {
     },
     test(fn, name) {
       try {
-        fn({});
+        fn({
+          step_func(callback) {
+            return (...args) => callback(...args);
+          },
+          unreached_func(message) {
+            return () => assert.fail(message);
+          },
+        });
         reportPass(path, name);
       } catch (error) {
         reportFailure(path, name, error);

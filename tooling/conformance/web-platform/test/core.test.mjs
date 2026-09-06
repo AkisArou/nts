@@ -77,6 +77,17 @@ const makeRedirectResponse = (url, status = 302) =>
 const utf8 = new TextEncoder();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
+async function collectWeakReference(reference) {
+  assert.equal(typeof globalThis.gc, "function", "the conformance runner must expose GC");
+  for (let attempt = 0; attempt < 100; attempt++) {
+    await tick();
+    globalThis.gc();
+    await tick();
+    if (reference.deref() === undefined) return true;
+  }
+  return false;
+}
+
 test("Web event constructors consume typed init dictionaries", () => {
   const source = new EventTarget();
   const port = new EventTarget();
@@ -435,6 +446,69 @@ test("AbortSignal.any selects the first reason and detaches", () => {
   a.abort("a");
   assert.equal(combined.reason, "b");
   assert.equal(AbortSignal.any([a.signal, b.signal]).reason, "a");
+});
+test("AbortSignal.any marks dependents before firing abort events", () => {
+  const controller = new AbortController();
+  const signals = [controller.signal];
+  signals.push(AbortSignal.any([controller.signal]));
+  signals.push(AbortSignal.any([controller.signal]));
+  signals.push(AbortSignal.any([signals[0]]));
+  signals.push(AbortSignal.any([signals[1]]));
+
+  let order = "";
+  for (let i = 0; i < signals.length; i++) {
+    signals[i].addEventListener("abort", (event) => {
+      assert.equal(event.isTrusted, true);
+      for (const signal of signals) assert.equal(signal.aborted, true);
+      order += i;
+    });
+  }
+  controller.abort("first");
+  assert.equal(order, "01234");
+  for (const signal of signals) assert.equal(signal.reason, "first");
+});
+test("AbortSignal.any consumes iterables before observing their signals", () => {
+  const first = new AbortController();
+  const second = new AbortController();
+  const signals = {
+    *[Symbol.iterator]() {
+      yield first.signal;
+      first.abort("after first yield");
+      yield second.signal;
+    },
+  };
+  assert.equal(AbortSignal.any(signals).reason, "after first yield");
+  assert.throws(() => AbortSignal.any([first.signal, {}]), TypeError);
+});
+test("AbortSignal.any retains only composites with active observers", async () => {
+  const source = new AbortController();
+  const unobserved = (() => {
+    const signal = AbortSignal.any([source.signal]);
+    return new WeakRef(signal);
+  })();
+  assert.equal(await collectWeakReference(unobserved), true);
+
+  const removed = (() => {
+    const signal = AbortSignal.any([source.signal]);
+    const listener = () => {};
+    signal.addEventListener("abort", listener);
+    signal.removeEventListener("abort", listener);
+    return new WeakRef(signal);
+  })();
+  assert.equal(await collectWeakReference(removed), true);
+
+  const capability = Promise.withResolvers();
+  const observed = (() => {
+    const signal = AbortSignal.any([source.signal]);
+    signal.addEventListener("abort", () => capability.resolve());
+    return new WeakRef(signal);
+  })();
+  await tick();
+  globalThis.gc();
+  await tick();
+  assert.notEqual(observed.deref(), undefined);
+  source.abort();
+  await capability.promise;
 });
 test("EventTarget once, receiver, removal while dispatching", () => {
   const target = new EventTarget();

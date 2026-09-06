@@ -305,3 +305,34 @@ Node-host suite passes 107/107, the pinned WPT slice remains 77/77, and the live
 frontier remains 212 primary refusals, 40 cascades, zero JVM-backend refusals, and
 no invalid HIR. A mutation using 65,535 rather than 65,536 as the unsigned-short
 modulus made the focused constructor test fail on the `-1` case.
+
+`AbortSignal.any()` now follows the DOM dependent-signal state machine instead of
+building ordinary strong parent subscriptions. Composite signals retain weak links
+to their original sources, flatten nested composites, and use source-owned
+finalization registries to retire dead dependency records. A source keeps a
+composite strongly reachable only while that composite has an active `abort`
+listener or internal abort algorithm; removing the last observer releases it. A
+bounded forced-collection test proves both halves: unobserved composites disappear,
+while an observed composite survives collection and receives the abort. All direct
+dependents are marked before any abort steps run, so source events precede dependent
+events, nested dependents already expose their final reason during reentrant
+listeners, and a second source cannot replace the first reason. Cancellation
+algorithms use an intrusive list, making removal constant-time and eliminating the
+abort-time snapshot allocation. Abort events created by the runtime are trusted,
+while `dispatchEvent()` continues to clear trust for script dispatch. The actual
+ECMAScript-private EventTarget dispatch helper also prevents a subclass method named
+`dispatch` from intercepting internal dispatch; the unchanged upstream subclass
+fixture caught the ordinary-private-method collision during development.
+
+Two complete unchanged `dom/abort` fixtures from Node's pinned WPT checkout add 18
+tests, taking the immutable upstream slice to 95/95; the Node-host suite passes
+110/110. A mutation that fired the source event before marking dependents made the
+focused ordering test fail with `1234` instead of `01234`. The live NTS check reports
+236 primary refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR.
+Twenty-eight primary messages name the not-yet-representable `WeakRef` signal state,
+and one names the iterable Web IDL sequence boundary. Both are planned compiler and
+runtime dependencies; replacing them with strong links or an array-only API would
+restore a leak or narrow the final API. The unchanged `AbortSignal.timeout` fixture
+is not claimed yet: the public one-argument signature still depends on the typed
+current-environment scheduler/clock seam, and a process-global timer is not an
+acceptable substitute.

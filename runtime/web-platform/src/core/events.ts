@@ -20,6 +20,7 @@ export class Event {
   private eventTarget: EventTarget | null = null;
   private eventCurrentTarget: EventTarget | null = null;
   private phase = Event.NONE;
+  private trusted = false;
   private canceled = false;
   private propagationStopped = false;
   private dispatching = false;
@@ -99,7 +100,7 @@ export class Event {
   }
 
   get isTrusted(): boolean {
-    return false;
+    return this.trusted;
   }
 
   preventDefault(): void {
@@ -139,11 +140,12 @@ export class Event {
     return true;
   }
 
-  /** @internal */ begin(target: EventTarget): void {
+  /** @internal */ begin(target: EventTarget, trusted: boolean): void {
     if (this.dispatching) {
       throw new DOMException("Event is already dispatching or uninitialized", "InvalidStateError");
     }
     this.dispatching = true;
+    this.trusted = trusted;
     this.eventTarget = target;
     this.eventCurrentTarget = target;
     this.phase = Event.AT_TARGET;
@@ -233,6 +235,8 @@ interface ListenerRecord {
   unsubscribeAbort: (() => void) | null;
 }
 
+type ListenerObserver = (type: string, added: boolean) => void;
+
 function listenerOption(value: boolean | undefined): boolean {
   return value ? true : false;
 }
@@ -249,6 +253,7 @@ function validateListenerSignal(signal: EventListenerSignal | undefined): void {
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
+  private listenerObserver: ListenerObserver | null = null;
   protected readonly report: (error: unknown) => void;
 
   constructor(report: (error: unknown) => void = () => {}) {
@@ -287,6 +292,7 @@ export class EventTarget {
       unsubscribeAbort: null,
     };
     this.listeners.push(listener);
+    this.listenerObserver?.(type, true);
     if (signal !== undefined) {
       listener.unsubscribeAbort = signal.subscribe(() => this.removeRecord(listener));
     }
@@ -308,7 +314,16 @@ export class EventTarget {
   }
 
   dispatchEvent(event: Event): boolean {
-    event.begin(this);
+    return this.#dispatch(event, false);
+  }
+
+  /** Provider-created events are trusted; script-dispatched events are not. */
+  protected dispatchTrustedEvent(event: Event): boolean {
+    return this.#dispatch(event, true);
+  }
+
+  #dispatch(event: Event, trusted: boolean): boolean {
+    event.begin(this, trusted);
     try {
       if (!event.stoppedBeforeTarget) {
         const snapshot = this.listeners.slice();
@@ -364,12 +379,18 @@ export class EventTarget {
     }
   }
 
+  /** Lets a specialized EventTarget account for the lifetime of its listeners. */
+  protected setListenerObserver(observer: ListenerObserver): void {
+    this.listenerObserver = observer;
+  }
+
   private removeRecord(listener: ListenerRecord): void {
     if (listener.removed) return;
     listener.removed = true;
     const unsubscribe = listener.unsubscribeAbort;
     listener.unsubscribeAbort = null;
     unsubscribe?.();
+    this.listenerObserver?.(listener.type, false);
   }
 }
 
