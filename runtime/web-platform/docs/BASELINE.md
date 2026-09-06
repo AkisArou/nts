@@ -195,3 +195,16 @@ Consequently the explicit context arguments still visible on `Request`, `Respons
 `WebSocket`, and `AbortSignal.timeout` are transitional and are not the intended
 public signatures. Removing them requires the typed current-environment/constructor
 entry seam; process-global mutable state is not an acceptable substitute.
+
+At `2c92fae`, the non-tree `EventTarget` implements the DOM listener options that
+affect standalone networking semantics: an already-aborted signal prevents
+registration, later abort removes the exact listener, duplicate registration does
+not let a second signal take ownership of the original listener, and passive
+listeners cannot cancel an event. Removal and one-shot delivery both detach the
+abort algorithm, and post-dispatch compaction is linear rather than repeated array
+splicing. The Node-host suite passes 100/100 and the unchanged WPT slice remains
+52/52. A mutation that retained the listener after signal abort failed the focused
+differential with two calls where Node and the implementation require one. The live
+NTS check reports 198 primary refusals, 41 cascades, zero JVM-backend refusals, and
+no invalid HIR; this is another final-source frontier, not a claim that its language
+dependencies are implemented.
