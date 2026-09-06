@@ -458,8 +458,17 @@ public final class NtsEnv {
     public static void close(NtsEnv env) {
         if (env.closed) { return; }
         env.closed = true;
-        int dropped = NtsInbox.discard(env.inbox);
-        env.outstanding -= dropped;
+        // Reclaim rather than drain: work still running on an I/O thread holds
+        // a credit, and a single drain walks past it. `reclaim` alternates
+        // until every credit is back, bounded, and reports what it could not
+        // recover instead of pretending.
+        int leaked = NtsInbox.reclaim(env.inbox, 2000.0);
+        env.outstanding = leaked;
+        if (leaked != 0) {
+            throw new NtsRefusal(
+                "closing left " + leaked + " completion credit(s) held by work that never settled"
+            );
+        }
         env.microtasks.clear();
         env.ticks.clear();
         for (int i = 0; i < env.size; i++) { env.heap[i] = null; }

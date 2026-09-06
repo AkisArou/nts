@@ -63,6 +63,13 @@ public final class NtsInbox {
      * producer's writes visible makes this visible to the producer.
      */
     private volatile Thread owner;
+    /**
+     * Set once, by {@link #reclaim}, before it starts taking credits back.
+     *
+     * <p>Volatile because a producer on an I/O thread reads it, and the whole
+     * point is that the producer sees it promptly.
+     */
+    private volatile boolean closed;
 
     private NtsInbox(int capacity) {
         this.capacity = capacity;
@@ -114,7 +121,23 @@ public final class NtsInbox {
      * callable from any thread, and cannot fail.
      */
     public static void post(Slot slot, NtsResumable work) {
-        if (slot.owner == null) { throw new NtsRefusal("posting to a slot that was already returned"); }
+        NtsInbox held = slot.owner;
+        if (held == null) { throw new NtsRefusal("posting to a slot that was already returned"); }
+        // A completion arriving after close is dropped by the thread that
+        // produced it and its credit goes straight back. Linking it into a
+        // queue nobody will drain loses the credit, and an environment that
+        // has lost a credit never reaches zero liveness and never finishes
+        // closing.
+        //
+        // A window remains: a producer can read this as false and link a moment
+        // later. `reclaim` closes it by draining until every credit is back
+        // rather than draining once.
+        if (held.closed) {
+            slot.owner = null;
+            slot.work = null;
+            held.credits.incrementAndGet();
+            return;
+        }
         slot.work = work;
         slot.next = null;
         // `getAndSet` then a volatile write to the previous node's link. The
@@ -174,6 +197,38 @@ public final class NtsInbox {
             if (work != null) { work.resume(); }
         }
     }
+
+    /**
+     * Stop accepting completions and take back every credit, including those
+     * held by work still running on an I/O thread.
+     *
+     * <p>Draining once is not enough, and the reason is a race with no lock to
+     * take: a producer can read the closed flag as false and link its slot a
+     * moment after the drain walked past it. So this alternates *drain, check,
+     * yield* until the credits are all back, which terminates because every
+     * in-flight post either sees the flag and returns its credit or links and
+     * is drained by the next pass.
+     *
+     * <p>Bounded, because an I/O thread that never finishes is a hang, and a
+     * hang that presents itself as a clean close is worse than a visible one.
+     * Returns the credits still missing when it gave up: **zero is the
+     * contract, and anything else is a leak for the caller to report rather
+     * than absorb.**
+     */
+    public static int reclaim(NtsInbox it, double timeoutMillis) {
+        it.closed = true;
+        long deadline = System.nanoTime() + (long) (timeoutMillis * 1_000_000.0);
+        for (;;) {
+            discard(it);
+            int missing = it.capacity - it.credits.get();
+            if (missing == 0) { return 0; }
+            if (System.nanoTime() > deadline) { return missing; }
+            Thread.yield();
+        }
+    }
+
+    /** Whether {@link #reclaim} has run. */
+    public static boolean isClosed(NtsInbox it) { return it.closed; }
 
     /**
      * Discard everything published without running it, returning every credit.

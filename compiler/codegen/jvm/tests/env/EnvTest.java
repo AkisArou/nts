@@ -73,16 +73,38 @@ public final class EnvTest {
             + NtsEnv.outstanding(env) + " outstanding");
 
         NtsInbox.post(dropped, null);
-        NtsEnv.close(env);
+        // A launch that never settles is a leak, and close says so rather than
+        // reporting a tidy zero. This one is deliberate: `neverSettles` was
+        // reserved and abandoned by nobody.
+        NtsInbox.Slot neverSettles = NtsEnv.launch(env);
+        check(neverSettles != null, "the environment refused a credit it had");
+        try {
+            NtsEnv.close(env);
+            check(false, "close absorbed a credit held by work that never settled");
+        } catch (NtsRefusal reported) {
+            check(reported.getMessage().contains("never settled"),
+                "close refused for the wrong reason: " + reported.getMessage());
+        }
         check(NtsEnv.isClosed(env), "close did not close");
-        check(NtsEnv.outstanding(env) == 1.0,
-            "close left " + NtsEnv.outstanding(env) + " outstanding; the never-posted launch is the one left");
         try {
             NtsEnv.launch(env);
             check(false, "a closed environment accepted new work");
         } catch (NtsRefusal expected) {
             // The point.
         }
+    }
+
+    /** The ordinary case: everything settles, and close is silent. */
+    static void cleanClose() {
+        NtsEnv env = NtsEnv.create(NtsEnv.VIRTUAL, 4);
+        NtsInbox.Slot a = NtsEnv.launch(env);
+        NtsInbox.Slot b = NtsEnv.launch(env);
+        NtsInbox.post(a, null);
+        NtsEnv.cancel(env, b);
+        NtsEnv.close(env);
+        check(NtsEnv.outstanding(env) == 0.0, "a clean close left " + NtsEnv.outstanding(env));
+        check(NtsInbox.available(NtsEnv.inbox(env)) == 4, "a clean close returned "
+            + NtsInbox.available(NtsEnv.inbox(env)) + " of 4 credits");
     }
 
     /** A monotonic lane waits for outstanding work rather than exiting idle. */
@@ -168,6 +190,7 @@ public final class EnvTest {
         isolation();
         clocks();
         liveness();
+        cleanClose();
         waitsForExternalWork();
         closedEnvironmentLetsGo();
         System.out.printf("environment: isolation, clocks, liveness, waiting and retirement -- %d failures%n",
