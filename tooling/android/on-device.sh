@@ -32,8 +32,17 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/classes" "$work/dex"
 
 jar="$here/runtime/jvm/nts-runtime.jar"
+# `src/android` too, and it was missing. Without it `AndroidNetworking` is not
+# in the R8 input, so its keep rule matches nothing -- which R8 says out loud
+# and this script scrolled past:
+#
+#   Proguard configuration rule does not match anything:
+#     `-keep class org.nts.web.AndroidNetworking { public *; }`
+#
+# One of the three rules was guarding a class that was never there.
 javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
   "$here"/runtime/web-platform/android/src/main/java/org/nts/web/*.java \
+  "$here"/runtime/web-platform/android/src/android/java/org/nts/web/*.java \
   "$here"/runtime/web-platform/android/src/test/java/org/nts/web/*.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
@@ -84,10 +93,23 @@ r8=$(ls "${TMPDIR:-/tmp}"/nts-okhttp-deps/r8-*.jar 2>/dev/null | tail -1)
 if [ -n "$r8" ]; then
   mkdir -p "$work/shrunk" "$work/testonly"
   # shellcheck disable=SC2046
+  # A keep rule that matches nothing is a hole, not a warning: it reads as
+  # protection and protects nothing, and the class it named is gone from the
+  # artifact. So it fails the run.
+  #
+  # Both streams. R8 prints this on **stdout**, and capturing only stderr made
+  # the check pass for a rule naming a class that does not exist -- a check
+  # that could not fail, guarding against checks that cannot fail.
   java -cp "$r8" com.android.tools.r8.R8 --release --min-api 26 --lib "$platform" \
     --pg-conf "$here/runtime/web-platform/android/consumer-rules.pro" \
     --output "$work/shrunk" \
-    $(find "$work/classes" -path '*org/nts/web/*' -name '*.class')
+    $(find "$work/classes" -path '*org/nts/web/*' -name '*.class') > "$work/r8.log" 2>&1 || {
+      cat "$work/r8.log" >&2; exit 1; }
+  if grep -q "does not match anything" "$work/r8.log"; then
+    echo "FAILED: a keep rule in consumer-rules.pro matches nothing" >&2
+    grep -A 2 "does not match anything" "$work/r8.log" >&2
+    exit 1
+  fi
   javac --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
     "$here"/runtime/web-platform/android/src/test/java/org/nts/web/*.java
   # shellcheck disable=SC2046
