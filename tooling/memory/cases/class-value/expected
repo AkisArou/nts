@@ -1,0 +1,20 @@
+ideal 0
+allocated 0
+because Argued before measuring.
+because
+because Allocations: none, and not because they die young -- there is nothing
+because to allocate. A class used as a value is one immortal object per class,
+because emitted as a static beside its descriptor the way a named function
+because used as a value already is. Seventeen iterations name two classes and
+because build neither of them.
+because
+because Operations: none. The object is immortal, so a retain or a release
+because reaching it would be a call that must do nothing -- `NTS_IMMORTAL` is
+because exactly the flag that stops one, and a count above zero here would
+because mean the flag is being read after the call rather than instead of it.
+because
+because What the case is for is the *implementation* rather than the cost. A
+because fresh object per mention breaks identity and would be caught by the
+because differential; a fresh object per mention that is then interned would
+because agree with node on every case and allocate seventeen times, and this
+because is the only thing that would say so.

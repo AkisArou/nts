@@ -1197,9 +1197,45 @@ pub fn generator_frame(index: usize) -> TypeId {
 ///
 /// The one question about a synthetic id that is asked outside the module that
 /// invented it, which is why the partition above exists.
+///
+/// A **constructor token** answers yes, and means to. `typeof TypeError` is
+/// `"function"` in JavaScript, and the tag a value carries is decided by this
+/// question -- so a class used as a value is a closure's class here for the
+/// same reason a named function used as a value is one.
 #[must_use]
 pub const fn is_closure_type(ty: TypeId) -> bool {
     ty.0 >= SYNTHETIC_CLOSURES
+}
+
+/// The band the constructor tokens live in.
+///
+/// A class used as a *value* -- `value === TypeError`, or a `constructor`
+/// getter returning one -- needs an identity: one immortal object per class,
+/// the same one everywhere the name is written, and `typeof` `"function"`.
+/// That is exactly what a named function used as a value already is, so it is
+/// the same machinery with a different source.
+///
+/// At the top of the id space rather than beside `SYNTHETIC_CLOSURES`, because
+/// closures are numbered upward from there by a counter this cannot see: a
+/// program with enough of them would reach any fixed offset. There are four
+/// provided error classes and the band holds sixteen.
+pub const CONSTRUCTOR_TOKENS: u32 = u32::MAX - 15;
+
+/// The token for the `n`th class this compiler provides.
+#[must_use]
+pub fn constructor_token(index: usize) -> TypeId {
+    let id = CONSTRUCTOR_TOKENS + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        u32::try_from(index).unwrap_or(u32::MAX) < 16,
+        "more provided classes than the token band holds"
+    );
+    TypeId(id)
+}
+
+/// Whether a type id names a constructor token rather than a closure.
+#[must_use]
+pub const fn is_constructor_token(ty: TypeId) -> bool {
+    ty.0 >= CONSTRUCTOR_TOKENS
 }
 
 /// A lowered program.

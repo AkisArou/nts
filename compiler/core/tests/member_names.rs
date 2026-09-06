@@ -178,3 +178,68 @@ fn a_private_name_does_not_swallow_the_members_after_it() {
         calls(after),
     );
 }
+
+/// An accessor something overrides is dispatched, and one nothing overrides is
+/// not.
+///
+/// `accessor_callee` returned a *name*, and both call sites wrapped it in
+/// `Callee::Direct`. So `b.plain` on a `Narrow` typed `Base` ran `Base`'s
+/// getter and answered 1 where node answers 2 — a silent wrong answer, on
+/// getters and setters alike and on both spellings of the member's name.
+///
+/// The hierarchy had the slot the whole time. `declared_methods` records an
+/// accessor under `get x` precisely so it can be overridden, and the slot was
+/// allocated and never read back, because nothing in the corpus overrode one.
+///
+/// Both halves. Dispatching *every* accessor satisfies the first assertion and
+/// costs an indirect call on every getter in every program, which is what the
+/// second one refuses.
+#[test]
+fn an_overridden_accessor_is_dispatched() {
+    let Some(lowered) = lower_at("../../examples/accessors") else {
+        return;
+    };
+    let virtuals: Vec<String> = lowered
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::Virtual { declared, .. },
+                ..
+            } => Some(declared.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        virtuals.iter().any(|name| name.contains("get plain")),
+        "`r.plain` where a subclass overrides it: {virtuals:?}",
+    );
+    assert!(
+        virtuals.iter().any(|name| name.contains("get computed")),
+        "and the bracketed spelling, which is what `runtime/node` writes: {virtuals:?}",
+    );
+    assert!(
+        virtuals.iter().any(|name| name.contains("set value")),
+        "and a setter, which goes through a different call site: {virtuals:?}",
+    );
+
+    let directs: Vec<String> = lowered
+        .program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| match &op.kind {
+            nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::Direct(name),
+                ..
+            } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        directs.iter().any(|name| name.contains("get only")),
+        "an accessor nobody overrides stays a static call: {directs:?}",
+    );
+}

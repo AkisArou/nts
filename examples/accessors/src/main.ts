@@ -87,3 +87,92 @@ class Counter {
     this.value += 1;
   }
 }
+
+// An accessor something **overrides**, which is a call decided by what the
+// receiver *is* rather than by what its type says — exactly as for a method,
+// and it was not.
+//
+// `accessor_callee` returned a name and both its call sites wrapped it in
+// `Callee::Direct`, so `b.plain` on a `Narrow` typed `Base` ran `Base`'s getter
+// and answered 1 where node answers 2. A silent wrong answer, on getters and
+// setters alike and on both spellings of the name. The hierarchy had the slot
+// the whole time: it records an accessor under `get x` precisely so it can be
+// overridden, and nothing ever read it back — because nothing in the corpus
+// overrode one.
+
+class Reading {
+  held = 1;
+  get plain(): number {
+    return 1;
+  }
+  // The symbol-ish spelling, which is what `runtime/node` writes as
+  // `override get ["constructor"]()`. Two spellings of one member, and a fix
+  // that reached only one of them would pass on the other.
+  get ["computed"](): number {
+    return 1;
+  }
+}
+
+class Overriding extends Reading {
+  override get plain(): number {
+    return 2;
+  }
+  override get ["computed"](): number {
+    return 2;
+  }
+}
+
+// Three deep, so the answer is not "whichever class was laid out last".
+class Middling extends Reading {
+  override get plain(): number {
+    return 3;
+  }
+}
+
+class Deepest extends Middling {}
+
+export function anOverriddenGetter(n: number): number {
+  const r: Reading = n > 0 ? new Overriding() : new Reading();
+  return r.plain * 10 + r.computed;
+}
+
+export function anOverrideTwoClassesUp(n: number): number {
+  const r: Reading = n > 0 ? new Deepest() : new Overriding();
+  return r.plain;
+}
+
+class Storing {
+  held = 0;
+  set value(v: number) {
+    this.held = v;
+  }
+}
+
+class Doubling extends Storing {
+  override set value(v: number) {
+    this.held = (v * 2) | 0;
+  }
+}
+
+export function anOverriddenSetter(n: number): number {
+  const s: Storing = n > 0 ? new Doubling() : new Storing();
+  s.value = n;
+  return s.held;
+}
+
+// And an accessor nothing overrides, which must stay a *static* call: the cost
+// of this fix is bounded to the members that need it, and an assertion about
+// the overridden ones alone would pass on a lowering that dispatched every
+// accessor in the program.
+class Alone {
+  held = 0;
+  get only(): number {
+    return this.held + 1;
+  }
+}
+
+export function anAccessorNobodyOverrides(n: number): number {
+  const a = new Alone();
+  a.held = n;
+  return a.only;
+}

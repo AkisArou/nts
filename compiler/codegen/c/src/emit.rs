@@ -817,8 +817,20 @@ fn erased_comparison(
         // against the absent reference was answered before this ran.
         _ => return None,
     };
+    // Through `const NtsHeader *`, which is what the reference helper takes.
+    // Every managed pointer is a header first -- that is what makes identity
+    // comparable at all -- but C does not know it, and an object whose layout
+    // is a *class* reaches here as `NtsObj_Point *`. It had never been an error
+    // because the only managed values compared this way were strings, arrays
+    // and maps, whose C types are the runtime's own; a class used as a value
+    // gave the first `NtsObj_*` and five `-Wincompatible-pointer-types`.
+    let cast = if helper == "nts_value_eq_reference" {
+        "(const NtsHeader *)"
+    } else {
+        ""
+    };
     Some(format!(
-        "{name} = {negate}{helper}({}, {});",
+        "{name} = {negate}{helper}({}, {cast}{});",
         value_name(value),
         value_name(against)
     ))

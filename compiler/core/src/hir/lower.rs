@@ -2375,9 +2375,22 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             let two_signatures = is_signature_name(&known.name)
                 && is_signature_name(&layout.name)
                 && known.name != layout.name;
+            // The third family, and the third for the same reason. A class used
+            // as a value is an object that exists to have an address: no
+            // fields, no methods, no base, so `same_shape` says every one of
+            // them is every other one -- and `err.constructor === TypeError`
+            // would then be true of a `RangeError`, which is the same wrong
+            // answer the error classes themselves gave before `two_errors`.
+            //
+            // Record 0096 said this shape would recur and why: shape cannot
+            // answer a nominal question about a shape with nothing in it.
+            let two_tokens = super::builtin::is_constructor_name(&known.name)
+                && super::builtin::is_constructor_name(&layout.name)
+                && known.name != layout.name;
             known.types.iter().any(|ty| layout.types.contains(ty))
                 || (!two_errors
                     && !two_signatures
+                    && !two_tokens
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {
@@ -3165,6 +3178,25 @@ fn provided_representation(
     // that reads nothing further.
     if named(snapshot, ty) == Some("Date") {
         return Some(HirType::Managed(ManagedType::Date));
+    }
+
+    // A provided error class used as a **value**. `lib.d.ts` declares
+    // `TypeError` as a variable of type `TypeErrorConstructor`, so this is the
+    // type a name's own mention has and the type a slot holding one is declared
+    // at -- and without it the *value* had the token type while every join,
+    // parameter and declaration around it asked the checker and got an object
+    // type with no layout. `NTS2006 an object type with no layout`, from a
+    // program in which nothing was refused.
+    //
+    // The class itself is not this: `Error` the instance type is laid out by
+    // `builtin::error_fields`, and only the constructor's is named this way.
+    if let Some(name) = named(snapshot, ty)
+        && let Some(class) = name.strip_suffix("Constructor")
+        && let Some(index) = super::builtin::error_index(class)
+    {
+        return Some(HirType::Managed(ManagedType::Object(super::constructor_token(
+            index,
+        ))));
     }
 
     // The payload comes from the checker's type arguments rather than from the
@@ -11789,7 +11821,7 @@ impl<'a> FuncBuilder<'a> {
             Place::Setter { object, ref callee } => {
                 self.push(
                     OpKind::Call {
-                        callee: Callee::Direct(callee.clone()),
+                        callee: callee.clone(),
                         args: vec![object, value],
                         frame: None,
                     },
@@ -12628,17 +12660,52 @@ impl<'a> FuncBuilder<'a> {
         Some(layout)
     }
 
-    /// The function an accessor of `member` on `ty` is emitted as.
+    /// The call an accessor of `member` on `ty` is emitted as.
     ///
     /// `Owner#get x`, where the owner is the class that *declares* it — which
     /// may be a base, exactly as for a method. `None` where the type has no
     /// such accessor, which is the ordinary case and means the caller should go
     /// on to say the property does not exist.
-    fn accessor_callee(&self, ty: TypeId, member: &str, kind: &str) -> Option<String> {
+    ///
+    /// # Dispatched, by the same rule a method is
+    ///
+    /// This returned a name, and the two call sites wrapped it in
+    /// `Callee::Direct`. So an **overridden** accessor was not dispatched:
+    ///
+    /// ```ts
+    /// class Base   { get plain(): number { return 1; } }
+    /// class Narrow extends Base { override get plain(): number { return 2; } }
+    /// const b: Base = new Narrow();
+    /// b.plain      // nts: 1     node: 2
+    /// ```
+    ///
+    /// A silent wrong answer, on both spellings — `get plain` and
+    /// `get ["plain"]` — and on setters the same way. The hierarchy had the
+    /// slot all along: `declared_methods` records an accessor under `get x`
+    /// exactly so that it can be overridden, and the slot was allocated and
+    /// never read. Nothing in the corpus overrode one, so nothing said so.
+    ///
+    /// The decision is `resolve_method`'s, letter for letter, and it is written
+    /// once here rather than at each of the two sites for the reason the
+    /// hierarchy's own comment gives about the base: two places that must agree
+    /// is how this goes wrong.
+    fn accessor_callee(&self, ty: TypeId, member: &str, kind: &str) -> Option<Callee> {
         let key = format!("{kind}{member}");
         let declaring = self.hierarchy.declaring(ty, &key)?;
         let owner = self.hierarchy.name.get(&declaring)?;
-        Some(format!("{owner}#{key}"))
+        let name = format!("{owner}#{key}");
+        Some(
+            if self.hierarchy.overridden(ty, &key)
+                && let Some(slot) = self.hierarchy.slot_for(ty, &key)
+            {
+                Callee::Virtual {
+                    slot,
+                    declared: name,
+                }
+            } else {
+                Callee::Direct(name)
+            },
+        )
     }
 
     /// Why a property is not on a layout.
@@ -14372,7 +14439,7 @@ impl<'a> FuncBuilder<'a> {
                     let origin = self.origin(id);
                     return Ok(self.push(
                         OpKind::Call {
-                            callee: Callee::Direct(callee),
+                            callee,
                             args: vec![value],
                             frame: None,
                         },
@@ -18116,6 +18183,41 @@ impl<'a> FuncBuilder<'a> {
             let ty = HirType::Managed(ManagedType::Object(closure_type(index)));
             return Ok(self.push(OpKind::ClosureStatic, ty, origin));
         }
+        // A class this compiler provides, used as a **value**.
+        //
+        // `err.constructor === TypeError` is how a program asks which error it
+        // caught, and `runtime/node` writes it 88 times -- 64 of them as
+        // `override get ["constructor"](): unknown { return TypeError; }`, so
+        // that code checking the built-in agrees about a subclass. Every one of
+        // those 88 was refused with "`TypeError` used as a value rather than as
+        // a type", which was true and was not a capability question.
+        //
+        // What a value of it has to be: one object per class, the same one
+        // wherever the name is written, `typeof` `"function"`, and comparable.
+        // That is a named function used as a value with a different source, so
+        // it is the same operation -- `ClosureStatic` at a type in the token
+        // band, which `is_closure_type` answers yes to and which is therefore
+        // tagged `FUNCTION` without a special case anywhere.
+        //
+        // Empty, because nothing reads a field of it. **Calling** it is a
+        // different feature and is refused by name: `TypeError(m)` is
+        // `new TypeError(m)` in JavaScript and would need the token to carry a
+        // `call` that constructs, which nothing in the profile asks for.
+        if let Some(record) = self.snapshot.symbols.get(symbol.0 as usize)
+            && self.member_read_from(id).is_none()
+            && let Some(index) = super::builtin::error_index(&record.name)
+        {
+            let ty = super::constructor_token(index);
+            self.layouts.push(Layout {
+                types: vec![ty],
+                name: super::builtin::constructor_name(&record.name),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                base: None,
+            });
+            let ty = HirType::Managed(ManagedType::Object(ty));
+            return Ok(self.push(OpKind::ClosureStatic, ty, origin));
+        }
         Err(self.unsupported(id, &self.describe_name(id, symbol)))
     }
 
@@ -19214,7 +19316,7 @@ enum Place {
     /// the receiver and the value as its two arguments.
     Setter {
         object: ValueId,
-        callee: String,
+        callee: Callee,
     },
     Element {
         array: ValueId,

@@ -54,6 +54,36 @@ pub(super) fn is_error(name: &str) -> bool {
     ERRORS.contains(&name)
 }
 
+/// Which provided error class a name is, by position in [`ERRORS`].
+///
+/// The position is the class's identity as a *value*: it picks the token type
+/// in [`super::constructor_token`], so two mentions of `TypeError` anywhere in
+/// a program name one object. A list rather than a map because there are four
+/// of them and the order is the identity.
+pub(super) fn error_index(name: &str) -> Option<usize> {
+    ERRORS.iter().position(|error| *error == name)
+}
+
+/// The layout of a class used as a *value*.
+///
+/// Empty, and that is the whole of it: the object exists to have an address.
+/// Nothing reads a field of `TypeError`-the-value, because the only things a
+/// program does with it are compare it, ask its `typeof`, and pass it along.
+///
+/// Named, because an empty shape is a shape `Layout::same_shape` cannot tell
+/// from another empty one -- the third family with that problem, after the
+/// error classes themselves and the function types of record 0096, and the
+/// third for the same reason. `collect_layouts` refuses to merge two of these
+/// with different names.
+pub(super) fn constructor_name(name: &str) -> String {
+    format!("Ctor_{name}")
+}
+
+/// Whether a layout name is a constructor token's.
+pub(super) fn is_constructor_name(name: &str) -> bool {
+    name.strip_prefix("Ctor_").is_some_and(is_error)
+}
+
 /// Why a member of the declared `Error` is absent here, if it is one.
 pub(super) fn omitted(name: &str) -> Option<&'static str> {
     OMITTED
