@@ -34,6 +34,7 @@ if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
 const {
   AbortController,
   Blob,
+  CustomEvent,
   Event,
   EventTarget,
   File,
@@ -71,6 +72,7 @@ function createWptContext(path, pending) {
     AbortController,
     ArrayBuffer,
     Blob,
+    CustomEvent,
     DataView,
     Event,
     EventTarget,

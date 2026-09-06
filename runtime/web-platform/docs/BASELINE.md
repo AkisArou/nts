@@ -281,3 +281,15 @@ check reports 209 primary refusals, 40 cascades, zero JVM-backend refusals, and 
 invalid HIR. The additional primary says `subscribe` is absent from
 `EventListenerSignal` even though that interface declares it; it is recorded as a
 frontend dependency rather than hidden by weakening the typed signal contract.
+
+The canonical event family now includes typed `CustomEvent<T>` construction,
+identity-preserving `detail`, and `initCustomEvent()`. The legacy initializer shares
+`Event`'s initialization state transition, so it cannot change either base event
+state or detail during dispatch. Constructor and detail behavior are differential
+against Node 24; initializer behavior follows the DOM standard because Node 24 does
+not expose that legacy member. The complete unchanged EventTarget constructibility
+fixture now runs as delivered, including subclassing, taking the pinned WPT slice to
+77/77. The Node-host suite passes 106/106. The live NTS check reports 212 primary
+refusals, 40 cascades, zero JVM-backend refusals, and no invalid HIR. The three new
+primaries are members of generic `CustomEvent<T>`, whose class representation is an
+already-planned compiler prerequisite; the class is not made untyped to hide them.

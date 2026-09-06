@@ -2,9 +2,17 @@ export { DOMException } from "./core/errors.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
 
-export { CloseEvent, ErrorEvent, Event, EventTarget, MessageEvent } from "./core/events.ts";
+export {
+  CloseEvent,
+  CustomEvent,
+  ErrorEvent,
+  Event,
+  EventTarget,
+  MessageEvent,
+} from "./core/events.ts";
 export type {
   CloseEventInit,
+  CustomEventInit,
   ErrorEventInit,
   EventInit,
   EventListener,

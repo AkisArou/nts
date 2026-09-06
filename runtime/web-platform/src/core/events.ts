@@ -123,7 +123,11 @@ export class Event {
   }
 
   initEvent(type: string, bubbles = false, cancelable = false): void {
-    if (this.dispatching) return;
+    this.initialize(type, bubbles, cancelable);
+  }
+
+  protected initialize(type: string, bubbles: boolean, cancelable: boolean): boolean {
+    if (this.dispatching) return false;
     this.propagationStopped = false;
     this.immediateStopped = false;
     this.canceled = false;
@@ -131,6 +135,7 @@ export class Event {
     this.eventType = type;
     this.eventBubbles = bubbles;
     this.eventCancelable = cancelable;
+    return true;
   }
 
   /** @internal */ begin(target: EventTarget): void {
@@ -162,6 +167,32 @@ export class Event {
 
   /** @internal */ get stoppedBeforeTarget(): boolean {
     return this.propagationStopped;
+  }
+}
+
+export interface CustomEventInit<T> extends EventInit {
+  detail?: T | null;
+}
+
+export class CustomEvent<T = unknown> extends Event {
+  private customDetail: T | null;
+
+  constructor(type: string, init: CustomEventInit<T> = {}) {
+    super(type, init);
+    this.customDetail = init.detail === undefined ? null : init.detail;
+  }
+
+  get detail(): T | null {
+    return this.customDetail;
+  }
+
+  initCustomEvent(
+    type: string,
+    bubbles = false,
+    cancelable = false,
+    detail: T | null = null,
+  ): void {
+    if (this.initialize(type, bubbles, cancelable)) this.customDetail = detail;
   }
 }
 

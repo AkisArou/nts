@@ -10,6 +10,7 @@ import {
   AbortController,
   AbortSignal,
   CloseEvent,
+  CustomEvent,
   DOMException,
   Event,
   EventTarget,
@@ -57,6 +58,7 @@ const NativeURLSearchParams = globalThis.URLSearchParams;
 const NativeBlob = globalThis.Blob;
 const NativeFile = globalThis.File;
 const NativeDOMException = globalThis.DOMException;
+const NativeCustomEvent = globalThis.CustomEvent;
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
@@ -638,6 +640,36 @@ test("Event exposes the DOM non-tree dispatch state machine", () => {
     assert.equal(current.cancelable, true);
   });
   target.dispatchEvent(inFlight);
+});
+test("CustomEvent preserves detail and ignores legacy initialization during dispatch", () => {
+  for (const CustomEventClass of [CustomEvent, NativeCustomEvent]) {
+    const marker = { marker: true };
+    const event = new CustomEventClass("before", {
+      bubbles: true,
+      cancelable: false,
+      detail: marker,
+    });
+    assert.equal(event.detail, marker);
+    assert.equal(new CustomEventClass("empty").detail, null);
+  }
+
+  const marker = { marker: true };
+  const event = new CustomEvent("before", { bubbles: true, detail: marker });
+  const target = new EventTarget();
+  target.addEventListener("before", () => {
+    event.initCustomEvent("ignored", false, true, "ignored");
+  });
+  target.dispatchEvent(event);
+  assert.deepEqual(
+    [event.type, event.bubbles, event.cancelable, event.detail],
+    ["before", true, false, marker],
+  );
+
+  event.initCustomEvent("after", false, true, "changed");
+  assert.deepEqual(
+    [event.type, event.bubbles, event.cancelable, event.detail],
+    ["after", false, true, "changed"],
+  );
 });
 test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   let pulls = 0;

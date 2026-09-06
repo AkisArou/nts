@@ -25,6 +25,7 @@
       "dom/events/AddEventListenerOptions-signal.any.js": "e6a34261594bcaf43057fc46ed734bcf105d68ee",
       "dom/events/EventTarget-add-remove-listener.any.js": "b1d7ffb3e07fbe2038f0e33a8e63173edf12234c",
       "dom/events/EventTarget-addEventListener.any.js": "e22da4aff850a2f0042c5ecda4c844cc1852f2ec",
+      "dom/events/EventTarget-constructible.any.js": "4125d23f0c965066c91d95c9ba83ac711fdabbc3",
       "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",
       "encoding/textencoder-utf16-surrogates.any.js": "31657516455bd60b803600db9f36f641504d1c15",
       "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
