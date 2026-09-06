@@ -275,6 +275,62 @@ public final class NtsSocket {
         if (c != null) { closeQuietly(c); }
     }
 
+    /**
+     * `CONNECT host:port` and the response, on an already-open socket.
+     *
+     * <p>Reads a byte at a time to the blank line. That is not slow enough to
+     * matter -- a response header is a few hundred bytes, once per connection
+     * -- and it is the only way to stop **exactly** at the end of the headers:
+     * a buffered read would consume the first bytes of the tunnelled stream
+     * into a buffer the `SSLSocket` wrapping this socket will never look in,
+     * and the handshake would then fail on a truncated ServerHello with no
+     * indication of where the bytes went.
+     *
+     * <p>Anything but a 2xx is a failure carrying the proxy's own status line,
+     * because `407 Proxy Authentication Required` and `502 Bad Gateway` are
+     * different problems for whoever has to fix them.
+     */
+    private static void establish(Socket carrier, String host, int port) throws IOException {
+        String authority = host + ":" + port;
+        StringBuilder request = new StringBuilder();
+        request.append("CONNECT ").append(authority).append(" HTTP/1.1\r\n");
+        request.append("Host: ").append(authority).append("\r\n");
+        request.append("Proxy-Connection: keep-alive\r\n\r\n");
+        OutputStream out = carrier.getOutputStream();
+        out.write(request.toString().getBytes("ISO-8859-1"));
+        out.flush();
+
+        InputStream in = carrier.getInputStream();
+        StringBuilder head = new StringBuilder();
+        int consecutive = 0;
+        while (consecutive < 2) {
+            int b = in.read();
+            if (b < 0) {
+                throw new IOException("the proxy closed the connection before answering CONNECT");
+            }
+            if (b == '\n') {
+                consecutive++;
+            } else if (b != '\r') {
+                consecutive = 0;
+            }
+            head.append((char) b);
+            if (head.length() > 16384) {
+                throw new IOException("the proxy sent more than 16 KiB of CONNECT response headers");
+            }
+        }
+        int firstLine = head.indexOf("\r\n");
+        String status = head.substring(0, firstLine < 0 ? head.length() : firstLine);
+        int space = status.indexOf(' ');
+        int code = -1;
+        if (space > 0 && status.length() >= space + 4) {
+            try { code = Integer.parseInt(status.substring(space + 1, space + 4)); }
+            catch (NumberFormatException malformed) { code = -1; }
+        }
+        if (code < 200 || code > 299) {
+            throw new IOException("the proxy refused CONNECT: " + status);
+        }
+    }
+
     private static void submit(NtsEnv env, NtsInbox.Slot slot, Runnable body,
                                NtsTextPairCallback failed) {
         try {
@@ -305,9 +361,51 @@ public final class NtsSocket {
      * slot means the environment refused the launch and no socket is created.
      */
     public static double connect(
+        NtsEnv env, NtsInbox.Slot slot,
+        String host, double port, boolean secure,
+        double timeoutMs, NtsNumberCallback ok, NtsTextPairCallback failed
+    ) {
+        return connectVia(env, slot, host, port, secure, timeoutMs, null, 0, DIRECT, ok, failed);
+    }
+
+    /** No proxy; the ordinary path. */
+    public static final double DIRECT = 0;
+    /** An HTTP proxy, reached with `CONNECT` and then tunnelled through. */
+    public static final double HTTP_PROXY = 1;
+    /** A SOCKS proxy, which the platform's `Socket` speaks natively. */
+    public static final double SOCKS_PROXY = 2;
+
+    /**
+     * Connect, optionally through a proxy, and report the handle to the owner
+     * lane.
+     *
+     * <h2>The security property, which is the whole reason this is not three
+     * lines</h2>
+     *
+     * A TLS connection through an HTTP proxy is a `CONNECT` tunnel with a
+     * handshake inside it, and **the certificate must name the target, not the
+     * proxy**. The natural implementation gets this wrong in a way that works:
+     * open a socket to the proxy, tunnel, wrap it in TLS, and the wrapping
+     * carries whatever host the wrapping was told. Told the proxy's name -- and
+     * the proxy's name is what the socket connected to -- every certificate the
+     * proxy can present is accepted for every site, which is a proxy that can
+     * read traffic it is only supposed to forward.
+     *
+     * <p>So the target's name is threaded through the tunnel to
+     * `createSocket(socket, host, port, autoClose)` and to `setServerNames`,
+     * and `TlsTest` proves it by presenting a certificate for the *proxy* on a
+     * tunnel to another name and requiring the connection to fail.
+     *
+     * <p>SOCKS needs none of this: the platform's `Socket` speaks it below the
+     * TLS layer, so the `SSLSocket` connects to the target's address and
+     * verifies it the way an unproxied one does.
+     */
+    public static double connectVia(
         final NtsEnv env, final NtsInbox.Slot slot,
         final String host, final double port, final boolean secure,
-        final double timeoutMs, final NtsNumberCallback ok, final NtsTextPairCallback failed
+        final double timeoutMs,
+        final String proxyHost, final double proxyPort, final double proxyKind,
+        final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
         if (slot == null) {
             later(env, failed, "Backpressure", "no completion credit was available");
@@ -320,37 +418,71 @@ public final class NtsSocket {
                 Socket socket = null;
                 try {
                     int millis = (int) Math.max(0.0, Math.min(timeoutMs, Integer.MAX_VALUE));
+                    boolean tunnel = proxyKind == HTTP_PROXY && proxyHost != null;
+                    // The plain socket first, whatever it connects to. A TLS
+                    // connection through a tunnel has to have its carrier
+                    // already open before the handshake can start, and doing it
+                    // this way means the tunnel and the direct path share every
+                    // line after the connect rather than being two functions
+                    // that drift.
+                    Socket carrier;
+                    if (proxyKind == SOCKS_PROXY && proxyHost != null) {
+                        // The platform speaks SOCKS below TLS, so the address
+                        // the `SSLSocket` sees is the target's and verification
+                        // is the unproxied one.
+                        carrier = new Socket(new java.net.Proxy(
+                            java.net.Proxy.Type.SOCKS,
+                            new InetSocketAddress(proxyHost, (int) proxyPort)));
+                    } else {
+                        carrier = new Socket();
+                    }
+                    socket = carrier;
+                    if (!publish(request, carrier)) {
+                        retire(id);
+                        finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
+                        return;
+                    }
+                    carrier.connect(tunnel
+                        ? new InetSocketAddress(proxyHost, (int) proxyPort)
+                        : new InetSocketAddress(host, (int) port), millis);
+                    if (tunnel) {
+                        establish(carrier, host, (int) port);
+                    }
                     if (secure) {
-                        SSLSocket ssl = (SSLSocket) SSLSocketFactory.getDefault().createSocket();
+                        // The layering overload is `SSLSocketFactory`'s and
+                        // not `SocketFactory`'s, so the cast is on the factory
+                        // rather than on the socket.
+                        SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                        SSLSocket ssl = (SSLSocket) factory.createSocket(carrier, host, (int) port, true);
                         SSLParameters params = ssl.getSSLParameters();
                         // Without this the chain is validated and the *name* is
                         // not. See the class note; this is the whole reason the
                         // TLS sabotage test exists.
+                        //
+                        // Through a tunnel it is `host` and not the proxy's
+                        // name, and `createSocket` above was given `host` for
+                        // the same reason: the far end of a tunnel is the site,
+                        // and a proxy that could satisfy the check with its own
+                        // certificate is a proxy that can read what it forwards.
                         params.setEndpointIdentificationAlgorithm("HTTPS");
                         List<SNIServerName> names =
                             Collections.<SNIServerName>singletonList(new SNIHostName(host));
                         params.setServerNames(names);
                         ssl.setSSLParameters(params);
                         socket = ssl;
+                        // Published again: the TLS socket is now the one that
+                        // closing has to reach, and the carrier it wraps is
+                        // closed with it because `autoClose` is true.
                         if (!publish(request, ssl)) {
                             retire(id);
                             finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
                             return;
                         }
-                        ssl.connect(new InetSocketAddress(host, (int) port), millis);
                         // The handshake is deferred until the first I/O, so a
                         // name mismatch would surface inside a later read
                         // rather than here. Forcing it now puts the failure
                         // where the caller asked for a connection.
                         ssl.startHandshake();
-                    } else {
-                        socket = new Socket();
-                        if (!publish(request, socket)) {
-                            retire(id);
-                            finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
-                            return;
-                        }
-                        socket.connect(new InetSocketAddress(host, (int) port), millis);
                     }
                     socket.setTcpNoDelay(true);
                     // A cancel that arrived while the handshake was running has

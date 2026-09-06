@@ -116,23 +116,23 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-#[test]
-fn tls_refuses_a_certificate_that_names_another_host() {
-    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
-    else {
-        return;
-    };
-    let jar = jar();
-    let dir = std::env::temp_dir().join(format!("nts-tls-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+/// A self-signed certificate naming `localhost`, and a trust store holding it.
+///
+/// Generated per run rather than checked in: a certificate in a repository is a
+/// secret that is not one, and a two-day validity that expired would be a
+/// failure nobody could attribute.
+///
+/// `localhost` and not `127.0.0.1` is the whole design. Both tests that use
+/// this connect to `127.0.0.1` and ask for one name or the other, so the
+/// certificate discriminates between two connections that are otherwise
+/// identical -- and through a proxy it also discriminates between verifying
+/// the target and verifying the proxy, which is the same distinction one hop
+/// further out.
+fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
     let server = dir.join("server.p12");
     let cert = dir.join("nts.cer");
     let trust = dir.join("trust.p12");
-
-    // Generated per run rather than checked in: a certificate in a repository
-    // is a secret that is not one, and a two-day validity that expired would be
-    // a failure nobody could attribute.
-    let made = Command::new(&keytool)
+    let made = Command::new(keytool)
         .args(["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048"])
         .args(["-validity", "1", "-dname", "CN=nts-test", "-ext", "SAN=dns:localhost"])
         .arg("-keystore")
@@ -141,7 +141,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         .output()
         .unwrap();
     assert!(made.status.success(), "keytool: {}", String::from_utf8_lossy(&made.stderr));
-    let exported = Command::new(&keytool)
+    let exported = Command::new(keytool)
         .args(["-exportcert", "-alias", "nts", "-storetype", "PKCS12", "-storepass", "changeit"])
         .arg("-keystore")
         .arg(&server)
@@ -150,7 +150,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         .output()
         .unwrap();
     assert!(exported.status.success(), "keytool: {}", String::from_utf8_lossy(&exported.stderr));
-    let imported = Command::new(&keytool)
+    let imported = Command::new(keytool)
         .args(["-importcert", "-noprompt", "-alias", "nts", "-storetype", "PKCS12"])
         .args(["-storepass", "changeit"])
         .arg("-file")
@@ -160,6 +160,63 @@ fn tls_refuses_a_certificate_that_names_another_host() {
         .output()
         .unwrap();
     assert!(imported.status.success(), "keytool: {}", String::from_utf8_lossy(&imported.stderr));
+    (server, trust)
+}
+
+/// An HTTP `CONNECT` tunnel, a SOCKS5 hop, and the certificate check a tunnel
+/// is most likely to lose.
+///
+/// The proxy is on `127.0.0.1` and the certificate names `localhost`, so a
+/// tunnel to `localhost` must succeed and one to `127.0.0.1` must fail. An
+/// implementation that verified against the *proxy* inverts the first of those
+/// -- the sabotage reports `No subject alternative names matching IP address
+/// 127.0.0.1`, which is the proxy's address arriving where the target's name
+/// should be.
+#[test]
+fn a_tunnel_carries_bytes_and_keeps_the_targets_name() {
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let jar = jar();
+    let dir = std::env::temp_dir().join(format!("nts-proxy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (server, trust) = keystores(&keytool, &dir);
+    compile(&javac, &jar, &dir, "ProxyTest");
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
+        .arg("-Djavax.net.ssl.keyStorePassword=changeit")
+        .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
+        .arg(format!("-Djavax.net.ssl.trustStore={}", trust.display()))
+        .arg("-Djavax.net.ssl.trustStorePassword=changeit")
+        .arg("-Djavax.net.ssl.trustStoreType=PKCS12")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("ProxyTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(said.ends_with("0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn tls_refuses_a_certificate_that_names_another_host() {
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let jar = jar();
+    let dir = std::env::temp_dir().join(format!("nts-tls-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (server, trust) = keystores(&keytool, &dir);
+
 
     compile(&javac, &jar, &dir, "TlsTest");
     let ran = Command::new(&java)
