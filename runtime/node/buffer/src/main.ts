@@ -34,8 +34,6 @@ import { emitWarning } from "../../internal/process-warning.ts";
 
 export { Blob, File, resolveObjectURL } from "./blob.ts";
 
-export { isEncodingName as isEncoding };
-
 /** Node's cap on a single buffer, and what `alloc` compares against. */
 /**
  * The largest a `Buffer` may be.
@@ -538,6 +536,7 @@ export class Buffer extends Uint8Array {
   }
 
   /** Whether `toString` and `write` would accept this name. */
+  static isEncoding(encoding: string): encoding is Encoding;
   static isEncoding(encoding: unknown): boolean {
     return isEncodingName(encoding);
   }

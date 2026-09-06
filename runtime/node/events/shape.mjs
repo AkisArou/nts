@@ -20,5 +20,23 @@ export function shape(exports) {
   ]) {
     if (exports[name]) EventEmitter[name] = exports[name];
   }
+  // Class methods and accessors are non-enumerable by default. Node's module
+  // is the same constructor populated through ordinary CommonJS assignments,
+  // so these implemented members are enumerable on the public namespace.
+  for (const [name, configurable] of [
+    ["captureRejections", false],
+    ["EventEmitterAsyncResource", true],
+    ["defaultMaxListeners", false],
+    ["setMaxListeners", true],
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(EventEmitter, name);
+    if (descriptor !== undefined) {
+      Object.defineProperty(EventEmitter, name, {
+        ...descriptor,
+        enumerable: true,
+        configurable,
+      });
+    }
+  }
   return EventEmitter;
 }

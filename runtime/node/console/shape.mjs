@@ -5,7 +5,28 @@
 // and `require('console') === globalThis.console` is asserted by node's own
 // test-console-instance.js.
 export function shape(exports) {
-  return exports.globalConsole ?? exports.default;
+  const underTest = exports.globalConsole ?? exports.default;
+
+  // TypeScript fields are enumerable data properties. Node keeps these
+  // Console implementation details off the enumerable module namespace.
+  for (const name of [
+    "_stdout",
+    "_stderr",
+    "_ignoreErrors",
+    "_stdoutErrorHandler",
+    "_stderrErrorHandler",
+    "_times",
+  ]) {
+    const descriptor = Object.getOwnPropertyDescriptor(underTest, name);
+    if (descriptor !== undefined) {
+      Object.defineProperty(underTest, name, {
+        ...descriptor,
+        enumerable: false,
+      });
+    }
+  }
+
+  return underTest;
 }
 
 /**

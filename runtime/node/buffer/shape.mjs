@@ -7,7 +7,25 @@ export function shape(exports) {
   const mod = { ...exports };
   delete mod.default;
   delete mod._createBlobFromExternalSource;
+
+  // Class syntax makes methods non-enumerable. Node installs Buffer's public
+  // operations with ordinary assignments, so its static and prototype
+  // operations are enumerable. Keep that host-object representation here;
+  // the typed implementation does not depend on descriptors.
+  makePropertiesEnumerable(mod.Buffer, ["length", "name", "prototype"]);
+  makePropertiesEnumerable(mod.Buffer.prototype, ["constructor"]);
+
   return mod;
+}
+
+function makePropertiesEnumerable(target, excluded) {
+  for (const name of Object.getOwnPropertyNames(target)) {
+    if (excluded.includes(name)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(target, name);
+    if (descriptor !== undefined && !descriptor.enumerable) {
+      Object.defineProperty(target, name, { ...descriptor, enumerable: true });
+    }
+  }
 }
 
 // `Buffer` is installed as a global, and the pass count argues against it while
