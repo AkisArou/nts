@@ -74,10 +74,6 @@ export function debuglog(
   return log;
 }
 
-export function debuglogEnabled(section: string): boolean {
-  return enabledSections.includes(section.toUpperCase());
-}
-
 /** Legacy name; Node exposes the same function value, not a wrapper. */
 export const debug = debuglog;
 
@@ -310,7 +306,6 @@ export default {
   deprecate,
   debug,
   debuglog,
-  debuglogEnabled,
   convertProcessSignalToExitCode,
   diff,
   parseArgs,
