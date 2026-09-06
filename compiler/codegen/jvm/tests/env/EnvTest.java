@@ -1,3 +1,4 @@
+import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -147,10 +148,27 @@ public final class EnvTest {
      * and every callback in them for the life of the thread.
      */
     static void closedEnvironmentLetsGo() {
-        WeakReference<?>[] refs = buildCloseAndDrop();
-        check(cleared(refs[0]), "a closed environment still retains its callbacks");
-        check(cleared(refs[1]), "the thread still retains the closed environment itself");
+        // Held for the whole check. A `WeakReference` that is itself collected
+        // is never enqueued, and the queue then stays empty for a reason that
+        // has nothing to do with the referents -- which reads exactly like a
+        // leak.
+        held = buildCloseAndDrop();
+        String missing = notEnqueued(2);
+        check(missing == null, "after close, the runtime still retains " + missing);
     }
+
+    static Named[] held;
+
+    /** A weak reference that says what it was pointing at. */
+    static final class Named extends WeakReference<Object> {
+        final String what;
+        Named(Object referent, String what) {
+            super(referent, QUEUE);
+            this.what = what;
+        }
+    }
+
+    static final ReferenceQueue<Object> QUEUE = new ReferenceQueue<Object>();
 
     /**
      * A separate method, and that is not style.
@@ -162,28 +180,63 @@ public final class EnvTest {
      * the worst kind of false negative: it accuses the code under test.
      * Returning only the weak references pops the frame that held them.
      */
-    static WeakReference<?>[] buildCloseAndDrop() {
+    static Named[] buildCloseAndDrop() {
         NtsEnv env = NtsEnv.create(NtsEnv.VIRTUAL);
         NtsEnv previous = NtsEnv.enterEnv(env);
         Object token = new Object();
-        final Object[] held = { token };
-        NtsEnv.postDelayed(env, new NtsCallback() { public void call() { held[0].hashCode(); } }, 1000, true);
-        NtsEnv.microtask(env, new NtsResumable() { public void resume() { held[0].hashCode(); } });
-        WeakReference<Object> callbackRef = new WeakReference<Object>(token);
-        WeakReference<NtsEnv> envRef = new WeakReference<NtsEnv>(env);
+        final Object[] captured = { token };
+        NtsEnv.postDelayed(env, new NtsCallback() { public void call() { captured[0].hashCode(); } }, 1000, true);
+        NtsEnv.microtask(env, new NtsResumable() { public void resume() { captured[0].hashCode(); } });
+        Named callbackRef = new Named(token, "its callbacks");
+        Named envRef = new Named(env, "the closed environment itself");
         NtsEnv.close(env);
         NtsEnv.leaveEnv(env, previous);
-        return new WeakReference<?>[] { callbackRef, envRef };
+        return new Named[] { callbackRef, envRef };
     }
 
-    /** Bounded rather than open-ended: a collection that never comes is a hang. */
-    static boolean cleared(WeakReference<?> ref) {
-        for (int attempt = 0; attempt < 40; attempt++) {
-            if (ref.get() == null) { return true; }
+    /**
+     * Waits for `want` references to be enqueued, and names one that never is.
+     *
+     * <h2>The queue, and never `get()`</h2>
+     *
+     * This used to poll `ref.get() == null`, which works on HotSpot and **can
+     * never succeed on ART**. ART's collector is concurrent copying with read
+     * barriers, and a read barrier on a weak reference *re-marks the referent*
+     * -- so asking whether the object is gone is what stops it going. The loop
+     * ran forty times, kept the object alive forty times, and reported a leak
+     * in a runtime that was releasing correctly.
+     *
+     * <p>It was found by running this suite on a device, and it is the third
+     * time this one test has accused correct code: first a local kept the
+     * subject reachable from the frame, then it needed its own method so the
+     * frame would pop, and now the poll itself was the retention. A reachability
+     * test is unusually good at passing for the wrong reason and unusually bad
+     * at failing for the right one.
+     *
+     * <p>A `ReferenceQueue` observes the clearing without touching the referent,
+     * which is the technique that works on both. Bounded rather than
+     * open-ended: a collection that never comes is a hang.
+     */
+    static String notEnqueued(int want) {
+        List<Named> seen = new ArrayList<Named>();
+        for (int attempt = 0; attempt < 60 && seen.size() < want; attempt++) {
             System.gc();
+            // Allocation as well as a request. `System.gc()` is a hint on ART,
+            // and a hint is not a guarantee that reference processing ran.
+            for (int i = 0; i < 200; i++) {
+                byte[] waste = new byte[8192];
+                waste[0] = 1;
+            }
             try { Thread.sleep(25); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            for (Object polled = QUEUE.poll(); polled != null; polled = QUEUE.poll()) {
+                seen.add((Named) polled);
+            }
         }
-        return ref.get() == null;
+        if (seen.size() >= want) { return null; }
+        for (Named ref : held) {
+            if (!seen.contains(ref)) { return ref.what; }
+        }
+        return "something it did not name";
     }
 
     public static void main(String[] args) throws Exception {
