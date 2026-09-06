@@ -43,6 +43,18 @@ export type {
   QueuingStrategyInit,
   QueuingStrategySize,
 } from "./streams/queuing-strategy.ts";
+export {
+  WritableStream,
+  WritableStreamDefaultController,
+  WritableStreamDefaultWriter,
+} from "./streams/writable.ts";
+export type {
+  UnderlyingSink,
+  UnderlyingSinkAbortCallback,
+  UnderlyingSinkCloseCallback,
+  UnderlyingSinkStartCallback,
+  UnderlyingSinkWriteCallback,
+} from "./streams/writable.ts";
 
 export { Headers } from "./fetch/headers.ts";
 export type { HeaderSequenceEntry, HeadersInit } from "./fetch/headers.ts";

@@ -27,8 +27,11 @@
       "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
     },
     "support": {
+      "common/gc.js": "ac43a4cfaf7735a08dfd1be177918167f815e800",
       "common/sab.js": "a3ea610e165d0d56ef1faab2ed49186d4e03c392",
-      "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
+      "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9",
+      "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
+      "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
     },
     "tests": {
       "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
@@ -55,7 +58,22 @@
       "streams/queuing-strategies.any.js": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
       "streams/readable-streams/bad-strategies.any.js": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
       "streams/readable-streams/constructor.any.js": "0b995f0cb16bde21df887a717690eaa853a988b9",
-      "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66"
+      "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66",
+      "streams/writable-streams/aborting.any.js": "9d8e80b1de63c5ae6d8377b3d56183d6ea3fb264",
+      "streams/writable-streams/bad-strategies.any.js": "a1ef0791168f99186925acbe869ac8449e0f4e79",
+      "streams/writable-streams/bad-underlying-sinks.any.js": "3c434ffe60ccb98f6c8eb96a06d0c61af46b283d",
+      "streams/writable-streams/byte-length-queuing-strategy.any.js": "eed86ee7004ea15e288def1f3d511ba6fe39d820",
+      "streams/writable-streams/close.any.js": "3b2c07cc3bfea1bf09a4c170f08e10c5be495848",
+      "streams/writable-streams/constructor.any.js": "bb382a33b8e0c42ed313b53a71c569cb693e1ebc",
+      "streams/writable-streams/count-queuing-strategy.any.js": "8211757530d3233e4bfeacd4d431861e6c7c7481",
+      "streams/writable-streams/error.any.js": "d08c8a54863bb9693e76116946bd118592d6928c",
+      "streams/writable-streams/floating-point-total-queue-size.any.js": "20a14fc19a51e004d16667fd78643ff48792d89c",
+      "streams/writable-streams/garbage-collection.any.js": "5e39e7c60d2c3355fafee4dc947112be7970a138",
+      "streams/writable-streams/general.any.js": "48f8eeb89e41eec32225b44be7c2e80132b970d4",
+      "streams/writable-streams/properties.any.js": "ae0549f0871b4866877dffbccf8803eeaa897d06",
+      "streams/writable-streams/reentrant-strategy.any.js": "18ce9e84759a11bed4f4b31f5e82cf6948a2b739",
+      "streams/writable-streams/start.any.js": "17972b568ceb24fee7a758a9d7a1147b26a030d6",
+      "streams/writable-streams/write.any.js": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c"
     }
   }
 }

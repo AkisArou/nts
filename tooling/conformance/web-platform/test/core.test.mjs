@@ -24,6 +24,9 @@ import {
   File,
   FormData,
   URLSearchParams,
+  WritableStream,
+  WritableStreamDefaultController,
+  WritableStreamDefaultWriter,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { encodeMultipart } from "../node_modules/.tsbuild/host/runtime/web-platform/src/forms/multipart.js";
 import { _createBlobFromExternalSource } from "../node_modules/.tsbuild/host/runtime/web-platform/src/file/blob.js";
@@ -1244,6 +1247,145 @@ test("Built-in queuing strategies preserve Web IDL conversion and function ident
   assert.equal(new ByteLengthQueuingStrategy({ highWaterMark: 1 }).size(new Uint8Array(7)), 7);
   assert.throws(() => new CountQueuingStrategy(), TypeError);
   assert.throws(() => new ByteLengthQueuingStrategy(null), TypeError);
+});
+test("Writable streams serialize writes and expose exact backpressure epochs", async () => {
+  const releases = [];
+  const writes = [];
+  const stream = new WritableStream(
+    {
+      write(chunk, controller) {
+        assert.equal(controller.signal.aborted, false);
+        writes.push(chunk);
+        const release = Promise.withResolvers();
+        releases.push(release);
+        return release.promise;
+      },
+    },
+    { highWaterMark: 2 },
+  );
+  const writer = stream.getWriter();
+  const initiallyReady = writer.ready;
+  assert.equal(writer.desiredSize, 2);
+
+  const first = writer.write("a");
+  assert.equal(writer.desiredSize, 1);
+  assert.deepEqual(writes, []);
+  await initiallyReady;
+  await Promise.resolve();
+  assert.deepEqual(writes, ["a"]);
+
+  const second = writer.write("b");
+  const backpressured = writer.ready;
+  assert.equal(writer.desiredSize, 0);
+  assert.notEqual(backpressured, initiallyReady);
+  assert.deepEqual(writes, ["a"]);
+
+  releases[0].resolve();
+  await first;
+  assert.deepEqual(writes, ["a", "b"]);
+  assert.equal(writer.desiredSize, 1);
+  await backpressured;
+  releases[1].resolve();
+  await second;
+  await writer.close();
+  await writer.closed;
+  assert.equal(writer.desiredSize, 0);
+});
+test("Writable operations expose their Web IDL arity and accept an omitted chunk", async () => {
+  assert.equal(WritableStream.prototype.abort.length, 0);
+  assert.equal(WritableStreamDefaultWriter.prototype.abort.length, 0);
+  assert.equal(WritableStreamDefaultWriter.prototype.write.length, 0);
+  assert.equal(WritableStreamDefaultController.prototype.error.length, 0);
+
+  const chunks = [];
+  const writer = new WritableStream({ write: (chunk) => chunks.push(chunk) }).getWriter();
+  await writer.write();
+  assert.deepEqual(chunks, [undefined]);
+  await writer.close();
+});
+test("Writable stream abort owns the sink signal and preserves reason identity", async () => {
+  const reason = new Error("stop");
+  let controller;
+  let receivedReason;
+  const stream = new WritableStream({
+    start(value) {
+      controller = value;
+    },
+    abort(value) {
+      receivedReason = value;
+    },
+  });
+  const writer = stream.getWriter();
+  const closed = writer.closed;
+  await writer.abort(reason);
+  await assert.rejects(closed, (error) => error === reason);
+  assert.equal(receivedReason, reason);
+  assert.equal(controller.signal.aborted, true);
+  assert.equal(controller.signal.reason, reason);
+  assert.equal(writer.desiredSize, null);
+});
+test("Writable terminal states release captured sink and strategy algorithms", async () => {
+  const fixture = (() => {
+    const sink = {};
+    const size = () => 1;
+    const stream = new WritableStream(sink, { size });
+    return {
+      stream,
+      writer: stream.getWriter(),
+      sinkReference: new WeakRef(sink),
+      sizeReference: new WeakRef(size),
+    };
+  })();
+
+  await fixture.writer.close();
+  assert.equal(await collectWeakReference(fixture.sinkReference), true);
+  assert.equal(await collectWeakReference(fixture.sizeReference), true);
+  assert.equal(fixture.stream.locked, true);
+});
+test("Writable setup releases its transient start algorithm", async () => {
+  let startReference;
+  const sink = {
+    get start() {
+      const start = () => {};
+      startReference = new WeakRef(start);
+      return start;
+    },
+  };
+  const writer = new WritableStream(sink).getWriter();
+
+  await Promise.resolve();
+  assert.ok(startReference);
+  assert.equal(await collectWeakReference(startReference), true);
+  await writer.close();
+});
+test("Writable queues release consumed chunks before later writes settle", async () => {
+  const releases = [];
+  const writer = new WritableStream({
+    write() {
+      const release = Promise.withResolvers();
+      releases.push(release);
+      return release.promise;
+    },
+  }).getWriter();
+  const fixture = (() => {
+    const firstChunk = {};
+    return {
+      firstChunkReference: new WeakRef(firstChunk),
+      firstWrite: writer.write(firstChunk),
+      secondWrite: writer.write({}),
+    };
+  })();
+
+  await Promise.resolve();
+  releases[0].resolve();
+  await fixture.firstWrite;
+  await Promise.resolve();
+  assert.equal(releases.length, 2);
+  assert.equal(await collectWeakReference(fixture.firstChunkReference), true);
+
+  releases[1].resolve();
+  await fixture.secondWrite;
+  await writer.close();
 });
 test("Stream cancellation settles pending read even while underlying pull awaits", async () => {
   let canceled = false;

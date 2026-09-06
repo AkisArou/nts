@@ -793,3 +793,49 @@ three cascades in the already-planned class/interface, typed-view, dictionary,
 generic collection, and numeric-conversion dependencies. A generic arity helper
 now preserves its caller's tuple element type; this removed an invalid-HIR mismatch
 without weakening the public strategy types to `unknown`.
+
+The default writable-stream state machine now implements serialized start, write,
+close, error, and abort transitions; exact backpressure-promise epochs; sink-owned
+abort signaling; close/abort precedence; reentrant size callbacks; and writer lock
+and release semantics. Its chunk and request queues are separate because a chunk
+remains in the size-accounted queue while its write request is in flight. Both use
+head-indexed FIFO storage, clear consumed references immediately, and compact only
+after a substantial sparse prefix accumulates. Closing or erroring clears the sink
+and size algorithms, and the transient start algorithm is released immediately
+after invocation rather than being retained for the stream lifetime.
+
+The public operations have their specified zero runtime arity, including an omitted
+write chunk being delivered as `undefined`. Three reachability tests retain the live
+stream while proving that its completed sink/strategy, transient start callback,
+and already-consumed first chunk can each be collected at the Standard-defined
+point. Removing size-algorithm clearing, start-algorithm clearing, or the consumed
+queue-slot clear makes the corresponding bounded weak-reference test fail. Removing
+the in-flight-write guard invokes the first queued chunk twice and makes the focused
+serialization test fail immediately.
+
+All fifteen complete, unchanged `streams/writable-streams/*.any.js` fixtures from
+the pinned Streams checkout are now hash-verified and executed, adding 191 upstream
+cases to the previous 552. At this checkpoint 742 of 743 pass. The sole visible
+failure overwrites each captured sink callback's own `.call` and `.apply` properties:
+Web IDL requires the method to be captured once and later invoked with the original
+sink as its callback `this` value. Re-reading the sink property, using a forgeable
+callback property, `Reflect`, prototype tricks, binding wrappers, or a host-only
+adapter would violate either that semantic or the governing integration contract.
+The exact missing compiler operation is a typed call through a function value with
+an explicit receiver. It has been reported to the compiler lane and remains visible;
+the 742 passing cases are not recorded as a green upstream gate. A diagnostic-only
+substitution of `Reflect.apply` made all 743 pass, proving the receiver operation is
+the only remaining failure, and was then restored rather than retained as a forbidden
+dynamic fallback.
+
+The complete local Node-host suite passes 143/143 with zero skipped, and the root
+TypeScript solution remains green. After consolidating both writable queues onto the
+shared generic FIFO, the live NTS check reports 390 primary lowering refusals, 71
+cascades, zero JVM-backend refusals, and no invalid HIR. Two primaries explicitly
+identify the existing missing method-call shape for `call`; the other frontier
+movement is dominated by final-form writable state, generic class/interface
+representation and specialisation, promise capabilities, optional/union values, and
+queue storage. These counts are a dependency inventory, not completed compiler work.
+This slice remains incomplete while the receiver-aware callback case is red; the
+failure stays in the committed evidence instead of being hidden by a forbidden
+dynamic fallback.

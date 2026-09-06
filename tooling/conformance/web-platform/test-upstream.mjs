@@ -48,6 +48,7 @@ const {
   ReadableStream,
   TextDecoder,
   TextEncoder,
+  WritableStream,
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 const { createHostNodeWebPlatform } =
   await import("./node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js");
@@ -98,6 +99,7 @@ function createWptContext(path, pending) {
     Float64Array,
     Function,
     FormData,
+    gc: globalThis.gc,
     Headers,
     Int8Array,
     Int16Array,
@@ -114,6 +116,7 @@ function createWptContext(path, pending) {
     Uint16Array,
     Uint32Array,
     WebAssembly,
+    WritableStream,
     WebSocket: class {
       constructor() {
         throw new Error("Host WebSocket is forbidden");
@@ -158,6 +161,9 @@ function createWptContext(path, pending) {
     },
     assert_unreached(message) {
       assert.fail(message);
+    },
+    step_timeout(callback, delay) {
+      return setTimeout(callback, delay);
     },
     async_test(callbackOrName, explicitName) {
       const callback = typeof callbackOrName === "function" ? callbackOrName : undefined;
@@ -231,7 +237,20 @@ function createWptContext(path, pending) {
     },
     promise_test(fn, name) {
       const result = Promise.resolve()
-        .then(() => fn({}))
+        .then(() => {
+          const test = {
+            step(callback) {
+              return callback.call(test);
+            },
+            step_timeout(callback, delay) {
+              return setTimeout(callback, delay);
+            },
+            unreached_func(message) {
+              return () => assert.fail(message);
+            },
+          };
+          return fn(test);
+        })
         .then(
           () => reportPass(path, name),
           (error) => reportFailure(path, name, error),
@@ -240,6 +259,9 @@ function createWptContext(path, pending) {
     },
     promise_rejects_exactly(_test, expected, promise, message) {
       return assert.rejects(promise, (error) => error === expected, message);
+    },
+    promise_rejects_js(_test, constructor, promise, message) {
+      return assert.rejects(promise, constructor, message);
     },
     test(fn, name) {
       const cleanups = [];

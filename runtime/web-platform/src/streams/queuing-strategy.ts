@@ -1,4 +1,4 @@
-import { requireArguments } from "../core/webidl.ts";
+import { requireArguments, requireDictionary } from "../core/webidl.ts";
 
 export type QueuingStrategySize<T> = (chunk: T) => number;
 
@@ -14,9 +14,13 @@ export interface QueuingStrategyInit {
 const defaultSize = (_chunk: unknown): number => 1;
 
 export function extractHighWaterMark<T>(
-  strategy: QueuingStrategy<T>,
+  strategy: QueuingStrategy<T> | null,
   defaultHighWaterMark: number,
 ): number {
+  requireDictionary(strategy, "Queuing strategy");
+  if (strategy === null) {
+    return defaultHighWaterMark;
+  }
   const highWaterMark = strategy.highWaterMark;
   if (highWaterMark === undefined) {
     return defaultHighWaterMark;
@@ -28,7 +32,13 @@ export function extractHighWaterMark<T>(
   return convertedHighWaterMark;
 }
 
-export function extractSizeAlgorithm<T>(strategy: QueuingStrategy<T>): QueuingStrategySize<T> {
+export function extractSizeAlgorithm<T>(
+  strategy: QueuingStrategy<T> | null,
+): QueuingStrategySize<T> {
+  requireDictionary(strategy, "Queuing strategy");
+  if (strategy === null) {
+    return defaultSize;
+  }
   const size = strategy.size;
   if (size === undefined) {
     return defaultSize;

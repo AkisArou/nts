@@ -7,9 +7,16 @@ import {
 
 // The Standard gives each environment one non-constructible function shared by
 // every instance. Its lexical name also supplies the observable function name.
-const size = (chunk: ArrayBufferView<ArrayBuffer>): number => chunk.byteLength;
+const size = (chunk: ArrayBufferView<ArrayBuffer> | undefined): number => {
+  if (chunk === undefined) {
+    throw new TypeError("Chunk must be an ArrayBuffer view");
+  }
+  return chunk.byteLength;
+};
 
-export class ByteLengthQueuingStrategy implements QueuingStrategy<ArrayBufferView<ArrayBuffer>> {
+export class ByteLengthQueuingStrategy implements QueuingStrategy<
+  ArrayBufferView<ArrayBuffer> | undefined
+> {
   readonly #highWaterMark: number;
 
   constructor(init: QueuingStrategyInit);
@@ -21,7 +28,7 @@ export class ByteLengthQueuingStrategy implements QueuingStrategy<ArrayBufferVie
     return this.#highWaterMark;
   }
 
-  get size(): QueuingStrategySize<ArrayBufferView<ArrayBuffer>> {
+  get size(): QueuingStrategySize<ArrayBufferView<ArrayBuffer> | undefined> {
     this.#highWaterMark;
     return size;
   }
