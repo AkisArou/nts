@@ -2803,9 +2803,21 @@ impl Emitter<'_> {
                         .or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
                 };
                 let Some((owner, member, descriptor)) = found else {
+                    // The cause, which is that *this table* has no entry, and
+                    // not the remedy, which would be to build the helper.
+                    //
+                    // Those are different and the difference has already cost
+                    // this file once: the coercions were present in
+                    // `NtsRuntime` and absent from `core_external`, and the
+                    // message said the runtime had not built them. Somebody
+                    // reading it goes and writes a method that is already
+                    // there. A refusal naming a remedy reads like a plan, and
+                    // a plausible plan is worse than no plan when it is wrong.
                     return Err(refuse(
                         self.func,
-                        &format!("a call to `{name}`, which needs a runtime this slice has not built"),
+                        &format!(
+                            "a call to `{name}`, which this backend has no name for -- the                              helper may exist in `runtime/jvm` already and be missing from                              `core_external`, which is how the coercions were refused"
+                        ),
                     ));
                 };
                 for &arg in args {
