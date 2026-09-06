@@ -50,6 +50,8 @@ const oneShotSync = {
   [ZSTD_DECOMPRESS]: zlib.zstdDecompressSync,
 };
 
+globalThis.nts_zlib_vernum = () => zlib.constants.ZLIB_VERNUM;
+
 let nextHandle = 1;
 const engines = new Map();
 let lastInitializationError = null;

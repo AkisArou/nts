@@ -633,6 +633,12 @@ export class Gunzip extends Zlib {
 }
 export class DeflateRaw extends Zlib {
   constructor(options?: ZlibOptions) {
+    // zlib itself silently promotes an eight-bit deflate window to nine. Node
+    // makes that promotion explicit on the caller's options object before
+    // initializing the stream, so preserve the same observable normalization.
+    if (options !== undefined && options.windowBits === C.Z_MIN_WINDOWBITS) {
+      options.windowBits = C.Z_MIN_WINDOWBITS + 1;
+    }
     super(options, C.DEFLATERAW);
   }
 }

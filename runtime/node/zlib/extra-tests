@@ -1,0 +1,8 @@
+# Pinned Node v24.20.0 files named for stream/iter that directly exercise the
+# public node:zlib/iter subpath.
+test-stream-iter-transform-compat.js
+test-stream-iter-transform-coverage.js
+test-stream-iter-transform-errors.js
+test-stream-iter-transform-roundtrip.js
+test-stream-iter-transform-sync.js
+test-stream-iter-validation.js

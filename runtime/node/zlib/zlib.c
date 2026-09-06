@@ -112,6 +112,8 @@ static _Thread_local int nts_zlib_global_status;
 static _Thread_local char nts_zlib_global_message[256];
 static _Thread_local char nts_zlib_global_code[96];
 
+double nts_zlib_vernum(void) { return (double)ZLIB_VERNUM; }
+
 static NtsString *nts_zlib_string(const char *text) {
   return nts_string_from_utf8(text, text == NULL ? 0 : strlen(text));
 }

@@ -77,4 +77,5 @@ declare function nts_zlib_last_status(): number;
 declare function nts_zlib_last_error_message(): string;
 declare function nts_zlib_last_error_code(): string;
 
+declare function nts_zlib_vernum(): number;
 declare function nts_crc32(input: Uint8Array, initial: number): number;

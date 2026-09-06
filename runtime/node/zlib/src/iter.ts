@@ -348,25 +348,38 @@ function* outputBatches(
   }
 }
 
+class CollectedChunk {
+  readonly bytes: Uint8Array;
+  next: CollectedChunk | null = null;
+
+  constructor(bytes: Uint8Array) {
+    this.bytes = bytes;
+  }
+}
+
 function concatenateSource(source: SyncTransformSource): Uint8Array {
-  const chunks: Uint8Array[] = [];
+  let first: CollectedChunk | null = null;
+  let last: CollectedChunk | null = null;
   let totalBytes = 0;
   for (const batch of source) {
     if (batch === null) continue;
     for (let i = 0; i < batch.length; i++) {
       const chunk = batch[i];
       if (chunk === undefined) continue;
-      chunks.push(chunk);
+      const collected = new CollectedChunk(chunk);
+      if (last === null) first = collected;
+      else last.next = collected;
+      last = collected;
       totalBytes += chunk.byteLength;
     }
   }
   const result = new Uint8Array(totalBytes);
   let offset = 0;
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    if (chunk === undefined) continue;
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
+  let collected = first;
+  while (collected !== null) {
+    result.set(collected.bytes, offset);
+    offset += collected.bytes.byteLength;
+    collected = collected.next;
   }
   return result;
 }

@@ -17,7 +17,6 @@ export const Z_SYNC_FLUSH = 2;
 export const Z_FULL_FLUSH = 3;
 export const Z_FINISH = 4;
 export const Z_BLOCK = 5;
-export const Z_TREES = 6;
 
 // Return codes.
 export const Z_OK = 0;
@@ -44,6 +43,10 @@ export const Z_HUFFMAN_ONLY = 2;
 export const Z_RLE = 3;
 export const Z_FIXED = 4;
 export const Z_DEFAULT_STRATEGY = 0;
+
+// Unlike the format and status constants, this value describes the zlib
+// headers against which the current backend was built.
+export const ZLIB_VERNUM = nts_zlib_vernum();
 
 export const Z_DEFAULT_WINDOWBITS = 15;
 export const Z_MIN_WINDOWBITS = 8;
@@ -115,6 +118,31 @@ export const BROTLI_DECODER_NO_ERROR = 0;
 export const BROTLI_DECODER_SUCCESS = 1;
 export const BROTLI_DECODER_NEEDS_MORE_INPUT = 2;
 export const BROTLI_DECODER_NEEDS_MORE_OUTPUT = 3;
+export const BROTLI_DECODER_ERROR_FORMAT_EXUBERANT_NIBBLE = -1;
+export const BROTLI_DECODER_ERROR_FORMAT_RESERVED = -2;
+export const BROTLI_DECODER_ERROR_FORMAT_EXUBERANT_META_NIBBLE = -3;
+export const BROTLI_DECODER_ERROR_FORMAT_SIMPLE_HUFFMAN_ALPHABET = -4;
+export const BROTLI_DECODER_ERROR_FORMAT_SIMPLE_HUFFMAN_SAME = -5;
+export const BROTLI_DECODER_ERROR_FORMAT_CL_SPACE = -6;
+export const BROTLI_DECODER_ERROR_FORMAT_HUFFMAN_SPACE = -7;
+export const BROTLI_DECODER_ERROR_FORMAT_CONTEXT_MAP_REPEAT = -8;
+export const BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_1 = -9;
+export const BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_2 = -10;
+export const BROTLI_DECODER_ERROR_FORMAT_TRANSFORM = -11;
+export const BROTLI_DECODER_ERROR_FORMAT_DICTIONARY = -12;
+export const BROTLI_DECODER_ERROR_FORMAT_WINDOW_BITS = -13;
+export const BROTLI_DECODER_ERROR_FORMAT_PADDING_1 = -14;
+export const BROTLI_DECODER_ERROR_FORMAT_PADDING_2 = -15;
+export const BROTLI_DECODER_ERROR_FORMAT_DISTANCE = -16;
+export const BROTLI_DECODER_ERROR_DICTIONARY_NOT_SET = -19;
+export const BROTLI_DECODER_ERROR_INVALID_ARGUMENTS = -20;
+export const BROTLI_DECODER_ERROR_ALLOC_CONTEXT_MODES = -21;
+export const BROTLI_DECODER_ERROR_ALLOC_TREE_GROUPS = -22;
+export const BROTLI_DECODER_ERROR_ALLOC_CONTEXT_MAP = -25;
+export const BROTLI_DECODER_ERROR_ALLOC_RING_BUFFER_1 = -26;
+export const BROTLI_DECODER_ERROR_ALLOC_RING_BUFFER_2 = -27;
+export const BROTLI_DECODER_ERROR_ALLOC_BLOCK_TYPE_TREES = -30;
+export const BROTLI_DECODER_ERROR_UNREACHABLE = -31;
 
 // Zstandard.
 export const ZSTD_e_continue = 0;
@@ -141,8 +169,6 @@ export const ZSTD_c_jobSize = 401;
 export const ZSTD_c_overlapLog = 402;
 export const ZSTD_d_windowLogMax = 100;
 export const ZSTD_CLEVEL_DEFAULT = 3;
-export const ZSTD_MIN_CLEVEL = -99;
-export const ZSTD_MAX_CLEVEL = 22;
 
 export const ZSTD_fast = 1;
 export const ZSTD_dfast = 2;

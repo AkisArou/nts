@@ -1,8 +1,8 @@
 'use strict';
 
 // Applicable behavior retained from pinned Node v24.20.0
-// test-zlib-invalid-input.js. The omitted setup calls classes without `new`
-// and installs spoofing accessors on a typed array.
+// test-zlib-invalid-input.js. The upstream fixture also installs spoofing
+// accessors on a typed array, which is a Section 13 non-goal.
 const common = require('../common');
 const zlib = require('zlib');
 
