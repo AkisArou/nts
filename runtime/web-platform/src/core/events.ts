@@ -1,4 +1,5 @@
 import { DOMException } from "./errors.ts";
+import { toUnsignedLong, toUnsignedShort, toUSVString } from "./webidl.ts";
 
 export interface EventInit {
   bubbles?: boolean;
@@ -27,9 +28,9 @@ export class Event {
 
   constructor(type: string, init: EventInit = {}) {
     this.eventType = type;
-    this.eventBubbles = init.bubbles ?? false;
-    this.eventCancelable = init.cancelable ?? false;
-    this.eventComposed = init.composed ?? false;
+    this.eventBubbles = init.bubbles ? true : false;
+    this.eventCancelable = init.cancelable ? true : false;
+    this.eventComposed = init.composed ? true : false;
   }
 
   get type(): string {
@@ -133,8 +134,8 @@ export class Event {
     this.canceled = false;
     this.eventTarget = null;
     this.eventType = type;
-    this.eventBubbles = bubbles;
-    this.eventCancelable = cancelable;
+    this.eventBubbles = bubbles ? true : false;
+    this.eventCancelable = cancelable ? true : false;
     return true;
   }
 
@@ -381,19 +382,57 @@ export interface MessageEventInit<T> extends EventInit {
 }
 
 export class MessageEvent<T = unknown> extends Event {
-  readonly data: T | null;
-  readonly lastEventId: string;
-  readonly origin: string;
-  readonly ports: readonly EventTarget[];
-  readonly source: EventTarget | null;
+  private messageData: T | null;
+  private messageLastEventId: string;
+  private messageOrigin: string;
+  private messagePorts: readonly EventTarget[];
+  private messageSource: EventTarget | null;
 
   constructor(type: string, init: MessageEventInit<T> = {}) {
     super(type, init);
-    this.data = init.data === undefined ? null : init.data;
-    this.lastEventId = init.lastEventId ?? "";
-    this.origin = init.origin ?? "";
-    this.ports = init.ports?.slice() ?? [];
-    this.source = init.source ?? null;
+    this.messageData = init.data === undefined ? null : init.data;
+    this.messageLastEventId = init.lastEventId ?? "";
+    this.messageOrigin = toUSVString(init.origin ?? "");
+    this.messagePorts = init.ports?.slice() ?? [];
+    this.messageSource = init.source ?? null;
+  }
+
+  get data(): T | null {
+    return this.messageData;
+  }
+
+  get lastEventId(): string {
+    return this.messageLastEventId;
+  }
+
+  get origin(): string {
+    return this.messageOrigin;
+  }
+
+  get ports(): readonly EventTarget[] {
+    return this.messagePorts;
+  }
+
+  get source(): EventTarget | null {
+    return this.messageSource;
+  }
+
+  initMessageEvent(
+    type: string,
+    bubbles = false,
+    cancelable = false,
+    data: T | null = null,
+    origin = "",
+    lastEventId = "",
+    source: EventTarget | null = null,
+    ports: readonly EventTarget[] = [],
+  ): void {
+    if (!this.initialize(type, bubbles, cancelable)) return;
+    this.messageData = data;
+    this.messageOrigin = toUSVString(origin);
+    this.messageLastEventId = lastEventId;
+    this.messageSource = source;
+    this.messagePorts = ports.slice();
   }
 }
 
@@ -404,15 +443,27 @@ export interface CloseEventInit extends EventInit {
 }
 
 export class CloseEvent extends Event {
-  readonly code: number;
-  readonly reason: string;
-  readonly wasClean: boolean;
+  private readonly closeCode: number;
+  private readonly closeReason: string;
+  private readonly clean: boolean;
 
   constructor(type: string, init: CloseEventInit = {}) {
     super(type, init);
-    this.code = init.code ?? 0;
-    this.reason = init.reason ?? "";
-    this.wasClean = init.wasClean ?? false;
+    this.closeCode = toUnsignedShort(init.code ?? 0);
+    this.closeReason = toUSVString(init.reason ?? "");
+    this.clean = init.wasClean ? true : false;
+  }
+
+  get code(): number {
+    return this.closeCode;
+  }
+
+  get reason(): string {
+    return this.closeReason;
+  }
+
+  get wasClean(): boolean {
+    return this.clean;
   }
 }
 
@@ -425,18 +476,38 @@ export interface ErrorEventInit extends EventInit {
 }
 
 export class ErrorEvent extends Event {
-  readonly colno: number;
-  readonly error: unknown;
-  readonly filename: string;
-  readonly lineno: number;
-  readonly message: string;
+  private readonly errorColumn: number;
+  private readonly errorValue: unknown;
+  private readonly errorFilename: string;
+  private readonly errorLine: number;
+  private readonly errorMessage: string;
 
   constructor(type: string, init: ErrorEventInit = {}) {
     super(type, init);
-    this.colno = init.colno ?? 0;
-    this.error = init.error ?? null;
-    this.filename = init.filename ?? "";
-    this.lineno = init.lineno ?? 0;
-    this.message = init.message ?? "";
+    this.errorColumn = toUnsignedLong(init.colno ?? 0);
+    this.errorValue = init.error ?? null;
+    this.errorFilename = toUSVString(init.filename ?? "");
+    this.errorLine = toUnsignedLong(init.lineno ?? 0);
+    this.errorMessage = init.message ?? "";
+  }
+
+  get colno(): number {
+    return this.errorColumn;
+  }
+
+  get error(): unknown {
+    return this.errorValue;
+  }
+
+  get filename(): string {
+    return this.errorFilename;
+  }
+
+  get lineno(): number {
+    return this.errorLine;
+  }
+
+  get message(): string {
+    return this.errorMessage;
   }
 }

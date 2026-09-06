@@ -671,6 +671,84 @@ test("CustomEvent preserves detail and ignores legacy initialization during disp
     ["after", false, true, "changed"],
   );
 });
+test("Event subclasses apply Web IDL value and readonly-state semantics", () => {
+  for (const [value, expected] of [
+    [NaN, 0],
+    [Infinity, 0],
+    [-Infinity, 0],
+    [-1, 65_535],
+    [-0.5, 0],
+    [1.9, 1],
+    [65_535, 65_535],
+    [65_536, 0],
+    [65_537, 1],
+  ]) {
+    const event = new CloseEvent("close", { code: value });
+    assert.equal(event.code, expected, String(value));
+    assert.equal(Object.is(event.code, -0), false, String(value));
+  }
+
+  const close = new CloseEvent("close", { code: 1000, reason: "\ud800", wasClean: true });
+  const nativeClose = new globalThis.CloseEvent("close", {
+    code: 1000,
+    reason: "\ud800",
+    wasClean: true,
+  });
+  assert.deepEqual(
+    [close.code, close.reason, close.wasClean],
+    [nativeClose.code, nativeClose.reason, nativeClose.wasClean],
+  );
+  assert.throws(() => {
+    close.code = 1001;
+  }, TypeError);
+
+  const port = new EventTarget();
+  const marker = { marker: true };
+  const message = new MessageEvent("before", {
+    data: marker,
+    origin: "\ud800",
+    ports: [port],
+    source: port,
+  });
+  assert.deepEqual(
+    [message.data, message.origin, message.lastEventId, message.source, ...message.ports],
+    [marker, "�", "", port, port],
+  );
+  const target = new EventTarget();
+  target.addEventListener("before", () => {
+    message.initMessageEvent("ignored", false, true, null, "ignored");
+  });
+  target.dispatchEvent(message);
+  assert.equal(message.type, "before");
+  assert.equal(message.data, marker);
+
+  const nextPorts = [new EventTarget()];
+  message.initMessageEvent("after", false, true, "data", "origin", "last", null, nextPorts);
+  nextPorts.length = 0;
+  assert.deepEqual(
+    [message.type, message.bubbles, message.cancelable, message.data, message.origin],
+    ["after", false, true, "data", "origin"],
+  );
+  assert.equal(message.lastEventId, "last");
+  assert.equal(message.source, null);
+  assert.equal(message.ports.length, 1);
+  assert.throws(() => {
+    message.data = null;
+  }, TypeError);
+
+  const error = new ErrorEvent("error", {
+    colno: 4_294_967_297,
+    filename: "\ud800",
+    lineno: -1,
+  });
+  assert.deepEqual(
+    [error.colno, error.filename, error.lineno, error.message],
+    [1, "�", 4_294_967_295, ""],
+  );
+  assert.throws(() => {
+    error.lineno = 1;
+  }, TypeError);
+});
 test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   let pulls = 0;
   const stream = new ReadableStream(

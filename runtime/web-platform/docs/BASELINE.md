@@ -293,3 +293,15 @@ fixture now runs as delivered, including subclassing, taking the pinned WPT slic
 refusals, 40 cascades, zero JVM-backend refusals, and no invalid HIR. The three new
 primaries are members of generic `CustomEvent<T>`, whose class representation is an
 already-planned compiler prerequisite; the class is not made untyped to hide them.
+
+The remaining event subclasses now store their Web IDL state behind read-only
+accessors. `CloseEvent` applies default unsigned-short modulo conversion and
+USVString conversion, `ErrorEvent` applies unsigned-long and filename USVString
+conversion, and `MessageEvent` copies its ports and implements the specified legacy
+initializer without allowing reinitialization during dispatch. Node 24's negative
+`CloseEvent.code` behavior is deliberately not used as an oracle where it diverges
+from the WebSockets IDL; valid close-state construction is still differential. The
+Node-host suite passes 107/107, the pinned WPT slice remains 77/77, and the live NTS
+frontier remains 212 primary refusals, 40 cascades, zero JVM-backend refusals, and
+no invalid HIR. A mutation using 65,535 rather than 65,536 as the unsigned-short
+modulus made the focused constructor test fail on the `-1` case.

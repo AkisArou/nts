@@ -11,6 +11,28 @@ function roundTiesToEven(value: number): number {
   return lower % 2 === 0 ? lower : lower + 1;
 }
 
+function unsignedInteger(value: number, modulus: number): number {
+  if (!Number.isFinite(value) || value === 0) {
+    return 0;
+  }
+  const integer = value < 0 ? Math.ceil(value) : Math.floor(value);
+  if (integer === 0) {
+    return 0;
+  }
+  const remainder = integer % modulus;
+  return remainder < 0 ? remainder + modulus : remainder;
+}
+
+/** Convert a number using Web IDL's default `unsigned short` rules. */
+export function toUnsignedShort(value: number): number {
+  return unsignedInteger(value, 65_536);
+}
+
+/** Convert a number using Web IDL's default `unsigned long` rules. */
+export function toUnsignedLong(value: number): number {
+  return unsignedInteger(value, 4_294_967_296);
+}
+
 /** Convert a number using Web IDL's `[Clamp] unsigned short` rules. */
 export function toClampedUnsignedShort(value: number): number {
   if (Number.isNaN(value) || value <= 0) {
