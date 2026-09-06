@@ -98,11 +98,11 @@ initializer without modifying the upstream test.
 
 ## Current integration evidence
 
-At `0304954`, the repository TypeScript build passes, the Node-host suite passes
-91/91 with zero skipped, and the unchanged WPT slice passes 9/9. The additional
+At `1b91c18`, the repository TypeScript build passes, the Node-host suite passes
+92/92 with zero skipped, and the unchanged WPT slice passes 9/9. The additional
 cases cover protocol parsing, Web IDL conversion, MIME/body behavior, cancellation,
-pool shutdown, TLS, and canonical event initialization; they do not turn host
-execution into evidence for a compiled provider.
+pool shutdown, TLS, canonical event initialization, and Blob view/slice behavior;
+they do not turn host execution into evidence for a compiled provider.
 
 The shared source now uses `Promise.withResolvers()` directly instead of retaining
 the external `Deferred` substitute. At `0304954`, the NTS check reports 186 primary
@@ -111,6 +111,13 @@ emitted primary messages mention an unrepresentable `PromiseWithResolvers` prope
 that count includes repeated specialized layouts and is one compiler/runtime feature
 blocker, not 73 independent missing features. The final-form source remains in place
 while that prerequisite is implemented.
+
+At `1b91c18`, after the canonical Blob began accepting every `ArrayBufferView` and
+using final Web IDL `[Clamp] long long` slice conversion, the same command reports
+187 primary lowering refusals, 38 cascades, zero `NTS4xxx` JVM-backend refusals, and
+no invalid HIR. That is the current in-tree implementation baseline. The changed
+count reflects intended source reaching a different diagnostic frontier; it is not
+itself progress or regression.
 
 The common C runtime now has an `NtsEnvironment` and scoped current-environment ABI,
 but shared TypeScript cannot yet obtain its environment-owned Web dependencies.
