@@ -91,6 +91,37 @@ public final class NtsRuntime {
         if (right == 0) { throw new NtsRefusal("an integer remainder by zero"); }
         return left % right;
     }
+
+    /**
+     * The unsigned forms, which are a *correctness* requirement rather than a
+     * width choice.
+     *
+     * <p>A `u32` is held in an `int` slot here, raw, because the JVM has no
+     * unsigned type -- and every value above 2^31 is a negative `int`. `idiv`
+     * and `irem` then answer with the sign of a dividend that has no sign.
+     * `benches/cases/absences` reached it with `i % 3` where the loop counter
+     * passes 2^31: **2,046,179,082 against node's 2,046,179,137**, and the C
+     * lane agreed with node because C has the type.
+     *
+     * <p>`divideUnsigned` and `remainderUnsigned` are Java 8 and Android 24,
+     * inside both floors this jar keeps.
+     */
+    public static int uidiv(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer division by zero"); }
+        return Integer.divideUnsigned(left, right);
+    }
+    public static int uirem(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer remainder by zero"); }
+        return Integer.remainderUnsigned(left, right);
+    }
+    public static long uldiv(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer division by zero"); }
+        return Long.divideUnsigned(left, right);
+    }
+    public static long ulrem(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer remainder by zero"); }
+        return Long.remainderUnsigned(left, right);
+    }
     public static long ldiv(long left, long right) {
         if (right == 0L) { throw new NtsRefusal("an integer division by zero"); }
         return left / right;

@@ -2340,11 +2340,24 @@ impl Emitter<'_> {
                 // `idiv` throws on a zero divisor where C is undefined, and
                 // nothing upstream proves the divisor non-zero. One helper
                 // rather than a guard at every site.
-                let (name, signature) = match (op, kind) {
-                    (BinOp::Div, Kind::Long) => ("ldiv", "(JJ)J"),
-                    (BinOp::Rem, Kind::Long) => ("lrem", "(JJ)J"),
-                    (BinOp::Div, _) => ("idiv", "(II)I"),
-                    (_, _) => ("irem", "(II)I"),
+                //
+                // And the *unsigned* forms are correctness, not width. A `u32`
+                // is held in an `int` slot, raw, because the JVM has no
+                // unsigned type -- so every value above 2^31 is a negative
+                // `int` and `irem` answers with the sign of a dividend that has
+                // no sign. `benches/cases/absences` reached it with `i % 3`
+                // where the counter passes 2^31, and the C lane agreed with
+                // node because C has the type.
+                let unsigned = matches!(self.ty(value), HirType::Int { signed: false, .. });
+                let (name, signature) = match (op, kind, unsigned) {
+                    (BinOp::Div, Kind::Long, false) => ("ldiv", "(JJ)J"),
+                    (BinOp::Rem, Kind::Long, false) => ("lrem", "(JJ)J"),
+                    (BinOp::Div, Kind::Long, true) => ("uldiv", "(JJ)J"),
+                    (BinOp::Rem, Kind::Long, true) => ("ulrem", "(JJ)J"),
+                    (BinOp::Div, _, false) => ("idiv", "(II)I"),
+                    (BinOp::Div, _, true) => ("uidiv", "(II)I"),
+                    (_, _, false) => ("irem", "(II)I"),
+                    (_, _, true) => ("uirem", "(II)I"),
                 };
                 code.invoke_static(&origin, pool, RUNTIME, name, signature);
             }
