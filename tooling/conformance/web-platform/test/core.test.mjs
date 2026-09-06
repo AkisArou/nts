@@ -7,6 +7,8 @@ import {
   Request,
   Response,
   ReadableStream,
+  ByteLengthQueuingStrategy,
+  CountQueuingStrategy,
   AbortController,
   AbortSignal,
   CloseEvent,
@@ -1210,6 +1212,38 @@ test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   reader.releaseLock();
   assert.equal(stream.locked, false);
   assert.equal(pulls, 1);
+});
+test("Built-in queuing strategies preserve Web IDL conversion and function identity", () => {
+  for (const [Actual, Expected] of [
+    [CountQueuingStrategy, globalThis.CountQueuingStrategy],
+    [ByteLengthQueuingStrategy, globalThis.ByteLengthQueuingStrategy],
+  ]) {
+    for (const input of [-Infinity, -5, false, true, NaN, "foo", "0", {}, () => {}]) {
+      const actual = new Actual({ highWaterMark: input });
+      const expected = new Expected({ highWaterMark: input });
+      assert.deepEqual(
+        [actual.highWaterMark, Object.prototype.toString.call(actual)],
+        [expected.highWaterMark, Object.prototype.toString.call(expected)],
+      );
+    }
+
+    const first = new Actual({ highWaterMark: 1 });
+    const second = new Actual({ highWaterMark: 2 });
+    assert.equal(first.size, second.size);
+    assert.equal(first.size.name, "size");
+    assert.equal(first.size.length, new Expected({ highWaterMark: 1 }).size.length);
+    assert.equal("prototype" in first.size, false);
+
+    for (const property of ["highWaterMark", "size"]) {
+      const getter = Object.getOwnPropertyDescriptor(Actual.prototype, property).get;
+      assert.throws(() => getter.call({}), TypeError);
+    }
+  }
+
+  assert.equal(new CountQueuingStrategy({ highWaterMark: 1 }).size(), 1);
+  assert.equal(new ByteLengthQueuingStrategy({ highWaterMark: 1 }).size(new Uint8Array(7)), 7);
+  assert.throws(() => new CountQueuingStrategy(), TypeError);
+  assert.throws(() => new ByteLengthQueuingStrategy(null), TypeError);
 });
 test("Stream cancellation settles pending read even while underlying pull awaits", async () => {
   let canceled = false;

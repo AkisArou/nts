@@ -1,5 +1,11 @@
 import { LimitError } from "../core/errors.ts";
 import { ignoreRejection } from "../core/promise.ts";
+import { QueueWithSizes } from "./queue-with-sizes.ts";
+import {
+  extractHighWaterMark,
+  extractSizeAlgorithm,
+  type QueuingStrategy,
+} from "./queuing-strategy.ts";
 
 export type ReadResult<T> = { done: false; value: T } | { done: true; value: undefined };
 
@@ -7,16 +13,6 @@ export interface UnderlyingSource<T> {
   start?(controller: ReadableStreamDefaultController<T>): void | Promise<void>;
   pull?(controller: ReadableStreamDefaultController<T>): void | Promise<void>;
   cancel?(reason: unknown): void | Promise<void>;
-}
-
-export interface QueuingStrategy<T> {
-  highWaterMark?: number;
-  size?(chunk: T): number;
-}
-
-interface QueueEntry<T> {
-  value: T;
-  size: number;
 }
 
 type StreamState = "readable" | "closed" | "errored";
@@ -38,9 +34,7 @@ export class ReadableStream<T> {
   private readonly controller: ReadableStreamDefaultController<T>;
   private readonly highWaterMark: number;
   private readonly sizeOf: (value: T) => number;
-  private readonly queue: QueueEntry<T>[] = [];
-  private queueHead = 0;
-  private totalSize = 0;
+  private readonly queue = new QueueWithSizes<T>();
   private readonly pending: PromiseWithResolvers<ReadResult<T>>[] = [];
   // A head index keeps a burst of outstanding reads linear; Array.shift() would
   // move every remaining capability after each delivered chunk.
@@ -56,11 +50,8 @@ export class ReadableStream<T> {
 
   constructor(source: UnderlyingSource<T> = {}, strategy: QueuingStrategy<T> = {}) {
     this.source = source;
-    this.highWaterMark = strategy.highWaterMark ?? 1;
-    if (Number.isNaN(this.highWaterMark) || this.highWaterMark < 0) {
-      throw new RangeError("Invalid highWaterMark");
-    }
-    this.sizeOf = strategy.size ?? countChunk;
+    this.sizeOf = extractSizeAlgorithm(strategy);
+    this.highWaterMark = extractHighWaterMark(strategy, 1);
     this.controller = new ReadableStreamDefaultController(this);
     try {
       Promise.resolve(source.start?.(this.controller)).then(
@@ -84,7 +75,7 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ get queuedSize(): number {
-    return this.totalSize;
+    return this.queue.totalSize;
   }
 
   /** @internal */ markDisturbed(): void {
@@ -126,9 +117,7 @@ export class ReadableStream<T> {
     if (this.state === "errored") {
       throw this.storedError;
     }
-    this.queue.length = 0;
-    this.queueHead = 0;
-    this.totalSize = 0;
+    this.queue.reset();
     this.finish();
     await this.source.cancel?.(reason);
   }
@@ -144,23 +133,9 @@ export class ReadableStream<T> {
     if (this.state === "errored") {
       return Promise.reject(this.storedError);
     }
-    const entry = this.queue[this.queueHead];
+    const entry = this.queue.dequeue();
     if (entry !== undefined) {
-      this.queueHead++;
-      this.totalSize = Math.max(0, this.totalSize - entry.size);
-      if (this.queueHead === this.queue.length) {
-        this.queue.length = 0;
-        this.queueHead = 0;
-      } else if (this.queueHead > 1024 && this.queueHead * 2 > this.queue.length) {
-        const remaining = this.queue.length - this.queueHead;
-        for (let index = 0; index < remaining; index++) {
-          const current = this.queue[this.queueHead + index];
-          if (current !== undefined) this.queue[index] = current;
-        }
-        this.queue.length = remaining;
-        this.queueHead = 0;
-      }
-      if (this.closeRequested && this.queueHead === this.queue.length) {
+      if (this.closeRequested && this.queue.empty) {
         this.finish();
       } else {
         this.maybePull();
@@ -191,19 +166,13 @@ export class ReadableStream<T> {
     if (read !== undefined) {
       read.resolve({ done: false, value });
     } else {
-      let size: number;
       try {
         const sizeOf = this.sizeOf;
-        size = sizeOf(value);
-        if (!Number.isFinite(size) || size < 0) {
-          throw new RangeError("Invalid chunk size");
-        }
+        this.queue.enqueue(value, sizeOf(value));
       } catch (error) {
         this.fail(error);
         throw error;
       }
-      this.queue.push({ value, size });
-      this.totalSize += size;
     }
     this.maybePull();
   }
@@ -213,7 +182,7 @@ export class ReadableStream<T> {
       throw new TypeError("Stream cannot be closed twice");
     }
     this.closeRequested = true;
-    if (this.queueHead === this.queue.length) {
+    if (this.queue.empty) {
       this.finish();
     }
   }
@@ -230,9 +199,7 @@ export class ReadableStream<T> {
     }
     this.state = "errored";
     this.storedError = error;
-    this.queue.length = 0;
-    this.queueHead = 0;
-    this.totalSize = 0;
+    this.queue.reset();
     this.rejectPending(error);
     this.currentReader?.fail(error);
   }
@@ -244,13 +211,13 @@ export class ReadableStream<T> {
     if (this.state === "closed") {
       return 0;
     }
-    return this.highWaterMark - this.totalSize;
+    return this.highWaterMark - this.queue.totalSize;
   }
   private maybePull(): void {
     if (!this.started || this.state !== "readable" || this.closeRequested) {
       return;
     }
-    if (this.pendingHead === this.pending.length && this.highWaterMark <= this.totalSize) {
+    if (this.pendingHead === this.pending.length && this.highWaterMark <= this.queue.totalSize) {
       return;
     }
     if (this.pulling) {

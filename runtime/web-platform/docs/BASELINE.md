@@ -762,3 +762,34 @@ existing class/interface, iteration, absence/arity, property-assignment, and
 environment-access prerequisites; the native `Iterator` base did not produce
 invalid HIR. The counts are a dependency frontier, not ten newly completed or
 regressed language features.
+
+The first full-Streams foundation now provides the Standard's single shared
+queue-with-sizes abstraction and the canonical `CountQueuingStrategy` and
+`ByteLengthQueuingStrategy` classes. The queue retains the specified running
+IEEE-754 total instead of recomputing it, clamps only negative subtraction residue,
+and uses a compacting head index so FIFO dequeue does not move the live suffix.
+Readable streams now use that same primitive that writable streams will consume.
+Strategy extraction reads `size` before `highWaterMark`, applies JavaScript
+`ToNumber` behavior, accepts positive infinity only as a high-water mark, and errors
+the stream when a size callback fails or returns a non-finite or negative value.
+Each built-in strategy exposes one stable, non-constructible, correctly named size
+function per environment rather than allocating a closure per instance.
+
+Three complete unchanged fixtures from Node's pinned Streams checkout add 29 cases:
+the built-in queuing-strategy surface, readable bad-strategy propagation, and the
+constructor's observable conversion order. The immutable WPT slice therefore grows
+from 523 to 552 tests, all passing; the complete Node-host suite passes 137/137 and
+the root TypeScript solution remains green. The WPT VM harness accepts either the
+host realm's injected `TypeError` or the VM intrinsic used by a failed `new` syntax
+operation; it does not turn a different error kind into a pass. Removing the
+queue-total negative clamp makes two pinned floating-point cases fail, proving that
+the shared arithmetic is observed rather than merely exercised.
+
+The source audit finds no `any`, assertion cast, proxy, reflection, descriptor, or
+prototype workaround in the Streams source. The live NTS frontier is 302 primary
+refusals, 67 cascades, zero JVM-backend refusals, and no invalid HIR. Relative to
+289/64, the final queue and strategy classes expose 13 net primary instances and
+three cascades in the already-planned class/interface, typed-view, dictionary,
+generic collection, and numeric-conversion dependencies. A generic arity helper
+now preserves its caller's tuple element type; this removed an invalid-HIR mismatch
+without weakening the public strategy types to `unknown`.

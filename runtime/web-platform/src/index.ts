@@ -35,7 +35,14 @@ export {
   ReadableStreamDefaultController,
   ReadableStreamDefaultReader,
 } from "./streams/readable.ts";
-export type { QueuingStrategy, ReadResult, UnderlyingSource } from "./streams/readable.ts";
+export type { ReadResult, UnderlyingSource } from "./streams/readable.ts";
+export { ByteLengthQueuingStrategy } from "./streams/byte-length-queuing-strategy.ts";
+export { CountQueuingStrategy } from "./streams/count-queuing-strategy.ts";
+export type {
+  QueuingStrategy,
+  QueuingStrategyInit,
+  QueuingStrategySize,
+} from "./streams/queuing-strategy.ts";
 
 export { Headers } from "./fetch/headers.ts";
 export type { HeaderSequenceEntry, HeadersInit } from "./fetch/headers.ts";

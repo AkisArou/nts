@@ -36,7 +36,9 @@ const {
   AbortController,
   AbortSignal,
   Blob,
+  ByteLengthQueuingStrategy,
   CustomEvent,
+  CountQueuingStrategy,
   Event,
   EventTarget,
   File,
@@ -75,6 +77,7 @@ function reportFailure(path, name, error) {
 }
 
 function createWptContext(path, pending) {
+  let contextIntrinsicTypeError = TypeError;
   const context = createContext({
     AbortController,
     AbortSignal,
@@ -82,7 +85,9 @@ function createWptContext(path, pending) {
     BigInt64Array,
     BigUint64Array,
     Blob,
+    ByteLengthQueuingStrategy,
     CustomEvent,
+    CountQueuingStrategy,
     DataView,
     DOMException,
     Event,
@@ -99,6 +104,7 @@ function createWptContext(path, pending) {
     Int32Array,
     MessageChannel,
     Promise,
+    RangeError,
     ReadableStream,
     TextDecoder,
     TextEncoder,
@@ -136,7 +142,13 @@ function createWptContext(path, pending) {
       assert.notStrictEqual(actual, expected, message);
     },
     assert_throws_js(constructor, callback, message) {
-      assert.throws(callback, constructor, message);
+      assert.throws(
+        callback,
+        (error) =>
+          error instanceof constructor ||
+          (constructor === TypeError && error instanceof contextIntrinsicTypeError),
+        message,
+      );
     },
     assert_throws_exactly(expected, callback, message) {
       assert.throws(callback, (error) => error === expected, message);
@@ -226,6 +238,9 @@ function createWptContext(path, pending) {
         );
       pending.push(result);
     },
+    promise_rejects_exactly(_test, expected, promise, message) {
+      return assert.rejects(promise, (error) => error === expected, message);
+    },
     test(fn, name) {
       const cleanups = [];
       const test = {
@@ -256,6 +271,13 @@ function createWptContext(path, pending) {
       else reportFailure(path, name, failure);
     },
   });
+  // The APIs under test are imported from the host realm. A failed `new` on a
+  // non-constructible host function is nevertheless created by the VM realm's
+  // syntax operation, whose intrinsic TypeError is not the injected constructor.
+  contextIntrinsicTypeError = runInContext(
+    "(() => { try { new (() => {})(); } catch (error) { return error.constructor; } })()",
+    context,
+  );
   context.globalThis = context;
   context.self = context;
   return context;

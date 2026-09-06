@@ -52,6 +52,9 @@
       "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
       "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
       "FileAPI/file/File-constructor.any.js": "0b0185c40bf83c5781630c72878764f2ef5588c6",
+      "streams/queuing-strategies.any.js": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
+      "streams/readable-streams/bad-strategies.any.js": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
+      "streams/readable-streams/constructor.any.js": "0b995f0cb16bde21df887a717690eaa853a988b9",
       "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66"
     }
   }

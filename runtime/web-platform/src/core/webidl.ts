@@ -12,11 +12,7 @@ function roundTiesToEven(value: number): number {
 }
 
 /** Enforce Web IDL's required-argument check before converting any argument. */
-export function requireArguments(
-  args: readonly unknown[],
-  required: number,
-  operation: string,
-): void {
+export function requireArguments<T>(args: readonly T[], required: number, operation: string): void {
   if (args.length < required) {
     throw new TypeError(operation + " requires at least " + required + " argument(s)");
   }
