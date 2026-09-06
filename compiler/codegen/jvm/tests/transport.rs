@@ -174,7 +174,7 @@ fn tls_refuses_a_certificate_that_names_another_host() {
 /// that decompresses transparently strips `Content-Encoding` and rewrites
 /// `Content-Length` while doing it, so the same response yields different
 /// observable headers depending on which adapter fetched it. The reference
-/// hands back the wire headers unchanged; the OkHttp adapter has to produce the
+/// hands back the wire headers unchanged; the `OkHttp` adapter has to produce the
 /// same pair, and that cross-adapter assertion is what this half sets up.
 #[test]
 fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
