@@ -17,16 +17,20 @@ import {
   File,
   FormData,
   URLSearchParams,
-  encodeMultipart,
-  tee,
-  bytesStream,
-  websocketAccept,
-  encodeFrame,
-  readFrame,
-  BufferedReader,
-  closePayload,
-  parseClose,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import { encodeMultipart } from "../node_modules/.tsbuild/host/runtime/web-platform/src/forms/multipart.js";
+import {
+  bytesStream,
+  tee,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
+import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/io.js";
+import {
+  closePayload,
+  encodeFrame,
+  parseClose,
+  readFrame,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/codec.js";
+import { websocketAccept } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/handshake.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;

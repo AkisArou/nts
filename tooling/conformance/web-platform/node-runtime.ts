@@ -1,5 +1,5 @@
-import { WebPlatformRuntime } from "../../../runtime/web-platform/src/runtime.ts";
-import type { WebPlatformOptions } from "../../../runtime/web-platform/src/runtime.ts";
+import { WebPlatformRuntime } from "../../../runtime/web-platform/src/provider.ts";
+import type { WebPlatformOptions } from "../../../runtime/web-platform/src/provider.ts";
 import { HostNodeContentDecoder } from "./node-content-decoder.ts";
 import { createHostNodePrimitives } from "./node-primitives.ts";
 import type { HostNodeSocketOptions } from "./node-primitives.ts";

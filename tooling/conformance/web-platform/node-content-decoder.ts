@@ -1,7 +1,7 @@
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import type { Transform } from "node:stream";
 import { ReadableStream } from "../../../runtime/web-platform/src/streams/readable.ts";
-import type { ContentDecoder } from "../../../runtime/web-platform/src/fetch/transport.ts";
+import type { ContentDecoder } from "../../../runtime/web-platform/src/provider.ts";
 import { HostNodeReadable } from "./node-primitives.ts";
 
 /** Native zlib is a codec primitive; HTTP policy and header handling remain shared. */

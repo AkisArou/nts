@@ -12,9 +12,9 @@ import {
   ReadableStream,
   AbortController,
   TextEncoder,
-  ConnectionPool,
   Response,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import { ConnectionPool } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/pool.js";
 import { createHostNodePrimitives } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
 import { tlsFixture } from "./tls-fixture.mjs";
 

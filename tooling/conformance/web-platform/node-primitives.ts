@@ -20,7 +20,7 @@ import type {
   Scheduler,
   SocketConnector,
   URLParser,
-} from "../../../runtime/web-platform/src/core/platform.ts";
+} from "../../../runtime/web-platform/src/provider.ts";
 
 const MAX_IO_BYTES = 64 * 1024;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;

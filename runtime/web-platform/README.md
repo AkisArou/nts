@@ -20,7 +20,37 @@ root `tsconfig.base.json`. Platform providers import only explicit typed capabil
 observable Fetch, Streams, HTTP, cache, cookie, proxy, WebSocket, SSE, and body policy
 stays in this shared layer.
 
+## Repository layout
+
+```text
+runtime/web-platform/src/index.ts       canonical public Web values and public types
+runtime/web-platform/src/provider.ts    stable typed provider/runtime boundary
+runtime/web-platform/src/core           shared Web foundations
+runtime/web-platform/src/fetch          Fetch objects, body and policy algorithms
+runtime/web-platform/src/forms          Blob/form/multipart algorithms pending dedup
+runtime/web-platform/src/http1          portable deterministic HTTP/1 reference engine
+runtime/web-platform/src/streams        canonical Web Streams implementation
+runtime/web-platform/src/websocket      WebSocket API, protocol and reference engine
+
+runtime/node/internal/web-platform      native Node-compatible provider (when introduced)
+tooling/conformance/web-platform        ordinary-Node host provider and host tests
+runtime/jvm                              JVM/Android provider, owned by the JVM lane
+```
+
+There is intentionally no `runtime/web-platform/adapters` directory. A platform
+implementation is not shared runtime code merely because it adapts a shared
+interface. The ordinary-Node implementation imports Node built-ins and therefore
+belongs to conformance tooling; the native provider is part of the Node runtime;
+mobile implementations live with their owning runtime. Only capability contracts
+and provider-independent observable algorithms belong here.
+
+`index.ts` is deliberately narrower than the source tree: parsers, pools, codecs,
+transport requests, provider primitives, policy helpers, and internal error types are
+not Web globals. Providers use `provider.ts`; focused conformance tests import an
+internal module explicitly when that internal algorithm is the subject of the test.
+
 The ordinary-Node provider used to exercise this code on the host lives under
 [`tooling/conformance/web-platform`](../../tooling/conformance/web-platform). It is
 test infrastructure, not the native Node-compatible provider. The latter belongs
-under `runtime/node` and calls the common runtime's typed native capabilities.
+under `runtime/node/internal/web-platform` and calls the common runtime's typed native
+capabilities.
