@@ -1,0 +1,22 @@
+# The OkHttp production provider's third-party dependencies: pinned, hashed,
+# licensed, and recorded here rather than resolved by a build file.
+#
+# A version range or a `+` would make the artifact that ships differ from the
+# artifact that was reviewed, which is the whole of a supply-chain problem in
+# one line. These are exact versions and exact SHA-256 digests of the exact
+# jars, and the test that uses them verifies the digest before putting a jar on
+# a classpath -- so a substituted artifact fails the build rather than shipping.
+#
+# The digests were taken from the jars fetched from Maven Central, each of
+# which also matched the SHA-1 published alongside it. Two independent digests
+# of the same bytes, which is the most the registry offers.
+#
+# The zero-invokedynamic rule is NOT applied to these. It is a rule about
+# NTS-authored Java, kept so the artifacts this repository builds stay legible
+# and desugar predictably; a third-party jar is reviewed on its own terms and
+# passes through D8 like any other dependency.
+#
+# group	artifact	version	sha256	license	purl
+com.squareup.okhttp3	okhttp	4.12.0	b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0	Apache-2.0	pkg:maven/com.squareup.okhttp3/okhttp@4.12.0
+com.squareup.okio	okio-jvm	3.6.0	67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412	Apache-2.0	pkg:maven/com.squareup.okio/okio-jvm@3.6.0
+org.jetbrains.kotlin	kotlin-stdlib	1.8.21	042a1cd1ac976cdcfe5eb63f1d8e0b0b892c9248e15a69c8cfba495d546ea52a	Apache-2.0	pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@1.8.21
