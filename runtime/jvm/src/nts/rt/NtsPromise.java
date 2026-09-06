@@ -50,6 +50,29 @@ public final class NtsPromise {
     public static void reject(NtsPromise promise, Object reason) {
         if (promise.state == PENDING) { settle(promise, REJECTED, NtsValue.ofObject(reason)); }
     }
+    /**
+     * Reject with a reason that arrives already erased.
+     *
+     * <p>{@link #reject} takes an {@code Object} because a reason is normally a
+     * reference the compiler has in hand. A **rethrow** does not have one: a
+     * `finally` spanning an `await` has to re-reject with exactly what {@link
+     * #reason} handed back, and that is an {@code NtsValue} because `catch (e)`
+     * is `unknown`.
+     *
+     * <p>Stored as it arrives rather than re-tagged through {@link
+     * NtsValue#ofObject}. The value is already correctly tagged -- it came out
+     * of a rejection -- and `ofObject` tags every reference `OBJECT`, so a
+     * round trip through it would turn a rejected string into a rejected
+     * object. `runtime/c` keeps the tag for the same reason by a different
+     * route: it stores the reference and recovers the tag from the header.
+     *
+     * <p>A reason that is not a reference cannot arise, for the reason the C
+     * header gives: it came from a rejection, and a rejection carries one.
+     */
+    public static void rejectValue(NtsPromise promise, NtsValue reason) {
+        if (promise.state == PENDING) { settle(promise, REJECTED, reason); }
+    }
+
     public static void rejectWith(NtsPromise result, NtsPromise source) {
         settle(result, REJECTED, source.settled);
     }

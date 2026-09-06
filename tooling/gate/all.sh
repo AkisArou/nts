@@ -464,7 +464,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # **112 of 112 — equal to the corpus.** The plan set the target at 86 of 87,
+  # **113 of 113 — equal to the corpus.** The plan set the target at 86 of 87,
   # which was the LLVM floor the day it was written; the corpus has grown by
   # twenty-three since and this lane refuses nothing in it.
   #
@@ -474,9 +474,15 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # name for long enough that the refusal read like a verdict on the construct
   # rather than on the absence of a file.
   #
-  # `async-catch` is the twelfth-hundredth-and-twelfth and it took two things:
-  # one runtime helper for the reason a rejected promise carries, and a latent
-  # bug in `crossing_values` that no earlier example had the shape to reach.
+  # `async-catch` took two things: one runtime helper for the reason a rejected
+  # promise carries, and a latent bug in `crossing_values` that no earlier
+  # example had the shape to reach.
+  #
+  # `async-finally` took one more, and it was the last thing standing between
+  # this lane and the corpus: `nts_promise_reject_value`. A `finally` spanning
+  # an `await` re-rejects with exactly what `nts_promise_reason` handed back,
+  # which is an `NtsValue` because `catch (e)` is `unknown` -- so the reason
+  # arrives already erased and there was no name for that shape.
   #
   # A floor equal to the corpus is a different kind of number from one below it:
   # from here it can only be held, and an example that does not agree fails this
@@ -496,7 +502,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # javac's 25. Materialising the same three booleans in the reference, one
   # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
   #
-  backend_examples 112 "through the JVM backend" ); }
+  backend_examples 113 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
