@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>`floatToRawIntBits`, so a NaN keeps its payload -- `floatToIntBits` canonicalises and node does not. Measured; see `memory.rs`. */
 public final class NtsViewF32 extends NtsView {
-    private NtsViewF32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 4; }
+    private NtsViewF32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 2); }
 
     /** Tracks the buffer's length. */
     public static NtsViewF32 over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewF32 extends NtsView {
 
     public static void set(NtsViewF32 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        int x = Float.floatToRawIntBits((float) v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewF32 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return Float.intBitsToFloat((b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewF32 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         int x = Float.floatToRawIntBits((float) v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
     }

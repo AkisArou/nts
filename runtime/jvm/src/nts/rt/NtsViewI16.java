@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>Little-endian, because a typed array is *platform* order and every platform this runs on is little-endian. `DataView` is where the choice lives. */
 public final class NtsViewI16 extends NtsView {
-    private NtsViewI16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 2; }
+    private NtsViewI16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 1); }
 
     /** Tracks the buffer's length. */
     public static NtsViewI16 over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewI16 extends NtsView {
 
     public static void set(NtsViewI16 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewI16 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return (short) ((b[a] & 0xFF) | (b[a + 1] << 8));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewI16 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8);
     }

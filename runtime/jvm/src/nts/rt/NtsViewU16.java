@@ -2,9 +2,7 @@ package nts.rt;
 
 /** `Uint16Array`: 2-byte elements over an {@link NtsBuffer}. */
 public final class NtsViewU16 extends NtsView {
-    private NtsViewU16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 2; }
+    private NtsViewU16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 1); }
 
     /** Tracks the buffer's length. */
     public static NtsViewU16 over(NtsBuffer buffer, double byteOffset) {
@@ -35,6 +33,20 @@ public final class NtsViewU16 extends NtsView {
 
     public static void set(NtsViewU16 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewU16 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return ((b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewU16 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8);
     }

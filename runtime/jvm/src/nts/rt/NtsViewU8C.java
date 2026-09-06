@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>`Uint8ClampedArray` is the one that is neither `ToInt32` nor a cast: it clamps to 0..255 and rounds **half to even**, so 0.5 is 0 and 1.5 is 2. See `clamp`. */
 public final class NtsViewU8C extends NtsView {
-    private NtsViewU8C(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 1; }
+    private NtsViewU8C(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
 
     /** Tracks the buffer's length. */
     public static NtsViewU8C over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewU8C extends NtsView {
 
     public static void set(NtsViewU8C view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) clamp(v);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewU8C view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return b[a] & 0xFF;
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewU8C view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         b[a] = (byte) clamp(v);
     }

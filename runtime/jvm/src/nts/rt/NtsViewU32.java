@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>`long` in the read so the top bit is a value rather than a sign; the store is the signed one, because `ToInt32` and `ToUint32` write identical bits. */
 public final class NtsViewU32 extends NtsView {
-    private NtsViewU32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 4; }
+    private NtsViewU32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 2); }
 
     /** Tracks the buffer's length. */
     public static NtsViewU32 over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewU32 extends NtsView {
 
     public static void set(NtsViewU32 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewU32 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return (((b[a] & 0xFFL) | ((b[a + 1] & 0xFFL) << 8) | ((b[a + 2] & 0xFFL) << 16) | ((b[a + 3] & 0xFFL) << 24)));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewU32 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
     }

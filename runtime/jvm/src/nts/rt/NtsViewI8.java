@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>`ToInt32` and then the low byte, which is what a store to an `Int8Array` is. */
 public final class NtsViewI8 extends NtsView {
-    private NtsViewI8(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 1; }
+    private NtsViewI8(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
 
     /** Tracks the buffer's length. */
     public static NtsViewI8 over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewI8 extends NtsView {
 
     public static void set(NtsViewI8 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) NtsRuntime.toInt32(v);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewI8 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return b[a];
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewI8 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         b[a] = (byte) NtsRuntime.toInt32(v);
     }

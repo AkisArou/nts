@@ -4,9 +4,7 @@ package nts.rt;
  *
  * <p>The same store as `Int8Array`; only the read differs, because the bits are the same and the interpretation is not. */
 public final class NtsViewU8 extends NtsView {
-    private NtsViewU8(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 1; }
+    private NtsViewU8(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
 
     /** Tracks the buffer's length. */
     public static NtsViewU8 over(NtsBuffer buffer, double byteOffset) {
@@ -37,6 +35,20 @@ public final class NtsViewU8 extends NtsView {
 
     public static void set(NtsViewU8 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) NtsRuntime.toInt32(v);
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewU8 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return b[a] & 0xFF;
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewU8 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         b[a] = (byte) NtsRuntime.toInt32(v);
     }

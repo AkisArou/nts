@@ -2,9 +2,7 @@ package nts.rt;
 
 /** `Float64Array`: 8-byte elements over an {@link NtsBuffer}. */
 public final class NtsViewF64 extends NtsView {
-    private NtsViewF64(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared); }
-
-    @Override public int width() { return 8; }
+    private NtsViewF64(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 3); }
 
     /** Tracks the buffer's length. */
     public static NtsViewF64 over(NtsBuffer buffer, double byteOffset) {
@@ -35,6 +33,20 @@ public final class NtsViewF64 extends NtsView {
 
     public static void set(NtsViewF64 view, double index, double v) {
         int a = at(view, index);
+        byte[] b = view.buffer.bytes;
+        write64(b, a, Double.doubleToRawLongBits(v));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static double getAt(NtsViewF64 view, int index) {
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        return Double.longBitsToDouble(read64(b, a));
+    }
+
+    /** The index already an `int`; see {@link NtsView#atInt}. */
+    public static void setAt(NtsViewF64 view, int index, double v) {
+        int a = atInt(view, index);
         byte[] b = view.buffer.bytes;
         write64(b, a, Double.doubleToRawLongBits(v));
     }
