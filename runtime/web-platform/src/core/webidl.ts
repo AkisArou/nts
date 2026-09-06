@@ -85,5 +85,5 @@ export function toUSVString(value: string): string {
 
 /** Apply JavaScript string coercion before the typed `USVString` conversion. */
 export function coerceToUSVString(value: unknown): string {
-  return toUSVString(`${value}`);
+  return toUSVString(typeof value === "string" ? value : `${value}`);
 }

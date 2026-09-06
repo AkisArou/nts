@@ -1,7 +1,13 @@
 import { decodeUTF8, utf8 } from "../core/encoding.ts";
-import { toUSVString } from "../core/webidl.ts";
+import { coerceToUSVString } from "../core/webidl.ts";
 
 export type SearchParamEntry = readonly [name: string, value: string];
+export type SearchParamSequenceEntry = Iterable<string> & object;
+export type SearchParamSequence = Iterable<SearchParamSequenceEntry>;
+export type SearchParamRecord = Readonly<Record<string, string>>;
+export type URLSearchParamsInit = string | SearchParamSequence | SearchParamRecord;
+
+const upperHex = "0123456789ABCDEF";
 
 function hexDigit(code: number | undefined): number {
   if (code === undefined) {
@@ -26,31 +32,70 @@ function compareEntriesByName(left: SearchParamEntry, right: SearchParamEntry): 
   return left[0] > right[0] ? 1 : 0;
 }
 
-export function formEncode(input: string): string {
-  let result = "";
+function isFormSafe(byte: number): boolean {
+  return (
+    (byte >= 65 && byte <= 90) ||
+    (byte >= 97 && byte <= 122) ||
+    (byte >= 48 && byte <= 57) ||
+    byte === 42 ||
+    byte === 45 ||
+    byte === 46 ||
+    byte === 95
+  );
+}
 
-  for (const byte of utf8.encode(input)) {
-    if (
-      (byte >= 65 && byte <= 90) ||
-      (byte >= 97 && byte <= 122) ||
-      (byte >= 48 && byte <= 57) ||
-      byte === 42 ||
-      byte === 45 ||
-      byte === 46 ||
-      byte === 95
-    ) {
-      result += String.fromCharCode(byte);
+function isSearchParamSequence(
+  init: SearchParamSequence | SearchParamRecord,
+): init is SearchParamSequence {
+  return Symbol.iterator in init;
+}
+
+function convertSequenceEntry(entry: SearchParamSequenceEntry): SearchParamEntry {
+  if ((typeof entry !== "object" || entry === null) && typeof entry !== "function") {
+    throw new TypeError("Each query pair must be an iterable [name, value] tuple");
+  }
+
+  let name = "";
+  let value = "";
+  let length = 0;
+  for (const item of entry) {
+    if (length === 0) name = coerceToUSVString(item);
+    else if (length === 1) value = coerceToUSVString(item);
+    else throw new TypeError("Each query pair must be an iterable [name, value] tuple");
+    length++;
+  }
+  if (length !== 2) {
+    throw new TypeError("Each query pair must be an iterable [name, value] tuple");
+  }
+  return [name, value];
+}
+
+export function formEncode(input: string): string {
+  const source = utf8.encode(input);
+  let length = 0;
+
+  for (const byte of source) {
+    length += isFormSafe(byte) || byte === 32 ? 1 : 3;
+  }
+
+  const output = new Uint8Array(length);
+  let offset = 0;
+  for (const byte of source) {
+    if (isFormSafe(byte)) {
+      output[offset++] = byte;
     } else if (byte === 32) {
-      result += "+";
+      output[offset++] = 43;
     } else {
-      result += "%" + byte.toString(16).toUpperCase().padStart(2, "0");
+      output[offset++] = 37;
+      output[offset++] = upperHex.charCodeAt(byte >>> 4);
+      output[offset++] = upperHex.charCodeAt(byte & 15);
     }
   }
-  return result;
+  return decodeUTF8(output, false, true);
 }
 
 export function formDecode(input: string): string {
-  const source = utf8.encode(input.replace(/\+/g, " "));
+  const source = utf8.encode(input);
   const bytes = new Uint8Array(source.length);
   let length = 0;
 
@@ -59,7 +104,9 @@ export function formDecode(input: string): string {
     if (byte === undefined) {
       break;
     }
-    if (byte === 37) {
+    if (byte === 43) {
+      bytes[length++] = 32;
+    } else if (byte === 37) {
       const high = hexDigit(source[i + 1]);
       const low = hexDigit(source[i + 2]);
       if (high >= 0 && low >= 0) {
@@ -67,17 +114,19 @@ export function formDecode(input: string): string {
         i += 2;
         continue;
       }
+      bytes[length++] = byte;
+    } else {
+      bytes[length++] = byte;
     }
-    bytes[length++] = byte;
   }
   return decodeUTF8(bytes.subarray(0, length), false, true);
 }
 
 /** Standalone URLSearchParams. Live linkage to URL is supplied by the existing NTS URL package. */
 export class URLSearchParams {
-  private list: SearchParamEntry[] = [];
+  private readonly list: SearchParamEntry[] = [];
 
-  constructor(init: string | readonly SearchParamEntry[] | URLSearchParams = "") {
+  constructor(init: URLSearchParamsInit = "") {
     if (typeof init === "string") {
       const query = init.startsWith("?") ? init.slice(1) : init;
       for (const part of query.split("&")) {
@@ -90,8 +139,12 @@ export class URLSearchParams {
           formDecode(index < 0 ? "" : part.slice(index + 1)),
         );
       }
+    } else if (isSearchParamSequence(init)) {
+      for (const entry of init) {
+        this.list.push(convertSequenceEntry(entry));
+      }
     } else {
-      for (const [name, value] of init) {
+      for (const [name, value] of Object.entries(init)) {
         this.append(name, value);
       }
     }
@@ -102,11 +155,11 @@ export class URLSearchParams {
   }
 
   append(name: string, value: string): void {
-    this.list.push([toUSVString(name), toUSVString(value)]);
+    this.list.push([coerceToUSVString(name), coerceToUSVString(value)]);
   }
 
   get(name: string): string | null {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     for (const item of this.list) {
       if (item[0] === key) {
         return item[1];
@@ -116,7 +169,7 @@ export class URLSearchParams {
   }
 
   getAll(name: string): string[] {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     const values: string[] = [];
     for (const item of this.list) {
       if (item[0] === key) {
@@ -127,8 +180,8 @@ export class URLSearchParams {
   }
 
   has(name: string, value?: string): boolean {
-    const key = toUSVString(name);
-    const match = value === undefined ? undefined : toUSVString(value);
+    const key = coerceToUSVString(name);
+    const match = value === undefined ? undefined : coerceToUSVString(value);
     for (const item of this.list) {
       if (item[0] === key && (match === undefined || item[1] === match)) {
         return true;
@@ -138,8 +191,8 @@ export class URLSearchParams {
   }
 
   delete(name: string, value?: string): void {
-    const key = toUSVString(name);
-    const match = value === undefined ? undefined : toUSVString(value);
+    const key = coerceToUSVString(name);
+    const match = value === undefined ? undefined : coerceToUSVString(value);
     let write = 0;
     for (const item of this.list) {
       if (item[0] !== key || (match !== undefined && item[1] !== match)) {
@@ -150,8 +203,8 @@ export class URLSearchParams {
   }
 
   set(name: string, value: string): void {
-    const key = toUSVString(name);
-    const val = toUSVString(value);
+    const key = coerceToUSVString(name);
+    const val = coerceToUSVString(value);
     let found = false;
     let write = 0;
     for (const item of this.list) {
@@ -173,11 +226,8 @@ export class URLSearchParams {
   }
 
   *entries(): Generator<SearchParamEntry, void, unknown> {
-    for (let i = 0; i < this.list.length; ++i) {
-      const entry = this.list[i];
-      if (entry !== undefined) {
-        yield [entry[0], entry[1]];
-      }
+    for (const entry of this.list) {
+      yield [entry[0], entry[1]];
     }
   }
 
@@ -203,14 +253,12 @@ export class URLSearchParams {
   }
 
   toString(): string {
-    let result = "";
+    const result: string[] = [];
     for (const entry of this.list) {
-      if (result.length !== 0) {
-        result += "&";
-      }
-      result += formEncode(entry[0]) + "=" + formEncode(entry[1]);
+      if (result.length !== 0) result.push("&");
+      result.push(formEncode(entry[0]), "=", formEncode(entry[1]));
     }
-    return result;
+    return result.join("");
   }
 
   [Symbol.iterator](): Generator<SearchParamEntry, void, unknown> {

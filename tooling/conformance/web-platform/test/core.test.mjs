@@ -1181,12 +1181,58 @@ test("Blob consumes its iterable once and decodes across immutable chunk boundar
   assert.equal(iterations, 1);
 });
 test("URLSearchParams differential and URL-encoded body consumption", async () => {
-  for (const text of ["?a=1&a=2&x=a+b", "x=%FF%GG&=v", "a=~!*()&b=💙"]) {
+  for (const text of [
+    "?a=1&a=2&x=a+b",
+    "x=%FF%GG&=v",
+    "a=~!*()&b=💙",
+    "lone=\ud800",
+    `long=${"a b+c/💙".repeat(1_025)}`,
+  ]) {
     const a = new URLSearchParams(text),
       b = new globalThis.URLSearchParams(text);
     assert.deepEqual([...a], [...b]);
     assert.equal(a.toString(), b.toString());
   }
+
+  function* generatedPair() {
+    yield "generated";
+    yield 42;
+  }
+  function* generatedSequence() {
+    yield generatedPair();
+    yield ["second", true];
+  }
+  function callablePair() {}
+  callablePair[Symbol.iterator] = function* () {
+    yield "callable";
+    yield "pair";
+  };
+  for (const makeInit of [
+    () => generatedSequence(),
+    () => [callablePair],
+    () => ({ b: 2, a: 1 }),
+    () => ({ 2: "two", 1: "one", tail: "last" }),
+    () => new globalThis.URLSearchParams("copy=1&copy=2"),
+  ]) {
+    assert.deepEqual(
+      [...new URLSearchParams(makeInit())],
+      [...new globalThis.URLSearchParams(makeInit())],
+    );
+  }
+  for (const malformed of [[[]], [["only"]], [["a", "b", "extra"]], ["ab"]]) {
+    assert.throws(() => new URLSearchParams(malformed), TypeError);
+  }
+
+  const coerced = new URLSearchParams();
+  const nativeCoerced = new globalThis.URLSearchParams();
+  for (const params of [coerced, nativeCoerced]) {
+    params.append(1, true);
+    params.set(false, 0);
+  }
+  assert.deepEqual([...coerced], [...nativeCoerced]);
+  assert.equal(coerced.get(1), nativeCoerced.get(1));
+  assert.equal(coerced.has(false, 0), nativeCoerced.has(false, 0));
+
   const r = makeResponse(new URLSearchParams("a=1&a=2"));
   assert.deepEqual(
     [...(await r.formData())],

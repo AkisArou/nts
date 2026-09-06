@@ -48,6 +48,13 @@ export { FormData } from "./forms/form-data.ts";
 export type { FormDataEntryValue } from "./forms/form-data.ts";
 
 export { URLSearchParams } from "./forms/search-params.ts";
+export type {
+  SearchParamEntry,
+  SearchParamRecord,
+  SearchParamSequence,
+  SearchParamSequenceEntry,
+  URLSearchParamsInit,
+} from "./forms/search-params.ts";
 
 export { WebSocket } from "./websocket/websocket.ts";
 export type { WebSocketData, WebSocketSendData } from "./websocket/websocket.ts";

@@ -435,3 +435,28 @@ JVM-backend refusals, and no invalid HIR. The two additional primaries are the t
 intentional `list.length = write` truncations, both instances of the existing
 array-length/property-assignment lowering gap; retaining replacement arrays merely to
 hide that temporary compiler limitation would regress the intended final form.
+
+`URLSearchParams` now implements all three standard initializer branches: strings,
+outer iterables whose inner objects are consumed as exactly two-item iterables, and
+records in Web IDL property order. Inner generators work, values are converted to
+USV strings at the public boundary, and zero-, one-, or three-item entries throw
+rather than being truncated by tuple destructuring. The typed input names the inner
+requirement as `Iterable<string> & object`, so primitive strings are rejected without
+discarding custom iterable pairs. A mutation that accepts extra items makes the
+focused test fail with a missing expected `TypeError`.
+
+The form codec no longer builds a regex-replaced input or repeatedly appends encoded
+fragments to a growing string. Decoding maps `+` while scanning the UTF-8 bytes;
+encoding counts once, fills one exact ASCII byte buffer using a constant uppercase
+hex table, and decodes that buffer once. Collection serialization gathers its final
+pieces and joins once. This is an allocation-shape result, not a measured throughput
+claim; the differential includes an 8,200-code-unit mixed long value as well as lone
+surrogates, malformed escapes, iterable/record construction, and runtime coercion.
+The Node-host suite remains 117/117 and the pinned WPT slice remains 95/95. The live
+NTS frontier is 241 primary refusals, 41 cascades, zero JVM-backend refusals, and no
+invalid HIR. Relative to 240/36, the regex literal, numeric `toString`, and one
+two-name iteration observation disappear; the final initializer types expose the
+planned union/intersection representation work, and correct boundary coercion exposes
+five downstream cascades behind the existing `unknown` conversion and text-encoding
+dependencies. One additional typed-array `subarray` observation is an existing
+typed-memory dependency, not a new semantic category.
