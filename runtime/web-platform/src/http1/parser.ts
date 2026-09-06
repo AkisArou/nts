@@ -126,3 +126,110 @@ export function responseFraming(headers: Headers): {
   }
   return length === null ? { kind: "eof", length: 0 } : { kind: "fixed", length };
 }
+
+function isTabOrSpace(code: number): boolean {
+  return code === 9 || code === 32;
+}
+
+function isQuotedText(code: number): boolean {
+  return (
+    code === 9 ||
+    code === 32 ||
+    code === 33 ||
+    (code >= 35 && code <= 91) ||
+    (code >= 93 && code <= 126) ||
+    code >= 128
+  );
+}
+
+function isQuotedPairValue(code: number): boolean {
+  return code === 9 || code === 32 || (code >= 33 && code <= 126) || code >= 128;
+}
+
+function skipBadWhitespace(line: string, start: number): number {
+  let index = start;
+  while (index < line.length && isTabOrSpace(line.charCodeAt(index))) index++;
+  return index;
+}
+
+function skipChunkExtensionValue(line: string, start: number): number {
+  if (line.charCodeAt(start) !== 34) {
+    let end = start;
+    while (
+      end < line.length &&
+      !isTabOrSpace(line.charCodeAt(end)) &&
+      line.charCodeAt(end) !== 59
+    ) {
+      end++;
+    }
+    if (!isToken(line.slice(start, end))) throw new ProtocolError("Invalid HTTP chunk extension");
+    return end;
+  }
+
+  let index = start + 1;
+  while (index < line.length) {
+    const code = line.charCodeAt(index++);
+    if (code === 34) return index;
+    if (code === 92) {
+      if (index === line.length || !isQuotedPairValue(line.charCodeAt(index++))) {
+        throw new ProtocolError("Invalid HTTP chunk extension escape");
+      }
+    } else if (!isQuotedText(code)) {
+      throw new ProtocolError("Invalid HTTP chunk extension string");
+    }
+  }
+  throw new ProtocolError("Unterminated HTTP chunk extension string");
+}
+
+/** Parse an RFC 9112 chunk-size line and validate ignored chunk extensions. */
+export function parseChunkSize(line: string): number {
+  validateWireValue(line);
+  let index = 0;
+
+  while (index < line.length) {
+    const code = line.charCodeAt(index);
+    if ((code >= 48 && code <= 57) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102)) {
+      index++;
+    } else {
+      break;
+    }
+  }
+  if (index === 0) throw new ProtocolError("Invalid HTTP chunk size");
+  const numeral = line.slice(0, index);
+
+  while (index < line.length) {
+    index = skipBadWhitespace(line, index);
+    if (index === line.length || line.charCodeAt(index++) !== 59) {
+      throw new ProtocolError("Invalid HTTP chunk extension delimiter");
+    }
+
+    index = skipBadWhitespace(line, index);
+    const nameStart = index;
+    while (
+      index < line.length &&
+      !isTabOrSpace(line.charCodeAt(index)) &&
+      line.charCodeAt(index) !== 59 &&
+      line.charCodeAt(index) !== 61
+    ) {
+      index++;
+    }
+    if (!isToken(line.slice(nameStart, index))) {
+      throw new ProtocolError("Invalid HTTP chunk extension name");
+    }
+
+    const nameEnd = index;
+    index = skipBadWhitespace(line, index);
+    if (index === line.length && index !== nameEnd) {
+      throw new ProtocolError("Invalid trailing whitespace in HTTP chunk extension");
+    }
+    if (index < line.length && line.charCodeAt(index) === 61) {
+      index = skipBadWhitespace(line, index + 1);
+      if (index === line.length) throw new ProtocolError("Missing HTTP chunk extension value");
+      index = skipChunkExtensionValue(line, index);
+    }
+  }
+
+  const size = Number.parseInt(numeral, 16);
+  if (!Number.isSafeInteger(size)) throw new LimitError("HTTP chunk is too large");
+  return size;
+}

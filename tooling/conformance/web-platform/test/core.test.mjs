@@ -24,6 +24,7 @@ import {
   tee,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/io.js";
+import { parseChunkSize } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/parser.js";
 import {
   toClampedUnsignedShort,
   toScalarValueString,
@@ -507,6 +508,30 @@ test("Web IDL conversions clamp with ties-to-even and replace lone surrogates", 
     assert.equal(toClampedUnsignedShort(input), expected);
   }
   assert.equal(toScalarValueString("a\ud800b\udc00c\ud83d\udc99"), "a\ufffdb\ufffdc\ud83d\udc99");
+});
+test("HTTP chunk extensions follow the RFC 9112 grammar", () => {
+  for (const [line, expected] of [
+    ["0", 0],
+    ["00;done", 0],
+    ["a;token=value", 10],
+    ['A \t; \tquoted \t= \t"value\\\"part" ; flag', 10],
+    ["ffffffff", 4_294_967_295],
+  ]) {
+    assert.equal(parseChunkSize(line), expected);
+  }
+  for (const line of [
+    "1 ",
+    "1;",
+    "1;=value",
+    "1;name ",
+    "1;name=",
+    "1;name=()",
+    '1;name="unterminated',
+    '1;name="value"junk',
+    "1 trailing",
+  ]) {
+    assert.throws(() => parseChunkSize(line), undefined, line);
+  }
 });
 test.after(() => api.close());
 test("Header HTTP whitespace normalization, non-breaking space and embedded newline rejection", () => {

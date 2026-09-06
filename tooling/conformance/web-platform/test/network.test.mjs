@@ -321,6 +321,11 @@ for (const [name, wire, headError] of [
   ["truncated fixed body", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx", false],
   ["bad chunk size", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nX\r\n", false],
   [
+    "bad chunk extension",
+    'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1;name="unterminated\r\nx\r\n0\r\n\r\n',
+    false,
+  ],
+  [
     "missing chunk terminator",
     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\naXX0\r\n\r\n",
     false,
@@ -342,7 +347,7 @@ suite(
   "Partial header reads, informational responses, chunk extensions and wire order",
   async (t) => {
     const wire =
-      "HTTP/1.1 103 Early Hints\r\nLink: </x>\r\n\r\nHTTP/1.1 200 Yep\r\nTransfer-Encoding: chunked\r\nSet-Cookie: a\r\nX-B: 2\r\nSet-Cookie: b\r\n\r\n3;x=y\r\nabc\r\n0\r\n\r\n";
+      'HTTP/1.1 103 Early Hints\r\nLink: </x>\r\n\r\nHTTP/1.1 200 Yep\r\nTransfer-Encoding: chunked\r\nSet-Cookie: a\r\nX-B: 2\r\nSet-Cookie: b\r\n\r\n3 \t; x \t= \t"quoted\\\"value" ; flag\r\nabc\r\n0;done\r\n\r\n';
     const s = await server(
       t,
       (socket) =>

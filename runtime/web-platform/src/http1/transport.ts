@@ -16,6 +16,7 @@ import { writeAll } from "./io.ts";
 import {
   contentLength,
   hasToken,
+  parseChunkSize,
   readHead,
   readHeaderFields,
   responseFraming,
@@ -250,14 +251,7 @@ export class Http1Transport implements FetchTransport {
                 if (needsChunkEnd && (await lease.reader.line(2)) !== "")
                   throw new ProtocolError("Missing chunk terminator");
                 const line = await lease.reader.line(this.limits.maxHeaderBytes);
-                const separator = line.indexOf(";");
-                const size = separator < 0 ? line : line.slice(0, separator);
-                if (!/^[0-9a-fA-F]+$/.test(size))
-                  throw new ProtocolError("Invalid HTTP chunk size");
-                validateWireValue(line);
-                remaining = Number.parseInt(size, 16);
-                if (!Number.isSafeInteger(remaining))
-                  throw new LimitError("HTTP chunk is too large");
+                remaining = parseChunkSize(line);
                 if (remaining === 0) {
                   const trailers = await readHeaderFields(lease.reader, this.limits);
                   for (const [name] of trailers)
