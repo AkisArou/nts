@@ -72,8 +72,11 @@ export class FormData {
     for (const item of this.entries()) yield item[1];
   }
 
-  forEach(callback: (value: FormDataEntryValue, name: string, parent: FormData) => void): void {
-    for (const [name, value] of this.entries()) callback(value, name, this);
+  forEach(
+    callback: (this: unknown, value: FormDataEntryValue, name: string, parent: FormData) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const [name, value] of this.entries()) callback.call(thisArg, value, name, this);
   }
 
   [Symbol.iterator](): Generator<FormDataEntry, void, unknown> {

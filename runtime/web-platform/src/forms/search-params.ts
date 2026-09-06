@@ -134,8 +134,11 @@ export class URLSearchParams {
     for (const entry of this.entries()) yield entry[1];
   }
 
-  forEach(callback: (value: string, name: string, parent: URLSearchParams) => void): void {
-    for (const [name, value] of this.entries()) callback(value, name, this);
+  forEach(
+    callback: (this: unknown, value: string, name: string, parent: URLSearchParams) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const [name, value] of this.entries()) callback.call(thisArg, value, name, this);
   }
 
   toString(): string {

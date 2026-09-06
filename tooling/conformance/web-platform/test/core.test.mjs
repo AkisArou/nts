@@ -36,6 +36,8 @@ const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
 const NativeResponse = globalThis.Response;
+const NativeFormData = globalThis.FormData;
+const NativeURLSearchParams = globalThis.URLSearchParams;
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
@@ -84,6 +86,40 @@ test("Fetch-standard duplicate Cookie uses comma, unlike the Node host oracle", 
     ]).get("cookie"),
     "a=1, b=2",
   );
+});
+test("Web collection forEach methods apply thisArg as the callback receiver", () => {
+  const marker = { marker: true };
+  const pairs = [
+    [new Headers([["x", "1"]]), new NativeHeaders([["x", "1"]])],
+    [new URLSearchParams("x=1"), new NativeURLSearchParams("x=1")],
+    [
+      (() => {
+        const value = new FormData();
+        value.append("x", "1");
+        return value;
+      })(),
+      (() => {
+        const value = new NativeFormData();
+        value.append("x", "1");
+        return value;
+      })(),
+    ],
+  ];
+
+  for (const [actual, expected] of pairs) {
+    const actualCalls = [];
+    const expectedCalls = [];
+
+    actual.forEach(function (value, name, parent) {
+      assert.equal(this, marker);
+      actualCalls.push([value, name, parent === actual]);
+    }, marker);
+    expected.forEach(function (value, name, parent) {
+      assert.equal(this, marker);
+      expectedCalls.push([value, name, parent === expected]);
+    }, marker);
+    assert.deepEqual(actualCalls, expectedCalls);
+  }
 });
 test("Headers validation, guard and raw ownership", () => {
   for (const name of ["", "a b", "x\r\ny", ":a", "é"])

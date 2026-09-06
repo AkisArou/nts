@@ -188,8 +188,11 @@ export class Headers {
     for (const entry of this.entries()) yield entry[1];
   }
 
-  forEach(callback: (value: string, name: string, parent: Headers) => void): void {
-    for (const entry of this.entries()) callback(entry[1], entry[0], this);
+  forEach(
+    callback: (this: unknown, value: string, name: string, parent: Headers) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const entry of this.entries()) callback.call(thisArg, entry[1], entry[0], this);
   }
 
   [Symbol.iterator](): Generator<HeaderEntry, void, unknown> {
