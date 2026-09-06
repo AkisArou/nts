@@ -74,11 +74,19 @@ an assignment plus a zero-fill of what it exposes. Growth zeroes even though the
 block was zero when reserved, because a resize down and up again would otherwise
 show what the shrunk region held.
 
-`NtsView` and its nine element classes are the typed arrays. The length is
+`NtsView` and its **eleven** element classes are the typed arrays — the nine
+numeric ones and the `BigInt64`/`BigUint64` pair, whose element is 64 bits where
+a bigint is 128, so a read sign-extends into the high word or zero-fills it and
+a write keeps the low one either way. The length is
 **computed, not stored**: a view built without an explicit length tracks its
 buffer, and a stored length is right until the first `resize`.
 
-`NtsDataView` is big-endian by default — the one place in the language where the
+`NtsDataView` is lowered as `ManagedType::DataView` since `932a9969`, which
+carries nothing — a typed array *is* its element type, and a `DataView` has none
+because the width is chosen per access by the method called. `examples/data-view`
+drives 466 cases across sixteen functions and all three backends agree with node.
+
+It is big-endian by default — the one place in the language where the
 default is the less common byte order — and unaligned access is legal, which is
 why it assembles from bytes rather than reaching for a wider primitive.
 
@@ -101,6 +109,12 @@ Out of bounds **refuses**. JavaScript reads out of bounds as `undefined` and
 writes by doing nothing; `nts_bounds` already refuses for ordinary arrays, and a
 typed array behaving differently would be a second answer to one question.
 
+`set` and `copyWithin` move ranges and their only hard case is the overlapping
+one — a forward loop is correct for every non-overlapping input. `copyWithin` is
+`System.arraycopy`, specified to behave as if copied through a temporary; `set`
+snapshots the source when the two views share a buffer, because two views can
+overlap at *different element widths*.
+
 Measured, in `docs/records/0182`: element access through a view is 4.65x a bare
 array, which is 2.28x of lost vectorisation times 1.98x of accessor work. The
 indirection through the buffer is not part of it.
@@ -115,6 +129,20 @@ is the Android one. Both speak HTTP `CONNECT` and SOCKS5, both close every
 connection on a network transition, both verify TLS against the target.
 `BothTunnels` runs every case through both against one proxy and requires the
 same answer, because two copies of something subtle is how drift starts.
+
+### Partial writes, which only the reference path can produce
+
+`OutputStream.write` writes everything or throws, so a JVM primitive naturally
+always reports the full count — and the shared `writeAll` loop above it, which
+exists precisely to handle a short write, would have its body executed once,
+ever, on every platform. The shared contract permits `1..data.length` because a
+real `send(2)` on a full send buffer returns short.
+
+`NtsSocket.fragmentWritesAt(n)` makes the deterministic reference path produce
+one. Not a production behaviour — the Android provider still writes in full —
+but a *reference* one, which is what the plan means by a deterministic reference
+transport. Deterministic rather than random, so a corpus that exercises it stays
+an oracle instead of becoming a flake.
 
 ### Three things that are easy to get wrong
 
@@ -160,7 +188,7 @@ asserted on the built client through OkHttp's own accessors instead.
 | typed memory | 3,098 oracle lines against node, by bit pattern, covering all eleven element types |
 | the Android library | class file 52, `-Xlint:all -Werror` clean, one `android.*` import in one file |
 | both, after `d8 --min-api 26` | zero `invoke-custom`; D8 desugars every lambda even where it would be legal |
-| after `r8` with `consumer-rules.pro` | the FFI surface survives, the private internals do not, and the shrunk library passes its whole suite on a device |
+| after `r8` with `consumer-rules.pro` | the FFI surface survives, the private internals do not, and the shrunk library passes its whole suite on a device. A keep rule matching **nothing** fails the run: it names a class now absent from the artifact, and every caller of it is across an FFI where nothing complains until it is called |
 | OkHttp, Okio, kotlin-stdlib, R8 | pinned to exact versions in `dependencies.tsv` with SHA-256, license and scope; verified before use, and a mismatch **fails** |
 
 The zero-invokedynamic rule is about NTS-authored Java. It is not applied to the
@@ -172,7 +200,13 @@ compiler against our house style.
 
     cargo test -p nts-codegen-jvm            # every suite above, skipping what it cannot find
     sh tooling/android/on-device.sh          # the same suites on ART, plus the R8-shrunk library
+    sh tooling/android/barrier.sh            # does `volatile` reach the compiler and make a fence
     sh tooling/jvm/sabotage.sh <edit> <driver>   # prove one can fail, without breaking the tree
+
+Every Java driver reports a **check count** and every harness asserts the number
+rather than the zero. Removing a whole case gives `30 checks, 0 failures` where
+it should be 56, and the old assertion passed that happily — zero failures is
+satisfied by a suite that stopped running.
 
 The last one copies `runtime/jvm/src` before editing it. Sabotage in place
 leaves wrong source in a checkout three sessions build from, for a window
@@ -180,11 +214,18 @@ leaves wrong source in a checkout three sessions build from, for a window
 
 ## What this lane is still waiting for
 
-- **`ManagedType::View { element }`**, so the typed arrays have a lowering. The
-  runtime half is done and oracle-tested; the descriptor and extern tables are
-  small once the variant exists.
-- **The `nts_jvm_web_*` intrinsic declarations**, so the transports are callable
-  from the shared TypeScript rather than only from Java.
+- **`ManagedType::View { element }`**, so the typed arrays have a lowering.
+  `DataView` landed separately because it carries nothing; the views carry an
+  element and bring the 97 match sites and the `elements`-narrowing collision
+  with them. The runtime half is finished and oracle-tested at 3,128 lines —
+  eleven element types with `set`, `copyWithin`, `subarray`, `slice` and the
+  bigint pair — so the descriptor and extern tables are an evening once the
+  variant exists.
+- **The `nts_jvm_web_*` intrinsic declarations to be agreed.** The proposal is
+  written and typechecks — `runtime/web-platform/android/intrinsics.d.ts`, with
+  the Java behind every entry — and three of them are themselves gated on the
+  byte-view type. Until then the transports are reachable from Java and not from
+  TypeScript.
 - **ARM hardware**, for the publication race itself. The keyword and the
   barrier it generates are both checked; only the reordering that would expose
   their absence is not. See `docs/records/0181`.
