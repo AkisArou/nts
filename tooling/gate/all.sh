@@ -436,7 +436,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 111 "through the LLVM backend, counting" ); }
+  backend_examples 112 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -447,7 +447,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 111 "through the LLVM backend" ); }
+  backend_examples 112 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -464,7 +464,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # **111 of 111 — equal to the corpus.** The plan set the target at 86 of 87,
+  # **112 of 112 — equal to the corpus.** The plan set the target at 86 of 87,
   # which was the LLVM floor the day it was written; the corpus has grown by
   # twenty-three since and this lane refuses nothing in it.
   #
@@ -473,6 +473,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # wanted a class to be, which is thirty lines, and both had been refused by
   # name for long enough that the refusal read like a verdict on the construct
   # rather than on the absence of a file.
+  #
+  # `async-catch` is the twelfth-hundredth-and-twelfth and it took two things:
+  # one runtime helper for the reason a rejected promise carries, and a latent
+  # bug in `crossing_values` that no earlier example had the shape to reach.
   #
   # A floor equal to the corpus is a different kind of number from one below it:
   # from here it can only be held, and an example that does not agree fails this
@@ -485,10 +489,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # What is left for this backend is mostly not coverage. Seven of the eight
   # AWFY rows are at or under hand-written Java; `awfy-queens` at 1.25x is the
-  # one left, and its counter is a method *parameter*, which is the one place a
-  # representation choice cannot be made without rewriting a descriptor.
+  # one left, and the diagnosis written here before -- that its counter is a
+  # method parameter -- was wrong. It is the **materialised boolean**:
+  # `a && b && c` lowers to a merge per operator whose parameter this backend
+  # writes to a slot and reads back, 55 bytecodes in `getRowColumn` against
+  # javac's 25. Materialising the same three booleans in the reference, one
+  # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
   #
-  backend_examples 111 "through the JVM backend" ); }
+  backend_examples 112 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

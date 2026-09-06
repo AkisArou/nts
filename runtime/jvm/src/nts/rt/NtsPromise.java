@@ -59,6 +59,25 @@ public final class NtsPromise {
     public static Object reference(NtsPromise promise) { return promise.settled.ref; }
     public static NtsValue value(NtsPromise promise) { return promise.settled; }
 
+    /**
+     * The reason a rejected promise carries, as an erased value.
+     *
+     * <p>`reject` stores it through {@link NtsValue#ofObject}, so it is already
+     * tagged by its class -- the JVM's answer to what `nts_tag_of_reference`
+     * recovers from the header on the C side. What that leaves is the null,
+     * which `ofObject` makes a `null` value and a `catch` of has to see as
+     * `undefined`; `runtime/c` says the same thing beside its own helper.
+     *
+     * <p>This did not exist until `catch (e)` did, and the C header says why:
+     * while a rejection could only be <em>forwarded</em>, nothing had to name
+     * it. `e` is `unknown`, so there is one representation and no question of
+     * which reader to call.
+     */
+    public static NtsValue reason(NtsPromise promise) {
+        NtsValue settled = promise.settled;
+        return settled.ref == null ? NtsValue.UNDEFINED_VALUE : settled;
+    }
+
     public static void subscribe(NtsPromise promise, NtsResumable frame) {
         if (frame == null) { throw new NullPointerException("resumable frame"); }
         if (promise.state != PENDING) {

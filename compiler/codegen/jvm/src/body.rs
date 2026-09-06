@@ -22,7 +22,7 @@
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
 use nts_core::hir::{
-    BinOp, BlockId, Func, HirType, OpKind, Program, UnOp, ValueId,
+    BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
@@ -109,6 +109,28 @@ fn crossing_values(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
         // A block parameter is written by predecessors, so its slot is
         // always live across this block's own frame.
         crosses.extend(block.params.iter().copied());
+        // A branch that carries block arguments emits a label of its own --
+        // the true arm gets one so its copies have somewhere to live -- and
+        // the copies read their operands *after* it. Those reads need a frame,
+        // and a slot this walk left as `Top` fails to verify there.
+        //
+        // `examples/async-catch` is the first program to produce the shape:
+        // `br is_rejected, handler(reason), fulfil`, where `reason` is
+        // computed one operation earlier and read nowhere else, so nothing
+        // else made it cross. The verifier named it exactly -- "Type top
+        // (current frame, locals[8]) is not assignable to reference type" --
+        // which is the one place this backend is a better instrument than the
+        // other two: on C the same slot is an uninitialised local and compiles.
+        //
+        // Every operand rather than only the true arm's: the arms are chosen
+        // by which one falls through, the cost is a declared slot, and a rule
+        // that depends on emission order is a rule that breaks when the order
+        // does.
+        if let Terminator::Branch { then_args, else_args, .. } = &block.terminator
+            && !(then_args.is_empty() && else_args.is_empty())
+        {
+            crosses.extend(nts_core::hir::operands_of_terminator(&block.terminator));
+        }
         let labels: Vec<usize> = block
             .ops
             .iter()

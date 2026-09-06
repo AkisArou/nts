@@ -430,6 +430,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_promise_value" => {
             (types::PROMISE, "value", "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;")
         }
+        "nts_promise_reason" => {
+            (types::PROMISE, "reason", "(Lnts/rt/NtsPromise;)Lnts/rt/NtsValue;")
+        }
 
         "nts_map_new" => (types::MAP, "newMap", "(D)Lnts/rt/NtsMap;"),
         "nts_set_new" => (types::MAP, "newSet", "(D)Lnts/rt/NtsMap;"),
