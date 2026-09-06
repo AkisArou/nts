@@ -1,4 +1,4 @@
-# Three ways to get ARM evidence on an x86 machine, and the fourth that worked
+# Five ways to get ARM evidence on an x86 machine, and the one that worked
 
 The goal asks for device evidence of ARM publication ordering. `NtsInbox.Slot.next`
 is `volatile` because the link write is the publication edge that makes a
@@ -6,23 +6,45 @@ worker's bytes visible to the owner lane, and **on x86 that keyword is
 unfalsifiable**: x86-TSO does not reorder stores with stores, so a build with
 the keyword and a build without it behave identically on every input.
 
-I said this was unavailable, then went and tried three ways to get it anyway.
-None of them work on this machine, and the reasons are worth having written
-down so the next person spends the afternoon on something else.
+I said this was unavailable, then went and tried five ways to get it anyway.
+Four do not work on this machine and one does something else entirely, and the
+reasons are worth writing down so the next person spends the afternoon on
+something better.
+
+The four failures are recorded in the order I tried them, which is also the
+order of how obviously right each looked.
 
 ## An arm64 emulator image
 
-The Android SDK here has `emulator`, `platform-tools`, three `build-tools` and
-one `system-images/android-36.1`, which is **x86_64 only**. Fetching an arm64
-image needs `sdkmanager`, which lives in `cmdline-tools`, which is not
-installed. So the route exists and the tool that opens it does not.
+The SDK here has one `system-images/android-36.1`, x86_64 only, and no
+`sdkmanager` to fetch another -- `cmdline-tools` is not installed. That is where
+this stopped the first time, and it was the wrong place to stop, because the
+images are plain zips on `dl.google.com` and `curl` is right there.
 
-Worth noting that this would have been real evidence if it had worked: an arm64
-image under the emulator is full CPU emulation, and QEMU's TCG does *not*
-reproduce weak memory ordering faithfully — it serialises. So even with the
-image, a passing run would have proved nothing about ARM. **The route that
-looked most like the answer is the one that would have produced a green tick
-and no information.**
+So: fetched `arm64-v8a-34_r04.zip`, 705 MB, SHA-1 `d9f2011131919abe95...`
+matching the checksum in the repository manifest; unpacked it into
+`system-images/android-34/default/arm64-v8a`; hand-wrote the `config.ini` and
+`.ini` that `avdmanager` would have written. The emulator listed the AVD. The
+bundled `qemu-system-aarch64` is present, which is what made it look plausible.
+
+    FATAL | Avd's CPU Architecture 'arm64' is not supported by the QEMU2
+            emulator on x86_64 host. System image must match the host
+            architecture.
+
+**The emulator refuses.** Cross-architecture guests are gone from it, and the
+`qemu-system-aarch64` binary is shipped for aarch64 *hosts*. The route is closed
+by the tool rather than by a missing package, which is a better thing to know:
+"install cmdline-tools and try again" would have been wrong advice, and it is
+what the first version of this record implied.
+
+It would have proved nothing anyway. An emulated guest gets the **host's**
+memory model -- QEMU's TCG does not reproduce weak ordering, so a missing
+barrier is as invisible under emulation as it is natively. The route that looked
+most like the answer is the one that would have produced a green tick and no
+information. It just took 705 MB to establish that it would not even have run.
+
+The image and the AVD were removed afterwards. Three quarters of a gigabyte of
+unusable system image left in someone's SDK is not a free experiment.
 
 ## `qemu-user` with an aarch64 JDK
 
@@ -50,7 +72,7 @@ generated from the keyword, on the actual target, by the actual compiler.
 not compile for one, and on-device `oatdump` aborts on the arm64 file as well,
 being built for one architecture.
 
-Two further variants, tried after the fourth route below made it clear how much
+Two further variants, tried after the route below made it clear how much
 an arm64 disassembly would be worth -- `dmb ish` on the real target rather than
 `lock add` on this one:
 
@@ -63,10 +85,10 @@ x86_64 device. It is not a boot-image problem to be worked around; the code
 generator is absent. Recorded so the next person does not spend the evening on
 flag combinations.
 
-## The fourth way, which does work
+## The one that works
 
-Written after the three above, because giving up on the manifestation is not the
-same as giving up on the mechanism.
+Written after the others, because giving up on the manifestation is not the same
+as giving up on the mechanism.
 
 The chain from `volatile` to correct-on-ARM has two links. The keyword has to
 survive into the class file, and the compiler has to turn it into a barrier. The
@@ -116,18 +138,17 @@ Three things now, in increasing order of how much they were worth getting:
 The *manifestation* is still unmeasured and cannot be measured here: showing the
 race needs hardware that reorders. But "the ratchet is the whole of it" was
 wrong when I wrote it, and it was wrong because I stopped at three failures
-instead of asking what a fourth attempt would be measuring.
+instead of asking what a further attempt would be measuring.
 
 ## The general shape
 
-Three of the four routes would have run, passed, and meant nothing — an emulator
+Two of the four failed routes would have run, passed, and meant nothing — an emulator
 and a user-mode translator both give the guest the host's memory model. A test
 that cannot fail is not evidence, and a test that cannot fail *for a reason
 specific to the platform it claims to be testing* is worse, because it looks
 like exactly the coverage that is missing.
 
-The fourth is the one that worked, and it worked by changing the question. The
-first three asked "can I make the bug happen here", which needs hardware. It
+The one that worked did so by changing the question. The others asked "can I make the bug happen here", which needs hardware. It
 asks "does the thing that prevents the bug get generated", which needs a
 compiler -- and there is one on every device. When a property cannot be
 observed, the next question is not a better emulator; it is which link in the
