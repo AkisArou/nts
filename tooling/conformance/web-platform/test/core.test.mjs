@@ -506,7 +506,7 @@ test("UTF-8 encode and encodeInto match host including lone surrogates", () => {
     }
   }
 });
-test("TextEncoder matches Node input coercion boundaries", () => {
+test("TextEncoder applies Web IDL string conversion at both encode boundaries", () => {
   const encoder = new TextEncoder();
   const native = new NativeEncoder();
   const coercible = {
@@ -521,10 +521,156 @@ test("TextEncoder matches Node input coercion boundaries", () => {
   assert.throws(() => encoder.encode(Symbol("value")), TypeError);
   assert.throws(() => native.encode(Symbol("value")), TypeError);
 
-  for (const value of [undefined, null, 42, coercible, Symbol("value")]) {
-    assert.throws(() => encoder.encodeInto(value, new Uint8Array(16)), TypeError);
-    assert.throws(() => native.encodeInto(value, new Uint8Array(16)), TypeError);
+  for (const [value, expected] of [
+    [undefined, "undefined"],
+    [null, "null"],
+    [42, "42"],
+    [true, "true"],
+    [coercible, "value\ufffd"],
+  ]) {
+    const destination = new Uint8Array(32);
+    const progress = encoder.encodeInto(value, destination);
+    assert.deepEqual(destination.subarray(0, progress.written), encoder.encode(expected));
+    assert.equal(progress.read, expected.length);
   }
+  assert.throws(() => encoder.encodeInto(Symbol("value"), new Uint8Array(16)), TypeError);
+
+  assert.throws(() => encoder.encodeInto(), TypeError);
+  assert.throws(() => encoder.encodeInto("value"), TypeError);
+  assert.throws(() => encoder.encodeInto("value", new Int8Array(16)), TypeError);
+
+  const order = [];
+  assert.throws(
+    () =>
+      encoder.encodeInto(
+        {
+          toString() {
+            order.push("source");
+            return "value";
+          },
+        },
+        new Int8Array(16),
+      ),
+    TypeError,
+  );
+  assert.deepEqual(order, ["source"]);
+
+  // Node 24 rejects these non-string sources despite the normative USVString
+  // declaration. Keep the version difference visible instead of copying it.
+  assert.throws(() => native.encodeInto(42, new Uint8Array(16)), TypeError);
+});
+test("TextDecoder converts labels and dictionaries before constructing state", () => {
+  const order = [];
+  const decoder = new TextDecoder(
+    {
+      toString() {
+        order.push("label");
+        return "UTF8";
+      },
+    },
+    {
+      get fatal() {
+        order.push("fatal");
+        return "enabled";
+      },
+      get ignoreBOM() {
+        order.push("ignoreBOM");
+        return 0;
+      },
+    },
+  );
+  assert.deepEqual(order, ["label", "fatal", "ignoreBOM"]);
+  assert.equal(decoder.encoding, "utf-8");
+  assert.equal(decoder.fatal, true);
+  assert.equal(decoder.ignoreBOM, false);
+  assert.throws(() => {
+    decoder.fatal = false;
+  }, TypeError);
+  assert.throws(() => {
+    decoder.ignoreBOM = true;
+  }, TypeError);
+  const encoder = new TextEncoder();
+  assert.throws(() => {
+    encoder.encoding = "utf-16";
+  }, TypeError);
+
+  for (const label of [
+    "unicode-1-1-utf-8",
+    "unicode11utf8",
+    "unicode20utf8",
+    "utf-8",
+    "utf8",
+    "x-unicode20utf8",
+  ]) {
+    assert.equal(new TextDecoder(label).encoding, "utf-8");
+  }
+  assert.equal(new TextDecoder("utf-8", null).fatal, false);
+  for (const options of [0, false, "options", Symbol("options")]) {
+    assert.throws(() => new TextDecoder("utf-8", options), TypeError);
+  }
+  assert.throws(() => new TextDecoder(null), RangeError);
+  assert.throws(() => new TextDecoder(42), RangeError);
+  assert.throws(() => new TextDecoder(Symbol("label")), TypeError);
+
+  const failedOrder = [];
+  assert.throws(
+    () =>
+      new TextDecoder("unsupported", {
+        get fatal() {
+          failedOrder.push("fatal");
+          return false;
+        },
+        get ignoreBOM() {
+          failedOrder.push("ignoreBOM");
+          return false;
+        },
+      }),
+    RangeError,
+  );
+  assert.deepEqual(failedOrder, ["fatal", "ignoreBOM"]);
+});
+test("TextDecoder accepts every AllowSharedBufferSource view without widening its range", () => {
+  const buffer = Uint8Array.of(0x78, 0x61, 0x62, 0x79).buffer;
+  assert.equal(new TextDecoder().decode(buffer), "xaby");
+  assert.equal(new TextDecoder().decode(new DataView(buffer, 1, 2)), "ab");
+
+  const wideBuffer = Uint8Array.of(0x78, 0x78, 0x61, 0x62, 0x79, 0x79).buffer;
+  assert.equal(new TextDecoder().decode(new Uint16Array(wideBuffer, 2, 1)), "ab");
+
+  const shared = new SharedArrayBuffer(4);
+  new Uint8Array(shared).set([0x78, 0x61, 0x62, 0x79]);
+  assert.equal(new TextDecoder().decode(new DataView(shared, 1, 2)), "ab");
+
+  let optionsRead = false;
+  assert.throws(
+    () =>
+      new TextDecoder().decode(
+        {},
+        {
+          get stream() {
+            optionsRead = true;
+            return false;
+          },
+        },
+      ),
+    TypeError,
+  );
+  assert.equal(optionsRead, false);
+  for (const input of [null, 42, {}, Symbol("input")]) {
+    assert.throws(() => new TextDecoder().decode(input), TypeError);
+  }
+});
+test("TextDecoder converts stream options before mutating decoder state", () => {
+  const decoder = new TextDecoder();
+  assert.equal(decoder.decode(Uint8Array.of(0xc2), { stream: "yes" }), "");
+  assert.throws(() => decoder.decode(Uint8Array.of(0xa2), 1), TypeError);
+  assert.equal(decoder.decode(Uint8Array.of(0xa2), { stream: 0 }), "¢");
+  assert.equal(decoder.decode(undefined, null), "");
+
+  const fatal = new TextDecoder("utf-8", { fatal: true });
+  assert.equal(fatal.decode(Uint8Array.of(0x61), { stream: true }), "a");
+  assert.throws(() => fatal.decode(Uint8Array.of(0xff), { stream: true }), TypeError);
+  assert.equal(fatal.decode(Uint8Array.of(0xef, 0xbb, 0xbf, 0x62), { stream: true }), "\ufeffb");
 });
 test("UTF-8 decoder differential over all split positions and malformed sequences", () => {
   const cases = [

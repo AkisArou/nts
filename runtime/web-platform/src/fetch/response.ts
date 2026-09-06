@@ -1,4 +1,4 @@
-import { coerceToByteString, toUnsignedShort } from "../core/webidl.ts";
+import { coerceToByteString, requireDictionary, toUnsignedShort } from "../core/webidl.ts";
 import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import { Body, BodyState, convertBodyInit, standardBodyPolicy } from "./body.ts";
@@ -35,9 +35,7 @@ function convertResponseInit(init: ResponseInit | null | undefined): ConvertedRe
   if (init === undefined || init === null) {
     return { headers: undefined, status: 200, statusText: "" };
   }
-  if (typeof init !== "object" && typeof init !== "function") {
-    throw new TypeError("Response init must be a dictionary");
-  }
+  requireDictionary(init, "Response init");
 
   // Web IDL converts dictionary members in lexicographic order. Constructing
   // Headers here also consumes and converts an iterable before `status` is read.

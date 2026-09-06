@@ -622,3 +622,39 @@ primary refusals, 57 cascades, zero JVM-backend refusals, and no invalid HIR. Th
 single additional primary is another occurrence of the existing unrepresentable
 `WeakRef[]` signal-state dependency reached through the internal fresh-signal
 factory; it is not a new feature or a backend refusal.
+
+The Encoding API now applies its complete Web IDL boundary before the existing UTF-8
+algorithm. `TextEncoder.encodeInto()` enforces both required arguments, converts its
+source to `USVString` before validating the destination, and accepts only a
+`Uint8Array`, including one backed by shared storage. This intentionally differs
+from pinned Node 24.20.0, which rejects non-string sources despite the normative
+`USVString` declaration. `TextDecoder` converts its `DOMString` label before the
+lexicographically ordered `fatal` and `ignoreBOM` dictionary members, supports every
+specified UTF-8 label, and exposes readonly attributes rather than writable public
+fields. Decode options are converted before decoder state can change.
+
+`TextDecoder.decode()` accepts the complete `AllowSharedBufferSource` boundary:
+`ArrayBuffer`, `SharedArrayBuffer`, and every `ArrayBufferView`, while reading exactly
+the view's byte range. Its streaming state now distinguishes whether the preceding
+call requested no flush. A fatal call rolls BOM serialization state back to the
+start of that call, so output discarded by the exception is not remembered while
+BOM state established by an earlier successful streaming call is retained. The
+zero-input flush path reuses a private empty view instead of allocating one per
+call. Required-argument and dictionary checks now live in the shared Web IDL module
+and are reused by Events and Fetch rather than maintained as divergent copies.
+
+Removing `USVString` conversion from `encodeInto()` makes the focused mutation fail
+on explicit `undefined` before any bytes can be reported. The Node-host suite passes
+127/127. Three additional complete, unchanged files from the pinned Node WPT checkout
+cover `encodeInto`, optional decoder arguments, and decoder input copying, expanding
+the immutable upstream slice from 95 to 211 tests; all 211 pass. The WPT harness
+installs one coherent typed-memory constructor family into its VM so the tested Web
+values and WebAssembly-created shared buffers belong to the same host environment.
+
+The live NTS frontier is 260 primary refusals, 58 cascades, zero JVM-backend
+refusals, and no invalid HIR. Relative to 254/57, the six new primaries are the
+final-form `AllowSharedBufferSource` union, its `SharedArrayBuffer` brand check, and
+four required/optional rest-tuple representation observations. The one net cascade
+is the now-explicit decoder-label call into shared `DOMString` conversion. These are
+the typed-memory and boundary-conversion prerequisites already owned by the plan;
+the source does not narrow the API to what the current lowering can represent.

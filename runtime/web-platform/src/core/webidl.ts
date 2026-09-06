@@ -11,6 +11,34 @@ function roundTiesToEven(value: number): number {
   return lower % 2 === 0 ? lower : lower + 1;
 }
 
+/** Enforce Web IDL's required-argument check before converting any argument. */
+export function requireArguments(
+  args: readonly unknown[],
+  required: number,
+  operation: string,
+): void {
+  if (args.length < required) {
+    throw new TypeError(operation + " requires at least " + required + " argument(s)");
+  }
+}
+
+/** Reject values that Web IDL cannot convert to a dictionary. */
+export function requireDictionary(value: unknown, name: string): void {
+  if (
+    value !== undefined &&
+    value !== null &&
+    typeof value !== "object" &&
+    typeof value !== "function"
+  ) {
+    throw new TypeError(name + " must be a dictionary");
+  }
+}
+
+/** Apply Web IDL's JavaScript `boolean` conversion. */
+export function coerceToBoolean(value: unknown): boolean {
+  return value ? true : false;
+}
+
 function unsignedInteger(value: number, modulus: number): number {
   const number = +value;
   if (!Number.isFinite(number) || number === 0) {

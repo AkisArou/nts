@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createContext, runInContext } from "node:vm";
+import { MessageChannel } from "node:worker_threads";
 
 // This is the deliberately small testharness.js surface required by the complete,
 // unchanged fixtures named in the manifest. Test and support sources are read from
@@ -83,12 +84,14 @@ function createWptContext(path, pending) {
     File,
     Headers,
     Int8Array,
+    MessageChannel,
     Promise,
     ReadableStream,
     TextDecoder,
     TextEncoder,
     TypeError,
     Uint8Array,
+    WebAssembly,
     WebSocket: class {
       constructor() {
         throw new Error("Host WebSocket is forbidden");
@@ -212,7 +215,10 @@ async function runFixture(root, path, data, verifiedSupport) {
   const source = data.toString();
   const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
   for (const match of scripts) {
-    const relativePath = new URL(match[1], new URL(path, root));
+    const scriptPath = match[1];
+    const relativePath = scriptPath.startsWith("/")
+      ? new URL(scriptPath.slice(1), root)
+      : new URL(scriptPath, new URL(path, root));
     const supportPath = relativePath.pathname.slice(root.pathname.length);
     const support = verifiedSupport.get(supportPath);
     assert.notEqual(support, undefined, `Unpinned WPT support script: ${supportPath}`);

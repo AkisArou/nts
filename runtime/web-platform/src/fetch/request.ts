@@ -1,5 +1,10 @@
 import { AbortSignal, createAbortSignal } from "../core/abort.ts";
-import { coerceToByteString, coerceToDOMString, coerceToUSVString } from "../core/webidl.ts";
+import {
+  coerceToByteString,
+  coerceToDOMString,
+  coerceToUSVString,
+  requireDictionary,
+} from "../core/webidl.ts";
 import type { RandomSource, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
@@ -83,9 +88,7 @@ function convertRequestInit(init: RequestInit | null | undefined): ConvertedRequ
       signal: undefined,
     };
   }
-  if (typeof init !== "object" && typeof init !== "function") {
-    throw new TypeError("Request init must be a dictionary");
-  }
+  requireDictionary(init, "Request init");
 
   // Web IDL dictionary conversion is observably lexicographic. Keep these reads
   // in member-name order and perform each member's type conversion immediately.

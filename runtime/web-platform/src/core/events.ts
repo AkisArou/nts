@@ -2,24 +2,19 @@ import type { AbortSignal } from "./abort.ts";
 import { abortSignalBrand } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
 import { DOMException } from "./errors.ts";
-import { coerceToDOMString, coerceToUSVString, toUnsignedLong, toUnsignedShort } from "./webidl.ts";
+import {
+  coerceToDOMString,
+  coerceToUSVString,
+  requireArguments,
+  requireDictionary,
+  toUnsignedLong,
+  toUnsignedShort,
+} from "./webidl.ts";
 
 export interface EventInit {
   bubbles?: boolean;
   cancelable?: boolean;
   composed?: boolean;
-}
-
-function validateDictionary(init: unknown, name: string): void {
-  if (typeof init !== "object" && typeof init !== "function") {
-    throw new TypeError(name + " must be a dictionary");
-  }
-}
-
-function requireArguments(args: readonly unknown[], required: number, operation: string): void {
-  if (args.length < required) {
-    throw new TypeError(operation + " requires at least " + required + " argument(s)");
-  }
 }
 
 export class Event {
@@ -49,7 +44,7 @@ export class Event {
     const convertedType = coerceToDOMString(type);
     this.eventType = convertedType;
     if (init !== undefined && init !== null) {
-      validateDictionary(init, "Event init");
+      requireDictionary(init, "Event init");
       this.eventBubbles = init.bubbles ? true : false;
       this.eventCancelable = init.cancelable ? true : false;
       this.eventComposed = init.composed ? true : false;
@@ -224,7 +219,7 @@ export class CustomEvent<T = unknown> extends Event {
     if (init === undefined || init === null) {
       this.customDetail = null;
     } else {
-      validateDictionary(init, "CustomEvent init");
+      requireDictionary(init, "CustomEvent init");
       const bubbles = init.bubbles ? true : false;
       const cancelable = init.cancelable ? true : false;
       const composed = init.composed ? true : false;
@@ -606,7 +601,7 @@ export class MessageEvent<T = unknown> extends Event {
       this.messagePorts = [];
       this.messageSource = null;
     } else {
-      validateDictionary(init, "MessageEvent init");
+      requireDictionary(init, "MessageEvent init");
       const bubbles = init.bubbles ? true : false;
       const cancelable = init.cancelable ? true : false;
       const composed = init.composed ? true : false;
@@ -713,7 +708,7 @@ export class CloseEvent extends Event {
       this.closeReason = "";
       this.clean = false;
     } else {
-      validateDictionary(init, "CloseEvent init");
+      requireDictionary(init, "CloseEvent init");
       const bubbles = init.bubbles ? true : false;
       const cancelable = init.cancelable ? true : false;
       const composed = init.composed ? true : false;
@@ -769,7 +764,7 @@ export class ErrorEvent extends Event {
       this.errorLine = 0;
       this.errorMessage = "";
     } else {
-      validateDictionary(init, "ErrorEvent init");
+      requireDictionary(init, "ErrorEvent init");
       const bubbles = init.bubbles ? true : false;
       const cancelable = init.cancelable ? true : false;
       const composed = init.composed ? true : false;

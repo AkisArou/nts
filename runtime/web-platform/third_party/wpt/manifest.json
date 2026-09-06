@@ -18,6 +18,7 @@
       "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
     },
     "support": {
+      "common/sab.js": "a3ea610e165d0d56ef1faab2ed49186d4e03c392",
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
     },
     "tests": {
@@ -30,6 +31,9 @@
       "dom/events/EventTarget-addEventListener.any.js": "e22da4aff850a2f0042c5ecda4c844cc1852f2ec",
       "dom/events/EventTarget-constructible.any.js": "4125d23f0c965066c91d95c9ba83ac711fdabbc3",
       "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",
+      "encoding/encodeInto.any.js": "9ea36d23d08cca0d1c380015d415de2abec95f2a",
+      "encoding/textdecoder-arguments.any.js": "2d137b7aa37e15dbb4a93315f616891fee01a6b2",
+      "encoding/textdecoder-copy.any.js": "61de4142bf27a25df5e6dfb0395c9eb392e58334",
       "encoding/textencoder-utf16-surrogates.any.js": "31657516455bd60b803600db9f36f641504d1c15",
       "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
       "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",

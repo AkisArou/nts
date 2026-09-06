@@ -1,10 +1,59 @@
 import { utf8Length, utf8Write } from "./utf8.ts";
 import { trimASCIIWhitespace } from "./ascii.ts";
-import { coerceToUSVString } from "./webidl.ts";
+import {
+  coerceToBoolean,
+  coerceToDOMString,
+  coerceToUSVString,
+  requireArguments,
+  requireDictionary,
+} from "./webidl.ts";
+
+export type AllowSharedBufferSource = ArrayBufferLike | ArrayBufferView<ArrayBufferLike>;
+
+export interface TextEncoderEncodeIntoResult {
+  read: number;
+  written: number;
+}
+
+const emptyBytes = new Uint8Array(0);
+
+function requireUint8Array(value: Uint8Array, name: string): void {
+  if (!(value instanceof Uint8Array)) {
+    throw new TypeError(name + " must be a Uint8Array");
+  }
+}
+
+function bufferSourceBytes(
+  input: AllowSharedBufferSource | undefined,
+): Uint8Array<ArrayBufferLike> {
+  if (input === undefined) {
+    return emptyBytes;
+  }
+  if (ArrayBuffer.isView(input)) {
+    return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  }
+  if (input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+    return new Uint8Array(input);
+  }
+  throw new TypeError("TextDecoder input must be an ArrayBuffer or ArrayBufferView");
+}
+
+function utf8Label(label: string): boolean {
+  return (
+    label === "unicode-1-1-utf-8" ||
+    label === "unicode11utf8" ||
+    label === "unicode20utf8" ||
+    label === "utf-8" ||
+    label === "utf8" ||
+    label === "x-unicode20utf8"
+  );
+}
 
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export class TextEncoder {
-  readonly encoding = "utf-8";
+  get encoding(): "utf-8" {
+    return "utf-8";
+  }
 
   encode(input = ""): Uint8Array<ArrayBuffer> {
     const text = coerceToUSVString(input);
@@ -13,10 +62,11 @@ export class TextEncoder {
     return output;
   }
 
-  encodeInto(input: string, destination: Uint8Array): { read: number; written: number } {
-    if (typeof input !== "string") {
-      throw new TypeError("TextEncoder.encodeInto source must be a string");
-    }
+  encodeInto(...args: [source: string, destination: Uint8Array]): TextEncoderEncodeIntoResult {
+    requireArguments(args, 2, "TextEncoder.encodeInto");
+    const input = coerceToUSVString(args[0]);
+    const destination = args[1];
+    requireUint8Array(destination, "TextEncoder.encodeInto destination");
     const progress = { read: 0, written: 0 };
     utf8Write(destination, input, 0, destination.length, progress);
     return progress;
@@ -28,24 +78,63 @@ export interface TextDecoderOptions {
   ignoreBOM?: boolean;
 }
 
-export class TextDecoder {
-  readonly encoding = "utf-8";
+export interface TextDecodeOptions {
+  stream?: boolean;
+}
+
+interface ConvertedTextDecoderOptions {
   readonly fatal: boolean;
   readonly ignoreBOM: boolean;
+}
+
+function convertTextDecoderOptions(
+  options: TextDecoderOptions | null | undefined,
+): ConvertedTextDecoderOptions {
+  requireDictionary(options, "TextDecoder options");
+  if (options === undefined || options === null) {
+    return { fatal: false, ignoreBOM: false };
+  }
+
+  // Web IDL dictionary members are read and converted lexicographically.
+  const fatal = coerceToBoolean(options.fatal);
+  const ignoreBOM = coerceToBoolean(options.ignoreBOM);
+  return { fatal, ignoreBOM };
+}
+
+function convertTextDecodeOptions(options: TextDecodeOptions | null | undefined): boolean {
+  requireDictionary(options, "TextDecoder decode options");
+  return options === undefined || options === null ? false : coerceToBoolean(options.stream);
+}
+
+export class TextDecoder {
+  private readonly decoderFatal: boolean;
+  private readonly decoderIgnoreBOM: boolean;
   private needed = 0;
   private seen = 0;
   private code = 0;
   private lower = 0x80;
   private upper = 0xbf;
   private bomSeen = false;
+  private doNotFlush = false;
 
-  constructor(label = "utf-8", options: TextDecoderOptions = {}) {
-    const normalized = trimASCIIWhitespace(label).toLowerCase();
-    if (normalized !== "utf-8" && normalized !== "utf8" && normalized !== "unicode-1-1-utf-8") {
+  constructor(label = "utf-8", options?: TextDecoderOptions) {
+    const convertedLabel = coerceToDOMString(label);
+    const convertedOptions = convertTextDecoderOptions(options);
+    const normalized = trimASCIIWhitespace(convertedLabel).toLowerCase();
+    if (!utf8Label(normalized)) {
       throw new RangeError("Only UTF-8 is implemented by this decoder");
     }
-    this.fatal = options.fatal ?? false;
-    this.ignoreBOM = options.ignoreBOM ?? false;
+    this.decoderFatal = convertedOptions.fatal;
+    this.decoderIgnoreBOM = convertedOptions.ignoreBOM;
+  }
+  get encoding(): "utf-8" {
+    return "utf-8";
+  }
+  get fatal(): boolean {
+    return this.decoderFatal;
+  }
+  get ignoreBOM(): boolean {
+    return this.decoderIgnoreBOM;
   }
   private resetSequence(): void {
     this.needed = 0;
@@ -54,23 +143,29 @@ export class TextDecoder {
     this.lower = 0x80;
     this.upper = 0xbf;
   }
-  private replacement(): string {
+  private replacement(): void {
     this.resetSequence();
-    if (this.fatal) {
-      this.bomSeen = false;
+    if (this.decoderFatal) {
       throw new TypeError("Invalid UTF-8");
     }
-    this.bomSeen = true;
-    return "\ufffd";
   }
 
-  decode(input: Uint8Array = new Uint8Array(0), options: { stream?: boolean } = {}): string {
+  decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
+    const input = bufferSourceBytes(args[0]);
+    const stream = convertTextDecodeOptions(args[1]);
+    if (!this.doNotFlush) {
+      this.resetSequence();
+      this.bomSeen = false;
+    }
+    this.doNotFlush = stream;
+
+    let bomSeen = this.bomSeen;
     const pieces: string[] = [];
     let ascii = "";
     const emit = (code: number): void => {
-      if (!this.bomSeen) {
-        this.bomSeen = true;
-        if (code === 0xfeff && !this.ignoreBOM) return;
+      if (!bomSeen) {
+        bomSeen = true;
+        if (code === 0xfeff && !this.decoderIgnoreBOM) return;
       }
       ascii += String.fromCodePoint(code);
       if (ascii.length >= 4096) {
@@ -101,10 +196,14 @@ export class TextDecoder {
           this.code = byte & 7;
           if (byte === 0xf0) this.lower = 0x90;
           if (byte === 0xf4) this.upper = 0x8f;
-        } else ascii += this.replacement();
+        } else {
+          this.replacement();
+          emit(0xfffd);
+        }
       } else {
         if (byte < this.lower || byte > this.upper) {
-          ascii += this.replacement();
+          this.replacement();
+          emit(0xfffd);
           continue;
         }
         i++;
@@ -119,11 +218,15 @@ export class TextDecoder {
         }
       }
     }
-    if (!options.stream) {
-      if (this.needed !== 0) ascii += this.replacement();
+    if (!stream) {
+      if (this.needed !== 0) {
+        this.replacement();
+        emit(0xfffd);
+      }
       this.resetSequence();
-      this.bomSeen = false;
+      bomSeen = false;
     }
+    this.bomSeen = bomSeen;
     pieces.push(ascii);
     return pieces.join("");
   }
