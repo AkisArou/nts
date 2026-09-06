@@ -71,3 +71,53 @@ was a second probe on every insert. I did not price it, and it cost **0.23x**.
 `number-format-double` is the control and it must not move: it formats genuine
 doubles, its values are not `| 0`'d, and the Grisu port is what it should keep
 reaching. A change that sped up both rows would be a change that had broken one.
+
+---
+
+## Measured: **zero**, and the rule that failed is the one this record cites
+
+    number-format          1.22x  ->  1.22x
+    number-format-double   1.41x  ->  1.43x     control, held
+    dispatch               0.67x  ->  0.70x     control, held
+
+Six sites emit `Integer.toString`, the substitution is exact, the gate is green
+at 111 of 111 — **and the row did not move.**
+
+The arithmetic I did not do: that case formats three numbers a round and then
+**sums every character of all three**, which is about 22 `charCodeAt` per round
+against 3 conversions. Formatting is a fiftieth of the work. A replacement that
+is ten times cheaper than what it replaces moves a row by nothing when the thing
+replaced is two percent of it.
+
+So record 0163's rule is necessary and **not sufficient**. *Price the
+replacement, not the thing you are removing* stops one short of its own point:
+
+> **Price the replacement, and price the share.**
+
+The saving is `share x (1 - replacement/original)`, and I had been computing the
+second factor and assuming the first was 1. Every one of today's four
+over-promises is a term in that product:
+
+| | share | replacement | outcome |
+| --- | ---: | --- | ---: |
+| `map-and-set` keys | unmeasured | a second probe, not free | **worse** |
+| conversions in `queens` (nts-69) | unmeasured | inlining, not free | zero |
+| `findLinear` | **20.64%, measured** | hashing, not free | 2% |
+| `String(n)` here | **2%, not measured** | free enough | **zero** |
+
+The third and fourth are the instructive pair. On `findLinear` I had the share
+and not the replacement's price. Here I had the replacement's price and not the
+share. Both predicted a win and both got approximately nothing, by opposite
+omissions.
+
+## Kept rather than reverted, and the reason is not the number
+
+A change measuring zero is normally reverted here. This one stays on the same
+footing as `count()` in 0158 and the proved growable store: **it is a deletion**.
+Six Grisu calls become six JDK intrinsic calls, the emitted code is smaller, the
+substitution is exact on every `i32`, and nothing was added to carry it.
+
+What is reverted is the *claim*. I wrote that this was the first change built
+under 0163's rule without an A/B because the replacement was priceable. The
+replacement was priceable and the change still needed the run, because the rule
+I was following had a factor missing.
