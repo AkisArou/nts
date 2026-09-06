@@ -6,15 +6,8 @@
 // provide ordering and backpressure, so an EventEmitter layer would only add
 // allocations and callbacks around the same native operation.
 
-import {
-  AbortError,
-  ERR_INVALID_ARG_TYPE,
-  ERR_OUT_OF_RANGE,
-} from "../../internal/errors.ts";
-import {
-  validateInteger,
-  validateObject,
-} from "../../internal/validators.ts";
+import { AbortError, ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
+import { validateInteger, validateObject } from "../../internal/validators.ts";
 import type { TransformOptions } from "../../stream/src/iter/pull.ts";
 import { kValidatedTransform } from "../../stream/src/iter/types.ts";
 import {
@@ -26,11 +19,7 @@ import {
 import { Buffer } from "../../buffer/src/main.ts";
 import * as C from "./constants.ts";
 import { zlibCodeForStatus } from "./error-code.ts";
-import {
-  optionalByteView,
-  parameterArrays,
-  type BinaryInput,
-} from "./options.ts";
+import { optionalByteView, parameterArrays, type BinaryInput } from "./options.ts";
 
 const DEFAULT_OUTPUT_SIZE = 65_536;
 const NO_PLEDGED_SOURCE_SIZE = -1;
@@ -134,15 +123,8 @@ function outputSize(options: IteratorEngineOptions): number {
   return value;
 }
 
-function brotliParameters(
-  mode: number,
-  options: IteratorEngineOptions,
-): [number[], number[]] {
-  const [userKeys, userValues] = parameterArrays(
-    options.params,
-    C.BROTLI_PARAM_NDIRECT,
-    "brotli",
-  );
+function brotliParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
+  const [userKeys, userValues] = parameterArrays(options.params, C.BROTLI_PARAM_NDIRECT, "brotli");
   if (mode !== C.BROTLI_ENCODE) return [userKeys, userValues];
 
   // Defaults precede user values so a repeated key has Node's last-write-wins
@@ -160,10 +142,7 @@ function brotliParameters(
   return [keys, values];
 }
 
-function zstdParameters(
-  mode: number,
-  options: IteratorEngineOptions,
-): [number[], number[]] {
+function zstdParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
   return parameterArrays(
     options.params,
     mode === C.ZSTD_COMPRESS ? 402 : C.ZSTD_d_windowLogMax,
@@ -179,10 +158,7 @@ function pledgedSourceSize(mode: number, options: IteratorEngineOptions): number
   return value;
 }
 
-function parseConfiguration(
-  mode: number,
-  options: IteratorEngineOptions,
-): TransformConfiguration {
+function parseConfiguration(mode: number, options: IteratorEngineOptions): TransformConfiguration {
   const chunkSize = outputSize(options);
   const dictionary = optionalByteView(options.dictionary, "options.dictionary");
 
@@ -226,10 +202,7 @@ function parseConfiguration(
 
   const windowBitsValue = options.windowBits;
   let windowBits: number;
-  if (
-    windowBitsValue === 0 &&
-    (mode === C.INFLATE || mode === C.GUNZIP)
-  ) {
+  if (windowBitsValue === 0 && (mode === C.INFLATE || mode === C.GUNZIP)) {
     windowBits = 0;
   } else {
     windowBits = numberInRange(
@@ -246,13 +219,7 @@ function parseConfiguration(
     processFlag: C.Z_NO_FLUSH,
     finishFlag: C.Z_FINISH,
     chunkSize,
-    level: numberInRange(
-      options.level,
-      "options.level",
-      C.Z_MIN_LEVEL,
-      C.Z_MAX_LEVEL,
-      4,
-    ),
+    level: numberInRange(options.level, "options.level", C.Z_MIN_LEVEL, C.Z_MAX_LEVEL, 4),
     windowBits,
     memLevel: numberInRange(
       options.memLevel,
@@ -276,24 +243,25 @@ function parseConfiguration(
 }
 
 function openEngine(configuration: TransformConfiguration): number {
-  const handle = configuration.family === "zlib"
-    ? nts_zlib_create(
-      configuration.mode,
-      configuration.level,
-      configuration.windowBits,
-      configuration.memLevel,
-      configuration.strategy,
-      configuration.dictionary,
-      false,
-    )
-    : nts_zlib_create_params(
-      configuration.mode,
-      configuration.parameterKeys,
-      configuration.parameterValues,
-      configuration.dictionary,
-      configuration.pledgedSourceSize,
-      false,
-    );
+  const handle =
+    configuration.family === "zlib"
+      ? nts_zlib_create(
+          configuration.mode,
+          configuration.level,
+          configuration.windowBits,
+          configuration.memLevel,
+          configuration.strategy,
+          configuration.dictionary,
+          false,
+        )
+      : nts_zlib_create_params(
+          configuration.mode,
+          configuration.parameterKeys,
+          configuration.parameterValues,
+          configuration.dictionary,
+          configuration.pledgedSourceSize,
+          false,
+        );
   if (handle < 0) {
     throw new IteratorZlibError(
       "Failed to initialize the compression engine",
@@ -313,16 +281,13 @@ async function nativeWrite(
 ): Promise<Uint8Array> {
   throwIfAborted(signal);
   const operation = nts_zlib_write(handle, flush, bytes, outputLimit);
-  let rejectAbort: (reason?: unknown) => void = (): void => {};
-  const aborted = new Promise<never>((_resolve, reject) => {
-    rejectAbort = reject;
-  });
-  const onAbort = (): void => rejectAbort(signal.reason ?? new AbortError());
+  const aborted = Promise.withResolvers<never>();
+  const onAbort = (): void => aborted.reject(signal.reason ?? new AbortError());
   signal.addEventListener("abort", onAbort, { once: true });
   if (signal.aborted) onAbort();
 
   try {
-    const output = await Promise.race([operation, aborted]);
+    const output = await Promise.race([operation, aborted.promise]);
     const status = nts_zlib_status(handle);
     if (status !== 0) {
       throw new IteratorZlibError(
@@ -354,10 +319,7 @@ async function* nativeOutput(
 
 const emptyNativeInput = new Uint8Array(0);
 
-function* outputBatches(
-  output: Uint8Array,
-  chunkSize: number,
-): Generator<ByteBatch> {
+function* outputBatches(output: Uint8Array, chunkSize: number): Generator<ByteBatch> {
   for (let offset = 0; offset < output.byteLength; offset += chunkSize) {
     yield [output.subarray(offset, Math.min(offset + chunkSize, output.byteLength))];
   }
@@ -399,34 +361,32 @@ function concatenateSource(source: SyncTransformSource): Uint8Array {
   return result;
 }
 
-function oneShot(
-  configuration: TransformConfiguration,
-  input: Uint8Array,
-): Uint8Array {
-  const output = configuration.family === "zlib"
-    ? nts_zlib_oneshot(
-      configuration.mode,
-      configuration.level,
-      configuration.windowBits,
-      configuration.memLevel,
-      configuration.strategy,
-      configuration.dictionary,
-      configuration.finishFlag,
-      MAXIMUM_ONE_SHOT_OUTPUT,
-      input,
-      false,
-    )
-    : nts_zlib_oneshot_params(
-      configuration.mode,
-      configuration.parameterKeys,
-      configuration.parameterValues,
-      configuration.dictionary,
-      configuration.pledgedSourceSize,
-      configuration.finishFlag,
-      MAXIMUM_ONE_SHOT_OUTPUT,
-      input,
-      false,
-    );
+function oneShot(configuration: TransformConfiguration, input: Uint8Array): Uint8Array {
+  const output =
+    configuration.family === "zlib"
+      ? nts_zlib_oneshot(
+          configuration.mode,
+          configuration.level,
+          configuration.windowBits,
+          configuration.memLevel,
+          configuration.strategy,
+          configuration.dictionary,
+          configuration.finishFlag,
+          MAXIMUM_ONE_SHOT_OUTPUT,
+          input,
+          false,
+        )
+      : nts_zlib_oneshot_params(
+          configuration.mode,
+          configuration.parameterKeys,
+          configuration.parameterValues,
+          configuration.dictionary,
+          configuration.pledgedSourceSize,
+          configuration.finishFlag,
+          MAXIMUM_ONE_SHOT_OUTPUT,
+          input,
+          false,
+        );
   const status = nts_zlib_last_status();
   if (status !== 0) {
     throw new IteratorZlibError(
@@ -448,10 +408,7 @@ class AsyncCompressionTransform {
     this.#options = options;
   }
 
-  async *transform(
-    source: AsyncByteStream,
-    options: TransformOptions,
-  ): AsyncGenerator<ByteBatch> {
+  async *transform(source: AsyncByteStream, options: TransformOptions): AsyncGenerator<ByteBatch> {
     const signal = options.signal;
     throwIfAborted(signal);
     const configuration = parseConfiguration(this.#mode, this.#options);
@@ -502,103 +459,69 @@ class SyncCompressionTransform {
   }
 }
 
-function asyncTransform(
-  mode: number,
-  options: IteratorEngineOptions,
-): AsyncCompressionTransform {
+function asyncTransform(mode: number, options: IteratorEngineOptions): AsyncCompressionTransform {
   validateObject(options, "options");
   return new AsyncCompressionTransform(mode, options);
 }
 
-function syncTransform(
-  mode: number,
-  options: IteratorEngineOptions,
-): SyncCompressionTransform {
+function syncTransform(mode: number, options: IteratorEngineOptions): SyncCompressionTransform {
   validateObject(options, "options");
   return new SyncCompressionTransform(mode, options);
 }
 
-export function compressGzip(
-  options: IteratorZlibOptions = {},
-): AsyncCompressionTransform {
+export function compressGzip(options: IteratorZlibOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.GZIP, options);
 }
 
-export function compressDeflate(
-  options: IteratorZlibOptions = {},
-): AsyncCompressionTransform {
+export function compressDeflate(options: IteratorZlibOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.DEFLATE, options);
 }
 
-export function compressBrotli(
-  options: IteratorBrotliOptions = {},
-): AsyncCompressionTransform {
+export function compressBrotli(options: IteratorBrotliOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.BROTLI_ENCODE, options);
 }
 
-export function compressZstd(
-  options: IteratorZstdOptions = {},
-): AsyncCompressionTransform {
+export function compressZstd(options: IteratorZstdOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.ZSTD_COMPRESS, options);
 }
 
-export function decompressGzip(
-  options: IteratorZlibOptions = {},
-): AsyncCompressionTransform {
+export function decompressGzip(options: IteratorZlibOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.GUNZIP, options);
 }
 
-export function decompressDeflate(
-  options: IteratorZlibOptions = {},
-): AsyncCompressionTransform {
+export function decompressDeflate(options: IteratorZlibOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.INFLATE, options);
 }
 
-export function decompressBrotli(
-  options: IteratorBrotliOptions = {},
-): AsyncCompressionTransform {
+export function decompressBrotli(options: IteratorBrotliOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.BROTLI_DECODE, options);
 }
 
-export function decompressZstd(
-  options: IteratorZstdOptions = {},
-): AsyncCompressionTransform {
+export function decompressZstd(options: IteratorZstdOptions = {}): AsyncCompressionTransform {
   return asyncTransform(C.ZSTD_DECOMPRESS, options);
 }
 
-export function compressGzipSync(
-  options: IteratorZlibOptions = {},
-): SyncCompressionTransform {
+export function compressGzipSync(options: IteratorZlibOptions = {}): SyncCompressionTransform {
   return syncTransform(C.GZIP, options);
 }
 
-export function compressDeflateSync(
-  options: IteratorZlibOptions = {},
-): SyncCompressionTransform {
+export function compressDeflateSync(options: IteratorZlibOptions = {}): SyncCompressionTransform {
   return syncTransform(C.DEFLATE, options);
 }
 
-export function compressBrotliSync(
-  options: IteratorBrotliOptions = {},
-): SyncCompressionTransform {
+export function compressBrotliSync(options: IteratorBrotliOptions = {}): SyncCompressionTransform {
   return syncTransform(C.BROTLI_ENCODE, options);
 }
 
-export function compressZstdSync(
-  options: IteratorZstdOptions = {},
-): SyncCompressionTransform {
+export function compressZstdSync(options: IteratorZstdOptions = {}): SyncCompressionTransform {
   return syncTransform(C.ZSTD_COMPRESS, options);
 }
 
-export function decompressGzipSync(
-  options: IteratorZlibOptions = {},
-): SyncCompressionTransform {
+export function decompressGzipSync(options: IteratorZlibOptions = {}): SyncCompressionTransform {
   return syncTransform(C.GUNZIP, options);
 }
 
-export function decompressDeflateSync(
-  options: IteratorZlibOptions = {},
-): SyncCompressionTransform {
+export function decompressDeflateSync(options: IteratorZlibOptions = {}): SyncCompressionTransform {
   return syncTransform(C.INFLATE, options);
 }
 
@@ -608,8 +531,6 @@ export function decompressBrotliSync(
   return syncTransform(C.BROTLI_DECODE, options);
 }
 
-export function decompressZstdSync(
-  options: IteratorZstdOptions = {},
-): SyncCompressionTransform {
+export function decompressZstdSync(options: IteratorZstdOptions = {}): SyncCompressionTransform {
   return syncTransform(C.ZSTD_DECOMPRESS, options);
 }
