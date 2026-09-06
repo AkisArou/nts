@@ -10,8 +10,10 @@ export interface BlobOptions {
 
 function mediaType(input: string): string {
   for (let i = 0; i < input.length; ++i) {
-    const c = input.charCodeAt(i);
-    if (c < 0x20 || c > 0x7e) return "";
+    const code = input.charCodeAt(i);
+    if (code < 0x20 || code > 0x7e) {
+      return "";
+    }
   }
   return input.toLowerCase();
 }
@@ -25,7 +27,9 @@ export class Blob {
     this.type = mediaType(options.type ?? "");
     for (const part of parts) {
       if (part instanceof Blob) {
-        for (const chunk of part.chunks) this.chunks.push(chunk);
+        for (const chunk of part.chunks) {
+          this.chunks.push(chunk);
+        }
         this.byteLength += part.size;
       } else {
         const data =
@@ -47,34 +51,39 @@ export class Blob {
   }
 
   slice(start = 0, end = this.size, contentType = ""): Blob {
-    const normalize = (n: number): number => {
-      const value = Number.isNaN(n) ? 0 : Math.trunc(n);
-      return value < 0 ? Math.max(this.size + value, 0) : Math.min(value, this.size);
+    const normalize = (value: number): number => {
+      const integer = Number.isNaN(value) ? 0 : Math.trunc(value);
+      return integer < 0 ? Math.max(this.size + integer, 0) : Math.min(integer, this.size);
     };
     const from = normalize(start);
     const to = Math.max(from, normalize(end));
     const result = new Blob([], { type: contentType });
     let offset = 0;
     for (const chunk of this.chunks) {
-      const a = Math.max(0, from - offset);
-      const b = Math.min(chunk.length, to - offset);
-      if (b > a) {
-        result.chunks.push(chunk.subarray(a, b));
-        result.byteLength += b - a;
+      const first = Math.max(0, from - offset);
+      const last = Math.min(chunk.length, to - offset);
+      if (last > first) {
+        result.chunks.push(chunk.subarray(first, last));
+        result.byteLength += last - first;
       }
       offset += chunk.length;
-      if (offset >= to) break;
+      if (offset >= to) {
+        break;
+      }
     }
     return result;
   }
+
   async bytes(): Promise<Uint8Array> {
     return concatBytes(this.chunks, this.size);
   }
+
   async arrayBuffer(): Promise<ArrayBuffer> {
     const output = new ArrayBuffer(this.size);
     new Uint8Array(output).set(await this.bytes());
     return output;
   }
+
   async text(): Promise<string> {
     return decodeUTF8(await this.bytes());
   }
@@ -90,7 +99,7 @@ export class Blob {
             controller.close();
             return;
           }
-          const end = Math.min(offset + 65536, chunk.length);
+          const end = Math.min(offset + 65_536, chunk.length);
           // Public consumers may mutate chunks; Blob's immutable storage must not escape.
           controller.enqueue(chunk.slice(offset, end));
           offset = end;

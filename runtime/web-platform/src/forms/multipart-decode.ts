@@ -3,7 +3,7 @@ import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { LimitError } from "../core/errors.ts";
 import { isToken } from "../fetch/headers.ts";
 import { FormData } from "./form-data.ts";
-import { File } from "./blob.ts";
+import { File } from "../file/blob.ts";
 import { parseContentDisposition } from "./mime.ts";
 import type { MIMEType } from "./mime.ts";
 

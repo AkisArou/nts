@@ -1,6 +1,6 @@
 import type { RandomSource } from "../provider/primitives.ts";
 import { utf8 } from "../core/encoding.ts";
-import { Blob } from "./blob.ts";
+import { Blob } from "../file/blob.ts";
 import { FormData } from "./form-data.ts";
 
 export interface EncodedMultipart {

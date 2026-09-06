@@ -31,8 +31,8 @@ export type { RequestCredentials, RequestInit, RequestRedirect } from "./fetch/r
 export { Response } from "./fetch/response.ts";
 export type { ResponseInit } from "./fetch/response.ts";
 
-export { Blob, File } from "./forms/blob.ts";
-export type { BlobOptions, BlobPart, FileOptions } from "./forms/blob.ts";
+export { Blob, File } from "./file/blob.ts";
+export type { BlobOptions, BlobPart, FileOptions } from "./file/blob.ts";
 
 export { FormData } from "./forms/form-data.ts";
 export type { FormDataEntryValue } from "./forms/form-data.ts";

@@ -7,7 +7,7 @@ import { utf8 } from "../core/encoding.ts";
 import { toClampedUnsignedShort, toUSVString } from "../core/webidl.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { isToken } from "../fetch/headers.ts";
-import { Blob } from "../forms/blob.ts";
+import { Blob } from "../file/blob.ts";
 import type {
   SocketClose,
   SocketMessage,

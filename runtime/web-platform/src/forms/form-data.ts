@@ -1,4 +1,4 @@
-import { Blob, File } from "./blob.ts";
+import { Blob, File } from "../file/blob.ts";
 import { toUSVString } from "../core/webidl.ts";
 
 export type FormDataEntryValue = string | File;

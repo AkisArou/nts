@@ -1,6 +1,6 @@
 import { concatBytes, decodeUTF8, utf8 } from "../core/encoding.ts";
 import { LimitError } from "../core/errors.ts";
-import { Blob } from "../forms/blob.ts";
+import { Blob } from "../file/blob.ts";
 import { FormData } from "../forms/form-data.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";

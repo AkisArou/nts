@@ -27,7 +27,8 @@ runtime/web-platform/src/index.ts       canonical public Web values and public t
 runtime/web-platform/src/provider.ts    stable provider-facing entry point
 runtime/web-platform/src/core           shared Web foundations
 runtime/web-platform/src/fetch          Fetch objects, body and policy algorithms
-runtime/web-platform/src/forms          Blob/form/multipart algorithms pending dedup
+runtime/web-platform/src/file           canonical File API objects and storage algorithms
+runtime/web-platform/src/forms          FormData, URL-encoding, MIME and multipart algorithms
 runtime/web-platform/src/http1          portable deterministic HTTP/1 reference engine
 runtime/web-platform/src/provider       native capability contracts and runtime assembly
 runtime/web-platform/src/streams        canonical Web Streams implementation
