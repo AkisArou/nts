@@ -1826,6 +1826,29 @@ impl Emitter<'_> {
                 if nts_jvm_emitter::Pool::utf8_length(text) > 65_535 {
                     return Err(refuse(self.func, "a string literal past the 65,535-byte constant limit"));
                 }
+                // The seed of a string accumulator. A `ConstString` is not
+                // rematerialised -- it has a slot like any other value -- so
+                // this is where the builder is constructed, and constructing it
+                // *from* the seed rather than appending the seed afterwards
+                // keeps the empty case, which is every case this has seen, to a
+                // bare `new`.
+                if self.accumulated.contains(&value) {
+                    code.new_object(origin, pool, crate::builder::BUILDER);
+                    code.dup(origin);
+                    if text.is_empty() {
+                        code.invoke_special(origin, pool, crate::builder::BUILDER, "<init>", "()V");
+                    } else {
+                        code.const_string(origin, pool, text);
+                        code.invoke_special(
+                            origin,
+                            pool,
+                            crate::builder::BUILDER,
+                            "<init>",
+                            "(Ljava/lang/String;)V",
+                        );
+                    }
+                    return Ok(Placed::OnStack);
+                }
                 code.const_string(origin, pool, text);
                 Ok(Placed::OnStack)
             }
@@ -2082,6 +2105,48 @@ impl Emitter<'_> {
             }
             _ if op == BinOp::Concat => {
                 let origin = self.func.values[lhs.0 as usize].origin.clone();
+                // An accumulator is already a builder, and `append` returns the
+                // same builder -- so the result of the concatenation is the
+                // receiver and the store that follows writes the reference back
+                // to its own slot. See `builder` for what makes that invisible.
+                if self.accumulated.contains(&lhs) {
+                    // `out += String.fromCharCode(c)` builds a one-character
+                    // string, appends it, and drops it. Where nothing else
+                    // reads that string it is the whole cost of the append: on
+                    // `node-utf8` about a hundred allocations a decode, which
+                    // is most of what the builder had not already removed.
+                    //
+                    // `appendCharCode` rather than a cast emitted here, so the
+                    // coercion has one spelling; see its note in `NtsRuntime`.
+                    if self.uses.get(rhs.0 as usize).copied() == Some(1)
+                        && let OpKind::Call { callee: Callee::External(name), args, .. } =
+                            &self.func.values[rhs.0 as usize].kind
+                        && name == "nts_string_from_char_code"
+                        && let [unit] = args.as_slice()
+                    {
+                        let unit = *unit;
+                        self.load(code, pool, lhs)?;
+                        self.push_as(code, pool, unit, Kind::Double, &origin)?;
+                        code.invoke_static(
+                            &origin,
+                            pool,
+                            RUNTIME,
+                            "appendCharCode",
+                            "(Ljava/lang/StringBuilder;D)Ljava/lang/StringBuilder;",
+                        );
+                        return Ok(Some(Placed::OnStack));
+                    }
+                    self.load(code, pool, lhs)?;
+                    self.load(code, pool, rhs)?;
+                    code.invoke_virtual(
+                        &origin,
+                        pool,
+                        crate::builder::BUILDER,
+                        "append",
+                        "(Ljava/lang/String;)Ljava/lang/StringBuilder;",
+                    );
+                    return Ok(Some(Placed::OnStack));
+                }
                 self.load(code, pool, lhs)?;
                 self.load(code, pool, rhs)?;
                 code.invoke_virtual(
@@ -3137,7 +3202,23 @@ impl Emitter<'_> {
                         // type with no `Kind`.
                         let kind = types::kind(&self.func.return_type)
                             .map_or_else(|| self.kind_of(*value), Ok)?;
-                        self.push_as(code, pool, *value, kind, &origin)?;
+                        // The one place an accumulator becomes a string. It is
+                        // a return rather than any read because a return runs
+                        // once per call by construction, and a `toString` that
+                        // ran per iteration would reintroduce the quadratic
+                        // this representation exists to remove.
+                        if self.accumulated.contains(value) {
+                            self.load(code, pool, *value)?;
+                            code.invoke_virtual(
+                                &origin,
+                                pool,
+                                crate::builder::BUILDER,
+                                "toString",
+                                "()Ljava/lang/String;",
+                            );
+                        } else {
+                            self.push_as(code, pool, *value, kind, &origin)?;
+                        }
                         code.ret(&origin, Some(kind));
                     }
                     None => code.ret(&origin, None),

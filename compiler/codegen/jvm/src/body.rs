@@ -193,6 +193,8 @@ pub struct Emitter<'a> {
     pub(crate) scratch: Option<u16>,
     /// Erased values held as a bare reference rather than an `NtsValue`.
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
+    /// String accumulators held as a `StringBuilder`; see `builder`.
+    pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
     /// `i32` values held in a `double` slot on this target; see `widen`.
     pub(crate) widened: rustc_hash::FxHashSet<ValueId>,
     /// `(declaring class, field name)` for fields held as a `double`.
@@ -227,6 +229,10 @@ impl<'a> Emitter<'a> {
         // Computed before slots so the decision and the slot type cannot
         // disagree -- there is one answer and both read it.
         let unboxed = crate::unbox::unboxable(func);
+        // String accumulators held as a `StringBuilder`; see `builder`. Beside
+        // the others and before slots for the same reason: one answer, read by
+        // the decision and by the slot type alike.
+        let accumulated = crate::builder::accumulators(func);
         let widened = plan.values_in(func);
         let widened_fields = plan.fields().clone();
         let mut param_slot = Vec::with_capacity(func.params.len());
@@ -270,6 +276,7 @@ impl<'a> Emitter<'a> {
                 continue;
             }
             let held = crate::unbox::held_as(&unboxed, value)
+                .or_else(|| crate::builder::held_as(&accumulated, value))
                 .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double));
             let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
                 return Err(refuse(
@@ -328,6 +335,7 @@ impl<'a> Emitter<'a> {
             max_locals: u16::try_from(next).unwrap_or(u16::MAX),
             scratch: None,
             unboxed,
+            accumulated,
             widened,
             widened_fields,
             temps: FxHashMap::default(),

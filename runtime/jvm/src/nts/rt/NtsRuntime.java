@@ -184,6 +184,21 @@ public final class NtsRuntime {
         return index < 0 || index >= s.length() ? 1.0 : Character.charCount(s.codePointAt(index));
     }
     public static String stringFromCharCode(double code) { return String.valueOf((char) toUint16(code)); }
+
+    /**
+     * {@code sb += String.fromCharCode(code)}, without the string.
+     *
+     * <p>The backend emits this where an accumulator held as a builder appends
+     * a single code unit and nothing else reads the one-character string --
+     * which in `node-utf8` is every character of the ASCII and BMP paths, about
+     * a hundred allocations a decode. It calls {@link #toUint16} rather than
+     * casting so that the conversion is the same one {@link
+     * #stringFromCharCode} makes: two spellings of a coercion are two chances
+     * to disagree, and the one thing this may not do is answer differently.
+     */
+    public static StringBuilder appendCharCode(StringBuilder into, double code) {
+        return into.append((char) toUint16(code));
+    }
     public static String stringFromCodePoint(double code) { return new String(Character.toChars((int) toInteger(code))); }
     public static String strRepeat(String s, double times) {
         int count = (int) toInteger(times);
