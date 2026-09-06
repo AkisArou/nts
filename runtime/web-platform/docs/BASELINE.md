@@ -164,6 +164,31 @@ live NTS check reports 195 primary refusals, 39 cascades, zero JVM-backend refus
 and no invalid HIR. As above, the changed refusal count is a diagnostic frontier
 for final-form source, not a completed-feature count.
 
+At `2112af4`, Node URL percent decoding uses the canonical shared UTF-8 writer and
+both `URL` and `URLSearchParams` use the shared typed scalar-value-string
+normalizer. Untyped JavaScript coercion remains explicit at public Node boundaries;
+passing a `symbol` still throws instead of slipping through a TypeScript annotation.
+The Node URL suite passes 44/44 applicable files with three precisely documented
+Section 13 exclusions, and the pinned URL WPT runner passes 892/892. `nts emit-c`
+for the URL project exits successfully, and the HIR verifies all 292 functions left
+after pruning; 212 constructs in the wider imported dependency graph remain refused
+and are not claimed as implemented. The complete URL source directory was also
+normalized with the repository formatter rather than leaving mixed imported style.
+
+At `2bda8af`, `TextEncoder.encodeInto()` no longer carries a second UTF-8 state
+machine. The canonical bounded writer optionally fills the progress object that
+`encodeInto()` must return, while its ordinary Node Buffer and URL callers retain a
+number return and allocate no progress object. A mutation forcing the consumed
+code-unit count to zero makes the focused differential fail with `{ read: 0,
+written: 1 }` versus `{ read: 1, written: 1 }`. The local Node-host suite passes
+99/99. Two complete unchanged Encoding WPT files from Node's pinned checkout add
+thirteen surrogate/default-input cases, bringing the immutable WPT slice to 52/52;
+the VM context explicitly installs the integrated `TextEncoder` and `TextDecoder`,
+not the host globals. The live NTS check reports 196 primary refusals, 40 cascades,
+zero JVM-backend refusals, and no invalid HIR. The additional diagnostics are the
+current final-source frontier, not evidence of either implemented features or a
+compiler regression.
+
 The common C runtime now has an `NtsEnvironment` and scoped current-environment ABI,
 but shared TypeScript cannot yet obtain its environment-owned Web dependencies.
 Consequently the explicit context arguments still visible on `Request`, `Response`,
