@@ -24,11 +24,7 @@ import {
   parsePullArguments,
   type Transform,
 } from "../../stream/src/iter/pull.ts";
-import type {
-  AsyncByteStream,
-  ByteBatch,
-  SyncByteStream,
-} from "../../stream/src/iter/utils.ts";
+import type { AsyncByteStream, ByteBatch, SyncByteStream } from "../../stream/src/iter/utils.ts";
 import * as constants from "./constants.ts";
 import {
   aggregateTwoErrors,
@@ -94,11 +90,7 @@ import {
   type ReadStream,
   type WriteStream,
 } from "./streams.ts";
-import {
-  Dir,
-  opendir as opendirCallback,
-  type OpenDirOptions,
-} from "./dir.ts";
+import { Dir, opendir as opendirCallback, type OpenDirOptions } from "./dir.ts";
 import { resolve as resolvePath } from "../../path/src/posix.ts";
 
 export { constants };
@@ -199,9 +191,7 @@ type UnknownFileWriteIterable = Iterable<unknown> | AsyncIterable<unknown>;
 type FileWriteInput = FileWriteChunk | UnknownFileWriteIterable;
 const writeFileMaxChunkSize = 512 * 1024;
 
-function isFileWriteIterable(
-  value: unknown,
-): value is UnknownFileWriteIterable {
+function isFileWriteIterable(value: unknown): value is UnknownFileWriteIterable {
   if (
     value === null ||
     typeof value === "string" ||
@@ -210,30 +200,17 @@ function isFileWriteIterable(
   ) {
     return false;
   }
-  const hasAsyncIterator = Symbol.asyncIterator in value &&
-    typeof value[Symbol.asyncIterator] === "function";
-  const hasIterator = Symbol.iterator in value &&
-    typeof value[Symbol.iterator] === "function";
+  const hasAsyncIterator =
+    Symbol.asyncIterator in value && typeof value[Symbol.asyncIterator] === "function";
+  const hasIterator = Symbol.iterator in value && typeof value[Symbol.iterator] === "function";
   return hasAsyncIterator || hasIterator;
 }
 
 function requireFileWriteData(value: unknown): FileWriteInput {
-  if (
-    typeof value !== "string" &&
-    !ArrayBuffer.isView(value) &&
-    !isFileWriteIterable(value)
-  ) {
+  if (typeof value !== "string" && !ArrayBuffer.isView(value) && !isFileWriteIterable(value)) {
     throw new ERR_INVALID_ARG_TYPE(
       "data",
-      [
-        "string",
-        "Buffer",
-        "TypedArray",
-        "DataView",
-        "AsyncIterable",
-        "Iterable",
-        "Stream",
-      ],
+      ["string", "Buffer", "TypedArray", "DataView", "AsyncIterable", "Iterable", "Stream"],
       value,
     );
   }
@@ -262,11 +239,7 @@ async function writeFileHandle(
       if (typeof chunk === "string") {
         bytes = Buffer.from(chunk, encoding);
       } else if (ArrayBuffer.isView(chunk)) {
-        bytes = new Uint8Array(
-          chunk.buffer,
-          chunk.byteOffset,
-          chunk.byteLength,
-        );
+        bytes = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
       } else {
         throw new ERR_INVALID_ARG_TYPE(
           "data",
@@ -277,10 +250,7 @@ async function writeFileHandle(
 
       let offset = 0;
       while (offset < bytes.byteLength) {
-        const length = Math.min(
-          writeFileMaxChunkSize,
-          bytes.byteLength - offset,
-        );
+        const length = Math.min(writeFileMaxChunkSize, bytes.byteLength - offset);
         const { bytesWritten } = await handle.write(bytes, offset, length, null);
         if (bytesWritten === 0) {
           throw new Error("fs write made no progress");
@@ -302,10 +272,7 @@ async function writeFileHandle(
     let offset = 0;
     while (offset < bytes.byteLength) {
       throwIfWriteAborted(signal);
-      const length = Math.min(
-        writeFileMaxChunkSize,
-        bytes.byteLength - offset,
-      );
+      const length = Math.min(writeFileMaxChunkSize, bytes.byteLength - offset);
       const { bytesWritten } = await handle.write(bytes, offset, length, null);
       if (bytesWritten === 0) {
         throw new Error("fs write made no progress");
@@ -323,22 +290,13 @@ async function writeFileToOpenHandle(
   const settings = getOptions(options, { encoding: "utf8", flush: false });
   const flush = settings.flush ?? false;
   validateBoolean(flush, "options.flush");
-  const encoding = requireTextEncoding(
-    settings.encoding || "utf8",
-    "options.encoding",
-  );
-  await writeFileHandle(
-    handle,
-    requireFileWriteData(data),
-    settings.signal,
-    encoding,
-  );
+  const encoding = requireTextEncoding(settings.encoding || "utf8", "options.encoding");
+  await writeFileHandle(handle, requireFileWriteData(data), settings.signal, encoding);
 }
 
 export type WatchOverflow = "ignore" | "error";
 
-export interface PromiseWatchOptions
-  extends Omit<WatchOptions, "throwIfNoEntry"> {
+export interface PromiseWatchOptions extends Omit<WatchOptions, "throwIfNoEntry"> {
   maxQueue?: number | undefined;
   overflow?: WatchOverflow | undefined;
 }
@@ -365,19 +323,13 @@ interface NormalizedPromiseWatchOptions {
   overflow: WatchOverflow;
 }
 
-function normalizePromiseWatchOptions(
-  value: unknown,
-): NormalizedPromiseWatchOptions {
+function normalizePromiseWatchOptions(value: unknown): NormalizedPromiseWatchOptions {
   const raw = value === undefined ? {} : value;
   validateObject(raw, "options");
   const options: RawPromiseWatchOptions = raw;
 
-  const persistent = options.persistent === undefined
-    ? true
-    : options.persistent;
-  const recursive = options.recursive === undefined
-    ? false
-    : options.recursive;
+  const persistent = options.persistent === undefined ? true : options.persistent;
+  const recursive = options.recursive === undefined ? false : options.recursive;
   const maxQueue = options.maxQueue === undefined ? 2048 : options.maxQueue;
   const overflow = options.overflow === undefined ? "ignore" : options.overflow;
   validateBoolean(persistent, "options.persistent");
@@ -407,25 +359,6 @@ function normalizePromiseWatchOptions(
   };
 }
 
-class WatchWaiter {
-  readonly promise: Promise<void>;
-  #resolve: (() => void) | undefined;
-
-  constructor() {
-    this.promise = new Promise<void>((resolve) => {
-      this.#resolve = resolve;
-    });
-  }
-
-  wake(): void {
-    const resolve = this.#resolve;
-    if (resolve === undefined) {
-      throw new Error("fs watch waiter has no resolver");
-    }
-    resolve();
-  }
-}
-
 interface WatchFailure {
   readonly reason: unknown;
 }
@@ -449,30 +382,27 @@ export async function* watch(
   const watcher = new FSWatcher();
   const queue: Array<WatchEvent | WatchFailure> = [];
   let queueHead = 0;
-  let waiter = new WatchWaiter();
-  const onChange = (
-    eventType: WatchEventType,
-    changed: WatchFileName,
-  ): void => {
+  let waiter = Promise.withResolvers<void>();
+  const onChange = (eventType: WatchEventType, changed: WatchFileName): void => {
     if (queue.length - queueHead < settings.maxQueue) {
       queue.push({ eventType, filename: changed });
-      waiter.wake();
+      waiter.resolve();
     } else if (settings.overflow === "error") {
       queue.length = 0;
       queueHead = 0;
       queue.push({
         reason: new ERR_FS_WATCH_QUEUE_OVERFLOW(settings.maxQueue),
       });
-      waiter.wake();
+      waiter.resolve();
     } else {
       emitWarning("fs.watch maxQueue exceeded", "Warning", "");
     }
   };
   const onError = (error: unknown): void => {
     queue.push({ reason: error });
-    waiter.wake();
+    waiter.resolve();
   };
-  const onAbort = (): void => waiter.wake();
+  const onAbort = (): void => waiter.resolve();
 
   watcher.on("change", onChange);
   watcher.on("error", onError);
@@ -494,7 +424,7 @@ export async function* watch(
       }
       queue.length = 0;
       queueHead = 0;
-      waiter = new WatchWaiter();
+      waiter = Promise.withResolvers<void>();
     }
     if (signal.aborted) {
       throw new AbortError(undefined, { cause: signal.reason });
@@ -539,8 +469,7 @@ interface NormalizedFileHandleWriterOptions {
   chunkSize: number;
 }
 
-interface NormalizedFileHandlePullOptions
-  extends NormalizedFileHandleWriterOptions {
+interface NormalizedFileHandlePullOptions extends NormalizedFileHandleWriterOptions {
   signal: AbortSignalLike | undefined;
 }
 
@@ -548,9 +477,7 @@ interface RawFileHandleWriterOperationOptions {
   signal?: unknown;
 }
 
-function writerOptionsObject(
-  value: unknown,
-): asserts value is RawFileHandleWriterOptions {
+function writerOptionsObject(value: unknown): asserts value is RawFileHandleWriterOptions {
   validateObject(value, "options");
 }
 
@@ -599,9 +526,7 @@ function normalizePullOptions(value: unknown): NormalizedFileHandlePullOptions {
   };
 }
 
-function writerSignal(
-  value: unknown,
-): asserts value is AbortSignalLike | undefined {
+function writerSignal(value: unknown): asserts value is AbortSignalLike | undefined {
   validateAbortSignal(value, "options.signal");
 }
 
@@ -618,11 +543,7 @@ function writerChunkBytes(value: unknown): Uint8Array {
   if (ArrayBuffer.isView(value)) {
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   }
-  throw new ERR_INVALID_ARG_TYPE(
-    "chunk",
-    ["string", "Buffer", "TypedArray", "DataView"],
-    value,
-  );
+  throw new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "TypedArray", "DataView"], value);
 }
 
 function writerChunks(value: unknown): Uint8Array[] {
@@ -651,9 +572,7 @@ function copyWriterBytes(value: Uint8Array, offset: number, length: number): num
 export class FileHandle extends EventEmitter {
   #fd: number;
   #references = 1;
-  #closePromise: Promise<void> | undefined;
-  #resolveClose: (() => void) | undefined;
-  #rejectClose: ((error: unknown) => void) | undefined;
+  #closeCapability: PromiseWithResolvers<void> | undefined;
   #descriptorClosed = false;
   #operationLocked = false;
 
@@ -680,7 +599,7 @@ export class FileHandle extends EventEmitter {
       throw new Error("FileHandle stream reference count underflow");
     }
     this.#references--;
-    if (this.#references === 0 && this.#closePromise !== undefined) {
+    if (this.#references === 0 && this.#closeCapability !== undefined) {
       this.#closeDescriptor();
     }
   }
@@ -690,7 +609,11 @@ export class FileHandle extends EventEmitter {
   ): Promise<{ bytesRead: number; buffer: ArrayBufferView }>;
   async read<T extends ArrayBufferView>(
     buffer: T,
-    options?: { offset?: number | null; length?: number | null; position?: number | bigint | null } | null,
+    options?: {
+      offset?: number | null;
+      length?: number | null;
+      position?: number | bigint | null;
+    } | null,
   ): Promise<{ bytesRead: number; buffer: T }>;
   async read<T extends ArrayBufferView>(
     buffer: T,
@@ -700,11 +623,14 @@ export class FileHandle extends EventEmitter {
   ): Promise<{ bytesRead: number; buffer: T }>;
   async read(
     bufferOrOptions?: ArrayBufferView | FileHandleReadOptions | null,
-    offsetOrOptions: number | null | {
-      offset?: number | null;
-      length?: number | null;
-      position?: number | bigint | null;
-    } = 0,
+    offsetOrOptions:
+      | number
+      | null
+      | {
+          offset?: number | null;
+          length?: number | null;
+          position?: number | bigint | null;
+        } = 0,
     length?: number,
     position: number | bigint | null = null,
   ): Promise<{ bytesRead: number; buffer: ArrayBufferView }> {
@@ -734,12 +660,17 @@ export class FileHandle extends EventEmitter {
       };
       if (typeof offsetOrOptions === "object") {
         const offset = offsetOrOptions?.offset ?? 0;
-        callbacks.read(this.#fd, buffer, {
+        callbacks.read(
+          this.#fd,
           buffer,
-          offset,
-          length: offsetOrOptions?.length ?? buffer.byteLength - offset,
-          position: offsetOrOptions?.position ?? null,
-        }, complete);
+          {
+            buffer,
+            offset,
+            length: offsetOrOptions?.length ?? buffer.byteLength - offset,
+            position: offsetOrOptions?.position ?? null,
+          },
+          complete,
+        );
       } else {
         const offset = offsetOrOptions ?? 0;
         callbacks.read(
@@ -854,7 +785,7 @@ export class FileHandle extends EventEmitter {
     if (this.#descriptorClosed) {
       throw new ERR_INVALID_STATE("The FileHandle is closed");
     }
-    if (this.#closePromise !== undefined) {
+    if (this.#closeCapability !== undefined) {
       throw new ERR_INVALID_STATE("The FileHandle is closing");
     }
     if (this.#operationLocked) {
@@ -863,9 +794,7 @@ export class FileHandle extends EventEmitter {
   }
 
   /** Read this handle as an asynchronous stream/iter byte source. */
-  pull(
-    ...args: (Transform | FileHandlePullOptions)[]
-  ): AsyncByteStream;
+  pull(...args: (Transform | FileHandlePullOptions)[]): AsyncByteStream;
   pull(...args: unknown[]): AsyncByteStream {
     this.#requireOperationAvailable();
     const parsed = parsePullArguments(args);
@@ -873,15 +802,11 @@ export class FileHandle extends EventEmitter {
     this.#operationLocked = true;
 
     const source = new FileHandleAsyncSource(this, settings);
-    return parsed.transforms.length === 0
-      ? source
-      : createParsedPull(source, parsed);
+    return parsed.transforms.length === 0 ? source : createParsedPull(source, parsed);
   }
 
   /** Read this handle as a synchronous stream/iter byte source. */
-  pullSync(
-    ...args: (Transform | FileHandleWriterOptions)[]
-  ): SyncByteStream;
+  pullSync(...args: (Transform | FileHandleWriterOptions)[]): SyncByteStream;
   pullSync(...args: unknown[]): SyncByteStream {
     this.#requireOperationAvailable();
     const parsed = parsePullArguments(args);
@@ -929,11 +854,11 @@ export class FileHandle extends EventEmitter {
     }
     this.#references--;
 
-    if (autoClose && this.#closePromise === undefined && !this.#descriptorClosed) {
+    if (autoClose && this.#closeCapability === undefined && !this.#descriptorClosed) {
       this.#beginClose(true);
       return;
     }
-    if (this.#references === 0 && this.#closePromise !== undefined) {
+    if (this.#references === 0 && this.#closeCapability !== undefined) {
       this.#closeDescriptorSync();
     }
   }
@@ -1057,25 +982,18 @@ export class FileHandle extends EventEmitter {
 
   #beginClose(synchronous: boolean): Promise<void> {
     if (this.#descriptorClosed) return Promise.resolve();
-    const pending = this.#closePromise;
-    if (pending !== undefined) return pending;
+    const pending = this.#closeCapability;
+    if (pending !== undefined) return pending.promise;
 
     this.#references--;
-    let resolveClose = (): void => {};
-    let rejectClose = (_error: unknown): void => {};
-    const closePromise = new Promise<void>((resolve, reject) => {
-      resolveClose = resolve;
-      rejectClose = reject;
-    });
-    this.#closePromise = closePromise;
-    this.#resolveClose = resolveClose;
-    this.#rejectClose = rejectClose;
+    const closeCapability = Promise.withResolvers<void>();
+    this.#closeCapability = closeCapability;
     this.emit("close");
     if (this.#references === 0) {
       if (synchronous) this.#closeDescriptorSync();
       else this.#closeDescriptor();
     }
-    return closePromise;
+    return closeCapability.promise;
   }
 
   #closeDescriptor(): void {
@@ -1103,15 +1021,11 @@ export class FileHandle extends EventEmitter {
   }
 
   #settleClose(error: unknown): void {
-    const resolve = this.#resolveClose;
-    const reject = this.#rejectClose;
-    this.#resolveClose = undefined;
-    this.#rejectClose = undefined;
-    this.#closePromise = undefined;
-    if (error !== null && error !== undefined) reject?.(error);
-    else resolve?.();
+    const closeCapability = this.#closeCapability;
+    this.#closeCapability = undefined;
+    if (error !== null && error !== undefined) closeCapability?.reject(error);
+    else closeCapability?.resolve();
   }
-
 }
 
 /** The single-use asynchronous byte source returned by FileHandle.pull(). */
@@ -1124,10 +1038,7 @@ class FileHandleAsyncSource implements AsyncByteStream {
   #remaining: number;
   #started = false;
 
-  constructor(
-    handle: FileHandle,
-    options: NormalizedFileHandlePullOptions,
-  ) {
+  constructor(handle: FileHandle, options: NormalizedFileHandlePullOptions) {
     this.#handle = handle;
     this.#autoClose = options.autoClose;
     this.#chunkSize = options.chunkSize;
@@ -1150,22 +1061,14 @@ class FileHandleAsyncSource implements AsyncByteStream {
           if (signal.aborted) {
             throw signal.reason ?? new AbortError();
           }
-          const toRead = this.#remaining > 0
-            ? Math.min(this.#chunkSize, this.#remaining)
-            : this.#chunkSize;
+          const toRead =
+            this.#remaining > 0 ? Math.min(this.#chunkSize, this.#remaining) : this.#chunkSize;
           const buffer = Buffer.allocUnsafe(toRead);
-          const result = await this.#handle.read(
-            buffer,
-            0,
-            toRead,
-            this.#position,
-          );
+          const result = await this.#handle.read(buffer, 0, toRead, this.#position);
           if (result.bytesRead === 0) return;
           if (this.#position >= 0) this.#position += result.bytesRead;
           if (this.#remaining > 0) this.#remaining -= result.bytesRead;
-          const chunk = result.bytesRead < toRead
-            ? buffer.subarray(0, result.bytesRead)
-            : buffer;
+          const chunk = result.bytesRead < toRead ? buffer.subarray(0, result.bytesRead) : buffer;
           yield [chunk];
         }
         return;
@@ -1174,22 +1077,14 @@ class FileHandleAsyncSource implements AsyncByteStream {
       // The ordinary path deliberately has no cancellation branch in its
       // read loop. This is the hot path for file pipelines.
       while (this.#remaining !== 0) {
-        const toRead = this.#remaining > 0
-          ? Math.min(this.#chunkSize, this.#remaining)
-          : this.#chunkSize;
+        const toRead =
+          this.#remaining > 0 ? Math.min(this.#chunkSize, this.#remaining) : this.#chunkSize;
         const buffer = Buffer.allocUnsafe(toRead);
-        const result = await this.#handle.read(
-          buffer,
-          0,
-          toRead,
-          this.#position,
-        );
+        const result = await this.#handle.read(buffer, 0, toRead, this.#position);
         if (result.bytesRead === 0) return;
         if (this.#position >= 0) this.#position += result.bytesRead;
         if (this.#remaining > 0) this.#remaining -= result.bytesRead;
-        const chunk = result.bytesRead < toRead
-          ? buffer.subarray(0, result.bytesRead)
-          : buffer;
+        const chunk = result.bytesRead < toRead ? buffer.subarray(0, result.bytesRead) : buffer;
         yield [chunk];
       }
     } finally {
@@ -1214,11 +1109,7 @@ class FileHandleSyncSource implements SyncByteStream, Iterator<ByteBatch, undefi
   #remaining: number;
   #done = false;
 
-  constructor(
-    handle: FileHandle,
-    fd: number,
-    options: NormalizedFileHandleWriterOptions,
-  ) {
+  constructor(handle: FileHandle, fd: number, options: NormalizedFileHandleWriterOptions) {
     this.#handle = handle;
     this.#fd = fd;
     this.#autoClose = options.autoClose;
@@ -1234,9 +1125,8 @@ class FileHandleSyncSource implements SyncByteStream, Iterator<ByteBatch, undefi
   next(): IteratorResult<ByteBatch, undefined> {
     if (this.#done || this.#remaining === 0) return this.#finish();
 
-    const toRead = this.#remaining > 0
-      ? Math.min(this.#chunkSize, this.#remaining)
-      : this.#chunkSize;
+    const toRead =
+      this.#remaining > 0 ? Math.min(this.#chunkSize, this.#remaining) : this.#chunkSize;
     const bytes = nts_fs_read(this.#fd, toRead, this.#position);
     const errno = nts_errno();
     if (errno !== 0) {
@@ -1265,10 +1155,7 @@ class FileHandleSyncSource implements SyncByteStream, Iterator<ByteBatch, undefi
 
 /** The typed public surface of `FileHandle.writer()`. */
 export interface FileHandleWriter {
-  write(
-    chunk: FileHandleWriterChunk,
-    options?: FileHandleWriterOperationOptions,
-  ): Promise<void>;
+  write(chunk: FileHandleWriterChunk, options?: FileHandleWriterOperationOptions): Promise<void>;
   writev(
     chunks: readonly FileHandleWriterChunk[],
     options?: FileHandleWriterOperationOptions,
@@ -1303,11 +1190,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
   #error: unknown = undefined;
   #asyncOperations = 0;
 
-  constructor(
-    handle: FileHandle,
-    fd: number,
-    options: NormalizedFileHandleWriterOptions,
-  ) {
+  constructor(handle: FileHandle, fd: number, options: NormalizedFileHandleWriterOptions) {
     this.#handle = handle;
     this.#fd = fd;
     this.#autoClose = options.autoClose;
@@ -1316,10 +1199,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     this.#bytesRemaining = options.limit;
   }
 
-  write(
-    chunk: FileHandleWriterChunk,
-    options?: FileHandleWriterOperationOptions,
-  ): Promise<void>;
+  write(chunk: FileHandleWriterChunk, options?: FileHandleWriterOperationOptions): Promise<void>;
   write(chunk: unknown, options?: unknown): Promise<void> {
     if (this.#error !== undefined) return Promise.reject(this.#error);
     if (this.#closed) {
@@ -1331,11 +1211,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     const bytes = writerChunkBytes(chunk);
     if (this.#bytesRemaining >= 0 && bytes.byteLength > this.#bytesRemaining) {
       return Promise.reject(
-        new ERR_OUT_OF_RANGE(
-          "write",
-          `<= ${this.#bytesRemaining} bytes`,
-          bytes.byteLength,
-        ),
+        new ERR_OUT_OF_RANGE("write", `<= ${this.#bytesRemaining} bytes`, bytes.byteLength),
       );
     }
     if (this.#bytesRemaining > 0) this.#bytesRemaining -= bytes.byteLength;
@@ -1386,11 +1262,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     if (this.#bytesRemaining >= 0 && length > this.#bytesRemaining) return false;
 
     const position = this.#position;
-    const written = nts_fs_write(
-      this.#fd,
-      copyWriterBytes(bytes, 0, length),
-      position,
-    );
+    const written = nts_fs_write(this.#fd, copyWriterBytes(bytes, 0, length), position);
     if (written < 0) return false;
     this.#totalBytesWritten += written;
     if (written < length) {
@@ -1418,12 +1290,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     if (this.#bytesRemaining >= 0 && totalSize > this.#bytesRemaining) return false;
 
     const position = this.#position;
-    const written = nts_fs_writev(
-      this.#fd,
-      flattenBuffers(bytes),
-      bufferLengths(bytes),
-      position,
-    );
+    const written = nts_fs_writev(this.#fd, flattenBuffers(bytes), bufferLengths(bytes), position);
     if (written < 0) return false;
     this.#totalBytesWritten += written;
     if (written < totalSize) {
@@ -1529,10 +1396,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     try {
       let retries = 0;
       while (totalSize > 0) {
-        const result = await this.#handle.writev(
-          buffers,
-          position < 0 ? null : position,
-        );
+        const result = await this.#handle.writev(buffers, position < 0 ? null : position);
         const written = result.bytesWritten;
         if (signal?.aborted) throw signal.reason;
         if (written === 0) {
@@ -1548,13 +1412,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
         if (position >= 0) position += written;
         if (totalSize > 0 && written > 0) {
           const flattened = Buffer.concat(buffers);
-          await this.#writeAll(
-            flattened,
-            written,
-            totalSize,
-            position,
-            signal,
-          );
+          await this.#writeAll(flattened, written, totalSize, position, signal);
           return;
         }
       }
@@ -1563,19 +1421,10 @@ class FileHandleWriterImplementation implements FileHandleWriter {
     }
   }
 
-  #writeSyncAll(
-    buffer: Uint8Array,
-    offset: number,
-    length: number,
-    position: number,
-  ): void {
+  #writeSyncAll(buffer: Uint8Array, offset: number, length: number, position: number): void {
     let retries = 0;
     while (length > 0) {
-      const written = nts_fs_write(
-        this.#fd,
-        copyWriterBytes(buffer, offset, length),
-        position,
-      );
+      const written = nts_fs_write(this.#fd, copyWriterBytes(buffer, offset, length), position);
       if (written < 0) throw uvException(written, "write");
       if (written === 0) {
         retries++;
@@ -1614,18 +1463,11 @@ async function writeDataToPath(
   });
   const flush = settings.flush ?? false;
   validateBoolean(flush, "options.flush");
-  const encoding = requireTextEncoding(
-    settings.encoding || "utf8",
-    "options.encoding",
-  );
+  const encoding = requireTextEncoding(settings.encoding || "utf8", "options.encoding");
   const validatedData = requireFileWriteData(data);
   throwIfWriteAborted(settings.signal);
 
-  const handle = await open(
-    path,
-    settings.flag || defaultFlag,
-    settings.mode ?? 0o666,
-  );
+  const handle = await open(path, settings.flag || defaultFlag, settings.mode ?? 0o666);
   try {
     await writeFileHandle(handle, validatedData, settings.signal, encoding);
     if (flush) await handle.sync();
@@ -1687,16 +1529,8 @@ export async function appendFile(
 export const chmod = promisifyVoid(callbacks.chmod);
 export const chown = promisifyVoid(callbacks.chown);
 export const copyFile = promisifyVoid(callbacks.copyFile);
-export function cp(
-  source: PathLike,
-  destination: PathLike,
-  options?: CopyOptions,
-): Promise<void>;
-export function cp(
-  source: unknown,
-  destination: unknown,
-  options?: unknown,
-): Promise<void> {
+export function cp(source: PathLike, destination: PathLike, options?: CopyOptions): Promise<void>;
+export function cp(source: unknown, destination: unknown, options?: unknown): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const settings = normalizeCpOptions(options);
     const sourcePath = getValidatedPath(source, "src");
@@ -1716,14 +1550,8 @@ export function lstat(
   path: BytePathLike,
   options?: StatOptions & { bigint?: false },
 ): Promise<Stats>;
-export function lstat(
-  path: BytePathLike,
-  options?: StatOptions,
-): Promise<Stats | BigIntStats>;
-export function lstat(
-  path: BytePathLike,
-  options?: StatOptions,
-): Promise<Stats | BigIntStats> {
+export function lstat(path: BytePathLike, options?: StatOptions): Promise<Stats | BigIntStats>;
+export function lstat(path: BytePathLike, options?: StatOptions): Promise<Stats | BigIntStats> {
   if (options?.bigint === true) {
     return new Promise<BigIntStats>((resolve, reject) => {
       callbacks.lstat(path, options, (error, value) => {
@@ -1802,9 +1630,7 @@ export async function mkdtempDisposable(
   options?: string | FileOptions,
 ): Promise<DisposableTempDirectory> {
   const cwd = resolvePath();
-  const made = options === undefined
-    ? await mkdtemp(prefix)
-    : await mkdtemp(prefix, options);
+  const made = options === undefined ? await mkdtemp(prefix) : await mkdtemp(prefix, options);
   if (typeof made !== "string") {
     throw new ERR_INVALID_ARG_TYPE("path", "string", made);
   }
@@ -1836,10 +1662,7 @@ export function glob(
   pattern: GlobPatternInput,
   options?: GlobOptions,
 ): AsyncIterableIterator<string>;
-export function glob(
-  pattern: unknown,
-  options?: unknown,
-): AsyncIterableIterator<string | Dirent> {
+export function glob(pattern: unknown, options?: unknown): AsyncIterableIterator<string | Dirent> {
   return callbacks.globIterator(pattern, options);
 }
 export const readlink = promisifyValue(callbacks.readlink, "readlink");
@@ -1915,14 +1738,8 @@ export function stat(
     });
   });
 }
-export function statfs(
-  path: BytePathLike,
-  options: { bigint: true },
-): Promise<StatFs<bigint>>;
-export function statfs(
-  path: BytePathLike,
-  options?: StatFsOptions,
-): Promise<StatFs<number>>;
+export function statfs(path: BytePathLike, options: { bigint: true }): Promise<StatFs<bigint>>;
+export function statfs(path: BytePathLike, options?: StatFsOptions): Promise<StatFs<number>>;
 export function statfs(
   path: BytePathLike,
   options?: StatFsOptions,
@@ -1959,10 +1776,7 @@ export const truncate = promisifyVoid(callbacks.truncate);
 export const unlink = promisifyVoid(callbacks.unlink);
 export const utimes = promisifyVoid(callbacks.utimes);
 export const lutimes = promisifyVoid(callbacks.lutimes);
-export async function lchmod(
-  _path: PathLike,
-  _mode: number | string,
-): Promise<void> {
+export async function lchmod(_path: PathLike, _mode: number | string): Promise<void> {
   throw new ERR_METHOD_NOT_IMPLEMENTED("lchmod()");
 }
 export const lchown = promisifyVoid(callbacks.lchown);
