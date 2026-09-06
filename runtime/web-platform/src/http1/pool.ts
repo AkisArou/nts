@@ -31,7 +31,9 @@ interface Waiter {
   signal: AbortSignal;
   result: PromiseWithResolvers<ConnectionLease>;
   unsubscribe: () => void;
-  started: boolean;
+  previous: Waiter | null;
+  next: Waiter | null;
+  queued: boolean;
   settled: boolean;
 }
 
@@ -77,7 +79,9 @@ export class ConnectionPool {
   private readonly idleTimeoutMs: number;
   private readonly records = new Set<RecordEntry>();
   private readonly counts = new Map<string, number>();
-  private pending: Waiter[] = [];
+  private firstPending: Waiter | null = null;
+  private lastPending: Waiter | null = null;
+  private pendingCount = 0;
   private readonly connecting = new Map<Waiter, AbortController>();
   private total = 0;
   private closed = false;
@@ -99,7 +103,7 @@ export class ConnectionPool {
   acquire(address: ConnectAddress, signal: AbortSignal): Promise<ConnectionLease> {
     if (this.closed) return Promise.reject(new TypeError("Connection pool is closed"));
     if (signal.aborted) return Promise.reject(signal.reason);
-    if (this.pending.length >= this.maxPending)
+    if (this.pendingCount >= this.maxPending)
       return Promise.reject(new LimitError("Connection pool queue is full"));
     const key = (address.secure ? "tls:" : "tcp:") + address.hostname + ":" + address.port;
     const waiter: Waiter = {
@@ -108,21 +112,47 @@ export class ConnectionPool {
       signal,
       result: Promise.withResolvers(),
       unsubscribe: () => {},
-      started: false,
+      previous: null,
+      next: null,
+      queued: false,
       settled: false,
     };
     waiter.unsubscribe = signal.subscribe(() => {
       rejectWaiter(waiter, signal.reason);
       this.connecting.get(waiter)?.abort(signal.reason);
-      if (!waiter.started) {
-        this.pending = this.pending.filter((item) => item !== waiter);
+      if (waiter.queued) {
+        this.removePending(waiter);
         this.pump();
       }
     });
-    this.pending.push(waiter);
+    this.appendPending(waiter);
     this.pump();
     return waiter.result.promise;
   }
+
+  private appendPending(waiter: Waiter): void {
+    waiter.previous = this.lastPending;
+    waiter.queued = true;
+    if (this.lastPending === null) this.firstPending = waiter;
+    else this.lastPending.next = waiter;
+    this.lastPending = waiter;
+    this.pendingCount++;
+  }
+
+  private removePending(waiter: Waiter): void {
+    if (!waiter.queued) return;
+    const previous = waiter.previous;
+    const next = waiter.next;
+    if (previous === null) this.firstPending = next;
+    else previous.next = next;
+    if (next === null) this.lastPending = previous;
+    else next.previous = previous;
+    waiter.previous = null;
+    waiter.next = null;
+    waiter.queued = false;
+    this.pendingCount--;
+  }
+
   private changeCount(key: string, delta: number): void {
     const count = (this.counts.get(key) ?? 0) + delta;
     if (count === 0) this.counts.delete(key);
@@ -139,27 +169,30 @@ export class ConnectionPool {
     if (this.closed) return;
     for (const record of this.records)
       if (!record.busy && record.connection.closed) this.drop(record);
-    for (let i = 0; i < this.pending.length;) {
-      const waiter = this.pending[i];
-      if (waiter === undefined) break;
-      if (waiter.settled) {
-        this.pending.splice(i, 1);
-        waiter.unsubscribe();
+    let waiter = this.firstPending;
+    while (waiter !== null) {
+      const current = waiter;
+      const next = current.next;
+      if (current.settled) {
+        this.removePending(current);
+        current.unsubscribe();
+        waiter = next;
         continue;
       }
       let idle: RecordEntry | undefined;
       for (const record of this.records)
-        if (!record.busy && record.key === waiter.key) {
+        if (!record.busy && record.key === current.key) {
           idle = record;
           break;
         }
       if (idle !== undefined) {
-        this.pending.splice(i, 1);
+        this.removePending(current);
         idle.busy = true;
         idle.timer?.cancel();
         idle.timer = null;
-        waiter.unsubscribe();
-        resolveWaiter(waiter, new ConnectionLease(idle, this));
+        current.unsubscribe();
+        resolveWaiter(current, new ConnectionLease(idle, this));
+        waiter = next;
         continue;
       }
       // Reclaim an unrelated idle connection before blocking on the global cap.
@@ -172,52 +205,52 @@ export class ConnectionPool {
       }
       if (
         this.total >= this.maxConnections ||
-        (this.counts.get(waiter.key) ?? 0) >= this.maxPerOrigin
+        (this.counts.get(current.key) ?? 0) >= this.maxPerOrigin
       ) {
-        i++;
+        waiter = next;
         continue;
       }
-      this.pending.splice(i, 1);
-      waiter.started = true;
-      this.changeCount(waiter.key, 1);
+      this.removePending(current);
+      this.changeCount(current.key, 1);
       const controller = new AbortController();
-      this.connecting.set(waiter, controller);
+      this.connecting.set(current, controller);
       Promise.resolve()
-        .then(() => this.connector.connect(waiter.address, controller.signal))
+        .then(() => this.connector.connect(current.address, controller.signal))
         .then(
           (connection) => {
-            this.connecting.delete(waiter);
-            waiter.unsubscribe();
-            if (this.closed || waiter.settled || waiter.signal.aborted) {
+            this.connecting.delete(current);
+            current.unsubscribe();
+            if (this.closed || current.settled || current.signal.aborted) {
               connection.close();
-              this.changeCount(waiter.key, -1);
+              this.changeCount(current.key, -1);
               rejectWaiter(
-                waiter,
-                waiter.signal.aborted
-                  ? waiter.signal.reason
+                current,
+                current.signal.aborted
+                  ? current.signal.reason
                   : new TypeError("Connection pool closed"),
               );
             } else {
               const record: RecordEntry = {
-                key: waiter.key,
+                key: current.key,
                 connection,
                 reader: new BufferedReader(connection),
                 busy: true,
                 timer: null,
               };
               this.records.add(record);
-              resolveWaiter(waiter, new ConnectionLease(record, this));
+              resolveWaiter(current, new ConnectionLease(record, this));
             }
             this.pump();
           },
           (error) => {
-            this.connecting.delete(waiter);
-            waiter.unsubscribe();
-            this.changeCount(waiter.key, -1);
-            rejectWaiter(waiter, error);
+            this.connecting.delete(current);
+            current.unsubscribe();
+            this.changeCount(current.key, -1);
+            rejectWaiter(current, error);
             this.pump();
           },
         );
+      waiter = next;
     }
   }
 
@@ -250,15 +283,19 @@ export class ConnectionPool {
       controller.abort(error);
     }
     for (const record of this.records) this.drop(record);
-    for (const waiter of this.pending.splice(0)) {
+    let waiter = this.firstPending;
+    while (waiter !== null) {
+      const next = waiter.next;
+      this.removePending(waiter);
       waiter.unsubscribe();
       rejectWaiter(waiter, new TypeError("Connection pool is closed"));
+      waiter = next;
     }
   }
 
   get stats(): { connections: number; pending: number; idle: number } {
     let idle = 0;
     for (const record of this.records) if (!record.busy) idle++;
-    return { connections: this.total, pending: this.pending.length, idle };
+    return { connections: this.total, pending: this.pendingCount, idle };
   }
 }

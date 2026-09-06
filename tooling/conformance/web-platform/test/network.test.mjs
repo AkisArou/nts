@@ -431,6 +431,127 @@ suite("ConnectionPool.close interrupts an outstanding connector", async () => {
   assert.equal(pool.stats.connections, 0);
 });
 
+suite("ConnectionPool removes canceled waiters without disturbing FIFO order", async () => {
+  class ReusableConnection {
+    closed = false;
+
+    read() {
+      return Promise.resolve(null);
+    }
+
+    write(data) {
+      return Promise.resolve(data.length);
+    }
+
+    close() {
+      this.closed = true;
+    }
+  }
+
+  const connection = new ReusableConnection();
+  const pool = new ConnectionPool(
+    { connect: () => Promise.resolve(connection) },
+    createHostNodePrimitives().scheduler,
+    { maxConnections: 1, maxConnectionsPerOrigin: 1, maxPending: 2050 },
+  );
+  const address = { hostname: "queue.test", port: 80, secure: false, connectTimeoutMs: 1000 };
+  const first = await pool.acquire(address, new AbortController().signal);
+  const delivered = [];
+  const canceled = [];
+  const controllers = [];
+  const pending = [];
+
+  for (let index = 0; index < 2050; index++) {
+    const controller = new AbortController();
+    controllers.push(controller);
+    pending.push(
+      pool.acquire(address, controller.signal).then(
+        (lease) => {
+          delivered.push(index);
+          lease.release(true);
+        },
+        (reason) => {
+          assert.equal(reason, index);
+          canceled.push(index);
+        },
+      ),
+    );
+  }
+  await assert.rejects(
+    pool.acquire(address, new AbortController().signal),
+    /Connection pool queue is full/,
+  );
+
+  const expectedDelivered = [];
+  const expectedCanceled = [];
+  for (let index = 0; index < controllers.length; index++) {
+    if (index % 3 === 1) {
+      expectedCanceled.push(index);
+      controllers[index].abort(index);
+    } else expectedDelivered.push(index);
+  }
+  assert.equal(pool.stats.pending, expectedDelivered.length);
+
+  first.release(true);
+  await Promise.all(pending);
+  assert.deepEqual(canceled, expectedCanceled);
+  assert.deepEqual(delivered, expectedDelivered);
+  assert.deepEqual(pool.stats, { connections: 1, pending: 0, idle: 1 });
+  pool.close();
+  assert.equal(connection.closed, true);
+});
+
+suite("ConnectionPool skips a waiter blocked by its origin cap", async () => {
+  const connections = [];
+  const connectedOrigins = [];
+  const pool = new ConnectionPool(
+    {
+      connect(address) {
+        connectedOrigins.push(address.hostname);
+        const connection = {
+          closed: false,
+          read: () => Promise.resolve(null),
+          write: (data) => Promise.resolve(data.length),
+          close() {
+            this.closed = true;
+          },
+        };
+        connections.push(connection);
+        return Promise.resolve(connection);
+      },
+    },
+    createHostNodePrimitives().scheduler,
+    { maxConnections: 2, maxConnectionsPerOrigin: 1 },
+  );
+  const signal = new AbortController().signal;
+  const originA = { hostname: "a.test", port: 80, secure: false, connectTimeoutMs: 1000 };
+  const originB = { hostname: "b.test", port: 80, secure: false, connectTimeoutMs: 1000 };
+  const firstA = await pool.acquire(originA, signal);
+  let secondASettled = false;
+  const secondA = pool.acquire(originA, signal).then((lease) => {
+    secondASettled = true;
+    return lease;
+  });
+  const firstB = await pool.acquire(originB, signal);
+
+  assert.deepEqual(connectedOrigins, ["a.test", "b.test"]);
+  assert.equal(secondASettled, false);
+  assert.deepEqual(pool.stats, { connections: 2, pending: 1, idle: 0 });
+
+  firstB.release(false);
+  await tick();
+  assert.equal(secondASettled, false);
+  firstA.release(false);
+  const acquiredA = await secondA;
+  assert.deepEqual(connectedOrigins, ["a.test", "b.test", "a.test"]);
+  acquiredA.release(false);
+  pool.close();
+  assert.equal(
+    connections.every((connection) => connection.closed),
+    true,
+  );
+});
+
 // Independent test-server frame encoder/parser. These do not call the implementation's codec.
 function frame(opcode, payload = Buffer.alloc(0), fin = true) {
   const bytes = Buffer.from(payload);

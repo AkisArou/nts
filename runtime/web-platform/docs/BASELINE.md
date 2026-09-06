@@ -364,3 +364,21 @@ refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR; the one
 additional primary is the already-reported in-place array-length assignment gap.
 Restoring the snapshot allocation merely to suppress that diagnostic would regress
 the intended final implementation.
+
+The HTTP/1 connection pool now keeps queued acquisitions in an intrusive FIFO
+instead of an array. Each waiter pays three explicit fields (`previous`, `next`, and
+`queued`); in return, cancellation and dispatch unlink in constant time without a
+replacement `filter()` allocation or a suffix-moving `splice()`. The pump still
+walks past a waiter blocked by its per-origin limit, so one saturated origin cannot
+head-of-line block another origin while global capacity remains. A 2,050-waiter
+test cancels every third acquisition, checks the queue limit and exact pending
+count, then proves that every survivor receives one reused connection in FIFO
+order. A separate two-origin case protects the skip rule. Corrupting removal of the
+queue head strands the stress case until its eight-second timeout; stopping at a
+per-origin-blocked waiter likewise times out the independent-origin case. The
+Node-host suite passes 114/114 and the pinned WPT slice remains 95/95. The live NTS
+frontier is 239 primary refusals, 36 cascades, zero JVM-backend refusals, and no
+invalid HIR. Relative to the preceding 237/36 inventory, the only primary-message
+movement is one fewer hierarchy diagnostic for `unsubscribe` and three additional
+observations of the existing unrepresentable `PromiseWithResolvers.result`
+property; the queue introduces no new underlying compiler dependency.
