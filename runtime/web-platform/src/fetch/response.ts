@@ -4,24 +4,31 @@ import { Headers } from "./headers.ts";
 import type { HeadersInit, HeaderEntry } from "./headers.ts";
 import type { RandomSource, URLParser } from "../core/platform.ts";
 import type { ReadableStream } from "../streams/readable.ts";
+
 export interface ResponseInit {
   status?: number;
   statusText?: string;
   headers?: HeadersInit;
 }
+
 export interface ResponseContext {
   random: RandomSource;
   bodyPolicy: BodyPolicy;
 }
+
 const noRandom: RandomSource = {
+
   fill() {
     throw new TypeError("FormData needs an environment-owned RandomSource");
   },
 };
+
 const defaultContext: ResponseContext = { random: noRandom, bodyPolicy: standardBodyPolicy };
+
 export function nullBodyStatus(status: number): boolean {
   return status === 101 || status === 103 || status === 204 || status === 205 || status === 304;
 }
+
 export class Response extends Body {
   private readonly context: ResponseContext;
   private responseStatus: number;
@@ -30,6 +37,7 @@ export class Response extends Body {
   private responseURL = "";
   private wasRedirected = false;
   private responseType: "default" | "basic" | "error" = "default";
+
   constructor(
     body: BodyInit | null = null,
     init: ResponseInit = {},
@@ -55,24 +63,30 @@ export class Response extends Body {
     this.statusText = statusText;
     this.headers = headers;
   }
+
   get status(): number {
     return this.responseStatus;
   }
+
   get ok(): boolean {
     return this.status >= 200 && this.status <= 299;
   }
+
   get url(): string {
     return this.responseURL;
   }
+
   get redirected(): boolean {
     return this.wasRedirected;
   }
+
   get type(): "default" | "basic" | "error" {
     return this.responseType;
   }
   protected override contentType(): string | null {
     return this.headers.get("content-type");
   }
+
   clone(): Response {
     const state = this.bodyState.clone();
     const copy = new Response(

@@ -13,15 +13,21 @@ import type {
   TransportRequest,
   TransportResponse,
 } from "./transport.ts";
+
 const redirects = new Set([301, 302, 303, 307, 308]);
 
 function checkURL(url: URLRecord): void {
+
   validateNetworkURL(url);
+
   checkNetworkPort(url.port);
 }
+
 function cancelBody(body: ReadableStream<Uint8Array> | null, reason?: unknown): void {
+
   if (body !== null) body.cancel(reason).catch(() => {});
 }
+
 function abortableDispatch(
   transport: FetchTransport,
   request: TransportRequest,
@@ -111,11 +117,13 @@ function abortableBody(
     { highWaterMark: 0, size: (value) => value.length },
   );
 }
+
 export class FetchClient {
   private readonly transport: FetchTransport;
   private readonly context: RequestContext;
   private readonly decoder: ContentDecoder | undefined;
   private readonly maxRedirects: number;
+
   constructor(
     transport: FetchTransport,
     context: RequestContext,
@@ -234,6 +242,7 @@ export class FetchClient {
   };
 }
 import { BodyState } from "./body.ts";
+
 function emptyBody(context: RequestContext): BodyState {
   return BodyState.empty(context.bodyPolicy);
 }

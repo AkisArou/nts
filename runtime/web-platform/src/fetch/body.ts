@@ -7,6 +7,7 @@ import { FormData } from "../forms/form-data.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
+
 export type BodyInit =
   | string
   | Uint8Array
@@ -15,10 +16,12 @@ export type BodyInit =
   | FormData
   | URLSearchParams
   | ReadableStream<Uint8Array>;
+
 export interface BodyPolicy {
   maxConsumeBytes: number;
   maxCloneBufferBytes: number;
 }
+
 export const standardBodyPolicy: BodyPolicy = {
   maxConsumeBytes: Infinity,
   maxCloneBufferBytes: Infinity,
@@ -30,6 +33,7 @@ export class BodyState {
   readonly length: number | null;
   private readonly replaySource: Blob | null;
   readonly policy: BodyPolicy;
+
   constructor(
     stream: ReadableStream<Uint8Array> | null,
     type: string | null,
@@ -43,9 +47,11 @@ export class BodyState {
     this.replaySource = replaySource;
     this.policy = policy;
   }
+
   static empty(policy: BodyPolicy = standardBodyPolicy): BodyState {
     return new BodyState(null, null, 0, null, policy);
   }
+
   static extract(
     input: BodyInit | null | undefined,
     random: RandomSource,
@@ -74,15 +80,19 @@ export class BodyState {
     } else blob = new Blob([input]);
     return new BodyState(blob.stream(), type, blob.size, blob, policy);
   }
+
   get used(): boolean {
     return this.stream?.disturbed ?? false;
   }
+
   get unusable(): boolean {
     return this.used || (this.stream?.locked ?? false);
   }
+
   get replayable(): boolean {
     return this.stream === null || this.replaySource !== null;
   }
+
   replay(): BodyState {
     if (this.stream === null) return BodyState.empty(this.policy);
     if (this.replaySource === null) throw new TypeError("Cannot replay a streaming request body");
@@ -94,6 +104,7 @@ export class BodyState {
       this.policy,
     );
   }
+
   clone(): BodyState {
     if (this.unusable) throw new TypeError("Body is already used or locked");
     if (this.stream === null) return BodyState.empty(this.policy);
@@ -105,6 +116,7 @@ export class BodyState {
     this.stream = branches[0];
     return new BodyState(branches[1], this.type, this.length, this.replaySource, this.policy);
   }
+
   transfer(): BodyState {
     if (this.unusable) throw new TypeError("Body is already used or locked");
     return new BodyState(
@@ -141,12 +153,15 @@ export class BodyState {
 /** Common methods for Request/Response. json() returns unknown, never a fictitious caller-chosen T. */
 export abstract class Body {
   /** @internal */ protected bodyState: BodyState;
+
   constructor(state: BodyState) {
     this.bodyState = state;
   }
+
   get body(): ReadableStream<Uint8Array> | null {
     return this.bodyState.stream;
   }
+
   get bodyUsed(): boolean {
     return this.bodyState.used;
   }
@@ -187,6 +202,7 @@ export abstract class Body {
     return this.bodyState;
   }
 }
+
 export function bodyFromBytes(
   bytes: Uint8Array,
   policy: BodyPolicy = standardBodyPolicy,

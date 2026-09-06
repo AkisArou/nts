@@ -13,8 +13,11 @@ import type {
   WebSocketSession,
   WebSocketTransport,
 } from "./transport.ts";
+
 export type WebSocketData = string | Blob | ArrayBuffer;
+
 export type WebSocketSendData = string | Blob | Uint8Array | ArrayBuffer;
+
 export interface WebSocketContext {
   urls: URLParser;
   scheduler: Scheduler;
@@ -23,10 +26,12 @@ export interface WebSocketContext {
   origin?: string;
   maxBufferedAmount?: number;
 }
+
 interface PendingSend {
   size: number;
   value: string | Blob | Uint8Array;
 }
+
 export class WebSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -63,27 +68,35 @@ export class WebSocket extends EventTarget {
     callback: null,
     listener: null,
   };
+
   get onopen(): ((this: WebSocket, event: Event) => void) | null {
     return this.openHandler.callback;
   }
+
   set onopen(callback: ((this: WebSocket, event: Event) => void) | null) {
     this.setHandler(this, this.openHandler, "open", callback, (_event): _event is Event => true);
   }
+
   get onerror(): ((this: WebSocket, event: Event) => void) | null {
     return this.errorHandler.callback;
   }
+
   set onerror(callback: ((this: WebSocket, event: Event) => void) | null) {
     this.setHandler(this, this.errorHandler, "error", callback, (_event): _event is Event => true);
   }
+
   get onmessage(): ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null {
     return this.messageHandler.callback;
   }
+
   set onmessage(callback: ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null) {
     this.setHandler(this, this.messageHandler, "message", callback, isSocketMessageEvent);
   }
+
   get onclose(): ((this: WebSocket, event: CloseEvent) => void) | null {
     return this.closeHandler.callback;
   }
+
   set onclose(callback: ((this: WebSocket, event: CloseEvent) => void) | null) {
     this.setHandler(
       this,
@@ -93,6 +106,7 @@ export class WebSocket extends EventTarget {
       (event): event is CloseEvent => event instanceof CloseEvent,
     );
   }
+
   constructor(url: string, protocols: string | readonly string[], context: WebSocketContext) {
     super((error) => context.scheduler.reportError(error));
     this.context = context;
@@ -128,21 +142,27 @@ export class WebSocket extends EventTarget {
     this.url = parsed.href;
     this.connect(parsed, offers).catch((error) => this.fail(error));
   }
+
   get readyState(): number {
     return this.state;
   }
+
   get bufferedAmount(): number {
     return this.amount;
   }
+
   get protocol(): string {
     return this.chosenProtocol;
   }
+
   get extensions(): string {
     return this.negotiatedExtensions;
   }
+
   get binaryType(): "blob" | "arraybuffer" {
     return this.binary;
   }
+
   set binaryType(value: "blob" | "arraybuffer") {
     if (value === "blob" || value === "arraybuffer") this.binary = value;
   }
@@ -200,6 +220,7 @@ export class WebSocket extends EventTarget {
       );
     }
   }
+
   send(data: WebSocketSendData): void {
     if (this.state === this.CONNECTING)
       throw new DOMException("WebSocket is still connecting", "InvalidStateError");
@@ -237,6 +258,7 @@ export class WebSocket extends EventTarget {
     });
     this.sends.catch((error) => this.fail(error));
   }
+
   close(code?: number, reason = ""): void {
     if (
       code !== undefined &&
@@ -281,6 +303,7 @@ export class WebSocket extends EventTarget {
 }
 
 function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData> {
+
   if (!(event instanceof MessageEvent)) return false;
   const data: unknown = event.data;
   return typeof data === "string" || data instanceof Blob || data instanceof ArrayBuffer;

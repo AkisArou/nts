@@ -5,8 +5,11 @@ import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
 import type { HeadersInit } from "./headers.ts";
 import { ReadableStream } from "../streams/readable.ts";
+
 export type RequestRedirect = "follow" | "error" | "manual";
+
 export type RequestCredentials = "omit" | "same-origin" | "include";
+
 export interface RequestInit {
   method?: string;
   headers?: HeadersInit;
@@ -16,25 +19,33 @@ export interface RequestInit {
   credentials?: RequestCredentials;
   duplex?: "half";
 }
+
 export interface RequestContext {
   urls: URLParser;
   random: RandomSource;
   bodyPolicy: BodyPolicy;
   baseURL?: string;
 }
+
 export function normalizeMethod(method: string): string {
+
   if (!isToken(method)) throw new TypeError("Invalid HTTP method");
   const upper = method.toUpperCase();
+
   if (upper === "CONNECT" || upper === "TRACE" || upper === "TRACK")
     throw new TypeError("Forbidden HTTP method");
   return ["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"].includes(upper) ? upper : method;
 }
+
 export function validateNetworkURL(url: URLRecord): void {
+
   if (url.protocol !== "http:" && url.protocol !== "https:")
     throw new TypeError("Only HTTP(S) URLs are supported");
+
   if (url.username !== "" || url.password !== "")
     throw new TypeError("Credentials in URLs are not permitted");
 }
+
 export class Request extends Body {
   readonly method: string;
   readonly headers: Headers;
@@ -44,6 +55,7 @@ export class Request extends Body {
   readonly duplex = "half";
   readonly parsedURL: URLRecord;
   private readonly context: RequestContext;
+
   constructor(input: string | Request, init: RequestInit, context: RequestContext) {
     const source = input instanceof Request ? input : null;
     const url = context.urls.parse(
@@ -87,12 +99,14 @@ export class Request extends Body {
     this.redirect = redirect;
     this.credentials = credentials;
   }
+
   get url(): string {
     return this.parsedURL.href;
   }
   protected override contentType(): string | null {
     return this.headers.get("content-type");
   }
+
   clone(): Request {
     const state = this.bodyState.clone();
     const result = new Request(
@@ -110,6 +124,7 @@ export class Request extends Body {
     return result;
   }
 }
+
 function inputString(input: string | Request): string {
   return typeof input === "string" ? input : input.url;
 }

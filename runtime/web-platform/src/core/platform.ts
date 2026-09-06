@@ -1,17 +1,24 @@
 import type { AbortSignal } from "./abort.ts";
 
 export interface CancelHandle {
+
   cancel(): void;
 }
 /** enqueue MUST enqueue a task, never invoke inline. Timer cancellation is idempotent. */
 export interface Scheduler {
+
   enqueue(task: () => void): void;
+
   delay(milliseconds: number, task: () => void): CancelHandle;
+
   reportError(error: unknown): void;
 }
+
 export interface RandomSource {
+
   fill(bytes: Uint8Array): void;
 }
+
 export interface URLRecord {
   readonly href: string;
   readonly protocol: string;
@@ -27,8 +34,10 @@ export interface URLRecord {
 }
 /** Bind the project's WHATWG URL implementation here, not java.net.URI. */
 export interface URLParser {
+
   parse(input: string, base?: string): URLRecord;
 }
+
 export interface ConnectAddress {
   readonly hostname: string; // IPv6 has no surrounding brackets at this boundary.
   readonly port: number;
@@ -43,13 +52,19 @@ export interface ConnectAddress {
  */
 export interface ByteConnection {
   readonly closed: boolean;
+
   read(maxBytes: number): Promise<Uint8Array | null>;
+
   write(data: Uint8Array): Promise<number>;
+
   close(): void;
 }
+
 export interface SocketConnector {
+
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection>;
 }
+
 export interface PlatformPrimitives {
   readonly sockets: SocketConnector;
   readonly random: RandomSource;

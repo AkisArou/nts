@@ -4,6 +4,7 @@ import { isToken } from "../fetch/headers.ts";
 import { FormData } from "./form-data.ts";
 import { File } from "./blob.ts";
 import { parseParameterized } from "./mime.ts";
+
 export interface MultipartDecodeLimits {
   maxParts?: number;
   maxPartHeaderBytes?: number;
@@ -12,6 +13,7 @@ export interface MultipartDecodeLimits {
 class BytePattern {
   private readonly needle: Uint8Array;
   private readonly prefix: number[];
+
   constructor(needle: Uint8Array) {
     this.needle = needle;
     this.prefix = new Array<number>(needle.length).fill(0);
@@ -21,6 +23,7 @@ class BytePattern {
       this.prefix[i] = matched;
     }
   }
+
   find(bytes: Uint8Array, from: number): number {
     for (let i = from, matched = 0; i < bytes.length; i++) {
       while (matched > 0 && bytes[i] !== this.needle[matched])
@@ -31,6 +34,7 @@ class BytePattern {
     return -1;
   }
 }
+
 function at(bytes: Uint8Array, position: number, a: number, b: number): boolean {
   return bytes[position] === a && bytes[position + 1] === b;
 }
@@ -42,6 +46,7 @@ export function decodeMultipart(
 ): FormData {
   const mime = parseParameterized(contentType);
   const boundary = mime.parameters.get("boundary");
+
   if (
     mime.value !== "multipart/form-data" ||
     boundary === undefined ||
@@ -56,6 +61,7 @@ export function decodeMultipart(
   const search = new BytePattern(marker);
   const headersEnd = new BytePattern(Uint8Array.of(13, 10, 13, 10));
   let offset = 0;
+
   if (!opening.every((byte, index) => bytes[index] === byte)) {
     // MIME permits a preamble. Only a boundary at a line boundary is recognized.
     const first = search.find(bytes, 0);
@@ -65,6 +71,7 @@ export function decodeMultipart(
   offset += opening.length;
   const result = new FormData();
   let parts = 0;
+
   while (true) {
     if (at(bytes, offset, 45, 45)) {
       if (offset + 2 !== bytes.length && !at(bytes, offset + 2, 13, 10))

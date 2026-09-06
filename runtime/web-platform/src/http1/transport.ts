@@ -25,6 +25,7 @@ import {
 import type { HeadLimits } from "./parser.ts";
 import { ConnectionPool } from "./pool.ts";
 import type { PoolOptions } from "./pool.ts";
+
 export interface Http1Options extends PoolOptions {
   connectTimeoutMs?: number;
   headersTimeoutMs?: number;
@@ -33,6 +34,7 @@ export interface Http1Options extends PoolOptions {
   maxHeaders?: number;
   maxInformational?: number;
 }
+
 export function addressOf(
   url: URLRecord,
   connectTimeoutMs: number,
@@ -49,8 +51,10 @@ export function addressOf(
     connectTimeoutMs,
   };
 }
+
 function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: boolean } {
   const headers = new Headers(request.headers);
+
   for (const name of [
     "host",
     "connection",
@@ -65,11 +69,15 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
     if (headers.has(name)) throw new TypeError("Transport-managed request header: " + name);
   }
   const declared = contentLength(headers);
+
   if (declared !== null && (request.bodyLength === null || declared !== request.bodyLength))
     throw new TypeError("Content-Length does not match body length");
+
   headers.delete("content-length");
+
   headers.set("host", request.url.host);
   const chunked = request.body !== null && request.bodyLength === null;
+
   if (chunked) headers.set("transfer-encoding", "chunked");
   else if (
     request.bodyLength !== null &&
@@ -81,9 +89,11 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
     headers.set("content-length", String(request.bodyLength));
   }
   const target = request.url.pathname + request.url.search;
+
   if (/[^\x21-\x7e]/.test(target))
     throw new TypeError("URL parser produced an invalid HTTP request target");
   let head = request.method + " " + (target || "/") + " HTTP/1.1\r\n";
+
   for (const [name, value] of headers.raw()) {
     validateWireValue(value);
     head += name + ": " + value + "\r\n";
@@ -96,6 +106,7 @@ async function upload(
   length: number | null,
   chunked: boolean,
 ): Promise<void> {
+
   if (reader === null) return;
   let sent = 0;
   try {
@@ -118,6 +129,7 @@ async function upload(
     reader.releaseLock();
   }
 }
+
 export class Http1Transport implements FetchTransport {
   readonly pool: ConnectionPool;
   private readonly scheduler: Scheduler;
@@ -125,6 +137,7 @@ export class Http1Transport implements FetchTransport {
   private readonly headersTimeout: number;
   private readonly readTimeout: number;
   private readonly limits: HeadLimits;
+
   constructor(connector: SocketConnector, scheduler: Scheduler, options: Http1Options = {}) {
     this.pool = new ConnectionPool(connector, scheduler, options);
     this.scheduler = scheduler;
@@ -302,6 +315,7 @@ export class Http1Transport implements FetchTransport {
       throw hasFailure ? failure : error;
     }
   }
+
   close(): void {
     this.pool.close();
   }

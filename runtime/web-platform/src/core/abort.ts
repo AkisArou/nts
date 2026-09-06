@@ -7,6 +7,7 @@ interface Algorithm {
   callback: () => void;
   active: boolean;
 }
+
 export class AbortSignal extends EventTarget {
   private isAborted = false;
   private abortReason: unknown = undefined;
@@ -15,18 +16,23 @@ export class AbortSignal extends EventTarget {
     callback: null,
     listener: null,
   };
+
   get onabort(): ((this: AbortSignal, event: Event) => void) | null {
     return this.abortHandler.callback;
   }
+
   set onabort(callback: ((this: AbortSignal, event: Event) => void) | null) {
     this.setHandler(this, this.abortHandler, "abort", callback, (_event): _event is Event => true);
   }
+
   get aborted(): boolean {
     return this.isAborted;
   }
+
   get reason(): unknown {
     return this.abortReason;
   }
+
   throwIfAborted(): void {
     if (this.isAborted) throw this.abortReason;
   }
@@ -99,11 +105,14 @@ export class AbortSignal extends EventTarget {
     return signal;
   }
 }
+
 export class AbortController {
   readonly signal: AbortSignal;
+
   constructor(report?: (error: unknown) => void) {
     this.signal = new AbortSignal(report);
   }
+
   abort(reason?: unknown): void {
     this.signal.trigger(reason);
   }

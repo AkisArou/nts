@@ -10,12 +10,14 @@ import type {
   SocketConnector,
 } from "../core/platform.ts";
 import { BufferedReader } from "./io.ts";
+
 export interface PoolOptions {
   maxConnections?: number;
   maxConnectionsPerOrigin?: number;
   maxPending?: number;
   idleTimeoutMs?: number;
 }
+
 interface RecordEntry {
   key: string;
   connection: ByteConnection;
@@ -23,6 +25,7 @@ interface RecordEntry {
   busy: boolean;
   timer: CancelHandle | null;
 }
+
 interface Waiter {
   key: string;
   address: ConnectAddress;
@@ -31,24 +34,28 @@ interface Waiter {
   unsubscribe: () => void;
   started: boolean;
 }
+
 export class ConnectionLease {
   readonly connection: ByteConnection;
   readonly reader: BufferedReader;
   private readonly record: RecordEntry;
   private readonly pool: ConnectionPool;
   private released = false;
+
   constructor(record: RecordEntry, pool: ConnectionPool) {
     this.connection = record.connection;
     this.reader = record.reader;
     this.record = record;
     this.pool = pool;
   }
+
   release(reusable: boolean): void {
     if (this.released) return;
     this.released = true;
     this.pool.release(this.record, reusable);
   }
 }
+
 export class ConnectionPool {
   private readonly connector: SocketConnector;
   private readonly scheduler: Scheduler;
@@ -62,6 +69,7 @@ export class ConnectionPool {
   private readonly connecting = new Map<Waiter, AbortController>();
   private total = 0;
   private closed = false;
+
   constructor(connector: SocketConnector, scheduler: Scheduler, options: PoolOptions = {}) {
     this.connector = connector;
     this.scheduler = scheduler;
@@ -75,6 +83,7 @@ export class ConnectionPool {
     if (!Number.isFinite(this.idleTimeoutMs) || this.idleTimeoutMs < 0)
       throw new RangeError("Invalid pool idle timeout");
   }
+
   acquire(address: ConnectAddress, signal: AbortSignal): Promise<ConnectionLease> {
     if (this.closed) return Promise.reject(new TypeError("Connection pool is closed"));
     if (signal.aborted) return Promise.reject(signal.reason);
@@ -216,6 +225,7 @@ export class ConnectionPool {
     }
     this.pump();
   }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -230,6 +240,7 @@ export class ConnectionPool {
       waiter.result.reject(new TypeError("Connection pool is closed"));
     }
   }
+
   get stats(): { connections: number; pending: number; idle: number } {
     let idle = 0;
     for (const record of this.records) if (!record.busy) idle++;

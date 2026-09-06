@@ -1,9 +1,11 @@
 /** DOMException's useful non-DOM surface. No host DOMException dependency. */
 export class DOMException extends Error {
+
   constructor(message = "", name = "Error") {
     super(message);
     this.name = name;
   }
+
   get code(): number {
     switch (this.name) {
       case "IndexSizeError":
@@ -33,24 +35,32 @@ export class DOMException extends Error {
     }
   }
 }
+
 export function abortError(): DOMException {
   return new DOMException("The operation was aborted", "AbortError");
 }
+
 export function networkError(cause: unknown): TypeError {
   return new TypeError("Network request failed", { cause });
 }
+
 export class ProtocolError extends Error {
+
   constructor(message: string) {
     super(message);
     this.name = "ProtocolError";
   }
 }
+
 export class LimitError extends RangeError {
+
   constructor(message: string) {
     super(message);
     this.name = "LimitError";
   }
 }
+
 export function invariant(value: boolean, message: string): asserts value {
+
   if (!value) throw new Error(message);
 }

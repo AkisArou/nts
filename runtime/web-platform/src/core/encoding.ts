@@ -1,6 +1,7 @@
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export function toUSVString(input: string): string {
   let result = "";
+
   for (let i = 0; i < input.length; i++) {
     const code = input.charCodeAt(i);
     if (code >= 0xd800 && code <= 0xdbff) {
@@ -13,13 +14,16 @@ export function toUSVString(input: string): string {
   }
   return result;
 }
+
 export class TextEncoder {
   readonly encoding = "utf-8";
+
   encode(input = ""): Uint8Array {
     const output = new Uint8Array(input.length * 3);
     const result = this.encodeInto(input, output);
     return output.slice(0, result.written);
   }
+
   encodeInto(input: string, destination: Uint8Array): { read: number; written: number } {
     let read = 0;
     let written = 0;
@@ -53,10 +57,12 @@ export class TextEncoder {
     return { read, written };
   }
 }
+
 export interface TextDecoderOptions {
   fatal?: boolean;
   ignoreBOM?: boolean;
 }
+
 export class TextDecoder {
   readonly encoding = "utf-8";
   readonly fatal: boolean;
@@ -67,6 +73,7 @@ export class TextDecoder {
   private lower = 0x80;
   private upper = 0xbf;
   private bomSeen = false;
+
   constructor(label = "utf-8", options: TextDecoderOptions = {}) {
     const normalized = label.trim().toLowerCase();
     if (normalized !== "utf-8" && normalized !== "utf8" && normalized !== "unicode-1-1-utf-8") {
@@ -91,6 +98,7 @@ export class TextDecoder {
     this.bomSeen = true;
     return "\ufffd";
   }
+
   decode(input: Uint8Array = new Uint8Array(0), options: { stream?: boolean } = {}): string {
     const pieces: string[] = [];
     let ascii = "";
@@ -155,17 +163,23 @@ export class TextDecoder {
     return pieces.join("");
   }
 }
+
 export const utf8 = new TextEncoder();
+
 export function decodeUTF8(bytes: Uint8Array, fatal = false, ignoreBOM = false): string {
   return new TextDecoder("utf-8", { fatal, ignoreBOM }).decode(bytes);
 }
+
 export function latin1(bytes: Uint8Array): string {
   let result = "";
+
   for (const byte of bytes) result += String.fromCharCode(byte);
   return result;
 }
+
 export function asciiBytes(text: string): Uint8Array {
   const result = new Uint8Array(text.length);
+
   for (let i = 0; i < text.length; ++i) {
     const value = text.charCodeAt(i);
     if (value > 255) throw new TypeError("Expected an HTTP ByteString");
@@ -173,10 +187,12 @@ export function asciiBytes(text: string): Uint8Array {
   }
   return result;
 }
+
 export function concatBytes(chunks: readonly Uint8Array[], length?: number): Uint8Array {
   const total = length ?? chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const result = new Uint8Array(total);
   let offset = 0;
+
   for (const chunk of chunks) {
     result.set(chunk, offset);
     offset += chunk.length;

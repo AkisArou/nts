@@ -1,20 +1,26 @@
 import { concatBytes, decodeUTF8, utf8, toUSVString } from "../core/encoding.ts";
 import { ReadableStream } from "../streams/readable.ts";
+
 export type BlobPart = string | Uint8Array | ArrayBuffer | Blob;
+
 export interface BlobOptions {
   type?: string;
 }
+
 function mediaType(input: string): string {
+
   for (let i = 0; i < input.length; ++i) {
     const c = input.charCodeAt(i);
     if (c < 0x20 || c > 0x7e) return "";
   }
   return input.toLowerCase();
 }
+
 export class Blob {
   private chunks: Uint8Array[] = [];
   private byteLength = 0;
   readonly type: string;
+
   constructor(parts: readonly BlobPart[] = [], options: BlobOptions = {}) {
     this.type = mediaType(options.type ?? "");
     for (const part of parts) {
@@ -35,9 +41,11 @@ export class Blob {
       }
     }
   }
+
   get size(): number {
     return this.byteLength;
   }
+
   slice(start = 0, end = this.size, contentType = ""): Blob {
     const normalize = (n: number): number => {
       const value = Number.isNaN(n) ? 0 : Math.trunc(n);
@@ -70,6 +78,7 @@ export class Blob {
   async text(): Promise<string> {
     return decodeUTF8(await this.bytes());
   }
+
   stream(): ReadableStream<Uint8Array> {
     let index = 0;
     let offset = 0;
@@ -95,12 +104,15 @@ export class Blob {
     );
   }
 }
+
 export interface FileOptions extends BlobOptions {
   lastModified?: number;
 }
+
 export class File extends Blob {
   readonly name: string;
   readonly lastModified: number;
+
   constructor(parts: readonly BlobPart[], name: string, options: FileOptions = {}) {
     super(parts, options);
     this.name = toUSVString(name);

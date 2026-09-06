@@ -19,3 +19,8 @@ Shared source compiles without DOM or Node ambient globals and extends the repos
 root `tsconfig.base.json`. Platform providers import only explicit typed capabilities;
 observable Fetch, Streams, HTTP, cache, cookie, proxy, WebSocket, SSE, and body policy
 stays in this shared layer.
+
+The ordinary-Node provider used to exercise this code on the host lives under
+[`tooling/conformance/web-platform`](../../tooling/conformance/web-platform). It is
+test infrastructure, not the native Node-compatible provider. The latter belongs
+under `runtime/node` and calls the common runtime's typed native capabilities.

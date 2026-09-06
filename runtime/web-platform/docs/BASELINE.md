@@ -12,10 +12,11 @@
   `151f06d8d3dac257f7637b9e754bc9b6ce1a5b4844aa932a9d742b2cd37a5747`.
 
 `sha256sum -c MANIFEST.sha256` passed for all 77 delivered files before import. The
-29 shared TypeScript algorithm files imported in the first root-visible change were
-byte-identical to their delivered counterparts. `src/realm.ts` and the old barrel
-that exported it were intentionally omitted. Android source is owned and imported by
-the JVM session; it is not copied through the Node lane.
+mechanical copy of the 29 shared TypeScript algorithm files was checked byte-for-byte
+against the delivery before repository formatting and the reviewed realm removal
+were applied. `src/realm.ts` and the old barrel that exported it were intentionally
+omitted. Android source is owned and imported by the JVM session; it is not copied
+through the Node lane.
 
 The original manifest, provenance, claims, and raw host evidence are retained under
 `docs/external`. Their paths describe the external archive, not the layout of the
@@ -71,3 +72,25 @@ An earlier temporary exclusion config in the external directory still reached
 `realm.ts` despite TypeScript's resolved file list excluding it. That invocation is
 not used as evidence. The canonical root project removes the rejected file rather
 than relying on an exclusion, and no source workaround was introduced.
+
+## Integrated Node-host evidence
+
+The ordinary-Node provider and its host tests live under
+`tooling/conformance/web-platform`, not under the shared runtime. This is deliberate:
+the provider imports Node TCP, TLS, timer, random and compression primitives and is
+host-level conformance infrastructure. It is neither the native Node-compatible
+provider under `runtime/node` nor an implementation used by the mobile targets.
+
+At the integrated tree, using the repository's TypeScript `7.0.2`, Node declarations
+`24.13.3`, and Node `v24.20.0`:
+
+| Command                                                   | Result                          |
+| --------------------------------------------------------- | ------------------------------- |
+| `tooling/conformance/web-platform/check.sh`               | 80/80 pass, zero skipped        |
+| `node tooling/conformance/web-platform/test-upstream.mjs` | expected nonzero exit; 8/9 pass |
+
+The 80-test corpus is adapted only where removal of the external synthetic realm
+changed construction: it creates the same canonical `Request`, `Response`, and
+`WebSocket` classes through an explicit test runtime. Host `fetch` and `WebSocket`
+remain replaced by throwing values. The WPT fixtures are unchanged and hash-checked;
+the same dictionary-initializer failure remains visible.

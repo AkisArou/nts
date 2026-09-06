@@ -1,0 +1,126 @@
+import type { PlatformPrimitives } from "./core/platform.ts";
+import type { BodyPolicy } from "./fetch/body.ts";
+import { FetchClient } from "./fetch/fetch.ts";
+import type { RequestContext, RequestInit } from "./fetch/request.ts";
+import { Request } from "./fetch/request.ts";
+import type { Response } from "./fetch/response.ts";
+import type { ContentDecoder, FetchTransport } from "./fetch/transport.ts";
+import { Http1Transport } from "./http1/transport.ts";
+import type { Http1Options } from "./http1/transport.ts";
+import { RawWebSocketTransport } from "./websocket/raw-transport.ts";
+import type { RawWebSocketOptions } from "./websocket/raw-transport.ts";
+import type { WebSocketTransport } from "./websocket/transport.ts";
+import { WebSocket } from "./websocket/websocket.ts";
+
+export interface WebPlatformOptions {
+  baseURL?: string;
+  origin?: string;
+  bodyPolicy?: Partial<BodyPolicy>;
+  http1?: Http1Options;
+  websocket?: RawWebSocketOptions;
+  maxRedirects?: number;
+  maxWebSocketBufferedAmount?: number;
+  fetchTransport?: FetchTransport;
+  webSocketTransport?: WebSocketTransport;
+  contentDecoder?: ContentDecoder;
+}
+
+/**
+ * Environment-owned Web networking state.
+ *
+ * The public Web constructors remain top-level canonical classes. This object owns
+ * transports, pools, policy, and open sessions; it is not a constructor-producing
+ * JavaScript realm. Provider bootstrap associates one runtime with an
+ * `NtsEnvironment` and installs the canonical values for that environment.
+ */
+export class WebPlatformRuntime {
+  readonly http1: Http1Transport;
+  readonly requestContext: RequestContext;
+  readonly fetch: (input: string | Request, init?: RequestInit) => Promise<Response>;
+
+  private readonly webSocketTransport: WebSocketTransport;
+  private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
+  private readonly primitives: PlatformPrimitives;
+  private readonly options: WebPlatformOptions;
+  private closed = false;
+
+  constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
+    const bodyPolicy = readBodyPolicy(options.bodyPolicy);
+    const maxRedirects = options.maxRedirects ?? 20;
+    if (!Number.isSafeInteger(maxRedirects) || maxRedirects < 0) {
+      throw new RangeError("Invalid redirect limit");
+    }
+
+    this.primitives = primitives;
+    this.options = options;
+    this.requestContext = {
+      urls: primitives.urls,
+      random: primitives.random,
+      bodyPolicy,
+      baseURL: options.baseURL,
+    };
+    this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
+
+    if (options.webSocketTransport === undefined) {
+      const transport = new RawWebSocketTransport(
+        primitives.sockets,
+        primitives.random,
+        primitives.scheduler,
+        options.websocket,
+      );
+      this.webSocketTransport = transport;
+      this.ownedWebSocketTransport = transport;
+    } else {
+      this.webSocketTransport = options.webSocketTransport;
+      this.ownedWebSocketTransport = null;
+    }
+
+    const client = new FetchClient(
+      options.fetchTransport ?? this.http1,
+      this.requestContext,
+      options.contentDecoder,
+      maxRedirects,
+    );
+    this.fetch = client.fetch;
+  }
+
+  createWebSocket(url: string, protocols: string | readonly string[] = []): WebSocket {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    return new WebSocket(url, protocols, {
+      urls: this.primitives.urls,
+      scheduler: this.primitives.scheduler,
+      transport: this.webSocketTransport,
+      baseURL: this.options.baseURL,
+      origin: this.options.origin,
+      maxBufferedAmount: this.options.maxWebSocketBufferedAmount,
+    });
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.http1.close();
+    if (this.ownedWebSocketTransport !== null) {
+      this.ownedWebSocketTransport.close();
+    }
+  }
+}
+
+function readBodyPolicy(input: Partial<BodyPolicy> | undefined): BodyPolicy {
+  const policy: BodyPolicy = {
+    maxConsumeBytes: input?.maxConsumeBytes ?? Infinity,
+    maxCloneBufferBytes: input?.maxCloneBufferBytes ?? Infinity,
+  };
+
+  validateByteLimit(policy.maxConsumeBytes);
+
+  validateByteLimit(policy.maxCloneBufferBytes);
+  return policy;
+}
+
+function validateByteLimit(limit: number): void {
+
+  if (Number.isNaN(limit) || limit < 0 || (limit !== Infinity && !Number.isSafeInteger(limit))) {
+    throw new RangeError("Invalid body byte limit");
+  }
+}

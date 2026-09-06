@@ -23,6 +23,7 @@ import type {
   WebSocketSession,
   WebSocketTransport,
 } from "./transport.ts";
+
 export interface RawWebSocketOptions {
   connectTimeoutMs?: number;
   handshakeTimeoutMs?: number;
@@ -32,6 +33,7 @@ export interface RawWebSocketOptions {
   outgoingFrameBytes?: number;
   maxFragments?: number;
 }
+
 export class RawWebSocketTransport implements WebSocketTransport {
   private readonly sockets: SocketConnector;
   private readonly random: RandomSource;
@@ -40,6 +42,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
   private readonly sessions = new Set<RawWebSocketSession>();
   private readonly connecting = new Set<AbortController>();
   private closed = false;
+
   constructor(
     sockets: SocketConnector,
     random: RandomSource,
@@ -141,6 +144,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
       dispose();
     }
   }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -149,6 +153,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
     for (const session of this.sessions) session.abort();
   }
 }
+
 class RawWebSocketSession implements WebSocketSession {
   readonly protocol: string;
   readonly extensions = "";
@@ -169,6 +174,7 @@ class RawWebSocketSession implements WebSocketSession {
   private textChunks: string[] = [];
   private fragments = 0;
   private readonly onEnd: (session: RawWebSocketSession) => void;
+
   constructor(
     connection: ByteConnection,
     reader: BufferedReader,
@@ -227,6 +233,7 @@ class RawWebSocketSession implements WebSocketSession {
     this.closeTimer = this.scheduler.delay(this.options.closeTimeoutMs ?? 5000, () => this.abort());
     await this.write({ fin: true, opcode: 8, payload }, true);
   }
+
   abort(): void {
     if (this.ended) return;
     this.ended = true;

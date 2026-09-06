@@ -1,4 +1,5 @@
 import { isToken } from "../fetch/headers.ts";
+
 export interface ParameterizedValue {
   value: string;
   parameters: ReadonlyMap<string, string>;
@@ -8,7 +9,9 @@ export function parseParameterized(input: string): ParameterizedValue {
   let at = input.indexOf(";");
   const value = (at < 0 ? input : input.slice(0, at)).trim().toLowerCase();
   const parameters = new Map<string, string>();
+
   if (at < 0) return { value, parameters };
+
   while (at < input.length) {
     at++;
     while (input.charAt(at) === " " || input.charAt(at) === "\t") at++;

@@ -3,6 +3,7 @@ import { ProtocolError, LimitError } from "../core/errors.ts";
 import { concatBytes, latin1 } from "../core/encoding.ts";
 export async function writeAll(connection: ByteConnection, data: Uint8Array): Promise<void> {
   let offset = 0;
+
   while (offset < data.length) {
     const part = data.subarray(offset, Math.min(offset + 65536, data.length));
     const written = await connection.write(part);
@@ -16,9 +17,11 @@ export class BufferedReader {
   private readonly connection: ByteConnection;
   private buffer: Uint8Array = new Uint8Array(0);
   private position = 0;
+
   constructor(connection: ByteConnection) {
     this.connection = connection;
   }
+
   get bufferedBytes(): number {
     return this.buffer.length - this.position;
   }

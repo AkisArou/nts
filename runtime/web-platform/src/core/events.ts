@@ -3,6 +3,7 @@ import { DOMException } from "./errors.ts";
 export interface EventInit {
   cancelable?: boolean;
 }
+
 export class Event {
   readonly type: string;
   readonly cancelable: boolean;
@@ -15,14 +16,18 @@ export class Event {
   eventPhase = 0;
   private dispatching = false;
   private immediateStopped = false;
+
   constructor(type: string, init: EventInit = {}) {
     this.type = type;
     this.cancelable = init.cancelable ?? false;
   }
+
   preventDefault(): void {
     if (this.cancelable) this.defaultPrevented = true;
   }
+
   stopPropagation(): void {}
+
   stopImmediatePropagation(): void {
     this.immediateStopped = true;
   }
@@ -45,15 +50,19 @@ export class Event {
     return this.immediateStopped;
   }
 }
+
 export type EventListener = (this: EventTarget, event: Event) => void;
+
 export interface EventHandlerSlot<Target extends EventTarget, E extends Event> {
   callback: ((this: Target, event: E) => void) | null;
   listener: EventListener | null;
 }
+
 export interface ListenerOptions {
   once?: boolean;
   capture?: boolean;
 }
+
 interface ListenerRecord {
   type: string;
   callback: EventListener;
@@ -65,9 +74,11 @@ interface ListenerRecord {
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
   protected readonly report: (error: unknown) => void;
+
   constructor(report: (error: unknown) => void = () => {}) {
     this.report = report;
   }
+
   addEventListener(
     type: string,
     callback: EventListener | null,
@@ -88,6 +99,7 @@ export class EventTarget {
       return;
     this.listeners.push({ type, callback, capture, once, removed: false });
   }
+
   removeEventListener(
     type: string,
     callback: EventListener | null,
@@ -99,6 +111,7 @@ export class EventTarget {
         item.removed = true;
     }
   }
+
   dispatchEvent(event: Event): boolean {
     event.begin(this);
     try {
@@ -141,19 +154,23 @@ export class EventTarget {
     }
   }
 }
+
 export class MessageEvent<T> extends Event {
   readonly data: T;
   readonly origin: string;
+
   constructor(type: string, data: T, origin = "") {
     super(type);
     this.data = data;
     this.origin = origin;
   }
 }
+
 export class CloseEvent extends Event {
   readonly code: number;
   readonly reason: string;
   readonly wasClean: boolean;
+
   constructor(type: string, code = 0, reason = "", wasClean = false) {
     super(type);
     this.code = code;

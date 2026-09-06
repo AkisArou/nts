@@ -3,6 +3,7 @@ export * from "./core/errors.ts";
 export * from "./core/abort.ts";
 export * from "./core/events.ts";
 export * from "./core/encoding.ts";
+export * from "./runtime.ts";
 export * from "./streams/readable.ts";
 export * from "./fetch/headers.ts";
 export * from "./fetch/body.ts";
