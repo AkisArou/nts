@@ -6,5 +6,21 @@
     "fetch/api/headers/headers-combine.any.js": "4f3b6d11df97481c4593ec69ae3432692d4749f4",
     "fetch/api/headers/headers-normalize.any.js": "68cf5b85f3acb7fcfe6275ffa0c4d37843ac2935",
     "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "nodeWpt": {
+    "root": "third_party/node/test/fixtures/wpt",
+    "versionsFile": "third_party/node/test/fixtures/wpt/versions.json",
+    "subset": "FileAPI",
+    "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+    "support": {
+      "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
+    },
+    "tests": {
+      "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
+      "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
+      "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
+      "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
+      "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004"
+    }
   }
 }
