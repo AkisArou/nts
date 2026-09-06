@@ -425,6 +425,78 @@ public final class SocketTest {
         }
     }
 
+    /**
+     * A write that reports less than it was asked, and a caller that loops.
+     *
+     * <p>`OutputStream.write` writes everything or throws, so this primitive
+     * naturally always reports the full count -- and the shared `writeAll` loop
+     * above it, which exists to handle a short write, would have its body run
+     * **once, ever, on every platform**. A partial-write path no provider can
+     * produce is a path nothing has run, and a real `send(2)` on a full send
+     * buffer returns short.
+     *
+     * <p>So the reference transport can be told to fragment, deterministically,
+     * and this is the loop a shared `writeAll` is: keep writing from where the
+     * last call stopped until the whole slice is gone. What it proves is that
+     * short writes make progress and that the bytes arrive in order and intact
+     * -- an off-by-one in the offset would deliver the right *number* of bytes
+     * and the wrong ones.
+     */
+    static void partialWrites(Echo echo) throws Exception {
+        NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 32);
+        NtsEnv previous = NtsEnv.enterEnv(env);
+        NtsSocket.fragmentWritesAt(7);
+        try {
+            Result connected = new Result();
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000,
+                connected, connected);
+            NtsEnv.drain(env);
+            check(connected.name == null, "connect failed: " + connected.name);
+            double handle = connected.value;
+
+            byte[] sent = new byte[60];
+            for (int i = 0; i < sent.length; i++) { sent[i] = (byte) ('a' + (i % 26)); }
+            int at = 0;
+            int calls = 0;
+            while (at < sent.length) {
+                Result wrote = new Result();
+                NtsSocket.write(env, NtsEnv.launch(env), handle, sent, at, sent.length - at,
+                    wrote, wrote);
+                NtsEnv.drain(env);
+                if (wrote.name != null) { check(false, "write failed: " + wrote.message); break; }
+                check(wrote.value >= 1 && wrote.value <= sent.length - at,
+                    "a write reported " + wrote.value + " of " + (sent.length - at)
+                    + ", outside the 1..length the contract allows");
+                at += (int) wrote.value;
+                calls++;
+            }
+            check(at == sent.length, "the loop wrote " + at + " of " + sent.length);
+            check(calls > 1,
+                "the whole slice went in one call, so the fragment setting did nothing and "
+                + "this exercises the same path as an ordinary write");
+
+            byte[] back = new byte[sent.length];
+            int filled = 0;
+            while (filled < back.length) {
+                Result read = new Result();
+                NtsSocket.read(env, NtsEnv.launch(env), handle, back, filled,
+                    back.length - filled, read, read);
+                NtsEnv.drain(env);
+                if (read.name != null || read.value <= 0) { break; }
+                filled += (int) read.value;
+            }
+            check(filled == back.length, "read back " + filled + " of " + back.length);
+            check(java.util.Arrays.equals(back, sent),
+                "the bytes came back different -- a fragmented write that delivered the right "
+                + "count from the wrong offset would look exactly like this");
+            NtsSocket.close(handle);
+        } finally {
+            NtsSocket.fragmentWritesAt(0);
+            NtsEnv.close(env);
+            NtsEnv.leaveEnv(env, previous);
+        }
+    }
+
     /** Closing the environment leaves no socket behind. */
     static void shutdownCloses(Echo echo) throws Exception {
         NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 8);
@@ -455,13 +527,14 @@ public final class SocketTest {
             cancellation(echo);
             backpressure(echo);
             connectCancel();
+            partialWrites(echo);
             networkTransition(echo);
             shutdownCloses(echo);
         } finally {
             echo.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("socket: round trip, lanes, cancellation, backpressure, connect cancel, transition, shutdown -- %d checks, %d failures%n",
+        System.out.printf("socket: round trip, lanes, cancellation, backpressure, connect cancel, partial writes, transition, shutdown -- %d checks, %d failures%n",
             checks, failures);
         if (failures != 0) { System.exit(1); }
     }

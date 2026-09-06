@@ -116,7 +116,7 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
     // cases reports no failures perfectly well, which is the assertion
     // `android.rs` already makes about `PASS: 11` and the one every other
     // driver here was missing.
-    assert!(said.ends_with("42 checks, 0 failures"), "{said}");
+    assert!(said.ends_with("56 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

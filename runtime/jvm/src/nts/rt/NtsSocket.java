@@ -176,6 +176,38 @@ public final class NtsSocket {
         return closed;
     }
 
+    /**
+     * Cap every write at this many bytes, so the reference transport reports
+     * **partial** writes. Zero means write whatever it is given.
+     *
+     * <h2>Why a reference transport should be able to write less than it was
+     * asked</h2>
+     *
+     * `OutputStream.write` either writes everything or throws, so this
+     * primitive naturally always reports the full count -- and the shared
+     * `writeAll` loop above it, which exists precisely to handle a short write,
+     * therefore has its loop body executed **once, ever, on every platform**.
+     * A partial-write path that no provider can produce is a path nothing has
+     * run.
+     *
+     * <p>A real `send(2)` on a socket with a full send buffer returns short,
+     * which is why the shared contract permits `1..data.length` and why the
+     * loop is there. So the deterministic reference path is the right place to
+     * produce it: not a production behaviour, a *reference* behaviour, which is
+     * what "deterministic reference transport" means in the plan. The
+     * production Android provider keeps writing in full.
+     *
+     * <p>Deterministic rather than random: the same input fragments the same
+     * way on every run, so a corpus that exercises it stays an oracle rather
+     * than becoming a flake.
+     */
+    private static volatile int fragment;
+
+    /** Set the fragment size. Test and corpus use; zero turns it off. */
+    public static void fragmentWritesAt(double bytes) {
+        fragment = (int) Math.max(0.0, bytes);
+    }
+
     /** Stop accepting work and let the pool go. Idempotent. */
     public static synchronized void shutdown() {
         if (workers != null) {
@@ -673,9 +705,14 @@ public final class NtsSocket {
         submit(env, slot, new Runnable() {
             @Override public void run() {
                 try {
-                    c.out.write(from, (int) offset, (int) length);
+                    // At most `fragment` bytes, and never zero: the contract is
+                    // `1..data.length`, so a short write still makes progress
+                    // and a caller looping on it terminates.
+                    int cap = fragment;
+                    int wrote = cap > 0 && cap < (int) length ? cap : (int) length;
+                    c.out.write(from, (int) offset, wrote);
                     c.out.flush();
-                    finish(slot, ok, failed, length, null, null);
+                    finish(slot, ok, failed, wrote, null, null);
                 } catch (IOException problem) {
                     if (c.closed) {
                         finish(slot, ok, failed, 0, "Aborted", "the connection was closed");
