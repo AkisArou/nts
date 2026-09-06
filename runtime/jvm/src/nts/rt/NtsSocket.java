@@ -522,9 +522,30 @@ public final class NtsSocket {
                         // and a proxy that could satisfy the check with its own
                         // certificate is a proxy that can read what it forwards.
                         params.setEndpointIdentificationAlgorithm("HTTPS");
-                        List<SNIServerName> names =
-                            Collections.<SNIServerName>singletonList(new SNIHostName(host));
-                        params.setServerNames(names);
+                        // **The SNI name is what the check runs against**, and
+                        // that is not what this comment used to say. JSSE
+                        // identifies the endpoint against the server name when
+                        // one is set and against the socket's peer host only
+                        // when one is not -- so an implementation that passed
+                        // the proxy to `createSocket` and the target to
+                        // `setServerNames` is accidentally *correct*, and one
+                        // that gets them the other way round is wrong with the
+                        // peer host right in front of it. Measured: giving
+                        // `createSocket` a name in neither certificate changed
+                        // nothing for a host, and changed the error message for
+                        // an address.
+                        //
+                        // No SNI for an address. RFC 6066 says the name must be
+                        // a DNS name and `SNIHostName` will accept `127.0.0.1`
+                        // anyway, because it is syntactically one -- servers are
+                        // entitled to reject the handshake for it, and the
+                        // identification an address needs is the peer host's,
+                        // which is the same string.
+                        if (!host.contains(":") && !host.matches("[0-9.]+")) {
+                            List<SNIServerName> names =
+                                Collections.<SNIServerName>singletonList(new SNIHostName(host));
+                            params.setServerNames(names);
+                        }
                         ssl.setSSLParameters(params);
                         socket = ssl;
                         // Published again: the TLS socket is now the one that

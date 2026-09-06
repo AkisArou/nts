@@ -40,6 +40,12 @@ public final class NetworkPrimitives implements AutoCloseable {
     public interface ReadCallback { void success(byte[] bytes, boolean eof); void failure(String name, String message); }
     public interface WriteCallback { void success(int written); void failure(String name, String message); }
     public interface CleartextPolicy { boolean permits(String hostname); }
+    /** No proxy. */
+    public static final int DIRECT = 0;
+    /** An HTTP proxy, reached with `CONNECT` and tunnelled through. */
+    public static final int HTTP_PROXY = 1;
+    /** A SOCKS proxy, which the platform's `Socket` speaks natively. */
+    public static final int SOCKS_PROXY = 2;
     public interface ErrorReporter { void report(String name, String message); }
 
     private static final int MAX_CHUNK = 65536;
@@ -127,6 +133,37 @@ public final class NetworkPrimitives implements AutoCloseable {
 
     /** Returns the cancellable connection handle immediately. All callbacks are asynchronous. */
     public int connect(String hostname, int port, boolean secure, int timeoutMs, ConnectCallback callback) {
+        return connect(hostname, port, secure, timeoutMs, null, 0, DIRECT, callback);
+    }
+
+    /**
+     * As {@link #connect}, through a proxy.
+     *
+     * <p>A TLS connection through a `CONNECT` tunnel must verify the
+     * certificate against the **target**, not the proxy. The wrong version
+     * works perfectly against an honest proxy: hand the TLS layering the host
+     * the socket connected to -- which is the proxy -- and every certificate
+     * the proxy can present becomes good for every site it forwards.
+     *
+     * <p>The name that decides it is the **SNI** one, not the socket's peer
+     * host: JSSE identifies against `setServerNames` when it is set and falls
+     * back to the peer host only when it is not. So the two have to agree, and
+     * a sabotage that changed only one of them was a no-op in the direction
+     * that matters. Both come from `hostname` here.
+     *
+     * <p>SOCKS needs none of this. The platform speaks it below TLS, so the
+     * `SSLSocket` sees the target's address and verifies it the way an
+     * unproxied one does.
+     *
+     * <p>This tunnel is a second implementation of `nts.rt.NtsSocket`'s, and
+     * deliberately so: this library depends on no NTS runtime, which is what
+     * lets it be built into an Android library on its own. Two copies of
+     * something subtle is how drift starts, so they are held together by a
+     * test that runs both against one proxy and requires the same answer
+     * rather than by care.
+     */
+    public int connect(String hostname, int port, boolean secure, int timeoutMs,
+                       String proxyHost, int proxyPort, int proxyKind, ConnectCallback callback) {
         Objects.requireNonNull(hostname); Objects.requireNonNull(callback);
         if (hostname.isEmpty() || port < 1 || port > 65535 || timeoutMs < 1) throw new IllegalArgumentException("Invalid connect arguments");
         int id = nextId(ids);
@@ -156,11 +193,20 @@ public final class NetworkPrimitives implements AutoCloseable {
             connects.execute(() -> {
                 try {
                     if (connection.closed.get()) throw new IOException("Connect canceled");
+                    boolean tunnel = proxyKind == HTTP_PROXY && proxyHost != null;
                     Socket raw = connection.socket;
+                    if (proxyKind == SOCKS_PROXY && proxyHost != null) {
+                        raw = new java.net.Socket(new java.net.Proxy(
+                                java.net.Proxy.Type.SOCKS, new InetSocketAddress(proxyHost, proxyPort)));
+                        connection.socket = raw;
+                        if (connection.closed.get()) { raw.close(); throw new IOException("Connect canceled"); }
+                    }
                     // DNS is allowed to block only on this bounded connect pool. Closing a
                     // Socket cannot interrupt all resolver implementations; see README.
-                    raw.connect(new InetSocketAddress(hostname, port), timeoutMs);
+                    raw.connect(tunnel ? new InetSocketAddress(proxyHost, proxyPort)
+                            : new InetSocketAddress(hostname, port), timeoutMs);
                     raw.setTcpNoDelay(true);
+                    if (tunnel) { establish(raw, hostname, port, timeoutMs); }
                     if (secure) {
                         Socket layered = tlsFactory.createSocket(raw, hostname, port, true);
                         if (!(layered instanceof SSLSocket)) { layered.close(); throw new SSLException("TLS factory returned a non-TLS socket"); }
@@ -261,6 +307,78 @@ public final class NetworkPrimitives implements AutoCloseable {
         try { connection.socket.close(); } catch (IOException ignored) { /* Idempotent best-effort OS close. */ }
         capacity.release();
     }
+    /**
+     * `CONNECT host:port`, and the response, on an already-open socket.
+     *
+     * <p>Read a byte at a time to the blank line, which is the only way to stop
+     * **exactly** at the end of the headers. A buffered read would take the
+     * first bytes of the tunnelled stream into a buffer the `SSLSocket`
+     * wrapping this socket will never look in, and the handshake would fail on
+     * a truncated ServerHello with no indication of where the bytes went. A
+     * response header is a few hundred bytes once per connection, so the cost
+     * of doing it a byte at a time is not a cost.
+     *
+     * <p>The proxy's own status line is carried into the failure: `407 Proxy
+     * Authentication Required` and `502 Bad Gateway` are different problems for
+     * whoever has to fix them.
+     */
+    private static void establish(Socket carrier, String hostname, int port, int timeoutMs) throws IOException {
+        String authority = hostname + ":" + port;
+        String request = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority
+                + "\r\nProxy-Connection: keep-alive\r\n\r\n";
+        int previous = carrier.getSoTimeout();
+        carrier.setSoTimeout(timeoutMs);
+        try {
+            carrier.getOutputStream().write(request.getBytes("ISO-8859-1"));
+            carrier.getOutputStream().flush();
+            java.io.InputStream in = carrier.getInputStream();
+            StringBuilder head = new StringBuilder();
+            int consecutive = 0;
+            while (consecutive < 2) {
+                int b = in.read();
+                if (b < 0) throw new IOException("The proxy closed the connection before answering CONNECT");
+                if (b == '\n') consecutive++; else if (b != '\r') consecutive = 0;
+                head.append((char) b);
+                if (head.length() > 16384) throw new IOException("The proxy sent more than 16 KiB of CONNECT response headers");
+            }
+            int firstLine = head.indexOf("\r\n");
+            String status = head.substring(0, firstLine < 0 ? head.length() : firstLine);
+            int space = status.indexOf(' ');
+            int code = -1;
+            if (space > 0 && status.length() >= space + 4) {
+                try { code = Integer.parseInt(status.substring(space + 1, space + 4)); }
+                catch (NumberFormatException malformed) { code = -1; }
+            }
+            if (code < 200 || code > 299) throw new IOException("The proxy refused CONNECT: " + status);
+        } finally {
+            carrier.setSoTimeout(previous);
+        }
+    }
+
+    /**
+     * The default network changed; every connection on the old one is gone.
+     * Returns how many were closed.
+     *
+     * <p>Not a no-op that waits for the reads to fail. A socket on a replaced
+     * network reports nothing: a read blocks for as long as the kernel is
+     * willing to give it -- tens of seconds on a handover -- and a write
+     * succeeds into a buffer that will never drain, so the failure the program
+     * eventually sees is a timeout arriving long after the cause and describing
+     * the wrong thing.
+     *
+     * <p>Every completion still arrives, because closing under a blocked worker
+     * is what unblocks it and the worker reports through the callback it was
+     * given. A transition that closed the sockets and dropped the completions
+     * would strand the caller instead.
+     */
+    public int networkChanged() {
+        int closed = 0;
+        for (Integer id : new ArrayList<Integer>(sockets.keySet())) {
+            if (sockets.containsKey(id)) { closeSocket(id); closed++; }
+        }
+        return closed;
+    }
+
     public void randomFill(byte[] destination) { random.nextBytes(Objects.requireNonNull(destination)); }
     public void post(Task task) { Objects.requireNonNull(task); complete(task::run); }
     public int timer(long milliseconds, Task task) {

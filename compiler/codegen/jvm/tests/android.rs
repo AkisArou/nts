@@ -133,6 +133,86 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The two `CONNECT` tunnels, against one proxy, required to answer the same.
+///
+/// `nts.rt.NtsSocket` and `org.nts.web.NetworkPrimitives` each speak it and
+/// neither can call the other -- this library depends on no NTS runtime, which
+/// is what lets it be built into an Android library on its own. So there are
+/// two implementations of something subtle, and the rule this repository keeps
+/// is that where two things must agree and only one can be deleted, the second
+/// one asserts rather than computes.
+///
+/// The certificate names `localhost` and the proxy is on `127.0.0.1`, so a
+/// tunnel to `localhost` must succeed on both and one to `127.0.0.1` must fail
+/// on both.
+#[test]
+fn the_two_tunnels_answer_the_same_through_one_proxy() {
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let root = repository();
+    let dir = std::env::temp_dir().join(format!("nts-both-tunnels-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+
+    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let mine = dir.join("nts-runtime.jar");
+    std::fs::copy(&jar, &mine).unwrap();
+
+    let server = dir.join("server.p12");
+    let cert = dir.join("nts.cer");
+    let trust = dir.join("trust.p12");
+    for args in [
+        vec!["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048",
+             "-validity", "1", "-dname", "CN=nts-test", "-ext", "SAN=dns:localhost",
+             "-keystore", server.to_str().unwrap(), "-storetype", "PKCS12",
+             "-storepass", "changeit", "-keypass", "changeit"],
+        vec!["-exportcert", "-alias", "nts", "-storetype", "PKCS12", "-storepass", "changeit",
+             "-keystore", server.to_str().unwrap(), "-file", cert.to_str().unwrap()],
+        vec!["-importcert", "-noprompt", "-alias", "nts", "-storetype", "PKCS12",
+             "-storepass", "changeit", "-file", cert.to_str().unwrap(),
+             "-keystore", trust.to_str().unwrap()],
+    ] {
+        let ran = Command::new(&keytool).args(&args).output().unwrap();
+        assert!(ran.status.success(), "keytool: {}", String::from_utf8_lossy(&ran.stderr));
+    }
+
+    let classpath = format!("{}:{}", mine.display(), dir.display());
+    let compiled = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&classpath)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("compiler/codegen/jvm/tests/android/BothTunnels.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "BothTunnels did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
+        .arg("-Djavax.net.ssl.keyStorePassword=changeit")
+        .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
+        .arg(format!("-Djavax.net.ssl.trustStore={}", trust.display()))
+        .arg("-Djavax.net.ssl.trustStorePassword=changeit")
+        .arg("-Djavax.net.ssl.trustStoreType=PKCS12")
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("BothTunnels")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(said.ends_with("0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The artifact rules, checked against the bytes rather than the build file.
 ///
 /// `build.gradle.kts` says `VERSION_1_8` and `minSdk = 26`, and a build file is
