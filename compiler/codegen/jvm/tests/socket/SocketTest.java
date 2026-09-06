@@ -328,6 +328,93 @@ public final class SocketTest {
         }
     }
 
+    /**
+     * A network transition closes what was open and loses no completion.
+     *
+     * <p>The second half is the one that can go wrong invisibly. Closing the
+     * sockets is easy; closing them and dropping the in-flight completions
+     * strands the lane, because the connections are gone and the environment
+     * waits forever for answers that are never coming. So this puts a read in
+     * flight, transitions under it, and asserts both that the read *settles*
+     * and that liveness reaches zero.
+     */
+    static void networkTransition(Echo echo) throws Exception {
+        NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 16);
+        NtsEnv previous = NtsEnv.enterEnv(env);
+        try {
+            double[] handles = new double[3];
+            for (int i = 0; i < handles.length; i++) {
+                Result connected = new Result();
+                NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000,
+                    connected, connected);
+                NtsEnv.drain(env);
+                check(connected.name == null, "connect " + i + " failed: " + connected.name);
+                handles[i] = connected.value;
+            }
+            check(NtsSocket.openCount() == 3.0,
+                "three connections registered as " + NtsSocket.openCount());
+
+            // A read that will never be answered -- the echo server says
+            // nothing until it is spoken to -- so it is in flight across the
+            // transition, which is the case that matters.
+            byte[] into = new byte[16];
+            Result blocked = new Result();
+            NtsSocket.read(env, NtsEnv.launch(env), handles[0], into, 0, into.length,
+                blocked, blocked);
+            Thread.sleep(120);
+            check(blocked.settled == 0, "the read settled before the transition");
+
+            double closed = NtsSocket.networkChanged();
+            check(closed >= 3.0, "the transition closed " + closed + " of at least 3");
+            check(NtsSocket.openCount() == 0.0,
+                NtsSocket.openCount() + " connections survived the transition");
+
+            // A bounded pump rather than `drain`. If the transition failed to
+            // unblock the worker, `drain` waits for a completion that is never
+            // coming and the suite **hangs** instead of failing -- which is
+            // what the sabotage did. Two seconds is far longer than a loopback
+            // read needs and far shorter than the tens of seconds a socket on
+            // a replaced network takes to give up on its own.
+            for (int i = 0; i < 200 && blocked.settled == 0; i++) {
+                NtsEnv.step(env);
+                Thread.sleep(10);
+            }
+            check(blocked.settled == 1,
+                "the in-flight read settled " + blocked.settled + " times across a transition "
+                + "-- a completion dropped here strands the lane, because the connection is gone "
+                + "and nothing will ever answer");
+            NtsEnv.drain(env);
+            check(NtsEnv.outstanding(env) == 0.0,
+                "a transition left " + NtsEnv.outstanding(env) + " completion(s) outstanding");
+
+            // Every handle is now closed, and a use of one says so rather than
+            // reaching into a table entry something else may have taken.
+            Result after = new Result();
+            NtsSocket.read(env, NtsEnv.launch(env), handles[1], into, 0, into.length, after, after);
+            NtsEnv.drain(env);
+            check("Closed".equals(after.name),
+                "a read after a transition reported " + after.name);
+
+            // The table entries have to be *freed*, not merely closed. A
+            // transition that closed the sockets and left the rows behind
+            // reports zero open -- `openCount` skips closed rows -- while the
+            // table grows by three on every handover, forever. The observable
+            // is that the next connection reuses a slot rather than appending.
+            Result again = new Result();
+            NtsSocket.connect(env, NtsEnv.launch(env), "127.0.0.1", echo.port(), false, 2000,
+                again, again);
+            NtsEnv.drain(env);
+            check(again.name == null, "a connect after a transition failed: " + again.name);
+            check(again.value <= handles.length,
+                "the connection after a transition took handle " + again.value
+                + ", past the " + handles.length + " the transition should have freed");
+            NtsSocket.close(again.value);
+        } finally {
+            NtsEnv.close(env);
+            NtsEnv.leaveEnv(env, previous);
+        }
+    }
+
     /** Closing the environment leaves no socket behind. */
     static void shutdownCloses(Echo echo) throws Exception {
         NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 8);
@@ -358,12 +445,13 @@ public final class SocketTest {
             cancellation(echo);
             backpressure(echo);
             connectCancel();
+            networkTransition(echo);
             shutdownCloses(echo);
         } finally {
             echo.close();
             NtsSocket.shutdown();
         }
-        System.out.printf("socket: round trip, lanes, cancellation, backpressure, connect cancel, shutdown -- %d failures%n",
+        System.out.printf("socket: round trip, lanes, cancellation, backpressure, connect cancel, transition, shutdown -- %d failures%n",
             failures);
         if (failures != 0) { System.exit(1); }
     }

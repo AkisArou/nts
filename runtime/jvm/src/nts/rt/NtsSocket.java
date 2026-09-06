@@ -119,6 +119,63 @@ public final class NtsSocket {
         return workers;
     }
 
+    /**
+     * The default network changed; every connection that existed on the old one
+     * is gone. Returns how many were closed.
+     *
+     * <h2>Why this is not a no-op that waits for the reads to fail</h2>
+     *
+     * A socket on a network that has been replaced does not report anything. It
+     * sits there: a read blocks until the connect timeout the kernel is willing
+     * to give it, which on a mobile handover is tens of seconds, and a write
+     * succeeds into a buffer that will never drain. The failure the program
+     * eventually sees is a timeout, arriving long after the cause, describing
+     * the wrong thing. So the transition is the event and closing is what makes
+     * it observable.
+     *
+     * <p>**Every completion still arrives.** Closing a socket under a blocked
+     * worker is what unblocks it, and the worker then reports through the slot
+     * it reserved, so no credit is lost and the environment's liveness still
+     * reaches zero. A transition that closed the sockets and dropped the
+     * completions would strand the lane instead -- the connections would be
+     * gone and the environment would wait forever for the answers.
+     *
+     * <p>Pending connects go too: a connect in progress is a connect on the old
+     * network, and letting it complete would hand the program a connection that
+     * is already dead.
+     */
+    public static double networkChanged() {
+        int closed = 0;
+        java.util.List<Connection> gone = new ArrayList<Connection>();
+        synchronized (TABLE) {
+            for (int i = 0; i < OPEN.size(); i++) {
+                Connection c = OPEN.get(i);
+                if (c != null) { gone.add(c); OPEN.set(i, null); }
+            }
+        }
+        for (Connection c : gone) { closeQuietly(c); closed++; }
+        java.util.List<Request> pending = new ArrayList<Request>();
+        synchronized (PENDING) {
+            for (int i = 0; i < PENDING.size(); i++) {
+                Request request = PENDING.get(i);
+                if (request != null) { pending.add(request); }
+            }
+        }
+        for (Request request : pending) {
+            Socket socket;
+            synchronized (request) {
+                if (request.cancelled) { continue; }
+                request.cancelled = true;
+                socket = request.socket;
+            }
+            closed++;
+            if (socket != null) {
+                try { socket.close(); } catch (IOException ignored) { /* transitioning */ }
+            }
+        }
+        return closed;
+    }
+
     /** Stop accepting work and let the pool go. Idempotent. */
     public static synchronized void shutdown() {
         if (workers != null) {

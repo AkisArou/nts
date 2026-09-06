@@ -395,7 +395,23 @@ public final class NtsEnv {
         NtsResumable next = env.ticks.pollFirst();
         if (next == null) { next = env.microtasks.pollFirst(); }
         if (next != null) { next.resume(); return true; }
-        if (NtsInbox.drain(env.inbox) > 0) { return true; }
+        // `deliver` and not `NtsInbox.drain`, which is what this used to call
+        // and which skipped **both** of the things delivery does besides
+        // running the work: the liveness count is decremented there, and the
+        // microtask checkpoint runs there.
+        //
+        // So a lane driven by `step` -- which is how `Check` drives the
+        // differential -- ran its completions, never returned their credits,
+        // and could not reach zero liveness afterwards; `close` then refused
+        // with a leak that was the accounting rather than the program. And a
+        // callback that resolved a promise had its continuation deferred to
+        // whenever something else happened to checkpoint, which is an ordering
+        // difference from node in the one place `docs/async.md` says there
+        // must not be one.
+        //
+        // It was invisible because no example in the corpus does external I/O:
+        // with an empty inbox both spellings do nothing, identically.
+        if (deliver(env) > 0) { return true; }
         return env.fireEarliest();
     }
 
