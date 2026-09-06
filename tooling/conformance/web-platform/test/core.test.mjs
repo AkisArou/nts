@@ -246,6 +246,26 @@ test("UTF-8 encode and encodeInto match host including lone surrogates", () => {
     }
   }
 });
+test("TextEncoder matches Node input coercion boundaries", () => {
+  const encoder = new TextEncoder();
+  const native = new NativeEncoder();
+  const coercible = {
+    toString() {
+      return "value\ud800";
+    },
+  };
+
+  for (const value of [null, 42, true, coercible]) {
+    assert.deepEqual(encoder.encode(value), native.encode(value));
+  }
+  assert.throws(() => encoder.encode(Symbol("value")), TypeError);
+  assert.throws(() => native.encode(Symbol("value")), TypeError);
+
+  for (const value of [undefined, null, 42, coercible, Symbol("value")]) {
+    assert.throws(() => encoder.encodeInto(value, new Uint8Array(16)), TypeError);
+    assert.throws(() => native.encodeInto(value, new Uint8Array(16)), TypeError);
+  }
+});
 test("UTF-8 decoder differential over all split positions and malformed sequences", () => {
   const cases = [
     utf8.encode("A€💙\ufeffZ"),

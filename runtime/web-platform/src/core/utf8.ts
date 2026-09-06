@@ -28,29 +28,40 @@ export function utf8Length(input: string): number {
   return length;
 }
 
+/** Code units consumed and bytes written by a bounded UTF-8 write. */
+export interface Utf8WriteProgress {
+  read: number;
+  written: number;
+}
+
 /**
  * Write `input` as UTF-8 into `output` at `offset`, up to `maximum` bytes.
  *
  * A partial code point is never written. The return value is the number of
- * bytes written, not the final output offset.
+ * bytes written, not the final output offset. `progress` is optional so hot
+ * paths such as Node Buffer do not allocate a result object; `encodeInto()`
+ * supplies the object it must return and receives the code-unit count too.
  */
 export function utf8Write(
   output: Uint8Array,
   input: string,
   offset: number,
   maximum: number,
+  progress?: Utf8WriteProgress,
 ): number {
   let outputIndex = offset;
+  let inputIndex = 0;
   const end = offset + maximum;
 
-  for (let inputIndex = 0; inputIndex < input.length; inputIndex++) {
+  while (inputIndex < input.length) {
     let code = input.charCodeAt(inputIndex);
+    let inputUnits = 1;
 
     if (code >= 0xd800 && code < 0xdc00) {
       const next = inputIndex + 1 < input.length ? input.charCodeAt(inputIndex + 1) : 0;
       if (next >= 0xdc00 && next < 0xe000) {
         code = 0x10000 + ((code - 0xd800) << 10) + next - 0xdc00;
-        inputIndex++;
+        inputUnits = 2;
       } else {
         code = 0xfffd;
       }
@@ -77,9 +88,16 @@ export function utf8Write(
       output[outputIndex++] = 0x80 | ((code >> 6) & 0x3f);
       output[outputIndex++] = 0x80 | (code & 0x3f);
     }
+
+    inputIndex += inputUnits;
   }
 
-  return outputIndex - offset;
+  const written = outputIndex - offset;
+  if (progress !== undefined) {
+    progress.read = inputIndex;
+    progress.written = written;
+  }
+  return written;
 }
 
 /**

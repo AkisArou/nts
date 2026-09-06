@@ -1,47 +1,25 @@
 import { utf8Length, utf8Write } from "./utf8.ts";
 import { trimASCIIWhitespace } from "./ascii.ts";
+import { coerceToUSVString } from "./webidl.ts";
 
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export class TextEncoder {
   readonly encoding = "utf-8";
 
   encode(input = ""): Uint8Array<ArrayBuffer> {
-    const output = new Uint8Array(utf8Length(input));
-    utf8Write(output, input, 0, output.length);
+    const text = coerceToUSVString(input);
+    const output = new Uint8Array(utf8Length(text));
+    utf8Write(output, text, 0, output.length);
     return output;
   }
 
   encodeInto(input: string, destination: Uint8Array): { read: number; written: number } {
-    let read = 0;
-    let written = 0;
-    while (read < input.length) {
-      let code = input.charCodeAt(read);
-      let units = 1;
-      if (code >= 0xd800 && code <= 0xdbff) {
-        const low = input.charCodeAt(read + 1);
-        if (low >= 0xdc00 && low <= 0xdfff) {
-          code = 0x10000 + ((code - 0xd800) << 10) + low - 0xdc00;
-          units = 2;
-        } else code = 0xfffd;
-      } else if (code >= 0xdc00 && code <= 0xdfff) code = 0xfffd;
-      const size = code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-      if (written + size > destination.length) break;
-      if (size === 1) destination[written++] = code;
-      else {
-        if (size === 2) destination[written++] = 0xc0 | (code >>> 6);
-        else if (size === 3) {
-          destination[written++] = 0xe0 | (code >>> 12);
-          destination[written++] = 0x80 | ((code >>> 6) & 63);
-        } else {
-          destination[written++] = 0xf0 | (code >>> 18);
-          destination[written++] = 0x80 | ((code >>> 12) & 63);
-          destination[written++] = 0x80 | ((code >>> 6) & 63);
-        }
-        destination[written++] = 0x80 | (code & 63);
-      }
-      read += units;
+    if (typeof input !== "string") {
+      throw new TypeError("TextEncoder.encodeInto source must be a string");
     }
-    return { read, written };
+    const progress = { read: 0, written: 0 };
+    utf8Write(destination, input, 0, destination.length, progress);
+    return progress;
   }
 }
 

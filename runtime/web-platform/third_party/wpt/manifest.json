@@ -11,6 +11,7 @@
     "root": "third_party/node/test/fixtures/wpt",
     "versionsFile": "third_party/node/test/fixtures/wpt/versions.json",
     "subsets": {
+      "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
       "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
       "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
     },
@@ -18,6 +19,8 @@
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
     },
     "tests": {
+      "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",
+      "encoding/textencoder-utf16-surrogates.any.js": "31657516455bd60b803600db9f36f641504d1c15",
       "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
       "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
       "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
