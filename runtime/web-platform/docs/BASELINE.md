@@ -238,3 +238,10 @@ reports 204 primary refusals, 41 cascades, zero JVM-backend refusals, and no inv
 HIR. Compared with the preceding check, no new diagnostic kind appeared; four more
 reachable occurrences carry the existing general class-value refusal. The frontier
 remains a dependency inventory, not a progress metric.
+
+The upstream evidence now includes Node's pinned, unchanged
+`dom/events/EventTarget-add-remove-listener.any.js` fixture. Both Node's recorded
+`dom/events` WPT revision and the fixture's Git blob hash are verified before it
+runs, and the VM context installs the shared `Event` and `EventTarget` classes
+rather than the host globals. This raises the immutable WPT slice to 53/53 while
+the Node-host suite remains 102/102.

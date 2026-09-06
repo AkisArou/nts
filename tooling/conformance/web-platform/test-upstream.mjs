@@ -31,7 +31,7 @@ if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
   }
 }
 
-const { Blob, File, Headers, ReadableStream, TextDecoder, TextEncoder } =
+const { Blob, Event, EventTarget, File, Headers, ReadableStream, TextDecoder, TextEncoder } =
   await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 
 let passed = 0;
@@ -62,6 +62,8 @@ function createWptContext(path, pending) {
     ArrayBuffer,
     Blob,
     DataView,
+    Event,
+    EventTarget,
     File,
     Headers,
     Int8Array,
