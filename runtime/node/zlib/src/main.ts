@@ -980,6 +980,72 @@ function oneShotSync(mode: number, input: InputType, options?: EngineOptions): O
   return { buffer, engine };
 }
 
+/**
+ * Collect one incremental engine into the result of a convenience call.
+ *
+ * This is the same stream path Node uses. In particular, compression stays in
+ * the native worker pool through `nts_zlib_write`; an asynchronous convenience
+ * call must not run its synchronous counterpart from `nextTick`, because that
+ * would merely postpone the point at which it blocks the event loop.
+ */
+function collectOneShot(
+  engine: ZlibBase,
+  input: InputType,
+  callback: CompressCallback,
+): void {
+  const buffers: Buffer[] = [];
+  let outputLength = 0;
+  let settled = false;
+
+  const onData = (chunk: Buffer): void => {
+    buffers.push(chunk);
+    outputLength += chunk.length;
+  };
+  const onError = (error: unknown): void => {
+    if (settled) return;
+    settled = true;
+    engine.removeListener("end", onEnd);
+    engine.close();
+    if (!(error instanceof Error)) throw error;
+    callback(error);
+  };
+  const onEnd = (): void => {
+    if (settled) return;
+    settled = true;
+    engine.removeListener("error", onError);
+
+    const buffer = buffers.length === 0
+      ? Buffer.alloc(0)
+      : (buffers.length === 1 && buffers[0] !== undefined
+        ? buffers[0]
+        : Buffer.concat(buffers, outputLength));
+    engine.close();
+    callback(null, engine._info ? { buffer, engine } : buffer);
+  };
+
+  engine.on<[Buffer]>("data", onData);
+  engine.on<[unknown]>("error", onError);
+  engine.on("end", onEnd);
+  // Writable streams accept strings and Uint8Array, whereas the convenience
+  // surface also accepts every ArrayBuffer view and ArrayBuffer itself. Adapt
+  // those wider binary inputs without copying their bytes.
+  let streamInput = input;
+  if (
+    typeof input !== "string" && !(input instanceof Uint8Array) &&
+    (input instanceof ArrayBuffer ||
+      input instanceof SharedArrayBuffer ||
+      ArrayBuffer.isView(input))
+  ) {
+    streamInput = byteView(input, "buffer");
+  }
+  try {
+    engine.end(streamInput);
+  } catch (error) {
+    engine.close();
+    throw error;
+  }
+}
+
 function oneShot(
   mode: number,
   input: InputType,
@@ -994,27 +1060,17 @@ function oneShot(
   } else {
     compressionOptions = options;
   }
-  validateFunction(completion, "callback");
-  // On a tick, so a one-shot never calls back before it has returned. Node
-  // runs the work on the thread pool; the difference is when the *work*
-  // happens, not when the caller hears about it.
-  nextTick(() => {
-    let result: OneShotResult;
-    try {
-      result = oneShotSync(mode, input, compressionOptions);
-    } catch (error) {
-      // Every failure produced by this statically typed implementation is an
-      // Error. Preserve an out-of-contract thrown value instead of lying to a
-      // typed callback about it.
-      if (!(error instanceof Error)) throw error;
-      completion(error);
-      return;
-    }
-    // Deliberately outside the try: an exception from user callback code must
-    // propagate once, not be mistaken for compression failure and delivered
-    // to the same callback a second time.
-    completion(null, result);
-  });
+  // Pinned Node constructs the engine before validating the callback. Besides
+  // preserving that error order, this makes option errors synchronous while
+  // compression errors still arrive through the callback.
+  const engine = engineForMode(mode, compressionOptions);
+  try {
+    validateFunction(completion, "callback");
+  } catch (error) {
+    engine.close();
+    throw error;
+  }
+  collectOneShot(engine, input, completion);
 }
 
 export function deflate(
