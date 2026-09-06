@@ -121,24 +121,56 @@ it shows the compiler discharges its obligation on the platform it was run on,
 and the argument that it does so on ARM is the specification's rather than a
 measurement's.
 
+## The claim in the first paragraph was wrong
+
+> on x86 that keyword is **unfalsifiable**
+
+That is true of the *hardware* and it is not the whole of what `volatile` does.
+It constrains the **compiler** too, and C2 is free to hoist a plain load out of
+a loop -- so a consumer that drains in a loop can read the link once and spin on
+a register forever, having never seen a post that happened. Which is precisely
+the failure the publication edge exists to prevent, and it is observable here:
+
+    the owner drained 0 of 1 and is still spinning -- a post that happened
+    was never seen
+
+Two failure modes, one keyword. The hardware one needs ARM. The compiler one
+needed a bare spin loop, and `Stress.publicationIsVisible` is it.
+
+**The first version of that test passed with the keyword removed**, because the
+spin counted with an `AtomicInteger` -- which is itself a barrier, so the loop
+could not be hoisted. The instrument was preventing the failure it was looking
+for, which is the third time in this repository and the second time in this
+record's neighbourhood.
+
+**And it discriminates on HotSpot only.** Under ART the sabotaged build passes:
+its JIT did not hoist in the window the test allows. So the desktop shows this
+one and the device does not, which is the opposite of the usual direction.
+
 ## What the evidence actually is
 
 Three things now, in increasing order of how much they were worth getting:
 
 1. `NtsInbox.Slot.next` carries `ACC_VOLATILE`, asserted by reflection in
-   `inbox.rs`. A fact about the class file, checkable anywhere, and
-   sabotage-proven -- removing the keyword gives *"NtsInbox.Slot.next is not
-   volatile: the publication edge is gone"*.
-2. ART's compiler emits a barrier for a store to that kind of field and not for
+   `inbox.rs`. A fact about the class file, checkable anywhere and on the
+   device, and sabotage-proven.
+2. **The compiler-reordering failure manifests.** Removing the keyword makes a
+   draining consumer miss a post that happened and spin forever. On HotSpot
+   only; ART did not hoist.
+3. ART's compiler emits a barrier for a store to that kind of field and not for
    a store to an ordinary one, measured on a device rather than argued from the
    Java Memory Model.
-3. The JMM says the same obligation holds on every implementation, including the
-   ones this machine cannot run.
+4. The JMM says the same obligation holds on the implementations this machine
+   cannot run.
 
-The *manifestation* is still unmeasured and cannot be measured here: showing the
-race needs hardware that reorders. But "the ratchet is the whole of it" was
-wrong when I wrote it, and it was wrong because I stopped at three failures
-instead of asking what a further attempt would be measuring.
+What is still unmeasured is the **hardware** half: a weakly ordered machine
+breaking this with the compiler behaving perfectly. That needs ARM.
+
+Two things I got wrong on the way, both by stopping early. "The ratchet is the
+whole of it" was wrong because I stopped at three failed routes instead of
+asking what a further attempt would measure. "Unfalsifiable on x86" was wrong
+because I reasoned about the hardware and forgot the compiler is also bound by
+the keyword.
 
 ## The general shape
 

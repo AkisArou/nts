@@ -128,6 +128,74 @@ public final class Stress {
     }
 
     /**
+     * The publication property, **observed failing** rather than only asserted.
+     *
+     * <p>I had this wrong for a long time and the record said so: that on x86
+     * the keyword is unfalsifiable, because x86-TSO does not reorder stores
+     * with stores. That is true of the *hardware* and it is not the whole of
+     * what `volatile` does. It constrains the **compiler** as well, and C2 is
+     * free to hoist a plain load out of a loop -- so a consumer that drains in
+     * a loop can read the link once and spin on a register forever, having
+     * never seen a post that happened.
+     *
+     * <p>Which is exactly the failure the publication edge exists to prevent,
+     * and it is observable right here:
+     *
+     * <pre>
+     *   volatile link:  drained 1 of 1
+     *   plain link:     drained 0 of 1, gave up after 2000ms
+     * </pre>
+     *
+     * <p>So one of the two manifestations is available on this machine after
+     * all. The other is not: a weakly ordered machine can break this with the
+     * compiler behaving perfectly, and only real ARM shows that. Two failure
+     * modes, one keyword, and exactly one of them is testable here.
+     *
+     * <p>**And only on HotSpot.** Run under ART with the keyword removed, this
+     * passes -- its JIT did not hoist the load in the window the test allows.
+     * So the check discriminates on the desktop and not on the device, which is
+     * the opposite of the usual direction and worth knowing before someone
+     * reads a green device run as covering it. What the device does cover is
+     * the declaration ratchet and the barrier that `tooling/android/barrier.sh`
+     * reads out of the compiled code.
+     *
+     * <p>`drain` returns on the first null link, so the hoistable read is the
+     * *caller's* loop rather than anything inside the queue -- which is why the
+     * spin below is bare.
+     *
+     * <p>Bounded rather than open-ended: the failure being tested for is an
+     * infinite loop, so the test must not be one.
+     */
+    static void publicationIsVisible() throws Exception {
+        final NtsInbox inbox = NtsInbox.withCapacity(4);
+        final NtsInbox.Slot slot = NtsInbox.reserve(inbox);
+        if (slot == null) { fail("no credit for the visibility probe"); return; }
+        // A plain array cell, and **no atomic anywhere in the spin**. The first
+        // version of this used an `AtomicInteger` for the count, which is
+        // itself a barrier -- so the loop could not be hoisted and the test
+        // passed with the keyword removed. The instrument was preventing the
+        // failure it was looking for, for the third time in this repository.
+        final int[] seen = { 0 };
+        Thread owner = new Thread(new Runnable() {
+            @Override public void run() {
+                while (seen[0] == 0) { seen[0] = NtsInbox.drain(inbox); }
+            }
+        }, "owner");
+        owner.setDaemon(true);
+        owner.start();
+        Thread.sleep(400);           // long enough for C2 to compile the spin
+        NtsInbox.post(slot, new NtsResumable() { @Override public void resume() { } });
+        owner.join(2000);
+        boolean stuck = owner.isAlive();
+        if (stuck || seen[0] != 1) {
+            fail("the owner drained " + seen[0] + " of 1 and "
+                + (stuck ? "is still spinning" : "stopped")
+                + " -- a post that happened was never seen, which is the publication "
+                + "edge failing through the compiler rather than the hardware");
+        }
+    }
+
+    /**
      * The declaration that makes the publication property true, asserted where
      * the property itself cannot be.
      *
@@ -148,6 +216,7 @@ public final class Stress {
     }
 
     public static void main(String[] args) throws Exception {
+        publicationIsVisible();
         linkIsVolatile();
         int producers = args.length > 0 ? Integer.parseInt(args[0]) : 16;
         int rounds = args.length > 1 ? Integer.parseInt(args[1]) : 200;
