@@ -578,6 +578,24 @@ test("Abort reason identity and independent internal cancellation", () => {
     (error) => error === reason,
   );
 });
+test("Public EventTarget and abort constructors do not expose provider hooks", () => {
+  assert.throws(() => new AbortSignal(), TypeError);
+  assert.throws(() => new globalThis.AbortSignal(), TypeError);
+
+  let reported = 0;
+  const target = new EventTarget(() => reported++);
+  target.addEventListener("error", () => {
+    throw new Error("listener failure");
+  });
+  assert.equal(target.dispatchEvent(new Event("error")), true);
+
+  const controller = new AbortController(() => reported++);
+  controller.signal.subscribe(() => {
+    throw new Error("abort failure");
+  });
+  controller.abort();
+  assert.equal(reported, 0);
+});
 test("AbortSignal.any selects the first reason and detaches", () => {
   const a = new AbortController(),
     b = new AbortController();

@@ -1,4 +1,4 @@
-import { AbortSignal } from "../core/abort.ts";
+import { AbortSignal, createAbortSignal } from "../core/abort.ts";
 import { coerceToByteString, coerceToDOMString, coerceToUSVString } from "../core/webidl.ts";
 import type { RandomSource, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
@@ -180,7 +180,7 @@ export class Request extends Body {
     this.context = context;
     const inherited =
       convertedInit.signal === null ? undefined : (convertedInit.signal ?? source?.signal);
-    this.signal = inherited === undefined ? new AbortSignal() : AbortSignal.any([inherited]);
+    this.signal = inherited === undefined ? createAbortSignal() : AbortSignal.any([inherited]);
     this.redirect = redirect;
     this.credentials = credentials;
   }

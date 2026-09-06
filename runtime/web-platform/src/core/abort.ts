@@ -14,6 +14,8 @@ interface AbortAlgorithm {
 
 function doNothing(): void {}
 
+const abortSignalConstructorKey: unique symbol = Symbol("construct NTS AbortSignal");
+
 export class AbortSignal extends EventTarget implements AbortSignalOperations {
   readonly [abortSignalBrand] = true;
   private isAborted = false;
@@ -33,6 +35,16 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     callback: null,
     listener: null,
   };
+
+  constructor(key: typeof abortSignalConstructorKey, errorReporter?: (error: unknown) => void) {
+    if (key !== abortSignalConstructorKey) {
+      throw new TypeError("Illegal constructor");
+    }
+    super();
+    if (errorReporter !== undefined) {
+      this.setErrorReporter(errorReporter);
+    }
+  }
 
   get onabort(): ((this: AbortSignal, event: Event) => void) | null {
     return this.abortHandler.callback;
@@ -60,7 +72,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       try {
         callback();
       } catch (error) {
-        this.report(error);
+        this.reportError(error);
       }
       return doNothing;
     }
@@ -90,7 +102,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   static abort(reason?: unknown): AbortSignal {
-    const signal = new AbortSignal();
+    const signal = new AbortSignal(abortSignalConstructorKey);
     signal.trigger(reason);
     return signal;
   }
@@ -103,7 +115,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       converted.push(signal);
     }
 
-    const result = new AbortSignal();
+    const result = new AbortSignal(abortSignalConstructorKey);
     for (const signal of converted) {
       if (signal.aborted) {
         result.trigger(signal.reason);
@@ -128,7 +140,9 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   static timeout(milliseconds: number, scheduler: Scheduler): AbortSignal {
     if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
       throw new RangeError("Invalid timeout");
-    const signal = new AbortSignal((error) => scheduler.reportError(error));
+    const signal = new AbortSignal(abortSignalConstructorKey, (error) =>
+      scheduler.reportError(error),
+    );
     scheduler.delay(milliseconds, () =>
       signal.trigger(new DOMException("The operation timed out", "TimeoutError")),
     );
@@ -170,7 +184,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
           try {
             algorithm.callback();
           } catch (error) {
-            this.report(error);
+            this.reportError(error);
           }
         }
         algorithm.previous = null;
@@ -286,11 +300,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
 }
 
 export class AbortController {
-  private readonly controllerSignal: AbortSignal;
-
-  constructor(report?: (error: unknown) => void) {
-    this.controllerSignal = new AbortSignal(report);
-  }
+  private readonly controllerSignal = createAbortSignal();
 
   get signal(): AbortSignal {
     return this.controllerSignal;
@@ -299,4 +309,9 @@ export class AbortController {
   abort(reason?: unknown): void {
     this.controllerSignal.trigger(reason);
   }
+}
+
+/** @internal Creates an un-aborted signal without exposing its illegal constructor. */
+export function createAbortSignal(): AbortSignal {
+  return new AbortSignal(abortSignalConstructorKey);
 }

@@ -367,11 +367,7 @@ export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
   private listenerObserver: ListenerObserver | null = null;
   private dispatchDepth = 0;
-  protected readonly report: (error: unknown) => void;
-
-  constructor(report: (error: unknown) => void = () => {}) {
-    this.report = report;
-  }
+  private errorReporter: (error: unknown) => void = () => {};
 
   addEventListener(
     ...args: [
@@ -495,7 +491,7 @@ export class EventTarget {
               handleEvent.call(item.callback, event);
             }
           } catch (error) {
-            this.report(error);
+            this.reportError(error);
           } finally {
             event.setPassiveListener(false);
           }
@@ -532,6 +528,16 @@ export class EventTarget {
   /** Lets a specialized EventTarget account for the lifetime of its listeners. */
   protected setListenerObserver(observer: ListenerObserver): void {
     this.listenerObserver = observer;
+  }
+
+  /** Binds provider exception reporting without changing the public constructor. */
+  protected setErrorReporter(reporter: (error: unknown) => void): void {
+    this.errorReporter = reporter;
+  }
+
+  /** Reports an exception through the owning provider. */
+  protected reportError(error: unknown): void {
+    this.errorReporter(error);
   }
 
   private removeRecord(listener: ListenerRecord): void {

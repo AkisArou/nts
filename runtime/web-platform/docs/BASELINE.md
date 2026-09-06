@@ -601,3 +601,24 @@ diagnostics for the structural signal and event-init types, a nullability case, 
 an erased-value use. The net six-primary increase is therefore an exact compiler
 dependency inventory, not a runtime regression and not a reason to weaken the final
 API.
+
+Provider exception-report callbacks no longer leak through the public constructors.
+`EventTarget` has its specified zero-argument construction surface, extra JavaScript
+arguments are ignored, and specialized targets bind their provider reporter only
+after base construction. `AbortController` likewise ignores extra arguments, while
+direct `AbortSignal` construction throws `TypeError` behind an unexported
+construction key. Static abort factories, controllers, and internal request signal
+creation retain canonical `AbortSignal` identity. The request path uses an internal
+module-level factory rather than allocating and immediately discarding a controller.
+WebSocket listener exceptions still reach its owning scheduler through the protected
+provider seam. The remaining explicit scheduler parameter on
+`AbortSignal.timeout()` is the already-recorded current-environment dependency; this
+change does not replace it with process-global state.
+
+Restoring the old reporter-taking `EventTarget` constructor made the focused mutation
+fail with one reported exception instead of zero. The Node-host suite passes 124/124
+and the unchanged pinned WPT slice remains 95/95. The live NTS frontier is 254
+primary refusals, 57 cascades, zero JVM-backend refusals, and no invalid HIR. The
+single additional primary is another occurrence of the existing unrepresentable
+`WeakRef[]` signal-state dependency reached through the internal fresh-signal
+factory; it is not a new feature or a backend refusal.

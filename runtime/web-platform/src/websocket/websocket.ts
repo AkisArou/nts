@@ -109,7 +109,8 @@ export class WebSocket extends EventTarget {
   }
 
   constructor(url: string, protocols: string | readonly string[], context: WebSocketContext) {
-    super((error) => context.scheduler.reportError(error));
+    super();
+    this.setErrorReporter((error) => context.scheduler.reportError(error));
     this.context = context;
     if (
       context.maxBufferedAmount !== undefined &&
