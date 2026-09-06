@@ -1,36 +1,49 @@
-import { toUSVString } from "../core/webidl.ts";
+import { coerceToUSVString } from "../core/webidl.ts";
 import { Blob, File } from "../file/blob.ts";
 
 export type FormDataEntryValue = string | File;
 
 export type FormDataEntry = readonly [name: string, value: FormDataEntryValue];
+type OptionalFilename = [] | [filename: string | undefined];
 
-export class FormData {
-  private list: FormDataEntry[] = [];
-
-  append(name: string, value: string | Blob, filename?: string): void {
-    this.list.push([toUSVString(name), this.convert(value, filename)]);
+function convertFormDataValue(
+  value: string | Blob,
+  filename: OptionalFilename,
+): FormDataEntryValue {
+  if (!(value instanceof Blob)) {
+    if (filename.length !== 0) {
+      throw new TypeError("A filename requires a Blob");
+    }
+    return coerceToUSVString(value);
   }
-
-  private convert(value: string | Blob, filename?: string): FormDataEntryValue {
-    if (typeof value === "string") {
-      if (filename !== undefined) {
-        throw new TypeError("A filename requires a Blob");
-      }
-      return toUSVString(value);
-    }
-    if (value instanceof File && filename === undefined) {
-      return value;
-    }
-    return new File([value], filename ?? "blob", {
+  const suppliedFilename = filename.length === 0 ? undefined : filename[0];
+  if (value instanceof File && suppliedFilename === undefined) {
+    return value;
+  }
+  return new File(
+    [value],
+    suppliedFilename === undefined ? "blob" : coerceToUSVString(suppliedFilename),
+    {
       type: value.type,
       lastModified: value instanceof File ? value.lastModified : Date.now(),
-    });
+    },
+  );
+}
+
+export class FormData {
+  private readonly list: FormDataEntry[] = [];
+
+  append(name: string, value: string): void;
+  append(name: string, value: Blob, filename?: string): void;
+  append(name: string, value: string | Blob, ...filename: OptionalFilename): void {
+    this.list.push([coerceToUSVString(name), convertFormDataValue(value, filename)]);
   }
 
-  set(name: string, value: string | Blob, filename?: string): void {
-    const key = toUSVString(name);
-    const converted = this.convert(value, filename);
+  set(name: string, value: string): void;
+  set(name: string, value: Blob, filename?: string): void;
+  set(name: string, value: string | Blob, ...filename: OptionalFilename): void {
+    const key = coerceToUSVString(name);
+    const converted = convertFormDataValue(value, filename);
     let found = false;
     let write = 0;
     for (const item of this.list) {
@@ -48,7 +61,7 @@ export class FormData {
   }
 
   get(name: string): FormDataEntryValue | null {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     for (const item of this.list) {
       if (item[0] === key) {
         return item[1];
@@ -58,7 +71,7 @@ export class FormData {
   }
 
   getAll(name: string): FormDataEntryValue[] {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     const values: FormDataEntryValue[] = [];
     for (const item of this.list) {
       if (item[0] === key) {
@@ -69,7 +82,7 @@ export class FormData {
   }
 
   has(name: string): boolean {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     for (const item of this.list) {
       if (item[0] === key) {
         return true;
@@ -79,7 +92,7 @@ export class FormData {
   }
 
   delete(name: string): void {
-    const key = toUSVString(name);
+    const key = coerceToUSVString(name);
     let write = 0;
     for (const item of this.list) {
       if (item[0] !== key) {
@@ -90,11 +103,8 @@ export class FormData {
   }
 
   *entries(): Generator<FormDataEntry, void, unknown> {
-    for (let i = 0; i < this.list.length; ++i) {
-      const item = this.list[i];
-      if (item !== undefined) {
-        yield [item[0], item[1]];
-      }
+    for (const item of this.list) {
+      yield [item[0], item[1]];
     }
   }
 

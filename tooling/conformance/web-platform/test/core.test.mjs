@@ -1142,6 +1142,40 @@ test("Blob immutability, slices, File and form serialization", async () => {
   assert.equal(utf8.encode(text).length, encoded.blob.size);
   assert.match(encoded.contentType, /boundary=----nts-/);
 });
+test("FormData applies Web IDL overload conversion and preserves renamed files", () => {
+  const actual = new FormData();
+  const expected = new NativeFormData();
+  for (const form of [actual, expected]) {
+    form.append(1, true);
+    form.append("object", { value: 1 });
+    form.append("null", null);
+    form.append("undefined", undefined);
+    form.set(false, 0);
+  }
+  assert.deepEqual([...actual], [...expected]);
+  assert.equal(actual.get(1), expected.get(1));
+  assert.equal(actual.has(false), expected.has(false));
+
+  const file = new File(["body"], "old", { type: "text/plain", lastModified: 123 });
+  const nativeFile = new NativeFile(["body"], "old", {
+    type: "text/plain",
+    lastModified: 123,
+  });
+  actual.append("renamed", file, 42);
+  expected.append("renamed", nativeFile, 42);
+  const renamed = actual.get("renamed");
+  const nativeRenamed = expected.get("renamed");
+  assert.equal(renamed.name, nativeRenamed.name);
+  assert.equal(renamed.type, nativeRenamed.type);
+  assert.equal(renamed.lastModified, nativeRenamed.lastModified);
+  assert.notEqual(renamed, file);
+  assert.throws(() => actual.append("bad", "text", "filename"), TypeError);
+  assert.throws(() => actual.append("bad", "text", undefined), TypeError);
+
+  actual.append("blob", new Blob(["body"]), undefined);
+  expected.append("blob", new NativeBlob(["body"]), undefined);
+  assert.equal(actual.get("blob").name, expected.get("blob").name);
+});
 test("Blob copies every view and applies Web IDL slice conversion", async () => {
   const backing = Uint8Array.of(9, 1, 2, 3, 9);
   const view = new DataView(backing.buffer, 1, 3);

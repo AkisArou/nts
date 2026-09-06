@@ -460,3 +460,28 @@ planned union/intersection representation work, and correct boundary coercion ex
 five downstream cascades behind the existing `unknown` conversion and text-encoding
 dependencies. One additional typed-array `subarray` observation is an existing
 typed-memory dependency, not a new semantic category.
+
+`FormData` now selects its Web IDL overload at runtime rather than treating every
+non-string input as a file. Values such as numbers, booleans, null-like host inputs,
+and ordinary objects take the string path; Blob values retain the file path. The
+public overloads remain statically precise. Their implementation uses a rest-tuple
+arity (`[] | [string | undefined]`) because explicit third-argument `undefined`
+still selects the Blob overload: a string value must throw, while a Blob uses its
+default filename and a File keeps its identity. This expresses observable arity
+without the `arguments` object, which is a permanent language non-goal. Renaming a
+File produces a distinct File but preserves its media type and `lastModified`.
+Names, values, and supplied filenames use the shared USV-string boundary, and the
+entry list is now explicitly owned while its live iterator uses ordinary iteration
+without indexed-access assertions.
+
+A differential covers primitive and object coercion, a numeric filename, File
+identity and metadata, and both explicit-`undefined` overload outcomes. Weakening
+the arity check makes it fail with a missing expected `TypeError`. The Node-host
+suite passes 118/118 and the pinned WPT slice remains 95/95. The live NTS frontier
+is 242 primary refusals, 42 cascades, zero JVM-backend refusals, and no invalid HIR.
+Relative to 241/41, two rest parameters with a currently unrepresentable tuple-union
+element and their length access replace the earlier array-property assignment and
+the old `FormData#convert` method refusal. Two correct boundary-coercion cascades
+replace that method cascade. `Date.now` no longer appears because the enclosing
+top-level helper is refused earlier; provider-owned current time is still required
+for a newly wrapped Blob and has not been removed or worked around.
