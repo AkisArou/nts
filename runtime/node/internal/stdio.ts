@@ -1,14 +1,12 @@
 // The process's own output streams.
 //
-// `process.stdout` is a `node:stream` `Writable` over a `node:tty` or
-// `node:net` handle, and neither of those modules exists yet. What `console`
-// actually asks of a stream is small -- write a string, tell me whether you
-// are a terminal, let me attach an error listener -- so that much is here, as
-// an `EventEmitter` over two write bindings.
-//
-// When `node:stream` and `node:process` land these become `process.stdout` and
-// `process.stderr` and this file is deleted; the interface below is the part
-// that survives, because it is what `console` was written against.
+// Node builds `process.stdout` and `process.stderr` as `Writable` streams over
+// tty, pipe, or file handles. The compiled profile exposes the smaller common
+// protocol its process, console, util, assert, and readline modules consume:
+// synchronous string writes, terminal metadata, and EventEmitter error
+// handling. Keeping that protocol structural lets callers supply an ordinary
+// writable without coupling these foundational modules to a concrete stream
+// class or handle kind.
 
 import { EventEmitter, type Listener } from "../events/src/main.ts";
 import { getColorDepth } from "./color-depth.ts";
@@ -19,6 +17,11 @@ declare function nts_write_stderr(text: string): number;
 declare function nts_stdout_is_tty(): boolean;
 declare function nts_stderr_is_tty(): boolean;
 
+/** The structural write operation shared by console and readline. */
+export interface StringWritable {
+  write(chunk: string, callback?: (err?: Error | null) => void): boolean;
+}
+
 /**
  * What `console` needs of a stream.
  *
@@ -27,8 +30,7 @@ declare function nts_stderr_is_tty(): boolean;
  * a `write` method. A nominal type would reject exactly the callers node
  * accepts.
  */
-export interface WritableLike {
-  write(chunk: string, callback?: (err?: Error | null) => void): boolean;
+export interface WritableLike extends StringWritable {
   isTTY?: boolean | undefined;
   columns?: number | undefined;
   getColorDepth?: (() => number) | undefined;

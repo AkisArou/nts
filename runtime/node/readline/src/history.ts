@@ -18,7 +18,7 @@ const DEFAULT_HISTORY_SIZE = 30;
 
 interface HistoryContext {
   line: string;
-  emit(event: string, ...args: unknown[]): unknown;
+  emit(event: "history", history: string[]): boolean;
 }
 
 export interface HistoryOptions {

@@ -9,7 +9,7 @@
 import { ERR_INVALID_ARG_VALUE, ERR_INVALID_CURSOR_POS } from "./errors.ts";
 import { validateFunction } from "./validators.ts";
 import { nextTick } from "./tick.ts";
-import type { WritableLike } from "./stdio.ts";
+import type { StringWritable } from "./stdio.ts";
 
 const ESCAPE = "\u001b";
 
@@ -34,7 +34,7 @@ function defer(callback: Callback): void {
 
 /** Absolute cursor placement. Column only, when `y` is omitted. */
 export function cursorTo(
-  stream: WritableLike | null | undefined,
+  stream: StringWritable | null | undefined,
   x: number,
   y?: number | Callback,
   callback?: Callback,
@@ -65,7 +65,7 @@ export function cursorTo(
 
 /** Cursor movement relative to where it is. */
 export function moveCursor(
-  stream: WritableLike | null | undefined,
+  stream: StringWritable | null | undefined,
   dx: number,
   dy: number,
   callback?: Callback,
@@ -98,7 +98,7 @@ export function moveCursor(
 
 /** `dir < 0` clears left of the cursor, `> 0` right of it, `0` the whole line. */
 export function clearLine(
-  stream: WritableLike | null | undefined,
+  stream: StringWritable | null | undefined,
   dir: number,
   callback?: Callback,
 ): boolean {
@@ -120,7 +120,7 @@ export function clearLine(
 }
 
 export function clearScreenDown(
-  stream: WritableLike | null | undefined,
+  stream: StringWritable | null | undefined,
   callback?: Callback,
 ): boolean {
   if (callback !== undefined) {

@@ -106,7 +106,11 @@ export interface Key {
 }
 
 interface KeypressTarget {
-  emit(event: string, ...args: unknown[]): unknown;
+  emit(
+    event: "keypress",
+    input: string | undefined,
+    key: Key,
+  ): boolean;
 }
 
 /**

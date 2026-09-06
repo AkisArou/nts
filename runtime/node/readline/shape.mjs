@@ -36,6 +36,16 @@ export function subpaths(exports) {
 export function internals(exports) {
   return {
     "internal/readline/utils": {
+      // The pinned internal module stores these strings as properties on its
+      // callable CSI template tag. Function-object properties are outside the
+      // static profile, but consumers that only read the constants can use
+      // the same immutable values without requiring that metaobject shape.
+      CSI: {
+        kClearToLineBeginning: exports.kClearToLineBeginning,
+        kClearToLineEnd: exports.kClearToLineEnd,
+        kClearLine: exports.kClearLine,
+        kClearScreenDown: exports.kClearScreenDown,
+      },
       charLengthAt: exports.charLengthAt,
       charLengthLeft: exports.charLengthLeft,
       commonPrefix: exports.commonPrefix,

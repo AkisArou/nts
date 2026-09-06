@@ -58,6 +58,12 @@ export {
   kSubstringSearch,
   reverseString,
 } from "./utils.ts";
+export {
+  kClearLine,
+  kClearScreenDown,
+  kClearToLineBeginning,
+  kClearToLineEnd,
+} from "../../internal/readline-callbacks.ts";
 export { getStringWidth } from "../../util/src/width.ts";
 export { inspect } from "../../util/src/inspect.ts";
 export { stripVTControlCharacters } from "../../util/src/main.ts";

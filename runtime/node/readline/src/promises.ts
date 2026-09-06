@@ -16,6 +16,7 @@
 import { ERR_INVALID_ARG_TYPE } from "../../internal/errors.ts";
 import { validateBoolean, validateInteger } from "../../internal/validators.ts";
 import { nextTick } from "../../internal/tick.ts";
+import type { StringWritable } from "../../internal/stdio.ts";
 import {
   kClearLine,
   kClearScreenDown,
@@ -34,11 +35,7 @@ import {
 
 const CSI_ = "\u001b[";
 
-interface ReadlineWritable {
-  write(chunk: string, callback?: (error?: Error | null) => void): unknown;
-}
-
-function isWritable(stream: unknown): stream is ReadlineWritable {
+function isWritable(stream: unknown): stream is StringWritable {
   return (
     typeof stream === "object" &&
     stream !== null &&
@@ -68,11 +65,11 @@ export interface ReadlineOptions {
  * reads as one statement and reaches the terminal as one write.
  */
 export class Readline {
-  #stream: ReadlineWritable;
+  #stream: StringWritable;
   #todo: string[] = [];
   #autoCommit = false;
 
-  constructor(stream: ReadlineWritable, options?: ReadlineOptions) {
+  constructor(stream: StringWritable, options?: ReadlineOptions) {
     if (!isWritable(stream)) throw new ERR_INVALID_ARG_TYPE("stream", "Writable", stream);
     this.#stream = stream;
     if (options?.autoCommit != null) {

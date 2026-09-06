@@ -24,7 +24,7 @@ import type { Buffer } from "../../buffer/src/main.ts";
 import { setTimeout, clearTimeout } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/timeout.ts";
 import { kEscape } from "../../internal/readline-callbacks.ts";
-import { charLengthAt, emitKeys } from "./utils.ts";
+import { charLengthAt, emitKeys, type Key } from "./utils.ts";
 
 /** GNU readline's `keyseq-timeout` default. */
 const ESCAPE_CODE_TIMEOUT = 500;
@@ -42,16 +42,16 @@ const kEscapeDecoder = Symbol("escape-decoder");
 export const kSawKeyPress = Symbol("saw-key-press");
 
 interface KeypressStream {
-  emit(event: string, ...args: unknown[]): unknown;
-  on<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
-  removeListener<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
-  listenerCount(event: string): number;
+  emit(
+    event: "keypress",
+    input: string | undefined,
+    key: Key,
+  ): boolean;
+  on(event: "data", listener: (data: Buffer | string) => void): this;
+  on(event: "newListener", listener: (event: string | symbol) => void): this;
+  removeListener(event: "data", listener: (data: Buffer | string) => void): this;
+  removeListener(event: "newListener", listener: (event: string | symbol) => void): this;
+  listenerCount(event: "keypress"): number;
   [kKeypressDecoder]?: StringDecoder;
   [kEscapeDecoder]?: Generator<void, void, string>;
 }
@@ -134,7 +134,7 @@ export function emitKeypressEvents(
     }
   }
 
-  function onNewListener(event: string): void {
+  function onNewListener(event: string | symbol): void {
     if (event !== "keypress") return;
     stream.on("data", onData);
     stream.removeListener("newListener", onNewListener);

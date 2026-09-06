@@ -42,6 +42,7 @@ import {
   validateUint32,
 } from "../../internal/validators.ts";
 import { nextTick } from "../../internal/tick.ts";
+import type { StringWritable } from "../../internal/stdio.ts";
 import { History, type HistoryOptions } from "./history.ts";
 import { emitKeypressEvents, kSawKeyPress } from "./keypress.ts";
 import { charLengthAt, charLengthLeft, commonPrefix, type Key } from "./utils.ts";
@@ -81,12 +82,13 @@ export const kQuestionPromise = Symbol("questionPromise");
  */
 const LINE_ENDING = /\r?\n|\r(?!\n)|\u2028|\u2029/g;
 
-export interface Completion {
-  0: string[];
-  1: string;
-}
+/** Matches and the input prefix those matches complete. */
+export type Completion = [matches: string[], completeOn: string];
 
-export type CompletionCallback = (err: unknown, result?: Completion) => void;
+export type CompletionCallback = (
+  err?: Error | null,
+  result?: Completion,
+) => void;
 
 /**
  * Both public completer spellings share one safe invocation signature.
@@ -104,34 +106,39 @@ export type Completer = (
 
 export interface InputStream {
   isRaw?: boolean;
-  setRawMode?(mode: boolean): unknown;
-  on<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
-  removeListener<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
-  listenerCount(event: string): number;
-  emit(event: string, ...args: unknown[]): unknown;
-  resume(): unknown;
-  pause(): unknown;
+  setRawMode?(mode: boolean): this;
+  on(event: "data", listener: (data: Buffer | string) => void): this;
+  on(event: "end", listener: () => void): this;
+  on(event: "error", listener: (error: unknown) => void): this;
+  on(
+    event: "keypress",
+    listener: (input: string | undefined, key: Key | undefined) => void,
+  ): this;
+  on(event: "newListener", listener: (event: string | symbol) => void): this;
+  removeListener(event: "data", listener: (data: Buffer | string) => void): this;
+  removeListener(event: "end", listener: () => void): this;
+  removeListener(event: "error", listener: (error: unknown) => void): this;
+  removeListener(
+    event: "keypress",
+    listener: (input: string | undefined, key: Key | undefined) => void,
+  ): this;
+  removeListener(event: "newListener", listener: (event: string | symbol) => void): this;
+  listenerCount(event: "keypress"): number;
+  emit(
+    event: "keypress",
+    input: string | undefined,
+    key: Key,
+  ): boolean;
+  resume(): this;
+  pause(): this;
 }
 
-export interface OutputStream {
-  write(chunk: string, callback?: (err?: Error | null) => void): boolean;
+export interface OutputStream extends StringWritable {
   columns?: number;
   rows?: number;
   isTTY?: boolean;
-  on<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
-  removeListener<Args extends unknown[]>(
-    event: string,
-    listener: (...args: Args) => unknown,
-  ): unknown;
+  on(event: "resize", listener: () => void): this;
+  removeListener(event: "resize", listener: () => void): this;
 }
 
 export interface InterfaceOptions {
