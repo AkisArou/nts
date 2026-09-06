@@ -17382,6 +17382,19 @@ impl<'a> FuncBuilder<'a> {
             .returned_by(receiver)
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
+        // The result needs its layout as much as any other value does, and the
+        // direct-call path already asks for one. Without this, a closure whose
+        // return is *itself* a function produced a value of a type no layout
+        // answered for, and the backend refused the whole function with
+        // `NTS2006 an object type with no layout` -- a message about the type
+        // and not about the call that made it.
+        //
+        // `sub: (c: number) => () => void` is the shape, and it is what
+        // `EventListenerSignal.subscribe` is. Calling it was the trigger:
+        // declaring the field, and even building one, were both fine, because
+        // nothing until the call needed the returned signature to have a
+        // class.
+        self.materialize(id, &ty)?;
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::Call {

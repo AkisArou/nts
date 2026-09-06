@@ -146,3 +146,39 @@ export function throughALiteral(n: number): number {
   const h: Handler = { handle: (x) => x * 7 };
   return h.handle(n);
 }
+
+// A field whose call *returns* another function.
+//
+// Declaring the field was fine, and so was building one. Calling it was not:
+// the result's type is a signature, and until the call nothing had needed that
+// signature to have a class, so the backend refused the whole function with
+// `NTS2006 an object type with no layout` -- a message about a type rather
+// than about the call that produced it.
+//
+// `EventListenerSignal.subscribe(callback: () => void): () => void` in the
+// shared Web source is this shape, and an unsubscribe returned from a
+// subscribe is how most of them are spelled.
+interface Source {
+  subscribe: (callback: (x: number) => number) => (() => number);
+}
+
+export function throughAReturnedFunction(n: number): number {
+  const source: Source = {
+    subscribe: (callback) => {
+      const seen = callback(n);
+      return () => seen + 1;
+    },
+  };
+  const unsubscribe = source.subscribe((x) => x * 2);
+  return unsubscribe();
+}
+
+// And one that captures nothing, so the returned closure is a bare code
+// pointer rather than an object with a field -- the two are different shapes
+// and only one of them was ever exercised here.
+export function returnedWithoutCapture(n: number): number {
+  const source: Source = {
+    subscribe: () => (): number => 11,
+  };
+  return source.subscribe((x) => x)() + n;
+}
