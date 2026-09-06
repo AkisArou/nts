@@ -3,6 +3,18 @@
 #
 #   tooling/gate/all.sh
 #
+# **This does not need the measurement lock, and wrapping it in one is a habit
+# worth breaking.** Sixteen steps and not one of them times anything: `benches`
+# *compiles* the fifty cases and never runs them, `memory` counts allocations,
+# which is deterministic, and the only mention of `nts-bench` in this file is a
+# comment. Two sessions ran `with-lock.sh --wait tooling/gate/all.sh` against
+# each other for most of a day and one of them queued thirty-one minutes for a
+# resource neither was using.
+#
+# The lock is for `nts-bench` and for `perf`. If you reach for it here, the
+# thing you are actually worried about is CPU contention making the gate
+# *slower*, which it will, and which costs minutes rather than correctness.
+#
 # Four checks, and they answer different questions:
 #
 #   clippy      does it lint clean
@@ -245,7 +257,7 @@ profile() {
   printf '  %s modules emitted, %s refusal(s)\n' \
     "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
   # The ceiling. Lower it when a feature earns it.
-  ceiling=9350
+  ceiling=7450
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1
@@ -399,7 +411,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 110 "through the LLVM backend, counting" ); }
+  backend_examples 111 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -410,7 +422,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 110 "through the LLVM backend" ); }
+  backend_examples 111 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -427,7 +439,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
     return 1
   fi
-  # **110 of 110 — equal to the corpus.** The plan set the target at 86 of 87,
+  # **111 of 111 — equal to the corpus.** The plan set the target at 86 of 87,
   # which was the LLVM floor the day it was written; the corpus has grown by
   # twenty-three since and this lane refuses nothing in it.
   #
@@ -451,7 +463,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # one left, and its counter is a method *parameter*, which is the one place a
   # representation choice cannot be made without rewriting a descriptor.
   #
-  backend_examples 110 "through the JVM backend" ); }
+  backend_examples 111 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

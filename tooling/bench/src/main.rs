@@ -164,6 +164,62 @@ const WIDE_REFERENCE_GAPS: &[(&str, &str)] = &[(
      them, which is what this row exists to report.",
 )];
 
+/// Other compiler processes on this machine, by executable name.
+///
+/// **`pgrep -x`, never `-f`.** The full-command-line form matches the caller's
+/// own command line and the loop sees itself; `tooling/gate/wait-idle.sh` has
+/// that trap written out at length and a self-test that runs the claim. This is
+/// the same question asked from Rust.
+///
+/// Our own pid is excluded so a second `nts-bench` is visible and this one is
+/// not.
+fn other_compilers() -> Vec<u32> {
+    let mine = std::process::id();
+    let mut found = Vec::new();
+    for name in ["nts", "nts-bench"] {
+        let Ok(output) = std::process::Command::new("pgrep").arg("-x").arg(name).output() else {
+            continue;
+        };
+        found.extend(
+            String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .filter_map(|pid| pid.parse::<u32>().ok())
+                .filter(|pid| *pid != mine),
+        );
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// Refuse to begin, or warn about the row that was measured anyway.
+///
+/// A benchmark wants a quiet machine and the measurement lock does not give it
+/// one: the lock excludes *other sessions*, and the run that spoiled a full
+/// publish here was a 159-case `nts check` sweep started from the same session
+/// that held it. Both processes were legitimately mine, so no lock protocol
+/// could have refused either.
+///
+/// What can refuse is this: the timed runner asking, at the start and before
+/// every case, whether anything else is compiling. `NTS_BENCH_ALONE=0` opts out
+/// for a run that knowingly shares.
+fn quiet_enough(when: &str) -> Option<String> {
+    if std::env::var("NTS_BENCH_ALONE").is_ok_and(|value| value == "0") {
+        return None;
+    }
+    let busy = other_compilers();
+    if busy.is_empty() {
+        return None;
+    }
+    let pids: Vec<String> = busy.iter().map(u32::to_string).collect();
+    Some(format!(
+        "another compiler is running ({}) {when}; a timed run wants the machine \
+         to itself -- `tooling/gate/wait-idle.sh`, or `NTS_BENCH_ALONE=0` to \
+         measure anyway",
+        pids.join(", ")
+    ))
+}
+
 fn main() -> Result<()> {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -194,6 +250,10 @@ fn main() -> Result<()> {
     // *current* case needs would leave the next one without it. Which of them
     // reaches a binary is still per-case -- `nts_unicode.c` goes on a command
     // line only when that case's program calls into it.
+    if let Some(warning) = quiet_enough("before this run started") {
+        bail!("{warning}");
+    }
+
     for file in nts_codegen_c::support_files(true) {
         file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
@@ -219,6 +279,13 @@ fn main() -> Result<()> {
 
     let mut rows = Vec::new();
     for case in &cases {
+        // Before each case rather than once at the start: a sweep begun while
+        // the suite is halfway through spoils the rows after it and none
+        // before, and a note on those rows is worth more than a refusal that
+        // throws away forty minutes of correct measurement.
+        if let Some(warning) = quiet_enough("while this case was measured") {
+            println!("note: {:<16} {warning}", case.file_name().unwrap_or("?"));
+        }
         match run_case(&root, case, &out) {
             Ok(row) => rows.push(row),
             Err(error) => println!("{:<16} failed: {error:#}", case.file_name().unwrap_or("?")),

@@ -77,3 +77,41 @@ other. The thing that caught it was not a review and not a test: it was the
 harness's own rule that every variant of a case must produce the same checksum,
 which is the one place in this tooling where two implementations are made to
 answer the same question.
+
+---
+
+## What the new row is, measured before touching it
+
+`symbol-keyed-map` at 3.35x is 25.17 us against a reference's 7.51, and the
+first two instruments say it is neither of the things it looks like.
+
+**It is not allocation.** 368 bytes an operation against the reference's 312 —
+the two `NtsValue.ofObject(symbol)` wrappers built per iteration to look a key
+up are scalar-replaced, exactly as record 0156 found for `map-and-set`'s numeric
+keys an hour earlier. That check cost one run and it is the one I skipped last
+time.
+
+**And it is not work.** A fixed-count driver:
+
+| | instructions/op | cycles/op | IPC |
+| --- | ---: | ---: | ---: |
+| hand-written Java | 304,435 | 91,880 | **3.31** |
+| ours | **113,098** | 154,403 | **0.73** |
+
+We execute **2.7x fewer instructions** and take **1.7x more cycles**. An IPC of
+0.73 against 3.31 is not a small stall; it is serialisation.
+
+The structural difference is visible without a profiler.
+`IdentityHashMap` stores keys and values inline in one `Object[]` — `table[i]`
+is the key reference and `table[i+1]` its value — so a probe compares the
+reference it already has against one load. `NtsMap` stores `NtsValue[] keys`,
+so a probe is `buckets[p]`, then `keys[slot]`, then that box's `.ref`: **three
+dependent loads where the reference has one**, and 8,192 probes an operation
+with nothing between them to overlap.
+
+That is a claim about the shape and not yet a measurement of it — the table is
+four entries and fits in L1, so eighteen cycles a lookup is more than a chase
+through resident lines should cost, and the next instrument is a profile rather
+than another counter. Written down here so the row does not get filed as
+allocation, which is what it looks like and what I would have assumed.
+

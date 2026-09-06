@@ -697,27 +697,30 @@ fn resumes(program: &Program, layout: &nts_core::hir::Layout) -> Option<String> 
 /// erasures of one closure are now the same `NtsValue` where they were equal
 /// ones.
 fn erased_closures(program: &Program) -> Vec<(String, String)> {
-    let mut found = std::collections::BTreeSet::new();
-    for func in &program.funcs {
-        for op in &func.values {
-            let nts_core::hir::OpKind::Erase { value } = &op.kind else {
-                continue;
-            };
-            if !matches!(
-                func.values[value.0 as usize].kind,
-                nts_core::hir::OpKind::ClosureStatic
-            ) {
-                continue;
-            }
-            if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) =
-                func.values[value.0 as usize].ty
-                && let Some(layout) = program.layout(id)
-            {
-                found.insert(types::class_name(layout));
-            }
-        }
-    }
-    found.into_iter().map(|class| (erased_field(&class), class)).collect()
+    // **One per closure singleton, whether or not an `Erase` names it.**
+    //
+    // This scanned for `Erase { value }` over a `ClosureStatic` and declared a
+    // field for each, and the emitter reached for the same field from a second
+    // place the scan did not know about: a comparison between an erased value
+    // and a bare closure pushes *both* sides erased, so
+    //
+    //     %2 = erase %1 : erased
+    //     %4 = eq %2, %3 : bool     <- %3 a ClosureStatic, never an `Erase`
+    //
+    // emits `getstatic erased$Ctor_RangeError` for a field nothing declared.
+    // `examples/class-values` does exactly that and the JVM said so:
+    // `NoSuchFieldError`, loudly, at link time rather than as a wrong answer.
+    //
+    // The precise repair is to enumerate the implicit-erase sites too, and it
+    // is the wrong one: it is a third walk that has to stay in step with the
+    // emitter, and its failure mode is the `NoSuchFieldError` above. Deriving
+    // the set from `closure_singletons` makes the two identical *by
+    // construction* -- `erased$X` exists exactly when `closure$X` does -- and
+    // its failure mode is an unused static field holding a constant.
+    closure_singletons(program)
+        .into_iter()
+        .map(|(_, class)| (erased_field(&class), class))
+        .collect()
 }
 
 /// The field an erased closure singleton gets, in one place because the scan
