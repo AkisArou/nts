@@ -7,34 +7,130 @@ export interface EventInit {
 }
 
 export class Event {
-  readonly type: string;
-  readonly bubbles: boolean;
-  readonly cancelable: boolean;
-  readonly composed: boolean;
-  readonly isTrusted = false;
-  defaultPrevented = false;
-  target: EventTarget | null = null;
-  currentTarget: EventTarget | null = null;
-  eventPhase = 0;
+  static readonly NONE = 0;
+  static readonly CAPTURING_PHASE = 1;
+  static readonly AT_TARGET = 2;
+  static readonly BUBBLING_PHASE = 3;
+
+  private eventType: string;
+  private eventBubbles: boolean;
+  private eventCancelable: boolean;
+  private readonly eventComposed: boolean;
+  private eventTarget: EventTarget | null = null;
+  private eventCurrentTarget: EventTarget | null = null;
+  private phase = Event.NONE;
+  private canceled = false;
+  private propagationStopped = false;
   private dispatching = false;
   private immediateStopped = false;
   private passiveListener = false;
 
   constructor(type: string, init: EventInit = {}) {
-    this.type = type;
-    this.bubbles = init.bubbles ?? false;
-    this.cancelable = init.cancelable ?? false;
-    this.composed = init.composed ?? false;
+    this.eventType = type;
+    this.eventBubbles = init.bubbles ?? false;
+    this.eventCancelable = init.cancelable ?? false;
+    this.eventComposed = init.composed ?? false;
+  }
+
+  get type(): string {
+    return this.eventType;
+  }
+
+  get target(): EventTarget | null {
+    return this.eventTarget;
+  }
+
+  get srcElement(): EventTarget | null {
+    return this.eventTarget;
+  }
+
+  get currentTarget(): EventTarget | null {
+    return this.eventCurrentTarget;
+  }
+
+  composedPath(): EventTarget[] {
+    if (!this.dispatching || this.eventCurrentTarget === null) return [];
+    return [this.eventCurrentTarget];
+  }
+
+  get eventPhase(): number {
+    return this.phase;
+  }
+
+  get NONE(): number {
+    return Event.NONE;
+  }
+
+  get CAPTURING_PHASE(): number {
+    return Event.CAPTURING_PHASE;
+  }
+
+  get AT_TARGET(): number {
+    return Event.AT_TARGET;
+  }
+
+  get BUBBLING_PHASE(): number {
+    return Event.BUBBLING_PHASE;
+  }
+
+  get bubbles(): boolean {
+    return this.eventBubbles;
+  }
+
+  get cancelable(): boolean {
+    return this.eventCancelable;
+  }
+
+  get returnValue(): boolean {
+    return !this.canceled;
+  }
+
+  set returnValue(value: boolean) {
+    if (!value) this.preventDefault();
+  }
+
+  get defaultPrevented(): boolean {
+    return this.canceled;
+  }
+
+  get composed(): boolean {
+    return this.eventComposed;
+  }
+
+  get isTrusted(): boolean {
+    return false;
   }
 
   preventDefault(): void {
-    if (this.cancelable && !this.passiveListener) this.defaultPrevented = true;
+    if (this.eventCancelable && !this.passiveListener) this.canceled = true;
   }
 
-  stopPropagation(): void {}
+  stopPropagation(): void {
+    this.propagationStopped = true;
+  }
+
+  get cancelBubble(): boolean {
+    return this.propagationStopped;
+  }
+
+  set cancelBubble(value: boolean) {
+    if (value) this.propagationStopped = true;
+  }
 
   stopImmediatePropagation(): void {
+    this.propagationStopped = true;
     this.immediateStopped = true;
+  }
+
+  initEvent(type: string, bubbles = false, cancelable = false): void {
+    if (this.dispatching) return;
+    this.propagationStopped = false;
+    this.immediateStopped = false;
+    this.canceled = false;
+    this.eventTarget = null;
+    this.eventType = type;
+    this.eventBubbles = bubbles;
+    this.eventCancelable = cancelable;
   }
 
   /** @internal */ begin(target: EventTarget): void {
@@ -42,17 +138,18 @@ export class Event {
       throw new DOMException("Event is already dispatching or uninitialized", "InvalidStateError");
     }
     this.dispatching = true;
-    this.immediateStopped = false;
-    this.target = target;
-    this.currentTarget = target;
-    this.eventPhase = 2;
+    this.eventTarget = target;
+    this.eventCurrentTarget = target;
+    this.phase = Event.AT_TARGET;
   }
 
   /** @internal */ end(): void {
     this.dispatching = false;
     this.passiveListener = false;
-    this.currentTarget = null;
-    this.eventPhase = 0;
+    this.eventCurrentTarget = null;
+    this.phase = Event.NONE;
+    this.propagationStopped = false;
+    this.immediateStopped = false;
   }
 
   /** @internal */ setPassiveListener(passive: boolean): void {
@@ -61,6 +158,10 @@ export class Event {
 
   /** @internal */ get stopped(): boolean {
     return this.immediateStopped;
+  }
+
+  /** @internal */ get stoppedBeforeTarget(): boolean {
+    return this.propagationStopped;
   }
 }
 
@@ -156,19 +257,21 @@ export class EventTarget {
   dispatchEvent(event: Event): boolean {
     event.begin(this);
     try {
-      const snapshot = this.listeners.slice();
-      for (const item of snapshot) {
-        if (item.removed || item.type !== event.type) continue;
-        if (item.once) this.removeRecord(item);
-        event.setPassiveListener(item.passive);
-        try {
-          item.callback.call(this, event);
-        } catch (error) {
-          this.report(error);
-        } finally {
-          event.setPassiveListener(false);
+      if (!event.stoppedBeforeTarget) {
+        const snapshot = this.listeners.slice();
+        for (const item of snapshot) {
+          if (event.stopped) break;
+          if (item.removed || item.type !== event.type) continue;
+          if (item.once) this.removeRecord(item);
+          event.setPassiveListener(item.passive);
+          try {
+            item.callback.call(this, event);
+          } catch (error) {
+            this.report(error);
+          } finally {
+            event.setPassiveListener(false);
+          }
         }
-        if (event.stopped) break;
       }
     } finally {
       event.end();

@@ -392,6 +392,82 @@ test("EventTarget signal and passive listener options match Node", () => {
   assert.equal(activeTarget.dispatchEvent(activeEvent), false);
   assert.equal(activeEvent.defaultPrevented, true);
 });
+test("Event exposes the DOM non-tree dispatch state machine", () => {
+  for (const name of ["NONE", "CAPTURING_PHASE", "AT_TARGET", "BUBBLING_PHASE"])
+    assert.equal(Event[name], globalThis.Event[name]);
+
+  const target = new EventTarget();
+  const event = new Event("state", { bubbles: true, cancelable: true, composed: true });
+  assert.deepEqual(
+    [event.NONE, event.CAPTURING_PHASE, event.AT_TARGET, event.BUBBLING_PHASE],
+    [0, 1, 2, 3],
+  );
+  assert.equal(event.target, null);
+  assert.equal(event.srcElement, null);
+  assert.equal(event.currentTarget, null);
+  assert.equal(event.eventPhase, Event.NONE);
+  assert.deepEqual(event.composedPath(), []);
+  assert.equal(event.cancelBubble, false);
+  assert.equal(event.returnValue, true);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(event.isTrusted, false);
+
+  const calls = [];
+  target.addEventListener("state", (current) => {
+    calls.push("first");
+    assert.equal(current.target, target);
+    assert.equal(current.srcElement, target);
+    assert.equal(current.currentTarget, target);
+    assert.equal(current.eventPhase, Event.AT_TARGET);
+    assert.deepEqual(current.composedPath(), [target]);
+    current.stopPropagation();
+    current.returnValue = false;
+  });
+  target.addEventListener("state", (current) => {
+    calls.push("second");
+    assert.equal(current.cancelBubble, true);
+    assert.equal(current.returnValue, false);
+  });
+
+  assert.equal(target.dispatchEvent(event), false);
+  assert.deepEqual(calls, ["first", "second"]);
+  assert.equal(event.target, target);
+  assert.equal(event.srcElement, target);
+  assert.equal(event.currentTarget, null);
+  assert.equal(event.eventPhase, Event.NONE);
+  assert.deepEqual(event.composedPath(), []);
+  assert.equal(event.cancelBubble, false);
+  assert.equal(event.returnValue, false);
+
+  event.stopImmediatePropagation();
+  event.initEvent("reset", false, false);
+  assert.equal(event.type, "reset");
+  assert.equal(event.bubbles, false);
+  assert.equal(event.cancelable, false);
+  assert.equal(event.composed, true);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(event.cancelBubble, false);
+  assert.equal(event.target, null);
+
+  const blocked = new Event("blocked");
+  let blockedCalls = 0;
+  target.addEventListener("blocked", () => blockedCalls++);
+  blocked.stopImmediatePropagation();
+  target.dispatchEvent(blocked);
+  assert.equal(blockedCalls, 0);
+  assert.equal(blocked.cancelBubble, false);
+  target.dispatchEvent(blocked);
+  assert.equal(blockedCalls, 1);
+
+  const inFlight = new Event("in-flight", { bubbles: true, cancelable: true });
+  target.addEventListener("in-flight", (current) => {
+    current.initEvent("ignored", false, false);
+    assert.equal(current.type, "in-flight");
+    assert.equal(current.bubbles, true);
+    assert.equal(current.cancelable, true);
+  });
+  target.dispatchEvent(inFlight);
+});
 test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   let pulls = 0;
   const stream = new ReadableStream(
