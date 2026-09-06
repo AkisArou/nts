@@ -349,3 +349,18 @@ refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR. The compil
 already classifies the stream's capability arrays under the planned
 `PromiseWithResolvers` representation dependency; the allocation-stable source did
 not introduce another diagnostic category.
+
+`EventTarget` dispatch no longer allocates a listener-array snapshot. Each dispatch
+captures its starting length, so listeners added by a callback remain invisible to
+that dispatch while a nested dispatch sees the then-current list. Removals leave
+tombstones only while some dispatch is active; the outermost dispatch compacts once,
+and a removal outside dispatch compacts immediately instead of retaining the dead
+listener indefinitely. A forced-collection assertion verifies that ordinary
+add/remove releases the callback. Replacing the fixed dispatch boundary with the
+live array length makes the focused test invoke the newly added listener too early,
+producing `outer,nested,late` rather than `outer,nested`. The Node-host suite passes
+112/112 and the pinned WPT slice remains 95/95. The live NTS frontier is 237 primary
+refusals, 36 cascades, zero JVM-backend refusals, and no invalid HIR; the one
+additional primary is the already-reported in-place array-length assignment gap.
+Restoring the snapshot allocation merely to suppress that diagnostic would regress
+the intended final implementation.

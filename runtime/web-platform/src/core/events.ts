@@ -254,6 +254,7 @@ function validateListenerSignal(signal: EventListenerSignal | undefined): void {
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
   private listenerObserver: ListenerObserver | null = null;
+  private dispatchDepth = 0;
   protected readonly report: (error: unknown) => void;
 
   constructor(report: (error: unknown) => void = () => {}) {
@@ -324,10 +325,13 @@ export class EventTarget {
 
   #dispatch(event: Event, trusted: boolean): boolean {
     event.begin(this, trusted);
+    this.dispatchDepth++;
+    const listenerCount = this.listeners.length;
     try {
       if (!event.stoppedBeforeTarget) {
-        const snapshot = this.listeners.slice();
-        for (const item of snapshot) {
+        for (let index = 0; index < listenerCount; index++) {
+          const item = this.listeners[index];
+          if (item === undefined) continue;
           if (event.stopped) break;
           if (item.removed || item.type !== event.type) continue;
           if (item.once) this.removeRecord(item);
@@ -347,14 +351,8 @@ export class EventTarget {
       }
     } finally {
       event.end();
-      let write = 0;
-      for (let read = 0; read < this.listeners.length; read++) {
-        const listener = this.listeners[read];
-        if (listener !== undefined && !listener.removed) {
-          this.listeners[write++] = listener;
-        }
-      }
-      this.listeners.length = write;
+      this.dispatchDepth--;
+      if (this.dispatchDepth === 0) this.compactListeners();
     }
     return !event.defaultPrevented;
   }
@@ -391,6 +389,16 @@ export class EventTarget {
     listener.unsubscribeAbort = null;
     unsubscribe?.();
     this.listenerObserver?.(listener.type, false);
+    if (this.dispatchDepth === 0) this.compactListeners();
+  }
+
+  private compactListeners(): void {
+    let write = 0;
+    for (let read = 0; read < this.listeners.length; read++) {
+      const listener = this.listeners[read];
+      if (listener !== undefined && !listener.removed) this.listeners[write++] = listener;
+    }
+    this.listeners.length = write;
   }
 }
 

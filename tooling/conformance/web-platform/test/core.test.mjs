@@ -528,6 +528,29 @@ test("EventTarget once, receiver, removal while dispatching", () => {
   target.dispatchEvent(new Event("x"));
   assert.equal(calls, 1);
 });
+test("EventTarget fixes each dispatch boundary without retaining removed listeners", async () => {
+  const target = new EventTarget();
+  const calls = [];
+  const late = () => calls.push("late");
+  target.addEventListener("outer", () => {
+    calls.push("outer");
+    target.addEventListener("outer", late);
+    target.dispatchEvent(new Event("nested"));
+  });
+  target.addEventListener("nested", () => calls.push("nested"));
+  target.dispatchEvent(new Event("outer"));
+  assert.deepEqual(calls, ["outer", "nested"]);
+  target.dispatchEvent(new Event("outer"));
+  assert.deepEqual(calls, ["outer", "nested", "outer", "nested", "late"]);
+
+  const removed = (() => {
+    const listener = () => {};
+    target.addEventListener("removed", listener);
+    target.removeEventListener("removed", listener);
+    return new WeakRef(listener);
+  })();
+  assert.equal(await collectWeakReference(removed), true);
+});
 test("EventTarget listener objects resolve handleEvent at dispatch time", () => {
   for (const [EventClass, EventTargetClass] of [
     [Event, EventTarget],
