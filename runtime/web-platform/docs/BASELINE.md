@@ -485,3 +485,25 @@ the old `FormData#convert` method refusal. Two correct boundary-coercion cascade
 replace that method cascade. `Date.now` no longer appears because the enclosing
 top-level helper is refused earlier; provider-owned current time is still required
 for a newly wrapped Blob and has not been removed or worked around.
+
+`Headers` now applies the Fetch IDL's `ByteString` conversion at every public name
+and value boundary and validates every sequence element as an object iterable with
+exactly two converted items. Primitive names and values therefore coerce once,
+characters through U+00FF remain valid input to later HTTP validation, higher code
+units and symbols throw during `ByteString` conversion, inner generators work, and
+one-, three-, or primitive-string entries can no longer be silently destructured.
+The shared `DOMString` conversion is the single first stage for both `ByteString`
+and `USVString`; its string fast path allocates nothing and keeps their distinct
+post-conversion rules explicit.
+
+A differential covers public-method coercion, an inner generator, every malformed
+pair length, a primitive inner string, the U+00FF boundary, and symbol rejection.
+Weakening the exact pair check to accept a third item makes the focused test fail
+with a missing expected `TypeError`. The Node-host suite passes 119/119 and the
+pinned WPT slice remains 95/95. The live NTS frontier is 243 primary refusals, 53
+cascades, zero JVM-backend refusals, and no invalid HIR. Relative to 242/42, the one
+new primary is the intended `Iterable<string> & object` representation that excludes
+primitive strings statically. Eleven new cascades are the visible call graph from
+header users through the shared boundary conversion; they are not eleven separate
+features. The source remains in final form and depends on the planned intersection
+and boundary-string-conversion lowering rather than weakening either contract.

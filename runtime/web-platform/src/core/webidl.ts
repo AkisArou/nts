@@ -83,7 +83,23 @@ export function toUSVString(value: string): string {
   return runStart === 0 ? value : result + value.slice(runStart);
 }
 
+/** Apply Web IDL's JavaScript `DOMString` conversion. */
+export function coerceToDOMString(value: unknown): string {
+  return typeof value === "string" ? value : `${value}`;
+}
+
 /** Apply JavaScript string coercion before the typed `USVString` conversion. */
 export function coerceToUSVString(value: unknown): string {
-  return toUSVString(typeof value === "string" ? value : `${value}`);
+  return toUSVString(coerceToDOMString(value));
+}
+
+/** Apply Web IDL's JavaScript `ByteString` conversion. */
+export function coerceToByteString(value: unknown): string {
+  const text = coerceToDOMString(value);
+  for (let index = 0; index < text.length; index++) {
+    if (text.charCodeAt(index) > 255) {
+      throw new TypeError("ByteString contains a code unit greater than 255");
+    }
+  }
+  return text;
 }

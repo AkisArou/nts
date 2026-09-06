@@ -33,7 +33,7 @@ export {
 export type { QueuingStrategy, ReadResult, UnderlyingSource } from "./streams/readable.ts";
 
 export { Headers } from "./fetch/headers.ts";
-export type { HeadersInit } from "./fetch/headers.ts";
+export type { HeaderSequenceEntry, HeadersInit } from "./fetch/headers.ts";
 
 export { Request } from "./fetch/request.ts";
 export type { RequestCredentials, RequestInit, RequestRedirect } from "./fetch/request.ts";

@@ -1,9 +1,12 @@
 import { trimHTTPWhitespace } from "../core/ascii.ts";
+import { coerceToByteString } from "../core/webidl.ts";
 
 /** Transport entries retain wire order and duplicates. Public iteration is sorted. */
 export type HeaderEntry = readonly [name: string, value: string];
 
-export type HeaderSequence = Iterable<HeaderEntry>;
+export type HeaderSequenceEntry = Iterable<string> & object;
+
+export type HeaderSequence = Iterable<HeaderSequenceEntry>;
 
 export type HeaderRecord = Readonly<Record<string, string>>;
 
@@ -41,16 +44,17 @@ export function isToken(value: string): boolean {
 }
 
 export function normalizeName(name: string): string {
-  if (!isToken(name)) {
+  const converted = coerceToByteString(name);
+  if (!isToken(converted)) {
     throw new TypeError("Invalid HTTP header name");
   }
-  return name.toLowerCase();
+  return converted.toLowerCase();
 }
 
 export function normalizeValue(value: string): string {
   // Fetch trims HTTP whitespace (HTAB, LF, CR, SP) before validating embedded
   // newline bytes. String.trim() is wrong: it would also strip NBSP and FF.
-  const normalized = trimHTTPWhitespace(value);
+  const normalized = trimHTTPWhitespace(coerceToByteString(value));
 
   for (let i = 0; i < normalized.length; ++i) {
     const c = normalized.charCodeAt(i);
@@ -65,6 +69,26 @@ function isHeaderSequence(init: HeadersInit): init is Headers | HeaderSequence {
   return Symbol.iterator in init;
 }
 
+function convertHeaderSequenceEntry(entry: HeaderSequenceEntry): HeaderEntry {
+  if ((typeof entry !== "object" || entry === null) && typeof entry !== "function") {
+    throw new TypeError("Each header must be an iterable [name, value] tuple");
+  }
+
+  let name = "";
+  let value = "";
+  let length = 0;
+  for (const item of entry) {
+    if (length === 0) name = coerceToByteString(item);
+    else if (length === 1) value = coerceToByteString(item);
+    else throw new TypeError("Each header must be an iterable [name, value] tuple");
+    length++;
+  }
+  if (length !== 2) {
+    throw new TypeError("Each header must be an iterable [name, value] tuple");
+  }
+  return [name, value];
+}
+
 export class Headers {
   private readonly list: HeaderEntry[] = [];
   private guard: HeaderGuard = "none";
@@ -75,7 +99,8 @@ export class Headers {
       return;
     }
     if (isHeaderSequence(init)) {
-      for (const [name, value] of init) {
+      for (const entry of init) {
+        const [name, value] = convertHeaderSequenceEntry(entry);
         this.append(name, value);
       }
       return;

@@ -327,6 +327,35 @@ test("Headers validation, guard and raw ownership", () => {
   headers.makeImmutable();
   assert.throws(() => headers.delete("a"), TypeError);
 });
+test("Headers enforces sequence pairs and ByteString boundary conversion", () => {
+  const actual = new Headers();
+  const expected = new NativeHeaders();
+  for (const headers of [actual, expected]) {
+    headers.append(1, true);
+    headers.set(false, 0);
+  }
+  assert.deepEqual([...actual], [...expected]);
+  assert.equal(actual.get(1), expected.get(1));
+  assert.equal(actual.has(false), expected.has(false));
+  actual.delete(false);
+  expected.delete(false);
+  assert.deepEqual([...actual], [...expected]);
+
+  const entry = function* () {
+    yield 2;
+    yield "é";
+  };
+  assert.deepEqual([...new Headers([entry()])], [...new NativeHeaders([entry()])]);
+
+  for (const pair of [["name"], ["name", "value", "extra"], "nv"]) {
+    assert.throws(() => new Headers([pair]), TypeError);
+    assert.throws(() => new NativeHeaders([pair]), TypeError);
+  }
+  assert.throws(() => actual.append("x", "€"), TypeError);
+  assert.throws(() => expected.append("x", "€"), TypeError);
+  assert.throws(() => actual.append("x", Symbol("value")), TypeError);
+  assert.throws(() => expected.append("x", Symbol("value")), TypeError);
+});
 test("Headers live iteration observes insertion and removal", () => {
   const actual = new Headers([
     ["b", "2"],
