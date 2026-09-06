@@ -226,3 +226,15 @@ redispatch assertion fail with zero calls instead of one. The live NTS check rep
 200 primary refusals, 41 cascades, zero JVM-backend refusals, and no invalid HIR. The
 two additional primaries are the already-planned general class-value dependency
 exposed by canonical `Event` constant references, not a backend regression.
+
+At `8d7d448`, `DOMException` exposes all 25 legacy constants on both the canonical
+constructor and its instances, and its `code` getter implements all 22 names that
+still have nonzero codes. The three obsolete names (`DOMStringSizeError`,
+`NoDataAllowedError`, and `ValidationError`) retain their constants while correctly
+producing code zero, matching Node. The Node-host suite passes 102/102 and the
+unchanged WPT slice remains 52/52. Removing the `HierarchyRequestError` mapping made
+the focused differential fail with zero where Node returns three. The live NTS check
+reports 204 primary refusals, 41 cascades, zero JVM-backend refusals, and no invalid
+HIR. Compared with the preceding check, no new diagnostic kind appeared; four more
+reachable occurrences carry the existing general class-value refusal. The frontier
+remains a dependency inventory, not a progress metric.
