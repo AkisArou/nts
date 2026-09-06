@@ -1,3 +1,5 @@
+import { utf8Length, utf8Write } from "./utf8.ts";
+
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export function toUSVString(input: string): string {
   let result = "";
@@ -19,9 +21,9 @@ export class TextEncoder {
   readonly encoding = "utf-8";
 
   encode(input = ""): Uint8Array {
-    const output = new Uint8Array(input.length * 3);
-    const result = this.encodeInto(input, output);
-    return output.slice(0, result.written);
+    const output = new Uint8Array(utf8Length(input));
+    utf8Write(output, input, 0, output.length);
+    return output;
   }
 
   encodeInto(input: string, destination: Uint8Array): { read: number; written: number } {

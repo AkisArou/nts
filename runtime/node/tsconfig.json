@@ -4,5 +4,6 @@
   "compilerOptions": {
     "types": []
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts"],
+  "references": [{ "path": "../web-platform" }]
 }
