@@ -46,6 +46,8 @@ const {
   Headers,
   DOMException,
   ReadableStream,
+  ReadableStreamDefaultController,
+  ReadableStreamDefaultReader,
   TextDecoder,
   TextEncoder,
   WritableStream,
@@ -108,6 +110,8 @@ function createWptContext(path, pending) {
     Promise,
     RangeError,
     ReadableStream,
+    ReadableStreamDefaultController,
+    ReadableStreamDefaultReader,
     TextDecoder,
     TextEncoder,
     TypeError,
@@ -132,6 +136,9 @@ function createWptContext(path, pending) {
     assert_false(value, message) {
       assert.equal(value, false, message);
     },
+    assert_greater_than(actual, expected, message) {
+      assert.ok(actual > expected, message);
+    },
     assert_greater_than_equal(actual, expected, message) {
       assert.ok(actual >= expected, message);
     },
@@ -143,6 +150,24 @@ function createWptContext(path, pending) {
     },
     assert_not_equals(actual, expected, message) {
       assert.notStrictEqual(actual, expected, message);
+    },
+    assert_object_equals(actual, expected, message) {
+      assert.equal(typeof actual, "object", message);
+      assert.notEqual(actual, null, message);
+      const seen = new Set();
+      const compare = (actualValue, expectedValue) => {
+        if (typeof actualValue !== "object" || actualValue === null) {
+          assert.strictEqual(actualValue, expectedValue, message);
+          return;
+        }
+        if (seen.has(actualValue)) return;
+        seen.add(actualValue);
+        const actualKeys = Object.keys(actualValue);
+        const expectedKeys = Object.keys(expectedValue);
+        assert.deepStrictEqual(actualKeys.sort(), expectedKeys.sort(), message);
+        for (const key of actualKeys) compare(actualValue[key], expectedValue[key]);
+      };
+      compare(actual, expected);
     },
     assert_throws_js(constructor, callback, message) {
       assert.throws(
@@ -206,7 +231,7 @@ function createWptContext(path, pending) {
           };
         },
         step_timeout(callback, delay) {
-          return setTimeout(callback, delay);
+          return setTimeout(test.step_func(callback), delay);
         },
         unreached_func(message) {
           return () => capability.reject(new Error(message));
@@ -236,21 +261,43 @@ function createWptContext(path, pending) {
       return JSON.stringify(value);
     },
     promise_test(fn, name) {
-      const result = Promise.resolve()
-        .then(() => {
-          const test = {
-            step(callback) {
-              return callback.call(test);
-            },
-            step_timeout(callback, delay) {
-              return setTimeout(callback, delay);
-            },
-            unreached_func(message) {
-              return () => assert.fail(message);
-            },
+      const asynchronousFailure = Promise.withResolvers();
+      const test = {
+        step(callback) {
+          try {
+            return callback.call(test);
+          } catch (error) {
+            asynchronousFailure.reject(error);
+            return undefined;
+          }
+        },
+        step_func(callback) {
+          return (...args) => {
+            try {
+              return callback.call(test, ...args);
+            } catch (error) {
+              asynchronousFailure.reject(error);
+              return undefined;
+            }
           };
-          return fn(test);
-        })
+        },
+        step_timeout(callback, delay) {
+          return setTimeout(test.step_func(callback), delay);
+        },
+        unreached_func(message) {
+          return () => asynchronousFailure.reject(new Error(message));
+        },
+      };
+      const body = Promise.resolve().then(() => {
+        return fn(test);
+      });
+      const timeout = Promise.withResolvers();
+      const timer = setTimeout(
+        () => timeout.reject(new Error(`Upstream promise test timed out: ${name}`)),
+        5000,
+      );
+      const result = Promise.race([body, asynchronousFailure.promise, timeout.promise])
+        .finally(() => clearTimeout(timer))
         .then(
           () => reportPass(path, name),
           (error) => reportFailure(path, name, error),

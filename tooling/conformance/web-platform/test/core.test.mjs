@@ -2625,6 +2625,29 @@ test("Released reader.closed rejects even if the previous closed promise was ful
   await assert.rejects(reader.closed);
   await prior;
 });
+test("Readable stream internals cannot be shadowed by public expandos", async () => {
+  const source = {
+    pull(controller) {
+      assert.equal(this, source);
+      controller.enqueue("kept");
+      controller.close();
+    },
+  };
+  const stream = new ReadableStream(source, { highWaterMark: 0 });
+  stream.source = null;
+  stream.state = "errored";
+  stream.queue = [];
+  stream.controller = null;
+
+  const reader = stream.getReader();
+  reader.stream = null;
+  reader.closedCapability = { promise: Promise.reject(new Error("shadow")) };
+  reader.closedCapability.promise.catch(() => {});
+
+  assert.deepEqual(await reader.read(), { done: false, value: "kept" });
+  assert.deepEqual(await reader.read(), { done: true, value: undefined });
+  await reader.closed;
+});
 test("Iterator always releases its lock when underlying cancellation rejects", async () => {
   const stream = new ReadableStream({
     start(c) {

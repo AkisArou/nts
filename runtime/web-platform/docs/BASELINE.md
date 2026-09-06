@@ -839,3 +839,45 @@ queue storage. These counts are a dependency inventory, not completed compiler w
 This slice remains incomplete while the receiver-aware callback case is red; the
 failure stays in the committed evidence instead of being hidden by a forbidden
 dynamic fallback.
+
+The default readable-stream core now captures each underlying-source algorithm
+exactly once, validates the source dictionary and callback members in Web IDL
+order, invokes `start` and `pull` synchronously, and preserves the original source
+as the callback receiver. Start exceptions therefore escape the constructor while
+pull exceptions error the stream; promise results are observed only after the
+algorithm itself has run. Closing or erroring settles `reader.closed` before pending
+read requests and releases the captured source and strategy algorithms. Pending
+read capabilities use the shared FIFO rather than a second queue implementation.
+
+ReadableStream, its controller, and its default reader now keep observable state in
+ECMAScript private fields. Script may add public properties named `source`, `state`,
+`controller`, `stream`, or `closedCapability` without shadowing implementation
+state. Replacing the private source with the earlier public field makes the focused
+local test wedge before producing its first chunk. Independently, the upstream
+harness now bounds each promise test and routes asynchronous step failures into its
+result, so the equivalent failure in an unchanged fixture becomes a verdict instead
+of hanging or crashing the whole gate. Tee also defers source-close propagation
+while its final read is being distributed. Removing that guard makes the unchanged
+reentrant-strategy fixture lose the final chunk in both branches and changes the
+aggregate upstream result from 861/862 to 860/862.
+
+Seven additional complete, unchanged `streams/readable-streams/*.any.js` fixtures
+and their upstream `rs-utils.js` support file are pinned by exact Git blob hash.
+They add 119 cases covering bad sources, cancellation, default readers, count
+strategy integration, garbage-collection reachability, general state/locking, and
+reentrant strategies. All 119 readable cases pass. Across the complete pinned Web
+slice, 861 of 862 pass; the only failure is still the separately documented
+writable callback-receiver operation. The complete local Node-host suite passes
+144/144 and the root TypeScript solution remains green. The initial `pipeTo()` and
+`pipeThrough()` state transfer is present, but full piping, byte/BYOB, transform,
+and async-iteration fixture families are not claimed by this checkpoint.
+
+Against the current compiler frontier, the shared project reports 437 primary
+`NTS1001` refusals, 77 dependent `NTS1003` cascades, zero `NTS4xxx` JVM-backend
+refusals, and no invalid HIR. Two primaries still name the missing explicit-receiver
+`call` operation. One additional `NTS1004` currently treats a type-only
+`WebPlatformRuntime` import as a runtime module edge and consequently reports a
+false `standardBodyPolicy` temporal-dead-zone cycle. Repository TypeScript erases
+that edge, and directly importing the emitted `Response` module succeeds in the
+pinned Node runtime. This compiler module-graph defect has been reported; valid
+final-form source is retained rather than reorganized to hide a type-only edge.

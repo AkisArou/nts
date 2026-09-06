@@ -31,6 +31,7 @@
       "common/sab.js": "a3ea610e165d0d56ef1faab2ed49186d4e03c392",
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9",
       "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
+      "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
       "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
     },
     "tests": {
@@ -57,8 +58,15 @@
       "FileAPI/file/File-constructor.any.js": "0b0185c40bf83c5781630c72878764f2ef5588c6",
       "streams/queuing-strategies.any.js": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
       "streams/readable-streams/bad-strategies.any.js": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
+      "streams/readable-streams/bad-underlying-sources.any.js": "3d77b923d178a0134f3f3d0590be0f4fd836c7a5",
+      "streams/readable-streams/cancel.any.js": "d44222f1497f0acbf9d080b0668f9759c001d716",
       "streams/readable-streams/constructor.any.js": "0b995f0cb16bde21df887a717690eaa853a988b9",
+      "streams/readable-streams/count-queuing-strategy-integration.any.js": "a8c1b91d0068e316463400395601c995b9f89f40",
+      "streams/readable-streams/default-reader.any.js": "f92862719e47c178e3bdb1ddcf2cfa12b84b4514",
       "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66",
+      "streams/readable-streams/garbage-collection.any.js": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
+      "streams/readable-streams/general.any.js": "eee3f62215eeb07e6a1c06d004defd98324b270e",
+      "streams/readable-streams/reentrant-strategies.any.js": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
       "streams/writable-streams/aborting.any.js": "9d8e80b1de63c5ae6d8377b3d56183d6ea3fb264",
       "streams/writable-streams/bad-strategies.any.js": "a1ef0791168f99186925acbe869ac8449e0f4e79",
       "streams/writable-streams/bad-underlying-sinks.any.js": "3c434ffe60ccb98f6c8eb96a06d0c61af46b283d",
