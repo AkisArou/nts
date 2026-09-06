@@ -31,7 +31,7 @@ if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
   }
 }
 
-const { Blob, File, Headers } =
+const { Blob, File, Headers, ReadableStream } =
   await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 
 let passed = 0;
@@ -66,6 +66,7 @@ function createWptContext(path, pending) {
     Headers,
     Int8Array,
     Promise,
+    ReadableStream,
     TextEncoder,
     Uint8Array,
     WebSocket: class {
@@ -146,11 +147,9 @@ const nodeWptRoot = new URL(`${manifest.nodeWpt.root}/`, repositoryRoot);
 const versions = JSON.parse(
   readFileSync(new URL(manifest.nodeWpt.versionsFile, repositoryRoot), "utf8"),
 );
-assert.equal(
-  versions[manifest.nodeWpt.subset]?.commit,
-  manifest.nodeWpt.revision,
-  `Node's ${manifest.nodeWpt.subset} WPT revision changed`,
-);
+for (const [subset, revision] of Object.entries(manifest.nodeWpt.subsets)) {
+  assert.equal(versions[subset]?.commit, revision, `Node's ${subset} WPT revision changed`);
+}
 
 const nodeSupport = new Map();
 for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.support)) {

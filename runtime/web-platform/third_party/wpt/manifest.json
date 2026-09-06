@@ -10,8 +10,10 @@
   "nodeWpt": {
     "root": "third_party/node/test/fixtures/wpt",
     "versionsFile": "third_party/node/test/fixtures/wpt/versions.json",
-    "subset": "FileAPI",
-    "revision": "7f5130188818b6c12c636491186b459ec2bf131f",
+    "subsets": {
+      "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
+    },
     "support": {
       "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9"
     },
@@ -20,7 +22,8 @@
       "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
       "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
       "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
-      "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004"
+      "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
+      "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66"
     }
   }
 }

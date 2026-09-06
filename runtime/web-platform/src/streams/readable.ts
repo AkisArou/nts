@@ -19,6 +19,16 @@ interface QueueEntry<T> {
   size: number;
 }
 
+type StreamState = "readable" | "closed" | "errored";
+
+function countChunk<T>(_value: T): number {
+  return 1;
+}
+
+function identity<T>(value: T): T {
+  return value;
+}
+
 /**
  * Default-reader Streams subset, not BYOB or a Web-IDL implementation. Reads are
  * pull-driven, with a single in-flight underlying pull and explicit ownership.
@@ -32,8 +42,11 @@ export class ReadableStream<T> {
   private queueHead = 0;
   private totalSize = 0;
   private pending: PromiseWithResolvers<ReadResult<T>>[] = [];
+  // A head index keeps a burst of outstanding reads linear; Array.shift() would
+  // move every remaining capability after each delivered chunk.
+  private pendingHead = 0;
   private currentReader: ReadableStreamDefaultReader<T> | null = null;
-  private state: "readable" | "closed" | "errored" = "readable";
+  private state: StreamState = "readable";
   private storedError: unknown;
   private closeRequested = false;
   private started = false;
@@ -44,9 +57,10 @@ export class ReadableStream<T> {
   constructor(source: UnderlyingSource<T> = {}, strategy: QueuingStrategy<T> = {}) {
     this.source = source;
     this.highWaterMark = strategy.highWaterMark ?? 1;
-    if (Number.isNaN(this.highWaterMark) || this.highWaterMark < 0)
+    if (Number.isNaN(this.highWaterMark) || this.highWaterMark < 0) {
       throw new RangeError("Invalid highWaterMark");
-    this.sizeOf = strategy.size ?? (() => 1);
+    }
+    this.sizeOf = strategy.size ?? countChunk;
     this.controller = new ReadableStreamDefaultController(this);
     try {
       Promise.resolve(source.start?.(this.controller)).then(
@@ -78,26 +92,40 @@ export class ReadableStream<T> {
   }
 
   getReader(): ReadableStreamDefaultReader<T> {
-    if (this.locked) throw new TypeError("Stream is locked");
+    if (this.locked) {
+      throw new TypeError("Stream is locked");
+    }
     return new ReadableStreamDefaultReader(this);
   }
 
   /** @internal */ attach(reader: ReadableStreamDefaultReader<T>): void {
-    if (this.locked) throw new TypeError("Stream is locked");
+    if (this.locked) {
+      throw new TypeError("Stream is locked");
+    }
     this.currentReader = reader;
-    if (this.state === "closed") reader.finish();
-    if (this.state === "errored") reader.fail(this.storedError);
+    if (this.state === "closed") {
+      reader.finish();
+    }
+    if (this.state === "errored") {
+      reader.fail(this.storedError);
+    }
   }
 
   cancel(reason?: unknown): Promise<void> {
-    if (this.locked) return Promise.reject(new TypeError("Stream is locked"));
+    if (this.locked) {
+      return Promise.reject(new TypeError("Stream is locked"));
+    }
     return this.cancelInternal(reason);
   }
 
   /** @internal */ async cancelInternal(reason: unknown): Promise<void> {
     this.isDisturbed = true;
-    if (this.state === "closed") return;
-    if (this.state === "errored") throw this.storedError;
+    if (this.state === "closed") {
+      return;
+    }
+    if (this.state === "errored") {
+      throw this.storedError;
+    }
     this.queue = [];
     this.queueHead = 0;
     this.totalSize = 0;
@@ -106,15 +134,20 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>> {
-    if (reader !== this.currentReader)
+    if (reader !== this.currentReader) {
       return Promise.reject(new TypeError("Reader has been released"));
+    }
     this.isDisturbed = true;
-    if (this.state === "closed") return Promise.resolve({ done: true, value: undefined });
-    if (this.state === "errored") return Promise.reject(this.storedError);
+    if (this.state === "closed") {
+      return Promise.resolve({ done: true, value: undefined });
+    }
+    if (this.state === "errored") {
+      return Promise.reject(this.storedError);
+    }
     const entry = this.queue[this.queueHead];
     if (entry !== undefined) {
       this.queueHead++;
-      this.totalSize -= entry.size;
+      this.totalSize = Math.max(0, this.totalSize - entry.size);
       if (this.queueHead === this.queue.length) {
         this.queue = [];
         this.queueHead = 0;
@@ -122,8 +155,11 @@ export class ReadableStream<T> {
         this.queue = this.queue.slice(this.queueHead);
         this.queueHead = 0;
       }
-      if (this.closeRequested && this.queueHead === this.queue.length) this.finish();
-      else this.maybePull();
+      if (this.closeRequested && this.queueHead === this.queue.length) {
+        this.finish();
+      } else {
+        this.maybePull();
+      }
       return Promise.resolve({ done: false, value: entry.value });
     }
     const result = Promise.withResolvers<ReadResult<T>>();
@@ -133,23 +169,30 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ release(reader: ReadableStreamDefaultReader<T>): void {
-    if (reader !== this.currentReader) return;
+    if (reader !== this.currentReader) {
+      return;
+    }
     this.currentReader = null;
     const error = new TypeError("Reader has been released");
-    for (const read of this.pending.splice(0)) read.reject(error);
+    this.rejectPending(error);
     reader.released(error);
   }
 
   /** @internal */ enqueue(value: T): void {
-    if (this.state !== "readable" || this.closeRequested)
+    if (this.state !== "readable" || this.closeRequested) {
       throw new TypeError("Stream is not writable");
-    const read = this.pending.shift();
-    if (read !== undefined) read.resolve({ done: false, value });
-    else {
+    }
+    const read = this.takePending();
+    if (read !== undefined) {
+      read.resolve({ done: false, value });
+    } else {
       let size: number;
       try {
-        size = this.sizeOf(value);
-        if (!Number.isFinite(size) || size < 0) throw new RangeError("Invalid chunk size");
+        const sizeOf = this.sizeOf;
+        size = sizeOf(value);
+        if (!Number.isFinite(size) || size < 0) {
+          throw new RangeError("Invalid chunk size");
+        }
       } catch (error) {
         this.fail(error);
         throw error;
@@ -161,36 +204,50 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ requestClose(): void {
-    if (this.state !== "readable" || this.closeRequested)
+    if (this.state !== "readable" || this.closeRequested) {
       throw new TypeError("Stream cannot be closed twice");
+    }
     this.closeRequested = true;
-    if (this.queueHead === this.queue.length) this.finish();
+    if (this.queueHead === this.queue.length) {
+      this.finish();
+    }
   }
+
   private finish(): void {
     this.state = "closed";
-    for (const read of this.pending.splice(0)) read.resolve({ done: true, value: undefined });
+    this.resolvePendingAsClosed();
     this.currentReader?.finish();
   }
 
   /** @internal */ fail(error: unknown): void {
-    if (this.state !== "readable") return;
+    if (this.state !== "readable") {
+      return;
+    }
     this.state = "errored";
     this.storedError = error;
     this.queue = [];
     this.queueHead = 0;
     this.totalSize = 0;
-    for (const read of this.pending.splice(0)) read.reject(error);
+    this.rejectPending(error);
     this.currentReader?.fail(error);
   }
 
   /** @internal */ get desiredSize(): number | null {
-    if (this.state === "errored") return null;
-    if (this.state === "closed") return 0;
+    if (this.state === "errored") {
+      return null;
+    }
+    if (this.state === "closed") {
+      return 0;
+    }
     return this.highWaterMark - this.totalSize;
   }
   private maybePull(): void {
-    if (!this.started || this.state !== "readable" || this.closeRequested) return;
-    if (this.pending.length === 0 && this.highWaterMark <= this.totalSize) return;
+    if (!this.started || this.state !== "readable" || this.closeRequested) {
+      return;
+    }
+    if (this.pendingHead === this.pending.length && this.highWaterMark <= this.totalSize) {
+      return;
+    }
     if (this.pulling) {
       this.pullAgain = true;
       return;
@@ -213,6 +270,48 @@ export class ReadableStream<T> {
       );
   }
 
+  private takePending(): PromiseWithResolvers<ReadResult<T>> | undefined {
+    const read = this.pending[this.pendingHead];
+    if (read === undefined) {
+      return undefined;
+    }
+    this.pendingHead++;
+    if (this.pendingHead === this.pending.length) {
+      this.pending = [];
+      this.pendingHead = 0;
+    } else if (this.pendingHead > 1024 && this.pendingHead * 2 > this.pending.length) {
+      this.pending = this.pending.slice(this.pendingHead);
+      this.pendingHead = 0;
+    }
+    return read;
+  }
+
+  private resolvePendingAsClosed(): void {
+    const pending = this.pending;
+    const start = this.pendingHead;
+    this.pending = [];
+    this.pendingHead = 0;
+    for (let index = start; index < pending.length; index++) {
+      const read = pending[index];
+      if (read !== undefined) {
+        read.resolve({ done: true, value: undefined });
+      }
+    }
+  }
+
+  private rejectPending(error: unknown): void {
+    const pending = this.pending;
+    const start = this.pendingHead;
+    this.pending = [];
+    this.pendingHead = 0;
+    for (let index = start; index < pending.length; index++) {
+      const read = pending[index];
+      if (read !== undefined) {
+        read.reject(error);
+      }
+    }
+  }
+
   tee(): [ReadableStream<T>, ReadableStream<T>] {
     return tee(this);
   }
@@ -230,7 +329,9 @@ export class ReadableStream<T> {
       }
     } finally {
       try {
-        if (!ended && !options.preventCancel) await reader.cancel();
+        if (!ended && !options.preventCancel) {
+          await reader.cancel();
+        }
       } finally {
         reader.releaseLock();
       }
@@ -292,15 +393,17 @@ export class ReadableStreamDefaultReader<T> {
   }
 
   read(): Promise<ReadResult<T>> {
-    return this.stream === null
-      ? Promise.reject(new TypeError("Reader has been released"))
-      : this.stream.read(this);
+    if (this.stream === null) {
+      return Promise.reject(new TypeError("Reader has been released"));
+    }
+    return this.stream.read(this);
   }
 
   cancel(reason?: unknown): Promise<void> {
-    return this.stream === null
-      ? Promise.reject(new TypeError("Reader has been released"))
-      : this.stream.cancelInternal(reason);
+    if (this.stream === null) {
+      return Promise.reject(new TypeError("Reader has been released"));
+    }
+    return this.stream.cancelInternal(reason);
   }
 
   releaseLock(): void {
@@ -309,13 +412,17 @@ export class ReadableStreamDefaultReader<T> {
   }
 
   /** @internal */ finish(): void {
-    if (this.closedState !== "pending") return;
+    if (this.closedState !== "pending") {
+      return;
+    }
     this.closedState = "fulfilled";
     this.closedCapability.resolve();
   }
 
   /** @internal */ fail(error: unknown): void {
-    if (this.closedState !== "pending") return;
+    if (this.closedState !== "pending") {
+      return;
+    }
     this.closedState = "rejected";
     this.closedCapability.reject(error);
   }
@@ -343,13 +450,33 @@ class TeeBranch<T> {
         pull: () => owner.pull(),
         cancel: (reason) => owner.cancel(index, reason),
       },
-      { highWaterMark: 0, size },
+      { highWaterMark: 1, size },
     );
+  }
+
+  close(): void {
+    if (!this.canceled) {
+      this.controller?.close();
+    }
+  }
+
+  fail(error: unknown): void {
+    if (!this.canceled) {
+      this.controller?.error(error);
+    }
+  }
+
+  enqueue(value: T): void {
+    if (!this.canceled) {
+      this.controller?.enqueue(value);
+    }
   }
 }
 
 class TeeState<T> {
   readonly branches: [TeeBranch<T>, TeeBranch<T>];
+  // Tee permanently owns this reader. Releasing it after a terminal transition
+  // would make the original stream observably unlocked, unlike the Streams API.
   private readonly reader: ReadableStreamDefaultReader<T>;
   private readonly clone: (chunk: T) => T;
   private readonly size: (chunk: T) => number;
@@ -359,34 +486,57 @@ class TeeState<T> {
   private done = false;
 
   constructor(stream: ReadableStream<T>, options: TeeOptions<T>) {
-    this.reader = stream.getReader();
-    this.clone = options.clone ?? ((value) => value);
-    this.size = options.size ?? (() => 1);
+    this.clone = options.clone ?? identity;
+    this.size = options.size ?? countChunk;
     this.limit = options.maxBufferedSize ?? Infinity;
+    if (Number.isNaN(this.limit) || this.limit < 0) {
+      throw new RangeError("Invalid clone buffer limit");
+    }
+    this.reader = stream.getReader();
     this.branches = [new TeeBranch(this, 0, this.size), new TeeBranch(this, 1, this.size)];
     ignoreRejection(this.canceled.promise);
+    const closedObservation = this.reader.closed.then(
+      () => this.sourceClosed(),
+      (error) => this.sourceErrored(error),
+    );
+    ignoreRejection(closedObservation);
   }
 
   pull(): Promise<void> {
-    if (this.done) return Promise.resolve();
-    if (this.reading !== null) return this.reading;
+    if (this.done) {
+      return Promise.resolve();
+    }
+    if (this.reading !== null) {
+      return this.reading;
+    }
     this.reading = this.readOne().finally(() => {
       this.reading = null;
     });
     return this.reading;
   }
+
   private async readOne(): Promise<void> {
+    let result: ReadResult<T>;
     try {
-      const result = await this.reader.read();
-      if (this.done) return;
-      if (result.done) {
-        this.done = true;
-        for (const branch of this.branches) if (!branch.canceled) branch.controller?.close();
-        this.reader.releaseLock();
-        this.canceled.resolve();
+      result = await this.reader.read();
+    } catch (error) {
+      this.sourceErrored(error);
+      return;
+    }
+
+    try {
+      if (this.done) {
         return;
       }
-      const size = this.size(result.value);
+      if (result.done) {
+        this.sourceClosed();
+        return;
+      }
+      const sizeOf = this.size;
+      const size = sizeOf(result.value);
+      if (!Number.isFinite(size) || size < 0) {
+        throw new RangeError("Invalid chunk size");
+      }
       for (const branch of this.branches) {
         if (!branch.canceled && branch.stream.queuedSize + size > this.limit) {
           throw new LimitError("Clone backlog exceeded configured limit");
@@ -395,15 +545,14 @@ class TeeState<T> {
       const first = this.branches[0];
       const second = this.branches[1];
       // Clone before handing either branch a mutable chunk.
-      const secondValue = second.canceled ? result.value : this.clone(result.value);
-      if (!first.canceled) first.controller?.enqueue(result.value);
-      if (!second.canceled) second.controller?.enqueue(secondValue);
+      const clone = this.clone;
+      const secondValue = second.canceled ? result.value : clone(result.value);
+      first.enqueue(result.value);
+      second.enqueue(secondValue);
     } catch (error) {
-      this.done = true;
-      for (const branch of this.branches) if (!branch.canceled) branch.controller?.error(error);
-      ignoreRejection(this.reader.cancel(error));
-      this.reader.releaseLock();
-      this.canceled.reject(error);
+      if (!this.done) {
+        this.failTee(error);
+      }
     }
   }
 
@@ -415,18 +564,53 @@ class TeeState<T> {
     }
     if (this.branches[0].canceled && this.branches[1].canceled && !this.done) {
       this.done = true;
-      this.reader.cancel([this.branches[0].reason, this.branches[1].reason]).then(
+      const cancellation = this.reader.cancel([this.branches[0].reason, this.branches[1].reason]);
+      cancellation.then(
         () => {
-          this.reader.releaseLock();
           this.canceled.resolve();
         },
         (error) => {
-          this.reader.releaseLock();
           this.canceled.reject(error);
         },
       );
     }
     return this.canceled.promise;
+  }
+
+  private sourceClosed(): void {
+    if (this.done) {
+      return;
+    }
+    this.done = true;
+    for (const branch of this.branches) {
+      branch.close();
+    }
+    this.canceled.resolve();
+  }
+
+  private sourceErrored(error: unknown): void {
+    if (this.done) {
+      return;
+    }
+    this.done = true;
+    for (const branch of this.branches) {
+      branch.fail(error);
+    }
+    // A branch canceled before the source failed has fulfilled its cancellation
+    // contract; the source error is observed by the branch that remained active.
+    this.canceled.resolve();
+  }
+
+  private failTee(error: unknown): void {
+    this.done = true;
+    for (const branch of this.branches) {
+      branch.fail(error);
+    }
+    const cancellation = this.reader.cancel(error);
+    cancellation.then(
+      () => this.canceled.resolve(),
+      (cancelError) => this.canceled.reject(cancelError),
+    );
   }
 }
 
@@ -439,8 +623,9 @@ export function tee<T>(
 }
 
 export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStream<Uint8Array> {
-  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1)
+  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1) {
     throw new RangeError("Invalid byte chunk size");
+  }
   let position = 0;
   return new ReadableStream<Uint8Array>(
     {
@@ -458,7 +643,10 @@ export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStrea
   );
 }
 
-/** The source becomes disturbed immediately, matching Request body transfer. */
+/**
+ * The source becomes disturbed immediately and stays locked, matching Fetch body
+ * transfer. The proxy stream owns its reader even after a terminal transition.
+ */
 export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
   const reader = stream.getReader();
 
@@ -469,15 +657,12 @@ export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
         const result = await reader.read();
         if (result.done) {
           controller.close();
-          reader.releaseLock();
-        } else controller.enqueue(result.value);
+        } else {
+          controller.enqueue(result.value);
+        }
       },
       async cancel(reason) {
-        try {
-          await reader.cancel(reason);
-        } finally {
-          reader.releaseLock();
-        }
+        await reader.cancel(reason);
       },
     },
     { highWaterMark: 0 },

@@ -366,6 +366,108 @@ test("Stream cancellation settles pending read even while underlying pull awaits
   assert.deepEqual(await pending, { done: true, value: undefined });
   assert.equal(canceled, true);
 });
+test("Stream strategy callbacks have no receiver and pending reads remain FIFO", async () => {
+  let controller;
+  let sizeReceiver = "not-called";
+  const stream = new ReadableStream(
+    {
+      start(value) {
+        controller = value;
+      },
+    },
+    {
+      highWaterMark: 0,
+      size() {
+        sizeReceiver = this;
+        return 1;
+      },
+    },
+  );
+  const reader = stream.getReader();
+  const reads = new Array(2050);
+  for (let index = 0; index < reads.length; index++) {
+    reads[index] = reader.read();
+  }
+  for (let index = 0; index < reads.length; index++) {
+    controller.enqueue(index);
+  }
+  controller.close();
+  const results = await Promise.all(reads);
+  for (let index = 0; index < results.length; index++) {
+    assert.deepEqual(results[index], { done: false, value: index });
+  }
+  assert.equal(sizeReceiver, "not-called");
+  assert.deepEqual(await reader.read(), { done: true, value: undefined });
+
+  let bufferedController;
+  const buffered = new ReadableStream(
+    {
+      start(value) {
+        bufferedController = value;
+        value.enqueue(1e-16);
+        value.enqueue(1);
+      },
+    },
+    {
+      size(value) {
+        sizeReceiver = this;
+        return value;
+      },
+    },
+  );
+  assert.equal(sizeReceiver, undefined);
+  const bufferedReader = buffered.getReader();
+  assert.deepEqual(await bufferedReader.read(), { done: false, value: 1e-16 });
+  assert.deepEqual(await bufferedReader.read(), { done: false, value: 1 });
+  assert.equal(bufferedController.desiredSize, 1);
+  bufferedController.close();
+  assert.deepEqual(await bufferedReader.read(), { done: true, value: undefined });
+});
+test("Tee validates the explicit backlog limit before locking its source", () => {
+  for (const limit of [-1, NaN]) {
+    const source = new ReadableStream();
+    assert.throws(() => tee(source, { maxBufferedSize: limit }), RangeError);
+    assert.equal(source.locked, false);
+  }
+});
+test("Tee observes terminal source state without a branch read", async () => {
+  let closeController;
+  const closing = new ReadableStream(
+    {
+      start(controller) {
+        closeController = controller;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const [closedA, closedB] = closing.tee();
+  const closedReaderA = closedA.getReader();
+  const closedReaderB = closedB.getReader();
+  closeController.close();
+  await Promise.all([closedReaderA.closed, closedReaderB.closed]);
+  assert.equal(closing.locked, true);
+
+  let errorController;
+  const erroring = new ReadableStream(
+    {
+      start(controller) {
+        errorController = controller;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const [erroredA, erroredB] = erroring.tee();
+  const erroredReader = erroredA.getReader();
+  errorController.enqueue("queued before failure");
+  await tick();
+  const canceled = erroredB.cancel("unused");
+  const failure = new Error("source failed");
+  errorController.error(failure);
+  await assert.rejects(erroredReader.closed, (error) => error === failure);
+  await assert.rejects(erroredReader.read(), (error) => error === failure);
+  await canceled;
+  assert.equal(erroring.locked, true);
+});
 test("Body use, locking, transfer, clone and canonical identity", async () => {
   const response = makeResponse("hello");
   const clone = response.clone();
