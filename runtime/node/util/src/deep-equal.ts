@@ -496,7 +496,12 @@ function mapsEqual(a: Map<unknown, unknown>, b: Map<unknown, unknown>, ctx: Cont
     return true;
   }
 
-  const candidates = [...b.entries()].filter(([key]) => key !== null && typeof key === "object");
+  const candidates: Array<[unknown, unknown]> = [];
+  for (const [key, value] of b) {
+    if (key !== null && typeof key === "object") {
+      candidates.push([key, value]);
+    }
+  }
   return matchPairs(unmatched, candidates, ctx, true);
 }
 
@@ -1102,7 +1107,7 @@ function partialObjectsEqual(
     if (!isSet(actual) || actual.size < expected.size) {
       return false;
     }
-    if (!everyMatched([...expected], [...actual], (a, b) => partialEqual(b, a, pairs))) {
+    if (!everyMatched(expected, setElements(actual), (a, b) => partialEqual(b, a, pairs))) {
       return false;
     }
     return partialOwnKeys(actual, expected, pairs);
@@ -1116,8 +1121,8 @@ function partialObjectsEqual(
     // different object from the equal one in `actual`, so `get` would miss it.
     if (
       !everyMatched(
-        [...expected],
-        [...actual],
+        expected,
+        mapPairs(actual),
         ([k1, v1], [k2, v2]) => partialEqual(k2, k1, pairs) && partialEqual(v2, v1, pairs),
       )
     ) {
@@ -1143,7 +1148,7 @@ function partialObjectsEqual(
     const wanted = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
     const found = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
     return (
-      isSubsequence([...found], [...wanted], pairs) &&
+      isSubsequence(found, wanted, pairs) &&
       partialOwnKeys(actual, expected, pairs, isArrayIndexKey)
     );
   }
@@ -1152,7 +1157,7 @@ function partialObjectsEqual(
     if (!isAnyArrayBuffer(actual) || !arrayBuffersShareKind(actual, expected)) {
       return false;
     }
-    if (!isSubsequence([...new Uint8Array(actual)], [...new Uint8Array(expected)], pairs)) {
+    if (!isSubsequence(new Uint8Array(actual), new Uint8Array(expected), pairs)) {
       return false;
     }
     return partialOwnKeys(actual, expected, pairs);
@@ -1179,6 +1184,28 @@ function partialObjectsEqual(
   }
 
   return partialOwnKeys(actual, expected, pairs);
+}
+
+/** Materialize an unordered collection once, with its final size known. */
+function setElements<T>(value: Set<T>): T[] {
+  const elements = new Array<T>(value.size);
+  let index = 0;
+  for (const element of value) {
+    elements[index] = element;
+    index += 1;
+  }
+  return elements;
+}
+
+/** Materialize Map pairs for indexed distinct-match bookkeeping. */
+function mapPairs<K, V>(value: Map<K, V>): Array<[K, V]> {
+  const pairs = new Array<[K, V]>(value.size);
+  let index = 0;
+  for (const pair of value) {
+    pairs[index] = pair;
+    index += 1;
+  }
+  return pairs;
 }
 
 /**
@@ -1232,7 +1259,7 @@ function partialOwnKeys(
  * `wanted` occurs at all, taking its earliest occurrence never rules out a
  * later match.
  */
-function isSubsequence<T>(found: readonly T[], wanted: readonly T[], pairs: ObjectPairs): boolean {
+function isSubsequence<T>(found: ArrayLike<T>, wanted: Iterable<T>, pairs: ObjectPairs): boolean {
   let at = 0;
   for (const item of wanted) {
     while (
@@ -1259,7 +1286,7 @@ function isSubsequence<T>(found: readonly T[], wanted: readonly T[], pairs: Obje
  * that are different objects.
  */
 function everyMatched<T>(
-  wanted: readonly T[],
+  wanted: Iterable<T>,
   found: readonly T[],
   matches: (a: T, b: T) => boolean,
 ): boolean {

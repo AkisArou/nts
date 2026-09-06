@@ -12,11 +12,11 @@
 
 import {
   isAnyArrayBuffer,
-  isArrayBufferView,
   isBigInt64Array,
   isBigUint64Array,
   isBoxedPrimitive,
   isDate,
+  isDataView,
   isFloat16Array,
   isFloat32Array,
   isFloat64Array,
@@ -417,30 +417,66 @@ export function inspect(value: unknown, options?: InspectOptions | boolean): str
 
 /** `'it'`, `"it's"`, `` `both ' and "` `` — node prefers the quote needing least escaping. */
 export function quoteString(str: string): string {
-  const escaped = str
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t")
-    .replace(/\x08/g, "\\b")
-    .replace(/\f/g, "\\f")
-    .replace(/\v/g, "\\v")
-    // Everything else below space, and the delete character.
-    .replace(
-      /[\x00-\x07\x0e-\x1f\x7f]/g,
-      (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`,
-    );
+  let quote = "'";
+  if (str.includes("'")) {
+    if (!str.includes('"')) {
+      quote = '"';
+    } else if (!str.includes("`") && !str.includes("${")) {
+      quote = "`";
+    }
+  }
 
-  if (!escaped.includes("'")) {
-    return `'${escaped}'`;
+  const quoteCode = quote.charCodeAt(0);
+  let escaped = "";
+  let last = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    let replacement: string | undefined;
+    if (code === quoteCode) {
+      replacement = `\\${quote}`;
+    } else if (code === 0x5c) {
+      replacement = "\\\\";
+    } else if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+      replacement = escapeControlCharacter(code);
+    } else if (code >= 0xd800 && code <= 0xdfff) {
+      if (code <= 0xdbff && i + 1 < str.length) {
+        const trailing = str.charCodeAt(i + 1);
+        if (trailing >= 0xdc00 && trailing <= 0xdfff) {
+          i++;
+          continue;
+        }
+      }
+      replacement = `\\u${code.toString(16)}`;
+    }
+
+    if (replacement !== undefined) {
+      escaped += `${str.slice(last, i)}${replacement}`;
+      last = i + 1;
+    }
   }
-  if (!escaped.includes('"')) {
-    return `"${escaped}"`;
+  if (last !== str.length) {
+    escaped += str.slice(last);
   }
-  if (!escaped.includes("`")) {
-    return `\`${escaped}\``;
+  return `${quote}${escaped}${quote}`;
+}
+
+function escapeControlCharacter(code: number): string {
+  switch (code) {
+    case 0x08:
+      return "\\b";
+    case 0x09:
+      return "\\t";
+    case 0x0a:
+      return "\\n";
+    case 0x0c:
+      return "\\f";
+    case 0x0d:
+      return "\\r";
+    default: {
+      const hex = code.toString(16).toUpperCase();
+      return `\\x${hex.length === 1 ? `0${hex}` : hex}`;
+    }
   }
-  return `'${escaped.replace(/'/g, "\\'")}'`;
 }
 
 /**
@@ -474,13 +510,13 @@ export function formatBigInt(value: bigint, numericSeparator = false): string {
 }
 
 export function formatNumber(value: number, numericSeparator = false): string {
+  // Numeric grouping does not erase the sign bit of zero.
+  if (Object.is(value, -0)) return "-0";
   if (!numericSeparator) {
-    // `-0` prints as `-0`, which `String(-0)` does not do and which is the
-    // whole reason `Object.is` exists.
-    return Object.is(value, -0) ? "-0" : String(value);
+    return String(value);
   }
+  const asString = String(value);
   const integer = Math.trunc(value);
-  const asString = String(integer);
   if (integer === value) {
     // Exponential notation has no digit groups to insert into.
     if (!Number.isFinite(value) || asString.includes("e")) {
@@ -488,12 +524,42 @@ export function formatNumber(value: number, numericSeparator = false): string {
     }
     return addSeparators(asString);
   }
-  if (Number.isNaN(value)) {
+  if (Number.isNaN(value) || asString.includes("e")) {
     return asString;
   }
-  return `${addSeparators(asString)}.${addSeparatorsAfterPoint(
-    String(value).slice(asString.length + 1),
-  )}`;
+  const decimal = asString.indexOf(".");
+  return `${addSeparators(asString.slice(0, decimal))}.${
+    addSeparatorsAfterPoint(asString.slice(decimal + 1))
+  }`;
+}
+
+/**
+ * The primitive state carried by a supported boxed value.
+ *
+ * Node colors the whole label when it stands alone. Once own fields follow,
+ * the label is the unstyled base and only those field values carry styles.
+ */
+function formatBoxedPrimitive(
+  ctx: Context,
+  value: String | Number | Boolean,
+  standalone: boolean,
+): string {
+  const wrapped = value.valueOf();
+  let label: string;
+  let style: StyleType;
+  if (typeof wrapped === "string") {
+    const formatted = formatString(ctx, wrapped);
+    const plain = ctx.colors ? withoutInspectColors(formatted) : formatted;
+    label = `[String: ${plain}]`;
+    style = "string";
+  } else if (typeof wrapped === "number") {
+    label = `[Number: ${formatNumber(wrapped, ctx.numericSeparator)}]`;
+    style = "number";
+  } else {
+    label = `[Boolean: ${String(wrapped)}]`;
+    style = "boolean";
+  }
+  return standalone ? ctx.stylize(label, style) : label;
 }
 
 const kMinLineLength = 16;
@@ -615,17 +681,7 @@ function formatObject(ctx: Context, value: InspectableObject, recurseTimes: numb
   }
   if (isBoxedPrimitive(value)) {
     const wrapped = value.valueOf();
-    const base = `[${
-      typeof wrapped === "string"
-        ? "String"
-        : typeof wrapped === "number"
-          ? "Number"
-          : typeof wrapped === "boolean"
-            ? "Boolean"
-            : typeof wrapped === "bigint"
-              ? "BigInt"
-              : "Symbol"
-    }: ${formatPrimitive(ctx, wrapped)}]`;
+    const base = formatBoxedPrimitive(ctx, value, true);
     const keys = Object.keys(value);
     let hasNamedKey = false;
     for (const key of keys) {
@@ -741,22 +797,11 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
     return formatWithKeys(ctx, value, recurseTimes, formatError(value), ["{", "}"], []);
   }
   if (isBoxedPrimitive(value)) {
-    const wrapped = value.valueOf();
-    const kind =
-      typeof wrapped === "string"
-        ? "String"
-        : typeof wrapped === "number"
-          ? "Number"
-          : typeof wrapped === "boolean"
-            ? "Boolean"
-            : typeof wrapped === "bigint"
-              ? "BigInt"
-              : "Symbol";
     return formatWithKeys(
       ctx,
       value,
       recurseTimes,
-      `[${kind}: ${formatPrimitive(ctx, wrapped)}]`,
+      formatBoxedPrimitive(ctx, value, false),
       ["{", "}"],
       [],
     );
@@ -785,30 +830,123 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
     );
   }
   if (isMap(value)) {
-    const entries = indented(ctx, () =>
-      [...value].map(
-        ([k, v]) =>
-          `${formatValue(ctx, k, recurseTimes + 1)} => ${formatValue(ctx, v, recurseTimes + 1)}`,
-      ),
-    );
+    const entries = indented(ctx, () => {
+      const formatted = new Array<string>(value.size);
+      let index = 0;
+      for (const [key, entryValue] of value) {
+        formatted[index] =
+          `${formatValue(ctx, key, recurseTimes + 1)} => ${
+            formatValue(ctx, entryValue, recurseTimes + 1)
+          }`;
+        index += 1;
+      }
+      return formatted;
+    });
     return formatWithKeys(ctx, value, recurseTimes, `Map(${value.size})`, ["{", "}"], entries);
   }
   if (isSet(value)) {
-    const entries = indented(ctx, () =>
-      [...value].map((v) => formatValue(ctx, v, recurseTimes + 1)),
-    );
+    const entries = indented(ctx, () => {
+      const formatted = new Array<string>(value.size);
+      let index = 0;
+      for (const entryValue of value) {
+        formatted[index] = formatValue(ctx, entryValue, recurseTimes + 1);
+        index += 1;
+      }
+      return formatted;
+    });
     return formatWithKeys(ctx, value, recurseTimes, `Set(${value.size})`, ["{", "}"], entries);
   }
   if (isAnyArrayBuffer(value)) {
-    const bytes = new Uint8Array(value);
-    const shown = [...bytes.subarray(0, 50)].map((b) => b.toString(16).padStart(2, "0")).join(" ");
-    return `ArrayBuffer { [Uint8Contents]: <${shown}${bytes.length > 50 ? " ..." : ""}>, byteLength: ${bytes.length} }`;
+    const name = value instanceof ArrayBuffer ? "ArrayBuffer" : "SharedArrayBuffer";
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = new Uint8Array(value);
+    } catch {
+      bytes = undefined;
+    }
+
+    let contents: string;
+    if (bytes === undefined) {
+      contents = ctx.stylize("(detached)", "special");
+    } else {
+      const requestedLength = ctx.maxArrayLength ?? bytes.length;
+      const end = Math.min(bytes.length, requestedLength);
+      const shownLength = Number.isNaN(end) ? 0 : Math.trunc(end);
+      if (shownLength < 0) {
+        throw new RangeError("Index out of range");
+      }
+      const formattedBytes = new Array<string>(shownLength);
+      let index = 0;
+      for (const byte of bytes) {
+        if (index === shownLength) break;
+        formattedBytes[index] = byte.toString(16).padStart(2, "0");
+        index += 1;
+      }
+      const remaining = bytes.length - requestedLength;
+      contents = `${ctx.stylize("[Uint8Contents]", "special")}: <${
+        formattedBytes.join(" ")
+      }${
+        remaining > 0 ? ` ... ${remaining} more byte${remaining > 1 ? "s" : ""}` : ""
+      }>`;
+    }
+    const entries = [
+      contents,
+      `${ctx.stylize("[byteLength]", "string")}: ${
+        ctx.stylize(formatNumber(value.byteLength), "number")
+      }`,
+    ];
+    return formatWithKeys(ctx, value, recurseTimes, name, ["{", "}"], entries);
   }
-  if (isArrayBufferView(value)) {
-    return formatWithKeys(ctx, value, recurseTimes, "DataView", ["{", "}"], []);
+  if (isDataView(value)) {
+    return formatDataView(ctx, value, recurseTimes);
   }
 
   return formatWithKeys(ctx, value, recurseTimes, "", ["{", "}"], []);
+}
+
+function formatDataView(
+  ctx: Context,
+  value: DataView & InspectableObject,
+  recurseTimes: number,
+): string {
+  const buffer = value.buffer;
+  let byteLength: number;
+  let byteOffset: number | undefined;
+  let detached = false;
+  try {
+    byteLength = value.byteLength;
+    byteOffset = value.byteOffset;
+  } catch {
+    // The DataView accessors throw after its buffer is detached. Node falls
+    // back to the buffer's remaining observable state for these fields.
+    byteLength = buffer.byteLength;
+    byteOffset = undefined;
+    detached = true;
+  }
+
+  // Pinned Node exposes the two failed extra-property reads as two additional
+  // indentation levels in this exact edge case; its own inspect suite asserts
+  // that layout. Keep the offset local so it cannot affect a containing value.
+  const indentationOffset = detached ? 4 : 0;
+  ctx.indentationLvl += indentationOffset;
+  try {
+    const entries = indented(ctx, () => [
+      `${ctx.stylize("[byteLength]", "string")}: ${
+        ctx.stylize(formatNumber(byteLength), "number")
+      }`,
+      `${ctx.stylize("[byteOffset]", "string")}: ${
+        byteOffset === undefined
+          ? ctx.stylize("undefined", "undefined")
+          : ctx.stylize(formatNumber(byteOffset), "number")
+      }`,
+      `${ctx.stylize("[buffer]", "string")}: ${
+        formatValue(ctx, buffer, recurseTimes + 1)
+      }`,
+    ]);
+    return formatWithKeys(ctx, value, recurseTimes, "DataView", ["{", "}"], entries);
+  } finally {
+    ctx.indentationLvl -= indentationOffset;
+  }
 }
 
 /** Run `body` one indentation level deeper, and put the level back after. */
@@ -850,8 +988,8 @@ function formatError(err: Error): string {
 }
 
 /**
- * The named properties of `value`, appended to `entries`, then wrapped in
- * `braces` with `base` in front.
+ * The named properties of `value`, appended to the caller-owned `output`,
+ * then wrapped in `braces` with `base` in front.
  *
  * Array indices are skipped because they were already formatted as entries;
  * every other enumerable string field is printed as `key: value`.
@@ -864,9 +1002,8 @@ function formatWithKeys(
   recurseTimes: number,
   base: string,
   braces: [string, string],
-  entries: string[],
+  output: string[],
 ): string {
-  const output = [...entries];
   const isArrayLike = Array.isArray(value) || isTypedArray(value) || isStringObject(value);
 
   let keys = Object.keys(value);
@@ -958,7 +1095,8 @@ function reduceToSingleString(
     // deeper one reads better stacked even when it would fit on a line, and
     // grouping having changed the entries rules out combining them again.
     if (limit >= 1 && ctx.currentDepth - recurseTimes < limit && entries.length === output.length) {
-      const start = output.length + ctx.indentationLvl + braces[0].length + base.length + 10;
+      const start = output.length + ctx.indentationLvl + braces[0].length + base.length +
+        (base === "" ? 0 : 1) + 10;
       if (isBelowBreakLength(ctx, output, start, base)) {
         const joined = output.join(", ");
         if (!joined.includes("\n")) {
@@ -997,7 +1135,8 @@ function groupArrayElements(ctx: Context, output: string[], value: InspectableOb
   const dataLen = new Array<number>(outputLength);
 
   for (; i < outputLength; i++) {
-    const len = output[i]?.length ?? 0;
+    const entry = output[i] ?? "";
+    const len = ctx.colors ? lengthWithoutInspectColors(entry) : entry.length;
     dataLen[i] = len;
     totalLength += len + separatorSpace;
     if (maxLength < len) maxLength = len;
@@ -1079,10 +1218,66 @@ function isBelowBreakLength(ctx: Context, output: string[], start: number, base:
     if (entry.includes("\n")) {
       return false;
     }
-    total += entry.length;
+    total += ctx.colors ? lengthWithoutInspectColors(entry) : entry.length;
     if (total > ctx.breakLength) {
       return false;
     }
   }
   return base === "" || !base.includes("\n");
+}
+
+/** Visible length of text styled by this module's `ESC [ digits m` pairs. */
+function lengthWithoutInspectColors(value: string): number {
+  let length = 0;
+  let index = 0;
+  while (index < value.length) {
+    if (value.charCodeAt(index) === 27 && value[index + 1] === "[") {
+      let end = index + 2;
+      while (end < value.length) {
+        const code = value.charCodeAt(end);
+        if (code === 109) {
+          index = end + 1;
+          break;
+        }
+        if ((code < 48 || code > 57) && code !== 59) {
+          break;
+        }
+        end += 1;
+      }
+      if (index > end) continue;
+    }
+    length += 1;
+    index += 1;
+  }
+  return length;
+}
+
+/** Remove only the SGR color pairs emitted by `stylizeWithColor`. */
+function withoutInspectColors(value: string): string {
+  let plain = "";
+  let start = 0;
+  let index = 0;
+  while (index < value.length) {
+    if (value.charCodeAt(index) !== 27 || value[index + 1] !== "[") {
+      index += 1;
+      continue;
+    }
+    let end = index + 2;
+    while (end < value.length) {
+      const code = value.charCodeAt(end);
+      if (code === 109) {
+        plain += value.slice(start, index);
+        index = end + 1;
+        start = index;
+        break;
+      }
+      if ((code < 48 || code > 57) && code !== 59) {
+        index += 1;
+        break;
+      }
+      end += 1;
+    }
+    if (end >= value.length) index += 1;
+  }
+  return start === 0 ? value : plain + value.slice(start);
 }
