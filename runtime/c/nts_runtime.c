@@ -4165,9 +4165,7 @@ NtsDataView *nts_dataview_part(NtsBuffer *buffer, double byte_offset,
   return nts_dataview_make(buffer, byte_offset, byte_length, false);
 }
 
-NtsBuffer *nts_dataview_buffer(const NtsDataView *view) {
-  return view->buffer;
-}
+NtsBuffer *nts_dataview_buffer(const NtsDataView *view) { return view->buffer; }
 
 double nts_dataview_byte_offset(const NtsDataView *view) {
   return (double)view->offset;
@@ -4239,7 +4237,7 @@ static void nts_dataview_write(unsigned char *into, unsigned width,
 #define NTS_DATAVIEW_GET1(NAME, TYPE)                                          \
   double nts_dataview_get_##NAME(const NtsDataView *view, double at) {         \
     const unsigned char *from = nts_dataview_at(view, at);                     \
-    return from ? (double)(TYPE)*from : 0.0;                                   \
+    return from ? (double)(TYPE) * from : 0.0;                                 \
   }
 
 #define NTS_DATAVIEW_SET1(NAME)                                                \
@@ -4307,7 +4305,7 @@ double nts_dataview_get_float64(const NtsDataView *view, double at,
     if (!into) {                                                               \
       return;                                                                  \
     }                                                                          \
-    nts_dataview_write(into, WIDTH, (uint64_t)(uint32_t)nts_to_int32(value),    \
+    nts_dataview_write(into, WIDTH, (uint64_t)(uint32_t)nts_to_int32(value),   \
                        little_endian);                                         \
   }
 
