@@ -1,9 +1,10 @@
 /* The native half of `node:fs`, sync surface.
  *
- * Every function is one `uv_fs_*` call with a NULL callback, which is how
- * node's own `SyncCall` runs them, plus the conversion between `NtsString` and
- * the UTF-8 libuv takes. Node's `src/node_file.cc` is the same shape with
- * `v8::Local` where these have `NtsString`.
+ * Operations use `uv_fs_*` with a NULL callback, which is how node's own
+ * `SyncCall` runs them, plus the conversion between `NtsString` and the UTF-8
+ * libuv takes. Whole-file operations repeat the primitive read or write until
+ * completion, just as `lib/fs.js` does. Node's `src/node_file.cc` has the same
+ * boundary with `v8::Local` where these have `NtsString`.
  *
  * Errors are reported as libuv's negative errno through `nts_errno`, and the
  * TypeScript builds the exception. Keeping the message construction upstairs
@@ -547,23 +548,21 @@ double nts_fs_lutimes(NtsString *path, double atime, double mtime) {
   return simple(result);
 }
 
-static int close_descriptor(uv_file descriptor) {
+/* With growth disabled, the capacity is the fstat size of a regular-file byte
+ * read and therefore also the limit Node observes if the file grows
+ * concurrently. Streaming and UTF-8 reads use an initial chunk and grow. */
+static char *read_entire_descriptor(uv_file descriptor,
+                                    size_t initial_capacity, bool allow_growth,
+                                    size_t *length, int *error_out) {
   uv_fs_t request;
-  int result = uv_fs_close(NULL, &request, descriptor, NULL);
-  uv_fs_req_cleanup(&request);
-  return result;
-}
-
-static char *read_entire_descriptor(uv_file descriptor, size_t *length,
-                                    int *error_out) {
-  uv_fs_t request;
-  size_t capacity = 65536;
+  size_t capacity = initial_capacity > 0 ? initial_capacity : 8192;
   size_t used = 0;
   char *data = malloc(capacity);
   int error = data == NULL ? UV_ENOMEM : 0;
 
   while (error == 0) {
     if (used == capacity) {
+      if (!allow_growth) break;
       if (capacity > SIZE_MAX / 2) {
         error = UV_ENOMEM;
         break;
@@ -605,7 +604,7 @@ static char *read_entire_descriptor(uv_file descriptor, size_t *length,
 }
 
 static int write_entire_descriptor(uv_file descriptor, const char *data,
-                                   size_t length, bool flush) {
+                                   size_t length) {
   uv_fs_t request;
   size_t written = 0;
   int error = 0;
@@ -629,40 +628,16 @@ static int write_entire_descriptor(uv_file descriptor, const char *data,
     written += (size_t)result;
   }
 
-  if (error == 0 && flush) {
-    error = uv_fs_fsync(NULL, &request, descriptor, NULL);
-    uv_fs_req_cleanup(&request);
-  }
   return error;
 }
 
-static double write_entire_file(NtsString *path, const char *data,
-                                size_t length, double flags, double mode,
-                                bool flush) {
-  char *p = native_path(path);
-  if (p == NULL) return (double)UV_ENOMEM;
-
-  uv_fs_t request;
-  int descriptor =
-      uv_fs_open(NULL, &request, p, (int)flags, (int)mode, NULL);
-  uv_fs_req_cleanup(&request);
-  free(p);
-  if (descriptor < 0) return simple(descriptor);
-
-  int error = write_entire_descriptor(descriptor, data, length, flush);
-  int close_error = close_descriptor(descriptor);
-  if (error == 0 && close_error < 0) error = close_error;
-  return simple(error);
-}
-
-double nts_fs_write_file_utf8(NtsString *path, NtsString *contents,
-                              double flags, double mode, bool flush) {
+double nts_fs_write_file_utf8_fd(double fd, NtsString *contents) {
   size_t length = 0;
   char *data = nts_node_to_utf8_alloc(contents, &length);
   if (data == NULL) return simple(UV_ENOMEM);
-  double result = write_entire_file(path, data, length, flags, mode, flush);
+  int error = write_entire_descriptor((uv_file)fd, data, length);
   free(data);
-  return result;
+  return simple(error);
 }
 
 /* ---------------------------------------------------------------- entries */
@@ -1137,10 +1112,12 @@ NtsArray *nts_fs_mkdtemp_bytes(NtsArray *template_) {
   return out;
 }
 
-NtsArray *nts_fs_read_file_bytes_fd(double fd) {
+NtsArray *nts_fs_read_file_bytes_fd(double fd, double expected_size) {
   size_t length = 0;
   int error = 0;
-  char *data = read_entire_descriptor((uv_file)fd, &length, &error);
+  bool size_is_known = expected_size > 0;
+  char *data = read_entire_descriptor(
+      (uv_file)fd, (size_t)expected_size, !size_is_known, &length, &error);
   nts_node_set_errno(error);
   if (data == NULL) return empty_doubles();
 
@@ -1152,32 +1129,31 @@ NtsArray *nts_fs_read_file_bytes_fd(double fd) {
   return out;
 }
 
+NtsString *nts_fs_read_file_utf8_fd(double fd) {
+  size_t length = 0;
+  int error = 0;
+  char *data =
+      read_entire_descriptor((uv_file)fd, 8192, true, &length, &error);
+  nts_node_set_errno(error);
+  if (data == NULL) return empty_string();
+
+  NtsString *out = nts_string_from_utf8(data, length);
+  free(data);
+  return out;
+}
+
 /* Write raw bytes. `writeFileSync` takes a string or a `Buffer`, and encoding a
  * `Buffer` into a string to pass it here would re-encode every byte above
  * 0x7f. Two bindings, one per kind of payload. */
-double nts_fs_write_file_bytes(NtsString *path, NtsArray *bytes, double flags,
-                               double mode, bool flush) {
+double nts_fs_write_file_bytes_fd(double fd, NtsArray *bytes) {
   size_t length = (size_t)bytes->header.length;
   unsigned char *data = malloc(length > 0 ? length : 1);
   if (data == NULL) return simple(UV_ENOMEM);
   for (size_t i = 0; i < length; i++) {
     data[i] = (unsigned char)NTS_ITEMS(bytes, double)[i];
   }
-  double result = write_entire_file(path, (const char *)data, length, flags,
-                                    mode, flush);
-  free(data);
-  return result;
-}
-
-double nts_fs_write_file_bytes_fd(double fd, NtsArray *bytes, bool flush) {
-  size_t length = (size_t)bytes->header.length;
-  unsigned char *data = malloc(length > 0 ? length : 1);
-  if (data == NULL) return simple(UV_ENOMEM);
-  for (size_t i = 0; i < length; i++) {
-    data[i] = (unsigned char)NTS_ITEMS(bytes, double)[i];
-  }
-  int error = write_entire_descriptor((uv_file)fd, (const char *)data,
-                                      length, flush);
+  int error =
+      write_entire_descriptor((uv_file)fd, (const char *)data, length);
   free(data);
   return simple(error);
 }

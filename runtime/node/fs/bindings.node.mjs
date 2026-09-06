@@ -204,14 +204,14 @@ globalThis.nts_fs_open = (path, flags, mode) => {
 globalThis.nts_fs_open_bytes = (path, flags, mode) =>
   globalThis.nts_fs_open(Buffer.from(path), flags, mode);
 globalThis.nts_fs_close = (fd) => status(() => fs.closeSync(fd));
-globalThis.nts_fs_read_file_bytes_fd = (fd) =>
+globalThis.nts_fs_read_file_bytes_fd = (fd, _expectedSize) =>
   attempt(() => Array.from(fs.readFileSync(fd)), []);
-globalThis.nts_fs_write_file_utf8 = (path, contents, flags, mode, flush) =>
-  status(() => fs.writeFileSync(path, contents, { flag: flags, mode, flush }));
-globalThis.nts_fs_write_file_bytes = (path, bytes, flags, mode, flush) =>
-  status(() => fs.writeFileSync(path, Buffer.from(bytes), { flag: flags, mode, flush }));
-globalThis.nts_fs_write_file_bytes_fd = (fd, bytes, flush) =>
-  status(() => fs.writeFileSync(fd, Buffer.from(bytes), { flush }));
+globalThis.nts_fs_read_file_utf8_fd = (fd) =>
+  attempt(() => fs.readFileSync(fd, "utf8"), "");
+globalThis.nts_fs_write_file_utf8_fd = (fd, contents) =>
+  status(() => fs.writeFileSync(fd, contents));
+globalThis.nts_fs_write_file_bytes_fd = (fd, bytes) =>
+  status(() => fs.writeFileSync(fd, Buffer.from(bytes)));
 globalThis.nts_fs_scandir = scandirSync;
 globalThis.nts_fs_scandir_bytes = (path) => scandirSync(Buffer.from(path));
 globalThis.nts_fs_opendir = (path) =>

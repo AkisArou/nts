@@ -944,7 +944,7 @@ const ioMaxLength = 2 ** 31 - 1;
  * already received from a pipe or device.
  */
 class ReadFileContext {
-  #path: string | undefined;
+  #path: BytePathLike | undefined;
   #ownsDescriptor: boolean;
   #encoding: string | null | undefined;
   #flag: string | number;
@@ -962,9 +962,9 @@ class ReadFileContext {
   #chunks: Buffer[] = [];
   #pendingError: unknown = null;
 
-  constructor(source: string | number, options: ReadFileOptions, callback: ReadFileCallback) {
-    this.#ownsDescriptor = typeof source === "string";
-    if (typeof source === "string") {
+  constructor(source: BytePathLike | number, options: ReadFileOptions, callback: ReadFileCallback) {
+    this.#ownsDescriptor = typeof source !== "number";
+    if (typeof source !== "number") {
       this.#path = source;
     } else {
       this.#fd = source;
@@ -983,7 +983,7 @@ class ReadFileContext {
     }
     const path = this.#path;
     if (path === undefined) {
-      this.#callback(new Error("fs readFile lost its validated path"));
+      this.#callback(new Error("fs readFile lost its path"));
       return;
     }
     open(
@@ -1202,14 +1202,14 @@ class ReadFileContext {
   }
 }
 
-export function readFile(path: PathLike | number, callback: ReadFileCallback): void;
+export function readFile(path: BytePathLike | number, callback: ReadFileCallback): void;
 export function readFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   options: string | ReadFileOptions | null,
   callback: ReadFileCallback,
 ): void;
 export function readFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   optionsOrCallback: string | ReadFileOptions | null | ReadFileCallback,
   callback?: ReadFileCallback,
 ): void {
@@ -1231,13 +1231,12 @@ export function readFile(
     complete(new AbortError(undefined, { cause: settings.signal.reason }));
     return;
   }
-  const source = usesCallerDescriptor ? path : getValidatedPath(path);
-  const context = new ReadFileContext(source, settings, complete);
+  const context = new ReadFileContext(path, settings, complete);
   context.start();
 }
 
 class WriteFileContext {
-  #source: string | number;
+  #path: BytePathLike | undefined;
   #buffer: Buffer;
   #flag: string | number;
   #mode: number | string;
@@ -1249,20 +1248,20 @@ class WriteFileContext {
   #offset = 0;
 
   constructor(
-    source: string | number,
+    source: BytePathLike | number,
     buffer: Buffer,
     options: FileOptions,
     callback: Callback,
   ) {
-    this.#source = source;
     this.#buffer = buffer;
-    this.#flag = options.flag ?? "w";
+    this.#flag = options.flag || "w";
     this.#mode = options.mode ?? 0o666;
     this.#signal = options.signal;
     this.#flush = options.flush ?? false;
     this.#callback = callback;
-    this.#ownsDescriptor = typeof source === "string";
+    this.#ownsDescriptor = typeof source !== "number";
     if (typeof source === "number") this.#fd = source;
+    else this.#path = source;
   }
 
   start(): void {
@@ -1270,9 +1269,9 @@ class WriteFileContext {
       this.#writeNext();
       return;
     }
-    const path = this.#source;
-    if (typeof path !== "string") {
-      this.#callback(new Error("fs writeFile lost its validated path"));
+    const path = this.#path;
+    if (path === undefined) {
+      this.#callback(new Error("fs writeFile lost its path"));
       return;
     }
     open(
@@ -1349,18 +1348,18 @@ class WriteFileContext {
 }
 
 export function writeFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   callback: Callback,
 ): void;
 export function writeFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   options: string | FileOptions | null,
   callback: Callback,
 ): void;
 export function writeFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   optionsOrCallback: string | FileOptions | null | Callback,
   callback?: Callback,
@@ -1391,7 +1390,7 @@ export function writeFile(
       data,
     );
   }
-  const encoding = settings.encoding ?? "utf8";
+  const encoding = settings.encoding || "utf8";
   const buffer = typeof data === "string"
     ? Buffer.from(data, encoding)
     : Buffer.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
@@ -1401,24 +1400,23 @@ export function writeFile(
     complete(new AbortError(undefined, { cause: settings.signal.reason }));
     return;
   }
-  const source = usesCallerDescriptor ? path : getValidatedPath(path);
-  const context = new WriteFileContext(source, buffer, settings, complete);
+  const context = new WriteFileContext(path, buffer, settings, complete);
   context.start();
 }
 
 export function appendFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   callback: Callback,
 ): void;
 export function appendFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   options: string | FileOptions | null,
   callback: Callback,
 ): void;
 export function appendFile(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   optionsOrCallback: string | FileOptions | null | Callback,
   callback?: Callback,

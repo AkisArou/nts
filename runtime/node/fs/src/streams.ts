@@ -83,7 +83,7 @@ interface StreamFileHandle {
     buffers: T,
     position: number | null,
   ): Promise<{ bytesWritten: number; buffers: T }>;
-  on(type: "close", listener: () => void): unknown;
+  on(type: "close", listener: () => void): this;
 }
 
 interface PendingDestroy {

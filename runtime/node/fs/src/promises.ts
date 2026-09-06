@@ -1601,7 +1601,7 @@ class FileHandleWriterImplementation implements FileHandleWriter {
 
 /** Open, incrementally write, optionally flush, and close one promise source. */
 async function writeDataToPath(
-  path: PathLike,
+  path: BytePathLike,
   data: unknown,
   options: string | FileOptions | undefined,
   defaultFlag: "a" | "w",
@@ -1641,7 +1641,7 @@ async function writeDataToPath(
 }
 
 export async function open(
-  path: PathLike,
+  path: BytePathLike,
   flags: string | number = "r",
   mode: number | string = 0o666,
 ): Promise<FileHandle> {
@@ -1669,12 +1669,12 @@ export function opendir(
 
 export const access = promisifyVoid(callbacks.access);
 export async function appendFile(
-  path: PathLike | FileHandle,
+  path: BytePathLike | FileHandle,
   data: FileWriteData,
   options?: string | FileOptions,
 ): Promise<void>;
 export async function appendFile(
-  path: PathLike | FileHandle,
+  path: BytePathLike | FileHandle,
   data: unknown,
   options?: string | FileOptions,
 ): Promise<void> {
@@ -1812,7 +1812,7 @@ export async function mkdtempDisposable(
 }
 
 export function readFile(
-  path: PathLike | FileHandle,
+  path: BytePathLike | FileHandle,
   options?: string | ReadFileOptions,
 ): Promise<string | Buffer> {
   if (path instanceof FileHandle) return path.readFile(options);
@@ -1966,12 +1966,12 @@ export async function lchmod(
 }
 export const lchown = promisifyVoid(callbacks.lchown);
 export async function writeFile(
-  path: PathLike | FileHandle,
+  path: BytePathLike | FileHandle,
   data: FileWriteData,
   options?: string | FileOptions,
 ): Promise<void>;
 export async function writeFile(
-  path: PathLike | FileHandle,
+  path: BytePathLike | FileHandle,
   data: unknown,
   options?: string | FileOptions,
 ): Promise<void> {

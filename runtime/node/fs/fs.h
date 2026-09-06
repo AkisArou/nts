@@ -27,12 +27,10 @@ NtsArray *nts_fs_statfs_bigint_bytes(NtsArray *path);
 double nts_fs_open(NtsString *path, double flags, double mode);
 double nts_fs_open_bytes(NtsArray *path, double flags, double mode);
 double nts_fs_close(double fd);
-NtsArray *nts_fs_read_file_bytes_fd(double fd);
-double nts_fs_write_file_utf8(NtsString *path, NtsString *contents,
-                              double flags, double mode, bool flush);
-double nts_fs_write_file_bytes(NtsString *path, NtsArray *bytes, double flags,
-                               double mode, bool flush);
-double nts_fs_write_file_bytes_fd(double fd, NtsArray *bytes, bool flush);
+NtsArray *nts_fs_read_file_bytes_fd(double fd, double expected_size);
+NtsString *nts_fs_read_file_utf8_fd(double fd);
+double nts_fs_write_file_utf8_fd(double fd, NtsString *contents);
+double nts_fs_write_file_bytes_fd(double fd, NtsArray *bytes);
 NtsArray *nts_fs_read(double fd, double length, double position);
 NtsArray *nts_fs_read_bigint(double fd, double length, __int128 position);
 double nts_fs_write(double fd, NtsArray *bytes, double position);

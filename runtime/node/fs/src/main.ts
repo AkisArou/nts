@@ -180,15 +180,11 @@ declare function nts_fs_statfs(path: string): number[];
 declare function nts_fs_statfs_bytes(path: number[]): number[];
 declare function nts_fs_statfs_bigint(path: string): string[];
 declare function nts_fs_statfs_bigint_bytes(path: number[]): string[];
-declare function nts_fs_read_file_bytes_fd(fd: number): number[];
-declare function nts_fs_write_file_utf8(
-  path: string, contents: string, flags: number, mode: number, flush: boolean,
-): number;
-declare function nts_fs_write_file_bytes(
-  path: string, bytes: number[], flags: number, mode: number, flush: boolean,
-): number;
+declare function nts_fs_read_file_bytes_fd(fd: number, expectedSize: number): number[];
+declare function nts_fs_read_file_utf8_fd(fd: number): string;
+declare function nts_fs_write_file_utf8_fd(fd: number, contents: string): number;
 declare function nts_fs_write_file_bytes_fd(
-  fd: number, bytes: number[], flush: boolean,
+  fd: number, bytes: number[],
 ): number;
 declare function nts_fs_scandir(path: string): number[][];
 declare function nts_fs_scandir_bytes(path: number[]): number[][];
@@ -727,13 +723,13 @@ export function accessSync(path: BytePathLike, mode: number | null = constants.F
  * signature, and the reason the return type is a union rather than a choice
  * made for the caller.
  */
-export function readFileSync(path: PathLike | number, options?: null): Buffer;
+export function readFileSync(path: BytePathLike | number, options?: null): Buffer;
 export function readFileSync(
-  path: PathLike | number,
+  path: BytePathLike | number,
   options: string | ReadFileOptions,
 ): string | Buffer;
 export function readFileSync(
-  path: PathLike | number,
+  path: BytePathLike | number,
   options?: string | ReadFileOptions | null,
 ): string | Buffer {
   const settings = getReadFileOptions(options);
@@ -744,6 +740,17 @@ export function readFileSync(
   if (!ownsDescriptor) validateFileDescriptor(fd);
 
   try {
+    // Node's exact-UTF-8 path reads fixed chunks directly, without allocating
+    // a byte result or issuing the fstat needed to size one.
+    if (
+      settings.buffer === undefined &&
+      (settings.encoding === "utf8" || settings.encoding === "utf-8")
+    ) {
+      const text = nts_fs_read_file_utf8_fd(fd);
+      checkErrno("read");
+      return text;
+    }
+
     const stats = fstatSync(fd);
     const size = stats.isFile() ? stats.size : 0;
     if (size > 2 ** 31 - 1) throw new ERR_FS_FILE_TOO_LARGE(size);
@@ -788,14 +795,16 @@ export function readFileSync(
       }
 
       const contents = supplied.subarray(0, position);
-      if (settings.encoding === null || settings.encoding === undefined) return contents;
+      if (!settings.encoding) return contents;
       return contents.toString(requireTextEncoding(settings.encoding, "options.encoding"));
     }
 
-    const bytes = nts_fs_read_file_bytes_fd(fd);
+    // The native reader still handles growth and unknown-size files, but the
+    // regular-file stat avoids repeated reallocations on the common path.
+    const bytes = nts_fs_read_file_bytes_fd(fd, size);
     checkErrno("read");
     const contents = Buffer.from(bytes);
-    if (settings.encoding === null || settings.encoding === undefined) return contents;
+    if (!settings.encoding) return contents;
     return contents.toString(requireTextEncoding(settings.encoding, "options.encoding"));
   } finally {
     if (ownsDescriptor) closeSync(fd);
@@ -803,13 +812,12 @@ export function readFileSync(
 }
 
 export function writeFileSync(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   options?: string | FileOptions,
 ): void {
   const settings = getOptions(options, { encoding: "utf8", mode: 0o666, flag: "w" });
-  const flags = flagsOf(settings.flag ?? "w");
-  const mode = parseFileMode(settings.mode, "mode", 0o666);
+  const flag = settings.flag || "w";
   const flush = settings.flush ?? false;
   validateBoolean(flush, "options.flush");
 
@@ -821,38 +829,68 @@ export function writeFileSync(
     );
   }
 
-  const encoding = requireTextEncoding(settings.encoding ?? "utf8", "options.encoding");
-  const bytes = typeof data === "string"
-    ? Buffer.from(data, encoding)
-    : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-  if (typeof path === "number") {
-    validateFileDescriptor(path);
-    check(nts_fs_write_file_bytes_fd(path, Array.from(bytes), flush), "write");
-    return;
+  const usesUtf8FastPath = typeof data === "string" &&
+    (settings.encoding === "utf8" || settings.encoding === "utf-8");
+  let payload: string | number[];
+  if (typeof data === "string") {
+    const encoding = requireTextEncoding(settings.encoding || "utf8", "options.encoding");
+    payload = usesUtf8FastPath
+      ? data
+      : Array.from(Buffer.from(data, encoding));
+  } else {
+    // After `getOptions` has validated the option, encoding applies only when
+    // text has to be converted. An existing view is copied byte-for-byte.
+    payload = Array.from(
+      new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
+    );
   }
 
-  const validatedPath = getValidatedPath(path);
-  const result = typeof data === "string" && (encoding === "utf8" || encoding === "utf-8")
-    ? nts_fs_write_file_utf8(validatedPath, data, flags, mode, flush)
-    : nts_fs_write_file_bytes(
-      validatedPath,
-      Array.from(bytes),
-      flags,
-      mode,
-      flush,
-    );
-  check(result, "open", validatedPath);
+  // Keep descriptor ownership and every failure stage visible here. A combined
+  // open/write/close binding cannot tell `uvException` which syscall failed,
+  // and a side-channel for that tag would make an otherwise synchronous
+  // result depend on hidden native state.
+  let ownsDescriptor = false;
+  let fd: number;
+  if (typeof path === "number") {
+    // Node's UTF-8 binding evaluates these arguments even for a caller-owned
+    // descriptor. Its ordinary byte path does not consult either option.
+    if (usesUtf8FastPath) {
+      flagsOf(flag);
+      parseFileMode(settings.mode, "mode", 0o666);
+    }
+    validateFileDescriptor(path);
+    fd = path;
+  } else {
+    const validatedPath = getValidatedBytePath(path);
+    const flags = flagsOf(flag);
+    const mode = parseFileMode(settings.mode, "mode", 0o666);
+    fd = typeof validatedPath === "string"
+      ? nts_fs_open(validatedPath, flags, mode)
+      : nts_fs_open_bytes(validatedPath, flags, mode);
+    check(fd, "open", displayBytePath(validatedPath));
+    ownsDescriptor = true;
+  }
+
+  try {
+    const result = typeof payload === "string"
+      ? nts_fs_write_file_utf8_fd(fd, payload)
+      : nts_fs_write_file_bytes_fd(fd, payload);
+    check(result, "write");
+    if (flush) fsyncSync(fd);
+  } finally {
+    if (ownsDescriptor) closeSync(fd);
+  }
 }
 
 export function appendFileSync(
-  path: PathLike | number,
+  path: BytePathLike | number,
   data: string | ArrayBufferView,
   options?: string | FileOptions,
 ): void {
   const settings = getOptions(options, { encoding: "utf8", mode: 0o666, flag: "a" });
   writeFileSync(path, data, {
     ...settings,
-    flag: typeof path === "number" ? "a" : (settings.flag ?? "a"),
+    flag: typeof path === "number" ? "a" : (settings.flag || "a"),
   });
 }
 
