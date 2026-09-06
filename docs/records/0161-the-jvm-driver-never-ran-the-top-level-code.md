@@ -115,3 +115,23 @@ through resident lines should cost, and the next instrument is a profile rather
 than another counter. Written down here so the row does not get filed as
 allocation, which is what it looks like and what I would have assumed.
 
+**And priced, before the rewrite it would have justified: 3.7%.** The same probe
+written twice — four entries, 8,192 lookups, two of them misses, differing in
+nothing but whether the key is reached through a box:
+
+| | instructions/call | cycles/call |
+| --- | ---: | ---: |
+| the key inline in the table | 423,292 | 72,990 |
+| the key behind a box | 426,401 | **75,722** |
+
+1.007x and 1.037x. The extra dependent load is real and it is nearly free,
+because four boxes are L1-resident and the loads pipeline. **So the second
+hypothesis on this row is refuted too**, and `NtsMap`'s `NtsValue[] keys` is not
+what makes it 3.35x.
+
+Two hypotheses, two instruments, two refutations, and no rewrite spent on
+either. What the row *is* remains open: 13.8 instructions a probe against the
+probe's 52, and 18.8 cycles against 9.2 — an IPC of 0.73 where the same lookup
+written by hand gets 5.6. The next instrument is a profile, and after two wrong
+guesses it should not be a third guess.
+

@@ -175,4 +175,6 @@ leaves wrong source in a checkout three sessions build from, for a window
   small once the variant exists.
 - **The `nts_jvm_web_*` intrinsic declarations**, so the transports are callable
   from the shared TypeScript rather than only from Java.
-- **ARM hardware.** See `docs/records/0181`.
+- **ARM hardware**, for the publication race itself. The keyword and the
+  barrier it generates are both checked; only the reordering that would expose
+  their absence is not. See `docs/records/0181`.

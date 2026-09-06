@@ -156,13 +156,25 @@ The C++ reference has `static std::int32_t step` and none of that. `drive__Closu
 sitting three lines away in the same file *is* specialized to `int32_t`, which is
 what makes the gap visible: the machinery exists and does not reach a global.
 
-It does not reach one on purpose. `hir::elements` excludes anything
-`stored_into_a_global` from element-width narrowing — a rule I added myself two
-days ago, for a real reason (a global's declared type is `number` and nothing was
-proving otherwise), and this is its bill. Narrowing a module-scope binding whose
-every write is an `int32` is the next piece of work, and it is worth more than
-this feature was: every counter and flag at module scope in `runtime/node` is
-paying the same toll.
+**Correction to the first version of this paragraph**, which blamed
+`stored_into_a_global` in `hir::elements`. That exclusion is real and is mine,
+but it is about *array element widths* and `step` is a scalar, so it has nothing
+to do with this. The truth is duller and larger: there is a narrowing pass for
+array elements (`hir::elements`) and one for object fields (`hir::fields`), and
+**there is none for globals**. `hir::specialize` reconciles a store *to* a
+global's declared type by inserting a conversion; nothing ever changes the type
+itself.
+
+That is also why the contrast is so clean. `closures` keeps its closure in the
+frame, and the closure's `step` is a *field* — so `hir::fields` narrows it to
+`int32_t` and the loop collapses. Move the same variable to module scope and it
+is a global, which no pass looks at, so it stays `double`. The same value, the
+same writes, the same reads; the only difference is which of the three kinds of
+storage it landed in, and one of the three has no analysis.
+
+So the next piece of work is `hir::globals`, modelled on `hir::fields`, and it is
+worth more than this feature was: every counter and flag at module scope in
+`runtime/node` is paying this toll.
 
 So the four-deliverable rule earned its keep here in the way it is supposed to.
 The example says the feature is correct, the unit tests say the refusal is

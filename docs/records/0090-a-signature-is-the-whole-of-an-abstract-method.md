@@ -1,7 +1,7 @@
 # A signature is the whole of an abstract method
 
 `abstract area(): number;` was refused. The ledger's line was accurate and
-slightly misleading: *"the class works, the declaration is refused"* — which
+slightly misleading: _"the class works, the declaration is refused"_ — which
 reads as a gap in the declaration and is really a gap in what the **caller**
 could be emitted from.
 
@@ -11,7 +11,7 @@ could be emitted from.
 
 An abstract method has no body, so the first instinct is that there is nothing
 to lower and the declaration can be dropped. Dropping it produces this, from the
-C backend, on the function that *calls* it:
+C backend, on the function that _calls_ it:
 
     NTS2006 no declaration for `Shape#area` to take a signature from
 
@@ -19,7 +19,7 @@ A call through `Shape#area` on a `Shape` receiver is an indirect call:
 
     v1 = ((double (*)(NtsObj_Shape *))v0->header.descriptor->methods[0])(v0);
 
-and that cast is a function-pointer *type*. `virtual_signature` builds it by
+and that cast is a function-pointer _type_. `virtual_signature` builds it by
 looking the target up in `program.funcs` and reading its parameters and return
 type. With the method refused there is no entry to read, and the caller is
 declined for a reason that names the callee.
@@ -47,7 +47,7 @@ is. An overload signature has no body either:
 
 The first two are declarations whose code the lowering cannot see, and the call
 goes to the implementation. Emitting an unreachable function for one would be a
-function that *can* be reached and does nothing. Only `abstract` means "there is
+function that _can_ be reached and does nothing. Only `abstract` means "there is
 deliberately no body here", so the body is optional exactly when the modifier
 says so, and `examples/unsupported` carries the overload case.
 
@@ -65,7 +65,7 @@ check. It compiled. It should not have:
       CallArgumentType { func: "two", callee: "Overloaded#pick", at: 2,
                          expected: Erased, found: Float { bits: 64 } } ]
 
-Refusing the signatures refused the *declarations*. The implementation has a
+Refusing the signatures refused the _declarations_. The implementation has a
 body, so it lowered — and the call sites resolve against whichever signature
 TypeScript picked, whose parameter list is not the implementation's.
 `pick(a: number)` and `pick(a: number, b?: number) { .. }` are two different
@@ -76,14 +76,14 @@ the first.
 every diagnostic says the compiler noticed. This one reported three refusals and
 produced invalid HIR anyway.
 
-So the implementation is refused too, detected from its *siblings*: an overload
+So the implementation is refused too, detected from its _siblings_: an overload
 implementation looks exactly like an ordinary method, and what makes it one is
 that another member of the same class shares its name and has no body. `abstract`
 is excluded, which is why this is a separate question rather than the same one —
 an abstract method and its implementation are never siblings.
 
 It was worth checking that the cause was overloads at all. A probe with the same
-implementation and *no* overload signatures — `pick(a: number, b?: number)`
+implementation and _no_ overload signatures — `pick(a: number, b?: number)`
 called both ways — agrees with node on 58 cases. Optional parameters were never
 the problem; the resolved signature was.
 
@@ -116,7 +116,7 @@ new row would time the same instruction sequence under a different name.
 
 `const shape: Shape = n > 0 ? new Circle(n) : new Square(-n)` still refuses,
 with "an erased value where a concrete representation is wanted" — and it
-refuses with a *concrete* base too, so it is not this feature's. TypeScript types
+refuses with a _concrete_ base too, so it is not this feature's. TypeScript types
 the ternary as `Circle | Square` and the declaration says `Shape`; nts erases the
 union rather than upcasting both arms to their common base. Base-first layout is
 what would make that upcast free, and `Layout.base` now records the relation the
