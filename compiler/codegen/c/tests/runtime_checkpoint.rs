@@ -103,6 +103,19 @@ fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
 }
 
 #[test]
+fn a_process_wide_count_still_answers_for_the_process() {
+    // Reference counting, because half the suite is about an object being
+    // released in one environment and a total taken in another, and under
+    // NoGC nothing is ever reclaimed so every count would agree by accident.
+    let report = run_suite("environments", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 10,
+        "expected at least 10 environment checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+#[test]
 fn promises_resolve_in_the_order_node_resolves_them() {
     // Reference counting, because one of the checks is that the reaction chain
     // gives its memory back, and under NoGC nothing does.

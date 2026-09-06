@@ -71,12 +71,239 @@
 /* And ours, which replaces `js_dtoa` for everything it can prove. */
 #include "nts_grisu.h"
 
+/* One environment: everything a runtime owns that a second runtime must not
+ * see (RFC 17.1).
+ *
+ * Until now these were forty-seven file-scope statics, and that was not merely
+ * untidy -- it was the reason `nts_retain` could be non-atomic. "A runtime owns
+ * its heap and a managed reference does not cross between runtimes" was a
+ * premise the code asserted and nothing enforced. Gathering the mutable state
+ * into one object a lane points at makes it structural: two environments are
+ * two heaps, and there is no longer a shared word for them to race over.
+ *
+ * The immutable tables stay where they are. A descriptor is the same on every
+ * lane and copying it per environment would buy nothing.
+ *
+ * FIELD ORDER IS MEASURED, NOT COSMETIC. The first nine fields are what
+ * `nts_release` and `nts_alloc` touch on every call, and they are placed to
+ * share one cache line. As separate statics they sat at 0xb0, 0xe0, 0xf0 and
+ * 0x118 -- 104 bytes across three lines. Reproducing both layouts with typed
+ * globals and a noinline body, the release predicate ran 0.62s scattered
+ * against 0.21s packed over 500M iterations, which is the locality plus the
+ * adjacent `draining`/`collecting` pair folding into one compare. That is a
+ * microbenchmark of the predicate and not of any program: what it justifies is
+ * the field order, not a claim about `nts-bench`, which is measured separately.
+ *
+ * Reached through a `_Thread_local` pointer. Measured against a plain global
+ * pointer at 0.215s against 0.212s -- inside run-to-run noise -- so the thread
+ * safety is free and the contract's "an owner thread cannot retain a closed
+ * environment" costs nothing to honour. */
+/* Whether this build recycles memory itself. Decided here rather than beside
+ * the allocator because `NtsEnvironment` has a field that depends on it, and a
+ * struct cannot be laid out by a macro defined two hundred lines later.
+ *
+ * Not under AddressSanitizer. A recycling allocator hands the same address back
+ * after a free, which is precisely the pattern the sanitizer exists to catch --
+ * so a build made to find use-after-free must get its memory from `malloc` and
+ * give it back. The cycle collector's use-after-free was found that way and
+ * would have been invisible behind a free list.
+ *
+ * `NTS_NO_RECYCLE` forces the same, for anyone measuring what the recycling is
+ * worth. */
+#ifdef NTS_PROVIDER_RC
+#if defined(__SANITIZE_ADDRESS__) || defined(NTS_NO_RECYCLE)
+#define NTS_RECYCLES 0
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define NTS_RECYCLES 0
+#else
+#define NTS_RECYCLES 1
+#endif
+#else
+#define NTS_RECYCLES 1
+#endif
+#else
+/* The bump allocator never frees, so there is nothing to recycle. */
+#define NTS_RECYCLES 0
+#endif
+
+typedef struct NtsQueue {
+  NtsTask *items;
+  uint32_t head;
+  uint32_t len;
+  uint32_t capacity;
+} NtsQueue;
+
+#if NTS_RECYCLES
+#define NTS_CLASS_STEP 16u
+#define NTS_CLASSES 65u /* up to 1024 bytes */
+#endif
+
+struct NtsEnvironment {
+  /* -- one cache line: the reference-counting and allocation hot path -- */
+  size_t retains;
+  size_t releases;
+  size_t roots_len;
+  size_t roots_cap;
+  NtsHeader **roots;
+  size_t candidates;
+  size_t bytes_held;
+  bool draining;
+  bool collecting;
+
+  /* -- allocation -- */
+#ifndef NTS_PROVIDER_RC
+  unsigned char *bump;
+  size_t bump_left;
+#endif
+#if NTS_RECYCLES
+  void *recycled[NTS_CLASSES];
+#endif
+
+  /* -- diagnostics, aggregated on read at a safe point -- */
+  size_t allocated;
+  size_t reclaimed;
+  size_t permanent;
+  size_t allocations;
+
+  /* -- destruction and cycle collection -- */
+  NtsHeader *dying;
+  NtsHeader **work;
+  size_t work_len;
+  size_t work_cap;
+  NtsHeader **dead;
+  size_t dead_len;
+  size_t dead_cap;
+  NtsHeader **zeroed;
+  size_t zeroed_len;
+  size_t zeroed_cap;
+
+  /* -- host, scheduling and interning -- */
+  NtsHost host;
+  bool host_installed;
+  uint32_t depth;
+  NtsQueue microtask_queue;
+  NtsQueue tick_queue;
+  NtsMap *symbol_registry;
+
+  /* Every live environment, so a process-wide diagnostic can sum them. Read
+   * only at a safe point by a lane that has coordinated with the owners; it is
+   * not a synchronization mechanism and nothing on the hot path touches it. */
+  NtsEnvironment *next;
+};
+
+/* The environment this lane is running in.
+ *
+ * One default is created for the standalone case, because a program that never
+ * asks for an environment still has exactly one. */
+static NtsEnvironment nts_default_environment;
+static NtsEnvironment *nts_environments = &nts_default_environment;
+/* `static` is load-bearing rather than tidiness: with external linkage the
+ * compiler must assume any call it cannot see reassigns this, and reload it
+ * after every one. File-local, nothing outside can name it, so repeated
+ * `nts_env->` reads in one function collapse to a single fetch. */
+static _Thread_local NtsEnvironment *nts_env = &nts_default_environment;
+
+NtsEnvironmentScope nts_environment_enter(NtsEnvironment *environment) {
+  NtsEnvironmentScope scope;
+  scope.previous = nts_env;
+  nts_env = environment;
+  return scope;
+}
+
+/* Restored rather than cleared to null: entering is a save/restore around a
+ * call, and a null in between would make an ordinary nested entry look like a
+ * closed environment. The contract's requirement is that leaving cannot leave
+ * an owner thread pointing at something closed, which restoring satisfies. */
+void nts_environment_leave(NtsEnvironmentScope *scope) {
+  nts_env = scope->previous;
+  scope->previous = 0;
+}
+
+NtsEnvironment *nts_environment_current(void) { return nts_env; }
+
+/* A second environment, for a host that runs more than one.
+ *
+ * Heap-allocated because how many there are is a runtime question, while the
+ * default one is static because a program that never asks for an environment
+ * still has exactly one and it must exist before `main` does -- top-level code
+ * allocates, and only four entry points in this file require a host. */
+NtsEnvironment *nts_environment_create(void) {
+  NtsEnvironment *environment =
+      (NtsEnvironment *)calloc(1u, sizeof(NtsEnvironment));
+  if (!environment) {
+    fprintf(stderr, "nts: out of memory creating an environment\n");
+    abort();
+  }
+  environment->next = nts_environments;
+  nts_environments = environment;
+  return environment;
+}
+
+/* Close an environment and stop counting it.
+ *
+ * Refuses one that still holds objects. The alternative is to unlink it and
+ * free the struct, which silently subtracts its allocations from every
+ * process-wide total -- so a leak inside a closed environment would read as
+ * less memory rather than more, which is the wrong direction for the one
+ * question these counters exist to answer.
+ *
+ * Refuses the current one for the same reason `leave` restores rather than
+ * clears: an owner lane must not be left pointing at something closed. */
+void nts_environment_destroy(NtsEnvironment *environment) {
+  if (environment == nts_env) {
+    fprintf(stderr,
+            "nts: an environment cannot destroy itself while current\n");
+    abort();
+  }
+  if (environment == &nts_default_environment) {
+    fprintf(stderr, "nts: the default environment is not destroyable\n");
+    abort();
+  }
+  if (environment->allocated != environment->reclaimed) {
+    fprintf(stderr,
+            "nts: %zu object(s) still live in an environment being closed\n",
+            environment->allocated - environment->reclaimed);
+    abort();
+  }
+  NtsEnvironment **link = &nts_environments;
+  while (*link && *link != environment) {
+    link = &(*link)->next;
+  }
+  if (*link) {
+    *link = environment->next;
+  }
+  free(environment);
+}
+
+/* Sum one counter across every live environment.
+ *
+ * This is the whole of what keeps the memory harness, the eight counter-reading
+ * C runtime tests and the differential leak check working after the counters
+ * stopped being process-global: they ask a process-wide question, and the
+ * answer is now a sum rather than a load. Aggregation on read is also why none
+ * of this needed to become atomic -- the cost is paid once, here, by whoever
+ * asks, instead of on every retain by everyone who does not.
+ *
+ * Read at a safe point. A lane that walks this list while another owner is
+ * mutating its own counters gets a torn total; that is a coordination
+ * requirement on the caller, not something a lock here could fix, because the
+ * counters are plain by design. */
+static size_t nts_total(size_t offset) {
+  size_t total = 0;
+  for (const NtsEnvironment *e = nts_environments; e; e = e->next) {
+    total += *(const size_t *)((const unsigned char *)e + offset);
+  }
+  return total;
+}
+#define NTS_TOTAL(field) nts_total(offsetof(NtsEnvironment, field))
+
 /* Allocated and reclaimed, so that a test can see reference counting balance
  * from inside the program rather than infer it from memory use. */
-static size_t nts_allocated = 0;
-static size_t nts_reclaimed = 0;
 
-size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
+size_t nts_live_count(void) {
+  return NTS_TOTAL(allocated) - NTS_TOTAL(reclaimed);
+}
 
 /* Allocations the runtime holds for the life of the process **by design**.
  *
@@ -89,23 +316,21 @@ size_t nts_live_count(void) { return nts_allocated - nts_reclaimed; }
  * Separate from `nts_live_count` rather than subtracted inside it, because that
  * count is answering "what is still held" and the honest answer includes these.
  * What a *leak* check wants is the growth that is not this. */
-static size_t nts_permanent = 0;
-size_t nts_permanent_count(void) { return nts_permanent; }
+size_t nts_permanent_count(void) { return NTS_TOTAL(permanent); }
 
 /* The same allocations again, in a window a measurement can zero.
  *
- * `nts_allocated` cannot be zeroed: `nts_live_count` is the difference between
- * it and `nts_reclaimed`, so resetting one half would read the whole heap as
- * freed and the leak check would go quiet. */
-static size_t nts_allocations = 0;
+ * `nts_env->allocated` cannot be zeroed: `nts_live_count` is the difference
+ * between it and `nts_env->reclaimed`, so resetting one half would read the
+ * whole heap as freed and the leak check would go quiet. */
 
-size_t nts_counted_allocations(void) { return nts_allocations; }
+size_t nts_counted_allocations(void) { return NTS_TOTAL(allocations); }
 
 /* One place, so a fifth allocator cannot arrive and be counted by one of these
  * and not the other. Objects, arrays, strings and maps all come through it. */
 static void nts_note_allocation(void) {
-  nts_allocated++;
-  nts_allocations++;
+  nts_env->allocated++;
+  nts_env->allocations++;
 }
 
 /* Every call to `nts_retain` and `nts_release`, counted where it arrives rather
@@ -119,18 +344,18 @@ static void nts_note_allocation(void) {
  *
  * So this measures what the *compiler asked for*, which is the thing an elision
  * pass is trying to make smaller. */
-static size_t nts_retains = 0;
-static size_t nts_releases = 0;
 
-size_t nts_counted_retains(void) { return nts_retains; }
-size_t nts_counted_releases(void) { return nts_releases; }
+size_t nts_counted_retains(void) { return NTS_TOTAL(retains); }
+size_t nts_counted_releases(void) { return NTS_TOTAL(releases); }
 
 /* Zeroed between phases, so a measurement can exclude set-up it did not mean to
  * charge the program for. */
 void nts_counting_reset(void) {
-  nts_retains = 0;
-  nts_releases = 0;
-  nts_allocations = 0;
+  for (NtsEnvironment *e = nts_environments; e; e = e->next) {
+    e->retains = 0;
+    e->releases = 0;
+    e->allocations = 0;
+  }
 }
 
 /* Cyclic, because one descriptor serves every array of references and says
@@ -145,14 +370,7 @@ const NtsDescriptor nts_desc_string2 = {NTS_KIND_STRING, 2,  0, 0, 0, 0,
 /* The NoGC provider (RFC 9.1): a bump allocator that never frees. For compiler
  * bring-up, allocation testing and bounded-lifetime tools. It must never be
  * selected silently for a general application. */
-#ifndef NTS_PROVIDER_RC
-static unsigned char *nts_bump = 0;
-static size_t nts_bump_left = 0;
-#endif
-
-static size_t nts_bytes_held = 0;
-
-size_t nts_live_bytes(void) { return nts_bytes_held; }
+size_t nts_live_bytes(void) { return NTS_TOTAL(bytes_held); }
 
 #ifdef NTS_PROVIDER_RC
 /* Whether an uninitialized allocation is filled with a pattern that is not
@@ -160,28 +378,6 @@ size_t nts_live_bytes(void) { return nts_bytes_held; }
  * Off by default; the differential suite turns it on. */
 #ifndef NTS_POISON
 #define NTS_POISON 0
-#endif
-
-/* Whether this build recycles memory itself.
- *
- * Not under AddressSanitizer. A recycling allocator hands the same address back
- * after a free, which is precisely the pattern the sanitizer exists to catch --
- * so a build made to find use-after-free must get its memory from `malloc` and
- * give it back. The cycle collector's use-after-free was found that way and
- * would have been invisible behind a free list.
- *
- * `NTS_NO_RECYCLE` forces the same, for anyone measuring what the recycling is
- * worth. */
-#if defined(__SANITIZE_ADDRESS__) || defined(NTS_NO_RECYCLE)
-#define NTS_RECYCLES 0
-#elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define NTS_RECYCLES 0
-#else
-#define NTS_RECYCLES 1
-#endif
-#else
-#define NTS_RECYCLES 1
 #endif
 
 /* Blocks that have been given back, by size.
@@ -204,16 +400,11 @@ size_t nts_live_bytes(void) { return nts_bytes_held; }
  * declaration that is not makes an AddressSanitizer build -- the one case that
  * turns recycling off -- fail on `-Wunused-variable`, which the tests build
  * with `-Werror`. */
-#if NTS_RECYCLES
-#define NTS_CLASS_STEP 16u
-#define NTS_CLASSES 65u /* up to 1024 bytes */
-static void *nts_recycled[NTS_CLASSES];
-#endif
 #endif
 
 void *nts_alloc(size_t bytes) {
   bytes = (bytes + 15u) & ~(size_t)15u;
-  nts_bytes_held += bytes;
+  nts_env->bytes_held += bytes;
 
 #ifdef NTS_PROVIDER_RC
   /* Its own allocation, because it will be given back. The size is kept in
@@ -221,11 +412,11 @@ void *nts_alloc(size_t bytes) {
    * consulting the descriptor -- which a freed object may no longer have. */
 #if NTS_RECYCLES
   size_t klass = bytes / NTS_CLASS_STEP;
-  if (klass < NTS_CLASSES && nts_recycled[klass]) {
-    void *block = nts_recycled[klass];
+  if (klass < NTS_CLASSES && nts_env->recycled[klass]) {
+    void *block = nts_env->recycled[klass];
     /* The list is threaded through the free blocks themselves, in the word
      * after the size -- which is dead while the block is dead. */
-    nts_recycled[klass] = *(void **)((unsigned char *)block + 8u);
+    nts_env->recycled[klass] = *(void **)((unsigned char *)block + 8u);
     return (unsigned char *)block + 16u;
   }
 #endif
@@ -237,18 +428,18 @@ void *nts_alloc(size_t bytes) {
   *block = bytes;
   return (unsigned char *)block + 16u;
 #else
-  if (bytes > nts_bump_left) {
+  if (bytes > nts_env->bump_left) {
     size_t chunk = bytes > (size_t)1048576 ? bytes : (size_t)1048576;
-    nts_bump = (unsigned char *)malloc(chunk);
-    if (!nts_bump) {
+    nts_env->bump = (unsigned char *)malloc(chunk);
+    if (!nts_env->bump) {
       fprintf(stderr, "nts: out of memory\n");
       abort();
     }
-    nts_bump_left = chunk;
+    nts_env->bump_left = chunk;
   }
-  void *result = nts_bump;
-  nts_bump += bytes;
-  nts_bump_left -= bytes;
+  void *result = nts_env->bump;
+  nts_env->bump += bytes;
+  nts_env->bump_left -= bytes;
   return result;
 #endif
 }
@@ -265,12 +456,12 @@ static void nts_free_block(void *object) {
 #ifdef NTS_PROVIDER_RC
   size_t *block = (size_t *)((unsigned char *)object - 16u);
   size_t bytes = *block;
-  nts_bytes_held -= bytes;
+  nts_env->bytes_held -= bytes;
 #if NTS_RECYCLES
   size_t klass = bytes / NTS_CLASS_STEP;
   if (klass < NTS_CLASSES) {
-    *(void **)((unsigned char *)block + 8u) = nts_recycled[klass];
-    nts_recycled[klass] = block;
+    *(void **)((unsigned char *)block + 8u) = nts_env->recycled[klass];
+    nts_env->recycled[klass] = block;
     return;
   }
 #endif
@@ -307,16 +498,16 @@ static void nts_free_storage(NtsHeader *object) {
    * above answers, asked of the type that made the question worth asking. */
   if (object->descriptor->kind == NTS_KIND_MAP) {
     NtsMap *map = (NtsMap *)object;
-    nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
-    nts_bytes_held -= (size_t)map->slots * sizeof(int32_t);
+    nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    nts_env->bytes_held -= (size_t)map->slots * sizeof(int32_t);
     if (map->values) {
-      nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+      nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
     }
     /* Paired with the `nts_note_allocation` in `nts_map_rehash`, the same way
      * the rehash pairs the one it replaces. A table that was never grown has no
      * block and none to give back. */
     if (map->keys) {
-      nts_reclaimed++;
+      nts_env->reclaimed++;
     }
     /* `keys` is the block: `values` and `index` point into it. */
     free(map->keys);
@@ -330,10 +521,10 @@ static void nts_free_storage(NtsHeader *object) {
   }
   NtsArray *array = (NtsArray *)object;
   if (!nts_array_is_inline(array)) {
-    nts_bytes_held -= (size_t)array->capacity * object->descriptor->size;
+    nts_env->bytes_held -= (size_t)array->capacity * object->descriptor->size;
     /* The element block this array grew into, given back. Counted where it was
      * taken -- see `nts_array_reserve`. */
-    nts_reclaimed++;
+    nts_env->reclaimed++;
     free(array->elements);
     array->elements = 0;
   }
@@ -368,7 +559,7 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
  * Making it atomic would cost every retain a locked instruction to defend
  * against sharing the design does not permit. */
 void nts_retain(NtsHeader *object) {
-  nts_retains++;
+  nts_env->retains++;
   if (!object || object->reserved == NTS_IMMORTAL ||
       (object->flags & NTS_DYING) != 0) {
     return;
@@ -628,8 +819,6 @@ static void nts_release_contents(NtsHeader *object) {
  * rather than recursive, and that is not a micro-optimization: releasing the
  * head of a million-node list recursively is a million C stack frames. It also
  * means destruction allocates nothing and so cannot fail. */
-static NtsHeader *nts_dying = 0;
-static bool nts_draining = false;
 
 /* Destroy an object whose count has reached zero: give up what it holds, then
  * give the memory back. */
@@ -638,23 +827,23 @@ static void nts_destroy(NtsHeader *object) {
    * count has to know not to, and the flags word is the only part of the
    * header still saying what this is. */
   object->flags |= NTS_DYING;
-  object->reserved = (uintptr_t)nts_dying;
-  nts_dying = object;
-  if (nts_draining) {
+  object->reserved = (uintptr_t)nts_env->dying;
+  nts_env->dying = object;
+  if (nts_env->draining) {
     /* An outer call owns the list and will get to it. */
     return;
   }
 
-  nts_draining = true;
-  while (nts_dying) {
-    NtsHeader *dead = nts_dying;
-    nts_dying = (NtsHeader *)dead->reserved;
+  nts_env->draining = true;
+  while (nts_env->dying) {
+    NtsHeader *dead = nts_env->dying;
+    nts_env->dying = (NtsHeader *)dead->reserved;
     /* This may link more objects into the list, which the loop picks up. */
     nts_release_contents(dead);
-    nts_reclaimed++;
+    nts_env->reclaimed++;
     nts_free(dead);
   }
-  nts_draining = false;
+  nts_env->draining = false;
 }
 
 /* --- The cycle collector (RFC 9.2) -----------------------------------------
@@ -683,14 +872,6 @@ static void nts_destroy(NtsHeader *object) {
  */
 
 /* Candidate roots, and the shared worklist the traversals run on. */
-static NtsHeader **nts_roots = 0;
-static size_t nts_roots_len = 0;
-static size_t nts_roots_cap = 0;
-static NtsHeader **nts_work = 0;
-static size_t nts_work_len = 0;
-static size_t nts_work_cap = 0;
-static size_t nts_candidates = 0;
-static bool nts_collecting = false;
 
 /* Collection runs when this many candidates have accumulated. Any threshold is
  * a guess; what it trades is promptness against how often the walk happens, and
@@ -725,7 +906,7 @@ static void nts_push(NtsHeader ***buffer, size_t *len, size_t *cap,
 }
 
 static void nts_work_push(NtsHeader *object) {
-  nts_push(&nts_work, &nts_work_len, &nts_work_cap, object);
+  nts_push(&nts_env->work, &nts_env->work_len, &nts_env->work_cap, object);
 }
 
 static uint32_t nts_color(const NtsHeader *object) {
@@ -748,12 +929,12 @@ static void nts_possible_root(NtsHeader *object) {
     return;
   }
   object->flags |= NTS_BUFFERED;
-  nts_push(&nts_roots, &nts_roots_len, &nts_roots_cap, object);
-  nts_candidates++;
+  nts_push(&nts_env->roots, &nts_env->roots_len, &nts_env->roots_cap, object);
+  nts_env->candidates++;
 }
 
 void nts_release(NtsHeader *object) {
-  nts_releases++;
+  nts_env->releases++;
   if (!object || object->reserved == NTS_IMMORTAL) {
     return;
   }
@@ -776,8 +957,8 @@ void nts_release(NtsHeader *object) {
     /* Not while destroying: the dying list keeps its next pointer in the
      * count word, so an object on it has no count for the collector to
      * read. */
-    if (!nts_draining && !nts_collecting &&
-        nts_roots_len >= NTS_COLLECT_THRESHOLD) {
+    if (!nts_env->draining && !nts_env->collecting &&
+        nts_env->roots_len >= NTS_COLLECT_THRESHOLD) {
       nts_collect_cycles();
     }
     return;
@@ -804,10 +985,10 @@ static void nts_mark_gray_child(NtsHeader *child) {
 }
 
 static void nts_mark_gray(NtsHeader *root) {
-  nts_work_len = 0;
+  nts_env->work_len = 0;
   nts_work_push(root);
-  while (nts_work_len) {
-    NtsHeader *object = nts_work[--nts_work_len];
+  while (nts_env->work_len) {
+    NtsHeader *object = nts_env->work[--nts_env->work_len];
     if (nts_color(object) == NTS_GRAY || object->reserved == NTS_IMMORTAL) {
       continue;
     }
@@ -831,11 +1012,11 @@ static void nts_scan_black_child(NtsHeader *child) {
 static void nts_scan_black(NtsHeader *root) {
   /* Runs inside `nts_scan`'s loop, so it uses the tail of the same worklist
    * rather than clearing it. */
-  size_t floor = nts_work_len;
+  size_t floor = nts_env->work_len;
   nts_paint(root, NTS_BLACK);
   nts_work_push(root);
-  while (nts_work_len > floor) {
-    NtsHeader *object = nts_work[--nts_work_len];
+  while (nts_env->work_len > floor) {
+    NtsHeader *object = nts_env->work[--nts_env->work_len];
     nts_each_reference(object, nts_scan_black_child);
   }
 }
@@ -843,10 +1024,10 @@ static void nts_scan_black(NtsHeader *root) {
 static void nts_scan_child(NtsHeader *child) { nts_work_push(child); }
 
 static void nts_scan(NtsHeader *root) {
-  nts_work_len = 0;
+  nts_env->work_len = 0;
   nts_work_push(root);
-  while (nts_work_len) {
-    NtsHeader *object = nts_work[--nts_work_len];
+  while (nts_env->work_len) {
+    NtsHeader *object = nts_env->work[--nts_env->work_len];
     if (nts_color(object) != NTS_GRAY) {
       continue;
     }
@@ -869,49 +1050,43 @@ static void nts_scan(NtsHeader *root) {
  * freed the second still names it, and the walk reads a color out of memory
  * that is gone. The recursive form the paper gives frees *after* recursing,
  * which has the same effect; a worklist has to say so. */
-static NtsHeader **nts_dead = 0;
-static size_t nts_dead_len = 0;
-static size_t nts_dead_cap = 0;
 
 /* Candidates that reached zero while the buffer held them. They are reclaimed
  * at the very end of a collection and never during one -- see the reclaim pass
  * in `nts_collect_cycles` for why the timing is the whole point. */
-static NtsHeader **nts_zeroed = 0;
-static size_t nts_zeroed_len = 0;
-static size_t nts_zeroed_cap = 0;
 
 static void nts_collect_white_child(NtsHeader *child) { nts_work_push(child); }
 
 static void nts_gather_white(NtsHeader *root) {
-  nts_work_len = 0;
+  nts_env->work_len = 0;
   nts_work_push(root);
-  while (nts_work_len) {
-    NtsHeader *object = nts_work[--nts_work_len];
+  while (nts_env->work_len) {
+    NtsHeader *object = nts_env->work[--nts_env->work_len];
     if (nts_color(object) != NTS_WHITE || (object->flags & NTS_BUFFERED)) {
       continue;
     }
     nts_paint(object, NTS_BLACK);
     nts_each_reference(object, nts_collect_white_child);
-    nts_push(&nts_dead, &nts_dead_len, &nts_dead_cap, object);
+    nts_push(&nts_env->dead, &nts_env->dead_len, &nts_env->dead_cap, object);
   }
 }
 
 void nts_collect_cycles(void) {
-  if (nts_collecting) {
+  if (nts_env->collecting) {
     return;
   }
-  nts_collecting = true;
+  nts_env->collecting = true;
 
   /* Mark. A candidate that is no longer purple was retained since it was
    * buffered, so it is reachable and not a root; one whose count reached zero
    * while buffered was left for exactly this moment. */
   size_t kept = 0;
-  for (size_t index = 0; index < nts_roots_len; index++) {
-    NtsHeader *root = nts_roots[index];
+  for (size_t index = 0; index < nts_env->roots_len; index++) {
+    NtsHeader *root = nts_env->roots[index];
     if (nts_color(root) == NTS_PURPLE && root->reserved > 0 &&
         root->reserved != NTS_IMMORTAL) {
       nts_mark_gray(root);
-      nts_roots[kept++] = root;
+      nts_env->roots[kept++] = root;
       continue;
     }
     root->flags &= ~NTS_BUFFERED;
@@ -923,36 +1098,37 @@ void nts_collect_cycles(void) {
        * emptying the buffer below drops the last pointer to it. One object per
        * collection, leaked in a way no count disagrees about: a linked list
        * built head-first leaked exactly one link at every length above two. */
-      nts_push(&nts_zeroed, &nts_zeroed_len, &nts_zeroed_cap, root);
+      nts_push(&nts_env->zeroed, &nts_env->zeroed_len, &nts_env->zeroed_cap,
+               root);
     }
   }
-  nts_roots_len = kept;
+  nts_env->roots_len = kept;
 
-  for (size_t index = 0; index < nts_roots_len; index++) {
-    nts_scan(nts_roots[index]);
+  for (size_t index = 0; index < nts_env->roots_len; index++) {
+    nts_scan(nts_env->roots[index]);
   }
 
   /* Collect. The buffered flag is cleared first for every root, because
    * `nts_collect_white` refuses to free anything still buffered -- which is
    * how a root that is white but still in the buffer stays reachable until
    * its own turn. */
-  for (size_t index = 0; index < nts_roots_len; index++) {
-    nts_roots[index]->flags &= ~NTS_BUFFERED;
+  for (size_t index = 0; index < nts_env->roots_len; index++) {
+    nts_env->roots[index]->flags &= ~NTS_BUFFERED;
   }
-  nts_dead_len = 0;
-  for (size_t index = 0; index < nts_roots_len; index++) {
-    nts_gather_white(nts_roots[index]);
+  nts_env->dead_len = 0;
+  for (size_t index = 0; index < nts_env->roots_len; index++) {
+    nts_gather_white(nts_env->roots[index]);
   }
-  nts_roots_len = 0;
+  nts_env->roots_len = 0;
 
   /* Every one of these is garbage and every reference between them has
    * already been accounted for, so this frees the memory and nothing else --
    * releasing contents here would decrement counts a second time. */
-  for (size_t index = 0; index < nts_dead_len; index++) {
-    nts_reclaimed++;
-    nts_free(nts_dead[index]);
+  for (size_t index = 0; index < nts_env->dead_len; index++) {
+    nts_env->reclaimed++;
+    nts_free(nts_env->dead[index]);
   }
-  nts_dead_len = 0;
+  nts_env->dead_len = 0;
 
   /* Now, with every count settled and the buffer already empty, reclaim what
    * was found dead at the start. Ordinary release handles the cascade, and
@@ -964,14 +1140,14 @@ void nts_collect_cycles(void) {
    *
    * These cannot reach each other -- a zeroed object is one nothing points at
    * -- so no entry in this list is freed twice. */
-  for (size_t index = 0; index < nts_zeroed_len; index++) {
-    nts_destroy(nts_zeroed[index]);
+  for (size_t index = 0; index < nts_env->zeroed_len; index++) {
+    nts_destroy(nts_env->zeroed[index]);
   }
-  nts_zeroed_len = 0;
-  nts_collecting = false;
+  nts_env->zeroed_len = 0;
+  nts_env->collecting = false;
 }
 
-size_t nts_cycle_candidates(void) { return nts_candidates; }
+size_t nts_cycle_candidates(void) { return nts_env->candidates; }
 
 /* Rendered the way a person reading a crash needs it, which is not the way
  * `String(e)` would: this is the end of the program, so a thrown object prints
@@ -1260,7 +1436,7 @@ static NTS_NOINLINE void nts_array_grow(NtsArray *a) {
      * nothing. That is how the missing free below stayed invisible -- a
      * program that leaked every element block it ever grew measured as holding
      * exactly what it should. */
-    nts_bytes_held += bytes;
+    nts_env->bytes_held += bytes;
     /* And counted, which it was not.
      *
      * `nts_note_allocation` says "objects, arrays, strings and maps all come
@@ -1277,10 +1453,10 @@ static NTS_NOINLINE void nts_array_grow(NtsArray *a) {
     nts_note_allocation();
     if (!nts_array_is_inline(a)) {
       /* Not the inline block, so it was one of ours to free. */
-      nts_bytes_held -= (size_t)a->capacity * a->header.descriptor->size;
+      nts_env->bytes_held -= (size_t)a->capacity * a->header.descriptor->size;
       /* Paired with the note above, or `nts_live_count` -- which is
        * `allocated - reclaimed` -- reads every grown array as a leak. */
-      nts_reclaimed++;
+      nts_env->reclaimed++;
       free(a->elements);
     }
     a->elements = moved;
@@ -1542,8 +1718,9 @@ static void nts_widen(uint16_t *into, const NtsString *from) {
  * The count is `NTS_IMMORTAL`, which is what makes the rest of the system need
  * no new rule: retain and release already do nothing to an immortal object, and
  * the compiler emits a release wherever this string's live range ends whether
- * it is on the heap or not. `nts_allocated` is deliberately not touched -- this
- * did not allocate, and `nts_live_count` is how reference counting is tested.
+ * it is on the heap or not. `nts_env->allocated` is deliberately not touched --
+ * this did not allocate, and `nts_live_count` is how reference counting is
+ * tested.
  */
 static NtsString *nts_str_place(NtsHeader *into, uint32_t length, int wide) {
   into->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
@@ -3763,7 +3940,6 @@ static const NtsDescriptor nts_desc_symbol = {
  * registered symbol is reachable from the registry for the life of the runtime,
  * which is exactly the difference between `Symbol.for("a")` and `Symbol("a")`.
  * So it is not a leak; it is the semantics. */
-static NtsMap *nts_symbol_registry = 0;
 
 NtsSymbol *nts_symbol_new(NtsString *description) {
   NtsSymbol *symbol = (NtsSymbol *)nts_alloc(sizeof(NtsSymbol));
@@ -3780,14 +3956,14 @@ NtsSymbol *nts_symbol_new(NtsString *description) {
 }
 
 NtsSymbol *nts_symbol_for(NtsString *key) {
-  if (!nts_symbol_registry) {
-    nts_symbol_registry = nts_map_alloc(NTS_KEY_STRING, true);
+  if (!nts_env->symbol_registry) {
+    nts_env->symbol_registry = nts_map_alloc(NTS_KEY_STRING, true);
     /* The map header. Its key block is counted where it is allocated, in
      * `nts_map_rehash`, and is accounted for on the first insertion below. */
-    nts_permanent++;
+    nts_env->permanent++;
   }
   NtsValue slot = nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING);
-  NtsValue found = nts_map_get(nts_symbol_registry, slot);
+  NtsValue found = nts_map_get(nts_env->symbol_registry, slot);
   if (nts_value_tag(found) == NTS_TAG_SYMBOL) {
     /* Owned already: `nts_map_get` retains what it hands back, which is this
      * file's convention throughout -- `nts_map_key_at` and `nts_map_value_at`
@@ -3803,18 +3979,18 @@ NtsSymbol *nts_symbol_for(NtsString *key) {
   }
   size_t before = nts_live_count();
   NtsSymbol *symbol = nts_symbol_new(key);
-  nts_map_set(nts_symbol_registry, slot,
+  nts_map_set(nts_env->symbol_registry, slot,
               nts_value_of_reference((NtsHeader *)symbol, NTS_TAG_SYMBOL));
   /* Whatever that took: the symbol, the key the registry now holds, and the
    * table's block the first time it grows. Measured rather than enumerated,
    * because enumerating it would be a second copy of the map's own growth rule
    * and would be wrong the first time that rule changed. */
-  nts_permanent += nts_live_count() - before;
+  nts_env->permanent += nts_live_count() - before;
   return symbol;
 }
 
 NtsString *nts_symbol_key_for(const NtsSymbol *symbol) {
-  if (!symbol || !nts_symbol_registry) {
+  if (!symbol || !nts_env->symbol_registry) {
     return 0;
   }
   /* Walked rather than looked up, because the registry maps key to symbol and
@@ -3822,11 +3998,11 @@ NtsString *nts_symbol_key_for(const NtsSymbol *symbol) {
    * cost every `Symbol.for` a write to keep it. */
   /* `used` rather than `header.length`: the registry never deletes, so the two
    * are equal, and `used` is what indexes the entry array. */
-  for (uint32_t at = 0; at < nts_symbol_registry->used; at++) {
-    NtsValue value = nts_map_value_at(nts_symbol_registry, (double)at);
+  for (uint32_t at = 0; at < nts_env->symbol_registry->used; at++) {
+    NtsValue value = nts_map_value_at(nts_env->symbol_registry, (double)at);
     if (nts_value_tag(value) == NTS_TAG_SYMBOL &&
         (const NtsSymbol *)nts_value_reference(value) == symbol) {
-      NtsValue key = nts_map_key_at(nts_symbol_registry, (double)at);
+      NtsValue key = nts_map_key_at(nts_env->symbol_registry, (double)at);
       /* Owned already: `nts_map_key_at` retains before it returns. */
       return (NtsString *)nts_value_reference(key);
     }
@@ -3983,20 +4159,20 @@ static void nts_map_rehash(NtsMap *map) {
     }
   }
 
-  nts_bytes_held += (size_t)wanted * sizeof(NtsValue);
-  nts_bytes_held += (size_t)slots * sizeof(int32_t);
+  nts_env->bytes_held += (size_t)wanted * sizeof(NtsValue);
+  nts_env->bytes_held += (size_t)slots * sizeof(int32_t);
   if (map->holds_values) {
-    nts_bytes_held += (size_t)wanted * sizeof(NtsValue);
+    nts_env->bytes_held += (size_t)wanted * sizeof(NtsValue);
   }
   if (map->keys) {
-    nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
-    nts_bytes_held -= (size_t)map->slots * sizeof(int32_t);
+    nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    nts_env->bytes_held -= (size_t)map->slots * sizeof(int32_t);
     if (map->values) {
-      nts_bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+      nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
     }
     /* Paired with the one above, or `nts_live_count` -- which is
      * `allocated - reclaimed` -- would read every grown table as a leak. */
-    nts_reclaimed++;
+    nts_env->reclaimed++;
     /* `keys` is the block: `values` and `index` point into it. */
     free(map->keys);
   }
@@ -4280,17 +4456,13 @@ double nts_str_point_width(const NtsString *s, double at) {
  * choice.
  */
 
-static NtsHost nts_host;
-static bool nts_host_installed = false;
-static uint32_t nts_depth = 0;
-
 void nts_host_install(const NtsHost *host) {
-  nts_host = *host;
-  nts_host_installed = true;
+  nts_env->host = *host;
+  nts_env->host_installed = true;
 }
 
 static void nts_require_host(const char *what) {
-  if (!nts_host_installed) {
+  if (!nts_env->host_installed) {
     fprintf(stderr, "nts: %s before a host was installed\n", what);
     abort();
   }
@@ -4300,15 +4472,6 @@ static void nts_require_host(const char *what) {
  *
  * A ring rather than a list because the drain is FIFO and the whole point is
  * that it stays FIFO: reaction order is what the specification pins. */
-typedef struct NtsQueue {
-  NtsTask *items;
-  uint32_t head;
-  uint32_t len;
-  uint32_t capacity;
-} NtsQueue;
-
-static NtsQueue nts_microtask_queue;
-static NtsQueue nts_tick_queue;
 
 static void nts_queue_push(NtsQueue *queue, NtsTask task) {
   if (queue->len == queue->capacity) {
@@ -4344,17 +4507,19 @@ static bool nts_queue_shift(NtsQueue *queue, NtsTask *out) {
 void nts_enqueue_microtask(NtsTask task) {
   /* A host that owns checkpointing owns the queue with it, so there is one
    * ordering rather than two interleaved (RFC 26.6). */
-  if (nts_host_installed && nts_host.enqueue_microtask) {
-    nts_host.enqueue_microtask(nts_host.state, task);
+  if (nts_env->host_installed && nts_env->host.enqueue_microtask) {
+    nts_env->host.enqueue_microtask(nts_env->host.state, task);
     return;
   }
-  nts_queue_push(&nts_microtask_queue, task);
+  nts_queue_push(&nts_env->microtask_queue, task);
 }
 
-void nts_enqueue_tick(NtsTask task) { nts_queue_push(&nts_tick_queue, task); }
+void nts_enqueue_tick(NtsTask task) {
+  nts_queue_push(&nts_env->tick_queue, task);
+}
 
 bool nts_has_pending_work(void) {
-  return nts_microtask_queue.len != 0 || nts_tick_queue.len != 0;
+  return nts_env->microtask_queue.len != 0 || nts_env->tick_queue.len != 0;
 }
 
 /* The checkpoint.
@@ -4402,7 +4567,7 @@ bool nts_has_pending_work(void) {
  * and one that makes cycles far faster than it checkpoints still wants the
  * bound the threshold gives it. */
 static void nts_collect_at_checkpoint(void) {
-  if (nts_collecting || nts_draining || nts_roots_len == 0) {
+  if (nts_env->collecting || nts_env->draining || nts_env->roots_len == 0) {
     return;
   }
   nts_collect_cycles();
@@ -4411,29 +4576,29 @@ static void nts_collect_at_checkpoint(void) {
 static void nts_process_ticks_and_rejections(void) {
   NtsTask task;
   do {
-    while (nts_queue_shift(&nts_tick_queue, &task)) {
+    while (nts_queue_shift(&nts_env->tick_queue, &task)) {
       task.run(task.state);
     }
-    while (nts_queue_shift(&nts_microtask_queue, &task)) {
+    while (nts_queue_shift(&nts_env->microtask_queue, &task)) {
       task.run(task.state);
     }
-  } while (nts_tick_queue.len != 0);
+  } while (nts_env->tick_queue.len != 0);
   nts_collect_at_checkpoint();
 }
 
-void nts_enter(void) { nts_depth++; }
+void nts_enter(void) { nts_env->depth++; }
 
 void nts_leave(void) {
-  if (nts_depth == 0) {
+  if (nts_env->depth == 0) {
     fprintf(stderr, "nts: unbalanced nts_leave\n");
     abort();
   }
-  nts_depth--;
-  if (nts_depth != 0) {
+  nts_env->depth--;
+  if (nts_env->depth != 0) {
     return;
   }
   /* A host that supplied `enqueue_microtask` checkpoints for us. */
-  if (nts_host_installed && nts_host.enqueue_microtask) {
+  if (nts_env->host_installed && nts_env->host.enqueue_microtask) {
     return;
   }
   nts_process_ticks_and_rejections();
@@ -4443,7 +4608,7 @@ void nts_checkpoint(void) {
   /* The same opt-out `nts_leave` makes, for the same reason: a host that
    * supplied `enqueue_microtask` owns checkpointing, and draining here would
    * be a second ordering beside its one. */
-  if (nts_host_installed && nts_host.enqueue_microtask) {
+  if (nts_env->host_installed && nts_env->host.enqueue_microtask) {
     return;
   }
   nts_process_ticks_and_rejections();
@@ -4456,15 +4621,15 @@ void nts_task_run(NtsTask task) {
 }
 
 bool nts_is_owner_thread(void) {
-  return !nts_host_installed || !nts_host.is_owner_thread ||
-         nts_host.is_owner_thread(nts_host.state);
+  return !nts_env->host_installed || !nts_env->host.is_owner_thread ||
+         nts_env->host.is_owner_thread(nts_env->host.state);
 }
 
 /* Posting is thin, and these exist for the assertion and the contract note
  * rather than for the indirection. */
 void nts_post_task(NtsTask task) {
   nts_require_host("nts_post_task");
-  nts_host.post_task(nts_host.state, task);
+  nts_env->host.post_task(nts_env->host.state, task);
 }
 
 /* The delay every host is given: whole milliseconds, not negative, and small
@@ -4500,13 +4665,13 @@ double nts_delay(double delay_ms) {
 
 NtsTimerId nts_post_delayed(NtsTask task, double delay_ms, bool repeating) {
   nts_require_host("nts_post_delayed");
-  return nts_host.post_delayed(nts_host.state, task, nts_delay(delay_ms),
-                               repeating);
+  return nts_env->host.post_delayed(nts_env->host.state, task,
+                                    nts_delay(delay_ms), repeating);
 }
 
 void nts_cancel_delayed(NtsTimerId id) {
   nts_require_host("nts_cancel_delayed");
-  nts_host.cancel_delayed(nts_host.state, id);
+  nts_env->host.cancel_delayed(nts_env->host.state, id);
 }
 
 /* The one entry point that is safe off-thread. Everything a platform completes
@@ -4514,7 +4679,7 @@ void nts_cancel_delayed(NtsTimerId id) {
  * home through here before it may touch the heap. */
 void nts_post_from_any_thread(NtsTask task) {
   nts_require_host("nts_post_from_any_thread");
-  nts_host.post_from_any_thread(nts_host.state, task);
+  nts_env->host.post_from_any_thread(nts_env->host.state, task);
 }
 
 /* --- Promises (RFC 12) -----------------------------------------------------

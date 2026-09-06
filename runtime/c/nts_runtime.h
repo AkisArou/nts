@@ -1616,6 +1616,40 @@ typedef struct NtsHost {
   void *state;
 } NtsHost;
 
+/* An environment: one runtime's heap, queues, host and diagnostics.
+ *
+ * Opaque here on purpose. Everything that reads a field of it is inside
+ * `nts_runtime.c`, and keeping the layout private is what lets the hot fields
+ * be reordered on a measurement without recompiling anything that includes
+ * this header.
+ *
+ * A managed reference never crosses between two of these, which is why
+ * `nts_retain` can be a plain increment (RFC 17.1). */
+typedef struct NtsEnvironment NtsEnvironment;
+
+/* What `enter` saves so `leave` can put it back. */
+typedef struct NtsEnvironmentScope {
+  NtsEnvironment *previous;
+} NtsEnvironmentScope;
+
+/* Make `environment` the one this lane is running in, returning the previous
+ * one for `nts_environment_leave` to restore. Entries nest. */
+NtsEnvironmentScope nts_environment_enter(NtsEnvironment *environment);
+void nts_environment_leave(NtsEnvironmentScope *scope);
+
+/* The environment this lane is running in. Never null: a program that never
+ * asks for one still has exactly one. */
+NtsEnvironment *nts_environment_current(void);
+
+/* A second environment, and its close.
+ *
+ * `destroy` refuses one that is current, one that is the default, and one that
+ * still holds live objects -- the last because unlinking it would subtract its
+ * allocations from every process-wide total, so a leak inside a closed
+ * environment would read as *less* memory rather than more. */
+NtsEnvironment *nts_environment_create(void);
+void nts_environment_destroy(NtsEnvironment *environment);
+
 void nts_host_install(const NtsHost *host);
 
 /* Run a task with the checkpoint around it. Hosts call *this*, never
