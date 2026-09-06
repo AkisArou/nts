@@ -11,6 +11,7 @@ test-net-socket-write-after-close.js: implementation-detail test; directly close
 test-net-listen-handle-in-cluster-1.js: active-environment gap; cluster must transfer this profile's live native server handle through worker IPC and reconstruct the typed Server in the child
 test-net-listen-handle-in-cluster-2.js: private binding/active-environment gap; constructs a Node TCPWrap through internalBinding('tcp_wrap') and asks a cluster worker to adopt it
 test-net-listen-twice.js: active-environment gap; needs cluster worker bootstrap, its NODE_CLUSTER internal-message protocol, and process.disconnect on the substituted process
+test-net-server-close-before-ipc-response.js: hollow cross-process oracle; the routed primary branch only forks a cluster worker, and that uninjected worker loads host node:net, so an empty substituted module passes unchanged
 test-net-server-transfer-worker.js: temporary worker-runtime integration gap; transferring a live typed server needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
 test-net-socket-transfer-worker-http.js: temporary worker-runtime integration gap; transferring a live typed socket through an HTTP worker needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
 test-net-socket-transfer-worker.js: temporary worker-runtime integration gap; transferring a live typed socket needs an explicit native structured-clone/ownership ABI instead of Node's private runtime-Symbol hooks
