@@ -2933,11 +2933,17 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         // different reasons and only one of them is about *this* type. An
         // ordinary array is refused when its element is; `type Tree = Tree[]`
         // is refused because there is no finite `HirType` that spells it.
-        TypeKind::Array(_) => {
+        TypeKind::Array(element) => {
             if contains_a_cycle(snapshot, ty, &mut Vec::new()) {
                 "a recursive array type".to_owned()
             } else {
-                "an array type".to_owned()
+                // The element, for the same reason the structured arm below
+                // names its symbol: an array is refused *because its element
+                // is*, so the element is the whole of the answer and "an array
+                // type" is the one part of it the reader already knew. Nine
+                // array literals in `runtime/web-platform` said nothing but
+                // this.
+                format!("an array of {}", describe(snapshot, *element))
             }
         }
         // A placeholder the decomposition did not open. The flags say which
@@ -12844,8 +12850,17 @@ impl<'a> FuncBuilder<'a> {
     /// these stores is in bounds — the checks below are elided before they cost
     /// anything.
     fn lower_array_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
-        let ty = self
-            .type_of(id)
+        // Whether the checker's own answer was `never[]`, which is the empty
+        // literal. Held separately because it decides the *message*: when the
+        // three sources below all fail, describing the node's type says "an
+        // array of a representable type", which contradicts itself and sends
+        // the reader after a representation gap that is not there. What is
+        // missing is a type for the literal to take, and only the branch that
+        // discarded `never[]` knows that.
+        let own = self.type_of(id);
+        let empty = matches!(&own, Some(HirType::Managed(ManagedType::Array(element)))
+            if **element == HirType::Never);
+        let ty = own
             // `[]` is typed `never[]`, which is the checker saying the literal
             // decides nothing -- the slot it goes into does. So the expected
             // type wins over it, and only over it: a literal with elements
@@ -12870,7 +12885,16 @@ impl<'a> FuncBuilder<'a> {
             //
             // Last, so this can only decide what was previously refused.
             .or_else(|| self.contextual_type(id, 0))
-            .ok_or_else(|| self.unrepresentable(id, "an array literal"))?;
+            .ok_or_else(|| {
+                if empty {
+                    self.unsupported(
+                        id,
+                        "an empty array literal in a position that does not say what it holds",
+                    )
+                } else {
+                    self.unrepresentable(id, "an array literal")
+                }
+            })?;
         // `[a, b]` where the slot is a tuple. Written the same way as an array
         // and meaning something else: a fixed number of slots of their own
         // types, which is an object, so this builds one rather than an
@@ -15392,7 +15416,7 @@ impl<'a> FuncBuilder<'a> {
         let addend = self.lower_expression(rhs_node)?;
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a compound assignment of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a compound assignment"))?;
         let updated = match compound {
             Compound::Exponentiate => self.exponentiate(id, ty, current, addend),
             Compound::Op(op) => {
@@ -16304,7 +16328,23 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let parts = self.children(callee_node);
         let [receiver_node, member] = parts.as_slice() else {
-            return Err(self.unsupported(callee_node, "a method call of unexpected shape"));
+            // Named, because "unexpected" is a statement about the reader
+            // rather than about the program. A member access carries a third
+            // child exactly when it is optional-chained -- the question-dot
+            // sits between the receiver and the member -- and every one of the
+            // nine that reached this in `runtime/web-platform` was that,
+            // spelled `record.timer?.cancel()`. Saying "unexpected shape" sent
+            // the reader to look for a parser problem.
+            let chained = parts.len() == 3
+                && self.node(parts[1]).kind == NodeKind::Syntax(syntax::QUESTION_DOT_TOKEN);
+            return Err(self.unsupported(
+                callee_node,
+                if chained {
+                    "an optional-chained method call (`a?.b()`)"
+                } else {
+                    "a method callee that is not a receiver and a member"
+                },
+            ));
         };
         let receiver = self.lower_expression(*receiver_node)?;
 
@@ -16635,7 +16675,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|declaration| self.generators.get(&declaration).copied())
             .map(|index| HirType::Managed(ManagedType::Object(super::generator_frame(index))))
             .or_else(|| self.type_of(id))
-            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::Call {
@@ -16712,7 +16752,7 @@ impl<'a> FuncBuilder<'a> {
         let args = self.lower_arguments(id, arguments)?;
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         self.materialize(id, &ty)?;
         let origin = self.origin(id);
         Ok(self.push(
@@ -16789,7 +16829,7 @@ impl<'a> FuncBuilder<'a> {
         let ty = self
             .returned_by(receiver)
             .or_else(|| self.type_of(id))
-            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::Call {
@@ -17172,7 +17212,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a `Math` call of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a `Math` call"))?;
         let origin = self.origin(id);
 
         match (intrinsic, arguments) {
@@ -18589,7 +18629,7 @@ impl<'a> FuncBuilder<'a> {
         args.extend(self.lower_arguments(id, arguments)?);
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a call returning an unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::Call {
@@ -19207,7 +19247,7 @@ impl<'a> FuncBuilder<'a> {
         let rhs = self.lower_expression(*rhs_node)?;
         let ty = self
             .type_of(id)
-            .ok_or_else(|| self.unsupported(id, "a binary expression of unrepresentable type"))?;
+            .ok_or_else(|| self.unrepresentable(id, "a binary expression"))?;
 
         let token = self
             .kind_of(*operator)
