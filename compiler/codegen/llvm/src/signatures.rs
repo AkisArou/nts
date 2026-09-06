@@ -247,7 +247,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_tag_name", returns: "ptr", params: &["i32"], attributes: &[] },
     Signature { name: "nts_tag_of_reference", returns: "i32", params: &["ptr"], attributes: &[] },
     Signature { name: "nts_task_run", returns: "void", params: &["ptr byval(%struct.NtsTask) align 8"], attributes: &[] },
-    Signature { name: "nts_to_index", returns: "double", params: &["double"], attributes: &["nounwind", "willreturn", "memory(none)"] },
+    Signature { name: "nts_to_index", returns: "double", params: &["double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_to_int16_fn", returns: "signext i16", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_int32_fn", returns: "i32", params: &["double"], attributes: &[] },
     Signature { name: "nts_to_int8_fn", returns: "signext i8", params: &["double"], attributes: &[] },

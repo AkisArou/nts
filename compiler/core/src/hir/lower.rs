@@ -2239,7 +2239,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     // nothing walks a class expression at all — and a function that vanishes
     // takes its callers' correctness with it while the compiler reports
     // success.
-    for location in super::unaccounted(
+    for (location, name) in super::unaccounted(
         snapshot,
         &lowered.program,
         &lowered.diagnostics,
@@ -2247,7 +2247,10 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     ) {
         lowered.diagnostics.push(Diagnostic::error(
             "NTS1001",
-            "a function declaration outside every walk".to_owned(),
+            match &name {
+                Some(name) => format!("`{name}`, a declaration outside every walk"),
+                None => "an anonymous declaration outside every walk".to_owned(),
+            },
             location,
         ));
     }
@@ -13404,6 +13407,22 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// The type a member is declared with, where the type declares one.
+    ///
+    /// Asked only when a member is missing from a layout, to tell "there is no
+    /// such member" from "there is, and it has no representation". The two
+    /// have always been different and read the same.
+    fn declared_type_of(&self, ty: TypeId, member: &str) -> Option<TypeId> {
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return None;
+        };
+        properties
+            .iter()
+            .find(|property| property.name == member)
+            .map(|property| property.ty)
+    }
+
     /// Why a property is not on a layout.
     ///
     /// Usually because the type does not have it. On an error it can instead be
@@ -13425,14 +13444,32 @@ impl<'a> FuncBuilder<'a> {
             // property of a type whose decomposition stopped short, and an
             // actual absence all read the same. A refusal nobody can group by
             // is a refusal nobody can rank.
-            None => self.unsupported(
-                id,
-                &format!(
-                    "`{member}`, which `{}` does not declare",
-                    named(self.snapshot, ty)
-                        .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned)
+            // Declared, but not on the layout, which is a different failure
+            // wearing the same words. `EventListenerSignal` declares
+            // `subscribe(callback: () => void): () => void` and the refusal
+            // read `which \`EventListenerSignal\` does not declare` -- a
+            // sentence about the source that is false, and one that sends the
+            // reader to look for a typo. What is missing is a representation
+            // for the member's *type*, so that is what it says now.
+            None => match self.declared_type_of(ty, member) {
+                Some(declared) => self.unsupported(
+                    id,
+                    &format!(
+                        "`{member}`, declared by `{}` with a type that has no representation ({})",
+                        named(self.snapshot, ty)
+                            .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned),
+                        describe(self.snapshot, declared)
+                    ),
                 ),
-            ),
+                None => self.unsupported(
+                    id,
+                    &format!(
+                        "`{member}`, which `{}` does not declare",
+                        named(self.snapshot, ty)
+                            .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned)
+                    ),
+                ),
+            },
         }
     }
 

@@ -1691,7 +1691,7 @@ pub fn unaccounted(
     program: &Program,
     diagnostics: &[nts_diagnostics::Diagnostic],
     generic: &generics::GenericFunctions,
-) -> Vec<nts_diagnostics::Location> {
+) -> Vec<(nts_diagnostics::Location, Option<String>)> {
     use nts_semantic_schema::{NodeKind, syntax};
 
     let within = |outer: &nts_diagnostics::Location, inner: &nts_diagnostics::Location| {
@@ -1792,7 +1792,26 @@ pub fn unaccounted(
                 .iter()
                 .any(|diagnostic| within(&diagnostic.primary, &here));
         if !emitted && !refused {
-            missing.push(here);
+            // Named where it has one. A report that says only "a function
+            // declaration" leaves the reader to find which of a file's
+            // hundred it means -- and a *private* method is the case where
+            // that matters most, because nothing else in the output mentions
+            // it either: `EventTarget##dispatch` vanished and its two callers
+            // cascaded off a primary that named nothing.
+            let name = node
+                .children
+                .iter()
+                .find_map(|child| {
+                    let child = snapshot.nodes.get(child.0 as usize)?;
+                    matches!(
+                        child.kind,
+                        NodeKind::Syntax(syntax::IDENTIFIER | syntax::PRIVATE_IDENTIFIER)
+                    )
+                    .then(|| child.text.clone())
+                    .flatten()
+                })
+                .or_else(|| node.text.clone());
+            missing.push((here, name));
         }
     }
     missing
