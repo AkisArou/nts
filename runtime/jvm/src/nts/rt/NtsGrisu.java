@@ -55,6 +55,18 @@ final class NtsGrisu {
         return hi + ((mid >>> 31) & 1);
     }
 
+    /**
+     * Ten to the k, wrapped, for k up to the most turns the fractional loop can
+     * take. Sixty-four entries because that is more than a `long` can hold
+     * digits of, and the wrapping past 10^19 is the point rather than a defect:
+     * it is exactly what multiplying by ten that many times produces.
+     */
+    private static final long[] WRAPPED_POW10 = new long[64];
+    static {
+        long power = 1;
+        for (int i = 0; i < WRAPPED_POW10.length; i++) { WRAPPED_POW10[i] = power; power *= 10; }
+    }
+
     private static int digitsOf(long n) {
         if (n < 10L) { return 1; }
         if (n < 100L) { return 2; }
@@ -198,17 +210,25 @@ final class NtsGrisu {
             }
             divisor /= 10;
         }
+        // `unit` and `distance` are read only by `weed`, after the loop, and
+        // each is its own value times ten per turn -- so each is that value
+        // times a power of ten, and multiplication modulo 2^64 is associative,
+        // which makes the table exactly what the repeated multiply computes
+        // including its wrapping. Two of the four multiplies a digit, gone.
+        long distanceIn = distance;
+        int turns = 0;
         for (;;) {
             fractional *= 10;
-            unit *= 10;
             unsafe *= 10;
-            distance *= 10;
+            turns++;
             long digit = fractional >>> shift;
             buffer[length++] = (byte) ('0' + digit);
             fractional &= oneF - 1;
             kappa--;
             if (Long.compareUnsigned(fractional, unsafe) < 0) {
-                return weed(buffer, length, distance, unsafe, fractional, oneF, unit)
+                long scale = WRAPPED_POW10[turns];
+                return weed(buffer, length, distanceIn * scale, unsafe, fractional, oneF,
+                        unit * scale)
                     ? (((long) (length + kappa - tenK)) << 32) | length
                     : UNPROVEN;
             }
