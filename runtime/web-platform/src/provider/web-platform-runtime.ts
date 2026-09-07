@@ -239,6 +239,10 @@ export class WebPlatformRuntime
     return this.primitives.wallTimeMilliseconds();
   }
 
+  monotonicMilliseconds(): number {
+    return this.primitives.monotonicMilliseconds();
+  }
+
   createObjectURL(blob: Blob): string {
     if (this.closed) throw new TypeError("Web-platform runtime is closed");
     return this.blobURLs.create(blob);

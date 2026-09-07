@@ -674,6 +674,11 @@ export function createHostNodePrimitives(
     urls: hostNodeURLs,
     nativeLineEnding: EOL === "\r\n" ? "\r\n" : "\n",
     wallTimeMilliseconds: Date.now,
+    // `performance.now()`: milliseconds since `performance.timeOrigin`, backed by
+    // `uv_hrtime`, so a system clock change cannot move it. Not `process.hrtime.bigint()`,
+    // whose origin is documented as "an arbitrary time in the past" and which returns a
+    // `BigInt` that two other providers would have to implement.
+    monotonicMilliseconds: () => performance.now(),
   };
 }
 

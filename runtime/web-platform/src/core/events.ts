@@ -1,4 +1,8 @@
 import type { AbortSignal } from "./abort.ts";
+import {
+  currentWebPlatformRuntime,
+  hasWebPlatformRuntime,
+} from "../provider/environment.ts";
 import { abortSignalBrand } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
 import { DOMException } from "./errors.ts";
@@ -31,6 +35,7 @@ export class Event {
   private eventCurrentTarget: EventTarget | null = null;
   private phase = Event.NONE;
   private trusted = false;
+  private readonly eventTimeStamp: number;
   /**
    * One getter function shared by every instance, not one closure each.
    *
@@ -60,6 +65,16 @@ export class Event {
       this.eventCancelable = init.cancelable ? true : false;
       this.eventComposed = init.composed ? true : false;
     }
+    // Captured at construction, as the standard requires.
+    //
+    // Asked rather than provoked. `AbortController`, `AbortSignal` and `EventTarget` are
+    // all usable with no runtime installed, and reading the environment unguarded here
+    // fails 41 of this lane's own tests. `File` reads the clock unguarded for
+    // `lastModified` and gets away with it because nobody builds a `File` without a
+    // platform; an `Event` is built by code that has no idea whether there is one.
+    this.eventTimeStamp = hasWebPlatformRuntime()
+      ? currentWebPlatformRuntime().monotonicMilliseconds()
+      : 0;
     // `isTrusted` is `[LegacyUnforgeable]`: an own, non-configurable accessor on every
     // instance rather than one on the prototype. The difference is observable --
     // `Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted")` must find it -- and
@@ -135,6 +150,10 @@ export class Event {
 
   get composed(): boolean {
     return this.eventComposed;
+  }
+
+  get timeStamp(): number {
+    return this.eventTimeStamp;
   }
 
   preventDefault(): void {

@@ -764,6 +764,10 @@ test("AbortSignal.timeout uses the owning environment scheduler and Web IDL conv
         throw error;
       },
     },
+    // A hand-built runtime answers everything the platform asks it for; `Event` reads
+    // this when it is constructed. TypeScript does not check this fake against the
+    // interface it stands in for, because the file is `.mjs`.
+    monotonicMilliseconds: () => 0,
   };
   installWebPlatformRuntime(runtime);
   try {

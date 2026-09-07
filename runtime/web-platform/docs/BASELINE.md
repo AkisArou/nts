@@ -5427,3 +5427,72 @@ Adding a member to `WebPlatformRuntime` broke a hand-built stub runtime in
 because the test is `.mjs` and TypeScript never checked the stub against the interface it
 is standing in for. One fixture here; an embedder would have their own. Interface growth
 is not free in a suite whose fakes are untyped.
+
+## `Event.timeStamp`, and the last named conformance gap closes
+
+Both intrinsics are committed now — the compiler lane's `nts_environment_has_platform`
+in the C runtime and LLVM signatures, and the JVM lane's op table, which turned out to be
+missing **all eight** environment intrinsics rather than the one. That is why the cost
+measured from outside was a single cascade: anything reaching the environment was already
+dark on that backend, so adding one more call to an already-refused constructor could not
+cost more.
+
+So `Event.timeStamp` lands. Upstream goes from **2,408 to 2,410 of 2,418**, and the eight
+that remain are the long-standing structural failures this ledger has carried throughout.
+
+The frontier was re-baselined rather than compared across binaries, and the re-baselining
+earned its keep: the same source measured **1,296 primaries on the old pinned binary and
+1,299 on the new one**. The compiler moved. Against the new baseline this change costs
+one cascade — 1,299 primaries unchanged, 314 to 315, zero `NTS4xxx`, zero invalid HIR.
+
+### What the standard asks for, and what it does not
+
+`timeStamp` is captured at construction and read through the environment **only when
+there is one**. `AbortController`, `AbortSignal` and `EventTarget` are all usable with no
+platform installed, and reading unguarded fails 41 of this lane's own tests — established
+by doing it, not by arguing about it. `File` reads the clock unguarded for `lastModified`
+and gets away with it because nobody builds a `File` without a platform; an `Event` is
+built by code that has no idea.
+
+The clock is `monotonicMilliseconds()` beside the `wallTimeMilliseconds()` that was
+already on `PlatformPrimitives`, and the two must not be confused: a cache's "now" has to
+be in the same frame as the `Date` headers it compares against. The contract says
+non-decreasing and deliberately not "measures elapsed real time", because both providers
+measured it on real hardware and both stall rather than reverse across a suspend —
+`performance.now()` over `uv_hrtime` on the host, `System.nanoTime()` with 36 ns steps on
+an API-26 device.
+
+### Two of my own tests could not fail, and one of my instruments was bypassed
+
+The upstream fixture asserts `timeStamp > 0`, which a **wall clock satisfies just as
+well** — an epoch millisecond count is emphatically greater than zero. So this lane's own
+suite asserts what WPT cannot: that the value is time since an origin rather than an
+epoch, that it is captured once rather than read lazily, and that a later event is not
+stamped earlier than an earlier one.
+
+Then a sabotage returning a constant zero **passed that entire suite**. Captured-once,
+non-decreasing and not-an-epoch are all true of zero, and only the upstream fixture
+noticed. A file claiming to cover the semantics should not need the fixture to catch that,
+and it asserts strictly positive now.
+
+And the "no runtime installed" case passed for the wrong reason until it was moved to its
+own file. The environment slot is process-global, so a suite that builds a runtime
+installs one for everything after it — a no-runtime assertion sharing a file with a
+runtime test is asserting nothing.
+
+**The worst of the three was self-inflicted.** Two sabotages were run through an inline
+runner written in the moment rather than through `sabotage-run.sh`, which refuses when
+`tsc` has output. Both mutations failed to type-check, both ran against the *previous*
+sabotage's emit, and both reported a failure belonging to a different mutation. The guard
+against exactly this was built earlier the same day and then walked around, which is the
+more instructive half: an instrument only helps on the runs it is actually used for.
+
+### Held, then landed
+
+None of this was committed while the intrinsic was uncommitted. The shared half sat
+reverted through a full measurement cycle because declaring an intrinsic that `HEAD` does
+not have would break C and LLVM if the other lane's gate went red. It landed the hour the
+commit appeared, which is what the holding was for.
+
+Local corpus 752/752 with zero skipped, compiled axis 138 of 142 across 13 functions on
+all three backends.

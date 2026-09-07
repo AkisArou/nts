@@ -33,6 +33,8 @@ node --expose-gc \
   tooling/conformance/web-platform/test/durable-store.test.mjs \
   tooling/conformance/web-platform/test/early-hints.test.mjs \
   tooling/conformance/web-platform/test/error-taxonomy.test.mjs \
+  tooling/conformance/web-platform/test/event-timestamp.test.mjs \
+  tooling/conformance/web-platform/test/event-timestamp-bare.test.mjs \
   tooling/conformance/web-platform/test/eventsource.test.mjs \
   tooling/conformance/web-platform/test/eventsource-timing.test.mjs \
   tooling/conformance/web-platform/test/file-url.test.mjs \

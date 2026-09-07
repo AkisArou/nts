@@ -405,4 +405,25 @@ export interface PlatformPrimitives {
   readonly nativeLineEnding: "\n" | "\r\n";
 
   wallTimeMilliseconds(): number;
+
+  /**
+   * Milliseconds since an origin fixed for the lifetime of this provider.
+   *
+   * Monotonically non-decreasing, sub-millisecond where the provider has it. Two values
+   * from one provider are comparable; values from different providers are not. It
+   * promises neither per-realm origins nor comparability across threads: the first is
+   * the browser's shape, the second an accident of one host, and either written down
+   * would make a correct provider look broken.
+   *
+   * Deliberately not "measures elapsed real time". Both providers measured use a clock
+   * that stalls rather than reverses while a device sleeps -- `performance.now()` over
+   * `uv_hrtime` on the host, `System.nanoTime()` with 36ns steps on an API-26 device --
+   * so it is a stopwatch for intervals within a wakeful period, not a duration across
+   * one.
+   *
+   * Separate from {@link wallTimeMilliseconds} because a cache's "now" must be in the
+   * same frame as the `Date` headers it compares against. Two clocks; the mistake
+   * available is letting this one satisfy something that wanted the other.
+   */
+  monotonicMilliseconds(): number;
 }
