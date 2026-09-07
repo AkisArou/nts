@@ -387,7 +387,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,790 applicable test files pass** across twenty-two modules,
+**1,796 applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -517,7 +517,7 @@ model that makes *Y* inapplicable" — which a reader should not confuse with a
 claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,790
+warns about elsewhere, so the two numbers belong next to each other: **1,796
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -2894,6 +2894,22 @@ inputs are the ones a human thought to write down.**
 Every rule here was verified against node rather than read off its source. The
 padding-on-a-low-byte case was expected to go the other way.
 
+**And a fourth in `util`, through an option nothing asserted.**
+`util.format("%o", x)` is `inspect(x, { showHidden: true, depth: 4 })`, so every
+`%o` in a program depends on `showHidden` — and an array was printing without
+its `[length]`. 101 divergences over 800 generated format templates.
+
+Arrays and typed arrays report their statically nameable hidden properties now.
+Two gaps are asserted rather than left: a function's `[name]`, `[arguments]`,
+`[caller]` and `[prototype]` are the function metadata §13 refuses, and a boxed
+`String` prints its label where node adds `{ [length]: 2 }`.
+
+Writing the function assertion taught me the first. **I expected `[Function: f]`
+and the test failed** — a compiled function is a pointer, so its `.name` is the
+same refusal that keeps `[name]` off the list. The expectation was wrong and the
+implementation was right, which is the better way round and not the way it
+usually goes.
+
 Current state, all lanes:
 
 | corpus | comparisons | divergences |
@@ -2906,6 +2922,8 @@ Current state, all lanes:
 | `buffer`, TypeScript | 44,225 | 0 |
 | `path` with `win32`, TypeScript | 42,882 | 0 |
 | `string_decoder`, TypeScript | 14,688 | 0 |
+| `util` (`format`, `%o`), TypeScript | 7,416 | 0 |
+| `zlib` byte-for-byte, TypeScript | 3,130 | 0 |
 
 Two processes are needed on the TypeScript lane, because inside the
 substitution `require("node:path")` and `require("path")` are the same object
