@@ -35,7 +35,7 @@ export interface Http2TransportOptions {
    * decision rather than an optimisation the transport may take on its own, and it
    * only ever applies under the conditions in {@link Http2ConnectionRecord}.
    *
-   * It also requires {@link Http2TransportOptions.knownEndpoint}. Deciding to reuse a
+   * It also requires {@link Http2TransportOptions.knownEndpoints}. Deciding to reuse a
    * connection happens before connecting, while the endpoint an origin resolves to is
    * chosen by the DNS policy that sits *below* this transport in the connector chain.
    * Without a way to ask what is already known, this transport cannot tell whether a
@@ -44,14 +44,20 @@ export interface Http2TransportOptions {
   coalesceConnections?: boolean;
 
   /**
-   * The endpoint this address is already known to reach, or undefined.
+   * The endpoints this address is already known to reach, or undefined for "unknown".
    *
-   * Deliberately synchronous and deliberately allowed to answer "I do not know": it is
-   * a probe of what the DNS policy has already resolved, not a resolution. Coalescing
-   * must not perform network work in order to decide how to pool, and an unknown
-   * endpoint simply means the connection is opened normally.
+   * A set rather than a single value, because the question is membership: may this
+   * origin be served by a connection that is already on endpoint X? Asking instead
+   * which endpoint a fresh lookup would pick answers a different question, and answers
+   * it wrongly whenever a host has several addresses and the live connection is on one
+   * the probe did not name.
+   *
+   * Deliberately synchronous and deliberately allowed to say "I do not know": it probes
+   * what the DNS policy has already resolved rather than resolving. Coalescing must not
+   * perform network work in order to decide how to pool, and an unknown answer simply
+   * means the connection is opened normally.
    */
-  knownEndpoint?: (address: ConnectAddress) => string | undefined;
+  knownEndpoints?: (address: ConnectAddress) => readonly string[] | undefined;
 }
 
 /**
@@ -202,7 +208,9 @@ export class Http2Transport implements FetchTransport {
   private readonly all = new Set<Http2ClientConnection>();
   private readonly records = new Map<Http2ClientConnection, Http2ConnectionRecord>();
   private readonly coalescing: boolean;
-  private readonly knownEndpoint: ((address: ConnectAddress) => string | undefined) | undefined;
+  private readonly knownEndpoints:
+    | ((address: ConnectAddress) => readonly string[] | undefined)
+    | undefined;
   private readonly opening = new Map<string, Promise<Http2ClientConnection>>();
   private readonly openingCancellation = new Map<string, AbortController>();
   private readonly openingEstablished = new Set<string>();
@@ -222,8 +230,8 @@ export class Http2Transport implements FetchTransport {
     this.bodyReadTimeoutMs = options.bodyReadTimeoutMs ?? 30000;
     this.maxConnections = options.maxConnections ?? 64;
     this.connectionOptions = options.connection ?? {};
-    this.knownEndpoint = options.knownEndpoint;
-    this.coalescing = options.coalesceConnections === true && this.knownEndpoint !== undefined;
+    this.knownEndpoints = options.knownEndpoints;
+    this.coalescing = options.coalesceConnections === true && this.knownEndpoints !== undefined;
     if (!Number.isFinite(this.connectTimeoutMs) || this.connectTimeoutMs <= 0) {
       throw new RangeError("Invalid HTTP/2 connect timeout");
     }
@@ -385,17 +393,19 @@ export class Http2Transport implements FetchTransport {
   private coalesce(key: string, request: TransportRequest): Http2ClientConnection | null {
     if (!this.coalescing) return null;
     if (request.url.protocol !== "https:") return null;
-    const probe = this.knownEndpoint;
+    const probe = this.knownEndpoints;
     if (probe === undefined) return null;
     const address = addressOf(request.url, this.connectTimeoutMs, ["h2"]);
-    const endpoint = probe(address);
-    if (endpoint === undefined) return null;
+    const candidates = probe(address);
+    if (candidates === undefined || candidates.length === 0) return null;
     for (const connection of this.all) {
       if (connection.isDraining) continue;
       const record = this.records.get(connection);
       if (record === undefined || !record.secure) continue;
       if (record.resolvedAddress === undefined) continue;
-      if (record.resolvedAddress !== endpoint) continue;
+      // Membership, not equality: this connection may serve the origin if the origin
+      // is known to reach the endpoint the connection is already on.
+      if (!candidates.includes(record.resolvedAddress)) continue;
       if (record.port !== address.port) continue;
       if (!certificateCovers(record.certificateNames, address.hostname)) continue;
       this.current.set(key, connection);
@@ -425,9 +435,10 @@ export class Http2Transport implements FetchTransport {
       this.records.set(connection, {
         secure: address.secure,
         certificateNames: negotiated.certificateNames,
-        // The connector chain below chooses the endpoint, so what this transport knows
-        // is what the same probe reports for the address it asked for.
-        resolvedAddress: address.resolvedAddress ?? this.knownEndpoint?.(address),
+        // What the connection is actually on, as reported by the layer that chose it.
+        // A probe must never stand in here: it would answer where a fresh lookup would
+        // go, which is not where this connection went.
+        resolvedAddress: negotiated.endpoint ?? address.resolvedAddress,
         port: address.port,
       });
       this.openingEstablished.add(key);

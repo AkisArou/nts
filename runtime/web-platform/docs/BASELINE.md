@@ -2647,3 +2647,57 @@ alone.
 
 Recording it here so the gap is visible: the ledger is an unmet plan requirement whose
 blocker is a dependency decision, not effort.
+
+## The probe was asking the wrong question
+
+Coalescing shipped inert, needing a `knownEndpoint` probe nothing supplied. Wiring it
+to the shared DNS cache showed the probe's shape was wrong, so the shape changed
+before a consumer depended on it.
+
+`knownEndpoint` returned one endpoint: *which* address would this origin use. The
+condition that actually licenses reuse is membership: **may this origin be served by a
+connection already on endpoint X?** Those differ whenever a host has several addresses
+and the live connection is on one the probe would not have named — a legitimate reuse
+missed, and a rule that reads as if it had been checked. `knownEndpoints` now returns
+the set, and the transport tests membership against the endpoint the connection is
+actually on.
+
+"Actually on" also changed. The record previously fell back to the probe when the
+address carried no `resolvedAddress`, which answers where a fresh lookup would go
+rather than where this connection went. `NegotiatedConnection` gained an optional
+`endpoint`, reported by the layer that chose it, and the record uses that. Only the
+connector knows which address it dialled, and a reuse decision that guesses is a
+routing decision that guesses.
+
+`DnsCache.knownAddresses()` is the probe's natural source and is deliberately
+read-only. The existing cached read advances round-robin rotation and refreshes
+recency, so reusing it would have let a pooling decision change what the next real
+lookup answers. The new method neither resolves nor rotates nor touches recency, and
+answers an empty list for an unknown host — never confusable with "no addresses
+exist", because coalescing treats unknown as "open a connection normally".
+
+Three tests were added. One drives a host whose known set contains the live endpoint in
+second position, which is the case the single-value probe would have missed. One
+asserts the cache probe against a **control cache that was never probed**: rather than
+hardcoding a rotation order, it checks that three probes leave the next real lookup
+exactly where an unprobed cache leaves it, which is the property that matters and is
+robust to the rotation rule changing. The first attempt did hardcode the order, guessed
+it, and failed. The third wires a real `DnsCache` in as the probe end to end.
+
+Two sabotages, both restored. Making the probe use the rotating cached read failed the
+control comparison. Replacing membership with equality against the first candidate made
+the second origin open its own connection: `['alpha.test', 'beta.test']` where
+`['alpha.test']` was expected.
+
+The complete local Node-host/real-socket corpus passes 444/444 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Coalescing is still opt-in and still requires a caller to supply the probe; nothing
+enables it by default, and no provider other than the ordinary-Node conformance host
+reports an endpoint.
+
+Measured with the same pinned binary built at `43fda4d3`: 1,290 primary `NTS1001` and
+233 `NTS1003` before and after, with zero `NTS1004`, zero `NTS4xxx` and no invalid HIR.
+One message differs between the two runs and it is the same message with a shifted type
+id, so this slice moved the frontier not at all.

@@ -130,6 +130,14 @@ export interface NegotiatedConnection {
    * cross-origin routing defect; an empty list simply cannot coalesce.
    */
   readonly certificateNames: readonly string[];
+  /**
+   * The physical endpoint this connection actually reached, when the connector knows
+   * it. Absent when nothing below chose an address.
+   *
+   * Reuse decisions need the endpoint a live connection *is on*, not the one a fresh
+   * lookup would pick now, and only the layer that chose it can say which it was.
+   */
+  readonly endpoint?: string;
 }
 
 /**

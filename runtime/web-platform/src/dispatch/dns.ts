@@ -274,6 +274,31 @@ export class DnsCache {
     return this.joinLookup(lookup, signal);
   }
 
+  /**
+   * Endpoints already known for this hostname, without resolving.
+   *
+   * Read-only on purpose: it neither performs a lookup nor advances the round-robin
+   * rotation nor refreshes recency, because a caller deciding how to pool must not
+   * change what the next real lookup answers. An empty result means "not known", never
+   * "no addresses exist".
+   */
+  knownAddresses(
+    hostname: string,
+    families: readonly DnsAddressFamily[] = [4, 6],
+  ): readonly string[] {
+    if (hostname.length === 0) return [];
+    const record = this.records.get(hostname.toLowerCase());
+    if (record === undefined) return [];
+    const now = this.now();
+    const known: string[] = [];
+    for (const address of record.addresses) {
+      if (address.expiresAt <= now) continue;
+      if (!hasFamily(families, address.family)) continue;
+      known.push(address.address);
+    }
+    return known;
+  }
+
   invalidate(hostname: string): boolean {
     return this.records.delete(hostname.toLowerCase());
   }

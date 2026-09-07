@@ -403,7 +403,7 @@ export class HostNodeSocketConnector implements NegotiatingSocketConnector {
         settled = true;
         const connection = new HostNodeByteConnection(socket);
         cleanup();
-        resolve({ connection, protocol, certificateNames });
+        resolve({ connection, protocol, certificateNames, endpoint: physicalHostname });
       });
     });
   }

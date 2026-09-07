@@ -10,7 +10,10 @@ import test from "node:test";
 import http2 from "node:http2";
 import { createServer as createTlsServer } from "node:tls";
 
-import { AbortController } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import {
+  AbortController,
+  DnsCache,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import {
   certificateCovers,
   dnsNameCovers,
@@ -119,7 +122,7 @@ function resolvingConnector(base, resolvedAddress = "127.0.0.1") {
 }
 
 suite("a covered origin on the same endpoint reuses the connection", async (t) => {
-  const endpointFor = () => "127.0.0.1";
+  const endpointsFor = () => ["127.0.0.1"];
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   const connector = resolvingConnector(
@@ -127,7 +130,7 @@ suite("a covered origin on the same endpoint reuses the connection", async (t) =
   );
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoint: (address) => endpointFor(address),
+    knownEndpoints: (address) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -157,7 +160,7 @@ suite("coalescing is off unless it is asked for", async (t) => {
 });
 
 suite("an origin the certificate does not cover is never routed over the connection", async (t) => {
-  const endpointFor = () => "127.0.0.1";
+  const endpointsFor = () => ["127.0.0.1"];
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   const connector = resolvingConnector(
@@ -165,7 +168,7 @@ suite("an origin the certificate does not cover is never routed over the connect
   );
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoint: (address) => endpointFor(address),
+    knownEndpoints: (address) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -192,19 +195,22 @@ suite("a different endpoint is a different peer even under one certificate", asy
     reportsNegotiatedProtocol: true,
     connect(address, signal) {
       opened.push(address.hostname);
-      return base.connect({ ...address, resolvedAddress: endpointFor(address) }, signal);
+      return base.connect({ ...address, resolvedAddress: endpointsFor(address)[0] }, signal);
     },
     connectNegotiated(address, signal) {
       opened.push(address.hostname);
-      return base.connectNegotiated({ ...address, resolvedAddress: endpointFor(address) }, signal);
+      return base.connectNegotiated(
+        { ...address, resolvedAddress: endpointsFor(address)[0] },
+        signal,
+      );
     },
   };
-  function endpointFor(address) {
-    return address.hostname === "alpha.test" ? "127.0.0.1" : "127.0.0.2";
+  function endpointsFor(address) {
+    return address.hostname === "alpha.test" ? ["127.0.0.1"] : ["127.0.0.2"];
   }
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoint: (address) => endpointFor(address),
+    knownEndpoints: (address) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -216,7 +222,7 @@ suite("a different endpoint is a different peer even under one certificate", asy
 });
 
 suite("a connection with no known endpoint does not coalesce", async (t) => {
-  const endpointFor = () => undefined;
+  const endpointsFor = () => undefined;
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   // No resolvedAddress at all: certificate coverage alone must not be enough.
@@ -235,9 +241,132 @@ suite("a connection with no known endpoint does not coalesce", async (t) => {
   };
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoint: (address) => endpointFor(address),
+    knownEndpoints: (address) => endpointsFor(address),
   });
   t.after(() => transport.close());
   await assert.rejects(transport.dispatch(transportRequest(`https://alpha.test:${port}/a`)));
   assert.deepEqual(opened, ["alpha.test"]);
+});
+
+suite("the live endpoint may be any of the ones the origin is known to reach", async (t) => {
+  const { fixture, port } = await h2Origin(t);
+  const primitives = createHostNodePrimitives();
+  const connector = resolvingConnector(
+    new HostNodeSocketConnector({ ca: fixture.cert.toString() }),
+  );
+  const transport = new Http2Transport(connector, primitives.scheduler, {
+    coalesceConnections: true,
+    // beta is known to reach two addresses and the live connection is on the second.
+    // Asking which endpoint a fresh lookup would pick would answer 127.0.0.9 and miss
+    // a connection that legitimately serves this origin.
+    knownEndpoints: (address) =>
+      address.hostname === "alpha.test" ? ["127.0.0.1"] : ["127.0.0.9", "127.0.0.1"],
+  });
+  t.after(() => transport.close());
+
+  await consume((await transport.dispatch(transportRequest(`https://alpha.test:${port}/a`))).body);
+  const second = await transport.dispatch(transportRequest(`https://beta.test:${port}/b`));
+  assert.equal(await consume(second.body), `beta.test:${port}`);
+  assert.deepEqual(connector.opened, ["alpha.test"]);
+  assert.equal(transport.stats.connections, 1);
+});
+
+suite("the shared DNS cache answers the probe without resolving or rotating", async (t) => {
+  let resolverCalls = 0;
+  const cache = new DnsCache({
+    resolver: {
+      resolve() {
+        resolverCalls += 1;
+        return Promise.resolve([
+          { address: "127.0.0.1", family: 4, ttlMilliseconds: 60_000 },
+          { address: "127.0.0.9", family: 4, ttlMilliseconds: 60_000 },
+        ]);
+      },
+    },
+    nowMilliseconds: () => 0,
+  });
+
+  // Nothing is known before a lookup, and probing must not cause one.
+  assert.deepEqual(cache.knownAddresses("alpha.test"), []);
+  assert.equal(resolverCalls, 0);
+
+  const signal = new AbortController().signal;
+  const first = await cache.lookup("alpha.test", [4], signal);
+  assert.deepEqual(
+    first.map((entry) => entry.address),
+    ["127.0.0.1", "127.0.0.9"],
+  );
+  assert.equal(resolverCalls, 1);
+
+  // The probe answers both addresses and repeating it resolves nothing.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    assert.deepEqual(cache.knownAddresses("alpha.test"), ["127.0.0.1", "127.0.0.9"]);
+  }
+  assert.equal(resolverCalls, 1, "the probe never resolves");
+
+  // Whatever the rotation rule is, probing must not advance it. A control cache that
+  // was never probed answers the comparison, so this asserts "the probe changed
+  // nothing" rather than a hardcoded order.
+  const control = new DnsCache({
+    resolver: {
+      resolve() {
+        return Promise.resolve([
+          { address: "127.0.0.1", family: 4, ttlMilliseconds: 60_000 },
+          { address: "127.0.0.9", family: 4, ttlMilliseconds: 60_000 },
+        ]);
+      },
+    },
+    nowMilliseconds: () => 0,
+  });
+  const controlFirst = await control.lookup("alpha.test", [4], signal);
+  assert.deepEqual(
+    controlFirst.map((entry) => entry.address),
+    first.map((entry) => entry.address),
+  );
+  const second = await cache.lookup("alpha.test", [4], signal);
+  const controlSecond = await control.lookup("alpha.test", [4], signal);
+  assert.deepEqual(
+    second.map((entry) => entry.address),
+    controlSecond.map((entry) => entry.address),
+    "three probes must leave the next lookup exactly where it would have been",
+  );
+  assert.equal(resolverCalls, 1);
+
+  // Family filtering and unknown hosts.
+  assert.deepEqual(cache.knownAddresses("alpha.test", [6]), []);
+  assert.deepEqual(cache.knownAddresses("unknown.test"), []);
+  assert.deepEqual(cache.knownAddresses(""), []);
+});
+
+suite("a transport can take its probe straight from the shared DNS cache", async (t) => {
+  const { fixture, port } = await h2Origin(t);
+  const primitives = createHostNodePrimitives();
+  const cache = new DnsCache({
+    resolver: {
+      resolve() {
+        return Promise.resolve([{ address: "127.0.0.1", family: 4, ttlMilliseconds: 60_000 }]);
+      },
+    },
+    nowMilliseconds: () => 0,
+  });
+  const signal = new AbortController().signal;
+  await cache.lookup("alpha.test", [4], signal);
+  await cache.lookup("beta.test", [4], signal);
+
+  const connector = resolvingConnector(
+    new HostNodeSocketConnector({ ca: fixture.cert.toString() }),
+  );
+  const transport = new Http2Transport(connector, primitives.scheduler, {
+    coalesceConnections: true,
+    knownEndpoints: (address) => {
+      const known = cache.knownAddresses(address.hostname);
+      return known.length === 0 ? undefined : known;
+    },
+  });
+  t.after(() => transport.close());
+
+  await consume((await transport.dispatch(transportRequest(`https://alpha.test:${port}/a`))).body);
+  const second = await transport.dispatch(transportRequest(`https://beta.test:${port}/b`));
+  assert.equal(await consume(second.body), `beta.test:${port}`);
+  assert.deepEqual(connector.opened, ["alpha.test"]);
 });
