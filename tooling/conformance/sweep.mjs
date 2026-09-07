@@ -161,12 +161,29 @@ function addon(module) {
       tally,
     };
   }
-  return { stage: applicable > 0 && tally.pass === applicable ? "green" : "partial", detail: `${tally.pass} / ${applicable}`, clang: [], tally };
+  // Any pass on this axis gets the harder question asked of it, because the
+  // first one that was ever reported did not survive it. `path` reported 2 of
+  // 17 and both were `require('path/posix') === require('path').posix`
+  // holding because each side was `undefined`. Sabotage failed those files --
+  // for the wrong reason, the subpath stopping resolving -- and so reported a
+  // clean hollow count. Keeping the addon's names and destroying its behaviour
+  // is the question sabotage cannot ask: did this pass depend on what the
+  // module *does*?
+  const degenerate = runAddon(module, artifact, true)?.pass ?? 0;
+  const real = tally.pass - degenerate;
+  return {
+    stage: applicable > 0 && real === applicable ? "green" : real > 0 ? "partial" : "all-passes-degenerate",
+    detail: `${tally.pass} / ${applicable}${degenerate > 0 ? `, ${degenerate} degenerate` : ""}`,
+    clang: [],
+    tally,
+    degenerate,
+  };
 }
 
-/** One module against its compiled artifact. */
-function runAddon(module, artifact) {
+/** One module against its compiled artifact, optionally with its behaviour destroyed. */
+function runAddon(module, artifact, mutate = false) {
   const args = [join(HERE, "run.mjs"), "--module", module, "--addon", artifact, "--json"];
+  if (mutate) args.push("--mutate-addon");
   try {
     return JSON.parse(execFileSync(process.execPath, args, {
       encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],

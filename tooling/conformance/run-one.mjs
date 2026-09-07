@@ -281,6 +281,8 @@ function dispatchEscapedException(error) {
  * state with. Whatever still passes was never measuring us.
  */
 const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
+/** Keep the addon's exported names and destroy their behaviour; see `poison`. */
+const mutatedAddon = process.env["NTS_CONFORMANCE_ADDON_MUTATE"] === "1";
 
 /**
  * Warnings the module emitted while it was being loaded.
@@ -306,11 +308,43 @@ process.emitWarning = (...args) => {
   return realEmitWarning(...args);
 };
 
+/**
+ * Mutation for the compiled lane, because sabotage is not enough there.
+ *
+ * Blanking a module proves the suite is connected to its subject. It cannot
+ * prove that a *passing* file depends on anything the subject does, and on
+ * this axis that gap was not hypothetical: `path`'s compiled addon reported
+ * two passes, and both were `assert.strictEqual(require('path/posix'),
+ * require('path').posix)` holding because each side was `undefined`. The
+ * addon published one name and neither side of the comparison was it.
+ * Sabotage failed those files -- for the wrong reason, because the subpath
+ * stopped resolving -- and so reported a clean hollow count.
+ *
+ * This keeps the addon's shape and destroys its behaviour: every exported
+ * function throws, every exported value becomes a value nothing would expect.
+ * A file that still passes did not depend on what the module *does*, which is
+ * the question sabotage cannot ask.
+ */
+function poison(exports) {
+  const poisoned = {};
+  for (const key of Object.keys(exports)) {
+    const value = exports[key];
+    poisoned[key] =
+      typeof value === "function"
+        ? () => {
+            throw new Error(`poisoned addon export ${key} was called`);
+          }
+        : Symbol(`poisoned ${key}`);
+  }
+  return poisoned;
+}
+
 let underTest;
 try {
   let exports;
   if (addon && addon !== "-") {
     exports = createRequire(import.meta.url)(resolvePath(addon));
+    if (mutatedAddon) exports = poison(exports);
   } else {
     const shims = join(moduleDir, "bindings.node.mjs");
     if (existsSync(shims)) await import(shims);

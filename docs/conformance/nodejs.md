@@ -1806,6 +1806,27 @@ opposite for about twenty minutes on the strength of a number I had not asked
 the standard question of, which is the question this file exists to insist
 on — *what would this test have to see to fail?*
 
+**The instrument asks it now, so the next one does not depend on somebody
+remembering.**
+
+```sh
+node tooling/conformance/run.mjs --module path --addon <artifact> --mutate-addon
+```
+
+keeps the addon's exported names and destroys their behaviour: every exported
+function throws, every exported value becomes something nothing expects. A file
+that still passes did not depend on what the module *does*. `--addons` runs it
+against every compiled pass automatically and subtracts the survivors, so a
+module whose passes are all degenerate reports `all-passes-degenerate` rather
+than a number — which is what `path` reports today, `2 / 17, 2 degenerate`.
+
+The distinction from sabotage is the whole point and is worth stating in one
+line: **sabotage removes the module and asks whether the suite is connected to
+it; mutation keeps the module's shape and asks whether a pass depends on its
+behaviour.** The first is a control. Only the second has resolution, and the
+compiled lane had only the first until a pass it could not see through was
+published.
+
 | stage reached | modules | |
 | --- | ---: | --- |
 | `c-did-not-compile` | 17 | |

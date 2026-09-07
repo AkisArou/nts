@@ -57,6 +57,15 @@ const verbose = argv.includes("--verbose");
  * node's tests use the global `Buffer`, which was node's own.
  */
 const sabotage = argv.includes("--sabotage");
+/**
+ * Keep the compiled addon's exported names and destroy their behaviour.
+ *
+ * `--sabotage` blanks the module, which asks whether the suite is connected to
+ * its subject at all. This asks the harder question -- whether a file that
+ * passes depends on what the module *does* -- and it exists because the
+ * compiled lane produced a pass that survived sabotage and measured nothing.
+ */
+const mutateAddon = argv.includes("--mutate-addon");
 const asJson = argv.includes("--json");
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 
@@ -272,7 +281,11 @@ for (const test of tests) {
         // upstream tests intentionally resolve `./test/...`; launching them
         // from the NTS root turns those into unrelated ENOENT failures.
         cwd: NODE_ROOT,
-        env: { ...process.env, NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "" },
+        env: {
+          ...process.env,
+          NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
+          NTS_CONFORMANCE_ADDON_MUTATE: mutateAddon ? "1" : "",
+        },
       },
     );
     const line = out
