@@ -2921,13 +2921,25 @@ Current state, all lanes:
 | `url` incl. file URLs, TypeScript | 12,192 | 0 |
 | `assert` incl. failure messages, TypeScript | 7,615 | 0 |
 | `events` as a state machine, TypeScript | 6,040 | 0 |
+| `fs` paths and error codes, TypeScript | 8,568 | 0 |
 | `buffer`, TypeScript | 44,225 | 0 |
 | `path` with `win32`, TypeScript | 42,882 | 0 |
 | `string_decoder`, TypeScript | 14,688 | 0 |
 | `util` (`format`, `%o`), TypeScript | 7,416 | 0 |
 | `zlib` byte-for-byte, TypeScript | 3,130 | 0 |
 
-Ten corpora. **Four found bugs and six did not**, and the six matter: until
+**A corpus can assert a precondition, and `fs` is why.** It reads a directory
+inside the repository; the base was a *relative* path, so from any other working
+directory both sides would have answered `ENOENT` to everything, compared equal,
+and reported perfect agreement over nothing. **That is this document's own
+hollow-pass failure, appearing inside the tool built to find it** — and
+comparison cannot catch it, because two identical failures are identical. A
+corpus now declares what must be true, it is asserted against node rather than
+compared, and a false one fails the run. Demonstrated by pointing the base at a
+directory that does not exist: it stops and names it, where before it reported
+2,268 comparisons and no divergences.
+
+Eleven corpora. **Four found bugs and seven did not**, and the six matter: until
 today the answer for each of them was that nobody had asked. `assert` compares
 the full `deepStrictEqual` failure text, not only the verdict — an
 implementation can decide every comparison correctly and print something else.
