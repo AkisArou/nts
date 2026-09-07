@@ -7,14 +7,28 @@ on any of them.
 
 ## The situation in one paragraph
 
-Two axes move independently, and right now one is finished and the other has
-never started. **TypeScript-on-node: 1,796 of 1,796 across 22 modules, 0
-hollow, nothing failing.** **Compiled artifact: 0 of 22, and one compiler
-feature from 1.** Not one module
-produces a working addon. The project exists to compile TypeScript to native
-code, so the green axis is the *preparation* and the red one is the product. A
-plan that spends its next month on the green axis is a plan to build a very
-good reimplementation of Node that does not compile.
+Two axes move independently. **TypeScript-on-node: 1,796 of 1,796 across 22
+modules, 0 hollow, nothing failing.** **Compiled artifact: 1 of 22.**
+
+    1 of 22 modules' compiled artifacts pass every applicable test.
+
+    where they stop:
+       15  c-did-not-compile
+        4  built-exports-nothing
+        1  built-exports-partial
+        1  all-passes-degenerate
+        1  green
+
+That `1` is `punycode`, and it is a day old. This document was written when the
+number was zero and had never been anything else. The project exists to compile
+TypeScript to native code, so the green axis is the *preparation* and the red
+one is the product; a plan that spends its next month on the green axis is a
+plan to build a very good reimplementation of Node that does not compile.
+
+**The one is not a finish line.** Fifteen modules do not compile at all, and the
+green module publishes five of the six names its shape needs. What changed is
+that the walk has been made once, so the cost of the next one is known rather
+than guessed — which is what section A said the first module was for.
 
 Everything below is ordered by that.
 
@@ -22,10 +36,19 @@ Everything below is ordered by that.
 
 ## A. Make one module compile, end to end
 
-**Why first.** `0 of 22` is the only number in this document that measures the
-thing the project is for. It has also never been anything else, which means no
-one has yet walked a single module the whole way and found out what the walk
-costs. Until one has, every estimate about the compiled axis is a guess.
+**Why first.** This number is the only one in the document that measures the
+thing the project is for, and when this section was written it was `0` and had
+never been anything else — so nobody had walked a module the whole way and found
+out what the walk costs, and every estimate about the compiled axis was a guess.
+
+**It has been walked now.** Seven blockers, six of them invisible until the one
+above them moved: an annotated `const` taking its receiver from the initializer,
+a wrapper that never called `module__init`, a build script naming three of four
+generated files, a throw that did not cross the boundary, an export table that
+published by the wrong name and dropped what it could not represent in silence,
+an error class flattened at the boundary, and a process warning written to
+stderr where node's own tests can only see an event. The estimates in this
+document made before the walk were wrong in both directions.
 
 **The beachhead is `punycode`.** Measured on one pinned binary:
 
