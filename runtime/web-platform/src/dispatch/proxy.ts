@@ -136,7 +136,8 @@ function hostnameWithoutBrackets(hostname: string): string {
     : hostname;
 }
 
-function parseHttpEndpoint(urls: URLParser, uri: string): ProxyEndpoint {
+/** @internal Shared by CONNECT and absolute-form HTTP proxy transports. */
+export function parseHttpEndpoint(urls: URLParser, uri: string): ProxyEndpoint {
   let record: URLRecord;
   try {
     record = urls.parse(uri);
@@ -191,7 +192,8 @@ function validateTarget(target: ConnectAddress): void {
   }
 }
 
-function proxyAddress(proxy: ProxyEndpoint, target: ConnectAddress): ConnectAddress {
+/** @internal Physical proxy endpoint while preserving the caller's timeout. */
+export function proxyAddress(proxy: ProxyEndpoint, target: ConnectAddress): ConnectAddress {
   if (!proxy.secure) {
     return {
       hostname: proxy.hostname,
@@ -214,18 +216,21 @@ function authority(target: ConnectAddress): string {
   return host + ":" + String(target.port);
 }
 
-function validateAuthorization(value: string): string {
+/** @internal Validate an authorization value before it reaches the wire. */
+export function validateAuthorization(value: string): string {
   validateWireValue(value);
   if (value.length === 0) throw new ProxyConfigurationError("Proxy authorization is empty");
   return value;
 }
 
-function basicAuthorization(username: string, password: string): string | null {
+/** @internal Construct URL-userinfo Basic credentials. */
+export function basicAuthorization(username: string, password: string): string | null {
   if (username === "" && password === "") return null;
   return "Basic " + base64(utf8.encode(username + ":" + password));
 }
 
-function validateProxyHeaders(entries: readonly HeaderEntry[]): readonly HeaderEntry[] {
+/** @internal Validate immutable configuration headers. */
+export function validateProxyHeaders(entries: readonly HeaderEntry[]): readonly HeaderEntry[] {
   const result: HeaderEntry[] = [];
   for (const [rawName, value] of entries) {
     const name = rawName.toLowerCase();
@@ -245,7 +250,8 @@ function validateProxyHeaders(entries: readonly HeaderEntry[]): readonly HeaderE
   return result;
 }
 
-function callAuthenticator(
+/** @internal Normalize a synchronous or asynchronous authenticator. */
+export function callAuthenticator(
   authenticate: ProxyAuthenticator,
   context: ProxyAuthenticationContext,
 ): Promise<string | null> {

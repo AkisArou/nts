@@ -135,6 +135,12 @@ export type {
   ProxyKind,
   Socks5ProxyOptions,
 } from "./dispatch/proxy.ts";
+export { EnvHttpProxyAgent, ProxyAgent, Socks5ProxyAgent } from "./dispatch/proxy-agent.ts";
+export type {
+  EnvHttpProxyAgentOptions,
+  ProxyAgentOptions,
+  Socks5ProxyAgentOptions,
+} from "./dispatch/proxy-agent.ts";
 export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
 export type {
   AgentOptions,

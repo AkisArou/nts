@@ -4,12 +4,16 @@ import { connect as tcpConnect, createServer } from "node:net";
 import { createServer as createTlsServer } from "node:tls";
 import {
   AbortController,
+  EnvHttpProxyAgent,
   EnvironmentProxyPolicy,
   HttpConnectProxyConnector,
   NoProxyMatcher,
+  ProxyAgent,
   ProxyConfigurationError,
   ProxyResponseError,
+  ReadableStream,
   Socks5ProxyConnector,
+  Socks5ProxyAgent,
   Socks5ProxyError,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import {
@@ -137,6 +141,53 @@ class ManualScheduler {
 
 function target(hostname = "origin.example", secure = true) {
   return { hostname, port: secure ? 443 : 80, secure, connectTimeoutMs: 1234 };
+}
+
+function transportRequest(url, overrides = {}) {
+  return {
+    url: hostNodeURLs.parse(url),
+    method: "GET",
+    headers: [],
+    body: null,
+    bodyLength: null,
+    signal: new AbortController().signal,
+    ...overrides,
+  };
+}
+
+function replayableBytes(text) {
+  const bytes = encoder.encode(text);
+  return {
+    length: bytes.length,
+    open() {
+      return new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes.slice());
+          controller.close();
+        },
+      });
+    },
+  };
+}
+
+async function responseText(response) {
+  if (response.body === null) return "";
+  const reader = response.body.getReader();
+  const parts = [];
+  let length = 0;
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    parts.push(result.value);
+    length += result.value.length;
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.length;
+  }
+  return decoder.decode(bytes);
 }
 
 test("HTTP CONNECT preserves target identity and percent-decoded Basic credentials", async () => {
@@ -457,6 +508,228 @@ test("environment proxy policy rejects line breaks and unsupported schemes", () 
     () => new EnvironmentProxyPolicy(hostNodeURLs, { HTTP_PROXY: "ftp://proxy.example" }),
     ProxyConfigurationError,
   );
+});
+
+test("ProxyAgent forwards plaintext HTTP in absolute form without leaking URL userinfo", async () => {
+  const connection = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+  ]);
+  const direct = new QueueConnector([connection]);
+  const agent = new ProxyAgent({
+    connector: direct,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://user:pass@proxy.example:8080",
+  });
+  const response = await agent.dispatch(
+    transportRequest("http://url-user:url-pass@origin.example:8081/a?b=1#fragment"),
+  );
+  assert.equal(await responseText(response), "ok");
+  assert.deepEqual(direct.addresses, [
+    {
+      hostname: "proxy.example",
+      port: 8080,
+      secure: false,
+      connectTimeoutMs: 30000,
+    },
+  ]);
+  assert.equal(
+    connection.writtenText(),
+    "GET http://origin.example:8081/a?b=1 HTTP/1.1\r\n" +
+      "host: origin.example:8081\r\n" +
+      "proxy-authorization: Basic dXNlcjpwYXNz\r\n\r\n",
+  );
+  agent.close();
+});
+
+test("ProxyAgent tunnels HTTPS and verifies TLS against the logical target", async () => {
+  const connection = new ScriptedConnection([
+    "HTTP/1.1 200 Connection Established\r\n\r\n",
+    "HTTP/1.1 204 No Content\r\n\r\n",
+  ]);
+  const direct = new QueueConnector([connection]);
+  const tls = new RecordingTls();
+  const agent = new ProxyAgent({
+    connector: direct,
+    tls,
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example:8080",
+  });
+  const response = await agent.dispatch(transportRequest("https://target.example/path?q=1"));
+  assert.equal(response.status, 204);
+  assert.equal(tls.calls.length, 1);
+  assert.equal(tls.calls[0].target.hostname, "target.example");
+  assert.deepEqual(tls.calls[0].target.alpnProtocols, ["http/1.1"]);
+  assert.equal(
+    connection.writtenText(),
+    "CONNECT target.example:443 HTTP/1.1\r\nHost: target.example:443\r\n\r\n" +
+      "GET /path?q=1 HTTP/1.1\r\nhost: target.example\r\n\r\n",
+  );
+  agent.close();
+});
+
+test("ProxyAgent retries a forward 407 with typed authentication and a fresh request", async () => {
+  const first = new ScriptedConnection([
+    "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+      "Proxy-Authenticate: Bearer realm=test\r\n" +
+      "Content-Length: 0\r\n\r\n",
+  ]);
+  const second = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+  ]);
+  const direct = new QueueConnector([first, second]);
+  const calls = [];
+  const agent = new ProxyAgent({
+    connector: direct,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+    authenticate(context) {
+      calls.push(context);
+      return "Bearer fresh";
+    },
+  });
+  const response = await agent.dispatch(transportRequest("http://origin.example/resource"));
+  assert.equal(await responseText(response), "ok");
+  assert.equal(first.closed, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].target.hostname, "origin.example");
+  assert.match(second.writtenText(), /proxy-authorization: Bearer fresh\r\n/);
+  agent.close();
+});
+
+test("ProxyAgent reopens a replayable upload for forward-proxy authentication", async () => {
+  const first = new ScriptedConnection([
+    "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n",
+  ]);
+  const second = new ScriptedConnection(["HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"]);
+  const direct = new QueueConnector([first, second]);
+  const replayBody = replayableBytes("payload");
+  const agent = new ProxyAgent({
+    connector: direct,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+    authenticate: () => "Bearer retry",
+  });
+  const response = await agent.dispatch(
+    transportRequest("http://origin.example/upload", {
+      method: "POST",
+      body: replayBody.open(),
+      bodyLength: replayBody.length,
+      replayBody,
+    }),
+  );
+  assert.equal(response.status, 204);
+  assert.match(first.writtenText(), /\r\n\r\npayload$/);
+  assert.match(second.writtenText(), /\r\n\r\npayload$/);
+  agent.close();
+});
+
+test("ProxyAgent proxyTunnel forces CONNECT for plaintext HTTP", async () => {
+  const connection = new ScriptedConnection([
+    "HTTP/1.1 200 Connection Established\r\n\r\n",
+    "HTTP/1.1 204 No Content\r\n\r\n",
+  ]);
+  const agent = new ProxyAgent({
+    connector: new QueueConnector([connection]),
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+    proxyTunnel: true,
+  });
+  assert.equal((await agent.dispatch(transportRequest("http://origin.example/plain"))).status, 204);
+  assert.match(
+    connection.writtenText(),
+    /^CONNECT origin\.example:80 HTTP\/1\.1[\s\S]*GET \/plain HTTP\/1\.1/,
+  );
+  agent.close();
+});
+
+test("request headers cannot inject proxy credentials into routed dispatch", async () => {
+  const agent = new ProxyAgent({
+    connector: new QueueConnector([]),
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+  });
+  await assert.rejects(
+    agent.dispatch(
+      transportRequest("http://origin.example/", {
+        headers: [["Proxy-Authorization", "Bearer attacker"]],
+      }),
+    ),
+    /Transport-managed request header: proxy-authorization/,
+  );
+  agent.close();
+});
+
+test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel", async () => {
+  const connection = new ScriptedConnection([
+    new Uint8Array([5, 0]),
+    new Uint8Array([5, 0, 0, 1, 127, 0, 0, 1, 0, 80]),
+    "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+  ]);
+  const direct = new QueueConnector([connection]);
+  const agent = new Socks5ProxyAgent({
+    connector: direct,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "socks5://proxy.example:1080",
+  });
+  const response = await agent.dispatch(transportRequest("http://not-resolved-locally.example/a"));
+  assert.equal(await responseText(response), "ok");
+  assert.equal(direct.addresses[0].hostname, "proxy.example");
+  const written = connection.writtenBytes();
+  const httpStart = written.indexOf(71);
+  assert.equal(
+    decoder.decode(written.subarray(httpStart)),
+    "GET /a HTTP/1.1\r\nhost: not-resolved-locally.example\r\n\r\n",
+  );
+  agent.close();
+});
+
+test("EnvHttpProxyAgent snapshots variables and bypasses NO_PROXY destinations", async () => {
+  const directResponse = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\ndirect",
+  ]);
+  const proxyResponse = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nproxy",
+  ]);
+  const connector = new QueueConnector([directResponse, proxyResponse]);
+  const environment = {
+    HTTP_PROXY: "http://proxy.example:8080",
+    NO_PROXY: "bypass.example",
+  };
+  const agent = new EnvHttpProxyAgent({
+    connector,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    environment,
+  });
+  environment.HTTP_PROXY = "http://changed-after-construction.invalid";
+
+  assert.equal(
+    await responseText(await agent.dispatch(transportRequest("http://bypass.example/a"))),
+    "direct",
+  );
+  assert.equal(
+    await responseText(await agent.dispatch(transportRequest("http://origin.example/b"))),
+    "proxy",
+  );
+  assert.equal(connector.addresses[0].hostname, "bypass.example");
+  assert.equal(connector.addresses[1].hostname, "proxy.example");
+  assert.match(proxyResponse.writtenText(), /^GET http:\/\/origin\.example\/b HTTP\/1\.1\r\n/);
+  agent.close();
+  await assert.rejects(agent.dispatch(transportRequest("http://origin.example/")), /closed/);
 });
 
 test("real CONNECT tunnel upgrades TLS against the target identity, not the proxy", async () => {

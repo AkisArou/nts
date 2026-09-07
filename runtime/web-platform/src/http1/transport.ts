@@ -1,4 +1,5 @@
 import { Headers } from "../fetch/headers.ts";
+import type { HeaderEntry } from "../fetch/headers.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import { nullBodyStatus } from "../fetch/response.ts";
 import { ReadableStream } from "../streams/readable.ts";
@@ -8,6 +9,7 @@ import { ProtocolError, LimitError, DOMException } from "../core/errors.ts";
 import type {
   ByteConnection,
   CancelHandle,
+  ConnectAddress,
   Scheduler,
   SocketConnector,
 } from "../provider/primitives.ts";
@@ -35,11 +37,39 @@ export interface Http1Options extends PoolOptions {
   maxInformational?: number;
 }
 
+/** A provider-neutral HTTP/1 route selected for one dispatch. */
+export interface Http1DispatchRoute {
+  /** Physical endpoint and TLS identity passed to the socket provider. */
+  readonly address: ConnectAddress;
+  /** Origin-form for direct/tunneled requests, absolute-form for a forward proxy. */
+  readonly requestTarget: string;
+  /** Transport-owned fields that cannot be supplied through Fetch request headers. */
+  readonly headers?: readonly HeaderEntry[];
+}
+
 function isForbiddenTrailerName(name: string): boolean {
   return name === "content-length" || name === "host" || name === "transfer-encoding";
 }
 
-function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: boolean } {
+function isRouteManagedHeader(name: string): boolean {
+  return (
+    name === "host" ||
+    name === "connection" ||
+    name === "content-length" ||
+    name === "transfer-encoding" ||
+    name === "upgrade" ||
+    name === "trailer" ||
+    name === "te" ||
+    name === "keep-alive" ||
+    name === "proxy-connection" ||
+    name === "expect"
+  );
+}
+
+function requestHead(
+  request: TransportRequest,
+  route: Http1DispatchRoute,
+): { bytes: Uint8Array; chunked: boolean } {
   const headers = new Headers(request.headers);
 
   for (const name of [
@@ -51,6 +81,7 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
     "te",
     "keep-alive",
     "proxy-connection",
+    "proxy-authorization",
     "expect",
   ]) {
     if (headers.has(name)) throw new TypeError("Transport-managed request header: " + name);
@@ -63,6 +94,12 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
   headers.delete("content-length");
 
   headers.set("host", request.url.host);
+  for (const [name, value] of route.headers ?? []) {
+    if (isRouteManagedHeader(name.toLowerCase())) {
+      throw new TypeError("HTTP route cannot replace framing header: " + name.toLowerCase());
+    }
+    headers.set(name, value);
+  }
   const chunked = request.body !== null && request.bodyLength === null;
 
   if (chunked) headers.set("transfer-encoding", "chunked");
@@ -75,7 +112,7 @@ function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: b
   ) {
     headers.set("content-length", String(request.bodyLength));
   }
-  const target = request.url.pathname + request.url.search;
+  const target = route.requestTarget;
 
   if (/[^\x21-\x7e]/.test(target))
     throw new TypeError("URL parser produced an invalid HTTP request target");
@@ -149,14 +186,22 @@ export class Http1Transport implements FetchTransport {
     }
   }
   async dispatch(request: TransportRequest): Promise<TransportResponse> {
+    return this.dispatchRouted(request, {
+      address: addressOf(request.url, this.connectTimeout, ["http/1.1"]),
+      requestTarget: request.url.pathname + request.url.search || "/",
+    });
+  }
+
+  /** @internal Dispatch using a route selected by a shared proxy/connection policy. */
+  async dispatchRouted(
+    request: TransportRequest,
+    route: Http1DispatchRoute,
+  ): Promise<TransportResponse> {
     request.signal.throwIfAborted();
-    const serialized = requestHead(request);
+    const serialized = requestHead(request, route);
     if (serialized.bytes.length > this.limits.maxHeaderBytes)
       throw new LimitError("Request headers exceed configured limit");
-    const lease = await this.pool.acquire(
-      addressOf(request.url, this.connectTimeout, ["http/1.1"]),
-      request.signal,
-    );
+    const lease = await this.pool.acquire(route.address, request.signal);
     let uploadReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let uploadDone = request.body === null;
     let failure: unknown;
