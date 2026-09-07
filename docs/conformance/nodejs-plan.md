@@ -169,7 +169,24 @@ regression guard, and the annotated-const one exists because that repair landed
 twice — the first laid the object out as the declared type and broke
 `instanceof`, one relation recorded and a narrower one walked.
 
-**Two of the eight are invisible to `nts hir`.** `f64[]` lowers cleanly and
+**Two blockers have evidence but no fixture, and the attempt failed rather than
+being skipped.** The `NtsTask` microtask struct (three modules one clang error
+from compiling) and the `void` struct fields (228 of 244 clang errors, twelve
+modules) are both reported from the *generated C of real modules* — the exact
+error text, the struct with `void abort; void close; void start;` in it, and the
+call passing a closure pointer where a three-field struct is declared. Neither
+has a minimal reproduction.
+
+Two were written and both were wrong. A fixture calling `queueMicrotask` does
+not typecheck in a bare program — the name is not in scope — and one declaring
+an object type of optional function members lowers cleanly and compiles clean,
+so the `void` field needs something narrower than "an interface whose members
+are functions". **They were deleted rather than committed**: a fixture whose
+expectation passes is a guard with no defect behind it, which is the same
+"check that cannot fail" this document keeps finding elsewhere. The evidence
+stands; the reproduction is owed.
+
+**Two of the nine are invisible to `nts hir`.** `f64[]` lowers cleanly and
 fails at the wrapper, so the usual instrument reports "nothing refused" and says
 nothing; the runner takes its command from the expectation. That was worth
 encoding rather than remembering — this document quoted those two from
