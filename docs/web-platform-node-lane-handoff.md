@@ -70,12 +70,28 @@ binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 - pinned upstream corpus unchanged at 2,278 of 2,286 applicable, the same eight;
 - compiled axis 54 cases across 5 functions, agreeing on jvm, c and llvm.
 
-**Still open, and why.** The WebSocket **accept loop** needs a listening-socket provider
-primitive that does not exist, so it is an ABI addition to agree rather than code to
-write. The **public server module or package** is a repository-layout decision. The
-**Undici API ledger** still cannot be written honestly with nothing pinned. And whether
-the dispatched WebSocket transport should become the *default* has been left as a
-deliberate decision rather than taken by accident.
+**Closed since that list was written:** the WebSocket **accept loop**. Both peer lanes
+answered the ABI proposal — the JVM lane measured `bind`, port 0 and `accept` on an
+API-26 device; the Node lane, which has written the adapter, corrected the `backlog`
+contract, the close semantics and the bound-address field — and `SocketBinder`,
+`SocketListener` and `serveWebSocketUpgrades` are in with a real listening server under
+test. `SocketBinder` is optional on **policy** grounds, not capability: a client SDK
+should not silently grow the ability to listen.
+
+**Still open, and why.** The **public server module or package** is a repository-layout
+decision. The **Undici API ledger** still cannot be written honestly with nothing
+pinned. **Server-side TLS** — terminating `wss://` — is deliberately separate: it needs a
+certificate and a private key, which on Android means a key store and a set of questions
+about where the key lives, and coupling it to the listener would have held the listener
+behind it. And whether the dispatched WebSocket transport should become the *default* has
+been left as a deliberate decision rather than taken by accident.
+
+**One ABI proposal is outstanding: a monotonic clock.** `Event.timeStamp` is two failing
+upstream assertions and cannot be implemented without one — shared source has no clock
+by convention (`defaultNow()` returns literal `0`), and `new Event("x")` is constructible
+with no runtime to inject into. The JVM lane has measured `System.nanoTime()` on a device
+and confirmed the contract is keepable, with the caveat that it stalls rather than
+reverses during deep sleep. The Node lane has not answered yet.
 
 **One ABI change went in and the JVM lane has confirmed it on a device.**
 `DurableByteStore.source` now promises that a reader keeps reading what it was opened
