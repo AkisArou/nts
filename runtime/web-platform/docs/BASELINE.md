@@ -5301,3 +5301,35 @@ The engineering the afternoon produced is not wasted — `Fifo` clearing a deque
 so the value is not retained is right whatever the compiler does with it, and the
 distinction between nullable-to-release and nullable-as-a-domain-value is worth having.
 It is simply not a compiler constraint, and the handoff no longer says it is.
+
+### A correction: "outside every walk" was consistent and I called it inconsistent
+
+Two entries above, this ledger says of `a declaration outside every walk`: *"The other is
+`pipeline` — a public method of an exported class, reachable from outside the module by
+definition. Whatever that message means, it cannot mean what it says about that one."*
+
+That was too strong. A ten-line fixture, arrived at while verifying something else, makes
+the coherent reading visible:
+
+    class Slot<T> { value: T | undefined = undefined; }
+
+    export function genericSlot(value: number): number {
+      const holder = new Slot<number>();
+      holder.value = value;
+      return holder.value ?? -1;
+    }
+
+    refused: NTS1001 `null` or `undefined` where what it stands in for is not a reference
+    refused: NTS1001 `genericSlot`, a declaration outside every walk
+
+`genericSlot` is exported and is the only entry point in the program, and it is still
+reported as outside every walk. So the walk is over what **survives lowering**, not over
+what is reachable in the source — and `pipeline` fits that reading exactly: it returns a
+`ReadableStream` built from an object literal whose `start` was refused, so it is itself a
+cascade and drops out of the surviving graph for the same reason.
+
+Two consistent instances, and this ledger called them inconsistent. The wording objection
+stands on its own — a message that names a declaration in this source while describing a
+property of the compiler's traversal has sent me hunting for a missing call site twice —
+but the claim that no reading survived was wrong, and it was wrong in the direction of
+making somebody else's diagnostic look more broken than it is.
