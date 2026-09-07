@@ -180,6 +180,113 @@ OkHttp retries a *pooled* connection that turns out to be dead, not a fresh one
 that hangs up, so the obvious server never triggers it. All five switches are
 asserted on the built client through OkHttp's own accessors instead.
 
+## Durable storage
+
+Fourteen intrinsics behind `runtime/jvm/web-platform/store.ts`, implementing the
+provider half of `runtime/web-platform/src/storage/durable.ts`: bytes,
+atomicity, durability and enumeration, and nothing above them. RFC 9111
+freshness, `Vary`, invalidation, eviction, quota policy and CacheStorage
+matching are shared TypeScript, and none of these is a primitive for any of
+them.
+
+**One class for both runtimes, because a measurement said so.** `NtsStore` names
+no Android SDK member and lives in the runtime jar, so ART and a desktop JDK run
+the same code -- which is what makes the desktop suite evidence about the device
+rather than a proxy for it. The one operation with any reason to need the
+platform is syncing a directory, and it does not:
+
+    FileChannel.open(dir, READ).force(true)                        ok  (API 26)
+    android.system.Os.fsync on the same directory (the control)    ok
+
+The control is there so a failure would have been about the portable route
+rather than about the directory or the permissions. Without it the seam would
+have been written on a reasonable-sounding belief.
+
+### A commit is four operations and one of them is invisible
+
+Write to a temporary, sync the file, rename over the target, sync the
+**directory**. The rename is what makes a value appear whole or not at all; the
+first sync is what makes its bytes durable; the second is what makes the rename
+durable, because the directory entry lives in a different inode with its own
+dirty pages.
+
+That last one is the guarantee **no functional test can see**. Delete it and a
+committed value is still whole, still atomic, still correct on every machine
+that does not lose power -- all 66 checks pass. So the test checks the cause: an
+`LD_PRELOAD` shim in front of libc reports which calls a commit makes.
+
+    SHIM fsync  .../ns/k.1.nts-partial
+    SHIM rename .../ns/k.1.nts-partial -> .../ns/k
+    SHIM fsync  .../ns
+
+Not a power-cut test, and it says so. What it rules out is the edit that removes
+the guarantee silently -- deleting the sync, or moving it *before* the rename,
+which looks like it is still there. Both fail it; the functional suite stays
+green through both. `docs/records/0203`.
+
+### What it refuses, and why each is not a smaller answer
+
+- **A key whose encoded name passes the length limit.** Truncating would make
+  two keys one key, and a wrong answer is worse than an error.
+- **A second concurrent write to one key.** The ABI is sequential per key.
+  Making that true by *waiting* turns a caller's mistake into a pause, with the
+  pause as the only evidence it made one. A caller that wants the later value
+  serialises above this seam, where it can also decide which value should win --
+  which the store cannot know.
+- **A ranged view that does not fit the value.** A caller asked for a range of
+  *that* value; if the key was replaced between being sized and being opened, a
+  prefix of the new one is not a shorter answer to that question but an answer to
+  a different one, returned without saying so. Once open, the descriptor pins
+  what it was opened over, so a later commit cannot change what a view sees.
+
+Names are percent-encoded, reversibly so enumeration gives back what was stored,
+and that is also what makes escape impossible: `..` and `/` do not survive it.
+`../escape`, `/etc/passwd`, `.hidden`, `%41` and `é中` all round-trip inside
+their namespace.
+
+### Views both ways, and the record encoding
+
+`append` takes a view and the two reads fill one, because three entries in the
+table already borrow a caller's window and a store that allocated here would be
+the only one that does -- copying every value twice, once out of the file and
+once into the view the caller wanted anyway. `append` takes no offset or length
+beside the view: a view carries both, and passing them again is a second answer
+that can disagree with the first.
+
+`read` and `list` both answer **what there was** and write **what fits**, so a
+short guess is corrected by the same call. `list` is one call and one snapshot --
+`size NUL modified NUL keyByteLength NUL key` per record, concatenated -- because
+a count plus a lookup per key cannot be atomic, and a key created or removed
+between them makes the metadata disagree with the names with no way to tell which
+half is stale. The explicit key length is what lets records concatenate and still
+parse when a key contains a separator, which a key may.
+
+`source_read` answers `-1` at the end of a range and a positive count otherwise,
+so zero never occurs and "an empty chunk is invalid" is structural rather than a
+rule a consumer has to know.
+
+### The bug only the device could find
+
+`close` iterated `ConcurrentHashMap.keySet()`. Java 8 made that method's return
+type covariant -- `KeySetView` where Android's `core-oj` still says `Set` -- so
+`javac --release 8` wrote a descriptor ART cannot resolve, and it died with
+`NoSuchMethodError` on a method that *exists*.
+
+Every guard passed. The source is fine, the bytecode is valid, it dexes at
+`--min-api 26`, it needs no feature above the floor, and `android.jar` on the
+classpath supplies `android.*` while `java.util.*` still comes from the JDK.
+**ART resolves lazily**, so even forcing linkage over the corpus would not find
+it -- only executing that line does.
+
+Recompiling against Android's bootclasspath is not the fix: that descriptor then
+fails on every desktop JVM, where `keySet()` really does return `KeySetView`. The
+two platforms disagree and one jar runs on both, so the only rule that works is
+to avoid the members where they differ.
+`the_jar_names_no_method_android_spells_differently` reads the shipped jar's
+constant pool for them -- a list with one entry, and it says in its own doc that
+it is a list rather than a rule and cannot find the next one. The device suite
+can. `docs/records/0204`.
+
 ## The artifacts
 
 | | |
@@ -199,6 +306,7 @@ compiler against our house style.
 ## Running the evidence
 
     cargo test -p nts-codegen-jvm            # every suite above, skipping what it cannot find
+    cargo test -p nts-codegen-jvm --test store   # the durable store, and the syscalls a commit makes
     sh tooling/android/on-device.sh          # the same suites on ART, plus the R8-shrunk library
     sh tooling/android/barrier.sh            # does `volatile` reach the compiler and make a fence
     sh tooling/jvm/sabotage.sh <edit> <driver>   # prove one can fail, without breaking the tree
