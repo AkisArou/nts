@@ -4,6 +4,8 @@ import type { RequestContext, RequestInit } from "../fetch/request.ts";
 import { Request } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import type { ContentDecoder, FetchTransport } from "../fetch/transport.ts";
+import { Blob } from "../file/blob.ts";
+import { BlobURLStore } from "../file/object-url.ts";
 import { Http1Transport } from "../http1/transport.ts";
 import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
@@ -23,6 +25,8 @@ export interface WebPlatformOptions {
   fetchTransport?: FetchTransport;
   webSocketTransport?: WebSocketTransport;
   contentDecoder?: ContentDecoder;
+  /** Provider-specific serialization, e.g. Node's `blob:nodedata:` prefix. */
+  blobURLPrefix?: string;
 }
 
 /**
@@ -43,6 +47,7 @@ export class WebPlatformRuntime {
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
   private readonly primitives: PlatformPrimitives;
   private readonly options: WebPlatformOptions;
+  private readonly blobURLs: BlobURLStore;
   private closed = false;
 
   constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
@@ -55,12 +60,14 @@ export class WebPlatformRuntime {
     this.primitives = primitives;
     this.options = options;
     this.nativeLineEnding = primitives.nativeLineEnding;
+    this.blobURLs = new BlobURLStore(primitives.random, options.origin, options.blobURLPrefix);
     this.requestContext = {
       urls: primitives.urls,
       random: primitives.random,
       bodyPolicy,
       baseURL: options.baseURL,
       origin: options.origin,
+      blobURLs: this.blobURLs,
     };
     this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
 
@@ -91,6 +98,19 @@ export class WebPlatformRuntime {
     return this.primitives.wallTimeMilliseconds();
   }
 
+  createObjectURL(blob: Blob): string {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    return this.blobURLs.create(blob);
+  }
+
+  revokeObjectURL(value: string): void {
+    try {
+      this.blobURLs.revoke(this.primitives.urls.parse(value));
+    } catch {
+      return;
+    }
+  }
+
   createWebSocket(url: string, protocols: string | readonly string[] = []): WebSocket {
     if (this.closed) throw new TypeError("Web-platform runtime is closed");
     return new WebSocket(url, protocols, {
@@ -106,6 +126,7 @@ export class WebPlatformRuntime {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.blobURLs.close();
     this.http1.close();
     if (this.ownedWebSocketTransport !== null) {
       this.ownedWebSocketTransport.close();

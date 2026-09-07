@@ -1993,6 +1993,121 @@ test("Fetch processes data URLs without entering the network transport", async (
   controller.abort(reason);
   await assert.rejects(pending, (error) => error === reason);
 });
+test("Blob URLs are environment-owned, revocable, and captured by Request", async () => {
+  const runtime = createHostNodeWebPlatform({ origin: "https://example.test" });
+  const isolated = createHostNodeWebPlatform({ origin: "https://example.test" });
+  const nodeCompatible = createHostNodeWebPlatform({ blobURLPrefix: "blob:nodedata:" });
+  globalThis.nts_environment_platform = () => runtime;
+  try {
+    const blob = new Blob(["abcdef"], { type: "text/plain" });
+    assert.throws(() => runtime.createObjectURL({}), TypeError);
+    assert.doesNotThrow(() => runtime.revokeObjectURL("not a URL"));
+    const url = runtime.createObjectURL(blob);
+    assert.match(
+      url,
+      /^blob:https:\/\/example\.test\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    assert.notEqual(runtime.createObjectURL(blob), url);
+    assert.match(
+      nodeCompatible.createObjectURL(blob),
+      /^blob:nodedata:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+
+    const complete = await runtime.fetch(url + "#fragment");
+    assert.equal(complete.status, 200);
+    assert.equal(complete.statusText, "OK");
+    assert.equal(complete.url, url);
+    assert.equal(complete.headers.get("content-length"), "6");
+    assert.equal(complete.headers.get("content-type"), "text/plain");
+    assert.equal(await complete.text(), "abcdef");
+
+    runtime.revokeObjectURL(url + "#fragment");
+    assert.equal(await (await runtime.fetch(url)).text(), "abcdef");
+    await assert.rejects(isolated.fetch(url), TypeError);
+    await assert.rejects(runtime.fetch(url + "?query"), TypeError);
+    await assert.rejects(runtime.fetch(url + "/path"), TypeError);
+
+    const captured = new Request(url);
+    const clone = captured.clone();
+    runtime.revokeObjectURL(url);
+    assert.equal(await (await runtime.fetch(captured)).text(), "abcdef");
+    assert.equal(await (await runtime.fetch(clone)).text(), "abcdef");
+    await assert.rejects(runtime.fetch(url), TypeError);
+
+    const immediateURL = runtime.createObjectURL(blob);
+    const pending = runtime.fetch(immediateURL);
+    runtime.revokeObjectURL(immediateURL);
+    assert.equal(await (await pending).text(), "abcdef");
+
+    const methodURL = runtime.createObjectURL(blob);
+    for (const method of ["HEAD", "POST", "PUT", "DELETE", "OPTIONS", "CUSTOM"]) {
+      await assert.rejects(runtime.fetch(methodURL, { method }), TypeError, method);
+    }
+
+    const teardownURL = runtime.createObjectURL(blob);
+    runtime.close();
+    await assert.rejects(runtime.fetch(teardownURL), TypeError);
+    assert.throws(() => runtime.createObjectURL(blob), TypeError);
+  } finally {
+    runtime.close();
+    isolated.close();
+    nodeCompatible.close();
+    globalThis.nts_environment_platform = () => api;
+  }
+});
+test("Blob URL Fetch implements the single byte-range algorithm", async () => {
+  const runtime = createHostNodeWebPlatform({ origin: "https://example.test" });
+  try {
+    const url = runtime.createObjectURL(new Blob(["abcdef"], { type: "text/custom" }));
+    for (const [range, text, contentRange] of [
+      ["bytes=0-2", "abc", "bytes 0-2/6"],
+      ["bytes=2-", "cdef", "bytes 2-5/6"],
+      ["bytes=-2", "ef", "bytes 4-5/6"],
+      ["bytes=-20", "abcdef", "bytes -14-5/6"],
+      ["bytes=-0", "", "bytes 6-5/6"],
+      ["bytes \t= 1 \t-\t 3", "bcd", "bytes 1-3/6"],
+      ["bytes=0-1 ", "ab", "bytes 0-1/6"],
+      ["bytes=0-999999999999999999999999", "abcdef", "bytes 0-5/6"],
+    ]) {
+      const response = await runtime.fetch(url, { headers: { range } });
+      assert.equal(response.status, 206, range);
+      assert.equal(response.statusText, "Partial Content", range);
+      assert.equal(response.headers.get("content-range"), contentRange, range);
+      assert.equal(response.headers.get("content-length"), String(text.length), range);
+      assert.equal(response.headers.get("content-type"), "text/custom", range);
+      assert.equal(await response.text(), text, range);
+    }
+
+    for (const range of [
+      "Bytes=0-1",
+      "bytes=",
+      "bytes=-",
+      "bytes=3-2",
+      "bytes=6-",
+      "bytes=20-30",
+      "bytes=0-1,2-3",
+      "items=0-1",
+    ]) {
+      await assert.rejects(runtime.fetch(url, { headers: { range } }), TypeError, range);
+    }
+
+    const emptyURL = runtime.createObjectURL(new Blob([]));
+    for (const [range, contentRange] of [
+      ["bytes=-1", "bytes -1--1/0"],
+      ["bytes=-0", "bytes 0--1/0"],
+    ]) {
+      const response = await runtime.fetch(emptyURL, { headers: { range } });
+      assert.equal(response.status, 206, range);
+      assert.equal(response.headers.get("content-range"), contentRange, range);
+      assert.equal(response.headers.get("content-length"), "0", range);
+      assert.equal(await response.text(), "", range);
+    }
+    await assert.rejects(runtime.fetch(emptyURL, { headers: { range: "bytes=0-" } }), TypeError);
+  } finally {
+    runtime.close();
+    globalThis.nts_environment_platform = () => api;
+  }
+});
 test("Response applies Web IDL conversion before validation and body extraction", async () => {
   for (const input of [200.9, "201", 65_536 + 204, 65_536 + 599]) {
     const actual = makeResponse(null, { status: input });

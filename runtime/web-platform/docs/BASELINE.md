@@ -1143,3 +1143,38 @@ live NTS frontier is 619 primary `NTS1001` refusals, 83 dependent `NTS1003`
 cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics, and no
 invalid HIR. The one-primary, one-cascade movement is newly reachable final source,
 not a provider-completion claim.
+
+The environment-owned Blob URL store and Fetch's `blob:` scheme algorithm are now
+shared rather than delegated to a host network stack. Object URLs carry RFC 4122
+version-4 identifiers, retain the Blob until exact revocation or environment
+teardown, resolve with the fragment excluded, and are captured when a `Request` is
+constructed. Consequently, revoking after constructing or cloning a `Request`, or
+immediately after calling `fetch`, cannot invalidate that request. A second runtime
+cannot resolve the first runtime's entry. Providers may select an
+implementation-defined opaque-origin serialization such as Node's `blob:nodedata:`
+without changing storage or Fetch semantics.
+
+Blob Fetch accepts only `GET`, returns immutable `200 OK` responses with the Blob's
+length and type, and implements the Fetch Standard's single byte-range parser and
+`206 Partial Content` response. The local oracle covers omitted endpoints, HTTP
+tab/space, invalid units and multiple ranges, an endpoint beyond `2^53`, a start at
+or beyond the Blob length, zero-length Blobs, oversized suffixes, and zero suffixes.
+The last two intentionally preserve the Standard's unusual serialized ranges
+(`bytes -14-5/6` and `bytes 6-5/6` for a six-byte Blob); Node `v24.20.0` produced
+the same values in a direct comparison.
+
+The complete local Node-host suite passes 155/155 and the root TypeScript solution
+is green. The pinned upstream result remains 1865/1874 applicable cases with the
+same nine visible failures and seven named not-applicable cases; this tranche does
+not relabel unrelated failures. The live NTS frontier is 621 primary `NTS1001`
+refusals, 84 dependent `NTS1003` cascades, zero JVM-backend diagnostics, zero
+`NTS1004` module diagnostics, and no invalid HIR. The two-primary, one-cascade
+movement is new final source reaching existing compiler dependencies.
+
+The exact File API `url-with-fetch.any.js` fixture is not counted yet because it
+tests the public `URL.createObjectURL` and `URL.revokeObjectURL` statics. The Node
+runtime currently has a separate URL class and Blob URL registry; exposing a
+test-only partial `URL` would hide that duplicate identity. This shared storage and
+scheme-fetch substrate lands first, while the Node-owned URL implementation is
+being reconciled with the canonical Web `URL`. The fixture must be pinned unchanged
+when that public identity-preserving surface lands.

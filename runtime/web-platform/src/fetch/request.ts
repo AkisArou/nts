@@ -8,6 +8,8 @@ import {
 } from "../core/webidl.ts";
 import type { RandomSource, URLParser, URLRecord } from "../provider/primitives.ts";
 import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import type { Blob } from "../file/blob.ts";
+import type { BlobURLStore } from "../file/object-url.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
@@ -89,6 +91,7 @@ export interface RequestContext {
   bodyPolicy: BodyPolicy;
   baseURL?: string;
   origin?: string;
+  blobURLs: BlobURLStore;
 }
 
 declare function nts_environment_platform(): WebPlatformRuntime;
@@ -345,6 +348,8 @@ export class Request extends Body {
   private readonly historyNavigation: boolean;
   private readonly requestPriority: RequestPriority;
   /** @internal */ readonly parsedURL: URLRecord;
+  /** @internal The Blob URL entry captured when this request's URL was parsed. */
+  readonly blobURLObject: Blob | null;
   private readonly context: RequestContext;
 
   constructor(input: string | Request, init?: RequestInit);
@@ -352,11 +357,13 @@ export class Request extends Body {
     input: string | Request,
     init: RequestInit | null | undefined,
     context: RequestContext,
+    blobURLObject?: Blob | null,
   );
   constructor(
     input: string | Request,
     init: RequestInit | null | undefined = undefined,
     context: RequestContext = nts_environment_platform().requestContext,
+    blobURLObject: Blob | null | undefined = undefined,
   ) {
     const source = input instanceof Request ? input : null;
     const inputURL = source === null ? coerceToUSVString(input) : source.url;
@@ -414,6 +421,12 @@ export class Request extends Body {
     this.requestMethod = method;
     this.requestHeaders = headers;
     this.parsedURL = url;
+    this.blobURLObject =
+      blobURLObject !== undefined
+        ? blobURLObject
+        : source === null
+          ? context.blobURLs.resolve(url)
+          : source.blobURLObject;
     this.context = context;
     const inherited =
       convertedInit.signal === null ? undefined : (convertedInit.signal ?? source?.signal);
@@ -520,6 +533,7 @@ export class Request extends Body {
         referrerPolicy: this.referrerPolicy,
       },
       this.context,
+      this.blobURLObject,
     );
     result.bodyState = state;
     return result;

@@ -17,6 +17,7 @@ import type {
   TransportResponse,
 } from "./transport.ts";
 import { processDataURL } from "./data-url.ts";
+import { fetchBlob } from "./blob-url.ts";
 
 declare function nts_environment_platform(): WebPlatformRuntime;
 
@@ -177,6 +178,27 @@ export class FetchClient {
             "OK",
             [["content-type", data.mimeType]],
             bodyStream,
+            fragment < 0 ? url.href : url.href.slice(0, fragment),
+            false,
+            this.context,
+          );
+        }
+        if (url.protocol === "blob:") {
+          await Promise.resolve();
+          request.signal.throwIfAborted();
+          if (method !== "GET" || request.blobURLObject === null) {
+            throw new TypeError("Blob URL cannot be fetched");
+          }
+          const blobResponse = fetchBlob(request.blobURLObject, headers.get("range"));
+          if (blobResponse === null) {
+            throw new TypeError("Invalid Blob URL range");
+          }
+          const fragment = url.href.indexOf("#");
+          return Response.fromTransport(
+            blobResponse.status,
+            blobResponse.statusText,
+            blobResponse.headers,
+            abortableBody(blobResponse.body.stream(), request.signal),
             fragment < 0 ? url.href : url.href.slice(0, fragment),
             false,
             this.context,
