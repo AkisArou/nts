@@ -1801,3 +1801,33 @@ The live compiled-source frontier is 1172 primary `NTS1001` refusals and 194 dep
 `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. The increase is new policy source reaching existing
 language prerequisites; it is not compiled retry or provider evidence.
+
+## Bounded response policy interceptors
+
+At `cabe019f`, the shared interceptor layer can consume and discard a response or
+turn a status at or above 400 into a stable typed `ResponseError`. Text and JSON
+media types are captured as UTF-8 text, other media types remain bytes, and the
+error owns copied headers plus its status code and message. Canonical JSON object
+decoding remains attached to the compiler/common-runtime JSON prerequisite rather
+than delegating to a host parser.
+
+Both policies use one response collector with an explicit positive byte bound.
+It rejects an advertised over-limit `Content-Length` conservatively, including
+unsafe-integer values, and enforces the same bound incrementally when length is
+unknown or false. Cancellation is awaited before the policy rejects, exact-boundary
+bodies are accepted, trailer settlement remains visible, abort reasons retain exact
+identity, and a body-read or trailer failure is never relabeled as a status or size
+failure.
+
+The focused policy corpus passes 9/9 and the complete local Node-host/real-socket
+suite passes 320/320. The pinned WPT slice remains 2275/2283 applicable cases with
+14 named not-applicable cases and the same eight visible structural/common-compiler
+failures.
+
+A sabotage changed the incremental size check from strictly greater-than to
+greater-than-or-equal. The exact-boundary dump precondition fell from 1/1 to 0/1
+with `ResponseExceededMaxSizeError`, then returned to 1/1 after restoration. The
+live compiled-source frontier is 1180 primary `NTS1001` refusals and 195 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase is new policy source reaching existing
+language prerequisites; it is not compiled interceptor evidence.
