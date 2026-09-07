@@ -3096,3 +3096,53 @@ shifted type ids. An earlier revision wrote the end callback as `() => end?.()`,
 cost one primary for a function returning `undefined | void`; rewriting it as a block
 moved the diagnostic to the optional call rather than removing it, and an explicit
 `if (end !== undefined)` — the spelling this codebase uses elsewhere — costs nothing.
+
+## Fuzzing that can say what it covered
+
+The plan lists protocol fuzzing under testing and observability. The property is not
+"does it parse" — malformed input is the point — but that malformed input always
+reaches a **named** failure: a typed error from this runtime's own taxonomy, in bounded
+time, with nothing half-decoded escaping as a result. A raw `TypeError` from indexing
+past an array, or a `RangeError` from an allocation, means the parser fell over rather
+than refused, and the two are indistinguishable to a caller that only sees a rejection.
+
+Six thousand seeded iterations run against the WebSocket frame decoder in the server
+direction and the HTTP/1 header-field parser. Every accepted result is checked for
+internal consistency — a control frame is never fragmented and never large, an accepted
+opcode is one of the six that exist, a parsed field always has a name — because a
+parser that accepts garbage quietly is the failure mode a fuzzer exists to find.
+
+The corpus is seeded and its determinism is itself asserted: two generators from one
+seed agree exactly, and two different seeds diverge. A fuzzer whose corpus changes per
+run reports failures nobody can reproduce.
+
+**The generator asserts its own coverage**, which is the part most easily left out. Six
+shapes are counted — accepted frames, control opcodes, reserved bits, wrong masking,
+extended and 64-bit lengths — and the test fails naming any shape that never appeared.
+Without it the whole suite passes while generating nothing but two random bytes, which
+is the "mechanism that is never the only way in" pattern applied to a test rather than
+to an implementation.
+
+Both parsers passed as they stand: no unnamed failure in six thousand iterations.
+
+Four sabotages, all restored. Letting an invalid opcode reach the caller was caught.
+Dropping the control-frame fragmentation and size constraint was caught. Making the
+corpus incapable of carrying an extended length was caught by the coverage guard, which
+is what proves that guard is not decoration.
+
+The fourth is recorded because it did **not** fire and the reason matters. Mapping every
+reserved opcode to `1` instead of rejecting it produces a structurally valid frame, and
+a structural fuzzer cannot see it: the frame is consistent, it is simply about the wrong
+thing. That is a real limit on what this technique establishes — it finds parsers that
+fall over or accept malformed structure, not parsers that are confidently wrong — and
+naming it is more useful than picking a sabotage that flatters the method.
+
+The fuzzer lives in the conformance suite rather than in shared source. It is a test
+driver rather than a runtime feature, unlike `MockAgent` and `SnapshotAgent`, which are
+capabilities a consumer uses.
+
+The complete local Node-host/real-socket corpus passes 487/487 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The NTS frontier is unchanged at 1,298 primary
+`NTS1001` and 241 `NTS1003`, as expected for a slice that adds tests and changes no
+shared source.

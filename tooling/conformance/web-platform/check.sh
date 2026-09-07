@@ -19,6 +19,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/eventsource.test.mjs \
   tooling/conformance/web-platform/test/eventsource-timing.test.mjs \
   tooling/conformance/web-platform/test/file-url.test.mjs \
+  tooling/conformance/web-platform/test/fuzz.test.mjs \
   tooling/conformance/web-platform/test/hpack.test.mjs \
   tooling/conformance/web-platform/test/http2-connection.test.mjs \
   tooling/conformance/web-platform/test/http2-frame.test.mjs \
