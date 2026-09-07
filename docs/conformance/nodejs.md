@@ -1896,12 +1896,36 @@ process 30    os 12    url 12    querystring 6    punycode 2
 `emitWarning` roots in `internal/process-warning.ts` are what block it, since
 `ucs2decode` costs only `ucs2` itself.
 
-**The narrowing below is kept because it was wrong.** It reasoned from
-behaviour alone, intersected the crash paths against the working ones
-correctly, and produced two candidates that were both false. What it could not
-see is that the two working paths had something in common that was not visible
-in what they *did* — they both returned before touching module state, and
-nothing in the call traces says so.
+The backtrace, from the compiler session, names it in one frame:
+
+```
+SIGSEGV in nts_concat_into (into=0x0, a=0x7ffff7aff070, b=0x0)
+   b is `delimiter`, and program.c holds
+     static NtsString * delimiter = 0;
+   with no module#init anywhere in the file.
+```
+
+And the lowering had *announced* it, in terms that are the bug rather than a
+warning about it: *module evaluation … which the refusal above loses in full
+and so will not run; **the program still builds**, and every module-scope value
+it would have computed stays at its static initializer.* For a number a static
+initializer of zero is a wrong answer. For a reference it is a null
+dereference, and it was emitted knowingly.
+
+**The narrowing below is kept because it was wrong, and it was wrong by one
+step.** It intersected the crash paths against the working ones correctly and
+produced two false candidates. The early returns fire before *the null global
+is read* — not before per-character work. Same two data points, one inference
+short. And the second candidate looked strong for a reason worth keeping:
+`querystring` has fourteen null globals and `noEscapeTable` is one of them, so
+indexing it really is where the process dies — the array is null, not the index
+wrong.
+
+**A crashing artifact does not need this kind of reasoning at all.** `clang -g
+-O0` over the emitted `program.c` with a four-line `main`, then
+`gdb -batch -ex run -ex bt`, takes about ninety seconds and names the variable.
+Two hours of intersecting behaviours produced two wrong answers where the
+disassembly had the right one for free, and it does not touch the corpus.
 
 **Narrowed to two candidates by intersecting the crash paths against the
 working ones.** Both working paths return before any per-character work —
@@ -1927,7 +1951,13 @@ node's source purely to probe the compiler, which is the thing this document
 forbids for better reasons than this test is worth.
 
 **This document's own instrument was hiding both, which is why the stage list
-now has a `built-but-crashes`.** The sweep reported `punycode` as
+now has a `built-but-crashes`. It is the worst of the day's instrument
+failures, and not for the reason first recorded here.** The others reported
+success while measuring nothing. This one did not fail to measure — it
+*measured and misclassified*, and a misclassification survives scrutiny in a
+way silence does not. Someone reading `built-exports-partial 0 / 4` would go
+looking for missing exports, find them, and be right about everything except
+what mattered. The sweep reported `punycode` as
 `built-exports-partial 0 / 1, 4 names published` and `querystring` as
 `0 / 4, 1 name published` — which reads as *the test failed for want of
 exports* and is indistinguishable from `os`, whose surface genuinely is
