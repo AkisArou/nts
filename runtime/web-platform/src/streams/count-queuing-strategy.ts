@@ -26,7 +26,21 @@ export class CountQueuingStrategy implements QueuingStrategy<unknown> {
     return size;
   }
 
-  get [Symbol.toStringTag](): "CountQueuingStrategy" {
-    return "CountQueuingStrategy";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "CountQueuingStrategy",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }

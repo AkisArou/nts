@@ -575,8 +575,16 @@ export class Request extends Body {
     return result;
   }
 
-  get [Symbol.toStringTag](): string {
-    return "Request";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "Request",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

@@ -435,8 +435,16 @@ export class TransformStream<I = unknown, O = unknown> {
     return this.#state.writable;
   }
 
-  get [Symbol.toStringTag](): "TransformStream" {
-    return "TransformStream";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "TransformStream",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -469,7 +477,15 @@ export class TransformStreamDefaultController<O = unknown> {
     this.#state.terminate();
   }
 
-  get [Symbol.toStringTag](): "TransformStreamDefaultController" {
-    return "TransformStreamDefaultController";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "TransformStreamDefaultController",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }

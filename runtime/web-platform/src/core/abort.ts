@@ -298,6 +298,17 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       else source.releaseDependentSignal(this);
     }
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "AbortSignal",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 export class AbortController {
@@ -309,6 +320,17 @@ export class AbortController {
 
   abort(reason?: unknown): void {
     this.controllerSignal.trigger(reason);
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "AbortController",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

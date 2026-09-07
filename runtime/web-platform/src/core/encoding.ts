@@ -97,6 +97,17 @@ export class TextEncoder {
     utf8Write(destination, input, 0, destination.length, progress);
     return progress;
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "TextEncoder",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 export interface TextDecoderOptions {
@@ -332,6 +343,17 @@ export class TextDecoder {
     this.bomSeen = bomSeen;
     pieces.push(ascii);
     return pieces.join("");
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "TextDecoder",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

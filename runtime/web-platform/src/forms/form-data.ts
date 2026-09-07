@@ -210,7 +210,15 @@ export class FormData implements Iterable<FormDataEntry> {
     return new FormDataIterator(this.#list, selectEntry);
   }
 
-  get [Symbol.toStringTag](): "FormData" {
-    return "FormData";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "FormData",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }

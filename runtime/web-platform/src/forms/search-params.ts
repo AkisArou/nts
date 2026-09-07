@@ -264,4 +264,15 @@ export class URLSearchParams {
   [Symbol.iterator](): Generator<SearchParamEntry, void, unknown> {
     return this.entries();
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "URLSearchParams",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }

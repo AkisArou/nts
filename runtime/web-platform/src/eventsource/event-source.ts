@@ -464,4 +464,21 @@ export class EventSource extends EventTarget {
     this.registered = false;
     this.context.unregisterEventSource(this);
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "EventSource",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }

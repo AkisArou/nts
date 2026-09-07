@@ -327,6 +327,23 @@ export class WebSocket extends EventTarget {
     this.registered = false;
     this.context.unregisterWebSocket(this);
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "WebSocket",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData> {

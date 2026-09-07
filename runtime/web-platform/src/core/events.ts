@@ -238,6 +238,23 @@ export class Event {
   /** @internal */ get stoppedBeforeTarget(): boolean {
     return this.propagationStopped;
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "Event",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 export interface CustomEventInit<T> extends EventInit {
@@ -283,6 +300,23 @@ export class CustomEvent<T = unknown> extends Event {
     if (this.initialize(convertedType, convertedBubbles, convertedCancelable)) {
       this.customDetail = detail;
     }
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "CustomEvent",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -700,6 +734,17 @@ export class EventTarget {
     }
     this.listeners.length = write;
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "EventTarget",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 /**
@@ -901,6 +946,23 @@ export class MessageEvent<T = unknown> extends Event {
     this.messageSource = source;
     this.messagePorts = convertedPorts;
   }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "MessageEvent",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+  }
 }
 
 export interface CloseEventInit extends EventInit {
@@ -950,6 +1012,23 @@ export class CloseEvent extends Event {
 
   get wasClean(): boolean {
     return this.clean;
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "CloseEvent",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -1020,5 +1099,22 @@ export class ErrorEvent extends Event {
 
   get message(): string {
     return this.errorMessage;
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ErrorEvent",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }

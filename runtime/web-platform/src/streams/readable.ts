@@ -755,8 +755,16 @@ export class ReadableStream<T> {
     return this.values(options);
   }
 
-  get [Symbol.toStringTag](): "ReadableStream" {
-    return "ReadableStream";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableStream",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -970,8 +978,16 @@ export class ReadableStreamDefaultController<T> {
     this.#stream.fail(reason);
   }
 
-  get [Symbol.toStringTag](): "ReadableStreamDefaultController" {
-    return "ReadableStreamDefaultController";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableStreamDefaultController",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -1180,8 +1196,16 @@ export class ReadableStreamBYOBRequest {
     this.#view = null;
   }
 
-  get [Symbol.toStringTag](): "ReadableStreamBYOBRequest" {
-    return "ReadableStreamBYOBRequest";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableStreamBYOBRequest",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -1221,8 +1245,16 @@ export class ReadableByteStreamController {
     this.#state.stream.fail(reason);
   }
 
-  get [Symbol.toStringTag](): "ReadableByteStreamController" {
-    return "ReadableByteStreamController";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableByteStreamController",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -1310,8 +1342,16 @@ export class ReadableStreamBYOBReader {
     this.#closedCapability.reject(error);
   }
 
-  get [Symbol.toStringTag](): "ReadableStreamBYOBReader" {
-    return "ReadableStreamBYOBReader";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableStreamBYOBReader",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -1996,8 +2036,16 @@ export class ReadableStreamDefaultReader<T> {
     this.#closedCapability.reject(error);
   }
 
-  get [Symbol.toStringTag](): "ReadableStreamDefaultReader" {
-    return "ReadableStreamDefaultReader";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "ReadableStreamDefaultReader",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

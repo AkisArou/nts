@@ -450,8 +450,22 @@ export class WebSocketStream {
     return this.#state === "closed";
   }
 
-  get [Symbol.toStringTag](): "WebSocketStream" {
-    return "WebSocketStream";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "WebSocketStream",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 1,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

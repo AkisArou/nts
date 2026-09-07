@@ -5658,3 +5658,65 @@ the two halves of the seam.
 
 803/803 host, upstream unchanged at 2,410 of 2,418, frontier 1,302/317 to 1,305/319 on the
 same pinned binary.
+
+## The Web IDL surface, which nothing here had ever checked
+
+Written after the Node lane reported finding twelve `process` functions and four `os` ones
+published with no `.name` at all — node names every function it publishes, nothing upstream
+asserts it, and a compiled backend would lose it while passing every test it has. The same
+question asked here found the same class of defect.
+
+WPT tests this through `idlharness`, which this corpus does not pin: it needs the IDL
+definitions and a harness that parses them, which is a far larger dependency than a fixture
+file. So the surface was unchecked, and it was wrong in two ways no behavioural test would
+ever notice.
+
+**Fourteen interfaces had no `@@toStringTag` at all**, so
+`Object.prototype.toString.call(new Event("x"))` answered `[object Object]` where every
+other implementation answers `[object Event]`. **Twenty-one more had it as a getter**, which
+produces the right string and the wrong shape — Web IDL requires a *data* property,
+non-writable, non-enumerable, configurable. The accessor is the obvious thing to write in a
+class body, which is exactly why all twenty-one were written that way.
+
+**And eleven constructors had the wrong `length`.** Web IDL defines it as the required-
+argument count and it is observable: `Event.length` is 1 everywhere, and here it was 0.
+These classes take `...args` tuples so that an omitted argument is distinguishable from an
+explicit `undefined` — which Web IDL also requires, and which matters more than the arity —
+so the tuple stays and the arity is declared. `Headers` was wrong in the other direction,
+1 where the IDL says 0.
+
+The oracle is the IDL text, not node. Node agrees on every interface it implements and that
+agreement is worth having, but it is a cross-check: this lane has already found one place
+where node's own answer was the wrong one, and a table copied from a running implementation
+is a table chosen by whatever that implementation happens to do.
+
+### Three spellings, all correct, and the frontier chose between them
+
+The first version used a helper — one exported function so that thirty-five call sites could
+not drift from the rule. It cost **42 primary refusals**, 1,305 to 1,347. Passing a class or
+a prototype to a function is `a class used as a value`, which this compiler does not lower
+yet.
+
+Measured against the alternatives on a four-case control: a module-scope
+`Object.defineProperty` costs one refusal per interface, the helper costs two, and a
+`static {}` block costs **none** — because `this` inside it is not the class used as a value.
+
+All three are equally spec-conformant, so choosing the cheapest is a choice between
+spellings and not a way around a missing feature. The static block is also the better
+placement: the declaration sits with the class rather than at the bottom of the file.
+
+**What keeps thirty-five copies of a four-attribute descriptor honest** is the test, which
+asserts the exact descriptor and the exact length for every interface from one table. That
+table is the single source of truth the helper was going to be, and drift fails it.
+
+The slice ends at **1,297 primaries — eight fewer than it started with**, because removing
+the twenty-one accessors also removed the computed-member-name refusals they cost. Better
+conformance and a smaller frontier, which is not the usual direction.
+
+Four sabotages, all caught: a writable tag, a tag reverted to an accessor, a dropped length
+declaration, and a tag added to an Undici-shaped class. That last one matters because the
+suite asserts `Agent`, `Pool`, `RetryInterceptor`, `MockAgent` and `CookieJar` stay
+**untagged** — they are not Web IDL interfaces and no implementation tags them, so a later
+pass adding tags "for consistency" has to change that test and say why.
+
+808/808 host, upstream unchanged at 2,410 of 2,418.

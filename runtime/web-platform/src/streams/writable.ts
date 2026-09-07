@@ -657,8 +657,16 @@ export class WritableStream<W = unknown> {
     return new WritableStreamDefaultWriter(this);
   }
 
-  get [Symbol.toStringTag](): "WritableStream" {
-    return "WritableStream";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "WritableStream",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -722,8 +730,16 @@ export class WritableStreamDefaultWriter<W = unknown> {
     return stream.write(this, args[0]);
   }
 
-  get [Symbol.toStringTag](): "WritableStreamDefaultWriter" {
-    return "WritableStreamDefaultWriter";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "WritableStreamDefaultWriter",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -867,7 +883,15 @@ export class WritableStreamDefaultController<W = unknown> {
     this.#stream.error(reason);
   }
 
-  get [Symbol.toStringTag](): "WritableStreamDefaultController" {
-    return "WritableStreamDefaultController";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "WritableStreamDefaultController",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }

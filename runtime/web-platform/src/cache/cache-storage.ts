@@ -731,8 +731,16 @@ export class Cache {
     return Object.freeze(result);
   }
 
-  get [Symbol.toStringTag](): string {
-    return "Cache";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "Cache",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -827,8 +835,16 @@ export class CacheStorage {
     return Array.from(await this.store.keys());
   }
 
-  get [Symbol.toStringTag](): string {
-    return "CacheStorage";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "CacheStorage",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

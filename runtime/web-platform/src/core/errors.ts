@@ -1,4 +1,5 @@
 /** DOMException's useful non-DOM surface. No host DOMException dependency. */
+
 export class DOMException extends Error {
   static readonly INDEX_SIZE_ERR = 1;
   static readonly DOMSTRING_SIZE_ERR = 2;
@@ -180,6 +181,17 @@ export class DOMException extends Error {
       default:
         return 0;
     }
+  }
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "DOMException",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 

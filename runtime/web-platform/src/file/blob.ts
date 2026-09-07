@@ -603,8 +603,16 @@ export class Blob {
     return new ReadableStream(source, { highWaterMark: 0 });
   }
 
-  get [Symbol.toStringTag](): "Blob" | "File" {
-    return "Blob";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "Blob",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
 
@@ -644,7 +652,21 @@ export class File extends Blob {
     return this.#modificationTime;
   }
 
-  override get [Symbol.toStringTag](): "File" {
-    return "File";
+
+  // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
+  // written inline rather than through a helper.
+  static {
+    Object.defineProperty(this.prototype, Symbol.toStringTag, {
+      value: "File",
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
+    Object.defineProperty(this, "length", {
+      value: 2,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
   }
 }
