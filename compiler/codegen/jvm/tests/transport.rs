@@ -120,6 +120,41 @@ fn the_reference_transport_delivers_on_the_owner_lane() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The worker queue's bound, reached.
+///
+/// `NtsSocket.submit` catches `RejectedExecutionException` and says of it "the
+/// queue is bounded, so this is reachable" -- a claim nothing executed. The
+/// pool is 8 workers over a 256-deep queue, so it takes 265 operations in
+/// flight and nothing in this lane had asked for more than a handful.
+///
+/// The driver asserts the arithmetic rather than the fact: exactly 264 reads
+/// are admitted and the rest refused. "Something was refused" would pass
+/// against a pool of one, and the number is the whole claim -- it is what says
+/// an application on a phone cannot be made to spawn a thread per connect.
+#[test]
+fn a_full_io_queue_refuses_at_submission_and_gives_the_credit_back() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let jar = jar();
+    let dir = std::env::temp_dir().join(format!("nts-saturate-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    compile(&javac, &jar, &dir, "SaturateTest");
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("SaturateTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the saturation test failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(said.ends_with("417 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A self-signed certificate naming `localhost`, and a trust store holding it.
 ///
 /// Generated per run rather than checked in: a certificate in a repository is a

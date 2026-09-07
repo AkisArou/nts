@@ -214,27 +214,50 @@ leaves wrong source in a checkout three sessions build from, for a window
 
 ## What this lane is still waiting for
 
-- **A lowering that constructs `ManagedType::View`.** The variant landed; no
-  program produces one yet. The JVM half is wired — `types::view_class` maps an
-  element to one of eight classes and the descriptor and frame tables carry it —
-  so this lane is waiting on `lower` rather than on itself.
+Three things, and only one of them is code.
 
-  Eight of eleven. `NtsViewU8C`, `NtsViewI64` and `NtsViewU64` are built,
-  oracle-tested and reachable from Java, and `hir::builtin`'s
-  `typed_array_element` names neither `Uint8ClampedArray` nor the two bigint
-  arrays — so `view_class` returns `None` for them, which is a refusal by name.
-  It must stay one: clamping and wrapping disagree on exactly the inputs
-  typed-array code is written for, so an unsigned 8-bit element must never be
-  guessed to have been the clamped one.
-- **The five gated `nts_jvm_web_*` intrinsics.** Four are wired end to end and
-  tested — see `docs/records/0186`. The other five take an environment handle or
-  a byte view, and neither a common environment type nor a lowered `View`
-  exists. They are marked GATED in the declarations, and
-  `the_declarations_the_table_and_the_jar_agree` asserts the wired and gated
-  lists are complements, so a marker is a claim rather than a comment.
-- **ARM hardware**, for the publication race itself. The keyword and the
-  barrier it generates are both checked; only the reordering that would expose
-  their absence is not. See `docs/records/0181`.
+- **A physical ARM device**, for the publication race itself. The keyword and
+  the barrier it generates are both checked, and the compiler-reordering
+  manifestation is tested; only the hardware reordering that would expose a
+  missing barrier is not. See `docs/records/0181` for the five routes and which
+  one worked.
+- **An API-26 emulator or device**, for the coverage the plan names and a
+  desktop JVM cannot give: lifecycle, Wi-Fi/cellular transitions, the
+  `NetworkSecurityPolicy` cleartext check, private and debug CAs, background
+  restrictions, slow peers and DNS races. `tooling/android/on-device.sh` is
+  written and its paths are checked; it has never been run against hardware.
+- **HTTP/2 against a real controlled peer**, which is deferred rather than
+  missing. `OkHttpNetworking.client()` pins the protocol list to HTTP/1.1 alone
+  and asserts it, because the deterministic reference speaks HTTP/1.1 and the
+  two-adapter corpus compares what the two expose -- two adapters on different
+  protocols do not disagree about policy, they disagree about framing, and the
+  corpus would either report that as a defect or be taught to tolerate it. h2
+  becomes a negotiated capability when the reference can match it.
+
+Everything else the plan asks of this lane has evidence. What arrived most
+recently, and what it cost:
+
+- **Typed arrays lower and run.** `examples/typed-arrays` agrees with node on
+  292 cases; the corpus is 115 of 115 with no refusals. Eight of the eleven
+  runtime classes are reachable -- `NtsViewU8C`, `NtsViewI64` and `NtsViewU64`
+  have no element in `hir::builtin` and are refused by name in two independent
+  places, so the lists cannot drift into disagreeing about which elements exist.
+- **All eight `nts_jvm_web_*` intrinsics are wired**, with a round trip driven
+  from TypeScript against a real peer: connect, write, read back, checksum. The
+  environment parameter that gated five of them turned out to be redundant
+  rather than unrepresentable -- the environment is ambient in both runtimes --
+  and the two completion reservations are withdrawn with their reason written
+  down rather than left looking unfinished.
+- **Two shared middle-end defects**, found by that round trip and fixed in
+  `docs/records/0188`. A closure handed to an intrinsic through an intermediate
+  function had its body pruned, and its parameters joined to BOTTOM, so a global
+  assigned only from a callback was constant-folded to its initial value on all
+  three backends while node printed the real one.
+- **The worker queue's bound is reached and asserted**: 8 workers over a
+  256-deep queue admits exactly 264 blocked operations and refuses the rest at
+  submission, with the completion credit returned. `submit` had said "the queue
+  is bounded, so this is reachable" since it was written, and nothing had ever
+  asked for more than a handful of operations.
 
 ## `import { OkHttpClient } from "java:okhttp3"`
 
