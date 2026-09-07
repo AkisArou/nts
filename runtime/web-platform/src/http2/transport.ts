@@ -6,8 +6,15 @@ import type { HeaderEntry } from "../fetch/headers.ts";
 import { nullBodyStatus } from "../fetch/response.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import { addressOf } from "../http/address.ts";
+import { certificateCovers } from "../http/certificate.ts";
 import { contentLength } from "../http/fields.ts";
-import type { CancelHandle, Scheduler, SocketConnector } from "../provider/primitives.ts";
+import type {
+  CancelHandle,
+  ConnectAddress,
+  Scheduler,
+  SocketConnector,
+} from "../provider/primitives.ts";
+import { connectNegotiated } from "../provider/primitives.ts";
 import { ReadableStream } from "../streams/readable.ts";
 import type { ReadResult } from "../streams/readable.ts";
 import { HTTP2_REFUSED_STREAM, Http2WireError } from "./frame.ts";
@@ -21,6 +28,48 @@ export interface Http2TransportOptions {
   bodyReadTimeoutMs?: number;
   maxConnections?: number;
   connection?: Http2ConnectionOptions;
+  /**
+   * Reuse one connection for a second origin the peer's certificate covers.
+   *
+   * Off by default. Coalescing changes where a request is routed, so it is a policy
+   * decision rather than an optimisation the transport may take on its own, and it
+   * only ever applies under the conditions in {@link Http2ConnectionRecord}.
+   *
+   * It also requires {@link Http2TransportOptions.knownEndpoint}. Deciding to reuse a
+   * connection happens before connecting, while the endpoint an origin resolves to is
+   * chosen by the DNS policy that sits *below* this transport in the connector chain.
+   * Without a way to ask what is already known, this transport cannot tell whether a
+   * second origin even reaches the same peer.
+   */
+  coalesceConnections?: boolean;
+
+  /**
+   * The endpoint this address is already known to reach, or undefined.
+   *
+   * Deliberately synchronous and deliberately allowed to answer "I do not know": it is
+   * a probe of what the DNS policy has already resolved, not a resolution. Coalescing
+   * must not perform network work in order to decide how to pool, and an unknown
+   * endpoint simply means the connection is opened normally.
+   */
+  knownEndpoint?: (address: ConnectAddress) => string | undefined;
+}
+
+/**
+ * What a live connection is allowed to be reused for.
+ *
+ * `certificateNames` is empty for cleartext, which therefore never coalesces --
+ * there is nothing attesting that the peer speaks for another origin.
+ * `resolvedAddress` is the endpoint the shared DNS policy selected; when it is
+ * unknown the connection does not coalesce either, because certificate coverage
+ * alone would let a name the certificate happens to include be routed to a server
+ * that does not host it.
+ */
+interface Http2ConnectionRecord {
+  readonly secure: boolean;
+  readonly certificateNames: readonly string[];
+  readonly resolvedAddress: string | undefined;
+  /** The connection reaches one port; an origin on another port is a different peer. */
+  readonly port: number;
 }
 
 function originKey(request: TransportRequest): string {
@@ -151,6 +200,9 @@ export class Http2Transport implements FetchTransport {
   private readonly connectionOptions: Http2ConnectionOptions;
   private readonly current = new Map<string, Http2ClientConnection>();
   private readonly all = new Set<Http2ClientConnection>();
+  private readonly records = new Map<Http2ClientConnection, Http2ConnectionRecord>();
+  private readonly coalescing: boolean;
+  private readonly knownEndpoint: ((address: ConnectAddress) => string | undefined) | undefined;
   private readonly opening = new Map<string, Promise<Http2ClientConnection>>();
   private readonly openingCancellation = new Map<string, AbortController>();
   private readonly openingEstablished = new Set<string>();
@@ -170,6 +222,8 @@ export class Http2Transport implements FetchTransport {
     this.bodyReadTimeoutMs = options.bodyReadTimeoutMs ?? 30000;
     this.maxConnections = options.maxConnections ?? 64;
     this.connectionOptions = options.connection ?? {};
+    this.knownEndpoint = options.knownEndpoint;
+    this.coalescing = options.coalesceConnections === true && this.knownEndpoint !== undefined;
     if (!Number.isFinite(this.connectTimeoutMs) || this.connectTimeoutMs <= 0) {
       throw new RangeError("Invalid HTTP/2 connect timeout");
     }
@@ -308,6 +362,8 @@ export class Http2Transport implements FetchTransport {
 
     const existing = this.opening.get(key);
     if (existing !== undefined) return this.awaitWithAbort(existing, request.signal);
+    const coalesced = this.coalesce(key, request);
+    if (coalesced !== null) return coalesced;
     this.reserveConnectionCapacity();
     const cancellation = new AbortController();
     this.openingCancellation.set(key, cancellation);
@@ -317,6 +373,39 @@ export class Http2Transport implements FetchTransport {
     return this.awaitWithAbort(opening, request.signal);
   }
 
+  /**
+   * A live connection this request may be sent over, or null.
+   *
+   * Every condition here is necessary. The connection must be TLS, because cleartext
+   * presents nothing attesting to a second origin. The certificate must actually cover
+   * the requested host. Both endpoints must be known and identical, because a
+   * certificate that happens to include a name says nothing about which server hosts
+   * it. And the connection must still be usable.
+   */
+  private coalesce(key: string, request: TransportRequest): Http2ClientConnection | null {
+    if (!this.coalescing) return null;
+    if (request.url.protocol !== "https:") return null;
+    const probe = this.knownEndpoint;
+    if (probe === undefined) return null;
+    const address = addressOf(request.url, this.connectTimeoutMs, ["h2"]);
+    const endpoint = probe(address);
+    if (endpoint === undefined) return null;
+    for (const connection of this.all) {
+      if (connection.isDraining) continue;
+      const record = this.records.get(connection);
+      if (record === undefined || !record.secure) continue;
+      if (record.resolvedAddress === undefined) continue;
+      if (record.resolvedAddress !== endpoint) continue;
+      if (record.port !== address.port) continue;
+      if (!certificateCovers(record.certificateNames, address.hostname)) continue;
+      this.current.set(key, connection);
+      const coalesced = connection;
+      coalesced.closed.then(() => this.removeConnection(key, coalesced));
+      return connection;
+    }
+    return null;
+  }
+
   private async open(
     key: string,
     request: TransportRequest,
@@ -324,16 +413,23 @@ export class Http2Transport implements FetchTransport {
   ): Promise<Http2ClientConnection> {
     let connection: Http2ClientConnection | null = null;
     try {
-      const bytes = await this.connector.connect(
-        addressOf(request.url, this.connectTimeoutMs, ["h2"]),
-        cancellation.signal,
-      );
+      const address = addressOf(request.url, this.connectTimeoutMs, ["h2"]);
+      const negotiated = await connectNegotiated(this.connector, address, cancellation.signal);
+      const bytes = negotiated.connection;
       if (!this.accepting) {
         bytes.close();
         throw new TypeError("HTTP/2 transport is closed");
       }
       connection = new Http2ClientConnection(bytes, this.connectionOptions);
       this.all.add(connection);
+      this.records.set(connection, {
+        secure: address.secure,
+        certificateNames: negotiated.certificateNames,
+        // The connector chain below chooses the endpoint, so what this transport knows
+        // is what the same probe reports for the address it asked for.
+        resolvedAddress: address.resolvedAddress ?? this.knownEndpoint?.(address),
+        port: address.port,
+      });
       this.openingEstablished.add(key);
       await connection.start();
       await connection.ready;
@@ -362,6 +458,7 @@ export class Http2Transport implements FetchTransport {
 
   private removeConnection(key: string, connection: Http2ClientConnection): void {
     this.all.delete(connection);
+    this.records.delete(connection);
     if (this.current.get(key) === connection) this.current.delete(key);
   }
 

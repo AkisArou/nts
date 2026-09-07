@@ -2511,3 +2511,64 @@ observations reached through `AbortSignal` and one more `parse` called through a
 interface the lowering cannot resolve in the hierarchy — the interface-method shape
 that is now the most frequent single dependency in this lane's inventory, and which
 the compiler owner has placed ahead of the `BrokenBase` layout defect in their queue.
+
+## Coalescing, and the endpoint question it forced
+
+HTTP/2 connection coalescing reuses one connection for a second origin. The integration
+plan requires it and also names its hazard: a pool that coalesces on hostname alone is
+a cross-origin routing defect rather than a performance bug. `certificateNames` was
+carried on the connect result specifically so this could not be built without it.
+
+`dnsNameCovers` implements dNSName matching narrowly. Names are case-folded and a
+trailing root label is the same name. A wildcard is honoured only as the complete
+leftmost label of a name with at least three labels and matches exactly one label, so
+`*.example.test` covers `a.example.test` but not `example.test`, not
+`a.b.example.test`, and never an empty label. `*.test` is refused outright because it
+would cover a registry, and partial-label wildcards such as `f*.example.test` are not
+honoured: some readings of RFC 6125 permit them, mainstream TLS stacks reject them, and
+the safe reading is the one that reuses fewer connections.
+
+Reuse additionally requires that the connection be TLS, that its endpoint and port
+match, and that it still be usable. Cleartext presents nothing attesting to a second
+origin, so it never coalesces. The port is part of the record because a connection
+reaches one port and an origin on another is a different peer — an omission caught
+while writing the tests rather than by them.
+
+**Building this surfaced an architectural fact worth recording.** The decision to reuse
+must be made *before* connecting, but the endpoint an origin resolves to is chosen by
+the DNS policy that sits *below* this transport in the connector chain, and is attached
+to the address at connect time. The transport therefore cannot see it when it needs it.
+Rather than resolve DNS at the pool — which would make pooling perform network work —
+the dependency is named: `knownEndpoint` is a synchronous probe of what has already
+been resolved, explicitly allowed to answer "I do not know", and coalescing is inert
+without it. An unknown endpoint means the connection is opened normally. Coalescing is
+also off by default, because it changes where a request is routed and that is a policy
+decision rather than an optimisation a transport may take on its own.
+
+Six tests cover the matching rules directly and each reuse condition separately: a
+covered origin on the same endpoint is served over the existing connection with its own
+`:authority` still reaching the server; the same pair opens two connections when
+coalescing is not asked for; an origin whose certificate does not cover it opens its own
+connection and fails identity verification there; a covered origin claiming a different
+endpoint does not reuse; and a connection with no known endpoint does not coalesce.
+
+The sabotage removed only the certificate check, leaving every other condition met. The
+focused corpus fell from 6/6 to 5/6 with `Missing expected rejection`: `gamma.test` was
+answered over a connection whose certificate does not cover it, by a server that does
+not speak for it. That is the cross-origin routing defect itself rather than a
+bookkeeping assertion.
+
+The complete local Node-host/real-socket corpus passes 433/433 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: any wiring of `knownEndpoint` to the shared DNS cache, which is the
+natural consumer and is not built; nor coalescing on any provider other than the
+ordinary-Node conformance host.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,287 primary
+`NTS1001` and 233 `NTS1003`; after, 1,288 primary and 233 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Two messages appeared and one
+disappeared, but that pair is one message with a shifted type id. The single real
+addition is a `PromiseWithResolvers` property, the representation dependency recorded
+since the Streams work.

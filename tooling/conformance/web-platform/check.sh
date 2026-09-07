@@ -11,6 +11,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/cache-storage.test.mjs \
   tooling/conformance/web-platform/test/cache.test.mjs \
   tooling/conformance/web-platform/test/capability-confinement.test.mjs \
+  tooling/conformance/web-platform/test/coalescing.test.mjs \
   tooling/conformance/web-platform/test/cookies.test.mjs \
   tooling/conformance/web-platform/test/deduplicate.test.mjs \
   tooling/conformance/web-platform/test/diagnostics.test.mjs \
