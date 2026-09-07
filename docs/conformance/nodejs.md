@@ -2779,13 +2779,21 @@ files fail. **Not diverging** — 80,128 comparisons against node's own punycode
 0 divergences. **The deprecation warning is a real process event**, carrying
 `DEP0040`, rather than a line of text on stderr.
 
-It is **incomplete**, and the sweep says so on the row itself:
+It was **incomplete**, and the sweep said so on the row itself:
 
     | `punycode` | green | 2 / 2, incomplete: version absent |
 
-`version` does not publish. It passes every test it has while its surface is
-one string constant short of node's, and that annotation exists precisely
+`version` did not publish. The module passed every test it had while its surface
+was one string constant short of node's, and that annotation exists precisely
 because a first row on an axis that has only ever reported zero gets quoted.
+
+**It publishes now**, at `f4b8595c`, and the row carries no qualifier:
+`decode, encode, toASCII, toUnicode, ucs2, version`, all six agreeing, 2 of 2 on
+the compiled axis. The resolution had been wrong in two ways — it named another
+module's global rather than this one's, and it reported a global as a missing
+function — and *"no function answers to this name" was never the same claim as
+"this export is absent"*. The fixture that reported it,
+`blockers/value-export`, is now a regression guard rather than a blocker.
 
 **The stage table below predates this row and is otherwise current.** `punycode` lowers completely — 21 functions, nothing
 refused, all of it verifying — builds to a 275KB `.node`, and computes
