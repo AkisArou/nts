@@ -148,20 +148,26 @@ const chainRoots = [...calleeNames].filter((n) => !refusedNames.has(n)).sort();
 
 const layouts = nts(["layouts", tsconfig]);
 const api = [];
+let apiUnreadable;
 {
   const lines = layouts.split("\n");
   const start = lines.findIndex((l) => l.trim() === "public api");
   if (start < 0) {
-    // Without this the tool printed "querystring: 0 of 0 exports published",
-    // which reads like a measurement and is the absence of one. `layouts`
-    // had failed -- "the program does not typecheck" -- and every count
-    // downstream was computed over an empty list. A tool that cannot tell
-    // "nothing published" from "nothing read" is worse than no tool.
-    console.error(`${module}: could not read a public API from \`nts layouts\`.`);
-    console.error(`${layouts.trim().split("\n").slice(-3).join("\n")}`);
-    process.exit(1);
+    // Reported rather than counted as zero. The tool once printed
+    // "querystring: 0 of 0 exports published", which reads like a measurement
+    // and was the absence of one: `layouts` had failed and every count
+    // downstream was computed over an empty list.
+    //
+    // But exiting here threw away the half that does not need `layouts`. `fs`
+    // is the largest module in the profile -- 359 pinned test files -- and
+    // `nts layouts` prints no public API section for it at all, so refusing
+    // outright left the one module most worth analysing unanalysable. The
+    // refusal census and the cascade come from `emit-c`; only the published
+    // count needs `layouts`. So that count is marked unknown and the rest is
+    // still printed.
+    apiUnreadable = layouts.trim().split("\n").slice(-2).join(" / ");
   }
-  for (let i = start + 1; i < lines.length; i++) {
+  for (let i = start + 1; start >= 0 && i < lines.length; i++) {
     const m = /^\s{2}(\S+) -> (\S+)(\s+\(no function of that name\))?\s*$/.exec(lines[i]);
     if (m === null) break;
     api.push({ name: m[1], target: m[2], published: m[3] === undefined });
@@ -245,16 +251,25 @@ function shapeRequires() {
 const published = api.filter((e) => e.published);
 const publishedNames = new Set(published.map((e) => e.name));
 const required = shapeRequires();
-if (required !== undefined) {
-  const missing = required.filter((n) => !publishedNames.has(n));
-  console.log(
-    `${module}: shape needs ${required.length} name(s), ` +
-      `${required.length - missing.length} published, ${missing.length} missing`,
-  );
-  if (missing.length > 0) console.log(`  missing: ${missing.join(", ")}`);
-}
 
-console.log(`${module}: ${published.length} of ${api.length} exports published`);
+if (apiUnreadable !== undefined) {
+  console.log(
+    `${module}: shape needs ${required === undefined ? "?" : required.length} name(s), ` +
+      `published UNKNOWN -- \`nts layouts\` printed no public API section`,
+  );
+  console.log(`  (${apiUnreadable})`);
+  console.log(`  The refusal census below is from emit-c and is unaffected.`);
+} else {
+  if (required !== undefined) {
+    const missing = required.filter((n) => !publishedNames.has(n));
+    console.log(
+      `${module}: shape needs ${required.length} name(s), ` +
+        `${required.length - missing.length} published, ${missing.length} missing`,
+    );
+    if (missing.length > 0) console.log(`  missing: ${missing.join(", ")}`);
+  }
+  console.log(`${module}: ${published.length} of ${api.length} exports published`);
+}
 if (published.length > 0) {
   console.log(`  published: ${published.map((e) => e.name).join(", ")}`);
 }
