@@ -4574,6 +4574,36 @@ module's initialization with it. Each is tried on its own and skipped alone, so
 a module is not dark because of one line — the other session's work, and the
 difference between "this module does not initialise" and "this line does not".
 
+**That holds for a refused literal and not for a refused call, and the exception
+is expensive.** A module-scope initializer that *calls a function containing a
+refusal* still takes the whole initializer with it: no `module__init` is emitted
+at all, every module-scope variable stays at its `= 0`, and every function that
+reads one is dropped as uncompiled — including functions with no relationship to
+the refusal. Fixtured as `blockers/modscope-refusing-call`, whose control is the
+same file with a callee that lowers, and which publishes everything.
+
+It took three failed reproductions to find, and the ones that failed are worth
+keeping because they are what makes the claim above true: a refused *literal* at
+module scope costs only the export that reads it, and that holds whether it sits
+above or below the surviving statement, and whether it is in the same module or
+an imported one.
+
+**What it costs is read wrongly by every instrument here.** `os` ends with
+`export const constants: OsConstants = readConstants()`, and `readConstants`
+refuses on a property access. That one statement is why `osInformation` is never
+assigned, and with it `type`, `release`, `version`, `machine`, `arch`,
+`platform`, `endianness`, `EOL`, `devNull` and `constants` are never compiled —
+ten of the fifteen names missing from an addon that publishes 8 of 23. `emit-c`
+reports each as "no function of that name was compiled", which reads like an
+export-table problem; `hir` reports no refusal on any of those lines, because
+there is nothing wrong with them; and the per-module blocker chains name
+`architecture` and `byteOrder` as roots, which are consts rather than causes.
+Three instruments, three answers, none of them the statement responsible.
+
+Fourteen of the twenty-four built modules emit no `module__init` — `os`,
+`querystring`, `url` and `util` among them, all four of which compile and
+publish nothing.
+
 **111 statements are skipped across the twenty modules**, at `f1c6959`.
 
 The first count of these was 187, and reporting it that way was a mistake worth
