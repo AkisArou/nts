@@ -66,7 +66,6 @@ public final class NtsEnv {
      * from its own four host-guarded entry points. Environment first, host into
      * it.
      */
-    private static NtsEnv fallback;
 
     private static final class Timer {
         double due;
@@ -123,14 +122,52 @@ public final class NtsEnv {
         return new NtsEnv(timeMode == MONOTONIC, (int) inboxCapacity);
     }
 
-    /** The environment this lane is inside, creating the default if none is. */
+    /**
+     * The default environment, created once and safely published.
+     *
+     * <p>Initialization-on-demand. The JVM initializes a class exactly once,
+     * under a lock it holds itself, and every thread that reads `ONE`
+     * afterwards is guaranteed to see a fully constructed object -- with no
+     * synchronization on the read path once that has happened.
+     *
+     * <p>What this replaces was `if (fallback == null) { fallback = new
+     * NtsEnv(...); }` on a plain static, which is the textbook unsafe lazy
+     * singleton and was not theoretical here: **64 threads racing `current()`
+     * produced 56 to 62 distinct environments**, near enough one each. A
+     * completion submitted on one and drained from another goes to an inbox
+     * nobody is reading. The publication hazard is the other half and is the
+     * one that needs ARM to observe: a thread can see a non-null reference to
+     * an object whose fields are not written yet.
+     */
+    private static final class Default {
+        static final NtsEnv ONE = new NtsEnv(false, DEFAULT_INBOX);
+    }
+
+    /**
+     * The environment this lane is inside, or the default if it entered none.
+     *
+     * <p>There is exactly one default, and the **first** lane to reach it owns
+     * it. A second lane is refused by name rather than given a share: `post`
+     * wakes the inbox's owner, so two lanes on one inbox means one of them
+     * parks in `drain` holding work it will never be told about -- a liveness
+     * failure that looks like a hang and points nowhere.
+     *
+     * <p>`runtime/c` has the same singular default: `nts_environment_current`
+     * is documented as "never null: a program that never asks for one still has
+     * exactly one". What is JVM-specific is that a lane must be named, because
+     * the wake is `LockSupport.unpark` on a `Thread`.
+     */
     public static NtsEnv current() {
         NtsEnv here = CURRENT.get();
         if (here != null) { return here; }
-        if (fallback == null) { fallback = new NtsEnv(false, DEFAULT_INBOX); }
-        CURRENT.set(fallback);
-        NtsInbox.ownedBy(fallback.inbox, Thread.currentThread());
-        return fallback;
+        NtsEnv one = Default.ONE;
+        if (!NtsInbox.claim(one.inbox, Thread.currentThread())) {
+            throw new NtsRefusal(
+                "the default environment belongs to another lane -- enter one with "
+                    + "enterEnv on this thread before calling into the runtime from it");
+        }
+        CURRENT.set(one);
+        return one;
     }
 
     /**

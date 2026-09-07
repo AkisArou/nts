@@ -106,6 +106,57 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// One default environment, and one lane owns it.
+///
+/// `NtsEnv.current()` answers for a thread that entered none, which
+/// `runtime/c` also has -- "never null: a program that never asks for one still
+/// has exactly one". Singular there, and it was not singular here: the lazy
+/// initializer was the textbook unsafe singleton on a plain static, and **64
+/// threads racing it produced 56 to 62 distinct environments** on every run. A
+/// completion submitted against one and drained from another goes to an inbox
+/// nobody reads.
+///
+/// The second property is a decision rather than a repair. A second lane is
+/// refused by name rather than handed a share, because `post` wakes the
+/// inbox's owner and two lanes on one inbox leaves one of them parked in
+/// `drain` with work it will never be told about.
+#[test]
+fn one_default_environment_and_one_lane_owns_it() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let root = repository();
+    let jar = runtime_jar();
+    let dir = std::env::temp_dir().join(format!("nts-default-lane-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let compiled = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&jar)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("compiler/codegen/jvm/tests/env/DefaultLaneTest.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "the default-lane driver did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("DefaultLaneTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the default-lane test failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(said.ends_with("5 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Closing while completions are still arriving.
 ///
 /// The interesting instant has no lock in it: a worker has read the closed flag

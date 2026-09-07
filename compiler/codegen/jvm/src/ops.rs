@@ -760,6 +760,30 @@ fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str,
             "buffer",
             format!("(L{};)L{};", types::VIEW_BASE, types::BUFFER),
         ),
+        // A window onto the same bytes, and a copy. The whole difference
+        // between a view and an array is that these two are not the same
+        // operation, so they are the entries most worth getting right: the
+        // class is the *subject's*, because both answer a view of the element
+        // type they were given.
+        "nts_view_subarray" => {
+            (leak(class.to_owned()), "subarray", format!("(L{class};DD)L{class};"))
+        }
+        "nts_view_slice" => (leak(class.to_owned()), "slice", format!("(L{class};DD)L{class};")),
+        // `set` and `copyWithin` are declared on the base and take a base-typed
+        // receiver, so they need no per-element entry -- and both are correct
+        // only when the ranges intersect, which is why the runtime's `set`
+        // snapshots when the two views share a buffer and `copyWithin` goes
+        // through `System.arraycopy` for its memmove semantics.
+        "nts_view_copy_within" => (
+            types::VIEW_BASE,
+            "copyWithin",
+            format!("(L{};DDD)V", types::VIEW_BASE),
+        ),
+        "nts_view_set" => (
+            types::VIEW_BASE,
+            "set",
+            format!("(L{};L{};D)V", types::VIEW_BASE, types::VIEW_BASE),
+        ),
         // The generic pair, which exists for `set` across two element kinds and
         // for `DataView`. Not the indexing path.
         "nts_view_get" => {
@@ -1908,6 +1932,29 @@ impl Emitter<'_> {
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Placed, Diagnostic> {
         match kind {
+            // A typed array. Its elements are bytes in a buffer something else
+            // may also be looking at, so a subscript is a call on the element's
+            // own class rather than an `aaload`.
+            //
+            // Eleven classes rather than one with a kind field, and the call is
+            // monomorphic because of it: record 0182 measured 0.177 ns/element
+            // through a class-specific accessor against 0.924 through one that
+            // switches on a kind. The C header says the same thing from the
+            // other side -- "ordinary indexed access is emitted inline by the
+            // backends, because a call per element is not a price a typed array
+            // can pay" -- and an `invokestatic` that inlines to a shift and a
+            // load is that inlining, on this lane.
+            //
+            // Before the growable arms, and not after: `arrays_can_grow` is a
+            // fact about *arrays*. A view cannot grow, its length comes from
+            // the buffer it names, and a program that pushes somewhere must not
+            // put its typed arrays behind a wrapper that has no storage to
+            // wrap.
+            OpKind::ArrayGet { array, .. } | OpKind::ArraySet { array, .. }
+                if self.view_receiver(*array).is_some() =>
+            {
+                self.view_element(code, pool, kind, origin)
+            }
             // The wrapper, where the program grows an array anywhere. Every
             // index is a `double` across this boundary, matching the C ABI:
             // that is how it passes a number the compiler knew all along, and
@@ -2008,29 +2055,6 @@ impl Emitter<'_> {
                     &format!("(L{class};D{element})V"),
                 );
                 Ok(Placed::Stored)
-            }
-            // A typed array. Its elements are bytes in a buffer something else
-            // may also be looking at, so a subscript is a call on the element's
-            // own class rather than an `aaload`.
-            //
-            // Eleven classes rather than one with a kind field, and the call is
-            // monomorphic because of it: record 0182 measured 0.177 ns/element
-            // through a class-specific accessor against 0.924 through one that
-            // switches on a kind. The C header says the same thing from the
-            // other side -- "ordinary indexed access is emitted inline by the
-            // backends, because a call per element is not a price a typed array
-            // can pay" -- and an `invokestatic` that inlines to a shift and a
-            // load is that inlining, on this lane.
-            //
-            // Before the growable arms, and not after: `arrays_can_grow` is a
-            // fact about *arrays*. A view cannot grow, its length comes from
-            // the buffer it names, and a program that pushes somewhere must not
-            // put its typed arrays behind a wrapper that has no storage to
-            // wrap.
-            OpKind::ArrayGet { array, .. } | OpKind::ArraySet { array, .. }
-                if self.view_receiver(*array).is_some() =>
-            {
-                self.view_element(code, pool, kind, origin)
             }
             OpKind::ArrayNew { length, .. } => {
                 let element = self.element_descriptor(ty)?;
@@ -2313,6 +2337,116 @@ impl Emitter<'_> {
     /// this repository has a habit of finding a real duplication rather than
     /// merely a long function. Here it found that all three arms want the
     /// string on the stack first and nothing else in common.
+    /// How long a thing is, by what kind of thing it is.
+    ///
+    /// Five storages answer this and no two answer it the same way: a string
+    /// has a method, a map has a size, a bare array has an instruction, a
+    /// growable array has a field behind a helper, and a view computes it --
+    /// its own count, which for a tracking view follows the buffer through a
+    /// resize.
+    ///
+    /// Lifted out of `string_operation` when the view arm took it past a
+    /// hundred lines. That function's own doc says the limit "has a habit of
+    /// finding a real duplication rather than merely a long function", and here
+    /// it found that these six arms have nothing to do with strings at all
+    /// beyond having been written next to one.
+    fn length_of(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        kind: &OpKind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        match kind {
+            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
+                self.load(code, pool, *of)?;
+                code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
+                self.adapt_to(code, Kind::Int, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+            // `map.size` and `set.size` are the same operation on the same
+            // class, and neither is an `arraylength` -- which is what every
+            // non-string `Length` used to become, silently, until the verifier
+            // said "invalid type NtsMap".
+            OpKind::Length(of)
+                if matches!(
+                    self.ty(*of),
+                    HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
+                ) =>
+            {
+                self.load(code, pool, *of)?;
+                code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
+                self.adapt_to(code, Kind::Double, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+            OpKind::Length(of)
+                if self.shape.grows
+                    && matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) =>
+            {
+                let class = self.growable_class(&self.ty(*of).clone())?;
+                self.load(code, pool, *of)?;
+                // By what the length is *wanted* as. The field is an `int` and
+                // `array.len` is an `i32` upstream now, so reaching it through
+                // a `double`-returning helper emitted `i2d` inside and `d2i`
+                // outside -- `array-predicates` does that five times a
+                // specialization. The subscript and the constructor were given
+                // integral overloads for the same round trip; this is the
+                // third place it occurs and the last one that had none.
+                let integral = matches!(self.kind_of(value)?, Kind::Int | Kind::Long);
+                let (member, produced) =
+                    if integral { ("count", Kind::Int) } else { ("length", Kind::Double) };
+                let returns = if integral { "I" } else { "D" };
+                code.invoke_static(origin, pool, &class, member, &format!("(L{class};){returns}"));
+                self.adapt_to(code, produced, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+            // A view's length is not its buffer's and is not an
+            // `arraylength`: a window onto part of a buffer has its own count,
+            // and a *tracking* view's follows the buffer through a resize, so
+            // it is computed rather than stored.
+            //
+            // Two members for the same reason the growable array has two:
+            // `elements` answers an `int` and `length` a `double`, and reaching
+            // the wrong one costs an `i2d` inside and a `d2i` outside at every
+            // use. `hir::specialize` makes a loop bound integral, which is
+            // exactly where a length is read most.
+            OpKind::Length(of)
+                if matches!(self.ty(*of), HirType::Managed(ManagedType::View(_))) =>
+            {
+                self.load(code, pool, *of)?;
+                let integral = matches!(self.kind_of(value)?, Kind::Int | Kind::Long);
+                let (member, produced, returns) = if integral {
+                    ("elements", Kind::Int, "I")
+                } else {
+                    ("length", Kind::Double, "D")
+                };
+                code.invoke_static(
+                    origin,
+                    pool,
+                    types::VIEW_BASE,
+                    member,
+                    &format!("(L{};){returns}", types::VIEW_BASE),
+                );
+                self.adapt_to(code, produced, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
+                self.load(code, pool, *of)?;
+                code.array_length(origin);
+                self.adapt_to(code, Kind::Int, value, origin)?;
+                Ok(Placed::OnStack)
+            }
+            // Anything else has no length this backend knows how to take, and
+            // saying so beats reaching for the array instruction.
+            OpKind::Length(of) => Err(refuse(
+                self.func,
+                &format!("the length of {}", types::describe(&self.ty(*of).clone())),
+            )),
+            _ => Err(refuse(self.func, "a length operation that is not one")),
+        }
+    }
+
     fn string_operation(
         &mut self,
         code: &mut Code,
@@ -2360,60 +2494,7 @@ impl Emitter<'_> {
             // double, having been told once that it is a `uint32_t` and worth
             // 4.0x to say so. The widening is explicit here for the same reason
             // the coercion's is: the slot the middle end chose is the slot.
-            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
-                self.load(code, pool, *of)?;
-                code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
-                self.adapt_to(code, Kind::Int, value, origin)?;
-                Ok(Placed::OnStack)
-            }
-            // `map.size` and `set.size` are the same operation on the same
-            // class, and neither is an `arraylength` -- which is what every
-            // non-string `Length` used to become, silently, until the verifier
-            // said "invalid type NtsMap".
-            OpKind::Length(of)
-                if matches!(
-                    self.ty(*of),
-                    HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
-                ) =>
-            {
-                self.load(code, pool, *of)?;
-                code.invoke_static(origin, pool, types::MAP, "size", "(Lnts/rt/NtsMap;)D");
-                self.adapt_to(code, Kind::Double, value, origin)?;
-                Ok(Placed::OnStack)
-            }
-            OpKind::Length(of)
-                if self.shape.grows
-                    && matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) =>
-            {
-                let class = self.growable_class(&self.ty(*of).clone())?;
-                self.load(code, pool, *of)?;
-                // By what the length is *wanted* as. The field is an `int` and
-                // `array.len` is an `i32` upstream now, so reaching it through
-                // a `double`-returning helper emitted `i2d` inside and `d2i`
-                // outside -- `array-predicates` does that five times a
-                // specialization. The subscript and the constructor were given
-                // integral overloads for the same round trip; this is the
-                // third place it occurs and the last one that had none.
-                let integral = matches!(self.kind_of(value)?, Kind::Int | Kind::Long);
-                let (member, produced) =
-                    if integral { ("count", Kind::Int) } else { ("length", Kind::Double) };
-                let returns = if integral { "I" } else { "D" };
-                code.invoke_static(origin, pool, &class, member, &format!("(L{class};){returns}"));
-                self.adapt_to(code, produced, value, origin)?;
-                Ok(Placed::OnStack)
-            }
-            OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::Array(_))) => {
-                self.load(code, pool, *of)?;
-                code.array_length(origin);
-                self.adapt_to(code, Kind::Int, value, origin)?;
-                Ok(Placed::OnStack)
-            }
-            // Anything else has no length this backend knows how to take, and
-            // saying so beats reaching for the array instruction.
-            OpKind::Length(of) => Err(refuse(
-                self.func,
-                &format!("the length of {}", types::describe(&self.ty(*of).clone())),
-            )),
+            OpKind::Length(_) => self.length_of(code, pool, value, kind, origin),
             // Out of range JavaScript answers `NaN` where `charAt` throws, and a
             // fractional index truncates rather than being an error. Where the
             // compiler proved the index in range neither applies, so `charAt`

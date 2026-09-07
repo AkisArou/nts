@@ -158,6 +158,30 @@ public final class NtsInbox {
     public static void ownedBy(NtsInbox it, Thread lane) { it.owner = lane; }
 
     /**
+     * Claim this inbox for a lane, or report that another already holds it.
+     *
+     * <p>`ownedBy` says "called once" and means it: `post` wakes `owner`, so a
+     * second lane taking it silently leaves the first parked in `drain` with
+     * work it will never be told about. This is the checked form, for the one
+     * caller that cannot know whether it is first -- {@link NtsEnv#current} on
+     * a thread that never entered an environment.
+     *
+     * <p>Synchronized rather than a compare-and-set on the volatile field,
+     * because the check and the write must be one step and this runs once per
+     * lane. The read path in `post` is unchanged and still touches nothing but
+     * the volatile.
+     */
+    public static boolean claim(NtsInbox it, Thread lane) {
+        synchronized (it) {
+            if (it.owner != null && it.owner != lane) {
+                return false;
+            }
+            it.owner = lane;
+            return true;
+        }
+    }
+
+    /**
      * Return a credit without posting: cancellation, or a drop during close.
      *
      * <p>Exactly once, whichever way the work ended, is what makes zero
