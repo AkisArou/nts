@@ -110,7 +110,7 @@ axis. That would be the first non-zero this axis has ever reported.
 
 | # | blocker | state |
 | --- | --- | --- |
-| 1 | an annotated `const` takes its receiver type from the initializer | **open**, compiler lane |
+| 1 | an annotated `const` takes its receiver type from the initializer | **fixed**, verified here |
 | 2 | the Node-API wrapper never called `module__init` | **fixed**, verified here |
 | 3 | `build.sh` named three of the four generated `.c` files | **fixed**, this lane |
 | 4 | a compiled `throw` did not cross the boundary | **fixed**, and sufficient |
@@ -118,7 +118,25 @@ axis. That would be the first non-zero this axis has ever reported.
 | 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
 | 5c | no exported object literal of functions — `ucs2` as a namespace | **open**, compiler lane |
 
-**Blocker 1 is half fixed, and the half that is left is the half that matters.**
+**Blocker 1 is fixed, and only 5c remains.** Verified on a pinned binary with a
+clean tree: `nts hir runtime/node/punycode/tsconfig.json` reports **20
+functions, nothing refused**, the source that refused this morning compiles as
+written, and the addon computes `decode`, `encode`, `toASCII` and `toUnicode`
+correctly with no workaround anywhere in the tree. The entire remaining
+distance to this project's first green row on the compiled axis is:
+
+    no wrapper for ucs2: is exported and is not a function this backend can name
+
+`version` is the other unpublished name and does not matter — node's test never
+touches it. `ucs2` it uses six times. **One export shape, one module.** None of
+the wider work is in front of it: not the 21 roots in `internal/errors.ts`, not
+the void-field struct emitter, not the `NtsTask` microtask struct.
+
+The history below is kept because the shape of the mistake is worth more than
+the fix.
+
+**Blocker 1 was half fixed first, and the half that was left was the half that
+mattered.**
 The first repro sent to the compiler lane was too weak: it *read* `w.message`,
 which `Error` declares, so it passed for a reason unrelated to the fix while the
 real pattern — *writing* a property `Error` does not declare — stayed refused.
