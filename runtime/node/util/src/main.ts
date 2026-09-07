@@ -22,6 +22,7 @@ import {
 } from "../../internal/errors.ts";
 import { nextTick } from "../../internal/tick.ts";
 import { deprecate } from "../../internal/deprecate.ts";
+import type { AbortSignalLike } from "../../internal/abort.ts";
 import {
   validateBoolean, validateFunction, validateNumber, validateObject, validateOneOf, validateString,
   validateStringArray,
@@ -137,6 +138,35 @@ const ansiPattern = new RegExp(
 );
 
 /** ANSI escape sequences removed, upstream `lib/internal/util.js`. */
+/**
+ * A promise that settles when `signal` aborts, node's `util.aborted`.
+ *
+ * `resource` exists so the listener can be dropped once nothing else refers to
+ * the resource the wait belongs to. Node registers it as a weak handler for
+ * that purpose; this registration is an ordinary one, so a caller that drops
+ * its resource and never aborts keeps a listener on the signal. The difference
+ * is observable only under a collection, and is recorded in the conformance
+ * ledger rather than papered over.
+ */
+export async function aborted(signal: AbortSignalLike, resource: object): Promise<void> {
+  // Deliberately stricter than `validateAbortSignal`, which permits
+  // `undefined` because its callers take an optional signal. Here the signal
+  // is the subject, so absence is a type error like any other.
+  if (
+    signal === null ||
+    typeof signal !== "object" ||
+    !("aborted" in signal) ||
+    typeof signal.addEventListener !== "function"
+  ) {
+    throw new ERR_INVALID_ARG_TYPE("signal", "AbortSignal", signal);
+  }
+  validateObject(resource, "resource");
+  if (signal.aborted) return;
+  const settled = Promise.withResolvers<void>();
+  signal.addEventListener("abort", () => settled.resolve(), { once: true });
+  await settled.promise;
+}
+
 export function stripVTControlCharacters(str: string): string {
   validateString(str, "str");
 

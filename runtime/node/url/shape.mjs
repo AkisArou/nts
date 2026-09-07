@@ -13,6 +13,7 @@ export function shape(exports) {
     domainToASCII: exports.domainToASCII,
     domainToUnicode: exports.domainToUnicode,
     fileURLToPath: exports.fileURLToPath,
+    fileURLToPathBuffer: exports.fileURLToPathBuffer,
     format: exports.format,
     parse: exports.parse,
     pathToFileURL: exports.pathToFileURL,

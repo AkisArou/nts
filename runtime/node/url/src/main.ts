@@ -17,7 +17,12 @@ import { domainToASCII, domainToUnicode } from "./idna.ts";
 
 export { URL, isURL } from "./url.ts";
 export { URLSearchParams } from "./searchparams.ts";
-export { fileURLToPath, pathToFileURL, urlToHttpOptions } from "./fileurl.ts";
+export {
+  fileURLToPath,
+  fileURLToPathBuffer,
+  pathToFileURL,
+  urlToHttpOptions,
+} from "./fileurl.ts";
 export { domainToASCII, domainToUnicode };
 
 export { Url, parse, format, resolve, resolveObject } from "./legacy.ts";

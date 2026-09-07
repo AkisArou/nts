@@ -1,1 +1,2 @@
 test-stream2-httpclient-response-end.js: upstream names this as a stream2 regression, but every behavioral assertion exercises the HTTP server/client response implementation
+test-set-http-max-http-headers.js: node names this for the CLI flag, but every assertion is about node:http honouring --max-http-header-size

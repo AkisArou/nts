@@ -1,1 +1,1 @@
-^test-(url|whatwg-url)(-.*)?\.(?:js|mjs)$
+^(test-(url|whatwg-url)(-.*)?|test-fileurltopathbuffer)\.(?:js|mjs)$

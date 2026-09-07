@@ -17,6 +17,8 @@ import { validateObject, validateString } from "../../internal/validators.ts";
 import { posix, win32 } from "../../path/src/main.ts";
 import { domainToUnicode } from "./idna.ts";
 import { URL } from "./url.ts";
+import { Buffer } from "../../buffer/src/main.ts";
+import { percentDecodeBytes } from "../../../web-platform/src/core/percent.ts";
 
 declare function nts_platform(): string;
 
@@ -86,6 +88,46 @@ function pathFromUrlWin32(url: URL): string {
   return pathname.slice(1);
 }
 
+/**
+ * The `file:` path as raw bytes, for a name `fileURLToPath` cannot return.
+ *
+ * Neither variant below scans for encoded separators, which is the difference
+ * that matters and is not an oversight. `pathFromUrlPosix` can forbid `%2f`
+ * because it is about to produce a UTF-8 string; here there is no encoding to
+ * scan under. A single path may mix encodings segment by segment, and in
+ * Shift_JIS `%5c` is the yen sign rather than a backslash, so a scan would
+ * reject names that are perfectly legal. The bytes are taken literally
+ * instead -- which is the entire reason node has this second function.
+ */
+function pathBufferFromUrlPosix(url: URL): Buffer {
+  if (url.hostname !== "") {
+    throw new ERR_INVALID_FILE_URL_HOST(nts_platform());
+  }
+  return Buffer.from(percentDecodeBytes(url.pathname));
+}
+
+function pathBufferFromUrlWin32(url: URL): Buffer {
+  const hostname = url.hostname;
+  // Only literal separators become backslashes: a percent-encoded forward
+  // slash stays a byte, for the same reason there is no scan.
+  const decoded = Buffer.from(percentDecodeBytes(url.pathname.replaceAll("/", "\\")));
+  if (hostname !== "") {
+    return Buffer.concat([
+      Buffer.from("\\\\", "ascii"),
+      Buffer.from(domainToUnicode(hostname), "utf8"),
+      decoded,
+    ]);
+  }
+  // Read as bytes rather than characters: the drive letter and its colon are
+  // ASCII whatever the rest of the name is encoded in.
+  const letter = (decoded[1] ?? 0) | 0x20;
+  const separator = decoded[2];
+  if (letter < 0x61 || letter > 0x7a || separator !== 0x3a) {
+    throw new ERR_INVALID_FILE_URL_PATH("must be absolute", url);
+  }
+  return decoded.subarray(1);
+}
+
 export interface FileUrlOptions {
   /** Force the Windows rules, whatever the build's platform. */
   windows?: boolean | undefined;
@@ -105,6 +147,22 @@ export function fileURLToPath(path: string | URL, options?: FileUrlOptions): str
     throw new ERR_INVALID_URL_SCHEME("file");
   }
   return (windows ?? isWindowsPlatform()) ? pathFromUrlWin32(url) : pathFromUrlPosix(url);
+}
+
+export function fileURLToPathBuffer(path: string | URL, options?: FileUrlOptions): Buffer {
+  const windows = options?.windows;
+  let url: URL;
+  if (typeof path === "string") {
+    url = new URL(path);
+  } else if (path instanceof URL) {
+    url = path;
+  } else {
+    throw new ERR_INVALID_ARG_TYPE("path", ["string", "URL"], path);
+  }
+  if (url.protocol !== "file:") {
+    throw new ERR_INVALID_URL_SCHEME("file");
+  }
+  return (windows ?? isWindowsPlatform()) ? pathBufferFromUrlWin32(url) : pathBufferFromUrlPosix(url);
 }
 
 /**

@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,735 of node's own applicable test files pass** across twenty-two modules,
+**1,736 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -331,12 +331,12 @@ nobody had re-run the sweep that would have said so. A stale ledger is a
 weaker failure than a wrong measurement, but it is the same failure: a number
 in this file that nothing was checking.
 
-**The denominators moved too, and that is the part to read carefully.** 408
+**The denominators moved too, and that is the part to read carefully.** 410
 files across the profile are excluded, each with an individually named reason
 in its module's `not-applicable`. Read as buckets: 149 are §13 language
 non-goals, roughly 140 are private V8 or engine internals, 62 depend on a
 module that does not exist here yet (`http2`, `worker_threads`, `cluster`,
-`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 37 are temporary
+`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 39 are temporary
 runtime gaps, 12 are harness or runner limitations that `tooling/conformance`
 owns and can recover, and 8 exist *because* the file passed under sabotage.
 That last bucket is the healthy one --
@@ -353,13 +353,16 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,735
-measured, 408 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,736
+measured, 410 excluded, 0 hollow.**
 
-The ten `fs` files below move the first number without touching the second.
-They were never excluded; they were never *seen*. That is the distinction this
-line is for: an exclusion is a decision someone can audit, and a file no
-pattern matches is not a decision at all.
+Both numbers moved for the same reason, and the reason is worth stating. The
+ten `fs` files below were never excluded; they were never *seen*, and eight of
+them were already passing. Two more newly-found files went straight into the
+excluded column with a measured blocker each. That is the distinction this
+line exists for: an exclusion is a decision someone can audit, and a file no
+pattern matches is not a decision at all — it is absent from both columns, and
+absent from any argument about whether it should be.
 
 **The `compiles` column is not in this table, and its absence is deliberate.**
 It was last measured at compiler `9bb54c1`, which is long superseded, and it
@@ -391,7 +394,7 @@ still.
 | `stream` | **241 / 241** | 0 | the core, the operators, `Readable.from` and the async iterator |
 | `string_decoder` | **3 / 3** | 0 | complete |
 | `timers` | **53 / 53** | 0 | complete |
-| `url` | **44 / 44** | 0 | complete; exact on the Web Platform Tests corpus |
+| `url` | **45 / 45** | 0 | complete; exact on the Web Platform Tests corpus |
 | `util` | **20 / 20** | 0 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `zlib` | **66 / 66** | 0 | the streams, the one-shots, brotli and zstd |
 | `events` | 27 / 28 | 0 | complete but for one provider dependency, below |
@@ -774,6 +777,64 @@ be behaviour nothing measures, which is the same argument this document makes
 for not inventing channel names. It is recorded so the next test that demands
 one finds the reason rather than the surprise.
 
+## Comparing the export surface to node's, which nothing had done
+
+The pattern audit asks which of node's *tests* nothing runs. The complementary
+question is which of node's *exports* nothing implements, and it turns out to
+be cheap to answer exactly: load each module through the conformance
+substitution, take `Object.keys`, and diff against `Object.keys` of the real
+`node:` module in the same process. No filename heuristics, no prose.
+
+That diff is **32 exports across five modules**:
+
+| module | exports node has that ours does not |
+| --- | --- |
+| `util` | `aborted`, `getCallSites`, `inherits`, `transferableAbortSignal`, `transferableAbortController`, `TextDecoder`, `TextEncoder`, `MIMEType`, `MIMEParams`, `setTraceSigInt` |
+| `process` | 18, led by `stdin`, `title`, `ppid`, `exitCode`, `report`, `binding`, `dlopen`, `domain` |
+| `url` | `URLPattern`, `fileURLToPathBuffer` |
+| `console` | `context`, `createTask` |
+| `events` | `init` |
+
+Two of them had pinned tests that no module's pattern claimed, which is how
+they stayed missing: nothing ran the test, so nothing reported the absence.
+
+**`url.fileURLToPathBuffer` is implemented**, and
+`test-fileurltopathbuffer.js` now runs and passes — `url` goes to 45. It is
+not a `Buffer`-returning wrapper around `fileURLToPath`, and the difference is
+the point. `fileURLToPath` scans for encoded separators and rejects `%2f`,
+which it can do because it is about to produce a UTF-8 string. The buffer
+variant deliberately does not scan, because there is no encoding to scan
+under: a single path may mix encodings segment by segment, and in Shift_JIS
+`%5c` is the yen sign rather than a backslash, so the scan would reject legal
+names. It decodes to bytes and hands them over, which is the entire reason
+node has a second function.
+
+**`util.aborted` is implemented**, and its file is claimed but excluded, with
+the reason measured rather than asserted: four of its five cases pass, and the
+fifth wants two things this profile does not have. Node registers the abort
+listener as a *weak* handler keyed on the caller's resource, so collecting the
+resource detaches it and a later abort leaves the promise pending; web-platform's
+`EventTarget` has no weak-listener option, so ours resolves. That case then
+inspects the promise — and found a second gap worth more than the test.
+
+**`util.inspect` renders every Promise as `{}`.** Node renders
+`Promise { <pending> }`, `Promise { 42 }`, `Promise { <rejected> ... }`. Ours
+is correct for `Map`, `Set` and `WeakMap`, so this is specific. It is not
+listed in any exclusion, and the fuzzing this document reports for `inspect` —
+480,000 structures for the comparisons, 5,000 for `inspect` itself — evidently
+never generated a promise, which is a useful thing to know about a generator
+that reports 88.5% agreement. The fix needs a native binding: a promise's state
+is not reachable from JavaScript, and `process.binding("util")` in the pinned
+node no longer carries `getPromiseDetails`. Recorded here as a measured gap
+with its dependency named.
+
+The remaining 29 are not all work to do. `util.inherits` should stay missing
+and is excluded by name. Others are host-process facts (`process.ppid`,
+`process.title`), features from subsystems this profile does not have
+(`process.report`, `process.domain`), or deliberate refusals. What the diff
+buys is that each is now a line someone can argue with, instead of absent from
+both the code and the document.
+
 ## `path`
 
 Complete, both halves, transcribed from node v24.20.0 `lib/path.js`.
@@ -1153,9 +1214,19 @@ finalization is not synchronous with collection.
 ## `util`
 
 `inspect`, `format`/`formatWithOptions`, `types` (43 predicates), the three
-comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
-`styleText`, `parseEnv`, `stripVTControlCharacters`, `toUSVString`, and the
+comparisons, `deprecate`, `debuglog`, `promisify`, `callbackify`, `styleText`,
+`parseEnv`, `stripVTControlCharacters`, `toUSVString`, `aborted`, and the
 `getSystemError*` family.
+
+**This list said `inherits` until it was checked against the module.** It is
+not there and should not be: `util.inherits` is a §13 language non-goal, and
+`util/not-applicable` has said so all along — "entirely observable function and
+prototype mutation (`ctor.super_`, `ctor.prototype`, descriptors), and no
+operation in the flat NTS object model". The exclusion was right and this
+sentence was wrong, which is the more embarrassing direction for a prose list
+to be wrong in: it claimed credit for something the module had deliberately
+refused. Prose that lists a surface is unfalsifiable unless something compares
+it to the surface, which is what the section below now does.
 
 All 20 applicable files pass. The count understates the difficulty: `util`'s tests compare
 `inspect` output character for character, so a single spacing difference fails
@@ -2763,7 +2834,7 @@ generalised so that the same refusal about two different names counts once:
 | `string_decoder` | **35** | 3 |
 | `events` | **43** | 28 |
 | `util` | **57** | 20 |
-| `url` | **59** | 44 |
+| `url` | **59** | 45 |
 | `assert` | **61** | 10 |
 | `process` | **62** | 69 |
 | `console` | **69** | 17 |
