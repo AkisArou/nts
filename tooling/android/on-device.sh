@@ -72,7 +72,8 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes
   "$here"/compiler/codegen/jvm/tests/env/RejectTest.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
-  "$here"/compiler/codegen/jvm/tests/inbox/Stress.java
+  "$here"/compiler/codegen/jvm/tests/inbox/Stress.java \
+  "$here"/compiler/codegen/jvm/tests/store/StoreTest.java
 
 # shellcheck disable=SC2046
 # shellcheck disable=SC2086
@@ -118,6 +119,12 @@ run() {
     *) failed=1 ;;
   esac
 }
+
+# The durable store on ART. It names no SDK member, so this is the same class
+# the desktop suite runs -- and that is the point: atomic rename, both syncs and
+# the name encoding are filesystem behaviour, and the filesystem under ART is
+# not the one under a desktop JDK.
+run StoreTest /data/local/tmp/nts-store
 
 run org.nts.web.NetworkPrimitivesTest /data/local/tmp/store.p12
 # Which default-network events mean the open sockets are dead. The decision runs

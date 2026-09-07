@@ -156,3 +156,88 @@ fn nothing_in_the_runtime_needs_a_feature_android_lacks() {
         );
     }
 }
+
+/// No call whose *descriptor* differs between a desktop JDK and Android.
+///
+/// # The bug this exists for
+///
+/// `NtsStore.close` called `ConcurrentHashMap.keySet()`. Java 8 gave that method
+/// a covariant return type — `ConcurrentHashMap.KeySetView` where Java 7 and
+/// Android's `core-oj` say `Set` — so `javac --release 8` wrote
+/// `()Ljava/util/concurrent/ConcurrentHashMap$KeySetView;` into the call site.
+/// It resolved on every desktop JVM, passed 47 checks, and raised
+/// `NoSuchMethodError` on ART.
+///
+/// # Why the checks that already exist could not see it
+///
+/// `--release 8` fixes the *language* level and the platform signatures javac
+/// compiles against; it says nothing about which of those signatures Android
+/// kept. `-Xlint`, `d8 --min-api 26` and the no-`invokedynamic` ratchet all pass
+/// — the bytecode is valid, dexes cleanly and needs nothing above API 26. The
+/// member simply is not there, and **ART resolves lazily**, so even forcing
+/// linkage over the corpus would not find it: only executing that line does.
+///
+/// So this reads the artifact. A method reference is in the constant pool
+/// whether or not anything calls it, which is the property that makes a jar
+/// checkable without a device attached.
+///
+/// # Why a list rather than a rule
+///
+/// The general question — does every `java.*` reference in this jar resolve
+/// against `android.jar` — cannot be answered by recompiling, because compiling
+/// against Android's bootclasspath would emit descriptors the *desktop* JVM
+/// then rejects. The two platforms genuinely disagree and one jar has to run on
+/// both, so the only safe rule is to avoid the members where they disagree.
+/// That set is small and known; this is it, and the device suite is what finds
+/// the next one.
+#[test]
+fn the_jar_names_no_method_android_spells_differently() {
+    /// `(the descriptor fragment, what to write instead)`.
+    const DIFFERS: &[(&str, &str)] = &[(
+        "ConcurrentHashMap$KeySetView",
+        "`ConcurrentHashMap.keySet()`, whose return type Java 8 made covariant \
+         and Android's `core-oj` did not -- use `entrySet()` or `values()`",
+    )];
+
+    let Some(javap) = tool("javap") else {
+        return;
+    };
+    if std::env::var("NTS_REGENERATE").is_ok_and(|value| value != "0") {
+        // A sibling in this binary rewrites the jar **in place** under
+        // `NTS_REGENERATE`, and cargo runs the two concurrently -- so this read
+        // a half-written archive and reported the very defect it exists to
+        // find. Twice, in one session, with the comment in `tests/inbox.rs`
+        // warning about it already loaded. The check is about the committed
+        // artifact, so during a regeneration there is nothing for it to say.
+        eprintln!("SKIP android spellings: the jar is being regenerated in this run");
+        return;
+    }
+    let jar = root().join("runtime/jvm/nts-runtime.jar");
+    let names = Command::new("sh")
+        .arg("-c")
+        .arg(format!("unzip -Z1 '{}' '*.class'", jar.display()))
+        .output()
+        .expect("listing the jar");
+    let classes: Vec<String> = String::from_utf8_lossy(&names.stdout)
+        .lines()
+        .map(|line| line.trim_end_matches(".class").replace('/', "."))
+        .collect();
+    assert!(classes.len() > 20, "the jar listed {} classes", classes.len());
+
+    let listed = Command::new(&javap)
+        .arg("-v")
+        .arg("-p")
+        .arg("-cp")
+        .arg(&jar)
+        .args(&classes)
+        .output()
+        .expect("running javap");
+    let text = String::from_utf8_lossy(&listed.stdout);
+
+    for (fragment, instead) in DIFFERS {
+        assert!(
+            !text.contains(fragment),
+            "this jar has to run on ART as well as on a desktop JVM, and it names {instead}"
+        );
+    }
+}
