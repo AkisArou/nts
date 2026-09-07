@@ -430,19 +430,44 @@ nearly two-thirds of the total. A resolution number that excludes two-thirds of
 what it claims to be about is the same shape as everything else on this page,
 so it was completed rather than left.
 
-**No survivor inspected was a degenerate pass, and the detector has three named
-blind spots that explain all of them:**
+**No survivor inspected was a degenerate pass, and the detector has two blind
+spots — after a third, written here first, was falsified by measurement.**
 
-| blind spot | example |
-| --- | --- |
-| data properties, which mutation does not touch | `test-process-execpath.js`, `test-http-max-header-size.js`, `test-os-eol.js` |
-| identity and existence assertions | `test-path-posix-exists.js`, `test-stream-aliases-legacy.js` |
-| tests that assert a *throw* — which a throwing poison satisfies | `test-buffer-failed-alloc-typed-arrays.js`, `test-net-write-arguments.js` |
+The claim was that some survivors are tests asserting a *throw*, which a
+throwing poison satisfies for the wrong reason. It was plausible, it was the
+same shape as everything else on this page, and it is **wrong**. A second
+poison was built to test exactly that — return `undefined` instead of throwing,
+so a test expecting a throw fails — and the intersection did not shrink in a
+single module:
 
-The third is a design weakness rather than an accident: poisoning by throwing
-makes "this should throw" tests pass for the wrong reason, which is the same
-shape as everything else on this page. So **a survivor is not evidence of a
-degenerate test, and this column cannot be read as one.**
+```
+net       throw-survivors 2   silent-survivors 3   both 2
+http      throw-survivors 4   silent-survivors 8   both 4
+buffer    throw-survivors 3   silent-survivors 5   both 3
+readline  throw-survivors 5   silent-survivors 5   both 5
+```
+
+Every throw-survivor survives the silent poison too, so not one of them is
+passing because of the throw. The hypothesis explained nothing, and it was
+believed until it was tested.
+
+What is left:
+
+| blind spot | example | kind |
+| --- | --- | --- |
+| data properties, identity, existence | `test-http-max-header-size.js`, `test-path-posix-exists.js` | unreachable by *any* behavioural mutation |
+| inherited methods | `test-net-write-arguments.js` | a hole in this implementation |
+
+The second is precise and worth stating. `test-net-write-arguments.js` drives
+`socket.write(null)`; `class Socket extends Duplex` at `net/src/main.ts:514`
+and `net` never defines `write` — it is inherited from `Writable` at
+`stream/src/writable.ts:324`, **in a different module**. Poisoning a module
+replaces its own exports and their own methods, and inherited behaviour comes
+from a sibling. For `net` that is a scoping fact; for `stream`, whose `Duplex`
+inherits from a `Readable` and `Writable` it also exports, it is a genuine gap.
+
+So **a survivor is not evidence of a degenerate test, and this column cannot be
+read as one.**
 
 **Building it found two holes in itself, both of which looked like findings.**
 Poisoning only prototype methods left `buffer` at 40 survivors of 50 —
