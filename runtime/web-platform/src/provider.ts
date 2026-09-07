@@ -19,9 +19,29 @@ export type {
 export type {
   ContentDecoder,
   FetchTransport,
+  TransportBodySource,
+  TransportErrorCode,
   TransportRequest,
   TransportResponse,
 } from "./fetch/transport.ts";
+export { TransportError } from "./fetch/transport.ts";
+
+export { composeFetchTransport } from "./dispatch/interceptor.ts";
+export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export {
+  RetryAgent,
+  RetryExhaustedError,
+  RetryInterceptor,
+  UnreplayableRequestError,
+} from "./dispatch/retry.ts";
+export type {
+  RetryContext,
+  RetryDecider,
+  RetryDecision,
+  RetryErrorClassifier,
+  RetryObserver,
+  RetryOptions,
+} from "./dispatch/retry.ts";
 
 export {
   MockAgent,

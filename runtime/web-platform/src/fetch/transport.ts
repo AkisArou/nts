@@ -3,12 +3,43 @@ import type { URLRecord } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import type { HeaderEntry } from "./headers.ts";
 
+/** A body that can open an independent stream for each transport attempt. */
+export interface TransportBodySource {
+  readonly length: number;
+
+  open(): ReadableStream<Uint8Array>;
+}
+
+export type TransportErrorCode =
+  | "ECONNRESET"
+  | "ECONNREFUSED"
+  | "ENOTFOUND"
+  | "ENETDOWN"
+  | "ENETUNREACH"
+  | "EHOSTDOWN"
+  | "EHOSTUNREACH"
+  | "EPIPE"
+  | "UND_ERR_SOCKET";
+
+/** Provider errors use this typed envelope; platform facades translate native errors into it. */
+export class TransportError extends Error {
+  readonly code: TransportErrorCode;
+
+  constructor(code: TransportErrorCode, message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "TransportError";
+    this.code = code;
+  }
+}
+
 export interface TransportRequest {
   readonly url: URLRecord;
   readonly method: string;
   readonly headers: readonly HeaderEntry[];
   readonly body: ReadableStream<Uint8Array> | null;
   readonly bodyLength: number | null;
+  /** Absent/null means the body is one-shot. Providers do not consume this metadata. */
+  readonly replayBody?: TransportBodySource | null;
   readonly signal: AbortSignal;
 }
 

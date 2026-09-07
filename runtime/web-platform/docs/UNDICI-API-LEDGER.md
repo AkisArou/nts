@@ -32,63 +32,63 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 
 ## Dispatcher and connection APIs
 
-| Undici surface                               | Status   | NTS mapping or remaining obligation                                                                                          |
-| -------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `Dispatcher.dispatch`                        | provider | `FetchTransport.dispatch` is the typed streaming core; the low-level handler/backpressure facade is missing.                 |
-| `Dispatcher.request` / top-level `request`   | facade   | Fetch transport and body mixins exist; response-data, trailers and opaque-value facade remain.                               |
-| `Dispatcher.stream` / top-level `stream`     | missing  | Requires the Node classic writable-stream adapter over the shared response stream.                                           |
-| `Dispatcher.pipeline` / top-level `pipeline` | missing  | Requires the bidirectional Node classic-stream facade and pipeline lifecycle tests.                                          |
-| `Dispatcher.connect` / top-level `connect`   | missing  | Requires a typed tunnel/duplex handoff distinct from ordinary response bodies.                                               |
-| `Dispatcher.upgrade` / top-level `upgrade`   | provider | Raw WebSocket upgrade exists internally; the general upgraded-duplex facade is missing.                                      |
-| `Dispatcher.compose`                         | missing  | Shared typed interceptor composition and exact ordering/error semantics remain.                                              |
-| `Dispatcher.close`                           | provider | H1 and H2 transports close; a common dispatcher-level graceful close remains.                                                |
-| `Dispatcher.destroy`                         | provider | H1 and H2 can abort active work; common exact-reason async destruction remains.                                              |
-| connect/disconnect/error/drain events        | missing  | Typed diagnostics/event surface remains; no host `EventEmitter` is used in shared code.                                      |
-| dispatch controller pause/resume/abort       | missing  | Requires explicit body-flow ownership and handler callback delivery.                                                         |
-| informational response callbacks             | provider | H2 preserves informational blocks internally; public `onInfo` delivery remains.                                              |
-| request-body progress callbacks              | missing  | `onBodySent` and `onRequestSent` remain.                                                                                     |
-| response trailers                            | provider | H1/H2 parse them; public dispatcher response-data exposure remains.                                                          |
-| raw response headers/trailers                | missing  | Requires an exact ByteString-preserving Node facade.                                                                         |
-| `Client`                                     | provider | Strict H1 and prior-knowledge H2 engines exist; the public single-origin client, configuration and stats facade remain.      |
-| `H2CClient`                                  | provider | `Http2Transport` is an explicit h2c/prior-knowledge engine; public class/facade remains.                                     |
-| `Pool`                                       | provider | H1 has bounded per-origin pooling and H2 multiplexes; unified protocol-aware public pool remains.                            |
-| `RoundRobinPool`                             | missing  | Selection, health, stats and lifecycle remain.                                                                               |
-| `BalancedPool`                               | missing  | Weighted/health-aware upstream management and mutation remain.                                                               |
-| `Agent`                                      | missing  | Environment-owned origin routing, eviction, limits and public stats remain.                                                  |
-| global dispatcher getters/setters            | missing  | Must be environment-owned, never a process/module global.                                                                    |
-| custom connector / `buildConnector`          | provider | `SocketConnector` is the portable typed connection boundary; Node option/facade and negotiated ALPN metadata remain.         |
-| HTTP/1.1                                     | shared   | Strict streaming parser/writer, pooling, timeouts, cancellation and real-socket tests exist.                                 |
-| HTTP/2 / HPACK                               | provider | Frame, HPACK, multiplexing and prior-knowledge Fetch transport exist; ALPN dispatcher and safe connection coalescing remain. |
-| HTTP/1.1 pipelining                          | missing  | Must preserve ordered responses, idempotency/blocking controls and cancellation.                                             |
-| H2 prioritization behavior                   | provider | Priority fields are validated; scheduling behavior and provider capability policy remain.                                    |
-| DNS caching                                  | missing  | Typed resolver records, TTL, invalidation and interceptor/provider integration remain.                                       |
-| Happy Eyeballs                               | missing  | Requires provider DNS/address-attempt capability and deterministic race tests.                                               |
-| protocol-aware stats                         | provider | H2 transport exposes internal counts; stable client/pool/agent stats remain.                                                 |
-| graceful shutdown                            | provider | H1 close and H2 drain exist; environment-wide dispatcher shutdown remains.                                                   |
+| Undici surface                               | Status   | NTS mapping or remaining obligation                                                                                                             |
+| -------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dispatcher.dispatch`                        | provider | `FetchTransport.dispatch` is the typed streaming core; the low-level handler/backpressure facade is missing.                                    |
+| `Dispatcher.request` / top-level `request`   | facade   | Fetch transport and body mixins exist; response-data, trailers and opaque-value facade remain.                                                  |
+| `Dispatcher.stream` / top-level `stream`     | missing  | Requires the Node classic writable-stream adapter over the shared response stream.                                                              |
+| `Dispatcher.pipeline` / top-level `pipeline` | missing  | Requires the bidirectional Node classic-stream facade and pipeline lifecycle tests.                                                             |
+| `Dispatcher.connect` / top-level `connect`   | missing  | Requires a typed tunnel/duplex handoff distinct from ordinary response bodies.                                                                  |
+| `Dispatcher.upgrade` / top-level `upgrade`   | provider | Raw WebSocket upgrade exists internally; the general upgraded-duplex facade is missing.                                                         |
+| `Dispatcher.compose`                         | shared   | Immutable typed interceptor layers have explicit outer-to-inner request and reverse response/error ordering; the package method facade remains. |
+| `Dispatcher.close`                           | provider | H1 and H2 transports close; a common dispatcher-level graceful close remains.                                                                   |
+| `Dispatcher.destroy`                         | provider | H1 and H2 can abort active work; common exact-reason async destruction remains.                                                                 |
+| connect/disconnect/error/drain events        | missing  | Typed diagnostics/event surface remains; no host `EventEmitter` is used in shared code.                                                         |
+| dispatch controller pause/resume/abort       | missing  | Requires explicit body-flow ownership and handler callback delivery.                                                                            |
+| informational response callbacks             | provider | H2 preserves informational blocks internally; public `onInfo` delivery remains.                                                                 |
+| request-body progress callbacks              | missing  | `onBodySent` and `onRequestSent` remain.                                                                                                        |
+| response trailers                            | provider | H1/H2 parse them; public dispatcher response-data exposure remains.                                                                             |
+| raw response headers/trailers                | missing  | Requires an exact ByteString-preserving Node facade.                                                                                            |
+| `Client`                                     | provider | Strict H1 and prior-knowledge H2 engines exist; the public single-origin client, configuration and stats facade remain.                         |
+| `H2CClient`                                  | provider | `Http2Transport` is an explicit h2c/prior-knowledge engine; public class/facade remains.                                                        |
+| `Pool`                                       | provider | H1 has bounded per-origin pooling and H2 multiplexes; unified protocol-aware public pool remains.                                               |
+| `RoundRobinPool`                             | missing  | Selection, health, stats and lifecycle remain.                                                                                                  |
+| `BalancedPool`                               | missing  | Weighted/health-aware upstream management and mutation remain.                                                                                  |
+| `Agent`                                      | missing  | Environment-owned origin routing, eviction, limits and public stats remain.                                                                     |
+| global dispatcher getters/setters            | missing  | Must be environment-owned, never a process/module global.                                                                                       |
+| custom connector / `buildConnector`          | provider | `SocketConnector` is the portable typed connection boundary; Node option/facade and negotiated ALPN metadata remain.                            |
+| HTTP/1.1                                     | shared   | Strict streaming parser/writer, pooling, timeouts, cancellation and real-socket tests exist.                                                    |
+| HTTP/2 / HPACK                               | provider | Frame, HPACK, multiplexing and prior-knowledge Fetch transport exist; ALPN dispatcher and safe connection coalescing remain.                    |
+| HTTP/1.1 pipelining                          | missing  | Must preserve ordered responses, idempotency/blocking controls and cancellation.                                                                |
+| H2 prioritization behavior                   | provider | Priority fields are validated; scheduling behavior and provider capability policy remain.                                                       |
+| DNS caching                                  | missing  | Typed resolver records, TTL, invalidation and interceptor/provider integration remain.                                                          |
+| Happy Eyeballs                               | missing  | Requires provider DNS/address-attempt capability and deterministic race tests.                                                                  |
+| protocol-aware stats                         | provider | H2 transport exposes internal counts; stable client/pool/agent stats remain.                                                                    |
+| graceful shutdown                            | provider | H1 close and H2 drain exist; environment-wide dispatcher shutdown remains.                                                                      |
 
 ## Policy, proxy, cache, and coding APIs
 
-| Undici surface                                    | Status     | NTS mapping or remaining obligation                                                                                                    |
-| ------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| redirect interceptor                              | shared     | Fetch owns redirect modes, method rewriting, replay and cross-origin credential removal. Dispatcher composition facade remains.        |
-| decompression interceptor                         | shared     | Shared coding policy drives provider decoders with streaming limits, cancellation and visible original headers.                        |
-| RFC 9111 cache interceptor                        | shared     | Validators, freshness, `Vary`, invalidation and configured stale policies exist over typed stores.                                     |
-| memory cache store                                | shared     | `MemoryHttpCacheStore` and the separate `MemoryCacheStorageStore` exist with explicit bounds.                                          |
-| SQLite/persistent cache store                     | dependency | Durable byte/blob provider primitive and production stores remain; cache policy stays shared.                                          |
-| retry interceptor / `RetryAgent` / `RetryHandler` | missing    | Needs typed retry policy, idempotency/replay rules, delay/backoff, `Retry-After`, lifecycle and diagnostics.                           |
-| response-error interceptor                        | missing    | Status/body policy and stable error taxonomy remain.                                                                                   |
-| bounded dump interceptor                          | missing    | Must consume/cancel under an explicit byte limit without hiding network errors.                                                        |
-| DNS interceptor                                   | missing    | Depends on the resolver/cache capability above.                                                                                        |
-| deduplication interceptor                         | missing    | Needs exact keying, compatible bodies, per-subscriber cancellation and bounded fan-out.                                                |
-| tracing/diagnostics hooks                         | missing    | Opt-in typed events must not alter scheduling, ownership or public semantics.                                                          |
-| `ProxyAgent`                                      | provider   | The JVM/JVM reference transport has HTTP CONNECT; the shared dispatcher integration, authentication, reuse and other providers remain. |
-| `Socks5ProxyAgent`                                | provider   | The JVM reference transport has SOCKS5; the shared dispatcher surface, other providers and common corpus remain.                       |
-| `EnvHttpProxyAgent`                               | missing    | Environment variable parsing, `NO_PROXY` matching and explicit precedence remain Node-only policy.                                     |
-| injectable proxy authentication                   | missing    | Typed challenge/credential hook, redaction and retry bounds remain.                                                                    |
-| gzip                                              | shared     | Streaming decode policy and checksum/error tests exist; every production provider still needs evidence.                                |
-| zlib/raw deflate                                  | shared     | Both interoperable forms are selected and tested under the same output limits.                                                         |
-| Brotli                                            | shared     | Coding policy and host reference decoder exist; production-provider evidence remains.                                                  |
-| advertised encoding control                       | shared     | Only available decoders are advertised; identity is the fallback.                                                                      |
+| Undici surface                                    | Status     | NTS mapping or remaining obligation                                                                                                                                          |
+| ------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| redirect interceptor                              | shared     | Fetch owns redirect modes, method rewriting, replay and cross-origin credential removal. Dispatcher composition facade remains.                                              |
+| decompression interceptor                         | shared     | Shared coding policy drives provider decoders with streaming limits, cancellation and visible original headers.                                                              |
+| RFC 9111 cache interceptor                        | shared     | Validators, freshness, `Vary`, invalidation and configured stale policies exist over typed stores.                                                                           |
+| memory cache store                                | shared     | `MemoryHttpCacheStore` and the separate `MemoryCacheStorageStore` exist with explicit bounds.                                                                                |
+| SQLite/persistent cache store                     | dependency | Durable byte/blob provider primitive and production stores remain; cache policy stays shared.                                                                                |
+| retry interceptor / `RetryAgent` / `RetryHandler` | provider   | Typed pre-response/status retry, explicit body replay, backoff, `Retry-After`, abort and observation exist; partial-body Range/ETag resume and exact package facades remain. |
+| response-error interceptor                        | missing    | Status/body policy and stable error taxonomy remain.                                                                                                                         |
+| bounded dump interceptor                          | missing    | Must consume/cancel under an explicit byte limit without hiding network errors.                                                                                              |
+| DNS interceptor                                   | missing    | Depends on the resolver/cache capability above.                                                                                                                              |
+| deduplication interceptor                         | missing    | Needs exact keying, compatible bodies, per-subscriber cancellation and bounded fan-out.                                                                                      |
+| tracing/diagnostics hooks                         | missing    | Opt-in typed events must not alter scheduling, ownership or public semantics.                                                                                                |
+| `ProxyAgent`                                      | provider   | The JVM/JVM reference transport has HTTP CONNECT; the shared dispatcher integration, authentication, reuse and other providers remain.                                       |
+| `Socks5ProxyAgent`                                | provider   | The JVM reference transport has SOCKS5; the shared dispatcher surface, other providers and common corpus remain.                                                             |
+| `EnvHttpProxyAgent`                               | missing    | Environment variable parsing, `NO_PROXY` matching and explicit precedence remain Node-only policy.                                                                           |
+| injectable proxy authentication                   | missing    | Typed challenge/credential hook, redaction and retry bounds remain.                                                                                                          |
+| gzip                                              | shared     | Streaming decode policy and checksum/error tests exist; every production provider still needs evidence.                                                                      |
+| zlib/raw deflate                                  | shared     | Both interoperable forms are selected and tested under the same output limits.                                                                                               |
+| Brotli                                            | shared     | Coding policy and host reference decoder exist; production-provider evidence remains.                                                                                        |
+| advertised encoding control                       | shared     | Only available decoders are advertised; identity is the fallback.                                                                                                            |
 
 ## Mocking, replay, and observability
 

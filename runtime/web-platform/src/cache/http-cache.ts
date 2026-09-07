@@ -262,6 +262,7 @@ function copyRequest(request: TransportRequest, headers: readonly HeaderEntry[])
     headers,
     body: request.body,
     bodyLength: request.bodyLength,
+    replayBody: request.replayBody,
     signal: request.signal,
   };
 }

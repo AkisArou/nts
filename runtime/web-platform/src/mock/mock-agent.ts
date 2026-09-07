@@ -3,10 +3,15 @@ import { LimitError } from "../core/errors.ts";
 import { TextDecoder, TextEncoder } from "../core/encoding.ts";
 import { Headers } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
-import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
+import type {
+  FetchTransport,
+  TransportBodySource,
+  TransportRequest,
+  TransportResponse,
+} from "../fetch/transport.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import type { CancelHandle, Scheduler } from "../provider/primitives.ts";
-import { bytesStream } from "../streams/readable.ts";
+import { bytesStream, type ReadableStream } from "../streams/readable.ts";
 
 export type MockStringMatcher = string | RegExp | ((value: string) => boolean);
 export type MockBodyMatcher =
@@ -84,6 +89,20 @@ function copyBytes(bytes: Uint8Array): Uint8Array {
   const result = new Uint8Array(bytes.length);
   result.set(bytes);
   return result;
+}
+
+class CapturedTransportBody implements TransportBodySource {
+  readonly length: number;
+  private readonly bytes: Uint8Array;
+
+  constructor(bytes: Uint8Array) {
+    this.bytes = copyBytes(bytes);
+    this.length = bytes.length;
+  }
+
+  open(): ReadableStream<Uint8Array> {
+    return bytesStream(this.bytes);
+  }
 }
 
 function byteEqual(left: Uint8Array, right: Uint8Array): boolean {
@@ -210,6 +229,7 @@ export function replayMockRequest(
     headers: copyHeaders(request.headers),
     body: snapshot.body === null ? null : bytesStream(snapshot.body),
     bodyLength: snapshot.body === null ? null : snapshot.body.length,
+    replayBody: snapshot.body === null ? null : new CapturedTransportBody(snapshot.body),
     signal: request.signal,
   };
 }

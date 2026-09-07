@@ -95,6 +95,25 @@ export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 
 export { fetch, ServerCookiePolicy } from "./fetch/fetch.ts";
 export type { FetchCookiePolicy } from "./fetch/fetch.ts";
+export { TransportError } from "./fetch/transport.ts";
+export type { TransportBodySource, TransportErrorCode } from "./fetch/transport.ts";
+
+export { composeFetchTransport } from "./dispatch/interceptor.ts";
+export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export {
+  RetryAgent,
+  RetryExhaustedError,
+  RetryInterceptor,
+  UnreplayableRequestError,
+} from "./dispatch/retry.ts";
+export type {
+  RetryContext,
+  RetryDecider,
+  RetryDecision,
+  RetryErrorClassifier,
+  RetryObserver,
+  RetryOptions,
+} from "./dispatch/retry.ts";
 
 export {
   MockAgent,

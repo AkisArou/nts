@@ -9,6 +9,7 @@ import { parseMIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import type { RandomSource } from "../provider/primitives.ts";
 import { bytesStream, ReadableStream, tee, transfer } from "../streams/readable.ts";
+import type { TransportBodySource } from "./transport.ts";
 
 export type BodyInit =
   | string
@@ -28,6 +29,20 @@ export const standardBodyPolicy: BodyPolicy = {
   maxConsumeBytes: Infinity,
   maxCloneBufferBytes: Infinity,
 };
+
+class BlobTransportBodySource implements TransportBodySource {
+  readonly length: number;
+  private readonly blob: Blob;
+
+  constructor(blob: Blob) {
+    this.blob = blob;
+    this.length = blob.size;
+  }
+
+  open(): ReadableStream<Uint8Array> {
+    return this.blob.stream();
+  }
+}
 
 /** Convert the Web IDL `BodyInit?` union without consuming streams or copying buffers. */
 export function convertBodyInit(input: BodyInit | null | undefined): BodyInit | null | undefined {
@@ -115,6 +130,11 @@ export class BodyState {
 
   get replayable(): boolean {
     return this.stream === null || this.replaySource !== null;
+  }
+
+  /** @internal Preserve replayability across the provider-neutral transport boundary. */
+  transportBodySource(): TransportBodySource | null {
+    return this.replaySource === null ? null : new BlobTransportBodySource(this.replaySource);
   }
 
   replay(): BodyState {

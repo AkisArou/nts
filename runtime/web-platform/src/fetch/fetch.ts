@@ -273,6 +273,7 @@ export class FetchClient {
           headers: dispatchHeaders.raw(),
           body: body.stream,
           bodyLength: body.length,
+          replayBody: body.transportBodySource(),
           signal: request.signal,
         };
         let cached: HttpCacheDispatchResult;
