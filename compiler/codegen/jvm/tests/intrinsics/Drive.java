@@ -9,8 +9,10 @@ import nts.rt.NtsEnv;
 import nts.rt.NtsInbox;
 import nts.rt.NtsNumberCallback;
 import nts.rt.NtsBuffer;
+import nts.rt.NtsRefusal;
 import nts.rt.NtsSocket;
 import nts.rt.NtsView;
+import nts.rt.NtsWeb;
 import nts.rt.NtsViewU8;
 import nts.rt.NtsTextPairCallback;
 
@@ -267,6 +269,29 @@ public final class Drive {
             }
             System.out.println("outside " + outside);
             System.out.println("inside " + (inside > 0 ? "set" : "none"));
+
+            // Byte ownership: a read into a view whose buffer has been
+            // detached never starts. Synchronous, unlike every failure the
+            // callbacks carry, because a detached buffer is not an *outcome*
+            // of the operation -- which is what the language specifies and
+            // what node does.
+            //
+            // Asserted here rather than from TypeScript because a program
+            // cannot get there: `new Uint8Array(buffer)` does not lower, so
+            // there is no way to hold a view whose buffer something else can
+            // detach. The runtime property is real either way and this is the
+            // only place that can state it.
+            NtsBuffer doomed = NtsBuffer.allocate(16);
+            NtsViewU8 over = NtsViewU8.over(doomed, 0);
+            NtsBuffer.transfer(doomed, 16, true);
+            String refused;
+            try {
+                NtsWeb.read(0, over, null, null);
+                refused = "no";
+            } catch (NtsRefusal caught) {
+                refused = caught.getMessage().contains("detached") ? "TypeError" : "wrong";
+            }
+            System.out.println("detached read " + refused);
 
             System.out.println("open " + (int) call("openNow"));
             System.out.println("after close " + (int) call("closeOne", opened[0].handle));

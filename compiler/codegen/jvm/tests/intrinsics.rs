@@ -63,6 +63,7 @@ const EXPECTED: &str = "\
 random set
 outside 0
 inside set
+detached read TypeError
 open 3
 after close 2
 after cancel 2

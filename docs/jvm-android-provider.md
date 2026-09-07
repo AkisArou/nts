@@ -234,6 +234,16 @@ Three things, and only one of them is code.
   corpus would either report that as a defect or be taught to tolerate it. h2
   becomes a negotiated capability when the reference can match it.
 
+- **A lowering that can make two views alias**, which is the property
+  `ManagedType::View` exists for and which nothing tests. `new Uint8Array(buffer)`,
+  `subarray`, `slice` and `copyWithin` are all `NTS1001` today, so there is no
+  way for a program to hold two views over one buffer -- and all 292 cases of
+  `examples/typed-arrays` would pass against a lowering that copied. The runtime
+  half is built and oracle-tested: `set` snapshots when the buffers are the same
+  object, `copyWithin` is `System.arraycopy` for memmove semantics, `subarray`
+  aliases and `slice` copies. Ten cases are written and waiting; raised with the
+  owner of `hir::lower`.
+
 Everything else the plan asks of this lane has evidence. What arrived most
 recently, and what it cost:
 
@@ -253,6 +263,13 @@ recently, and what it cost:
   function had its body pruned, and its parameters joined to BOTTOM, so a global
   assigned only from a callback was constant-folded to its initial value on all
   three backends while node printed the real one.
+- **Byte ownership at the boundary.** A read or write into a view whose buffer
+  has been detached is a synchronous `TypeError` -- the operation never starts,
+  which is what the language specifies -- and the check happens *before* the
+  completion credit is reserved. It did not: Java evaluates arguments left to
+  right, so `NtsSocket.read(env, NtsEnv.launch(env), handle, storage(into), ...)`
+  reserved a completion and threw past it. A leaked credit is invisible until an
+  environment closes, which is where the test found it.
 - **The worker queue's bound is reached and asserted**: 8 workers over a
   256-deep queue admits exactly 264 blocked operations and refuses the rest at
   submission, with the completion credit returned. `submit` had said "the queue

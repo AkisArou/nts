@@ -90,17 +90,26 @@ public final class NtsWeb {
      */
     public static void read(double handle, NtsViewU8 into,
                             NtsNumberCallback onRead, NtsTextPairCallback onError) {
+        // The view **before** the credit. Java evaluates arguments left to
+        // right, so writing `NtsSocket.read(env, NtsEnv.launch(env), handle,
+        // storage(into), ...)` reserves a completion and then throws past it,
+        // and the reservation is only ever noticed when the environment is
+        // closed -- "closing left 1 completion credit(s) held by work that
+        // never settled", a long way from the line that held it.
+        byte[] bytes = storage(into);
         NtsEnv env = NtsEnv.current();
         NtsSocket.read(env, NtsEnv.launch(env), handle,
-            storage(into), into.offset, NtsView.elements(into), onRead, onError);
+            bytes, into.offset, NtsView.elements(into), onRead, onError);
     }
 
     /** Write from a caller-owned view, borrowed until the completion. */
     public static void write(double handle, NtsViewU8 from,
                              NtsNumberCallback onWrote, NtsTextPairCallback onError) {
+        // The view before the credit, as in `read`.
+        byte[] bytes = storage(from);
         NtsEnv env = NtsEnv.current();
         NtsSocket.write(env, NtsEnv.launch(env), handle,
-            storage(from), from.offset, NtsView.elements(from), onWrote, onError);
+            bytes, from.offset, NtsView.elements(from), onWrote, onError);
     }
 
     /** Idempotent, and what makes a blocked read or write return. */
@@ -132,6 +141,10 @@ public final class NtsWeb {
      * <p>Synchronous, unlike every failure the callbacks carry, because a
      * detached buffer is not an outcome of the operation -- the operation never
      * starts. That is what the language specifies and what node does.
+     *
+     * <p>Callers must reach this **before** reserving a completion credit. A
+     * throw past a reservation leaks it, and a leaked credit is invisible until
+     * an environment is closed.
      */
     private static byte[] storage(NtsViewU8 view) {
         byte[] bytes = view.buffer.bytes;
