@@ -4350,6 +4350,46 @@ instrument that would catch it is running the module and watching it crash. It i
 recorded here because a blocker with no diagnostic is the kind that gets
 forgotten, not because it is hard to fix.
 
+## A byte view is two failures, and `string_decoder` is two fixes
+
+`string_decoder` was reported here — and to the compiler lane, twice — as **one
+fix from green**: its entire public surface is `class StringDecoder`, so
+`blockers/export-class` looked like the only thing in the way. That was assembled
+from the one blocker that had been measured, with no second-order check. Its
+methods are
+
+    write(buf: ArrayBufferView | string): string
+    end(buf?: ArrayBufferView): string
+    text(buf: ArrayBufferView, offset: number): string
+
+and **none of those shapes crosses**. Publishing the class would publish a
+constructor whose methods cannot be called. The check that disproves it is four
+standalone functions with those signatures and it takes two minutes; it was run
+after the claim had been stated twice and written down once.
+
+**Behind "a byte view does not cross" there are two different failures wanting
+different work.** Measured in one file, on one binary:
+
+| parameter | outcome |
+| --- | --- |
+| `values: number[]` | **published** |
+| `bytes: Uint8Array` | lowers; wrapper declines — *"takes TypedArray: its signature does not cross"* |
+| `buf: ArrayBufferView` | **does not lower** — *"a parameter of unrepresentable type"* |
+
+A `Uint8Array` parameter is compiled and only the Node-API wrapper will not carry
+it, which is the same place `f64-parameter` was fixed and therefore a known kind
+of work. `ArrayBufferView` never lowers, because it is an interface rather than a
+concrete view type, so it needs the lowering *and then* the wrapper. **A fix that
+stops at `Uint8Array` — the obvious first step — publishes nothing for this
+module.** Fixtured as `blockers/arraybufferview-parameter`.
+
+**The reach is the argument for its priority.** `buffer` takes byte views
+everywhere, `fs.read` and `fs.write` take them, `zlib` takes them, and `stream`
+passes them through in object mode. Anything in this profile that moves bytes
+across the Node-API boundary wants this, which puts it above `export-class` on
+value even though `export-class` unblocks more module *names*: a published class
+with uncallable methods is worth nothing.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
