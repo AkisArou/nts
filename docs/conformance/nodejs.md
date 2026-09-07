@@ -1704,8 +1704,24 @@ finalization is not synchronous with collection.
 
 `inspect`, `format`/`formatWithOptions`, `types` (43 predicates), the three
 comparisons, `deprecate`, `debuglog`, `promisify`, `callbackify`, `styleText`,
-`parseEnv`, `stripVTControlCharacters`, `toUSVString`, `aborted`, and the
-`getSystemError*` family.
+`parseEnv`, `stripVTControlCharacters`, `toUSVString`, `aborted`, the
+`getSystemError*` family, and `TextEncoder`/`TextDecoder`.
+
+**The Encoding pair is a re-export, and the identity is the point.**
+`test-global-encoder.js` asserts `TextDecoder === util.TextDecoder` and
+`TextEncoder === util.TextEncoder` — not that both work, that both are the same
+object. Two separate correct implementations would fail it. So `util` re-exports
+web-platform's canonical Encoding and declares the `encoding` group in its
+`globals` file, which installs the same classes as the globals for its own test
+run. The group is declared per module rather than installed for everyone, for
+the reason already recorded against `abort`: a canonical global handed to a host
+function expecting the host's own is not understood.
+
+**Nothing was claiming that file.** It is named `test-global-encoder.js`, which
+matches no module's pattern, and the unclaimed audit could not see it either —
+`util` is on the incidental list, so a file importing only `assert` and `util`
+was discounted to nothing. The audit built to find tests in no denominator had a
+blind spot of exactly that shape, and it is the seventh instance of this bug.
 
 **This list said `inherits` until it was checked against the module.** It is
 not there and should not be: `util.inherits` is a §13 language non-goal, and
