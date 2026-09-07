@@ -33,7 +33,7 @@
 // `deep-equal.ts` are under every module here, and a sweep that covers only the
 // module being worked on would report the win and miss the cost.
 
-import { readdirSync, existsSync } from "node:fs";
+import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
@@ -50,12 +50,38 @@ const arg = (name) => {
 const withSabotage = !argv.includes("--no-sabotage");
 const withCompiles = argv.includes("--compiles");
 const withTests = !argv.includes("--no-tests");
-const compiler = join(ROOT, "target/release/nts");
+/**
+ * Which `nts` to measure, and why it is not simply `target/release/nts`.
+ *
+ * Three sessions share this checkout and only one of them builds into
+ * `target/`. A hard-coded path therefore measures whichever binary that
+ * session happens to have produced, which may be a different compiler than the
+ * one whose behaviour is being asked about -- and the run gives no sign of it.
+ * `NTS_BIN` is the name the gate and the differential already use for a pinned
+ * copy; `NTS_COMPILER` is the name `build.sh` already accepted here. Both are
+ * honoured so that neither existing habit silently does nothing.
+ */
+const compiler = process.env.NTS_BIN || process.env.NTS_COMPILER || join(ROOT, "target/release/nts");
 
 if (withCompiles && !existsSync(compiler)) {
   console.error(`no compiler at ${compiler}; the compiler session must build it`);
   process.exit(2);
 }
+
+/**
+ * The binary can change underneath a measurement that takes minutes.
+ *
+ * `nodejs.md` states the rule -- `stat` before and after, discard if the mtime
+ * moved -- and stating a rule is not the same as running it. A compiled column
+ * was published once from a run a rebuild had landed in the middle of, and
+ * nothing about it looked wrong. So the sweep checks itself now: it records the
+ * mtime before the first `nts hir` and again after the last, and refuses to
+ * print a `compiles` column it cannot vouch for.
+ *
+ * Pinning with `NTS_BIN` makes this check pass trivially, which is the point.
+ */
+const compilerStamp = () => (withCompiles ? statSync(compiler).mtimeMs : 0);
+const compilerBefore = withCompiles ? compilerStamp() : 0;
 
 const requested = arg("--modules");
 const modules = requested
@@ -168,5 +194,17 @@ if (withTests) {
   );
 }
 if (withCompiles) {
-  console.log(`${totalLowered} functions lower.`);
+  const compilerAfter = compilerStamp();
+  if (compilerAfter !== compilerBefore) {
+    console.log(
+      `\nDISCARD THIS COLUMN. ${compiler} was rebuilt during the run ` +
+        `(mtime ${new Date(compilerBefore).toISOString()} -> ` +
+        `${new Date(compilerAfter).toISOString()}), so the modules measured ` +
+        `before it used a different compiler than the ones measured after. ` +
+        `Pin a copy and re-run with NTS_BIN=<path>.`,
+    );
+    process.exitCode = 3;
+  } else {
+    console.log(`${totalLowered} functions lower, measured with ${compiler}.`);
+  }
 }
