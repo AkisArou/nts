@@ -432,6 +432,28 @@ try {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line !== "" && !line.startsWith("#"));
+    // Web-platform source reads its environment slot through a typed native ABI
+    // -- `nts_environment_has_platform` and its two siblings -- which compiled
+    // code satisfies and a host lane must stand in for. `provider/environment.ts`
+    // says so directly: "host-only conformance providers may supply equivalent
+    // globals while executing the same source as ordinary JavaScript."
+    //
+    // Nothing here installs a runtime, and the source is written for that: the
+    // `Event` constructor asks before reading, because "an `Event` is built by
+    // code that has no idea whether there is one". But *asking* is still a call,
+    // and an undefined binding throws where a `false` was wanted. Without these
+    // three, `new AbortController().abort()` dies inside `Event` and takes every
+    // abort-listener test in `node:events` with it, reported as a listener that
+    // was called 0 times -- which names neither the constructor nor the binding.
+    if (globalThis.nts_environment_has_platform === undefined) {
+      let platform;
+      globalThis.nts_environment_install_platform = (runtime) => {
+        platform = runtime;
+      };
+      globalThis.nts_environment_platform = () => platform;
+      globalThis.nts_environment_has_platform = () => platform !== undefined;
+    }
+
     for (const name of wanted) {
       if (name === "abort") {
         const abort = await import(join(moduleDir, "../../web-platform/src/core/abort.ts"));
