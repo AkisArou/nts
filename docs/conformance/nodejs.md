@@ -2846,13 +2846,101 @@ of type `void`.
     };
 
 That is a WHATWG `UnderlyingSink`; the neighbouring one is a `QueuingStrategy`.
-Object types whose members are functions or optional lower their field type to
-`void`. With clang's error limit at 20 per module, 228 is a floor and not a
-count.
+With clang's error limit at 20 per module, 228 is a floor and not a count.
+
+**The sentence that stood here was wrong, and correcting it split one bug into
+two.** It read "object types whose members are functions or optional lower their
+field type to `void`", which is a description of what the void structs have in
+common rather than of anything that causes them. Two structs in the same
+generated file disprove it, because they are only *partly* void:
+
+```c
+struct NtsObj_Type7151 {          struct NtsObj_Tuple249 {
+    NtsHeader header;                 NtsHeader header;
+    NtsString * kind;                 NtsValue _0_;
+    NtsString * name;                 void _1_;
+    NtsString * rawName;          };
+    int32_t index_;
+    void value;
+    void inlineValue;
+};
+```
+
+Four fields resolve and two do not, so void-ness is per field and "the struct
+was emitted with nothing resolved" cannot be the rule. (The first count of this
+said `ReadableByteStreamState` was partly void too. It was not: the pattern had
+matched `void * __defaultReads`, a legitimate pointer. An instrument and the
+thing it measures.)
+
+**Optionality is exonerated, by control rather than by argument.** The obvious
+suspect is the optional member, since `QueuingStrategy.highWaterMark?: number`
+is void in the real output and an optional number is not an exotic type. Both
+controls compile clean, emitting `NtsValue`:
+
+```ts
+interface Sink { type?: undefined; write?: (c: number) => void }
+interface Strategy { highWaterMark?: number; size?: (c: number) => number }
+```
+
+So `undefined` alone is not sufficient either — `type?: undefined` is fine. It
+is `undefined` as a **required** member that emits `void value;`, which is the
+shape `util/src/parse-args.ts` declares in one arm of `ParseArgsOptionToken`,
+and those two fields are exactly the two that voided. Fixtured as
+`blockers/undefined-required-field`, and it reaches two modules and eight sites:
+four in `util`, four in `http/src/parser.ts`, every one of them an arm of a
+discriminated union.
+
+That leaves the eight all-void structs — all Streams option dictionaries — as a
+**second and still-unreproduced cause**; their standalone forms compile. Both
+are the compiler lane's, and both are needed, because every one of the eight
+also carries a `type?: undefined` or reaches something that does: repairing only
+the second leaves a `void` field and clang still rejects the struct.
+
+Worth naming about the shape of this blocker, since it is the first of its kind
+here: **it refuses nothing**. `hir` is silent, `emit-c` reports success, and the
+only thing that objects is clang. No refusal count could ever have shown it,
+which is why it survived every measurement in this document until the generated
+C was read directly.
 
 Three modules — `async_hooks`, `diagnostics_channel`, `timers` — have one clang
 error each (two for `timers`), and it is the same one: a closure pointer passed
 where `nts_enqueue_microtask(NtsTask task)` declares a three-field struct.
+
+**That one was not the compiler's, and it took following the symbol to find
+out.** The chain runs from `program.c` through the enclosing `emitDestroy` to
+`internal/async-hooks.ts`, where this profile had written
+
+```ts
+declare function nts_enqueue_microtask(callback: () => void): void;
+```
+
+in four files, claiming a runtime symbol whose real signature is the struct.
+The lowering was faithful and the runtime was correct; a `declare function` had
+taken a name that already meant something else, and nothing could see it until
+the link. The binding is `nts_node_enqueue_microtask` now, with
+`internal/microtask.c` adapting through the runtime's own `nts_callback_task`.
+
+**The adapter is staged rather than working, and the reason is worth keeping.**
+`nts_callback_task` takes a slot index, and the runtime calls straight through
+it — `methods[entry->slot]` — so a wrong slot is a null call, not a type error.
+The compiler assigns the closure's call slot after every named method in the
+program, and the emitted vtables say what that means here:
+
+```
+async_hooks         { 0,0,0,0,0,0,0,0, Closure3__call }   slot 8
+diagnostics_channel { 0,0,0,0,0, Closure18__call }        slot 5
+buffer              { 0,0,0,0,0, Closure2__call }         slot 5
+punycode            { Closure5__call }                    slot 0
+```
+
+The worst possible distribution for a hardcoded constant: `punycode`, the module
+with no methods and the one anybody would test first, is the single program
+where `0` is right. The three modules this was written for would have
+typechecked, compiled, linked and crashed on their first microtask — a failure
+that looks like success until it runs, and strictly worse than the clang error
+it replaced. Neither this profile nor the runtime can derive the number, because
+a descriptor's method table carries no count to scan; only `program.c` knows it,
+and the compiler lane is publishing it as `nts_closure_call_slot`.
 
 **Neither fix produces a passing module, and the distinction is the useful part
 of this measurement.** Seven modules already compile — `buffer`, `os`, `path`,
