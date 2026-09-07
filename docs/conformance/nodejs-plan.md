@@ -205,6 +205,20 @@ diagnostic stream. **A Node-API addon is not that case.** It runs inside node,
 there is a `process` to emit on, and `napi_get_global` → `process.emitWarning`
 is the faithful route. Blocker 7.
 
+**The green row is pre-validated as real, not degenerate.** The sweep's harder
+question — keep the addon's names and destroy its behaviour — was asked of
+`punycode` before it can pass, because the first pass ever reported on this axis
+did not survive it:
+
+    run.mjs --module punycode --addon … --mutate-addon
+      FAIL  test-punycode.js               poisoned export encode was called
+      FAIL  local/error-identity-static.js decode(" ") threw Error that is not a RangeError
+      2 file(s): 0 passed, 2 failed
+
+Both files depend on what the module *does*. So when blocker 7 lands the row
+will be 2 of 2 with 0 degenerate, and that is known now rather than discovered
+afterwards.
+
 **Two caveats, so "punycode green" would mean what it says.** `version` still
 does not publish — a string constant node's test never touches, so the test can
 pass with the module incomplete. And `local/error-identity-static.js` will still
