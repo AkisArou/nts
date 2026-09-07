@@ -34,5 +34,6 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/retry.test.mjs \
   tooling/conformance/web-platform/test/server-handshake.test.mjs \
   tooling/conformance/web-platform/test/snapshot-agent.test.mjs \
+  tooling/conformance/web-platform/test/virtual-time.test.mjs \
   tooling/conformance/web-platform/test/weak-listener.test.mjs
 NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs

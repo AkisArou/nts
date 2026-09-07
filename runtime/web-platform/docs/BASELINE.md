@@ -2942,3 +2942,58 @@ Measured with the same pinned binary built at `43fda4d3`: 1,295 primary `NTS1001
 before and after, 234 to 235 cascades, with zero `NTS1004`, zero `NTS4xxx` and no
 invalid HIR. One message differs between the runs and it is the same message with a
 shifted type id; the added cascade is the handshake's new call into the negotiator.
+
+## A clock that moves only when told to
+
+The environment contract requires deterministic oracle tests to use virtual time and
+requires that network activity never silently advances it. `VirtualScheduler`
+implements the `Scheduler` seam with a clock that observes nothing: time passes only
+through `advance()`, so a test expecting a timeout has to say so.
+
+It is a provider rather than a test helper, and it is portable — no host dependency at
+all — so every target can run the same deterministic corpus rather than each lane
+writing its own approximation. Until now the only virtual clocks in this repository
+were ad-hoc objects defined inside individual test files.
+
+Three decisions are load-bearing and each has a test that fails without it.
+
+The clock **stops at each deadline** instead of jumping to the end of the interval. A
+task therefore sees the time its own deadline implies, and a timer it schedules inside
+the remaining window still runs in the same advance. Jumping would make the outcome
+depend on how the caller happened to divide the interval, which is the opposite of
+deterministic.
+
+Equal deadlines run in **scheduling order**. Without an explicit sequence the outcome
+would depend on array order after removals, which is a race written down rather than
+avoided.
+
+Cancellation is checked **when a timer is selected**, not when it is scheduled, because
+a running task may cancel a timer this advance has not reached yet. Cancelling twice or
+after firing is inert.
+
+Queued tasks drain before timers and never move the clock; a failing task is reported
+and the run continues, so one exception does not hide every later assertion behind it;
+and negative, `NaN` and infinite times are refused everywhere rather than normalized.
+`advanceToNextDeadline()` reports whether it moved, so a caller can drive a scheduler
+to quiescence without guessing an interval — including deadlines discovered on the way.
+
+Nine tests. Three sabotages, all restored: not stopping at each deadline took the
+corpus from 9/9 to 6/9; reversing the tie-break for equal deadlines took it to 8/9;
+and checking cancellation only at scheduling time took it to 8/9.
+
+The complete local Node-host/real-socket corpus passes 476/476 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: that anything uses it yet. The existing suites keep their own ad-hoc
+clocks, and moving them is separate work with its own risk of changing what a test
+measures. Nor does this settle the environment-level time-mode selection the contract
+describes; it provides the virtual mode, not the choice between modes.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,295 primary
+`NTS1001` and 235 `NTS1003`; after, 1,298 primary and 240 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. The three new primaries are one `push` on
+a homogeneous array, one assignment to an array's `length` in the compaction path — the
+same shape recorded for `Headers` and `FormData` — and one property access the lowering
+does not find declared on the type. The five cascades are the call graph from the tests
+of those paths.

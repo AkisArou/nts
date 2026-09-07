@@ -123,6 +123,8 @@ export type {
 } from "./dispatch/diagnostics.ts";
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
+export { VirtualScheduler } from "./provider/virtual-time.ts";
+export type { VirtualSchedulerOptions } from "./provider/virtual-time.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
 export { acceptWebSocketUpgrade, serializeUpgradeResponse } from "./websocket/server-handshake.ts";
 export { negotiatePerMessageDeflateOffer } from "./websocket/permessage-deflate.ts";
