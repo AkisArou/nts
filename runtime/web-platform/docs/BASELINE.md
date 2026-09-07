@@ -3908,3 +3908,64 @@ references**. It is the id ordering in `open`, and it is left standing.
 The complete local Node-host/real-socket corpus passes 578/578 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## Spill to disk, which is the row the byte store was built for
+
+`DurableSpillArea` reads a body to the end and holds it wherever it fits: under the
+threshold it never touches the store, over it the bytes are written as they arrive and
+the body is never assembled in memory at all. What comes back is a `Blob` either way,
+and that is the claim worth testing hardest — a consumer of a spilled body must not be
+able to tell, except by asking.
+
+It is the byte store's second consumer and the first to use its ranged-read side, which
+matters because that side had only ever been exercised by tests of itself. A spilled
+Blob slices, and two slices of one body read concurrently, which is the property a
+shared file offset would break and nothing else here would have noticed.
+
+Spilled bytes deliberately do not survive the process that wrote them. `open` clears the
+namespace: anything left in it belongs to a run that has ended and nothing can name it
+again, so it is not data, it is a leak. That makes the namespace unshareable with a
+store whose contents are meant to last, which is why it is a namespace rather than a key
+prefix on someone else's.
+
+`release` is on the returned handle rather than on the Blob because a Blob has no
+disposal of its own. The alternative is a finalizer deciding when stored bytes go away,
+and a cache of spilled bodies would then be at the mercy of when collection runs.
+
+Nine sabotages, all restored. Two would not type-check in their first form — an unused
+`abandon`, an unused binding after gutting `release` — and `sabotage-run.sh` refused
+both rather than reporting green against a stale emit; the retyped forms fail. Dropping
+the pre-threshold bytes at the crossing, assembling the body and writing it in one
+append, never clearing the namespace at open, allocating one key for every spill, and
+skipping the initial signal check all fail their own tests.
+
+Two of these are worth naming because the tests had to be built for them rather than
+happening to catch them.
+
+**"Streamed" was a comment until something counted.** The claim that a large body is
+never assembled in memory is invisible from outside: the bytes come back either way.
+The test now wraps the store and records the size of every append, so assembling the
+body and writing it once fails on the maximum append size rather than on the content.
+
+**An empty namespace is not proof that a write went away.** An uncommitted write is
+invisible to `list` and still holds its key, so every failure test passed while the
+abandoned write was never discarded — the cleanup was pinned only by the *stream*
+cancellation it also does. The recorder now observes the discard itself, and removing it
+fails.
+
+One tidy-up went with this. The same in-memory `FlatDurableStore` had been copied into
+three test files within two slices, which is how a fake stops being one fake: the copies
+drift, and a suite passing against a drifted copy says nothing about the seam the others
+exercise. There is one now, in `test/fake-flat.mjs`.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,264 to 1,267 primary `NTS1001` and 293 to 296
+`NTS1003`, with zero `NTS1004`, zero `NTS4xxx` and zero invalid HIR. No new refusal
+category — every primary this adds is a kind already on the frontier. The cascades again
+name the seam rather than the slice: `DurableSpillArea#clear` off `DurableByteStore#list`,
+and the constructor off `AbortController#get signal`.
+
+The complete local Node-host/real-socket corpus passes 602/602 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.
