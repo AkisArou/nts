@@ -1464,6 +1464,17 @@ impl Emitter<'_> {
         {
             return Ok(());
         }
+        // Or the target is an interface the source declares. The JVM would
+        // accept this store without being told -- JVMS 4.10.1.2 makes any class
+        // assignable to any interface without checking, so the verifier is not
+        // what this guards against. What it guards against is emitting a store
+        // the *program* does not license, which would then fail at the call
+        // with an `IncompatibleClassChangeError` on whichever path reached it
+        // first. So the check is kept and widened rather than skipped for
+        // interfaces.
+        if crate::hierarchy::implements(self.program, source_layout, *target_id) {
+            return Ok(());
+        }
         Err(refuse(
             self.func,
             &format!(
@@ -3489,6 +3500,65 @@ impl Emitter<'_> {
         Ok(())
     }
 
+    /// A call through a dispatch table, by name rather than by slot.
+    ///
+    /// The slot is unused: the JVM has its own vtable, and naming the method is
+    /// what lets C2 devirtualise through class-hierarchy analysis -- which is
+    /// why this lane is expected to win the `dispatch` row rather than merely
+    /// match it.
+    fn virtual_call(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        declared: &str,
+        args: &[ValueId],
+        result: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+            let Some(&receiver) = args.first() else {
+                return Err(refuse(self.func, "a virtual call with no receiver"));
+            };
+            let owner = self.object_class(&self.ty(receiver).clone())?;
+            let Some(target) = self.program.funcs.iter().find(|f| f.name == declared) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a virtual call to `{declared}`, which is not in this program"),
+                ));
+            };
+            let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a virtual call to `{declared}`, whose signature has no representation"),
+                ));
+            };
+            for &arg in args {
+                self.load(code, pool, arg)?;
+            }
+            let member = crate::hierarchy::member_name(declared);
+            // Which instruction, decided by what the receiver's static type
+            // is emitted as. The two are not interchangeable: they resolve
+            // through different constant-pool tags, and the wrong one is an
+            // `IncompatibleClassChangeError` at the call rather than
+            // anything the verifier reports at load.
+            let through_interface = match self.ty(receiver) {
+                HirType::Managed(ManagedType::Object(id)) => self
+                    .program
+                    .layout(*id)
+                    .is_some_and(|at| crate::hierarchy::is_interface(self.program, at)),
+                _ => false,
+            };
+            if through_interface {
+                code.invoke_interface(origin, pool, &owner, &member, &descriptor);
+            } else {
+                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+            }
+            Ok(if matches!(result, HirType::Void) {
+                Placed::Stored
+            } else {
+                Placed::OnStack
+            })
+    }
+
     #[allow(
         clippy::too_many_arguments,
         reason = "the result's own id joined seven that were already here, because \
@@ -3634,32 +3704,7 @@ impl Emitter<'_> {
             // which is why this lane is expected to win the `dispatch` row
             // rather than merely match it.
             Callee::Virtual { declared, .. } => {
-                let Some(&receiver) = args.first() else {
-                    return Err(refuse(self.func, "a virtual call with no receiver"));
-                };
-                let owner = self.object_class(&self.ty(receiver).clone())?;
-                let Some(target) = self.program.funcs.iter().find(|f| &f.name == declared) else {
-                    return Err(refuse(
-                        self.func,
-                        &format!("a virtual call to `{declared}`, which is not in this program"),
-                    ));
-                };
-                let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
-                    return Err(refuse(
-                        self.func,
-                        &format!("a virtual call to `{declared}`, whose signature has no representation"),
-                    ));
-                };
-                for &arg in args {
-                    self.load(code, pool, arg)?;
-                }
-                let member = crate::hierarchy::member_name(declared);
-                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
-                return Ok(if matches!(result, HirType::Void) {
-                    Placed::Stored
-                } else {
-                    Placed::OnStack
-                });
+                return self.virtual_call(code, pool, declared, args, result, origin);
             }
             // A closure call is a dispatch like any other, and the only thing
             // that made it different was that there was nothing to dispatch

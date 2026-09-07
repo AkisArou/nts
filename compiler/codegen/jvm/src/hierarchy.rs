@@ -16,6 +16,7 @@
 //! is a broken artifact, and only the field made the difference visible.
 
 use nts_core::hir::{Field, Layout, Program};
+use nts_semantic_schema::TypeId;
 
 /// Every layout from `layout` up to the root, `layout` first.
 #[must_use]
@@ -95,4 +96,49 @@ pub fn extended(program: &Program, layout: &Layout) -> bool {
 pub fn member_name(func_name: &str) -> String {
     let tail = func_name.rsplit('#').next().unwrap_or(func_name);
     crate::body::method_name(tail)
+}
+
+/// Is this layout emitted as a JVM *interface* rather than as a class?
+///
+/// True of a layout some other layout declares itself to implement. That is the
+/// whole test: `Layout.interfaces` is the program's `implements` edges, so a
+/// layout on the receiving end of one is a dispatch root and a layout on the
+/// giving end is a class. A root with no implementers is not asked about,
+/// because nothing can be stored into it and no call can reach it.
+///
+/// **Not decided from "has only abstract methods".** A base class every
+/// subclass overrides looks exactly like that, and making it an interface would
+/// silently drop its fields and its constructor.
+#[must_use]
+pub fn is_interface(program: &Program, layout: &Layout) -> bool {
+    program
+        .layouts
+        .iter()
+        .any(|other| other.interfaces.iter().any(|id| layout.types.contains(id)))
+}
+
+/// The interfaces this layout declares, as binary class names.
+///
+/// In `Layout.interfaces` order, which the IR sorts, so one input gives one
+/// byte sequence -- the class file's `interfaces[]` is written in this order and
+/// the jar-drift test compares bytes.
+#[must_use]
+pub fn implemented(program: &Program, layout: &Layout) -> Vec<String> {
+    layout
+        .interfaces
+        .iter()
+        .filter_map(|id| program.layout(*id))
+        .map(crate::types::class_name)
+        .collect()
+}
+
+/// Does `layout`, or anything it extends, declare `id` as an interface?
+///
+/// The class half has to be walked here even though `Layout.interfaces` is
+/// closed over interface *extension*: `class B extends A` where `A implements
+/// Sink` leaves `B.interfaces` empty, and `B` is still assignable to `Sink`
+/// because the JVM resolves a superclass's interfaces too.
+#[must_use]
+pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
+    ancestry(program, layout).iter().any(|at| at.interfaces.contains(&id))
 }

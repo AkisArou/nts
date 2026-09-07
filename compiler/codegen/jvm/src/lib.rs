@@ -262,32 +262,36 @@ pub fn emit(program: &Program) -> Emitted {
 /// `IllegalAccessError`. Inlining the constructor body into `<init>` would buy
 /// the flag and cost the verifier's `uninitializedThis` state; it is a later
 /// step and only worth taking if `benches/cases/objects` says the JIT cares.
-fn object_class(
+/// The fields one class adds, which is not the fields its objects have.
+///
+/// A base's fields are a prefix of the derived's, so redeclaring them here
+/// would give the object two of each and leave `getfield` reading whichever the
+/// descriptor named.
+fn declare_fields(
     program: &Program,
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
-) -> Result<Option<Class>, Diagnostic> {
-    let origin = program_origin(program);
-    let mut pool = Pool::new();
-    let name = types::class_name(layout);
-    let super_name = program
-        .base_layout(layout)
-        .and_then(|at| program.layouts.get(at))
-        .map_or_else(|| "java/lang/Object".to_owned(), types::class_name);
-    let mut builder = ClassBuilder::new(name, super_name);
-    // `final` only where nothing extends it. A base class marked final is
-    // rejected at load time, not at emit time, so this is the one place the
-    // hierarchy has to be consulted for something other than a name.
-    builder.access = if hierarchy::extended(program, layout) {
-        access::PUBLIC | access::SUPER
-    } else {
-        access::PUBLIC | access::SUPER | access::FINAL
-    };
-    builder.source_file = Some("nts".to_owned());
-    // Only what this class adds. A base's fields are a prefix of the derived's,
-    // so redeclaring them here would give the object two of each and leave
-    // `getfield` reading whichever the descriptor named.
+    builder: &mut ClassBuilder,
+    interface: bool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
     for field in hierarchy::declared(program, layout) {
+        if interface {
+            // A JVM interface has no instance fields, so there is nowhere to
+            // put this. Refused by name rather than dropped: an interface whose
+            // properties silently vanished would read every one of them as the
+            // zero of its type, which is a wrong answer rather than an error.
+            return Err(Diagnostic::error(
+                "NTS4001",
+                format!(
+                    "`{}` is implemented by another type and so is emitted as a JVM interface, \
+                     but it declares the property `{}` -- an interface has no instance fields \
+                     and this backend will not drop one",
+                    layout.name, field.name
+                ),
+                origin.location,
+            ));
+        }
         let Some(descriptor) = types::descriptor(types::Shape::of(program), &field.ty) else {
             return Err(Diagnostic::error(
                 "NTS4006",
@@ -311,6 +315,52 @@ fn object_class(
         };
         builder.field(access::PUBLIC, body::method_name(&field.name), descriptor);
     }
+    Ok(())
+}
+
+fn object_class(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    plan: &widen::Plan,
+) -> Result<Option<Class>, Diagnostic> {
+    let origin = program_origin(program);
+    let mut pool = Pool::new();
+    let name = types::class_name(layout);
+    let super_name = program
+        .base_layout(layout)
+        .and_then(|at| program.layouts.get(at))
+        .map_or_else(|| "java/lang/Object".to_owned(), types::class_name);
+    // A dispatch root the program declares -- something another layout says it
+    // implements -- is emitted as a JVM interface, not as a class. Its methods
+    // are already `ACC_ABSTRACT` by way of `Func::abstract_declaration`; what
+    // changes here is the class itself, and three things follow from it: no
+    // `SUPER` bit, no constructor, and no fields.
+    let interface = hierarchy::is_interface(program, layout);
+    let mut builder = ClassBuilder::new(name, super_name);
+    if interface {
+        // `ACC_INTERFACE` implies `ACC_ABSTRACT` and forbids `ACC_FINAL` and
+        // `ACC_SUPER`; JVMS 4.1 rejects the combinations at load rather than at
+        // first use, so getting this wrong is a `ClassFormatError` on every
+        // program rather than a subtle one.
+        builder.access = access::PUBLIC | access::INTERFACE | access::ABSTRACT;
+    } else {
+        // `final` only where nothing extends it. A base class marked final is
+        // rejected at load time, not at emit time, so this is the one place the
+        // hierarchy has to be consulted for something other than a name.
+        builder.access = if hierarchy::extended(program, layout) {
+            access::PUBLIC | access::SUPER
+        } else {
+            access::PUBLIC | access::SUPER | access::FINAL
+        };
+        // What this layout declares it implements. Pushed before the runtime
+        // interfaces below so the program's own edges come first and the order
+        // is the IR's, which is sorted.
+        for name in hierarchy::implemented(program, layout) {
+            builder.interfaces.push(name);
+        }
+    }
+    builder.source_file = Some("nts".to_owned());
+    declare_fields(program, layout, plan, &mut builder, interface, &origin)?;
     // A frame a `Suspend` names implements `NtsResumable`, with `resume()`
     // forwarding to the static body -- the same shape as a dispatch slot's
     // forwarder, and the reason promises are not blocked behind the closure
@@ -389,13 +439,18 @@ fn object_class(
             descriptor: types::VALUE_DESCRIPTOR,
         })
         .collect();
-    builder.constructor(&origin, &mut pool, &initial).map_err(|error| {
-        Diagnostic::error(
-            "NTS4003",
-            format!("`{}` could not be given a constructor: {error}", layout.name),
-            origin.location,
-        )
-    })?;
+    // An interface may declare `<clinit>` and nothing else; an `<init>` on one
+    // is a `ClassFormatError`. Nothing constructs an interface either -- a
+    // dispatch root is never the class `ObjectNew` names.
+    if !interface {
+        builder.constructor(&origin, &mut pool, &initial).map_err(|error| {
+            Diagnostic::error(
+                "NTS4003",
+                format!("`{}` could not be given a constructor: {error}", layout.name),
+                origin.location,
+            )
+        })?;
+    }
     builder
         .build(pool)
         .map(Some)
