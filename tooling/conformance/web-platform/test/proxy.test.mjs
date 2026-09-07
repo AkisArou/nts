@@ -498,6 +498,23 @@ test("empty lowercase proxy disables uppercase and wildcard NO_PROXY bypasses al
   });
   assert.equal(policy.httpProxy, null);
   assert.equal(policy.proxyFor(hostNodeURLs.parse("https://anywhere.test/")), null);
+  assert.equal(
+    new NoProxyMatcher("*, example.test").bypasses(hostNodeURLs.parse("https://x/")),
+    false,
+  );
+});
+
+test("environment NO_PROXY is live unless an explicit value was configured", () => {
+  const environment = { HTTP_PROXY: "http://proxy.test", NO_PROXY: "" };
+  const dynamic = new EnvironmentProxyPolicy(hostNodeURLs, environment);
+  const target = hostNodeURLs.parse("http://origin.test/");
+  assert.equal(dynamic.proxyFor(target), "http://proxy.test");
+  environment.NO_PROXY = "origin.test";
+  assert.equal(dynamic.proxyFor(target), null);
+
+  const explicit = new EnvironmentProxyPolicy(hostNodeURLs, environment, { noProxy: "" });
+  environment.NO_PROXY = "*";
+  assert.equal(explicit.proxyFor(target), "http://proxy.test");
 });
 
 test("environment proxy policy rejects line breaks and unsupported schemes", () => {
@@ -697,7 +714,7 @@ test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel
   agent.close();
 });
 
-test("EnvHttpProxyAgent snapshots variables and bypasses NO_PROXY destinations", async () => {
+test("EnvHttpProxyAgent snapshots proxy URLs and bypasses NO_PROXY destinations", async () => {
   const directResponse = new ScriptedConnection([
     "HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\ndirect",
   ]);

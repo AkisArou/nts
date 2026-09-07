@@ -118,12 +118,9 @@ export class NoProxyMatcher {
 
   constructor(value = "") {
     const entries: NoProxyEntry[] = [];
-    let bypassAll = false;
+    const bypassAll = value === "*";
     for (const part of splitNoProxy(value)) {
-      if (part === "*") {
-        bypassAll = true;
-        continue;
-      }
+      if (part === "*") continue;
       const entry = parseNoProxyEntry(part);
       if (entry !== null) entries.push(entry);
     }
@@ -188,22 +185,30 @@ function checkedProxy(urls: URLParser, value: string | null): string | null {
 export class EnvironmentProxyPolicy {
   readonly httpProxy: string | null;
   readonly httpsProxy: string | null;
-  readonly noProxy: NoProxyMatcher;
+  private readonly environment: ProxyEnvironment;
+  private readonly explicitNoProxy: string | undefined;
+  private noProxyValue = "";
+  private noProxyMatcher = new NoProxyMatcher();
 
   constructor(
     urls: URLParser,
     environment: ProxyEnvironment = {},
     options: EnvironmentProxyOptions = {},
   ) {
+    this.environment = environment;
+    this.explicitNoProxy = options.noProxy;
     const httpValue =
       options.httpProxy ?? environmentValue(environment.http_proxy, environment.HTTP_PROXY);
     const httpsValue =
       options.httpsProxy ?? environmentValue(environment.https_proxy, environment.HTTPS_PROXY);
     this.httpProxy = checkedProxy(urls, httpValue);
     this.httpsProxy = checkedProxy(urls, httpsValue) ?? this.httpProxy;
-    this.noProxy = new NoProxyMatcher(
-      options.noProxy ?? environmentValue(environment.no_proxy, environment.NO_PROXY) ?? "",
-    );
+    this.refreshNoProxy();
+  }
+
+  get noProxy(): NoProxyMatcher {
+    this.refreshNoProxy();
+    return this.noProxyMatcher;
   }
 
   proxyFor(url: URLRecord): string | null {
@@ -215,5 +220,15 @@ export class EnvironmentProxyPolicy {
   proxyForAddress(address: ConnectAddress): string | null {
     if (this.noProxy.bypassesAddress(address.hostname, address.port)) return null;
     return address.secure ? this.httpsProxy : this.httpProxy;
+  }
+
+  private refreshNoProxy(): void {
+    const value =
+      this.explicitNoProxy ??
+      environmentValue(this.environment.no_proxy, this.environment.NO_PROXY) ??
+      "";
+    if (value === this.noProxyValue) return;
+    this.noProxyValue = value;
+    this.noProxyMatcher = new NoProxyMatcher(value);
   }
 }
