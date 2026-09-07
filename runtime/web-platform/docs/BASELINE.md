@@ -1453,3 +1453,36 @@ and 128 dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, ze
 JVM-backend diagnostics, and no invalid HIR. The six additional primaries are the
 final policy/stream source reaching existing lowering gaps, not compiled-provider
 evidence.
+
+## `WebSocketStream` and environment-owned WebSocket construction
+
+At `21b5fd2b`, the shared runtime exposes the canonical public `WebSocket`
+constructor and Chromium's experimental `WebSocketStream`/`WebSocketError` surface
+through the environment-owned `WebPlatformRuntime`. Both APIs share URL,
+subprotocol and close conversion and use the same `WebSocketSession`; the stream API
+does not translate through DOM events. Its readable side has a one-chunk high-water
+mark and permits only one transport read at a time, while writable promises settle
+only after provider acceptance. Writer close waits for the peer close frame,
+handshake abort is detached after opening, abnormal-close identity is shared by the
+readable, writable and `closed` promise, and runtime close retires every registered
+socket and stream. Forbidden ports are rejected through the asynchronous connection
+path rather than being turned into a constructor exception.
+
+The unchanged WPT `websockets/stream/tentative/websocket-error.any.js` fixture is
+pinned at Git blob `b114bbb3e3495d2ae4ce0c75454539d4b2fddea7` from the repository's
+existing WPT revision and passes 10/10. The complete local Node-host and real-socket
+suite passes 229/229, including exact pull backpressure, byte snapshotting, pending
+write failure, close/cancel/abort paths, environment shutdown, forbidden-port timing,
+and real text/binary exchange. The repository TypeScript solution builds. The full
+upstream slice passes 2275/2283 applicable cases with 14 named not-applicable cases
+and the same eight visible structural/common-compiler failures as the preceding
+checkpoint; this tranche adds no WPT failure or exclusion.
+
+A sabotage changed the readable high-water mark from one to two. Its focused
+precondition failed 0/1 because the transport performed a second `next()` while the
+first unread message still occupied the queue; restoring the specified value returned
+the test to 1/1. The live compiled-source frontier is 1007 primary `NTS1001` refusals
+and 144 dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero
+JVM-backend diagnostics, and no invalid HIR. These counts expose the complete
+final-form stream state machine to existing compiler dependencies; they are not
+compiled-provider execution evidence.
