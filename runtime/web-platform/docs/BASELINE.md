@@ -1867,3 +1867,39 @@ compiled-source frontier is 1207 primary `NTS1001` refusals and 202 dependent
 `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. The increase is new shared policy source reaching
 existing language prerequisites; it is not compiled deduplication evidence.
+
+## Typed transport diagnostics
+
+At `d3d74e8b`, the shared transport has an opt-in typed diagnostic observer owned by
+each `WebPlatformRuntime`. It emits request creation, response headers, response
+trailers, and exact dispatch/trailer errors through stable request-context objects.
+Display sequences are local to the interceptor instance; object identity, not a
+process-global number, identifies a request.
+
+Diagnostics copy their request, response, and trailer headers before publication.
+Authorization, proxy authorization, cookies, and set-cookie fields are redacted by
+default, with additional configured names supported. HTTP query values are omitted by
+default, URL user information is never included, and non-network URL payloads such as
+`data:` bodies are never exposed. Observer mutation therefore cannot change the
+transport request or response.
+
+The observer deliberately does not acquire a body reader or substitute a proxy
+stream. The returned response, body stream, and trailers promise retain exact
+identity and the body remains unlocked. Provider connection and body-sent events can
+feed the same typed observer at their actual delivery points; manufacturing them in
+an interceptor would change ownership or scheduling. Observer failures are reported
+through the owning scheduler, while even a broken observer and broken reporter cannot
+change transport settlement or error identity.
+
+The focused diagnostic corpus passes 11/11 and the complete local
+Node-host/real-socket suite passes 342/342. The pinned WPT slice remains 2275/2283
+applicable cases with 14 named not-applicable cases and the same eight visible
+structural/common-compiler failures.
+
+A sabotage joined the built-in and configured redaction predicates with `&&` instead
+of `||`. The privacy precondition fell from 1/1 to 0/1 while displaying the raw
+authorization, cookie, and API-key values, then returned to 1/1 after restoration.
+The live compiled-source frontier is 1207 primary `NTS1001` refusals and 204 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. These counts describe shared diagnostics reaching
+existing language prerequisites, not compiled observer evidence.
