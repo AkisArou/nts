@@ -4986,3 +4986,31 @@ timing-dependent test asserting a discard is worse than an admission.
 Local corpus 714/714 with zero skipped, upstream unchanged at 2,408 of 2,418, compiled
 axis 138 of 142 across 13 functions. Frontier 1,294 to 1,296 primary `NTS1001`, cascades
 unchanged at 314, zero `NTS1004` and zero invalid HIR.
+
+### How to read "agreed on every case"
+
+The compiled axis reports agreement between a compiled program and node, on three
+backends. The JVM lane found the case that qualifies what that sentence is worth, from
+the other end of the same problem.
+
+Their `examples/declared-wider` returns a two-field `Error` from a function declaring a
+three-field `Tagged`, and the caller writes field two. The JVM verifier refuses it. The
+pointer-cast backends write past the end of the allocation and **agree with node**.
+
+So on that example, two of three backends report a pass on a program that is corrupting
+memory, and the only reason anybody knows is that the third is strict enough to complain.
+Stated generally: **agreement between a backend and the oracle is not evidence of
+correctness when the backend cannot detect the error.** Three backends agreeing is
+better than one; three agreeing while a fourth *refuses to compile it* is a different and
+stronger signal, because there the refusal is the finding and the agreement is the noise.
+
+This lane's axis has the same exposure. "138 of 142 cases, agreed on jvm, c and llvm"
+means the three produced the same answers as node — not that none of them produced them
+by accident. The four declined cases are the only place the axis currently says anything
+a backend refused to do, and they are worth more per case than the 138 for exactly that
+reason.
+
+It pairs with the correction two entries above. A backend defect behind a *language*
+refusal is invisible until the refusal is fixed; a backend defect behind a *permissive*
+backend is invisible until a stricter one sees it. Both are the same shape: the
+instrument's silence is a fact about the instrument.
