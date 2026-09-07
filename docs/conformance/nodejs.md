@@ -1850,6 +1850,42 @@ to 11, `querystring` 5 to 1, `buffer` and `string_decoder` to none at all.
 surface is classes, and the four names they used to publish were `buffer`
 internals that were never theirs.
 
+**Three causes keep the export tables short, not two, and the third is the
+cheapest.** Comparing what each built addon publishes against what its
+`main.ts` declares separates them:
+
+```
+PUBLISHED                                 NOT PUBLISHED
+escape(str: string): string               unescape(s: string, decodeSpaces?: boolean): string
+hostname(): string                        getPriority(pid = 0): number
+uptime(): number                          setPriority(priority: number): void      [3 overloads]
+toNamespacedPath(path: string): string    unescapeBuffer(s: string, decodeSpaces = false): Buffer
+```
+
+Every name on the right is scalar in and scalar out. None needs a class value
+or an object return. The only thing separating the columns is **an optional
+parameter, a defaulted parameter, or an overload set**. So:
+
+| cause | what it costs |
+| --- | --- |
+| object and array returns | `os.cpus`, `os.networkInterfaces`, `os.userInfo`, `querystring.parse` |
+| class values | `StringDecoder` and `Buffer` — *the entire surface* of two modules |
+| **optional / default / overload** | `querystring.unescape`, `os.getPriority`, `os.setPriority` |
+
+**107 of the profile's 719 exported functions take an optional or defaulted
+parameter** — 15% of the surface. Unlike the other two it is not a
+type-representation problem: N-API supplies an argument count, so this is
+arity handling. It is also the only one of the three that could plausibly land
+before class values do, and separating it matters beyond its own size: while
+three causes are tangled in one number, no one can say how much of the gap each
+owns.
+
+Recorded as inference rather than proof. It comes from four modules and a
+signature comparison, and confirming it would mean deleting an optional
+parameter from node's source to watch a name appear — rewriting correct source
+to probe a compiler behaviour, which this document forbids for better reasons
+than this one is worth.
+
 **`call to undeclared function` is two different bugs wearing one error
 message,** which is worth separating because only one of them announces
 itself:
