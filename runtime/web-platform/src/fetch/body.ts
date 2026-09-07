@@ -173,8 +173,6 @@ export class BodyState {
     } catch (error) {
       reader.cancel(error).catch(() => {});
       throw error;
-    } finally {
-      reader.releaseLock();
     }
   }
 }

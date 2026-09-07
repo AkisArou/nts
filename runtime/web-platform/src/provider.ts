@@ -24,6 +24,15 @@ export type {
 } from "./fetch/transport.ts";
 
 export type {
+  CacheStorageEntry,
+  CacheStorageHandle,
+  CacheStorageRequestRecord,
+  CacheStorageResponseRecord,
+  CacheStorageSnapshot,
+  CacheStorageStore,
+} from "./cache/cache-storage.ts";
+
+export type {
   SocketClose,
   SocketIncoming,
   SocketMessage,

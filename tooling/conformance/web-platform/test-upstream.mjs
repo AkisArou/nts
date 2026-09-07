@@ -40,8 +40,11 @@ const {
   AbortSignal,
   Blob,
   ByteLengthQueuingStrategy,
+  Cache,
+  CacheStorage,
   CustomEvent,
   CountQueuingStrategy,
+  CookieJar,
   Event,
   EventSource,
   EventTarget,
@@ -51,6 +54,7 @@ const {
   DOMException,
   Request,
   Response,
+  ServerCookiePolicy,
   ReadableByteStreamController,
   ReadableStream,
   ReadableStreamBYOBReader,
@@ -87,10 +91,19 @@ for (const resourcePath of [
   "eventsource/resources/last-event-id.py",
   "eventsource/resources/message.py",
   "eventsource/resources/message2.py",
+  "service-workers/cache-storage/cache-add.https.any.js",
+  "service-workers/cache-storage/resources/blank.html",
+  "service-workers/cache-storage/resources/fetch-status.py",
+  "service-workers/cache-storage/resources/simple.txt",
+  "service-workers/cache-storage/resources/vary.py",
 ]) {
   eventSourceResources.set(
     resourcePath,
-    readVerified(localWptRoot, resourcePath, manifest.support[resourcePath]),
+    readVerified(
+      localWptRoot,
+      resourcePath,
+      manifest.support[resourcePath] ?? manifest.files[resourcePath],
+    ),
   );
 }
 
@@ -100,6 +113,59 @@ function serveEventSourceResource(request, response) {
   if (!eventSourceResources.has(path)) {
     response.writeHead(404);
     response.end();
+    return;
+  }
+
+  if (path === "service-workers/cache-storage/resources/simple.txt") {
+    response.writeHead(200, { "Content-Type": "text/plain" });
+    response.end(eventSourceResources.get(path));
+    return;
+  }
+
+  if (path === "service-workers/cache-storage/resources/blank.html") {
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end(eventSourceResources.get(path));
+    return;
+  }
+
+  if (path === "service-workers/cache-storage/resources/fetch-status.py") {
+    const status = Number(url.searchParams.get("status"));
+    response.writeHead(status);
+    response.end();
+    return;
+  }
+
+  if (path === "service-workers/cache-storage/resources/vary.py") {
+    const setVary = url.searchParams.get("set-vary-value-override-cookie");
+    if (setVary !== null && setVary !== "") {
+      response.writeHead(200, {
+        "Set-Cookie": `vary-value-override=${setVary}; Path=/`,
+      });
+      response.end("vary cookie set");
+      return;
+    }
+    if (url.searchParams.has("clear-vary-value-override-cookie")) {
+      response.writeHead(200, {
+        "Set-Cookie": "vary-value-override=; Max-Age=0; Path=/",
+      });
+      response.end("vary cookie cleared");
+      return;
+    }
+    const cookie = request.headers.cookie
+      ?.split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("vary-value-override="));
+    const cookieVary = cookie?.slice("vary-value-override=".length);
+    const vary =
+      cookieVary === undefined || cookieVary === "" ? url.searchParams.get("vary") : cookieVary;
+    response.writeHead(200, vary === null || vary === "" ? {} : { Vary: vary });
+    response.end("vary response");
+    return;
+  }
+
+  if (path === "service-workers/cache-storage/cache-add.https.any.js") {
+    response.writeHead(200, { "Content-Type": "text/javascript" });
+    response.end(eventSourceResources.get(path));
     return;
   }
 
@@ -197,7 +263,15 @@ async function settleWithCleanups(outcome, cleanups) {
   if (failed) throw failure;
 }
 
-function createWptContext(path, root, verifiedSupport, pending, excludedTests, seenExcludedTests) {
+function createWptContext(
+  path,
+  root,
+  verifiedSupport,
+  pending,
+  excludedTests,
+  seenExcludedTests,
+  runtime,
+) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
   const context = createContext({
@@ -208,6 +282,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     BigUint64Array,
     Blob,
     ByteLengthQueuingStrategy,
+    Cache,
+    caches: runtime.caches,
+    CacheStorage,
     CustomEvent,
     CountQueuingStrategy,
     DataView,
@@ -226,9 +303,10 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     Int8Array,
     Int16Array,
     Int32Array,
-    location: path.startsWith("eventsource/")
-      ? new URL(path, eventSourceRoot)
-      : new URL(path, root),
+    location:
+      path.startsWith("eventsource/") || path.startsWith("service-workers/cache-storage/")
+        ? new URL(path, eventSourceRoot)
+        : new URL(path, root),
     MessageChannel,
     Request,
     Response,
@@ -253,6 +331,7 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     Uint8ClampedArray,
     Uint16Array,
     Uint32Array,
+    URL,
     URLSearchParams,
     WebAssembly,
     WritableStream,
@@ -266,6 +345,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
       for (let i = 0; i < actual.length; i++) {
         assert.strictEqual(actual[i], expected[i], message);
       }
+    },
+    assert_class_string(value, expected, message) {
+      assert.equal(Object.prototype.toString.call(value), `[object ${expected}]`, message);
     },
     assert_equals: assert.strictEqual,
     assert_false(value, message) {
@@ -401,9 +483,19 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     fetch(input, init) {
       let resolved;
       try {
-        resolved = new URL(String(input), new URL(path, root));
+        const base =
+          path.startsWith("eventsource/") || path.startsWith("service-workers/cache-storage/")
+            ? new URL(path, eventSourceRoot)
+            : new URL(path, root);
+        resolved = new URL(String(input), base);
       } catch {
-        return hostRuntime.fetch(input, init);
+        return runtime.fetch(input, init);
+      }
+      if (
+        path.startsWith("service-workers/cache-storage/") &&
+        resolved.origin === eventSourceRoot.origin
+      ) {
+        return runtime.fetch(resolved.href, init);
       }
       const supportPath = resolved.pathname.slice(root.pathname.length);
       const support = verifiedSupport.get(supportPath);
@@ -544,11 +636,15 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
 }
 
 async function runFixture(root, path, data, verifiedSupport) {
-  const eventSourceFixture = path.startsWith("eventsource/");
-  const fixtureRuntime = eventSourceFixture
+  const networkFixture =
+    path.startsWith("eventsource/") || path.startsWith("service-workers/cache-storage/");
+  const fixtureRuntime = networkFixture
     ? createHostNodeWebPlatform({
         baseURL: new URL(path, eventSourceRoot).href,
         origin: eventSourceRoot.origin,
+        cookies: path.startsWith("service-workers/cache-storage/")
+          ? new ServerCookiePolicy(new CookieJar())
+          : undefined,
       })
     : null;
   const pending = [];
@@ -561,6 +657,7 @@ async function runFixture(root, path, data, verifiedSupport) {
     pending,
     excludedTests,
     seenExcludedTests,
+    fixtureRuntime ?? hostRuntime,
   );
   const source = data.toString();
   const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);

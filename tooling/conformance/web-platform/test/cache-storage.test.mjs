@@ -1,0 +1,482 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  Cache,
+  CacheStorage,
+  Headers,
+  MemoryCacheStorageStore,
+  ReadableStream,
+  Request,
+  Response,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
+
+function stream(text) {
+  const bytes = new globalThis.TextEncoder().encode(text);
+  let sent = false;
+  return new ReadableStream({
+    pull(controller) {
+      if (sent) controller.close();
+      else {
+        sent = true;
+        controller.enqueue(bytes);
+      }
+    },
+  });
+}
+
+function transportResponse(status, text, headers = []) {
+  return {
+    status,
+    statusText: status >= 200 && status <= 299 ? "OK" : "Failure",
+    headers,
+    body: text === null ? null : stream(text),
+  };
+}
+
+function runtimeWithTransport(dispatch, options = {}) {
+  return createHostNodeWebPlatform({
+    ...options,
+    fetchTransport: { dispatch },
+  });
+}
+
+function quietRuntime(options = {}) {
+  return runtimeWithTransport(async () => {
+    throw new Error("Unexpected network request");
+  }, options);
+}
+
+test("Cache and CacheStorage are illegal constructors", () => {
+  const runtime = quietRuntime();
+  assert.throws(() => new Cache(), TypeError);
+  assert.throws(() => new CacheStorage(), TypeError);
+  assert.equal(Cache.length, 0);
+  assert.equal(CacheStorage.length, 0);
+  assert.equal(Cache.prototype.match.length, 1);
+  assert.equal(Cache.prototype.matchAll.length, 0);
+  assert.equal(Cache.prototype.add.length, 1);
+  assert.equal(Cache.prototype.addAll.length, 1);
+  assert.equal(Cache.prototype.put.length, 2);
+  assert.equal(Cache.prototype.delete.length, 1);
+  assert.equal(Cache.prototype.keys.length, 0);
+  assert.equal(CacheStorage.prototype.match.length, 1);
+  assert.equal(CacheStorage.prototype.open.length, 1);
+  assert.equal(CacheStorage.prototype.keys.length, 0);
+  assert.equal(Object.prototype.toString.call(new Headers()), "[object Headers]");
+  assert.equal(
+    Object.prototype.toString.call(new Request("https://cache.test")),
+    "[object Request]",
+  );
+  assert.equal(Object.prototype.toString.call(new Response()), "[object Response]");
+  runtime.close();
+});
+
+test("Cache algorithms do not redispatch through overridable public methods", async () => {
+  const runtime = runtimeWithTransport(async () => transportResponse(200, "network"));
+  const cache = await runtime.caches.open("dispatch");
+  await cache.put("https://cache.test/item", new Response("stored"));
+
+  cache.matchAll = () => {
+    throw new Error("Cache.match called the public matchAll method");
+  };
+  cache.addAll = () => {
+    throw new Error("Cache.add called the public addAll method");
+  };
+  assert.equal(await (await cache.match("https://cache.test/item")).text(), "stored");
+  await cache.add("https://cache.test/network");
+
+  const inheritedMatch = Cache.prototype.match;
+  Cache.prototype.match = () => {
+    throw new Error("CacheStorage.match called Cache.prototype.match");
+  };
+  try {
+    assert.equal(await (await runtime.caches.match("https://cache.test/item")).text(), "stored");
+  } finally {
+    Cache.prototype.match = inheritedMatch;
+  }
+});
+
+test("named caches preserve insertion order, share lists, and survive name deletion", async () => {
+  const runtime = quietRuntime();
+  const first = await runtime.caches.open("first");
+  const sameList = await runtime.caches.open("first");
+  await runtime.caches.open("second");
+  await first.put("https://cache.test/one", new Response("one"));
+
+  assert.notStrictEqual(first, sameList);
+  assert.equal(await (await sameList.match("https://cache.test/one")).text(), "one");
+  assert.deepEqual(await runtime.caches.keys(), ["first", "second"]);
+  assert.equal(await runtime.caches.has("first"), true);
+  assert.equal(await runtime.caches.delete("first"), true);
+  assert.equal(await runtime.caches.delete("first"), false);
+  assert.equal(await runtime.caches.has("first"), false);
+
+  // Deleting a name does not invalidate Cache objects already associated with its list.
+  assert.equal(await (await first.match("https://cache.test/one")).text(), "one");
+  const replacement = await runtime.caches.open("first");
+  assert.equal(await replacement.match("https://cache.test/one"), undefined);
+  assert.deepEqual(await runtime.caches.keys(), ["second", "first"]);
+
+  const names = await runtime.caches.keys();
+  names.push("ordinary-sequence");
+  assert.equal(names.at(-1), "ordinary-sequence");
+});
+
+test("cache names use DOMString conversion without replacing lone surrogates", async () => {
+  const runtime = quietRuntime();
+  const unpaired = "unpaired\ud800";
+  const replaced = "unpaired\ufffd";
+  await runtime.caches.open(unpaired);
+  assert.equal(await runtime.caches.has(unpaired), true);
+  assert.equal(await runtime.caches.has(replaced), false);
+  assert.deepEqual(await runtime.caches.keys(), [unpaired]);
+});
+
+test("put consumes the supplied body and matches return independent immutable responses", async () => {
+  const runtime = quietRuntime();
+  const cache = await runtime.caches.open("responses");
+  const original = new Response("payload", {
+    status: 201,
+    statusText: "Created",
+    headers: { "x-answer": "yes" },
+  });
+  await cache.put("https://cache.test/item#stored-fragment", original);
+  assert.equal(original.bodyUsed, true);
+
+  const first = await cache.match("https://cache.test/item#different-fragment");
+  const second = await cache.match("https://cache.test/item");
+  assert.equal(first.status, 201);
+  assert.equal(first.statusText, "Created");
+  assert.equal(first.headers.get("x-answer"), "yes");
+  assert.throws(() => first.headers.set("x-answer", "changed"), TypeError);
+  assert.equal(await first.text(), "payload");
+  assert.equal(await second.text(), "payload");
+
+  const all = await cache.matchAll();
+  assert.equal(Object.isFrozen(all), true);
+  assert.equal(all.length, 1);
+  assert.throws(() => all.push(new Response()), TypeError);
+});
+
+test("query matching implements ignoreSearch, ignoreMethod, and exact Vary", async () => {
+  const runtime = quietRuntime();
+  const cache = await runtime.caches.open("query");
+  await cache.put(
+    new Request("https://cache.test/value?a=1", { headers: { "accept-language": "en" } }),
+    new Response("english", { headers: { vary: "Accept-Language" } }),
+  );
+
+  assert.equal(
+    await (
+      await cache.match("https://cache.test/value?a=1#fragment", {
+        ignoreVary: true,
+      })
+    ).text(),
+    "english",
+  );
+  assert.equal(
+    await cache.match(
+      new Request("https://cache.test/value?a=1", {
+        headers: { "accept-language": "fr" },
+      }),
+    ),
+    undefined,
+  );
+  assert.equal(
+    await (
+      await cache.match(
+        new Request("https://cache.test/value?a=2", {
+          headers: { "accept-language": "en" },
+        }),
+        { ignoreSearch: true },
+      )
+    ).text(),
+    "english",
+  );
+  assert.equal(
+    await cache.match(new Request("https://cache.test/value?a=1", { method: "POST" })),
+    undefined,
+  );
+  assert.equal(
+    await (
+      await cache.match(new Request("https://cache.test/value?a=1", { method: "POST" }), {
+        ignoreMethod: true,
+        ignoreVary: true,
+      })
+    ).text(),
+    "english",
+  );
+});
+
+test("keys and delete return every matching request and preserve immutable headers", async () => {
+  const runtime = quietRuntime();
+  const cache = await runtime.caches.open("keys");
+  await cache.put(
+    new Request("https://cache.test/key", { headers: { variant: "a" } }),
+    new Response("a", { headers: { vary: "variant" } }),
+  );
+  await cache.put(
+    new Request("https://cache.test/key", { headers: { variant: "b" } }),
+    new Response("b", { headers: { vary: "variant" } }),
+  );
+  const keys = await cache.keys();
+  assert.equal(Object.isFrozen(keys), true);
+  assert.equal(keys.length, 2);
+  assert.equal(keys[0].headers.get("variant"), "a");
+  assert.equal(keys[1].headers.get("variant"), "b");
+  assert.throws(() => keys[0].headers.set("variant", "changed"), TypeError);
+  assert.equal(await cache.delete("https://cache.test/key", { ignoreVary: true }), true);
+  assert.deepEqual(await cache.keys(), []);
+});
+
+test("put enforces scheme, method, partial-response, Vary-star and body-state rules", async () => {
+  const runtime = quietRuntime();
+  const cache = await runtime.caches.open("validation");
+
+  await assert.rejects(cache.put("ftp://cache.test/x", new Response("x")), TypeError);
+  await assert.rejects(
+    cache.put(new Request("https://cache.test/x", { method: "POST" }), new Response("x")),
+    TypeError,
+  );
+  await assert.rejects(
+    cache.put("https://cache.test/x", new Response("x", { status: 206 })),
+    TypeError,
+  );
+  await assert.rejects(
+    cache.put("https://cache.test/x", new Response("x", { headers: { vary: "*" } })),
+    TypeError,
+  );
+  const used = new Response("used");
+  await used.text();
+  await assert.rejects(cache.put("https://cache.test/used", used), TypeError);
+  const locked = new Response("locked");
+  const reader = locked.body.getReader();
+  await assert.rejects(cache.put("https://cache.test/locked", locked), TypeError);
+  reader.releaseLock();
+  await assert.rejects(cache.put("https://cache.test/value", {}), TypeError);
+
+  // Empty Vary is not Vary: *.
+  await cache.put("https://cache.test/empty-vary", new Response("ok", { headers: { vary: "" } }));
+  assert.equal(await (await cache.match("https://cache.test/empty-vary")).text(), "ok");
+
+  await cache.put("https://cache.test/error", Response.error());
+  const error = await cache.match("https://cache.test/error");
+  assert.equal(error.status, 0);
+  assert.equal(error.type, "error");
+});
+
+test("add and addAll fetch complete responses and commit atomically", async () => {
+  let fetches = 0;
+  const runtime = runtimeWithTransport(async (request) => {
+    fetches++;
+    if (request.url.pathname === "/bad") return transportResponse(404, "missing");
+    if (request.url.pathname === "/partial") return transportResponse(206, "partial");
+    if (request.url.pathname === "/vary-star") {
+      return transportResponse(200, "vary", [["vary", "*"]]);
+    }
+    const language = request.headers.find((entry) => entry[0] === "accept-language")?.[1];
+    return transportResponse(
+      200,
+      request.url.pathname.slice(1) + (language === undefined ? "" : ":" + language),
+      language === undefined ? [] : [["vary", "accept-language"]],
+    );
+  });
+  const cache = await runtime.caches.open("network");
+
+  await cache.add("https://cache.test/one");
+  assert.equal(await (await cache.match("https://cache.test/one")).text(), "one");
+
+  await assert.rejects(
+    cache.addAll(["https://cache.test/two", "https://cache.test/bad"]),
+    TypeError,
+  );
+  assert.equal(await cache.match("https://cache.test/two"), undefined);
+  assert.equal(await cache.match("https://cache.test/bad"), undefined);
+  await assert.rejects(cache.add("https://cache.test/partial"), TypeError);
+  await assert.rejects(cache.add("https://cache.test/vary-star"), TypeError);
+
+  await assert.rejects(
+    cache.addAll(["https://cache.test/duplicate", "https://cache.test/duplicate"]),
+    (error) => error?.name === "InvalidStateError",
+  );
+  assert.equal(await cache.match("https://cache.test/duplicate"), undefined);
+  await assert.rejects(
+    cache.addAll([
+      "https://cache.test/fragment-duplicate#one",
+      "https://cache.test/fragment-duplicate#two",
+    ]),
+    (error) => error?.name === "InvalidStateError",
+  );
+
+  await cache.addAll([
+    new Request("https://cache.test/variant", { headers: { "accept-language": "en" } }),
+    new Request("https://cache.test/variant", { headers: { "accept-language": "fr" } }),
+  ]);
+  assert.equal(
+    await (
+      await cache.match(
+        new Request("https://cache.test/variant", { headers: { "accept-language": "fr" } }),
+      )
+    ).text(),
+    "variant:fr",
+  );
+
+  const beforeInvalidScheme = fetches;
+  await assert.rejects(cache.add("data:text/plain,no"), TypeError);
+  assert.equal(fetches, beforeInvalidScheme);
+  await assert.rejects(
+    cache.addAll(["https://cache.test/valid", undefined, "https://cache.test/also-valid"]),
+    TypeError,
+  );
+});
+
+test("addAll aborts remaining fetches after one response is invalid", async () => {
+  let aborted = false;
+  const runtime = runtimeWithTransport(async (request) => {
+    if (request.url.pathname === "/bad") return transportResponse(404, "missing");
+    return new Promise((resolve, reject) => {
+      const unsubscribe = request.signal.subscribe(() => {
+        aborted = true;
+        unsubscribe();
+        reject(request.signal.reason);
+      });
+    });
+  });
+  const cache = await runtime.caches.open("abort-batch");
+  await assert.rejects(
+    cache.addAll(["https://cache.test/wait", "https://cache.test/bad"]),
+    TypeError,
+  );
+  await Promise.resolve();
+  assert.equal(aborted, true);
+  assert.deepEqual(await cache.keys(), []);
+});
+
+test("addAll duplicate detection is symmetric across different Vary responses", async () => {
+  const runtime = runtimeWithTransport(async (request) => {
+    const vary = request.headers.find((entry) => entry[0] === "x-response-vary")?.[1];
+    return transportResponse(200, "variant", [["vary", vary]]);
+  });
+  const cache = await runtime.caches.open("asymmetric-vary");
+  const shapeVary = new Request("https://cache.test/asymmetric", {
+    headers: {
+      "x-response-vary": "x-shape",
+      "x-shape": "circle",
+      "x-size": "big",
+    },
+  });
+  const sizeVary = new Request("https://cache.test/asymmetric", {
+    headers: {
+      "x-response-vary": "x-size",
+      "x-shape": "square",
+      "x-size": "big",
+    },
+  });
+  await assert.rejects(
+    cache.addAll([shapeVary, sizeVary]),
+    (error) => error?.name === "InvalidStateError",
+  );
+  await assert.rejects(
+    cache.addAll([sizeVary, shapeVary]),
+    (error) => error?.name === "InvalidStateError",
+  );
+  assert.deepEqual(await cache.keys(), []);
+});
+
+test("CacheStorage.match searches named caches in order and honors cacheName", async () => {
+  const runtime = quietRuntime();
+  const first = await runtime.caches.open("first");
+  const second = await runtime.caches.open("second");
+  await first.put("https://cache.test/shared", new Response("first"));
+  await second.put("https://cache.test/shared", new Response("second"));
+  assert.equal(await (await runtime.caches.match("https://cache.test/shared")).text(), "first");
+  assert.equal(
+    await (await runtime.caches.match("https://cache.test/shared", { cacheName: "second" })).text(),
+    "second",
+  );
+  assert.equal(
+    await runtime.caches.match("https://cache.test/shared", { cacheName: "missing" }),
+    undefined,
+  );
+});
+
+test("memory quotas reject atomically without deleting the prior list", async () => {
+  const store = new MemoryCacheStorageStore({
+    maxCaches: 1,
+    maxEntriesPerCache: 1,
+    maxBodyBytesPerCache: 4,
+  });
+  const runtime = quietRuntime({ cacheStorageStore: store });
+  const cache = await runtime.caches.open("bounded");
+  await cache.put("https://cache.test/one", new Response("1234"));
+  await assert.rejects(
+    runtime.caches.open("second"),
+    (error) => error?.name === "QuotaExceededError",
+  );
+  await assert.rejects(
+    cache.put("https://cache.test/two", new Response("2")),
+    (error) => error?.name === "QuotaExceededError",
+  );
+  assert.equal(await (await cache.match("https://cache.test/one")).text(), "1234");
+  assert.equal(await cache.match("https://cache.test/two"), undefined);
+  await assert.rejects(
+    cache.put("https://cache.test/one", new Response("12345")),
+    (error) => error?.name === "QuotaExceededError",
+  );
+  assert.equal(await (await cache.match("https://cache.test/one")).text(), "1234");
+});
+
+test("compare-exchange retries preserve concurrent writes", async () => {
+  const underlying = new MemoryCacheStorageStore();
+  let conflicts = 1;
+  const store = {
+    lookup: (name) => underlying.lookup(name),
+    open: (name) => underlying.open(name),
+    delete: (name) => underlying.delete(name),
+    keys: () => underlying.keys(),
+    read: (handle) => underlying.read(handle),
+    compareExchange(handle, revision, entries) {
+      if (conflicts-- > 0) return Promise.resolve(false);
+      return underlying.compareExchange(handle, revision, entries);
+    },
+  };
+  const runtime = quietRuntime({ cacheStorageStore: store });
+  const cache = await runtime.caches.open("cas");
+  await Promise.all([
+    cache.put("https://cache.test/a", new Response("a")),
+    cache.put("https://cache.test/b", new Response("b")),
+  ]);
+  assert.deepEqual((await cache.keys()).map((request) => request.url).sort(), [
+    "https://cache.test/a",
+    "https://cache.test/b",
+  ]);
+});
+
+test("Web IDL request conversion precedes query-option conversion", async () => {
+  const runtime = quietRuntime();
+  const cache = await runtime.caches.open("conversion");
+  const order = [];
+  const request = {
+    toString() {
+      order.push("request");
+      return "https://cache.test/value";
+    },
+  };
+  const options = {
+    get ignoreMethod() {
+      order.push("ignoreMethod");
+      return false;
+    },
+    get ignoreSearch() {
+      order.push("ignoreSearch");
+      return false;
+    },
+    get ignoreVary() {
+      order.push("ignoreVary");
+      return false;
+    },
+  };
+  await cache.match(request, options);
+  assert.deepEqual(order, ["request", "ignoreMethod", "ignoreSearch", "ignoreVary"]);
+});

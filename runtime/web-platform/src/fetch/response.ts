@@ -7,6 +7,7 @@ import {
 import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import type { ReadableStream } from "../streams/readable.ts";
+import { Blob } from "../file/blob.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
@@ -216,5 +217,33 @@ export class Response extends Body {
     result.responseType = "basic";
     result.headers.makeImmutable();
     return result;
+  }
+
+  /** @internal Recreate the independent immutable response object returned by Cache. */
+  static fromCache(
+    status: number,
+    statusText: string,
+    headers: readonly HeaderEntry[],
+    body: Blob | null,
+    url: string,
+    redirected: boolean,
+    type: ResponseType,
+    context: ResponseContext,
+  ): Response {
+    const result = new Response(
+      body,
+      { status: status === 0 ? 200 : status, statusText, headers },
+      context,
+    );
+    result.responseStatus = status;
+    result.responseURL = url;
+    result.wasRedirected = redirected;
+    result.responseType = type;
+    result.headers.makeImmutable();
+    return result;
+  }
+
+  get [Symbol.toStringTag](): string {
+    return "Response";
   }
 }

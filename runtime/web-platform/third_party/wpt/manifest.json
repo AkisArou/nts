@@ -2,6 +2,7 @@
   "repository": "https://github.com/web-platform-tests/wpt",
   "retrieved": "2026-09-07",
   "eventSourceRevision": "b89af32bc8f42d678f444eb0703bca015ddcf240",
+  "cacheStorageRevision": "b89af32bc8f42d678f444eb0703bca015ddcf240",
   "pinType": "Git blob SHA-1 (content addressed)",
   "support": {
     "common/get-host-info.sub.js": "e9ec61659c3927e519170bc4e5253f91b7671945",
@@ -12,7 +13,12 @@
     "eventsource/resources/accept.event_stream": "24da54826784e6ba18eb354f97272375b52c7f3b",
     "eventsource/resources/last-event-id.py": "a2cb72644570d95c365e5153f3cd2126576affb6",
     "eventsource/resources/message.py": "468564f4df083fca0e4835c2b95cf1fc9201760b",
-    "eventsource/resources/message2.py": "8515e7b25eb9e60e74700f51d9d2cdfa062dcae1"
+    "eventsource/resources/message2.py": "8515e7b25eb9e60e74700f51d9d2cdfa062dcae1",
+    "service-workers/cache-storage/resources/blank.html": "a3c3a4689a62b45b1e429f6b7a94690e556a1259",
+    "service-workers/cache-storage/resources/fetch-status.py": "b7109f4787fd6d659a192f7f29157862eef36ae9",
+    "service-workers/cache-storage/resources/simple.txt": "9e3cb91fb9b95d6e51de85b82e6f86e92f59ac6d",
+    "service-workers/cache-storage/resources/test-helpers.js": "050ac0b542455ceb53ed36038af5b9b0810977cf",
+    "service-workers/cache-storage/resources/vary.py": "7fde1b1094ed4ce4018f17688e55d3be06fff993"
   },
   "files": {
     "eventsource/event-data.any.js": "12867694f856f1e618cdc87515c1dba640de9f41",
@@ -46,6 +52,14 @@
     "eventsource/format-null-character.any.js": "943628d2c02453301a61e607c9f5ac147e60458a",
     "eventsource/format-utf-8.any.js": "7976abfb55df193e3fe2b3d2316b7084190aa804",
     "eventsource/request-accept.any.js": "2e18173556433893795d0caa62bcfe746e73953a",
+    "service-workers/cache-storage/cache-storage-keys.https.any.js": "f19522be1b437d619b356b5b0290679a8f391866",
+    "service-workers/cache-storage/cache-storage.https.any.js": "b7d5af7b532036351ab842de451002ca36f7b4af",
+    "service-workers/cache-storage/cache-add.https.any.js": "f50e1a56bac1a4eeb137c970ba48fe90f0734074",
+    "service-workers/cache-storage/cache-delete.https.any.js": "42311200cffa935986e6540e6400c4bc7341205e",
+    "service-workers/cache-storage/cache-keys.https.any.js": "c19939c3455b6a300fca2c6690c8d189e6079bdb",
+    "service-workers/cache-storage/cache-match.https.any.js": "9ca45903cbb101810488ced4b31bb9f34957b1ef",
+    "service-workers/cache-storage/cache-matchAll.https.any.js": "93c55178918c333df25104e69ca74af5dbf04be9",
+    "service-workers/cache-storage/cache-put.https.any.js": "dbf2650a75a5ff051f222ccb736b14f65d98f1b9",
     "fetch/api/headers/header-setcookie.any.js": "cafb780c2c75a9ae6a84fb842f0d0fa075aeffd8",
     "fetch/api/headers/headers-basic.any.js": "ead1047645a15fa63fdbb665eaf8fc685b3bde7b",
     "fetch/api/headers/headers-casing.any.js": "20b8a9d375aaa0550f44df27cd3cbaec3bb1c772",
@@ -91,6 +105,18 @@
     "fetch/data-urls/processing.any.js": 73
   },
   "notApplicable": {
+    "service-workers/cache-storage/cache-add.https.any.js": {
+      "Cache.addAll with opaque-filtered 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    },
+    "service-workers/cache-storage/cache-match.https.any.js": {
+      "cors-exposed header should be stored correctly.": "This case asserts browser CORS response-header filtering, including hiding Set-Cookie. The standalone server/mobile profile intentionally exposes the Node/Undici-compatible header surface.",
+      "Cache.match ignores vary headers on opaque response.": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
+      "Cache.match blob should be sliceable": "The cache behavior is applicable and covered by the focused suite and pinned Blob fixtures, but this upstream case consumes the slice through browser-only FileReader rather than Blob.text() or Blob.arrayBuffer()."
+    },
+    "service-workers/cache-storage/cache-put.https.any.js": {
+      "Cache.put with opaque-filtered HTTP 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
+      "Cache.put with a VARY:* opaque response should not reject": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    },
     "fetch/api/headers/header-setcookie.any.js": {
       "Set-Cookie is a forbidden response header": "Browser response filtering is outside the standalone server/mobile profile; modern Node and standalone Undici expose Set-Cookie through getSetCookie()."
     },

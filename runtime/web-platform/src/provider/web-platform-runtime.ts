@@ -1,4 +1,10 @@
 import type { BodyPolicy } from "../fetch/body.ts";
+import {
+  CacheStorage,
+  MemoryCacheStorageStore,
+  createCacheStorage,
+} from "../cache/cache-storage.ts";
+import type { CacheStorageStore } from "../cache/cache-storage.ts";
 import type { HttpCache } from "../cache/http-cache.ts";
 import { FetchClient } from "../fetch/fetch.ts";
 import type { FetchCookiePolicy } from "../fetch/fetch.ts";
@@ -38,6 +44,11 @@ export interface WebPlatformOptions {
   cookies?: FetchCookiePolicy;
   /** Injected policy/store is not owned or closed by this runtime. */
   httpCache?: HttpCache;
+  /**
+   * Public Cache API storage for this runtime's storage key. Production providers
+   * inject durable quota-managed storage; the reference default is volatile.
+   */
+  cacheStorageStore?: CacheStorageStore;
   /** Provider-specific serialization, e.g. Node's `blob:nodedata:` prefix. */
   blobURLPrefix?: string;
 }
@@ -59,6 +70,7 @@ export class WebPlatformRuntime implements EventSourceContext {
   readonly urls: PlatformPrimitives["urls"];
   readonly baseURL: string | undefined;
   readonly eventSourcePolicy: EventSourcePolicy;
+  readonly caches: CacheStorage;
 
   private readonly webSocketTransport: WebSocketTransport;
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
@@ -116,6 +128,11 @@ export class WebPlatformRuntime implements EventSourceContext {
       options.httpCache,
     );
     this.fetch = client.fetch;
+    this.caches = createCacheStorage(
+      options.cacheStorageStore ?? new MemoryCacheStorageStore(),
+      this.requestContext,
+      this.fetch,
+    );
   }
 
   wallTimeMilliseconds(): number {

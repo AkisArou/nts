@@ -67,6 +67,8 @@ export type ReferrerPolicy =
 
 export type RequestPriority = "high" | "low" | "auto";
 
+export type RequestInfo = string | Request;
+
 export interface RequestInit {
   body?: BodyInit | null;
   cache?: RequestCache;
@@ -92,6 +94,13 @@ export interface RequestContext {
   baseURL?: string;
   origin?: string;
   blobURLs: BlobURLStore;
+}
+
+/** @internal Metadata set by Fetch rather than by the public RequestInit dictionary. */
+export interface RequestInternalMetadata {
+  readonly destination: RequestDestination;
+  readonly isReloadNavigation: boolean;
+  readonly isHistoryNavigation: boolean;
 }
 
 declare function nts_environment_platform(): WebPlatformRuntime;
@@ -346,7 +355,8 @@ export class Request extends Body {
   private readonly requestKeepalive: boolean;
   private readonly reloadNavigation: boolean;
   private readonly historyNavigation: boolean;
-  private readonly requestPriority: RequestPriority;
+  /** @internal Fetch scheduling metadata; `priority` is not a public Request attribute. */
+  readonly requestPriority: RequestPriority;
   /** @internal */ readonly parsedURL: URLRecord;
   /** @internal The Blob URL entry captured when this request's URL was parsed. */
   readonly blobURLObject: Blob | null;
@@ -358,12 +368,14 @@ export class Request extends Body {
     init: RequestInit | null | undefined,
     context: RequestContext,
     blobURLObject?: Blob | null,
+    metadata?: RequestInternalMetadata,
   );
   constructor(
     input: string | Request,
     init: RequestInit | null | undefined = undefined,
     context: RequestContext = nts_environment_platform().requestContext,
     blobURLObject: Blob | null | undefined = undefined,
+    metadata: RequestInternalMetadata | undefined = undefined,
   ) {
     const source = input instanceof Request ? input : null;
     const inputURL = source === null ? coerceToUSVString(input) : source.url;
@@ -434,15 +446,19 @@ export class Request extends Body {
       inherited === undefined ? createAbortSignal() : AbortSignal.any([inherited]);
     this.requestRedirect = redirect;
     this.requestCredentials = credentials;
-    this.requestDestination = source?.destination ?? "";
+    this.requestDestination = metadata?.destination ?? source?.destination ?? "";
     this.requestReferrer = referrer;
     this.requestReferrerPolicy = referrerPolicy;
     this.requestMode = mode;
     this.requestCache = cache;
     this.requestIntegrity = integrity;
     this.requestKeepalive = keepalive;
-    this.reloadNavigation = resetMetadata ? false : (source?.isReloadNavigation ?? false);
-    this.historyNavigation = resetMetadata ? false : (source?.isHistoryNavigation ?? false);
+    this.reloadNavigation =
+      metadata?.isReloadNavigation ??
+      (resetMetadata ? false : (source?.isReloadNavigation ?? false));
+    this.historyNavigation =
+      metadata?.isHistoryNavigation ??
+      (resetMetadata ? false : (source?.isHistoryNavigation ?? false));
     this.requestPriority = priority;
   }
 
@@ -534,8 +550,17 @@ export class Request extends Body {
       },
       this.context,
       this.blobURLObject,
+      {
+        destination: this.destination,
+        isReloadNavigation: this.isReloadNavigation,
+        isHistoryNavigation: this.isHistoryNavigation,
+      },
     );
     result.bodyState = state;
     return result;
+  }
+
+  get [Symbol.toStringTag](): string {
+    return "Request";
   }
 }

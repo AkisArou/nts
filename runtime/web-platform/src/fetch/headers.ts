@@ -285,4 +285,8 @@ export class Headers {
   [Symbol.iterator](): Generator<HeaderEntry, void, unknown> {
     return this.entries();
   }
+
+  get [Symbol.toStringTag](): string {
+    return "Headers";
+  }
 }

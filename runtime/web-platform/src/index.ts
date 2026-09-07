@@ -84,6 +84,7 @@ export type {
   RequestCredentials,
   RequestDestination,
   RequestInit,
+  RequestInfo,
   RequestMode,
   RequestPriority,
   RequestRedirect,
@@ -109,6 +110,20 @@ export {
   parseAge,
   parseHTTPDate,
 } from "./cache/freshness.ts";
+
+export { Cache, CacheStorage, MemoryCacheStorageStore } from "./cache/cache-storage.ts";
+export type {
+  CacheFetch,
+  CacheQueryOptions,
+  CacheStorageEntry,
+  CacheStorageHandle,
+  CacheStorageRequestRecord,
+  CacheStorageResponseRecord,
+  CacheStorageSnapshot,
+  CacheStorageStore,
+  MemoryCacheStorageStoreOptions,
+  MultiCacheQueryOptions,
+} from "./cache/cache-storage.ts";
 export { HttpCache, createVaryKey, isResponseStorable, varyMatches } from "./cache/http-cache.ts";
 export type {
   HttpCacheDiagnostics,

@@ -1347,3 +1347,57 @@ the cache tranche introduces no WPT failure or exclusion. The live NTS check rep
 module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. This increase
 is the final cache source reaching existing compiler dependencies, not compiled-cache
 execution evidence.
+
+## Public `Cache` and `CacheStorage`
+
+The Service Worker `Cache` and `CacheStorage` surface is now implemented separately
+from the RFC 9111 HTTP cache. Named caches preserve insertion order and stable opaque
+handles: deleting a name removes it from `CacheStorage`, while an already-open
+`Cache` continues to address its old request/response list and reopening the name
+creates a new list. Query matching implements method, search and exact `Vary`
+semantics; fragments do not participate. Returned requests, responses, headers and
+bodies are independent immutable snapshots, including internal Fetch metadata that
+is not exposed as a new public property.
+
+`put()` consumes and validates the response before an atomic compare-and-exchange
+commit. `addAll()` validates every request before network dispatch, aborts the other
+fetches after a failure, materializes every successful response, rejects duplicate
+operations symmetrically across their `Vary` responses, and either commits the whole
+batch or leaves the prior list intact. Cache algorithms call their internal steps
+directly rather than redispatching through overridable public methods. The memory
+provider enforces cache-count, entry-count and body-byte quotas and is explicitly a
+volatile reference provider. Production Node and mobile providers must inject a
+durable, quota-managed `CacheStorageStore`; one injected store is one storage-key
+and isolation namespace. The store contract exposes stable handles plus revisioned
+read/compare-exchange operations so persistence does not replace shared semantics.
+
+Eight complete CacheStorage WPT fixtures and five support resources are pinned
+unchanged by exact Git blob hash at WPT commit
+`b89af32bc8f42d678f444eb0703bca015ddcf240`. They register 128 cases: all 122
+applicable cases pass, and six are named not applicable because they require browser
+filtered opaque/CORS responses or `FileReader`. Those exclusions do not remove any
+Cache algorithm: the affected byte consumption is covered by the local suite and the
+pinned Blob/Streams fixtures. The focused suite passes 15/15 and the complete local
+Node-host/real-socket suite passes 214/214.
+
+The unchanged full upstream slice now passes 2265/2273 applicable cases, with 14
+named not-applicable cases and exactly the same eight visible failures: three Headers
+iterator-shape cases, two Promise-observation cases, two typed explicit-receiver
+cases, and the Web-IDL async-iterator prototype/object-shape case. The upstream
+`Cache.put()` fixture found two independent pre-existing Web-surface defects during
+this tranche: body consumption incorrectly released the reader lock after reaching
+EOF, and `Headers`, `Request`, and `Response` lacked their Web IDL class strings.
+Both are fixed in the canonical implementations rather than patched in the harness.
+
+The Cache query sabotage inverted `ignoreSearch`; after rebuilding the host tree the
+focused suite fell from 15/15 to 14/15 at the matching assertion, then returned to
+15/15 after restoration. The runner also verifies every imported fixture and support
+resource against its recorded Git blob hash before executing it.
+
+The live compiled-source frontier is 805 primary `NTS1001` refusals and 128 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. One visible Cache-specific primary says that
+`owner`, reached after narrowing a `CacheStorageHandle`, is not declared by the
+interface; this is kept in final source for the compiler lane rather than hidden by
+a cast or alternate architecture. These counts measure newly reachable final source,
+not compiled-provider completion.
