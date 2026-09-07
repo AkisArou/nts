@@ -2853,6 +2853,27 @@ compiled: object identity, prototype chains, error subclassing,
 `Symbol.toStringTag`. `local/*-static.js` is where those belong, because upstream
 will never assert them.
 
+**What can be asserted is bounded by the substitution, and finding that out cost
+a false alarm.** A probe reported `new Readable() instanceof EventEmitter` as
+**false**, where node says true — which reads as exactly the class of defect
+this section is about. It is not one. `stream`'s `uses` lists `buffer` and
+`zlib/iter`, so `require("events")` inside that context is the *host's*
+EventEmitter while `Readable` extends *this profile's*, and `instanceof` was
+comparing two different classes. Asked properly, the chain is
+`Readable -> Stream -> EventEmitter -> Object`, which is node's shape exactly.
+
+So an `instanceof` assertion across two substituted modules is a claim about the
+harness as much as the code, and it holds only when the second module is in the
+first's `uses`. Within one module, and against the canonical globals a module
+declares, the assertion means what it says. **The measurement was a claim about
+the lane that produced it**, and the first reading of it was wrong in the
+direction that would have sent a compiler session looking for a bug that is not
+there.
+
+These, by contrast, are real and hold today, and nothing asserts them:
+`url.URL === globalThis.URL`, `url.URLSearchParams`, `buffer.Buffer`,
+`buffer.Blob`, `buffer.File` and `buffer.atob`, each identical to its global.
+
 Three exist now.
 
 **`punycode/test/error-identity-static.js`** was the first, and it was proved by
