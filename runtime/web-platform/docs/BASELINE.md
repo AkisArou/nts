@@ -4516,3 +4516,40 @@ All three agree.
 The four declines are unchanged and still the percent-decoder's out-of-range reads.
 
 Local corpus 674/674, upstream unchanged at 2,278 of 2,286.
+
+### What the axis cannot reach yet, and why each one is blocked
+
+Written down because the next person to grow it should not have to rediscover the map.
+Every module in the shared source with at most one import was probed.
+
+**`core/webidl.ts`** — the Web-IDL numeric conversions (`toUnsignedLong`,
+`toEnforceRangeUnsignedLongLong`, the clamps) are pure number-to-number arithmetic and
+would be the best possible material for this axis: modulo-2^32 wrapping, clamp
+boundaries, and a 64-bit range check that must truncate before it compares. They are
+blocked by `requireDictionary(value: unknown)` and `coerceToDOMString` in the same
+module — `unknown` is unrepresentable, and a module is emitted whole. Splitting the file
+would unblock it, and that is exactly the "rewritten to fit" this fixture is not allowed
+to do; the numeric half stays off the axis until `unknown` parameters are representable
+or something else changes on its own merits.
+
+**`fetch/headers.ts`** — Web-IDL union and intersection parameter types. Three modules
+sit behind it (`forms/mime.ts`, `cache/cache-control.ts`, `cookies/cookies.ts`), so it
+is the single highest-value unblock available.
+
+**`http2/hpack-huffman.ts`** — the most interesting one, and it fails in three different
+ways at once. `core/errors.ts` uses `new Error(message, { cause })`, which is refused;
+the decoder uses `new Uint8Array` from a value; and on the JVM backend specifically:
+
+    not emitted: NTS4001 emitting %24 moved the operand stack from 0 to 1, and an
+    operation must leave it as it found it -- the emitter and its own accounting
+    disagree about this one (in `buildTree`)
+
+and the same for `encodeHpackHuffman`. That is a different class from every other
+refusal in this ledger: not "this construct is not supported yet" but the emitter
+contradicting itself, and it is JVM-only — c and llvm produce no `NTS4xxx` here.
+
+It resisted reduction. Two plausible constructs were ruled out with controls: a
+conditional assignment into one of two arrays, and a post-increment inside the index of
+an assignment target (`output[outputIndex++] = current`), which is the distinctive line
+in both functions. Both compile and agree. Reported to the compiler lane with the file,
+the two function names, and what has been eliminated, rather than a guess.
