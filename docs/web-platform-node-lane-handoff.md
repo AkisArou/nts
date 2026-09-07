@@ -141,6 +141,18 @@ mechanical here will notice. Identity constraints live only in the other lane's 
 in an agreement; ask before moving or re-wrapping a shared class, and do not expect a
 gate to ask for you.
 
+**This lane's streams are on the compiled critical path for `node:fs`, `node:stream`
+and `node:readline`.** The NodeJS lane measured `fs` at 2,077 refused constructs and
+roughly 450 of them are in `streams/fifo.ts`, `streams/writable.ts`, `streams/readable.ts`
+and `provider/web-platform-runtime.ts`. Two distinct compiler blockers, not one: nullable
+and optional properties (305 sites) and plain unrepresentable property types such as
+`PromiseWithResolvers` (164). Nothing here should be bent around either — they were
+inspected and every nullable one is nullable by design, either to *release* a reference
+(`Fifo` clears a dequeued slot so the value is not retained) or because null is a value
+in the domain (a list head when empty). The first kind matters to whoever fixes it: it is
+not "might not be there", it is "deliberately made absent", and a representation that
+boxed it would satisfy the type and defeat the purpose.
+
 The NodeJS lane searched their pinned suite and found exactly one explicit `===`
 assertion, `test-global-encoder.js`, covering `TextEncoder`/`TextDecoder`, `URL`,
 `URLSearchParams`, `Blob`, `File`, `AbortController`, `AbortSignal`, `Event`,

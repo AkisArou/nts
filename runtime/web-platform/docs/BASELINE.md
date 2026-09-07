@@ -4820,3 +4820,74 @@ lane's own reasoning.
 Local corpus 705/705, compiled axis 138 of 142 across 13 functions on all three
 backends, frontier unchanged at 1,294 primary `NTS1001` and 314 `NTS1003` with zero
 `NTS1004` and zero invalid HIR.
+
+## Forty more upstream tests, and three things they found
+
+The same survey that grew the Encoding corpus was run across every pinned subset: how
+many `.any.js` fixtures exist in Node's vendored checkout against how many are pinned.
+Seven more were pinned, chosen for being in areas this lane implements rather than for
+being likely to pass — `Blob.stream()`, `AbortSignal.any`, three `dom/events` fixtures
+and two streams crashtests.
+
+Thirty-five of the forty new assertions passed immediately. The other five are the
+point of the exercise, and they are three separate findings plus one profile boundary.
+
+### `isTrusted` was a prototype getter and had to be an own one
+
+`Event.isTrusted` is `[LegacyUnforgeable]`: an own, non-configurable accessor on every
+instance rather than one on the prototype, so that a script cannot redefine or delete
+the flag that says whether a script made the event. It was on the prototype, which
+satisfies every ordinary use and fails
+`Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted")`.
+
+The fix took two attempts and the second attempt is the interesting one. Defining the
+accessor per instance with an arrow closure passes the first three assertions and fails
+the fourth: **the getter must be the same function object for two different events.**
+The descriptor is per-instance; the accessor behind it is not. There is one shared
+static getter now, and the fixture passes.
+
+### `Event.timeStamp` does not exist, and cannot without a decision
+
+Two `Event-constructors` assertions fail on `assert_true(ev.timeStamp > 0)`. Everything
+around them passes — `type`, `target`, `srcElement`, `currentTarget`, `eventPhase`,
+`bubbles`, `cancelable`, `defaultPrevented`, `returnValue`, `isTrusted` — so this is one
+missing member rather than a shaky implementation.
+
+It is left failing on purpose. `timeStamp` is a `DOMHighResTimeStamp` relative to the
+global's time origin, and **this profile has no clock**: `defaultNow()` in the retry
+interceptor returns literal `0` and expects the caller to inject a real one, which is a
+deliberate convention rather than an oversight. `new Event("x")` is constructible with no
+runtime at all, so there is nowhere to inject one either.
+
+`Date.now()` would satisfy the assertion most of the time and is the wrong answer twice
+over: it is absolute epoch milliseconds rather than time since an origin, and an event
+constructed in the same millisecond as the module loaded would report `0` and fail
+intermittently. A flaky test bought with a semantic error is a bad trade.
+
+So this is an ABI question — a monotonic clock primitive — and it is the second one this
+lane has raised today. Recorded rather than papered over.
+
+### `Blob.stream()` is not a byte stream
+
+`Reading Blob.stream() with BYOB reader` fails with *A BYOB reader requires a byte
+stream*. The specification says `Blob.stream()` returns one; this returns a default
+stream, so `getReader({ mode: "byob" })` throws.
+
+A real gap and a real fix, requiring both blob stream sources to become
+`UnderlyingByteSource` with `autoAllocateChunkSize` and BYOB request handling. It is
+named here and left failing rather than being quietly dropped from the corpus, which
+would have been the easy way to keep this entry green.
+
+### One boundary rather than a bug
+
+`EventTarget-removeEventListener` has one assertion calling
+`globalThis.removeEventListener`, which requires the global object itself to be an
+`EventTarget`. That is true of `Window` and `Worker` and deliberately false here: this
+profile installs no ambient globals, and installing one to pass a test is precisely the
+shared process global the governing plan forbids. It is recorded in `notApplicable` with
+that reason; the rest of the fixture runs against a constructed `EventTarget` and passes.
+
+The corpus is **2,433 tests, 2,418 applicable, 2,407 passing, 11 failing** — the eight
+long-standing structural failures plus the three named above. Local corpus 705/705,
+compiled axis 138 of 142 across 13 functions, frontier unchanged at 1,294 primary
+`NTS1001` and 314 `NTS1003`.

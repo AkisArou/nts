@@ -31,6 +31,17 @@ export class Event {
   private eventCurrentTarget: EventTarget | null = null;
   private phase = Event.NONE;
   private trusted = false;
+  /**
+   * One getter function shared by every instance, not one closure each.
+   *
+   * `Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted").get` must be the
+   * *same function* for two different events -- the descriptor is per-instance, the
+   * accessor behind it is not. A per-instance arrow satisfies every other assertion
+   * about this property and fails that one.
+   */
+  private static readonly isTrustedGetter = function (this: Event): boolean {
+    return this.trusted;
+  };
   private canceled = false;
   private propagationStopped = false;
   private dispatching = false;
@@ -49,6 +60,16 @@ export class Event {
       this.eventCancelable = init.cancelable ? true : false;
       this.eventComposed = init.composed ? true : false;
     }
+    // `isTrusted` is `[LegacyUnforgeable]`: an own, non-configurable accessor on every
+    // instance rather than one on the prototype. The difference is observable --
+    // `Object.getOwnPropertyDescriptor(new Event("x"), "isTrusted")` must find it -- and
+    // the point of it is that a script cannot redefine or delete the flag that says
+    // whether a script made the event.
+    Object.defineProperty(this, "isTrusted", {
+      get: Event.isTrustedGetter,
+      enumerable: true,
+      configurable: false,
+    });
   }
 
   get type(): string {
@@ -114,10 +135,6 @@ export class Event {
 
   get composed(): boolean {
     return this.eventComposed;
-  }
-
-  get isTrusted(): boolean {
-    return this.trusted;
   }
 
   preventDefault(): void {

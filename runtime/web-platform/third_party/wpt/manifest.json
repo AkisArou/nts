@@ -135,6 +135,9 @@
     },
     "streams/readable-byte-streams/templated.any.js": {
       "ReadableStream with byte source (empty) BYOB reader: canceling via the reader should cause the reader to act closed": "The shared default-reader template expects value: undefined, but the current Streams algorithm and the pinned Node reference return a new zero-length transferred view for a BYOB read issued after cancellation. The dedicated byte-stream cancellation cases cover pending-read cancellation separately."
+    },
+    "dom/events/EventTarget-removeEventListener.any.js": {
+      "removing a null event listener should succeed": "The assertion calls globalThis.removeEventListener, which requires the global object itself to be an EventTarget. That is true of Window and Worker and deliberately false here: this profile installs no ambient globals, so there is no global event target to remove a listener from. The rest of the fixture runs against a constructed EventTarget and passes."
     }
   },
   "nodeWpt": {
@@ -156,7 +159,8 @@
       "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
       "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8",
       "encoding/resources/encodings.js": "80933bf9386cb629537c32ca4dc5c22a81d7e872",
-      "encoding/resources/decoding-helpers.js": "78e52da014b7c56451c00a0419c7cedfca01ab18"
+      "encoding/resources/decoding-helpers.js": "78e52da014b7c56451c00a0419c7cedfca01ab18",
+      "dom/abort/resources/abort-signal-any-tests.js": "8f897c934e87eab427004268299c1c547a957727"
     },
     "tests": {
       "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
@@ -252,7 +256,14 @@
       "encoding/textdecoder-fatal.any.js": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
       "encoding/textdecoder-ignorebom.any.js": "e825698ba405230d90da085e6fae70c364cbec16",
       "encoding/textdecoder-streaming.any.js": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
-      "encoding/textdecoder-utf16-surrogates.any.js": "7e8322cd19c2133ea4bf557e0502be343b5d524f"
+      "encoding/textdecoder-utf16-surrogates.any.js": "7e8322cd19c2133ea4bf557e0502be343b5d524f",
+      "FileAPI/blob/Blob-stream.any.js": "453144cac964a627bb2a004d435887b15ddc96d3",
+      "dom/abort/abort-signal-any.any.js": "b4abb14c1a3eff64cee0c171c1ca03cf89ccc9af",
+      "dom/events/Event-constructors.any.js": "faa623ea92991b72742477a18471449f5382f1a8",
+      "dom/events/Event-isTrusted.any.js": "00bcecd0ed67a07128a2555820d6e12f72aee990",
+      "dom/events/EventTarget-removeEventListener.any.js": "289dfcfbabde0f68d739a093985f4f2601665126",
+      "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js": "285b427e2778623979a28de8b6c91dfc774cc4e6",
+      "streams/readable-streams/crashtests/garbage-collection.any.js": "6e9d80c41425b13800717f9e27184f64f1514752"
     }
   }
 }
