@@ -4260,6 +4260,46 @@ It is the same distinction as `punycode` publishing its `ucs2` only because its
 imports forced explicit keys on it: a number that describes the writing, read as
 though it described the thing written.
 
+## The all-void structs: six reductions that do not reproduce it
+
+Eight structs in `util`'s generated C lose **every** field to bare `void`, and
+all eight are WHATWG Streams option dictionaries. `blockers/undefined-required-
+field` explains the *other* void fields — a required member typed `undefined` —
+and does not explain these. This is a second cause and it has no fixture,
+because six attempts to reduce it all compile clean.
+
+Recording the negatives, because they are what is left of the search space:
+
+| reduction | result |
+| --- | --- |
+| `interface Sink { type?: undefined; write?: (c: number) => void }` | `NtsValue`, clean |
+| `interface Strategy { highWaterMark?: number; size?: ... }` | `NtsValue`, clean |
+| generic `Sink<W>`, never instantiated | no struct emitted at all |
+| `Sink<number>` and `Strategy<number>`, materialised and read | `NtsValue`, named `NtsObj_Sink_25_` |
+| `Sink<W>` held by a `class Writable<W>`, built as `Writable<number>` | no struct emitted |
+| an argument literal written with **method shorthand** | `NtsValue`, named `NtsObj_Sink` |
+
+So it is **not** optionality, **not** `undefined` in an optional position, **not**
+genericity, **not** instantiation, **not** reaching the type through a class type
+parameter, and **not** method shorthand — the last tested specifically because
+shorthand *property* syntax turned out to lose a symbol elsewhere
+(`blockers/export-object-shorthand`), which made it the best remaining guess.
+
+**The one positive observation is about naming.** A materialised generic emits as
+`NtsObj_Sink_25_`, carrying its declared name and its instantiation; a
+method-shorthand literal emits as `NtsObj_Sink`. Every one of the eight broken
+structs is `NtsObj_TypeNNNN` — anonymous — while `NtsObj_UnderlyingByteSource`
+and `NtsObj_ReadableByteStreamState` sit in the same generated file with their
+names and their fields resolved. So whatever happens to the eight happens
+*before* the field types are decided: the type arrives already anonymous, and a
+struct emitted from an anonymous type has no properties to read. That would also
+explain why all its fields go void together, where a partially-void struct like
+`NtsObj_Type7151` is the other cause, one field at a time.
+
+That is a reading of the output and not a measurement, and it is recorded as
+such. What the six negatives buy is a much smaller space for the compiler lane to
+search than the module name alone would have given them.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
