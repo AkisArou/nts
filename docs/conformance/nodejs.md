@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,748 of node's own applicable test files pass** across twenty-two modules,
+**1,751 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -364,8 +364,8 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,748
-measured, 416 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,751
+measured, 418 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of
@@ -388,14 +388,14 @@ still.
 | module | node's tests | hollow | note |
 | --- | :---: | :---: | --- |
 | `assert` | **10 / 10** | 0 | complete, including `CallTracker` and node's Myers diff |
-| `async_hooks` | **110 / 110** | 0 | `AsyncLocalStorage` and the hooks |
+| `async_hooks` | **112 / 112** | 0 | `AsyncLocalStorage` and the hooks |
 | `buffer` | **50 / 50** | 0 | the read/write surface, validated against node's boundary values |
 | `console` | **17 / 17** | 0 | complete |
 | `dgram` | **75 / 75** | 0 | UDP |
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
-| `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `net` | **133 / 133** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
 | `process` | **81 / 81** | 0 | complete but for `process.binding`, `stdin` and workers |
@@ -787,6 +787,43 @@ is deliberately not done here. `fstat` was split when a test demanded it, and
 be behaviour nothing measures, which is the same argument this document makes
 for not inventing channel names. It is recorded so the next test that demands
 one finds the reason rather than the surprise.
+
+## Five more the patterns did not claim, and one test kept rather than lost
+
+Running the audit again over the families it had not yet been pointed at found
+five more files that matched no module anywhere: `test-blocklist.js` and
+`test-blocklist-clone.js` (`net.BlockList`), `test-socketaddress.js`
+(`net.SocketAddress`), and `test-als-defaultvalue.js` with
+`test-als-defaultvalue-original.js` (`AsyncLocalStorage` — node abbreviates it
+in the filename and `async_hooks`'s pattern spelled it out). That is the fourth
+and fifth instance of the same mistake, and the shape is now familiar enough to
+state as a rule: **a module's test pattern should be checked against node's
+directory listing, not against the module's own name.**
+
+Both `als` files passed untouched; `async_hooks` goes to 112.
+`test-socketaddress.js` is claimed and honestly reported as a skip, since it
+needs `internal/socketaddress`. The two `BlockList` files are the interesting
+ones.
+
+`test-blocklist.js` is 361 lines, of which eleven fail. Two blocks want
+`util.inspect` metadata this profile refuses: the depth-exceeded marker
+carrying a constructor's name — node prints `[BlockList]` where ours prints
+`[Object]`, which is the same §13 refusal the census records for
+`Point { x: 1 }` — and node's symbol-keyed `util.inspect.custom` hook
+rendering `rules: []`. **Excluding the file for those eleven lines would have
+thrown away three hundred and fifty that measure real behaviour**, so it is
+excluded and `local/blocklist-static.js` retains the rest unchanged: every
+address and subnet rule, every `ERR_INVALID_ARG_TYPE`, `isBlockList`, and the
+whole JSON round trip. That is the pattern this document already uses for
+`inspect`, `assert` and `promisify`, applied where it pays best — a §13
+refusal that touches two blocks should cost two blocks.
+
+`test-blocklist-clone.js` is a genuine exclusion with nothing to retain. It
+posts a `BlockList` through a `MessagePort` and requires the clone to *share
+the original's native handle*, so that adding an address to one is visible
+through the other. Node does that with its internal `kClone`/`kDeserialize`
+symbol protocol over a shared handle; this profile's `BlockList` holds ordinary
+typed state and structured clone has no route to it.
 
 ## Comparing the export surface to node's, which nothing had done
 
@@ -1339,7 +1376,12 @@ a file that is otherwise entirely correct. The measures that say more:
 **A census beats a bigger pool, and this is the evidence for it.**
 `tooling/conformance/census-inspect.mjs` enumerates 61 value kinds by hand,
 runs them through the substitution and through host node, and diffs. **35 of
-61 agree.** Two pools of 5,000 and 480,000 random structures had reported
+61 agree.** The 61 are enumerated *against a written-down set*, and that is the
+whole difference from a pool: every kind `formatByShape` has a branch for, plus
+every kind node's own `inspect` special-cases that ours does not. Anyone can
+tell whether the list has fallen behind by reading those two branch lists
+against `census-inspect-cases.cjs`; nobody can tell whether a generator has
+fallen behind, because the distribution it samples was never written down. Two pools of 5,000 and 480,000 random structures had reported
 health for `inspect` while every `Promise` printed as `{}`, because neither
 generator ever produced one; growing either pool samples the same distribution
 more times. Sixty-one deliberate kinds found ten gaps in a single run.

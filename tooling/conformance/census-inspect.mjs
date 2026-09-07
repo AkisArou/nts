@@ -17,6 +17,15 @@
 // (one runs the case file through the runner, the other directly), while the
 // structure around them -- an `[errors]` array, a `[cause]` -- is exactly what
 // this is meant to notice.
+//
+// The list in `census-inspect-cases.cjs` is enumerated against a written-down
+// set, which is what keeps it honest as both implementations move: every kind
+// `formatByShape` in `runtime/node/util/src/inspect.ts` has a branch for, plus
+// every kind node's own `inspect` special-cases and ours does not. When either
+// grows a branch, add the kind here. A reader can check that the list has not
+// fallen behind by reading those two branch lists against the cases; nobody
+// can perform the same check on a generator, because the distribution it
+// samples from is not written down anywhere.
 
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
