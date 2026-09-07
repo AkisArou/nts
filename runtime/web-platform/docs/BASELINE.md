@@ -5720,3 +5720,52 @@ suite asserts `Agent`, `Pool`, `RetryInterceptor`, `MockAgent` and `CookieJar` s
 pass adding tags "for consistency" has to change that test and say why.
 
 808/808 host, upstream unchanged at 2,410 of 2,418.
+
+## Two deviations measured and pinned rather than fixed
+
+Asking the Web IDL question properly turned up two more answers, both larger than the tags
+and lengths that were fixed with them, and both left standing on purpose.
+
+**Sixty-three internal methods are publicly reachable on interface prototypes.**
+`AbortSignal.prototype.trigger`, `ReadableStream.prototype.markDisturbed`,
+`Headers.prototype.makeImmutable` and sixty more. Web IDL says an interface prototype
+carries the interface's members and nothing else; these are wiring between modules in this
+runtime, public because they are ordinary methods.
+
+**Every interface member is non-enumerable, and Web IDL requires them to be enumerable.**
+Operations get `{ writable: true, enumerable: true, configurable: true }` and attribute
+accessors `{ enumerable: true, configurable: true }`; ES class members are non-enumerable,
+so all of them are. `for (const key in headers)` yields nothing where a conformant
+implementation enumerates the prototype.
+
+### Why neither was fixed in passing
+
+The second cannot be fixed before the first. A blanket pass making prototype members
+enumerable would enumerate the sixty-three internal ones too — **making one deviation worse
+in order to improve the other**, and turning an invisible leak into a visible one. They have
+to be closed in that order.
+
+And the first is not a tidy-up. `#private` is not free here — the frontier already carries
+refusals for properties of unrepresentable private type — so "make them private" is a
+decision about compiler cost taken by someone who knows what that cost is. It is not mine
+to spend quietly on sixty-three methods.
+
+So the surface is written down instead, with the rule that **it may shrink and never grow**.
+A new public method on an interface prototype fails the gate and has to be justified. The
+second test catches the case the table cannot: a *new* deviation on an interface that is
+currently clean, since a table of known offenders says nothing about the innocent.
+
+The count is asserted as a literal `63` rather than derived from the table, so removing an
+entry has to change that line too and cannot pass as a silent no-op. And the enumerability
+deviation is asserted in the direction it currently holds, with the note that if that
+assertion starts failing, the deviation is fixed and the test is what needs updating.
+
+The oracle is node's prototype per interface, so the list is exactly "members this runtime
+exposes that a conformant implementation does not". Interfaces node does not implement are
+absent from the table for that reason and not because they are clean — stated because the
+table would otherwise read as a complete census.
+
+Both sabotages caught: a clean interface growing a method, and a listed interface growing
+one beyond its list.
+
+812/812 host, upstream unchanged at 2,410 of 2,418.
