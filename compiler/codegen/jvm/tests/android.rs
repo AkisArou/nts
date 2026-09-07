@@ -51,6 +51,26 @@ fn android() -> PathBuf {
     repository().join("runtime/jvm/web-platform/android")
 }
 
+/// Every `.java` in every **shipped** source set: `src/*` except `src/test`.
+///
+/// Discovered rather than named. See the note in
+/// `r8_keeps_the_ffi_surface_and_removes_the_rest` for the three times a
+/// hand-written list of these disagreed with `consumer-rules.pro`.
+fn shipped_sources() -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let Ok(sets) = std::fs::read_dir(android().join("src")) else { return found };
+    let mut roots: Vec<PathBuf> = sets
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir() && path.file_name().is_some_and(|it| it != "test"))
+        .collect();
+    roots.sort();
+    for root in roots {
+        found.extend(sources(&root));
+    }
+    found
+}
+
 /// Every `.java` under a directory, since the suite is small enough that
 /// listing files by hand would be a second answer to "what is in it".
 fn sources(root: &Path) -> Vec<PathBuf> {
@@ -676,11 +696,18 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         .join(":");
     let mut compile = Command::new(&javac);
     compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&compile_path).arg("-d").arg(&classes);
-    for path in sources(&android().join("src/main"))
-        .into_iter()
-        .chain(sources(&android().join("src/android")))
-        .chain(sources(&android().join("src/okhttp")))
-    {
+    // **Every source set, discovered rather than listed.** Three times in this
+    // lane a keep rule and the compiled source list have disagreed:
+    // `AndroidNetworking`'s rule matched nothing because `src/android` was not
+    // compiled here, then `src/okhttp` was missing from this test, then from
+    // the device runner. Each time R8 said so and the run scrolled past it.
+    //
+    // Three occurrences of one shape is a missing invariant rather than three
+    // mistakes. Naming the sets is what made forgetting one possible, so this
+    // takes whatever is there -- a new source set is in the R8 input by
+    // construction, and a keep rule for a class in it cannot match nothing
+    // because nobody edited a list.
+    for path in shipped_sources() {
         compile.arg(path);
     }
     let built = compile.output().unwrap();

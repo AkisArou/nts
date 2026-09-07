@@ -62,11 +62,13 @@ okhttp_libs=$(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*
   exit 1
 }
 
+# **Every source set, found rather than listed.** Naming them is what made
+# forgetting one possible, three times over. A new one is in the build, in the
+# dex and in the R8 input by construction.
+sets=$(find "$here"/runtime/jvm/web-platform/android/src -name '*.java' | sort)
+# shellcheck disable=SC2086
 javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes" \
-  "$here"/runtime/jvm/web-platform/android/src/main/java/org/nts/web/*.java \
-  "$here"/runtime/jvm/web-platform/android/src/android/java/org/nts/web/*.java \
-  "$here"/runtime/jvm/web-platform/android/src/okhttp/java/org/nts/web/*.java \
-  "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
+  $sets \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
   "$here"/compiler/codegen/jvm/tests/inbox/Stress.java
