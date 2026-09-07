@@ -3832,3 +3832,79 @@ pair is the first taken with a binary built from the current tree.
 
 The complete local Node-host/real-socket corpus passes 550/550 with zero skipped, and
 the pinned upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The byte store has a consumer
+
+The durable ABI had a contract, a host strawman, an Android provider, an adapter and no
+caller. That is the shape this ledger keeps recording as a defect in other people's
+code — a mechanism nothing routes through is a mechanism whose shape nobody has checked
+— and it had been true of this seam for four slices.
+
+`DurableHttpCacheStore` is a persistent `HttpCacheStore` over it. RFC policy, matching
+and eviction stay exactly where they are for the memory store; only the bytes cross the
+provider boundary, which is the whole claim of the pairing — a filesystem cache and an
+Android cache should differ in where bytes land and nowhere else.
+
+**Metadata and body are separate keys, and the order they are written in is the crash
+story.** The byte store makes one key's replacement atomic and says nothing about two, so
+a publish commits the body first and the metadata second: an interrupted commit leaves
+either nothing or a body no metadata names, never metadata naming a body that is not
+there. Deleting runs the other way round. The split pays for itself twice — with the
+body in its own key, `replaceMetadata` rewrites one small value and is atomic for free,
+where a single-value layout would have had to rewrite the body to change a header.
+
+That ordering claim was stated before anything exercised it, which is the same defect in
+miniature. It has a test now: a store wrapper that fails the *second* commit, then a
+reopen that must find the entry absent, the surviving entry intact, and no orphan left.
+Reversing the two commits fails it — not because recovery breaks, but because the body
+never reaches storage at all, which is a different and more visible failure.
+
+Two properties of the metadata codec are load-bearing and each has a sabotage. Every
+variable-length field carries its own byte length, because a header value may hold any
+byte and a scan for the next separator would split one field into two. And times are
+written as two 32-bit halves rather than round-tripped through a decimal string, because
+wall-clock milliseconds do not fit in 32 bits.
+
+Three things are stated as limits rather than fixed. The index is in memory and this
+process is assumed to be the only writer — refusing a concurrent write to one key is not
+the same as coordinating two openers, and the byte store offers nothing that would be.
+Eviction order does not survive a restart, because persisting recency would mean a
+durable write on every cache *hit*, which is a real cost paid for a heuristic; after a
+restart entries fall back to commit order. And `open` reads every metadata record once,
+bounded by the entry limit.
+
+The suite runs twice, over the host filesystem and over a fake flat provider reached
+through `durableStoreFromFlat`. The second run is what gives the adapter a real workload
+rather than only its own unit tests, and a disagreement between the two runs would be a
+disagreement between the two halves of the seam — which is exactly what neither half can
+find alone.
+
+Ten sabotages, all restored. Two of them survived first time, and both named a real gap
+rather than a limit of the technique.
+
+The **round-trip test decoded nothing**. `find` answers from the in-memory index, so
+asserting on it in the writing process exercises the object that was handed in — the
+metadata never went near the codec. Truncating times to 32 bits passed cleanly. The test
+now reopens the store first, and the same sabotage fails it.
+
+The **vary sabotage was a no-op**. Removing the length check from `equalVary` changes
+nothing unless two variant lists differ in length while agreeing as far as the shorter
+one goes, and no test had such a pair. There is one now — `accept-encoding` alone against
+`accept-encoding` plus `accept-language` — and both the no-op form and an always-equal
+form fail it.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,256 to 1,264 primary `NTS1001` and 284 to 293
+`NTS1003`, with zero `NTS1004`, zero `NTS4xxx` and zero invalid HIR. The cascades name
+the seam accurately — `DurableHttpCacheStore#_publish` off `DurableByteStore#write`,
+`DurableHttpCacheBody#open` off `DurableByteStore#source`, `MetadataWriter#text` off
+`TextEncoder#encode` — which is the honest picture: the store is refused because the
+store it is built on is, not for reasons of its own.
+
+One refusal category is new to this project's frontier: **`sort` on an array of
+references**. It is the id ordering in `open`, and it is left standing.
+
+The complete local Node-host/real-socket corpus passes 578/578 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.

@@ -16,6 +16,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/deduplicate.test.mjs \
   tooling/conformance/web-platform/test/diagnostics.test.mjs \
   tooling/conformance/web-platform/test/dns.test.mjs \
+  tooling/conformance/web-platform/test/durable-cache.test.mjs \
   tooling/conformance/web-platform/test/durable-store.test.mjs \
   tooling/conformance/web-platform/test/early-hints.test.mjs \
   tooling/conformance/web-platform/test/error-taxonomy.test.mjs \

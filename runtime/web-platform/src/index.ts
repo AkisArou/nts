@@ -289,6 +289,8 @@ export type {
   HttpCacheState,
   HttpCacheType,
 } from "./cache/http-cache.ts";
+export { DurableHttpCacheStore } from "./cache/durable-store.ts";
+export type { DurableHttpCacheStoreOptions } from "./cache/durable-store.ts";
 export { MemoryHttpCacheStore } from "./cache/store.ts";
 export type {
   HttpCacheBody,
