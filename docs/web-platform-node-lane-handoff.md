@@ -327,32 +327,41 @@ was found to be what actually drains ART's reference queue.
 
 ## Recommended next work
 
-1. Reproduce the tests and build a current compiler before editing. Record the exact
-   current HEAD and distinguish host evidence from compiled-provider evidence.
+Items 3 to 6 of the original list are done; their entries in
+`runtime/web-platform/docs/BASELINE.md` carry the evidence. What follows replaces them
+with the state after that work.
+
+1. Reproduce the tests and build a current compiler before editing, then **pin a
+   private copy of the binary** and measure against that. Three sessions share this
+   checkout and `target/release/nts` moves several times an hour, so a frontier taken
+   across a moving binary is a number about nothing. Isolate a slice's own contribution
+   by measuring HEAD's source and yours with the *same* pinned binary, rather than
+   comparing against a figure produced by a different compiler.
 2. Verify the environment slot end to end on C, LLVM and JVM with a compiled fixture,
    including install-before-read, replacement, two-environment isolation, close, and
-   bootstrap order.
-3. Done. The negotiated-ALPN result is landed, its contract is enforced centrally, and
-   automatic HTTP/1.1 versus HTTP/2 selection runs over one connected stream on the
-   direct, HTTP-proxy tunnel and SOCKS routes. HTTP/2 connection coalescing is built on
-   `certificateNames` plus endpoint and port, off by default; connecting its
-   `knownEndpoint` probe to the shared DNS cache remains open.
-4. Done. A SOCKS pooling regression proves two logical target origins never reuse one
-   target-bound tunnel merely because the proxy endpoint is the same; see "One proxy
-   endpoint is not one connection pool" in `runtime/web-platform/docs/BASELINE.md`.
-5. Done. The public constructor context-injection paths are removed and internal
-   construction and identity are preserved; see the ledger entry named above.
-6. Done, and it found a real defect. `drain()` did report completion while provider
-   work from a cancelled open was outstanding; it now awaits the settlement of every
-   open it cancelled. See "A cancelled open is not a finished open" in
-   `runtime/web-platform/docs/BASELINE.md`.
-7. Reconcile the exact eight upstream structural failures with the current
+   bootstrap order. Still unstarted and still needs the other lanes.
+3. Wire the HTTP/2 `knownEndpoint` probe to the shared DNS cache. Coalescing is built
+   and correct but inert without it, because the reuse decision happens before
+   connecting while the endpoint is resolved below the transport. Do not resolve DNS at
+   the pool to close this.
+4. Reconcile the exact eight upstream structural failures with the current
    compiler/common-runtime work. Do not turn them into local prototype or `.call`
-   tricks.
-8. Settle the canonical URL/Blob identity and internal abort-listener seam with the
-   NodeJS peer before either lane freezes its facade.
-9. Take the next incomplete row from the plan's full server/mobile feature ledger
-   only after this audit; do not guess from the original delivery or copy its layout.
+   tricks. Six of the eight are compiler-owned and the compiler lane has confirmed
+   which; interface method resolution is ahead of the `BrokenBase` layout defect in
+   their queue, and that shape is now the most frequent single dependency in this lane.
+5. Settle the canonical URL/Blob identity with the NodeJS peer. They have asked to do
+   it after their current slice and to bring a *pinned failing test* rather than a
+   requirements list, which is the right way round. The internal abort-listener seam is
+   built; what remains there is Node reexporting the canonical abort globals, without
+   which the seam is unreachable from their lane.
+6. Pin an Undici revision, or decide not to. The plan requires an API ledger with
+   evidence per export and nothing is pinned or vendored, so the ledger cannot be
+   written honestly today. This is a dependency decision for the repository owner
+   rather than work this lane can do alone; see the ledger entry recording it.
+7. Take the next incomplete row from the plan's server/mobile feature table. `file:`
+   was the most recent such row. Read the table rather than guessing from the original
+   delivery, and check the ledger first — several rows are partly done with their
+   exact limits recorded.
 
 ## Reproduction commands
 
