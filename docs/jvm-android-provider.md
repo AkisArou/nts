@@ -214,70 +214,48 @@ leaves wrong source in a checkout three sessions build from, for a window
 
 ## What this lane is still waiting for
 
-Three things, and only one of them is code.
+Two pieces of hardware, and one protocol that is not this lane's to write.
 
-- **A physical ARM device**, for the publication race itself. The keyword and
-  the barrier it generates are both checked, and the compiler-reordering
-  manifestation is tested; only the hardware reordering that would expose a
-  missing barrier is not. See `docs/records/0181` for the five routes and which
-  one worked.
-- **An ARM device**, for the reordering itself. The emulator here is `x86_64`
-  and the only system image is `android-36.1`, so the hazard is unobtainable --
-  and an ARM image under full emulation is a *model* of a weak memory system
-  rather than one, worth no more than the x86 run.
+- **An arm64 host, or an ARM device.** The image is installed and unusable:
 
-  The other half is done and is in the device suite: `tooling/android/
-  barrier.sh` compiles two methods differing only in the keyword with **ART's
-  own AOT compiler** and disassembles them with its own dumper. `volatile` gets
-  `lock add [rsp], 0` and plain gets nothing. That does not show the race; it
-  shows the compiler on the platform we ship to discharging the obligation the
-  JMM gives it, which is the mechanism ARM correctness rests on. It had been
-  written weeks before there was a device and never run.
-- **The command-line SDK tools, before API 26 can be *run* at all.** The
-  artifact question is answered without them: `SDK_MEMBERS` records every
-  Android member this library names with the level that introduced it, ten of
-  them, extracted from the constant pools rather than from a list of files.
-  `--min-api 26` only proves the bytecode is acceptable -- a call to a method
-  added in API 31 dexes perfectly well and throws `NoSuchMethodError` on the
-  floor we declare. What is missing is running *on* 26, and that needs: There is
-  no `cmdline-tools` in this SDK and therefore no `sdkmanager` or `avdmanager`,
-  so an API-26 system image cannot be installed and an AVD at that level cannot
-  be created. Getting them means fetching an unpinned SDK component, which is
-  the one thing this lane's dependency rules are written against -- OkHttp,
-  Okio and Kotlin are pinned, hash-verified and SBOM-recorded, and an
-  unverified toolchain download to satisfy a test would be worse than the gap.
-  Checked with `ls` rather than assumed, which is the lesson of record 0190.
-- **A device at API 26 specifically, and one that is not an emulator.** What
-  runs today is API 36 on `x86_64`, which is real ART -- concurrent copying
-  collector with read barriers, Conscrypt over BoringSSL, framework natives
-  `dalvikvm` does not link -- and it covers the cleartext policy, TLS with a
-  private root, hostname rejection, handshake timeouts, capacity, timers, close
-  races and the two-adapter HTTP corpus. What it does not cover is the API floor
-  the library actually declares, Wi-Fi/cellular transitions, background
-  restrictions and DNS races, which need a device with a radio.
-- **HTTP/2 against a real controlled peer**, which is deferred rather than
-  missing -- and the deferral is now checked rather than declared. Every case in
-  the two-adapter corpus asserts the **request line the server received**, not
-  only the protocol list the client was built with: those are two claims, and
-  only the second was tested before. An h2 client with prior knowledge opens
-  with `PRI * HTTP/2.0`, which the server records like any other request line,
-  so the corpus can tell a provider that was configured not to speak h2 from one
-  that does not. `OkHttpNetworking.client()` pins the protocol list to HTTP/1.1 alone
-  and asserts it, because the deterministic reference speaks HTTP/1.1 and the
-  two-adapter corpus compares what the two expose -- two adapters on different
-  protocols do not disagree about policy, they disagree about framing, and the
-  corpus would either report that as a defect or be taught to tolerate it. h2
-  becomes a negotiated capability when the reference can match it.
+      FATAL | QEMU2 emulator does not support arm64 CPU architecture
 
-- **A lowering that can make two views alias**, which is the property
-  `ManagedType::View` exists for and which nothing tests. `new Uint8Array(buffer)`,
-  `subarray`, `slice` and `copyWithin` are all `NTS1001` today, so there is no
-  way for a program to hold two views over one buffer -- and all 292 cases of
-  `examples/typed-arrays` would pass against a lowering that copied. The runtime
-  half is built and oracle-tested: `set` snapshots when the buffers are the same
-  object, `copyWithin` is `System.arraycopy` for memmove semantics, `subarray`
-  aliases and `slice` copies. Ten cases are written and waiting; raised with the
-  owner of `hir::lower`.
+  The SDK emulator runs an arm64 guest only on an arm64 host. So the
+  publication race of `docs/records/0181` is still unobtainable, and so is
+  seeing ART emit `dmb ish` -- which needs no race, only an ARM compiler, and
+  would have been worth having.
+
+  What runs is the other half, on x86_64: `tooling/android/barrier.sh` compiles
+  two methods differing only in the keyword with **ART's own AOT compiler** and
+  disassembles them with its own dumper. `volatile` gets `lock add [rsp], 0`,
+  plain gets nothing. Not the race -- the compiler on the platform we ship to
+  discharging the obligation the JMM gives it.
+
+- **A device with a radio**, for Wi-Fi/cellular transitions, background
+  restrictions and DNS races. The *decision* a transition triggers is tested
+  without one -- `DefaultNetworkWatch` has thirteen cases and no `android.*`
+  import -- and what is missing is `ConnectivityManager` actually delivering
+  those events, and in that order.
+
+- **HTTP/2 against a real controlled peer**, which is deferred and is not this
+  lane's to implement: the shared layer owns the protocol engine. What is this
+  lane's is not lying about it, and every case in the two-adapter corpus now
+  asserts the **request line the server received** rather than only the protocol
+  list the client was built with. An h2 client with prior knowledge opens with
+  `PRI * HTTP/2.0`; sabotaging the client to `H2_PRIOR_KNOWLEDGE` fails every
+  case.
+
+### API 26 is no longer waiting
+
+The whole device suite runs on the floor this library declares, not on the API
+36 that had been standing in for it. Getting there found three defects API 36
+could not show -- a PKCS12 MAC its BouncyCastle cannot read, the ART tools
+living in `/system/bin` rather than an APEX, and a retirement check that was
+**accusing the code under test** because ART's reference-processing daemons are
+not started under a bare `app_process`. See `docs/records/0197`.
+
+One check skips there and says so: weak-reference retirement, because the queue
+on that configuration would stay empty whatever the subject did.
 
 Everything else the plan asks of this lane has evidence, and since
 `tooling/android/on-device.sh` started running, that evidence is from ART rather
