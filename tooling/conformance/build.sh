@@ -53,8 +53,34 @@ compiler="${NTS_COMPILER:-$root/target/release/nts}"
   echo "no compiler at $compiler; the compiler session must build it" >&2
   exit 2
 }
+# The counted provider, as one switch rather than two.
+#
+# `NTS_CONFORMANCE_RC=1` selects reference counting, and it sets *both* halves
+# because either alone is incoherent. `tooling/differential` puts it best: "the
+# provider decides what the compiler emits, not only what the runtime does with
+# it, so selecting one without the other compares a program that never releases
+# against an allocator that expects it to." `--rc` alone emits retains and
+# releases against a bump allocator that never frees, where a release too few
+# leaks unseen and a release too many is never observed. `-DNTS_PROVIDER_RC`
+# alone gives an allocator expecting counts from code that emits none.
+#
+# `-DNTS_POISON=1` rides along, because under the default provider an unwritten
+# or freed slot reads as exactly zero and is indistinguishable from a legitimate
+# zero, while under poison it reads `a5d03c3c3c3c3c3c`.
+#
+# There is an `NTS_RC` in this repository and it is *not* this: it is read only
+# by `tooling/differential`, and setting it here changes nothing. Verified the
+# hard way -- a build with `NTS_RC=1` produced byte-identical C, so a test that
+# "passed under reference counting" had done no such thing.
+rc_emit=()
+rc_defines=()
+if [ -n "${NTS_CONFORMANCE_RC:-}" ]; then
+  rc_emit=(--rc)
+  rc_defines=(-DNTS_PROVIDER_RC -DNTS_POISON=1)
+fi
+
 NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
-  emit-c "$src/tsconfig.json" --out "$work" --napi
+  emit-c "$src/tsconfig.json" --out "$work" --napi "${rc_emit[@]}"
 
 # The module's own C, plus the C every module shares. Globbed rather than
 # listed: a module owns its bindings, so adding one is adding a file to its own
@@ -115,6 +141,7 @@ done < <(find "$work" -maxdepth 1 -name '*.c' -print0)
 [ "${#generated_c[@]}" -gt 0 ] || { echo "the compiler emitted no C into $work" >&2; exit 2; }
 
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
+  "${rc_defines[@]}" \
   "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
