@@ -91,7 +91,13 @@ function validateLimit(value: number, name: string): number {
   return value;
 }
 
-function validStoredCookieShape(cookie: StoredCookie): boolean {
+/**
+ * Whether a value has the shape the jar's own invariants assume.
+ *
+ * Exported because a durable store has to answer the same question about bytes it read
+ * back, and two definitions of "a valid cookie" would drift. This is the jar's.
+ */
+export function validStoredCookieShape(cookie: StoredCookie): boolean {
   return (
     typeof cookie.name === "string" &&
     typeof cookie.value === "string" &&

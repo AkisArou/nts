@@ -33,6 +33,7 @@ node --expose-gc \
   tooling/conformance/web-platform/test/durable-store.test.mjs \
   tooling/conformance/web-platform/test/early-hints.test.mjs \
   tooling/conformance/web-platform/test/error-taxonomy.test.mjs \
+  tooling/conformance/web-platform/test/durable-cookie-jar.test.mjs \
   tooling/conformance/web-platform/test/identity.test.mjs \
   tooling/conformance/web-platform/test/proxy-resolution.test.mjs \
   tooling/conformance/web-platform/test/event-timestamp.test.mjs \

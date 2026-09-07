@@ -5595,3 +5595,66 @@ single value anyone can read; both change which object holds it.
 
 No shared source moved, so there is no frontier cost to report: this slice is entirely
 evidence about behaviour that was already correct and previously unasserted.
+
+## A cookie jar that survives the process, and two defects it found in itself
+
+The Cookies row asks for "an optional persistent `CookieJar`" and only `MemoryCookieJarStore`
+existed. `DurableCookieJarStore` closes it over the byte store the storage slice landed.
+
+The module is small because the atomicity is **inherited rather than reimplemented**.
+`CookieJarStore` is `loadAll`/`saveAll` over a whole snapshot and says a durable
+implementation "atomically replaces the previous snapshot or rejects"; `DurableByteStore`
+already promises a key holds the old value or the new one after a crash mid-write, never a
+mix and never absent. That is the same guarantee, so the jar is one key. Per-cookie keys
+would need a second mechanism to make the replacement atomic and the store already provides
+exactly one.
+
+### The decision that is not the round trip
+
+What to do with bytes that come back wrong. `reject` is the default because a jar that
+silently starts empty **is indistinguishable from a first run** — a user's session is gone,
+nothing is red, and no caller can tell corruption from freshness. Dropping exists because
+version skew is real and permanently bricking the jar is a bad answer to it, but it must be
+asked for and it reports what it dropped; dropping unobservably is the failure the option
+exists to avoid.
+
+Decoding is fatal for the same reason. A corrupt byte repaired to U+FFFD produces a cookie
+whose value is quietly *not* the one that was stored, and it would be sent to a server that
+way.
+
+### Two defects, and the second was found by the first being wrong
+
+The suite failed on its first run, and the test that failed was built on a false premise. It
+tried to force an encoding failure with a lone surrogate — but `JSON.stringify` escapes lone
+surrogates to ASCII, so no failure occurred.
+
+Chasing why exposed the real defect. `JSON.stringify` escapes control characters and lone
+surrogates and **passes ordinary non-ASCII straight through**. A cookie value is an octet
+string, so code units up to 0xFF are legitimate, and the ASCII-assuming encoder written on
+that false premise would have refused a perfectly valid cookie. Replaced with the shared
+`TextEncoder`, and the test replaced with the round trip that actually pins it.
+
+The second was reported by the fix. A UTF-8 failure raised inside `decodeSnapshot` was
+caught by the enclosing `JSON.parse` guard and re-reported as malformed JSON — sending a
+reader to the wrong layer entirely, since the two failures have different causes and
+different repairs. The decode now happens outside that guard.
+
+Both were mine, in code written the same hour, and neither would have been visible from a
+passing suite.
+
+### The taxonomy gate did its job
+
+Adding `CookieJarStoreError` failed `error-taxonomy.test.mjs`, which exists so that adding
+an error class **forces the retry-and-routing decision rather than defaulting it**. It is
+not a transport failure: a corrupt snapshot fails identically every time it is read, so
+retrying spends attempts to reach the same answer, and letting it reduce an upstream's
+health would blame a server for a local storage fault it never saw.
+
+Six sabotages, all caught — and two of them were refused for a stale emit first, which is
+the guard working where it was walked around earlier today. Run over both providers, the
+host filesystem and the fake flat store through `durableStoreFromFlat`, so the adapter
+carries a real workload and a disagreement between the runs would be a disagreement between
+the two halves of the seam.
+
+803/803 host, upstream unchanged at 2,410 of 2,418, frontier 1,302/317 to 1,305/319 on the
+same pinned binary.

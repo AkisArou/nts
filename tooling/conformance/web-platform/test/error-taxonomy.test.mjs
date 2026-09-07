@@ -29,6 +29,11 @@ const TAXONOMY = {
   AgentPendingLimitError: { build: (C) => new C(1), transport: false },
   BalancedPoolLimitError: { build: (C) => new C(1), transport: false },
   BalancedPoolMissingUpstreamError: { build: (C) => new C("origin"), transport: false },
+  // Not a transport failure, and the classification is the whole decision. A corrupt or
+  // unreadable stored snapshot fails the same way every time it is read, so retrying it
+  // spends attempts to reach an identical answer -- and letting it reduce an upstream's
+  // health would blame a server for a local storage fault it never saw.
+  CookieJarStoreError: { build: (C) => new C("unreadable"), transport: false },
   DeduplicationBufferError: { build: (C) => new C("limit"), transport: false },
   DnsConnectionError: { build: (C) => new C("host", []), transport: true },
   DnsLookupLimitError: { build: (C) => new C(1), transport: false },

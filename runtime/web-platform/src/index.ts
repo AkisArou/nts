@@ -366,6 +366,11 @@ export type {
   DeleteCookieAttributes,
 } from "./cookies/cookies.ts";
 export { CookieJar, MemoryCookieJarStore, domainMatches, pathMatches } from "./cookies/jar.ts";
+export { CookieJarStoreError, DurableCookieJarStore } from "./cookies/durable-jar.ts";
+export type {
+  DurableCookieJarStoreOptions,
+  InvalidCookiePolicy,
+} from "./cookies/durable-jar.ts";
 export type {
   CookieAccessContext,
   CookieAccessType,
