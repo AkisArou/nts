@@ -331,6 +331,13 @@ fn object_class(
     for interface in callback_interfaces(program, layout) {
         builder.interfaces.push(interface.to_owned());
     }
+    // A tuple is laid out as a struct -- `[number, string]` has fields of
+    // different types and cannot be a JVM array -- and the language calls it an
+    // Array. `nts_is_array` reads this with `instanceof`, because nothing on
+    // this lane carries a descriptor kind at run time.
+    if nts_core::hir::is_tuple_layout_name(&layout.name) {
+        builder.interfaces.push(types::TUPLE.to_owned());
+    }
     if let Some(resume) = resumes(program, layout) {
         builder.interfaces.push(types::RESUMABLE.to_owned());
         let origin = program_origin(program);

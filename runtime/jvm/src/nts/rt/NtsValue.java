@@ -43,6 +43,35 @@ public final class NtsValue {
         return value == null ? NULL_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
     public static boolean asBoolean(NtsValue value) { return value.num != 0.0; }
+    /**
+     * `Array.isArray`, which is a question about the *value* rather than about
+     * any static type.
+     *
+     * <p>Four things answer `true` and one that looks like it should does not.
+     * A bare JVM array of any element type; a growable array, which is a
+     * wrapper class chosen by storage width; and a tuple, which is a generated
+     * struct that the language calls an Array. A **typed array** answers
+     * `false` -- `Array.isArray(new Uint8Array(4))` is `false` in node, and
+     * that was unanswerable until `ManagedType::View` gave a view a
+     * representation of its own. The refusal this replaces named that as its
+     * cause.
+     *
+     * <p>`getClass().isArray()` rather than a chain of `instanceof` against
+     * every element type: one call, and it cannot go stale when an element type
+     * is added.
+     */
+    public static boolean isArray(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        if (ref == null) {
+            return false;
+        }
+        return ref.getClass().isArray()
+            || ref instanceof NtsTuple
+            || ref instanceof NtsArrayD
+            || ref instanceof NtsArrayL
+            || ref instanceof NtsArrayZ;
+    }
+
     public static String tagName(int tag) {
         switch (tag) {
             case UNDEFINED: return "undefined";

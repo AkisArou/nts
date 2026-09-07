@@ -280,6 +280,10 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // `byteLength` on a detached buffer answers zero rather than refusing,
         // because that is what the specification reports and `detached` is the
         // question with the answer.
+        // `Array.isArray` of a value whose static type is open. A question
+        // about the value, and the one place a tuple and an object differ on
+        // this lane.
+        "nts_is_array" => (types::VALUE, "isArray", "(Lnts/rt/NtsValue;)Z"),
         "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),
         "nts_buffer_new" => (types::BUFFER, "allocate", "(D)Lnts/rt/NtsBuffer;"),
         "nts_buffer_new_resizable" => {

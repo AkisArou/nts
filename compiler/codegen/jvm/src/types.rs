@@ -188,6 +188,14 @@ pub const BUFFER: &str = "nts/rt/NtsBuffer";
 /// A `DataView`: a buffer, an offset, and a length that may track the buffer's.
 pub const VIEW: &str = "nts/rt/NtsDataView";
 
+/// The marker a generated tuple class carries, so `Array.isArray` can answer.
+///
+/// `runtime/c` reads `NTS_KIND_TUPLE` off the descriptor. There is no
+/// descriptor here -- RFC §13 puts these objects in the platform collector's
+/// heap -- so the nominal fact goes where `instanceof` can read it, which on
+/// this platform is an interface.
+pub const TUPLE: &str = "nts/rt/NtsTuple";
+
 /// The base every typed-array class extends.
 ///
 /// The properties -- `length`, `byteLength`, `byteOffset`, `buffer` -- are
