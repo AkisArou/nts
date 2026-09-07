@@ -1178,3 +1178,39 @@ test-only partial `URL` would hide that duplicate identity. This shared storage 
 scheme-fetch substrate lands first, while the Node-owned URL implementation is
 being reconciled with the canonical Web `URL`. The fixture must be pinned unchanged
 when that public identity-preserving surface lands.
+
+## Readable byte streams and BYOB
+
+The shared `ReadableStream` implementation now has a distinct byte-controller state
+machine rather than treating byte streams as ordinary streams with `Uint8Array`
+chunks. It implements default and BYOB readers, `autoAllocateChunkSize`, transferred
+buffer ownership, every current typed-array and `DataView` view kind, `read({ min })`,
+partial-element handling, `respond()` / `respondWithNewView()`, reader release with a
+still-live BYOB request, and byte-preserving tee and Fetch-body transfer. Byte tee
+switches the source between default and BYOB readers according to branch demand and
+keeps cloning, cancellation aggregation, close/error propagation and the explicit
+NTS backlog limit intact.
+
+Ten complete, unchanged readable-byte-stream WPT fixtures are pinned by exact Git
+blob hash. They register 247 cases; all 246 applicable cases pass. The one named
+not-applicable case comes from the shared default-reader template: it expects
+`value: undefined` from a BYOB read issued after cancellation, while the current
+Streams algorithm and pinned Node reference return a new zero-length transferred
+view. Dedicated byte-stream cases still cover the distinct rule that a BYOB read
+which was already pending when cancellation began settles with `undefined`.
+`general.any.js` is 101/101 and `tee.any.js` is 39/39; the adversarial fixtures cover
+detached and non-transferable buffers, patched promise observation, minimum fills,
+replacement views and response-after-enqueue ordering.
+
+The complete local Node-host and real-socket suite passes 159/159. Across the full
+pinned upstream slice, 2112 of 2120 applicable cases pass, with eight named
+not-applicable cases. The eight visible failures are outside the byte-stream slice:
+three Headers iterator-shape cases, two promise-fulfillment observability cases, two
+explicit-receiver callback cases, and the Web-IDL async-iterator prototype/object
+shape case. They remain failures rather than being relabeled by this tranche.
+
+At `ee0e8daf`, the live compiled-source frontier is 716 primary `NTS1001` refusals,
+92 dependent `NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module
+diagnostics, and no invalid HIR. The increase is the complete final byte-stream and
+BYOB source reaching existing compiler dependencies; it is not compiled-provider
+progress.
