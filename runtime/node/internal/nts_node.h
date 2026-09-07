@@ -43,4 +43,10 @@ void nts_process_emit_warning_object(NtsString *message, NtsString *name,
  * falls back to stderr when it is not. */
 void nts_napi_set_env(void *env);
 
+/* Enqueue a compiled callback as a microtask. Named apart from the runtime's
+ * `nts_enqueue_microtask`, which takes an `NtsTask` rather than a callback --
+ * declaring a binding of that name with a callback parameter is what produced
+ * the incompatible-pointer clang error in three modules. See `microtask.c`. */
+void nts_node_enqueue_microtask(NtsHeader *callback);
+
 #endif

@@ -35,7 +35,7 @@ import {
   type WriterOptions,
 } from "./utils.ts";
 
-declare function nts_enqueue_microtask(callback: () => void): void;
+declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 const DEFAULT_READABLE_HIGH_WATER_MARK = 64 * 1024;
 const DEFAULT_WRITABLE_HIGH_WATER_MARK = 16_384;
@@ -585,7 +585,7 @@ export function toWritable(writer: unknown): Writable {
     if (writer.writeSync !== undefined) {
       try {
         if (writer.writeSync(bytes)) {
-          nts_enqueue_microtask(callback);
+          nts_node_enqueue_microtask(callback);
           return;
         }
       } catch (error) {
@@ -610,7 +610,7 @@ export function toWritable(writer: unknown): Writable {
     if (writer.writevSync !== undefined) {
       try {
         if (writer.writevSync(chunks)) {
-          nts_enqueue_microtask(callback);
+          nts_node_enqueue_microtask(callback);
           return;
         }
       } catch (error) {
@@ -630,13 +630,13 @@ export function toWritable(writer: unknown): Writable {
 
   const final = (callback: WriteCallback): void => {
     if (writer.end === undefined) {
-      nts_enqueue_microtask(callback);
+      nts_node_enqueue_microtask(callback);
       return;
     }
     if (writer.endSync !== undefined) {
       try {
         if (writer.endSync() >= 0) {
-          nts_enqueue_microtask(callback);
+          nts_node_enqueue_microtask(callback);
           return;
         }
       } catch (error) {

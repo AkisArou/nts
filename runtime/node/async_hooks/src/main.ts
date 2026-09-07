@@ -63,7 +63,7 @@ export type { AsyncResourceOptions } from "./resource.ts";
 export type { HookCallbacks };
 
 /** Enqueue a raw VM microtask without creating a promise. */
-declare function nts_enqueue_microtask(callback: () => void): void;
+declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 const microtaskResourceOptions: Readonly<{ requireManualDestroy: true }> = {
   requireManualDestroy: true,
@@ -81,12 +81,12 @@ export function queueMicrotaskForRuntime(callback: () => void): void {
   validateFunction(callback, "callback");
 
   if (AsyncContextFrame.current() === undefined && !enabledHooksExist()) {
-    nts_enqueue_microtask(callback);
+    nts_node_enqueue_microtask(callback);
     return;
   }
 
   const resource = new AsyncResource("Microtask", microtaskResourceOptions);
-  nts_enqueue_microtask(() => {
+  nts_node_enqueue_microtask(() => {
     resource.runInAsyncScope(() => {
       try {
         callback();

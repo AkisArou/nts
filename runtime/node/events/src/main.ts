@@ -44,7 +44,7 @@ import {
   addInternalEventListener,
 } from "../../../web-platform/src/core/events.ts";
 
-declare function nts_enqueue_microtask(callback: () => void): void;
+declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 export type Listener = (...args: unknown[]) => unknown;
 export type EventName = string | symbol;
@@ -1207,7 +1207,7 @@ export function addAbortListener(signal: unknown, listener: unknown): Disposable
   }
 
   if (signal.aborted) {
-    nts_enqueue_microtask(listener);
+    nts_node_enqueue_microtask(listener);
     return new AbortListenerDisposable();
   }
 

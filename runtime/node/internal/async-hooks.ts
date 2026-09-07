@@ -57,7 +57,7 @@ declare function nts_promise_hook_uninstall(): void;
  * which the hook being torn down would report, which would schedule another.
  * Node uses a native `enqueueMicrotask` for the same reason.
  */
-declare function nts_enqueue_microtask(callback: () => void): void;
+declare function nts_node_enqueue_microtask(callback: () => void): void;
 
 /** Schedule work in the host's check phase without keeping its loop alive. */
 declare function nts_schedule_unreferenced_immediate(callback: () => void): void;
@@ -368,7 +368,7 @@ export function removeHook(hook: RegisteredHook): boolean {
     // Deferred, because we may be between a promise's `before` and its
     // `after`: tearing the hook down now would drop the `after` and leave the
     // execution stack with a frame nothing will ever pop.
-    nts_enqueue_microtask(disablePromiseHookIfUnwanted);
+    nts_node_enqueue_microtask(disablePromiseHookIfUnwanted);
   }
   return true;
 }
@@ -518,7 +518,7 @@ export function emitDestroy(asyncId: number): void {
   // the owner thread, so directly enqueueing the resulting microtask has the
   // same ordering and avoids an interrupt round trip.
   if (destroyQueueLength === destroyMicrotaskThreshold) {
-    nts_enqueue_microtask(drainDestroyQueue);
+    nts_node_enqueue_microtask(drainDestroyQueue);
   }
   if (destroyQueueLength === destroyQueue.length) growDestroyQueue();
   destroyQueue[destroyQueueLength] = asyncId;

@@ -148,7 +148,7 @@ globalThis.nts_on_collected = (resource, onCollected) => {
   collected.register(resource, onCollected);
 };
 
-globalThis.nts_enqueue_microtask = (callback) => { hostQueueMicrotask(callback); };
+globalThis.nts_node_enqueue_microtask = (callback) => { hostQueueMicrotask(callback); };
 
 let unreferencedImmediateCallbacks = [];
 let unreferencedImmediateHandle = null;
