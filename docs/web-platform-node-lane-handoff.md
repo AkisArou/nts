@@ -35,9 +35,9 @@ evidence. Preserve unrelated changes in the shared dirty worktree.
 - Last commit from this lane: `1cd2d5df` (`The capability the raw transport cannot
   have`). The section below titled *Last completed slice* describes `03c03d93` and is
   kept as history; see *Where this lane is now* for the current state.
-- HEAD observed while writing this handoff: `b7651b84`; last observed while updating
-  it: `1cd2d5df`. Other agents remain active, so use the current HEAD rather than
-  assuming either value is still the tip.
+- HEAD observed while writing this handoff: `b7651b84`; while updating it, `bca60e9e`
+  -- which is another lane's commit, not this one's, and it had moved between reading
+  it and writing this line. Use the current HEAD; neither value is a tip for long.
 - `origin/main` was at `dcfb2a78` when this handoff began. Do not push merely because
   this file records that observation.
 - The worktree is shared and dirty with other agents' work. Do not clean, reset,
