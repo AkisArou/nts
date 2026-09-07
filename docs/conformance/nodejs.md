@@ -2779,8 +2779,11 @@ files fail. **Not diverging** — 80,128 comparisons against node's own punycode
 0 divergences. **The deprecation warning is a real process event**, carrying
 `DEP0040`, rather than a line of text on stderr.
 
-It is **incomplete**: `version` does not publish, so the row reads
-`incomplete: version absent`. It passes every test it has while its surface is
+It is **incomplete**, and the sweep says so on the row itself:
+
+    | `punycode` | green | 2 / 2, incomplete: version absent |
+
+`version` does not publish. It passes every test it has while its surface is
 one string constant short of node's, and that annotation exists precisely
 because a first row on an axis that has only ever reported zero gets quoted.
 
