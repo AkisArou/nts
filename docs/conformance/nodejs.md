@@ -2203,16 +2203,36 @@ what one fix will show for free.
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 
-**12,226 functions lower across twenty-two modules, against 6,839 refused.**
+**12,278 functions lower across twenty-two modules, against 6,794 refused.**
 The prose below was written against 1,509, and before that 946; read its
 *reasoning* and not its arithmetic until each claim is re-derived.
 
-Anchored to compiler `9c77ad85`, binary SHA-256 `81d82619`. The previous row
-here was 12,181 / 6,878 at `982ffe1f`: **+45 lowered and −39 refused** across
-the two, which is the layout-merge and export-table work plus a reads-only fix
-landing. The per-module table below still carries the `982ffe1f` figures and is
-re-derived when a change is large enough to be worth a per-module read; the
-totals are the anchored pair.
+**This axis is moving, and a single anchored figure understates that.** Three
+measurements inside one hour, each from its own pinned copy while
+`target/release` moved on underneath:
+
+| binary | lowered | refused |
+| --- | ---: | ---: |
+| `982ffe1f` | 12,181 | 6,878 |
+| `81d82619` | 12,226 | 6,839 |
+| `adc9e193` | **12,278** | **6,794** |
+
+Roughly +50 lowered and −45 refused per rebuild, sustained. The per-module
+table below carries the `982ffe1f` figures and is re-derived when a change is
+large enough to be worth a per-module read; the totals are the pinned pairs
+above.
+
+**The compiled-artifact axis did not move across any of the three.** 17
+`c-did-not-compile`, 2 `built-exports-nothing`, 2 `built-exports-partial`, 1
+`all-passes-degenerate`, 0 green, identical each time — and `punycode`'s three
+named blockers are unchanged across all three binaries.
+
+That divergence is the clearest thing this document has ever had to say about
+why it keeps two axes. **What lowers is improving steadily and what ships has
+not moved at all.** A profile reporting only the first would look like healthy
+progress; a profile reporting only the second would look stalled. Both are
+true, they are measuring different things, and the gap between them is the
+N-API boundary rather than the lowering.
 
 The compiled-artifact axis did **not** move across the same pair — 17
 `c-did-not-compile`, 2 `built-exports-nothing`, 2 `built-exports-partial`, 1
