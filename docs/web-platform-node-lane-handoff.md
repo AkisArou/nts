@@ -337,6 +337,26 @@ with the state after that work.
    across a moving binary is a number about nothing. Isolate a slice's own contribution
    by measuring HEAD's source and yours with the *same* pinned binary, rather than
    comparing against a figure produced by a different compiler.
+
+   **Three traps in that procedure, each of which cost this session real work.**
+
+   Diagnostic isolation swaps files for HEAD's copies and swaps them back, so it is a
+   *mutation of the tree* and needs its own control. Key backups by full path: keying
+   by basename put `fetch/transport.ts` and `http1/transport.ts` in one slot and the
+   restore wrote one into both, which reached a commit. Verify the restore type-checks
+   before doing anything else.
+
+   Run the gate **after** the isolation step, not before. A green corpus taken before a
+   swap is a true statement about a tree that no longer exists.
+
+   A sabotage that does not type-check leaves the previous emit in place, so the tests
+   run against the code the mutation was meant to replace and report green. That has
+   happened at least five times here. Check `tsc` is silent before believing any
+   sabotage result, including — especially — one that passes.
+
+   Note that `commit-mine.sh` runs clippy, which has nothing to say about TypeScript.
+   For this lane the last automatic gate before a commit does not look at the source at
+   all; the type-check has to be yours to run.
 2. Verify the environment slot end to end on C, LLVM and JVM with a compiled fixture,
    including install-before-read, replacement, two-environment isolation, close, and
    bootstrap order. Still unstarted and still needs the other lanes.
@@ -388,6 +408,19 @@ with the state after that work.
    `Scheduler`, seeded protocol fuzzing with asserted generator coverage, and an
    asserted error taxonomy. What remains there is opt-in tracing beyond the existing
    diagnostics, if anything.
+
+   Interim (1xx) responses now reach the caller on both HTTP/1 and HTTP/2 through
+   `TransportRequest.onInformational`, so `103 Early Hints` is no longer discarded.
+   Which `Request` fields are enforced and which are deliberately inert is asserted
+   rather than assumed.
+
+8. **Look for mechanisms nothing routes through.** Four were found in this lane in one
+   session: a dead internal factory, HTTP/2 coalescing that read an address the pooling
+   layer never has, an `onInformational` hook on the HTTP/2 connection that no caller
+   passed, and `Request.integrity` accepted and enforced nowhere. None was found by a
+   failing test, because a suite of refusals cannot tell you whether the thing refusing
+   exists — only a positive test can. Grepping for an option that is stored and never
+   read found two of them directly.
 
 ## Reproduction commands
 
