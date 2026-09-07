@@ -2136,10 +2136,54 @@ and a green row:
 | `NTS1001 ucs2decode, a function used as a value` | `punycode.ucs2` is an object holding function values | `punycode.ucs2.decode` and `.encode`, which the test exercises |
 
 That is the complete list for the smallest module in the profile — three
-compiler features for one test file. It is a fair measure of how far the
-compiled axis is from its first honest pass, and a better one than the stage
-histogram, which says where modules stop but not how much stands between them
-and moving.
+compiler features for one test file.
+
+**And `punycode` is not merely first, it is in a different league.** Counting
+the distinct `NTS1001` refusal *kinds* each module's emit reports — a proxy for
+"how many compiler features stand in the way", with the message text
+generalised so that the same refusal about two different names counts once:
+
+| module | distinct refusal kinds | applicable tests |
+| --- | ---: | ---: |
+| `punycode` | **3** | 1 |
+| `path` | **17** | 17 |
+| `async_hooks` | **23** | 110 |
+| `diagnostics_channel` | **24** | 26 |
+| `timers` | **30** | 53 |
+| `os` | **33** | 6 |
+| `buffer` | **33** | 50 |
+| `querystring` | **35** | 4 |
+| `string_decoder` | **35** | 3 |
+| `events` | **43** | 28 |
+| `util` | **57** | 20 |
+| `url` | **59** | 44 |
+| `assert` | **61** | 10 |
+| `process` | **62** | 69 |
+| `console` | **69** | 17 |
+| `readline` | **83** | 24 |
+| `net` | **91** | 132 |
+| `dgram` | **93** | 75 |
+| `stream` | **103** | 241 |
+| `zlib` | **106** | 66 |
+| `http` | **122** | 396 |
+| `fs` | **143** | 328 |
+
+**Three, then seventeen.** Every other module in the profile is between six and
+forty-eight times further from green than `punycode` is, and the two largest,
+`http` and `fs`, need well over a hundred distinct features apiece.
+
+This is the ordering the stage histogram does not give. `path` reaches
+`all-passes-degenerate` and `punycode` does not compile at all, which reads as
+`path` being ahead — and on distance it is six times behind. Where a module
+*stops* and how far it is from *moving* are different measurements, and only
+the second one is a plan.
+
+Two caveats on the column. Distinct refusal kinds is a proxy: some kinds are
+one feature and some are a family, and cascaded functions are not counted at
+all, so a module whose refusals are concentrated under one root is closer than
+its number suggests. And it says nothing about the N-API side — `string_decoder`
+needs 35 features *and* class values across the ABI, which is why its addon
+publishes nothing today.
 
 Reproduce any of it with one line:
 
