@@ -3083,7 +3083,7 @@ on any of these:
 
 Several have visible causes — node's `_errnoException` is bound, so its `length`
 is 0 where a plain declaration reports its parameters — and none is reached by a
-pinned test, or the sweep would not be at 1,790. Listed so the next person to
+pinned test, or the sweep would not be where it is. Listed so the next person to
 find one knows it was seen rather than missed.
 
 **Exactly one pinned test in node's whole `parallel/` suite enumerates a
