@@ -104,6 +104,42 @@ lane's to fix. What is ours:
 **Done looks like:** `tooling/conformance/check.sh punycode` green on the addon
 axis. That would be the first non-zero this axis has ever reported.
 
+### What the last mile actually contains, measured
+
+The path was walked end to end by routing around the first refusal temporarily.
+The workaround was reverted; what it bought was an inventory, and **three of the
+four blockers were invisible until someone walked it.**
+
+1. **The emit refusal.** An annotated `const` takes its receiver type from the
+   initializer rather than the annotation, so `const w: Tagged = new Error(m)`
+   refuses where `function f(w: Tagged)` and a factory with a declared return
+   type both lower. Compiler lane, five-line reproduction, boundary mapped.
+2. **The generated Node-API wrapper never calls `module__init()`.**
+   `program.c` emits `static NtsString * delimiter = 0;` and a `module__init`
+   that assigns it; `addon.c`'s `NAPI_MODULE_INIT` exports the functions and
+   calls nothing. Every module-scope constant stays null and the first read
+   segfaults — `nts_str_find(needle=0x0)` under `decode`. **Proved by patching
+   one line into the generated `addon.c`**, after which the addon returns
+   `decode("maana-pta") === "mañana"` and agrees with host node on every input
+   tried. This one blocks every module that ever links, not just this one.
+3. **One undefined runtime symbol.** `nm -D --undefined-only` on the linked
+   addon reports exactly `nts_str_to_lower_case`; everything else resolves.
+   `toUnicode` dies on the lookup.
+4. **A throw does not cross the Node-API boundary.** `decode("-")` should throw
+   a catchable `RangeError`; instead the process prints `nts: uncaught
+   RangeError: Invalid input` and dies, with the surrounding `try`/`catch`
+   never entered. `test-punycode.js` uses `assert.throws`, so this alone fails
+   the file even with 2 and 3 fixed.
+
+**The order that follows from this** is 2, then 4, then 3, then 1 — 2 is one
+line in the wrapper generator and unblocks anything that links, 4 decides
+whether *tests* can pass rather than whether code runs, 3 is a single missing
+function, and 1 is specific to `punycode`.
+
+**And the cost of learning it was seven refusals rather than `fs`'s three
+thousand**, which is the argument for having picked the smallest module made
+concrete.
+
 ---
 
 ## B. Breadth — the 24 modules that do not exist
