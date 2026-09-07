@@ -32,19 +32,68 @@ evidence. Preserve unrelated changes in the shared dirty worktree.
 ## Exact checkpoint
 
 - Governing implementation-start commit: `31f15a0`.
-- Last commit from this lane: `03c03d93` (`Use the environment-owned web platform
-runtime`).
-- HEAD observed while writing this handoff: `b7651b84`. Other agents remain active,
-  so use the current HEAD rather than assuming that value is still the tip.
+- Last commit from this lane: `1cd2d5df` (`The capability the raw transport cannot
+  have`). The section below titled *Last completed slice* describes `03c03d93` and is
+  kept as history; see *Where this lane is now* for the current state.
+- HEAD observed while writing this handoff: `b7651b84`; last observed while updating
+  it: `1cd2d5df`. Other agents remain active, so use the current HEAD rather than
+  assuming either value is still the tip.
 - `origin/main` was at `dcfb2a78` when this handoff began. Do not push merely because
   this file records that observation.
 - The worktree is shared and dirty with other agents' work. Do not clean, reset,
   restore, reformat, or stage paths outside this lane.
 
-`runtime/web-platform/docs/BASELINE.md` is the chronological evidence ledger, but its
-last section currently stops at dispatcher pools. The proxy and environment commits
-listed below are newer than its final entry; use this handoff as the checkpoint for
-those slices and resume updating the ledger with future work.
+`runtime/web-platform/docs/BASELINE.md` is the chronological evidence ledger and is now
+**ahead of this file**: every slice named below has its entry there, with the numbers,
+the sabotages and the stated limits. Read the ledger's tail first; this file is the map,
+not the record.
+
+## Where this lane is now
+
+Newer than every section that follows. Those describe an earlier checkpoint and are kept
+for their reasoning rather than their status.
+
+**Closed since:** the storage row — a provider-backed durable byte store with a portable
+flat adapter, spill-to-disk, and a replay body for retry that is released when the
+dispatch settles; the caching row — a persistent `HttpCacheStore` and a durable
+`CacheStorageStore` serving the real `Cache`/`CacheStorage` API; Undici-shaped `request`,
+`stream` and `pipeline`; a transport seam that surrenders its connection on a protocol
+switch, with `connect` and `upgrade` built on it; and a WebSocket client that opens
+through the HTTP dispatch stack and therefore works through a CONNECT proxy.
+
+**Current numbers**, all with one binary pinned from the current tree and the same
+binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
+
+- 1,292 primary `NTS1001`, 314 `NTS1003`, and **zero** `NTS1004`, `NTS4xxx` and invalid
+  HIR — those zeros have not moved at any measurement;
+- local Node-host/real-socket corpus 672/672, zero skipped;
+- pinned upstream corpus unchanged at 2,278 of 2,286 applicable, the same eight;
+- compiled axis 54 cases across 5 functions, agreeing on jvm, c and llvm.
+
+**Still open, and why.** The WebSocket **accept loop** needs a listening-socket provider
+primitive that does not exist, so it is an ABI addition to agree rather than code to
+write. The **public server module or package** is a repository-layout decision. The
+**Undici API ledger** still cannot be written honestly with nothing pinned. And whether
+the dispatched WebSocket transport should become the *default* has been left as a
+deliberate decision rather than taken by accident.
+
+**One ABI change went in and the JVM lane has confirmed it on a device.**
+`DurableByteStore.source` now promises that a reader keeps reading what it was opened
+over even after the key is replaced or deleted. Without it nothing above the seam can
+release stored bytes while anything might still be reading them.
+
+**Two instrument defects found here.** `tooling/conformance/web-platform/check.sh` had
+stopped running its compiled axis entirely: the upstream corpus above it exits nonzero
+while the eight named failures stand, and `set -e` made every later step unreachable.
+And the local `sabotage-run.sh` truncated its output, so a sabotage that broke a late
+test read as a **survivor** — the dangerous direction, because the honest response to a
+survivor is to go and weaken a test that was fine.
+
+`cargo clippy --workspace --all-targets` does not currently build: `hir::Layout` gained
+an `interfaces` field and six initializers in `compiler/core` test code were left behind.
+The library and the `nts` binary build clean, so pinned measurements are trustworthy,
+but `commit-mine.sh` refuses until it is fixed and every commit here has used
+`NTS_SKIP_CLIPPY=1`.
 
 ## Ownership and coordination
 
@@ -357,6 +406,10 @@ with the state after that work.
    Note that `commit-mine.sh` runs clippy, which has nothing to say about TypeScript.
    For this lane the last automatic gate before a commit does not look at the source at
    all; the type-check has to be yours to run.
+   One more, added since: **a truncating instrument argues for damage.** A sabotage
+   that appears to survive is a claim that some test is too weak, and the honest
+   response is to go and weaken something — which is the wrong thing to do when the
+   test was fine and the tool merely cut the line that said so. Read the whole output.
 2. Verify the environment slot end to end on C, LLVM and JVM with a compiled fixture,
    including install-before-read, replacement, two-environment isolation, close, and
    bootstrap order. Still unstarted and still needs the other lanes.
@@ -398,9 +451,10 @@ with the state after that work.
    The canonical client and a server built from these pieces round-trip text, binary
    and compressed messages over a real socket.
 
-   What does not exist is the surrounding server: no accept loop, no connection
-   lifecycle owner, no backpressure policy above the session, and no separate public
-   module or package. The plan asks for all of those. Note that the last is a packaging
+   What does not exist is the surrounding server: no accept loop, no backpressure
+   policy above the session, and no separate public module or package. The connection
+   lifecycle owner named here **has since been built** (`WebSocketServer`: bounded
+   connections, a 503 refusal, one shutdown, self-unregistering sessions). The plan asks for all of those. Note that the last is a packaging
    decision touching repository layout, so it is worth agreeing before building.
 
    The **Testing and observability** row is now essentially closed: mock and snapshot
