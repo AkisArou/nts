@@ -61,7 +61,15 @@ for (const [name, expected] of node) {
   if (normalise(actual) !== normalise(expected)) differing.push({ name, actual, expected });
 }
 
-console.log(`util.inspect census: ${node.size - differing.length} of ${node.size} kinds agree with node\n`);
+// The lane is printed because a result that cannot say which axis it came from
+// is how a finding gets generalised to the axis it was never taken on. This
+// measures TypeScript-on-node: the substituted module's `inspect` running on
+// node. It is not evidence about the compiled artifact, where `inspect`'s
+// property walk is a refusal rather than a wrong answer -- reading a member by
+// a runtime key does not lower -- so a difference found here may be vacuous
+// there.
+console.log("util.inspect census — axis: TypeScript on node (not the compiled artifact)");
+console.log(`${node.size - differing.length} of ${node.size} kinds agree with node\n`);
 for (const { name, actual, expected } of differing) {
   console.log(`  ${name}`);
   console.log(`    ours: ${showAll ? actual : String(actual).slice(0, 120)}`);
