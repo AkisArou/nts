@@ -128,6 +128,8 @@ export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
 // provider implementing it needs both types from this boundary.
 export type { BlobExternalReader, BlobExternalSource } from "./file/blob.ts";
 export type { DurableByteStore, DurableRecord, DurableWrite } from "./storage/durable.ts";
+export { durableStoreFromFlat } from "./storage/flat.ts";
+export type { FlatDurableStore } from "./storage/flat.ts";
 export { VirtualScheduler } from "./provider/virtual-time.ts";
 export type { VirtualSchedulerOptions } from "./provider/virtual-time.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";

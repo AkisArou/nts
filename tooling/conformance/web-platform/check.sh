@@ -22,6 +22,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/eventsource.test.mjs \
   tooling/conformance/web-platform/test/eventsource-timing.test.mjs \
   tooling/conformance/web-platform/test/file-url.test.mjs \
+  tooling/conformance/web-platform/test/flat-store.test.mjs \
   tooling/conformance/web-platform/test/fuzz.test.mjs \
   tooling/conformance/web-platform/test/hpack.test.mjs \
   tooling/conformance/web-platform/test/http2-connection.test.mjs \
@@ -45,7 +46,12 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/websocket-server.test.mjs \
   tooling/conformance/web-platform/test/websocket-server-lifetime.test.mjs \
   tooling/conformance/web-platform/test/weak-listener.test.mjs
-NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs
+# The upstream corpus exits nonzero while the eight named structural failures stand,
+# and `set -e` made every step after it unreachable -- including the compiled axis,
+# which was added precisely so it could not disappear quietly. Its status is held
+# and reported at the end instead.
+upstream=0
+NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs || upstream=$?
 
 # The compiled axis. Everything above is host evidence -- TypeScript on node, which
 # says the algorithms are right and nothing about whether they compile.
@@ -57,4 +63,10 @@ if [ -x "${NTS_BIN:-$root/target/release/nts}" ]; then
 else
   echo "check.sh: SKIPPING the compiled axis -- no compiler at ${NTS_BIN:-$root/target/release/nts}." >&2
   echo "  Host evidence alone does not show that any of this compiles." >&2
+fi
+
+if [ "$upstream" -ne 0 ]; then
+  echo "check.sh: the upstream corpus exited $upstream -- expected while the eight named" >&2
+  echo "  structural failures stand. Every other step above ran and is reported." >&2
+  exit "$upstream"
 fi

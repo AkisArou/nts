@@ -3743,3 +3743,92 @@ recording: a guarantee whose absence nothing was asking about.
 The complete local Node-host/real-socket corpus passes 536/536 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on all three backends, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The adapter is generic over the flat surface, so it is written once
+
+The JVM lane finished the provider half and said the adapter was mine: their side is
+synchronous scalars, strings and one caller-owned view, because that is what a
+foreign-function boundary can carry, and the promises, the `AbortSignal` checked between
+chunks and the `DurableWrite` object all belong above it.
+
+Writing that adapter *against their intrinsics* was the obvious move and the wrong one.
+It would have put a module in shared source whose import edge is one backend, and it
+would have been rewritten for the next provider — with the promise, cancellation and
+handle-lifetime semantics reimplemented each time. Those are precisely the parts most
+likely to differ subtly between platforms, and a difference there is invisible: two
+stores that both pass their own tests can still disagree about whether an aborted write
+releases its key.
+
+So the shared side declares the flat surface as an interface — `FlatDurableStore`,
+twelve synchronous functions — and `durableStoreFromFlat` adapts *any* of them. The JVM
+binding becomes a value that names their intrinsics; the host could supply one; a future
+C provider supplies one. The layer above is written once, here, and tested once.
+
+The tests run against a fake provider rather than a real store, and that is the point
+rather than a shortcut. Against a real store every assertion below could also be
+answered by the store, so a green suite would not say which half was right.
+
+Two behaviours in the adapter are not obvious and both have their own test. The
+**fill-buffer retry**: `read` and `list` answer what there was and write what fits, so a
+short first guess needs exactly one further call, sized by what the provider just
+reported — a second guess would be a loop with no bound. And **per-read allocation** in
+the ranged reader: `BlobExternalReader` transfers ownership of each chunk, so a consumer
+may hold two at once, and a buffer reused across calls rewrites the older one. That
+obligation is the shared side's, not the provider's, and it exists *because* the flat
+surface is fill-buffer shaped.
+
+The record encoding carries an explicit key length. A key may contain any byte,
+including the NUL that separates fields, so delimiting the key by scanning would split a
+legal key in two.
+
+Six sabotages, all restored. Dropping the fill-buffer retry breaks the two
+larger-than-the-buffer tests. Reusing one buffer across ranged reads breaks the
+chunk-ownership test. Delimiting the key by scanning breaks the NUL-key test. Removing
+the between-chunks signal check breaks cancellation; so does making `discard` refuse an
+aborted signal, which is the cleanup path failing exactly when it is needed. Removing
+the entry-point pre-checks did not type-check the first time — six now-unused parameters
+— and `sabotage-run.sh` refused it rather than reporting green against a stale emit; the
+retyped form breaks the already-aborted test.
+
+One sabotage was answered by a test that was too weak, and the weakness is worth
+recording because it looks like a strong test. The 400-record listing asserted only the
+*count*, and the scanning parser still produced 400 records: losing its place in the
+stream costs it one field per record, and it resynchronises, so it consumes exactly one
+record per turn and reports 400 mangled ones. The assertion now checks the decoded keys
+and sizes.
+
+That near-miss came with a second one. The clean-tree rerun that was supposed to confirm
+the strengthened assertion *failed*, and the reason was that the source had been restored
+without rebuilding — so the run was against the sabotaged emit. It is the same stale-emit
+defect `sabotage-run.sh` exists to refuse, reintroduced by stepping around it with a bare
+`node --test`. Restoring is not a measurement; rebuilding after restoring is.
+
+### The compiled axis had stopped running, and said nothing
+
+`check.sh` runs the compiled axis last and prints a loud skip when no compiler is
+present. It had not run since it was added. The upstream corpus sits above it and exits
+nonzero while the eight named structural failures stand, and `set -e` made every step
+after it unreachable — so the step written specifically so it could not disappear quietly
+disappeared quietly, and the ledger's "54 cases across 5 functions" was carried forward
+from a separate manual invocation each time. The upstream status is now held and
+reported at the end, and the axis runs.
+
+The axis is unchanged where it should be: 54 cases across 5 functions, agreeing on jvm,
+c and llvm.
+
+### What it costs at the frontier
+
+Measured with one compiler pinned from the current tree, both sides of the slice: the
+whole-project frontier moves from 1,251 to 1,256 primary `NTS1001` and from 283 to 284
+`NTS1003`, with zero `NTS1004`, zero `NTS4xxx` and zero invalid HIR throughout. The one
+refusal that names this slice's own shape is a `method declaration` in an object
+literal — `durableStoreFromFlat` returns one — and the one new cascade is
+`FlatDurableWrite#discard`, off the interface method it calls. Both are left standing;
+neither is worth a workaround, and the object-literal form is the shape the seam wants.
+
+Those totals are not comparable to the 1,304 and 242 recorded above. That pair was taken
+with a different compiler, and the interface-resolution change landed in between; this
+pair is the first taken with a binary built from the current tree.
+
+The complete local Node-host/real-socket corpus passes 550/550 with zero skipped, and
+the pinned upstream corpus is unchanged at 2,278 of 2,286 applicable.
