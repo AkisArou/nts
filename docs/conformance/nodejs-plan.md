@@ -119,6 +119,7 @@ axis. That would be the first non-zero this axis has ever reported.
 | 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
 | 5c | no exported object literal of functions — `ucs2` as a namespace | **fixed**, verified here |
 | 5d | `number[]` cannot cross the Node-API boundary in either direction | **open**, compiler lane |
+| 6 | the Node-API boundary flattens a thrown error's class | **open**, compiler lane |
 
 **The last mile is now one marshalling gap.** Namespace registration landed, so
 `ucs2` is no longer unnameable; the two functions that would hang off it have no
@@ -220,6 +221,33 @@ read and the test's behaviour inferred from it, while the evidence against was
 already on screen — the test run had reached line **257**, which is past the
 throws at 58-66. **One property was measured and a different property's
 behaviour was reported.**
+
+**And the sentence that followed it was the more expensive mistake.** "`instanceof
+RangeError` being false is a real difference and is recorded as one, but no
+pinned assertion touches it" is true and was the wrong conclusion. *No test
+covers it* is a fact about the tests, not about the code — which this document
+had already written down, in the line about a comment asserting a property no
+test covers being a test asserting nothing. It was filed as a difference and
+left.
+
+It is blocker 6 now, found by `punycode/test/error-identity-static.js` on its
+first run against a compiled artifact:
+
+    name                              = RangeError
+    String(e)                         = "RangeError: Invalid input"
+    constructor.name                  = Error
+    instanceof Error                  = true
+    instanceof RangeError             = false
+    getPrototypeOf(e) === Error.prototype = true
+
+The wrapper builds a generic JS `Error` and assigns `.name`. Everything derived
+from the string form is right and the class is gone. Node-API can express it —
+`napi_create_range_error` and `napi_create_type_error` produce genuine ones — so
+this is constructor selection at the boundary, not a limit of the ABI.
+
+**It also raises the bar on `punycode`.** Node's own `test-punycode.js` needs
+only the `f64[]` crossing, because it asserts by regex on the string form.
+Green *in the sweep* needs both. That is the right bar and the test stays.
 
 **Blocker 5 only became visible once 4 stopped killing the process.** The
 pinned test then ran past every throw and died on `punycode.ucs2.encode`.
