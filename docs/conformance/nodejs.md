@@ -4056,6 +4056,22 @@ an allocator that never frees, and nothing on its paths reads a slot after
 release. That is the first evidence on this axis that the passing module passes
 for the right reason.
 
+**Two tests are thin evidence for that claim, so the lane asks a harder
+question.** A module's test count is the number of questions node thought to
+ask, and two of them cannot see a release too many — the failure that matters
+here reallocates a slot and returns a *plausible* wrong answer, which is exactly
+what a small fixed corpus is worst at catching. So a module that passes under
+counting is then differentiated against node's own implementation on the same
+build:
+
+    punycode   2 / 2                                          [55 rc sites]
+               80,128 comparisons over 20,000 random inputs and 32 fixed:
+               0 divergences, 0 property failures
+
+That is the counted, poisoned artifact answering identically to node across
+twenty thousand generated inputs, not the uncounted one. It is the strongest
+statement this axis can currently make about any module.
+
 **The first run of this lane reported the same green row and it was worthless,
 which is the part worth keeping.** It passed `punycode` 2/2 while
 `punycode.build/program.c` held *zero* retain/release sites — an uncounted build

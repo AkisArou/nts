@@ -75,7 +75,24 @@ for module in $modules; do
   fi
 
   echo "$result  [$sites rc sites]"
-  printf '%s' "$result" | grep -q ' 0 failed' || failures=$((failures + 1))
+  if ! printf '%s' "$result" | grep -q ' 0 failed'; then
+    failures=$((failures + 1))
+    continue
+  fi
+
+  # A module that passes under counting has earned a harder question. Its test
+  # file count is the number of questions node thought to ask, and for the one
+  # module that passes here that is two -- which cannot see a release too many.
+  # A wrong answer from a reallocated slot is most likely to be a *plausible*
+  # one, so the thing to do is ask node the same questions and compare, with
+  # poison making a freed read conspicuous rather than zero.
+  if grep -q "^  $module:" tooling/conformance/differential-corpora.mjs 2>/dev/null ||
+     grep -q "\b$module:" tooling/conformance/differential-corpora.mjs 2>/dev/null; then
+    diff_out=$(timeout 1800 node tooling/conformance/differential-addon.mjs \
+      "$module" "$PWD/target/node/$module.node" --iterations 20000 2>&1 | tail -1)
+    printf '  %-16s %s\n' "" "$diff_out"
+    printf '%s' "$diff_out" | grep -q ' 0 divergence' || failures=$((failures + 1))
+  fi
 done
 
 echo
