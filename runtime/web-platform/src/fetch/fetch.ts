@@ -1,4 +1,5 @@
 import { AbortSignal } from "../core/abort.ts";
+import type { HttpCache, HttpCacheDispatchResult } from "../cache/http-cache.ts";
 import type { CookieAccessContext, CookieJar } from "../cookies/jar.ts";
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { networkError } from "../core/errors.ts";
@@ -156,10 +157,12 @@ function abortableBody(
 
 export class FetchClient {
   private readonly transport: FetchTransport;
+  private readonly cacheTransport: FetchTransport;
   private readonly context: RequestContext;
   private readonly decoder: ContentDecoder | undefined;
   private readonly maxRedirects: number;
   private readonly cookies: FetchCookiePolicy | undefined;
+  private readonly cache: HttpCache | undefined;
 
   constructor(
     transport: FetchTransport,
@@ -167,12 +170,15 @@ export class FetchClient {
     decoder?: ContentDecoder,
     maxRedirects = 20,
     cookies?: FetchCookiePolicy,
+    cache?: HttpCache,
   ) {
     this.transport = transport;
+    this.cacheTransport = { dispatch: (request) => abortableDispatch(transport, request) };
     this.context = context;
     this.decoder = decoder;
     this.maxRedirects = maxRedirects;
     this.cookies = cookies;
+    this.cache = cache;
   }
 
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
@@ -252,22 +258,34 @@ export class FetchClient {
           const cookie = await cookiePolicy.jar.getCookieHeader(url, cookieContext);
           if (cookie.length > 0) dispatchHeaders.set("cookie", cookie);
         }
-        const raw = await abortableDispatch(this.transport, {
+        const transportRequest: TransportRequest = {
           url,
           method,
           headers: dispatchHeaders.raw(),
           body: body.stream,
           bodyLength: body.length,
           signal: request.signal,
-        });
+        };
+        let cached: HttpCacheDispatchResult;
+        if (this.cache === undefined) {
+          const response = await abortableDispatch(this.transport, transportRequest);
+          cached = { response, receivedHeaders: response.headers, cacheState: "network" };
+        } else {
+          cached = await this.cache.dispatch(this.cacheTransport, transportRequest, request.cache);
+        }
+        const raw = cached.response;
         let retained = false;
         try {
           request.signal.throwIfAborted();
           if (raw.status < 200 || raw.status > 599)
             throw new TypeError("Invalid final HTTP response status");
           const responseHeaders = new Headers(raw.headers);
-          if (cookiePolicy !== undefined && cookieContext !== undefined) {
-            for (const value of responseHeaders.getSetCookie()) {
+          if (
+            cookiePolicy !== undefined &&
+            cookieContext !== undefined &&
+            cached.receivedHeaders !== null
+          ) {
+            for (const value of new Headers(cached.receivedHeaders).getSetCookie()) {
               await cookiePolicy.jar.setCookie(value, url, cookieContext);
             }
           }

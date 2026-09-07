@@ -95,6 +95,47 @@ export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 export { fetch, ServerCookiePolicy } from "./fetch/fetch.ts";
 export type { FetchCookiePolicy } from "./fetch/fetch.ts";
 
+export { MAX_DELTA_SECONDS, parseCacheControl, parseDeltaSeconds } from "./cache/cache-control.ts";
+export type {
+  CacheControlDirectives,
+  CacheExtensionDirective,
+  ParsedCacheControl,
+  QualifiedCacheDirective,
+} from "./cache/cache-control.ts";
+export {
+  cacheReuseDecision,
+  currentAgeSeconds,
+  freshnessLifetime,
+  parseAge,
+  parseHTTPDate,
+} from "./cache/freshness.ts";
+export { HttpCache, createVaryKey, isResponseStorable, varyMatches } from "./cache/http-cache.ts";
+export type {
+  HttpCacheDiagnostics,
+  HttpCacheDispatchResult,
+  HttpCacheOptions,
+  HttpCacheState,
+  HttpCacheType,
+} from "./cache/http-cache.ts";
+export { MemoryHttpCacheStore } from "./cache/store.ts";
+export type {
+  HttpCacheBody,
+  HttpCacheEntry,
+  HttpCacheEntryMetadata,
+  HttpCacheStore,
+  HttpCacheVaryField,
+  HttpCacheWriter,
+  MemoryHttpCacheStoreOptions,
+} from "./cache/store.ts";
+export type {
+  CacheReuseDecision,
+  CacheReuseInput,
+  FreshnessLifetime,
+  FreshnessLifetimeInput,
+  FreshnessSource,
+  StoredResponseTiming,
+} from "./cache/freshness.ts";
+
 export {
   deleteCookie,
   getCookiePairs,

@@ -1,4 +1,5 @@
 import type { BodyPolicy } from "../fetch/body.ts";
+import type { HttpCache } from "../cache/http-cache.ts";
 import { FetchClient } from "../fetch/fetch.ts";
 import type { FetchCookiePolicy } from "../fetch/fetch.ts";
 import type { RequestContext, RequestInit } from "../fetch/request.ts";
@@ -35,6 +36,8 @@ export interface WebPlatformOptions {
   eventSource?: EventSourceOptions;
   /** Injected policy is not owned or closed by this runtime. */
   cookies?: FetchCookiePolicy;
+  /** Injected policy/store is not owned or closed by this runtime. */
+  httpCache?: HttpCache;
   /** Provider-specific serialization, e.g. Node's `blob:nodedata:` prefix. */
   blobURLPrefix?: string;
 }
@@ -110,6 +113,7 @@ export class WebPlatformRuntime implements EventSourceContext {
       options.contentDecoder,
       maxRedirects,
       options.cookies,
+      options.httpCache,
     );
     this.fetch = client.fetch;
   }
