@@ -19,10 +19,13 @@ import { Http1Transport } from "../node_modules/.tsbuild/host/runtime/web-platfo
 import {
   HostNodeSocketConnector,
   HostNodeScheduler,
+  HostNodeTlsUpgrader,
   hostNodeRandom,
   hostNodeURLs,
 } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
-import { createServer } from "node:net";
+import { ProxyAgent } from "../node_modules/.tsbuild/host/runtime/web-platform/src/provider.js";
+import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
+import { connect, createServer } from "node:net";
 
 import { websocketServer } from "./websocket-echo-server.mjs";
 
@@ -217,4 +220,104 @@ suite("an already-aborted signal never reaches the transport", async (t) => {
     (thrown) => thrown === reason,
   );
   assert.equal(dispatched, 0);
+});
+
+/**
+ * A CONNECT proxy that pipes bytes to wherever it was asked to.
+ *
+ * Small on purpose: everything interesting happens on the client side, and a proxy that
+ * does more would make it harder to tell whose behaviour a failure belonged to.
+ */
+async function connectProxy(t) {
+  const CRLF = String.fromCharCode(13, 10);
+  const seen = { targets: [] };
+  const sockets = new Set();
+  const server = createServer((client) => {
+    sockets.add(client);
+    client.on("error", () => {});
+    client.on("close", () => sockets.delete(client));
+    let head = "";
+    let piping = false;
+    client.on("data", (chunk) => {
+      if (piping) return;
+      head += chunk.toString("latin1");
+      if (!head.includes(CRLF + CRLF)) return;
+      const authority = head.split(" ")[1] ?? "";
+      seen.targets.push(authority);
+      const colon = authority.lastIndexOf(":");
+      const upstream = connect(Number(authority.slice(colon + 1)), authority.slice(0, colon), () => {
+        piping = true;
+        client.write("HTTP/1.1 200 Connection Established" + CRLF + CRLF);
+        client.pipe(upstream);
+        upstream.pipe(client);
+      });
+      upstream.on("error", () => client.destroy());
+      sockets.add(upstream);
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => {
+    for (const socket of sockets) socket.destroy();
+    return new Promise((resolve) => server.close(resolve));
+  });
+  return { port: server.address().port, seen };
+}
+
+suite("a WebSocket reaches its server through a CONNECT proxy", async (t) => {
+  // The capability the raw transport cannot have: it opens its own socket, so a proxy
+  // would have to be reimplemented inside it. Here the proxy is just a transport.
+  const { port: originPort, seen: origin } = await websocketServer(t, { protocols: ["chat"] });
+  const { port: proxyPort, seen: proxy } = await connectProxy(t);
+  const scheduler = new HostNodeScheduler(() => {});
+  const agent = new ProxyAgent({
+    connector: new HostNodeSocketConnector(),
+    tls: new HostNodeTlsUpgrader(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: `http://127.0.0.1:${proxyPort}`,
+    proxyTunnel: true,
+  });
+  t.after(() => agent.close());
+  const websockets = new DispatchedWebSocketTransport(agent, hostNodeRandom, scheduler, {});
+  t.after(() => websockets.close());
+
+  const session = await websockets.connect(handshake(originPort, ["chat"]), none());
+  assert.equal(session.protocol, "chat");
+  await session.send({ kind: "text", data: "through the proxy" });
+  const echoed = await session.next();
+  assert.equal(echoed.kind, "text");
+  assert.equal(echoed.data, "through the proxy");
+  await session.close(1000, "done");
+
+  assert.deepEqual(proxy.targets, [`127.0.0.1:${originPort}`], "the proxy was asked for the origin");
+  assert.equal(origin.messages.length, 1, "and the origin server saw the message");
+});
+
+suite("the public WebSocket API works over a dispatched transport", async (t) => {
+  const { port } = await websocketServer(t, { protocols: ["chat"] });
+  const scheduler = new HostNodeScheduler(() => {});
+  const api = createHostNodeWebPlatform({
+    webSocketTransport: new DispatchedWebSocketTransport(
+      new Http1Transport(new HostNodeSocketConnector(), scheduler, {}),
+      hostNodeRandom,
+      scheduler,
+      {},
+    ),
+  });
+  t.after(() => api.close());
+
+  const socket = api.createWebSocket(`ws://127.0.0.1:${port}/`, ["chat"]);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve);
+    socket.addEventListener("error", () => reject(new Error("handshake refused")));
+  });
+  assert.equal(socket.protocol, "chat");
+
+  const echoed = new Promise((resolve) => {
+    socket.addEventListener("message", (event) => resolve(event.data));
+  });
+  socket.send("public surface");
+  assert.equal(await echoed, "public surface");
+  socket.close(1000, "done");
 });

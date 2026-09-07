@@ -4304,3 +4304,28 @@ message set is a type identifier renumbering.
 The complete local Node-host/real-socket corpus passes 670/670 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+### The capability the raw transport cannot have
+
+Two tests were added to the dispatched transport, and neither changes any source — the
+frontier is untouched, and the point of both is that nothing needed to change.
+
+**A WebSocket reaches its origin through a CONNECT proxy.** The proxy is a
+`ProxyAgent` with `proxyTunnel`, which is to say it is just a transport; nothing in the
+WebSocket path knows a proxy is involved. `RawWebSocketTransport` cannot do this at any
+price short of reimplementing proxying inside itself, because it opens its own socket.
+The test runs a real CONNECT proxy that pipes to a real WebSocket server, and asserts
+the proxy was asked for the origin — without that assertion a client that quietly
+connected directly would pass.
+
+**The public `WebSocket` API works over it.** A transport that satisfies
+`WebSocketTransport` and cannot serve `createWebSocket` would have been a store that
+passed only a test of itself, which is the mistake the durable cache slice recorded and
+this one had every opportunity to repeat.
+
+The default remains `RawWebSocketTransport`. Making the dispatched one the default is a
+change to what every embedder gets, and it is worth making deliberately rather than as a
+side effect of it now being possible — the reference path is also the one with the
+fewest moving parts when something goes wrong.
+
+The complete local corpus passes 672/672 with zero skipped.
