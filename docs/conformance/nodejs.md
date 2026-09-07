@@ -262,13 +262,23 @@ are not in its set* — is not worth running. 3,868 files `require('assert')`,
 because nearly every test in node's suite does, and requiring a module is not
 testing it.
 
-**One surface in this profile is hollow by construction and is not excluded,
-because the honest fix is not available yet.** `http/src/main.ts` exports
-`WebSocket`, `CloseEvent` and `MessageEvent` by reading them off `globalThis`.
-Node exposes all three from `node:http`, so exporting them is right; reading
-them from the host is not. They are neither ours nor the canonical
-implementation, so a test reaching `http.WebSocket` measures node against
-node. The canonical versions live in `runtime/web-platform`, and the seam to
+**One surface in this profile is not ours and is recorded rather than
+excluded.** `http/src/main.ts` exports `WebSocket`, `CloseEvent` and
+`MessageEvent` by reading them off `globalThis`. Node exposes all three from
+`node:http`, so exporting them is right; reading them from the host is not.
+
+Two corrections to how this was first written here. **No test in node's suite
+reaches them through `node:http`** — checked — so the `http` row is not
+inflated by it and calling it a hollow *pass* overstated the case. What it is
+is an untested surface that would be hollow if anything touched it.
+
+And the fidelity gap is sharper than "reads a global". Node defines all three
+as **lazy getters** that load from undici on first access
+(`lib/http.js:232`, `ObjectDefineProperty(module.exports, 'WebSocket', { get()
+{ return lazyUndici().WebSocket } })`). Ours are eager `export const`
+bindings. So the difference is observable in the property descriptor and in
+when the dependency loads, independently of which implementation is behind
+it. The canonical versions live in `runtime/web-platform`, and the seam to
 import them already works — `url/src/parser.ts` imports the percent decoder
 across it. What is unresolved is whether the canonical `WebSocket` can be
 constructed without an environment, since it obtains its transport from one and
