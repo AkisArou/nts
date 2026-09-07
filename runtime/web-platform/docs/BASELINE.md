@@ -4430,3 +4430,62 @@ appear only in stale build output, which is not a reference.
 
 Local corpus 674/674, upstream unchanged at 2,278 of 2,286, compiled axis 54 cases across
 5 functions on jvm, c and llvm. The frontier is unchanged from before the removal.
+
+## The compiled axis grows, and reaches something the compiler declines
+
+The compiled axis is the only evidence in this lane that any of this actually runs, and
+it had covered three modules since it left zero. `core/percent.ts` joins them:
+`percentDecodeBytes` is now exercised as `percentDecodedLength`, and the axis is **55 of
+59 cases across 6 functions, agreeing on jvm, c and llvm**.
+
+The four remaining cases are the finding, and they are left visible rather than trimmed
+away. The fixture's own header says it should grow as prerequisites land rather than by
+being rewritten to fit, and a fixture edited until it passes is a fixture that has
+stopped measuring anything.
+
+**The source is not the problem, and that was established before blaming anything else.**
+`percentDecodeBytes` was fuzzed on the host against an independent oracle over six
+thousand inputs — percent triples, truncated triples, non-hex digits, astral characters
+and lone surrogates — and agreed on every one.
+
+That fuzz found a defect on the first run, in the oracle. Its lone-surrogate regex was
+`[\uD800-\uDFFF](?![\uDC00-\uDFFF])`, which matches the **trailing** half of every valid
+surrogate pair, so every astral character read as malformed and the function looked
+wrong. The reported mismatches were all astral. A comparison is only as good as the side
+you are not testing.
+
+**A real inconsistency turned up on the way and is fixed, though it changed nothing.**
+The shared source is authored under `tsconfig.base.json`, which sets
+`noUncheckedIndexedAccess`; the compiled fixture extended `tsconfig.fixtures.json`,
+which does not. So `bytes[index + 1]` typed as `number` rather than `number | undefined`,
+the `=== undefined` guards the source depends on became statically impossible, and the
+axis was compiling a subtly different program from the one the host runs. The option is
+now set on the compiled fixture — not on the shared fixtures config, which every nts
+fixture uses and which is not this lane's to decide. Turning it on did not change the
+result by a single case, and saying so is the point: it was worth fixing because it was
+wrong, not because it explained anything.
+
+### A minimal reproduction, isolated with its own control
+
+  export function pastTheEnd(length: number): number {
+    const bytes = new Uint8Array(length & 7);
+    const beyond = bytes[bytes.length];
+    return beyond === undefined ? -1 : beyond;
+  }
+
+All 17 generated cases declined, on all three backends, and none was compared. The
+control — the same shape with an index that is always in range — checks 29 cases and
+agrees on every one, so the decline is the out-of-range read and not the surrounding
+construct. The behaviour is identical with and without `noUncheckedIndexedAccess`, so
+it is not the type-level option: node answers `undefined` for a read past the end, and
+the compiled program stops.
+
+The harness's own sentence is the one worth keeping: *a program that stops on every input
+looks exactly like this*. Four declines inside fifty-nine passing cases is easy to read
+as noise; the same defect alone is unmistakable, which is the argument for reducing
+before reporting.
+
+Raised with the compiler lane. Nothing here is worked around.
+
+Local corpus 674/674, upstream unchanged at 2,278 of 2,286, whole-project frontier
+unchanged at 1,292 primary `NTS1001` and 312 `NTS1003`.

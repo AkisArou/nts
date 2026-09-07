@@ -22,6 +22,7 @@ import {
   trimHTTPTabOrSpace,
 } from "../../../../../runtime/web-platform/src/core/ascii.ts";
 import { forgivingBase64Decode } from "../../../../../runtime/web-platform/src/core/base64.ts";
+import { percentDecodeBytes } from "../../../../../runtime/web-platform/src/core/percent.ts";
 
 /** dNSName matching, including the wildcard rules HTTP/2 coalescing depends on. */
 export function covers(presented: string, host: string): boolean {
@@ -49,4 +50,9 @@ export function base64Length(input: string): number {
   }
   const decoded = forgivingBase64Decode(bytes);
   return decoded === null ? -1 : decoded.length;
+}
+
+/** Percent decoding, reported as a length so the result stays scalar. */
+export function percentDecodedLength(input: string): number {
+  return percentDecodeBytes(input).length;
 }

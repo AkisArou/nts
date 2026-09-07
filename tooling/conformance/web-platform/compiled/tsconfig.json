@@ -1,4 +1,8 @@
 {
+  "//": "The shared Web-platform source is authored under `tsconfig.base.json`, which sets `noUncheckedIndexedAccess`. Compiling it here without that option types `bytes[i + 1]` as `number` rather than `number | undefined`, so the `=== undefined` guards the source relies on become statically impossible and the compiler is entitled to assume every index is in range. That is not a stricter build of the same program -- it is a different program, and the axis would be evidence about code nobody runs. `tsconfig.fixtures.json` is shared by every nts fixture and is not the place to decide this, so it is set here.",
   "extends": "../../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
   "include": ["src"]
 }
