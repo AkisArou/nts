@@ -44,5 +44,14 @@ export type {
   WebSocketTransport,
 } from "./websocket/transport.ts";
 
+export type {
+  WebSocketCloseInfo,
+  WebSocketOpenInfo,
+  WebSocketStreamContext,
+  WebSocketStreamData,
+  WebSocketStreamOptions,
+  WebSocketStreamSendData,
+} from "./websocket/websocket-stream.ts";
+
 export { WebPlatformRuntime } from "./provider/web-platform-runtime.ts";
 export type { WebPlatformOptions } from "./provider/web-platform-runtime.ts";

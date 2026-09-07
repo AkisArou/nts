@@ -26,7 +26,12 @@ import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
 import type { RawWebSocketOptions } from "../websocket/raw-transport.ts";
 import type { WebSocketTransport } from "../websocket/transport.ts";
-import { WebSocket } from "../websocket/websocket.ts";
+import { WebSocket, type WebSocketContext } from "../websocket/websocket.ts";
+import {
+  WebSocketStream,
+  type WebSocketStreamContext,
+  type WebSocketStreamOptions,
+} from "../websocket/websocket-stream.ts";
 import type { PlatformPrimitives } from "./primitives.ts";
 
 export interface WebPlatformOptions {
@@ -64,7 +69,9 @@ export interface WebPlatformOptions {
  * JavaScript realm. Provider bootstrap associates one runtime with an
  * `NtsEnvironment` and installs the canonical values for that environment.
  */
-export class WebPlatformRuntime implements EventSourceContext {
+export class WebPlatformRuntime
+  implements EventSourceContext, WebSocketContext, WebSocketStreamContext
+{
   readonly http1: Http1Transport;
   readonly requestContext: RequestContext;
   readonly fetch: (input: string | Request, init?: RequestInit) => Promise<Response>;
@@ -72,15 +79,18 @@ export class WebPlatformRuntime implements EventSourceContext {
   readonly scheduler: PlatformPrimitives["scheduler"];
   readonly urls: PlatformPrimitives["urls"];
   readonly baseURL: string | undefined;
+  readonly origin: string | undefined;
+  readonly maxBufferedAmount: number | undefined;
   readonly eventSourcePolicy: EventSourcePolicy;
   readonly caches: CacheStorage;
+  readonly transport: WebSocketTransport;
 
-  private readonly webSocketTransport: WebSocketTransport;
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
   private readonly primitives: PlatformPrimitives;
-  private readonly options: WebPlatformOptions;
   private readonly blobURLs: BlobURLStore;
   private readonly eventSources: EventSource[] = [];
+  private readonly webSockets: WebSocket[] = [];
+  private readonly webSocketStreams: WebSocketStream[] = [];
   private closed = false;
 
   constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
@@ -92,11 +102,12 @@ export class WebPlatformRuntime implements EventSourceContext {
     }
 
     this.primitives = primitives;
-    this.options = options;
     this.nativeLineEnding = primitives.nativeLineEnding;
     this.scheduler = primitives.scheduler;
     this.urls = primitives.urls;
     this.baseURL = options.baseURL;
+    this.origin = options.origin;
+    this.maxBufferedAmount = options.maxWebSocketBufferedAmount;
     this.eventSourcePolicy = readEventSourcePolicy(options.eventSource);
     this.blobURLs = new BlobURLStore(primitives.random, options.origin, options.blobURLPrefix);
     this.requestContext = {
@@ -116,10 +127,10 @@ export class WebPlatformRuntime implements EventSourceContext {
         primitives.scheduler,
         options.websocket,
       );
-      this.webSocketTransport = transport;
+      this.transport = transport;
       this.ownedWebSocketTransport = transport;
     } else {
-      this.webSocketTransport = options.webSocketTransport;
+      this.transport = options.webSocketTransport;
       this.ownedWebSocketTransport = null;
     }
 
@@ -159,14 +170,34 @@ export class WebPlatformRuntime implements EventSourceContext {
 
   createWebSocket(url: string, protocols: string | readonly string[] = []): WebSocket {
     if (this.closed) throw new TypeError("Web-platform runtime is closed");
-    return new WebSocket(url, protocols, {
-      urls: this.primitives.urls,
-      scheduler: this.primitives.scheduler,
-      transport: this.webSocketTransport,
-      baseURL: this.options.baseURL,
-      origin: this.options.origin,
-      maxBufferedAmount: this.options.maxWebSocketBufferedAmount,
-    });
+    return new WebSocket(url, protocols, this);
+  }
+
+  createWebSocketStream(url: string, options: WebSocketStreamOptions | null = {}): WebSocketStream {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    return new WebSocketStream(url, options, this);
+  }
+
+  registerWebSocket(socket: WebSocket): void {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    this.webSockets.push(socket);
+  }
+
+  unregisterWebSocket(socket: WebSocket): void {
+    const index = this.webSockets.indexOf(socket);
+    if (index < 0) return;
+    this.webSockets.splice(index, 1);
+  }
+
+  registerWebSocketStream(stream: WebSocketStream): void {
+    if (this.closed) throw new TypeError("Web-platform runtime is closed");
+    this.webSocketStreams.push(stream);
+  }
+
+  unregisterWebSocketStream(stream: WebSocketStream): void {
+    const index = this.webSocketStreams.indexOf(stream);
+    if (index < 0) return;
+    this.webSocketStreams.splice(index, 1);
   }
 
   registerEventSource(source: EventSource): void {
@@ -185,6 +216,10 @@ export class WebPlatformRuntime implements EventSourceContext {
     this.closed = true;
     const eventSources = this.eventSources.slice();
     for (const source of eventSources) source.close();
+    const webSockets = this.webSockets.slice();
+    for (const socket of webSockets) socket.closeForRuntime();
+    const webSocketStreams = this.webSocketStreams.slice();
+    for (const stream of webSocketStreams) stream.closeForRuntime();
     this.blobURLs.close();
     this.http1.close();
     if (this.ownedWebSocketTransport !== null) {

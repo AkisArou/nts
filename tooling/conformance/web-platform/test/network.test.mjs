@@ -16,6 +16,9 @@ import {
   Request,
   TextEncoder,
   Response,
+  WebSocket,
+  WebSocketError,
+  WebSocketStream,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { ConnectionPool } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/pool.js";
 import { decodeContentCodings } from "../node_modules/.tsbuild/host/runtime/web-platform/src/fetch/content-coding.js";
@@ -817,6 +820,405 @@ function wsEvents(ws) {
   ws.addEventListener("error", () => log.push("error"));
   return { opened, closed, log };
 }
+
+class ControlledWebSocketSession {
+  protocol = "chat";
+  extensions = "";
+  nextCalls = 0;
+  sent = [];
+  closes = [];
+  aborted = false;
+  incoming = [];
+  reads = [];
+  sendWait = null;
+
+  next() {
+    this.nextCalls++;
+    const queued = this.incoming.shift();
+    if (queued !== undefined) return Promise.resolve(queued);
+    const result = Promise.withResolvers();
+    this.reads.push(result);
+    return result.promise;
+  }
+
+  push(value) {
+    if (value.kind === "close") this.sendWait?.reject(new Error("peer closed during send"));
+    const read = this.reads.shift();
+    if (read === undefined) this.incoming.push(value);
+    else read.resolve(value);
+  }
+
+  send(message) {
+    this.sent.push(message);
+    return this.sendWait?.promise ?? Promise.resolve();
+  }
+
+  close(code, reason) {
+    this.closes.push({ code, reason });
+    return Promise.resolve();
+  }
+
+  abort() {
+    if (this.aborted) return;
+    this.aborted = true;
+    this.push({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
+  }
+}
+
+function controlledWebSocketRuntime(t, session = new ControlledWebSocketSession()) {
+  let connects = 0;
+  const api = runtime(t, {
+    webSocketTransport: {
+      connect() {
+        connects++;
+        return Promise.resolve(session);
+      },
+    },
+  });
+  return {
+    api,
+    session,
+    get connects() {
+      return connects;
+    },
+  };
+}
+
+suite("WebSocketError applies close dictionary conversion and validation", (t) => {
+  runtime(t);
+  assert.throws(() => new WebSocketStream(), TypeError);
+  assert.throws(
+    () => new WebSocketStream("invalid:"),
+    (error) => error.name === "SyntaxError",
+  );
+  assert.throws(() => new WebSocketStream("ws://example.test", true), TypeError);
+  assert.throws(() => new WebSocketStream("ws://example.test", { protocols: "chat" }), TypeError);
+
+  const empty = new WebSocketError();
+  assert.equal(empty.name, "WebSocketError");
+  assert.equal(empty.message, "");
+  assert.equal(empty.code, 0);
+  assert.equal(empty.closeCode, null);
+  assert.equal(empty.reason, "");
+
+  const converted = new WebSocketError("message", { closeCode: 2999.5, reason: "\ud800" });
+  assert.equal(converted.closeCode, 3000);
+  assert.equal(converted.reason, "\ufffd");
+  assert.equal(new WebSocketError("", { reason: "why" }).closeCode, 1000);
+  for (const closeCode of [999, 1001, 2999, 5000]) {
+    assert.throws(
+      () => new WebSocketError("", { closeCode }),
+      (error) => error.name === "InvalidAccessError",
+    );
+  }
+  assert.throws(
+    () => new WebSocketError("", { reason: "🔌".repeat(32) }),
+    (error) => error.name === "SyntaxError",
+  );
+});
+
+suite("WebSocket forbidden ports fail asynchronously", async (t) => {
+  const controlled = controlledWebSocketRuntime(t);
+  const stream = new WebSocketStream("ws://example.test:22/socket");
+  const streamError = await stream.opened.then(
+    () => assert.fail("a forbidden port must not open"),
+    (reason) => reason,
+  );
+  assert.ok(streamError instanceof WebSocketError);
+  await assert.rejects(stream.closed, (reason) => reason === streamError);
+
+  const socket = new WebSocket("ws://example.test:22/socket");
+  const events = wsEvents(socket);
+  const close = await events.closed;
+  assert.equal(close.code, 1006);
+  assert.equal(close.reason, "");
+  assert.equal(close.wasClean, false);
+  assert.deepEqual(events.log, ["error", "close"]);
+  assert.equal(controlled.connects, 0, "a blocked port must not reach the transport");
+});
+
+suite("WebSocketStream is pull-driven and writer close waits for the peer", async (t) => {
+  const controlled = controlledWebSocketRuntime(t);
+  const stream = new WebSocketStream("ws://example.test/socket", { protocols: ["chat"] });
+  const { readable, writable, protocol, extensions } = await stream.opened;
+  assert.equal(stream.url, "ws://example.test/socket");
+  assert.equal(protocol, "chat");
+  assert.equal(extensions, "");
+
+  await tick();
+  assert.equal(controlled.session.nextCalls, 1, "one chunk may be prefetched");
+  controlled.session.push({ kind: "text", data: "first" });
+  await tick();
+  assert.equal(controlled.session.nextCalls, 1, "a full readable queue must stop transport reads");
+
+  const reader = readable.getReader();
+  assert.deepEqual(await reader.read(), { done: false, value: "first" });
+  await tick();
+  assert.equal(
+    controlled.session.nextCalls,
+    2,
+    "consumption must request exactly one more message",
+  );
+  controlled.session.push({ kind: "binary", data: Uint8Array.of(1, 2, 3) });
+  const binary = await reader.read();
+  assert.equal(binary.done, false);
+  assert.ok(binary.value instanceof Uint8Array);
+  assert.deepEqual(binary.value, Uint8Array.of(1, 2, 3));
+
+  const writer = writable.getWriter();
+  controlled.session.sendWait = Promise.withResolvers();
+  const bytes = Uint8Array.of(4, 5, 6);
+  const write = writer.write(bytes.subarray(1));
+  await tick();
+  bytes.fill(9);
+  assert.deepEqual(controlled.session.sent, [{ kind: "binary", data: Uint8Array.of(5, 6) }]);
+  let writeSettled = false;
+  write.finally(() => {
+    writeSettled = true;
+  });
+  await tick();
+  assert.equal(writeSettled, false, "write resolves only when the provider accepts the bytes");
+  controlled.session.sendWait.resolve();
+  await write;
+
+  const closing = writer.close();
+  await tick();
+  assert.deepEqual(controlled.session.closes, [{ code: null, reason: "" }]);
+  let closingSettled = false;
+  closing.finally(() => {
+    closingSettled = true;
+  });
+  await tick();
+  assert.equal(closingSettled, false, "writer close must await the peer close frame");
+  controlled.session.push({
+    kind: "close",
+    code: 1005,
+    reason: "",
+    wasClean: true,
+    failed: false,
+  });
+  await closing;
+  assert.deepEqual(await stream.closed, { closeCode: 1005, reason: "" });
+});
+
+suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => {
+  const publicClose = controlledWebSocketRuntime(t);
+  const publicStream = new WebSocketStream("ws://example.test/public-close");
+  await publicStream.opened;
+  assert.throws(() => publicStream.close(true), TypeError);
+  publicStream.close({ reason: "because" });
+  assert.deepEqual(publicClose.session.closes, [{ code: 1000, reason: "because" }]);
+  publicClose.session.push({
+    kind: "close",
+    code: 1000,
+    reason: "because",
+    wasClean: true,
+    failed: false,
+  });
+  assert.deepEqual(await publicStream.closed, { closeCode: 1000, reason: "because" });
+
+  const canceled = controlledWebSocketRuntime(t);
+  const canceledStream = new WebSocketStream("ws://example.test/cancel");
+  const canceledInfo = await canceledStream.opened;
+  const cancellation = canceledInfo.readable.cancel({ closeCode: 3333, reason: "ignored" });
+  await tick();
+  assert.deepEqual(canceled.session.closes, [{ code: null, reason: "" }]);
+  canceled.session.push({
+    kind: "close",
+    code: 1005,
+    reason: "",
+    wasClean: true,
+    failed: false,
+  });
+  await cancellation;
+  assert.deepEqual(await canceledStream.closed, { closeCode: 1005, reason: "" });
+
+  const withError = controlledWebSocketRuntime(t);
+  const errorStream = new WebSocketStream("ws://example.test/cancel-with-error");
+  const errorInfo = await errorStream.opened;
+  const errorCancellation = errorInfo.readable.cancel(
+    new WebSocketError("", { closeCode: 3456, reason: "set" }),
+  );
+  await tick();
+  assert.deepEqual(withError.session.closes, [{ code: 3456, reason: "set" }]);
+  withError.session.push({
+    kind: "close",
+    code: 3456,
+    reason: "set",
+    wasClean: true,
+    failed: false,
+  });
+  await errorCancellation;
+  assert.deepEqual(await errorStream.closed, { closeCode: 3456, reason: "set" });
+
+  const remote = controlledWebSocketRuntime(t);
+  const remoteStream = new WebSocketStream("ws://example.test/remote");
+  const remoteInfo = await remoteStream.opened;
+  remote.session.push({
+    kind: "close",
+    code: 4000,
+    reason: "remote",
+    wasClean: true,
+    failed: false,
+  });
+  assert.deepEqual(await remoteStream.closed, { closeCode: 4000, reason: "remote" });
+  assert.deepEqual(await remoteInfo.readable.getReader().read(), { done: true, value: undefined });
+  await assert.rejects(
+    remoteInfo.writable.getWriter().ready,
+    (error) => error.name === "InvalidStateError",
+  );
+
+  const unwritten = controlledWebSocketRuntime(t);
+  const unwrittenStream = new WebSocketStream("ws://example.test/unwritten");
+  const unwrittenInfo = await unwrittenStream.opened;
+  unwritten.session.sendWait = Promise.withResolvers();
+  const writer = unwrittenInfo.writable.getWriter();
+  const write = writer.write(new Uint8Array(1024));
+  await tick();
+  unwritten.session.push({
+    kind: "close",
+    code: 4567,
+    reason: "stop",
+    wasClean: true,
+    failed: false,
+  });
+  const closedError = await unwrittenStream.closed.then(
+    () => assert.fail("unwritten data must make closure unclean"),
+    (reason) => reason,
+  );
+  assert.ok(closedError instanceof WebSocketError);
+  assert.equal(closedError.closeCode, 4567);
+  const writeError = await write.then(
+    () => assert.fail("pending write must reject"),
+    (reason) => reason,
+  );
+  assert.equal(writeError.name, "InvalidStateError");
+  await assert.rejects(writer.write("later"), (reason) => reason === writeError);
+});
+
+suite("WebSocketStream failure identity, handshake abort, and runtime ownership", async (t) => {
+  const failed = controlledWebSocketRuntime(t);
+  const abrupt = new WebSocketStream("ws://example.test/abrupt");
+  const { readable, writable } = await abrupt.opened;
+  const reader = readable.getReader();
+  const writer = writable.getWriter();
+  failed.session.push({
+    kind: "close",
+    code: 1006,
+    reason: "",
+    wasClean: false,
+    failed: true,
+  });
+  const error = await abrupt.closed.then(
+    () => assert.fail("abrupt close must reject"),
+    (reason) => reason,
+  );
+  assert.ok(error instanceof WebSocketError);
+  assert.equal(error.closeCode, 1006);
+  await assert.rejects(reader.read(), (reason) => reason === error);
+  await assert.rejects(writer.ready, (reason) => reason === error);
+
+  const before = new AbortController();
+  before.abort();
+  const never = controlledWebSocketRuntime(t);
+  const preAborted = new WebSocketStream("ws://example.test/never", { signal: before.signal });
+  await assert.rejects(preAborted.opened, (reason) => reason === before.signal.reason);
+  await assert.rejects(preAborted.closed, (reason) => reason === before.signal.reason);
+  assert.equal(never.connects, 0, "a pre-aborted stream must not invoke the transport");
+
+  const duringAbort = new AbortController();
+  const connection = Promise.withResolvers();
+  runtime(t, {
+    webSocketTransport: {
+      connect(_handshake, signal) {
+        signal.subscribe(() => connection.reject(signal.reason));
+        return connection.promise;
+      },
+    },
+  });
+  const connecting = new WebSocketStream("ws://example.test/connect", {
+    signal: duringAbort.signal,
+  });
+  duringAbort.abort();
+  await assert.rejects(connecting.opened, (reason) => reason === duringAbort.signal.reason);
+  await assert.rejects(connecting.closed, (reason) => reason === duringAbort.signal.reason);
+
+  const afterAbort = new AbortController();
+  const after = controlledWebSocketRuntime(t);
+  const connected = new WebSocketStream("ws://example.test/connected", {
+    signal: afterAbort.signal,
+  });
+  const connectedInfo = await connected.opened;
+  afterAbort.abort();
+  await connectedInfo.writable.getWriter().write("still connected");
+  assert.deepEqual(after.session.sent, [{ kind: "text", data: "still connected" }]);
+  assert.equal(after.session.aborted, false);
+  connected.close();
+  after.session.push({
+    kind: "close",
+    code: 1005,
+    reason: "",
+    wasClean: true,
+    failed: false,
+  });
+  await connected.closed;
+
+  const owned = controlledWebSocketRuntime(t);
+  const live = new WebSocketStream("ws://example.test/live");
+  await live.opened;
+  owned.api.close();
+  await assert.rejects(live.closed, WebSocketError);
+  assert.equal(owned.session.aborted, true);
+});
+
+suite("Canonical WebSocket constructor uses the installed environment", async (t) => {
+  const controlled = controlledWebSocketRuntime(t);
+  const socket = new WebSocket("ws://example.test/socket", "chat");
+  const events = wsEvents(socket);
+  await events.opened;
+  assert.equal(controlled.connects, 1);
+  assert.equal(socket.protocol, "chat");
+  socket.close(1000, "done");
+  await tick();
+  controlled.session.push({
+    kind: "close",
+    code: 1000,
+    reason: "done",
+    wasClean: true,
+    failed: false,
+  });
+  assert.equal((await events.closed).code, 1000);
+});
+
+suite("WebSocketStream exchanges text and binary over the real transport", async (t) => {
+  const s = await websocketServer(
+    t,
+    (socket) =>
+      peerParser(socket, (incoming) => {
+        if (incoming.opcode === 8) socket.end(frame(8, incoming.payload));
+        else socket.write(frame(incoming.opcode, incoming.payload, incoming.fin));
+      }),
+    { extra: "Sec-WebSocket-Protocol: chat\r\n" },
+  );
+  runtime(t);
+  const stream = new WebSocketStream(s.url, { protocols: ["chat"] });
+  const { readable, writable, protocol } = await stream.opened;
+  assert.equal(protocol, "chat");
+  const reader = readable.getReader();
+  const writer = writable.getWriter();
+
+  await writer.write("hello 💙");
+  assert.deepEqual(await reader.read(), { done: false, value: "hello 💙" });
+  await writer.write(Uint8Array.of(1, 2, 3));
+  const binary = await reader.read();
+  assert.equal(binary.done, false);
+  assert.ok(binary.value instanceof Uint8Array);
+  assert.deepEqual(binary.value, Uint8Array.of(1, 2, 3));
+
+  const closing = writer.close();
+  assert.deepEqual(await stream.closed, { closeCode: 1005, reason: "" });
+  await closing;
+});
 suite("WebSocket masked sends, independent echo, subprotocol, clean close", async (t) => {
   const s = await websocketServer(
     t,

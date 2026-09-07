@@ -98,6 +98,7 @@
     "xhr/formdata/iteration.any.js": "1633fd9c4daa792f7050723220b7fcaa38b20858",
     "xhr/formdata/set-blob.any.js": "6a8b5c717050598058d44ac6772ed04722924be3",
     "xhr/formdata/set.any.js": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
+    "websockets/stream/tentative/websocket-error.any.js": "b114bbb3e3495d2ae4ce0c75454539d4b2fddea7",
     "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
   },
   "expectedTests": {

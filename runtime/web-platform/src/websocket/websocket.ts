@@ -1,13 +1,17 @@
-import { checkNetworkPort } from "../core/network-port.ts";
 import { AbortController } from "../core/abort.ts";
 import type { EventHandlerSlot } from "../core/events.ts";
 import { Event, EventTarget, MessageEvent, CloseEvent } from "../core/events.ts";
 import { DOMException, LimitError } from "../core/errors.ts";
+import { checkNetworkPort } from "../core/network-port.ts";
 import { utf8Length } from "../core/utf8.ts";
-import { toClampedUnsignedShort, toUSVString } from "../core/webidl.ts";
+import { requireArguments, toUSVString } from "../core/webidl.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
-import { isToken } from "../fetch/headers.ts";
 import { Blob } from "../file/blob.ts";
+import {
+  normalizeWebSocketCloseArguments,
+  normalizeWebSocketProtocols,
+  normalizeWebSocketURL,
+} from "./semantics.ts";
 import type {
   SocketClose,
   SocketMessage,
@@ -26,7 +30,11 @@ export interface WebSocketContext {
   baseURL?: string;
   origin?: string;
   maxBufferedAmount?: number;
+  registerWebSocket(socket: WebSocket): void;
+  unregisterWebSocket(socket: WebSocket): void;
 }
+
+declare function nts_environment_platform(): WebSocketContext;
 
 interface PendingSend {
   size: number;
@@ -53,6 +61,7 @@ export class WebSocket extends EventTarget {
   private session: WebSocketSession | null = null;
   private sends: Promise<void> = Promise.resolve();
   private closeQueued = false;
+  private registered = false;
   private readonly openHandler: EventHandlerSlot<WebSocket, Event> = {
     callback: null,
     listener: null,
@@ -108,7 +117,17 @@ export class WebSocket extends EventTarget {
     );
   }
 
-  constructor(url: string, protocols: string | readonly string[], context: WebSocketContext) {
+  constructor(url: string, protocols?: string | readonly string[]);
+  /** @internal */ constructor(
+    url: string,
+    protocols: string | readonly string[] | undefined,
+    context: WebSocketContext,
+  );
+  constructor(
+    ...args: [url: string, protocols?: string | readonly string[], context?: WebSocketContext]
+  ) {
+    requireArguments(args, 1, "WebSocket constructor");
+    const context = args[2] ?? nts_environment_platform();
     super();
     this.setErrorReporter((error) => context.scheduler.reportError(error));
     this.context = context;
@@ -118,30 +137,11 @@ export class WebSocket extends EventTarget {
     ) {
       throw new RangeError("Invalid WebSocket buffer limit");
     }
-    let parsed: URLRecord;
-    try {
-      parsed = context.urls.parse(url, context.baseURL);
-    } catch {
-      throw new DOMException("Invalid WebSocket URL", "SyntaxError");
-    }
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      parsed = context.urls.parse(
-        (parsed.protocol === "http:" ? "ws:" : "wss:") + parsed.href.slice(parsed.protocol.length),
-      );
-    }
-    if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:") || parsed.href.includes("#")) {
-      throw new DOMException("WebSocket requires a ws(s) URL without a fragment", "SyntaxError");
-    }
-    if (parsed.username !== "" || parsed.password !== "")
-      throw new DOMException("Credentials in a WebSocket URL are not supported", "SyntaxError");
-    const offers = typeof protocols === "string" ? [protocols] : protocols.slice();
-    const seen = new Set<string>();
-    for (const offer of offers) {
-      if (!isToken(offer) || seen.has(offer))
-        throw new DOMException("Invalid or duplicate WebSocket subprotocol", "SyntaxError");
-      seen.add(offer);
-    }
+    const parsed = normalizeWebSocketURL(args[0], context);
+    const offers = normalizeWebSocketProtocols(args[1] ?? []);
     this.url = parsed.href;
+    context.registerWebSocket(this);
+    this.registered = true;
     this.connect(parsed, offers).catch((error) => this.fail(error));
   }
 
@@ -265,13 +265,7 @@ export class WebSocket extends EventTarget {
   }
 
   close(code?: number, reason = ""): void {
-    const closeCode = code === undefined ? undefined : toClampedUnsignedShort(code);
-    const closeReason = toUSVString(reason);
-    if (closeCode !== undefined && closeCode !== 1000 && (closeCode < 3000 || closeCode > 4999)) {
-      throw new DOMException("Close code must be 1000 or 3000..4999", "InvalidAccessError");
-    }
-    if (utf8Length(closeReason) > 123)
-      throw new DOMException("Close reason exceeds 123 UTF-8 bytes", "SyntaxError");
+    const close = normalizeWebSocketCloseArguments(code, reason);
     if (this.state === this.CLOSING || this.state === this.CLOSED) return;
     if (this.state === this.CONNECTING) {
       this.state = this.CLOSING;
@@ -280,10 +274,15 @@ export class WebSocket extends EventTarget {
       return;
     }
     this.state = this.CLOSING;
-    const wireCode = closeCode ?? (closeReason === "" ? null : 1000);
     this.sends
-      .then(() => this.session?.close(wireCode, closeReason))
+      .then(() => this.session?.close(close.closeCode, close.reason))
       .catch((error) => this.fail(error));
+  }
+  /** @internal */ closeForRuntime(): void {
+    if (this.state === this.CLOSED) return;
+    this.controller.abort();
+    this.session?.abort();
+    this.finish({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
   }
   private fail(_error: unknown): void {
     this.controller.abort();
@@ -295,6 +294,7 @@ export class WebSocket extends EventTarget {
     this.closeQueued = true;
     this.context.scheduler.enqueue(() => {
       this.state = this.CLOSED;
+      this.unregister();
       if (info.failed) {
         const error = new Event("error");
         this.dispatchEvent(error);
@@ -306,6 +306,12 @@ export class WebSocket extends EventTarget {
       });
       this.dispatchEvent(close);
     });
+  }
+
+  private unregister(): void {
+    if (!this.registered) return;
+    this.registered = false;
+    this.context.unregisterWebSocket(this);
   }
 }
 

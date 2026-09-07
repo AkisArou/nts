@@ -67,6 +67,8 @@ const {
   TransformStreamDefaultController,
   URLSearchParams,
   WritableStream,
+  WebSocketError,
+  WebSocketStream,
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 const { createHostNodeWebPlatform } =
   await import("./node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js");
@@ -335,6 +337,8 @@ function createWptContext(
     URLSearchParams,
     WebAssembly,
     WritableStream,
+    WebSocketError,
+    WebSocketStream,
     WebSocket: class {
       constructor() {
         throw new Error("Host WebSocket is forbidden");

@@ -198,3 +198,11 @@ export type {
 
 export { WebSocket } from "./websocket/websocket.ts";
 export type { WebSocketData, WebSocketSendData } from "./websocket/websocket.ts";
+export { WebSocketError, WebSocketStream } from "./websocket/websocket-stream.ts";
+export type {
+  WebSocketCloseInfo,
+  WebSocketOpenInfo,
+  WebSocketStreamData,
+  WebSocketStreamOptions,
+  WebSocketStreamSendData,
+} from "./websocket/websocket-stream.ts";

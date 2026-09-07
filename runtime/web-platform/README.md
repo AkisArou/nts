@@ -56,6 +56,18 @@ Fetch-standard limits; an embedder may raise either limit or set it to `Infinity
 explicitly. A coding must not be advertised unless the provider's decoder validates
 its format, checksum, and trailer as applicable.
 
+`WebSocket` and `WebSocketStream` share one URL, protocol-offer, close-code,
+and close-reason conversion layer and the same provider `WebSocketSession`.
+`WebSocketStream` is implemented directly on that session rather than by
+wrapping `WebSocket` events: its readable side issues at most one transport
+read to fill its one-chunk queue, and its writable promises settle only when
+the provider has accepted the corresponding message bytes. Closing a writer
+waits for the peer's close frame. Public construction obtains the transport
+and lifetime registry from the environment-owned `WebPlatformRuntime`, which
+also terminates streams when the environment closes. The API surface follows
+Chromium's current experimental IDL and the WPT `websockets/stream/tentative`
+corpus; RFC 6455 remains the wire-protocol authority.
+
 `index.ts` is deliberately narrower than the source tree: parsers, pools, codecs,
 transport requests, provider primitives, policy helpers, and internal error types are
 not Web globals. Providers use `provider.ts`; focused conformance tests import an
