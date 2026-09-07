@@ -305,6 +305,42 @@ recently, and what it cost:
   is bounded, so this is reachable" since it was written, and nothing had ever
   asked for more than a handful of operations.
 
+## What API 26 cannot answer, and the trap in finding out
+
+The shared lane proposed a negotiated-connection result carrying the ALPN
+protocol TLS selected and the peer's dNSName SANs. Measured on a device at the
+floor this library declares:
+
+    sdk 26
+    MISS  SSLSocket.getApplicationProtocol        (NoSuchMethodException)
+    MISS  SSLParameters.setApplicationProtocols   (NoSuchMethodException)
+    MISS  SSLParameters.getApplicationProtocols   (NoSuchMethodException)
+    HAVE  X509Certificate.getSubjectAlternativeNames
+
+SANs are plain X.509 and available from API 1. The selected protocol is not
+reportable until **API 29**; on 26 to 28 the only route is Conscrypt's hidden
+`setAlpnProtocols` / `getAlpnSelectedProtocol` by reflection, which the
+hidden-API restrictions from 28 make fragile and which this lane's dependency
+rules exist to forbid.
+
+**All three compile against the API-26 `android.jar`.** The stub declares them
+and the device does not have them, so a compile check answers "yes" to a
+question it cannot see. That is the same shape as `--min-api 26` proving the
+bytecode is acceptable and not that the methods exist -- and it is why
+`the_library_compiles_against_the_api_level_it_declares` compiles against the
+real jar rather than trusting a written list, and why that test is still not
+sufficient on its own for members the stub over-declares.
+
+The consequence for the ABI is that "empty means cleartext" collapses two facts:
+*there was no TLS*, and *there was and this platform cannot report it*. A
+provider that offered `["h2","http/1.1"]` on API 26 and negotiated h2 would
+answer empty, and a dispatcher would then speak HTTP/1.1 into an h2 connection.
+The rule this lane keeps instead: **a provider that cannot report the selection
+does not offer a choice.** It requests exactly one protocol, so absence is
+unambiguous -- and the two-adapter corpus asserts the request line the server
+actually received, so a provider that broke that rule fails rather than
+negotiating quietly.
+
 ## `import { OkHttpClient } from "java:okhttp3"`
 
 Raised by the repository's owner, and it is a better spelling than the one the
