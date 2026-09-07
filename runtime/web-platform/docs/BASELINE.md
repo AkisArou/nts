@@ -2763,3 +2763,58 @@ are one `digest` called through an interface the lowering cannot resolve in the
 hierarchy, one further `this` outside a method, and one further `WeakRef` array
 observation. The revision that used regular-expression literals measured 1,295 and 235
 instead.
+
+## A listener script cannot silence
+
+Node registers its abort listeners with a private `kResistStopPropagation`, so an
+earlier listener calling `stopImmediatePropagation()` does not cancel them.
+`addInternalEventListener` and a `resistStopPropagation` option on the existing weak
+seam provide that, on the same terms as the rest of the internal listener surface: not
+an `addEventListener` option, no new property on `EventTarget` or its prototype, and
+the host's private symbol not copied.
+
+The dispatch loop previously broke out entirely on an immediate stop. It now skips
+non-resisting listeners and keeps scanning, because a resisting listener registered
+after the one that stopped would otherwise be unreachable — the break made position in
+the list decide whether the option worked. Behaviour for every ordinary listener is
+unchanged: skipped and broken-out-of are the same thing when nothing resists.
+
+Resisting is opt-in rather than what "internal" means. A runtime listener that must
+observe an event regardless is a different thing from a runtime listener, and
+conflating them would let any internal registration quietly outrank script.
+
+**The sequencing here was settled by the Node lane's experiment, not by argument.**
+They first reported this option as unnecessary, then found their own ledger had named
+it, then installed the canonical abort globals in four lines to see whether the
+globals alone would close their failing case. They do not: with canonical globals
+`test-events-add-abort-listener.mjs` fails identically, which is what makes this option
+the remaining blocker rather than a guess. The same experiment found a dependency
+neither lane had counted — a canonical `AbortSignal` handed to the host's
+`node:events` breaks `listenerCount`, because the host cannot answer for a foreign
+`EventTarget` — so the globals are not the cheap prerequisite they looked like. That
+part is the Node lane's, and it is why this option is worth having on its own.
+
+Four tests were added: a resisting listener registered *after* the one that stops still
+runs; an internal listener without the option is silenced like any other; no dictionary
+member reaches the option and nothing named for it appears on the prototype; and
+resisting composes with weak holding, where a live resource still runs and a collected
+one is not resurrected by resisting.
+
+Two sabotages, both restored. Letting the stop silence resisting listeners took the
+focused corpus from 9/9 to 7/9. Making every internal listener resist took it to 8/9 on
+the case that asserts the option is opt-in.
+
+The complete local Node-host/real-socket corpus passes 457/457 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: that this closes any Node test. The Node lane's case is theirs to run, and
+their `test-aborted-util.js` gc case additionally needs the canonical globals and the
+`node:events` work described above.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,293 primary
+`NTS1001` and 233 `NTS1003`; after, 1,294 primary and 233 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Two messages appeared and one
+disappeared; that pair is one message with a shifted type id. The single real addition
+is one more module-scope `let` holding a function — the same static-initializer capture
+this seam already used, now naming two functions instead of one.

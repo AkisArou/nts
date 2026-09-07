@@ -290,6 +290,12 @@ interface ListenerRecord {
    * dictionary member reaches it.
    */
   weakResource: WeakRef<object> | null;
+  /**
+   * Internal, never Web-observable: this listener runs even after an earlier one
+   * called `stopImmediatePropagation()`. It is not an `addEventListener` option and no
+   * dictionary member reaches it.
+   */
+  resistStopPropagation: boolean;
 }
 
 interface WeaklyHeldRetirement {
@@ -302,12 +308,13 @@ interface WeaklyHeldRetirement {
  * reaches ECMAScript-private state without becoming a property of EventTarget, so
  * script can neither call it nor observe that it exists.
  */
-let registerWeaklyHeld!: (
+let registerInternal!: (
   target: EventTarget,
   type: string,
   callback: ConvertedEventListener,
-  resource: object,
+  resource: object | null,
   once: boolean,
+  resist: boolean,
 ) => void;
 let retireWeaklyHeld!: (target: EventTarget, listener: ListenerRecord) => void;
 
@@ -400,8 +407,8 @@ export class EventTarget {
   private errorReporter: (error: unknown) => void = () => {};
 
   static {
-    registerWeaklyHeld = (target, type, callback, resource, once): void => {
-      target.#addWeaklyHeld(type, callback, resource, once);
+    registerInternal = (target, type, callback, resource, once, resist): void => {
+      target.#addInternal(type, callback, resource, once, resist);
     };
     retireWeaklyHeld = (target, listener): void => {
       target.#retireWeaklyHeld(listener);
@@ -409,16 +416,17 @@ export class EventTarget {
   }
 
   /**
-   * Registers a listener whose lifetime is bounded by `resource`. Duplicate
-   * registration follows the same (type, callback, capture) rule as
-   * `addEventListener`, so this seam cannot install a second copy of a listener the
-   * public API would have rejected.
+   * Registers an internal listener, optionally bounded by `resource` and optionally
+   * resisting `stopImmediatePropagation()`. Duplicate registration follows the same
+   * (type, callback, capture) rule as `addEventListener`, so this seam cannot install
+   * a second copy of a listener the public API would have rejected.
    */
-  #addWeaklyHeld(
+  #addInternal(
     type: string,
     callback: ConvertedEventListener,
-    resource: object,
+    resource: object | null,
     once: boolean,
+    resist: boolean,
   ): void {
     if (
       this.listeners.some(
@@ -435,11 +443,14 @@ export class EventTarget {
       passive: false,
       removed: false,
       unsubscribeAbort: null,
-      weakResource: new WeakRef(resource),
+      weakResource: resource === null ? null : new WeakRef(resource),
+      resistStopPropagation: resist,
     };
     this.listeners.push(listener);
     this.listenerObserver?.(type, true);
-    weaklyHeldListeners.register(resource, { target: new WeakRef(this), listener }, listener);
+    if (resource !== null) {
+      weaklyHeldListeners.register(resource, { target: new WeakRef(this), listener }, listener);
+    }
   }
 
   #retireWeaklyHeld(listener: ListenerRecord): void {
@@ -496,6 +507,7 @@ export class EventTarget {
       removed: false,
       unsubscribeAbort: null,
       weakResource: null,
+      resistStopPropagation: false,
     };
     this.listeners.push(listener);
     this.listenerObserver?.(convertedType, true);
@@ -554,8 +566,13 @@ export class EventTarget {
         for (let index = 0; index < listenerCount; index++) {
           const item = this.listeners[index];
           if (item === undefined) continue;
-          if (event.stopped) break;
           if (item.removed || item.type !== event.type) continue;
+          // `stopImmediatePropagation()` hides the rest of the list from ordinary
+          // listeners. A resisting listener is internal and is not something script
+          // registered, so script stopping propagation does not cancel it; scanning
+          // continues rather than breaking, or the resisting listener would be
+          // unreachable behind the one that stopped.
+          if (event.stopped && !item.resistStopPropagation) continue;
           // A finalization callback is not synchronous with collection, so the
           // liveness of the resource is decided here rather than trusting that the
           // registry has already run.
@@ -668,9 +685,54 @@ export function addWeaklyHeldEventListener(
   type: string,
   callback: EventListener,
   resource: object,
-  options: { readonly once?: boolean } = {},
+  options: InternalListenerOptions = {},
 ): void {
-  registerWeaklyHeld(target, type, callback, resource, options.once ?? false);
+  registerInternal(
+    target,
+    type,
+    callback,
+    resource,
+    options.once ?? false,
+    options.resistStopPropagation ?? false,
+  );
+}
+
+/** Options for the internal listener seams. None of these is Web-observable. */
+export interface InternalListenerOptions {
+  readonly once?: boolean;
+  /**
+   * Run even after an earlier listener called `stopImmediatePropagation()`.
+   *
+   * Script stopping propagation is a statement about the listeners script registered.
+   * A runtime listener that must observe the event regardless — Node's abort listeners
+   * are the case this exists for — is not one of those, and an earlier listener must
+   * not be able to silence it.
+   */
+  readonly resistStopPropagation?: boolean;
+}
+
+/**
+ * @internal Register an `EventTarget` listener that is not part of the Web API.
+ *
+ * Same non-observability as {@link addWeaklyHeldEventListener}: not an
+ * `addEventListener` option, no new property on `EventTarget` or its prototype, and
+ * the host's private symbols are not copied. The listener is held normally; use
+ * {@link addWeaklyHeldEventListener} when its lifetime must follow a resource.
+ */
+export function addInternalEventListener(
+  target: EventTarget,
+  type: string,
+  callback: EventListener,
+  options: InternalListenerOptions = {},
+): void {
+  registerInternal(
+    target,
+    type,
+    callback,
+    null,
+    options.once ?? false,
+    options.resistStopPropagation ?? false,
+  );
 }
 
 export interface MessageEventInit<T> extends EventInit {

@@ -14,7 +14,10 @@ import {
   Event,
   EventTarget,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
-import { addWeaklyHeldEventListener } from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/events.js";
+import {
+  addInternalEventListener,
+  addWeaklyHeldEventListener,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/events.js";
 
 const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
 const tick = () => new Promise((resolve) => setImmediate(resolve));
@@ -153,3 +156,91 @@ suite("a weakly held listener follows the public duplicate and removal rules", (
   assert.deepEqual(seen, [1]);
   assert.equal(typeof resource, "object");
 });
+
+suite("an internal listener can resist stopImmediatePropagation", () => {
+  const target = new EventTarget();
+  const order = [];
+
+  // Registration order matters: the resisting listener is registered last, so without
+  // the option it would be the one hidden by the stop.
+  target.addEventListener("abort", (event) => {
+    order.push("script");
+    event.stopImmediatePropagation();
+  });
+  target.addEventListener("abort", () => order.push("later-script"));
+  addInternalEventListener(target, "abort", () => order.push("internal"), {
+    resistStopPropagation: true,
+  });
+
+  target.dispatchEvent(new Event("abort"));
+  // The ordinary later listener is silenced; the internal one is not.
+  assert.deepEqual(order, ["script", "internal"]);
+});
+
+suite("an internal listener without the option is silenced like any other", () => {
+  const target = new EventTarget();
+  const order = [];
+  target.addEventListener("abort", (event) => {
+    order.push("script");
+    event.stopImmediatePropagation();
+  });
+  addInternalEventListener(target, "abort", () => order.push("internal"));
+  target.dispatchEvent(new Event("abort"));
+  assert.deepEqual(order, ["script"], "resisting is opt-in, not what internal means");
+});
+
+suite("stopImmediatePropagation is not observable through the public API", () => {
+  const target = new EventTarget();
+  const order = [];
+  // No dictionary member requests resistance: a surplus member is inert, and the
+  // listener is silenced exactly as it would be without it.
+  target.addEventListener("abort", (event) => {
+    order.push("script");
+    event.stopImmediatePropagation();
+  });
+  target.addEventListener("abort", () => order.push("forged"), {
+    resistStopPropagation: true,
+    kResistStopPropagation: true,
+  });
+  target.dispatchEvent(new Event("abort"));
+  assert.deepEqual(order, ["script"]);
+  const resistNames = Object.getOwnPropertyNames(EventTarget.prototype).filter((name) =>
+    /resist/i.test(name),
+  );
+  assert.deepEqual(resistNames, []);
+});
+
+suite("resisting and weak holding compose", async () => {
+  const controller = new AbortController();
+  const order = [];
+  controller.signal.addEventListener("abort", (event) => {
+    order.push("script");
+    event.stopImmediatePropagation();
+  });
+
+  // A live resource: the resisting weak listener runs despite the stop.
+  const live = {};
+  addWeaklyHeldEventListener(controller.signal, "abort", () => order.push("weak"), live, {
+    once: true,
+    resistStopPropagation: true,
+  });
+
+  // A collected resource: resisting does not resurrect a listener whose reason for
+  // existing is gone.
+  const reference = registerResistingWeakly(controller.signal, () => order.push("dead"));
+  assert.equal(await collectWeakReference(reference), true);
+
+  controller.abort();
+  await tick();
+  assert.deepEqual(order, ["script", "weak"]);
+  assert.equal(typeof live, "object");
+});
+
+function registerResistingWeakly(target, callback) {
+  const resource = {};
+  addWeaklyHeldEventListener(target, "abort", callback, resource, {
+    once: true,
+    resistStopPropagation: true,
+  });
+  return new WeakRef(resource);
+}
