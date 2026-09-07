@@ -135,6 +135,37 @@ public abstract class NtsView {
         for (int i = 0; i < taken; i++) { view.writeAt(at + i, source.readAt(i)); }
     }
 
+    /**
+     * One element as a number, and one number written as an element, without
+     * knowing which of the eleven this is.
+     *
+     * <p>**Deliberately not the fast path**, and the C header says so at the
+     * same helpers: *"ordinary indexed access is emitted inline by the
+     * backends, because a call per element is not a price a typed array can
+     * pay."* These exist for `set` across two kinds, where the element type is
+     * not one thing, and for anything else that has a view but not its class.
+     *
+     * <p>So this dispatches virtually where {@link NtsViewU8#getAt} does not,
+     * and the difference is the whole reason there are eleven classes rather
+     * than one with a kind field: a monomorphic call site inlines to a shift
+     * and a load, and a switch on a kind does not.
+     *
+     * <p>**No bounds check here**, and that is not an omission. `readAt`
+     * forwards to the subclass's `getAt`, which calls {@link #atInt} and checks
+     * detachment and range there. Two versions of this had one anyway -- the
+     * first recovered the index it had just been given, and the second called
+     * `at` purely for its side effects -- and removing it changed nothing in
+     * 3,497 oracle lines, which is what a redundant check looks like when you
+     * ask whether it can fail.
+     */
+    public static double getElement(NtsView view, double index) {
+        return view.readAt((int) index);
+    }
+
+    public static void putElement(NtsView view, double index, double value) {
+        view.writeAt((int) index, value);
+    }
+
     /** `indexOf`, and `-1` where there is none. Strict equality, so NaN is never found. */
     public static double indexOf(NtsView view, double value, double from) {
         NtsBuffer.alive(view.buffer);

@@ -362,6 +362,23 @@ public final class Drive {
         }
 
         for (int k = 0; k < VIEWS.length; k++) {
+            for (double x : ELEMENTS) {
+                NtsBuffer backing = NtsBuffer.allocate(WIDTH[k] * 5);
+                java.util.Arrays.fill(NtsBuffer.storage(backing), (byte) 0xa5);
+                // At a non-zero byte offset: at zero the offset term vanishes
+                // and an accessor that dropped it would answer correctly on
+                // every one of these. It does not vanish here -- dropping it
+                // from `atInt` moves 369 lines, starting with this block.
+                NtsView view = make(VIEWS[k], backing, WIDTH[k] * 2);
+                // Through the generic pair rather than the typed one: the
+                // answer must not depend on knowing the class.
+                NtsView.putElement(view, 1, x);
+                line("generic " + VIEWS[k] + " " + bits(x) + " "
+                    + bits(NtsView.getElement(view, 1)) + " " + hex(backing));
+            }
+        }
+
+        for (int k = 0; k < VIEWS.length; k++) {
             NtsBuffer from = NtsBuffer.allocate(32);
             byte[] source = NtsBuffer.storage(from);
             for (int i = 0; i < PATTERN.length; i++) { source[i] = (byte) PATTERN[i]; }
@@ -546,6 +563,22 @@ public final class Drive {
         attempt("length-detached", new Attempt() { public void run() { NtsDataView.byteLength(stale); } });
         attempt("slice-detached", new Attempt() { public void run() { NtsBuffer.slice(gone, 0, 1); } });
         attempt("view-over-detached", new Attempt() { public void run() { NtsDataView.over(gone, 0); } });
+
+        NtsBuffer elems = NtsBuffer.allocate(8);
+        final NtsViewU16 window = NtsViewU16.over(elems, 2);
+        line("element-length " + (int) NtsView.length(window));
+        line("element-in-range " + (int) NtsView.getElement(window, 2));
+        // Node answers `undefined`; this repository refuses, as it does for an
+        // ordinary array. The oracle line says which, so the two are compared
+        // on a token rather than on a value neither can share.
+        String past;
+        try {
+            NtsView.getElement(window, 3);
+            past = "0";
+        } catch (nts.rt.NtsRefusal refused) {
+            past = "undefined";
+        }
+        line("element-past-end " + past);
 
         final NtsBuffer fixed = NtsBuffer.allocate(8);
         attempt("resize-fixed", new Attempt() { public void run() { NtsBuffer.resize(fixed, 4); } });

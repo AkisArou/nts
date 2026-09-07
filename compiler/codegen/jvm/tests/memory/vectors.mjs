@@ -274,6 +274,25 @@ for (const [name, Kind] of BIG_VIEWS) {
   out.push(`bigtrack-odd ${tracking.length}`);
 }
 
+// The generic accessors, which are what a cross-kind `set` and a `DataView`
+// reach for when the element type is not one thing. Same values as the typed
+// path -- the point is that not knowing the class changes nothing about the
+// answer, only about how fast it arrives.
+// At a non-zero `byteOffset`, deliberately, and the whole backing printed as
+// hex rather than just the element read back. The offset is added one layer
+// down, in the shared index arithmetic every accessor reaches; dropping it
+// there moves 369 of these lines, and `generic i8` is the first of them. At
+// offset zero the term vanishes and not one of them would notice.
+for (const [name, Kind, width] of VIEWS) {
+  for (const x of ELEMENTS) {
+    const backing = new ArrayBuffer(width * 5);
+    new Uint8Array(backing).fill(0xa5);
+    const view = new Kind(backing, width * 2);
+    view[1] = x;
+    out.push(`generic ${name} ${bits(x)} ${bits(view[1])} ${hex(new Uint8Array(backing))}`);
+  }
+}
+
 // Round trip: read the hostile pattern through a view and write it straight
 // back through another. The only vector here whose written value carries a NaN
 // payload -- everything in ELEMENTS is the canonical quiet NaN, so
@@ -435,6 +454,16 @@ function attempt(label, body) {
   attempt("length-detached", () => v.byteLength);
   attempt("slice-detached", () => b.slice(0, 1));
   attempt("view-over-detached", () => new DataView(b));
+}
+{
+  // A typed-array element out of range. JavaScript answers `undefined` and
+  // writes nothing; this repository refuses, as it does for ordinary arrays --
+  // so the *token* is what is compared, not the language's answer.
+  const backing = new ArrayBuffer(8);
+  const view = new Uint16Array(backing, 2);
+  out.push(`element-length ${view.length}`);
+  out.push(`element-in-range ${view[2]}`);
+  out.push(`element-past-end ${view[3] === undefined ? "undefined" : view[3]}`);
 }
 {
   const fixed = new ArrayBuffer(8);
