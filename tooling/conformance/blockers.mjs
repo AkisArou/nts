@@ -294,7 +294,17 @@ if (ranked.length > 0) {
 if (roots.length > 0) {
   const byKind = new Map();
   for (const r of roots) {
-    const kind = r.what.replace(/`[^`]*`/g, "X");
+    // Normalise the *name* and keep the *type*. Replacing every backticked
+    // token collapsed `a property X of unrepresentable type (X | null)` over
+    // both `PromiseWithResolvers | null` and `Cell | null` -- one name, two
+    // entirely different causes -- and this document's author then described
+    // the group by the wrong one and recommended a feature nobody needed. The
+    // member name varies and is never the reason; the type is always the
+    // reason, so the parenthesised part is kept verbatim.
+    const open = r.what.indexOf(" (");
+    const head = open < 0 ? r.what : r.what.slice(0, open);
+    const tail = open < 0 ? "" : r.what.slice(open);
+    const kind = head.replace(/`[^`]*`/g, "X") + tail;
     if (!byKind.has(kind)) byKind.set(kind, []);
     byKind.get(kind).push(`${r.file}:${r.line}`);
   }
