@@ -1,10 +1,11 @@
-// Two audits that used to be run by hand, and found things every time.
+// Three audits that used to be run by hand, and found things every time.
 //
-//   node tooling/conformance/audit.mjs            # both
+//   node tooling/conformance/audit.mjs            # all three
 //   node tooling/conformance/audit.mjs --unclaimed
 //   node tooling/conformance/audit.mjs --exports
+//   node tooling/conformance/audit.mjs --typecheck
 //
-// Both look for the same failure, which is the one a green sweep cannot show:
+// All three look for the same failure, the one a green sweep cannot show:
 // something that is *absent* rather than wrong. A test file no module claims
 // is not a failure and not a skip -- it is in no denominator on either axis,
 // so every percentage in the ledger is computed without it. An export node has
@@ -16,6 +17,14 @@
 // The second found `url.fileURLToPathBuffer` and `util.aborted`, each with a
 // pinned test that no pattern was claiming. Running them by hand means finding
 // them when somebody remembers to look, which is why they are here.
+//
+// The third was added after the same bug bit the checker rather than the code.
+// `tsc --project runtime/node/tsconfig.json` was green while thirteen modules
+// did not typecheck and `buffer` was 0 of 51, because that config references
+// `web-platform` as a project and a reference resolves through built
+// declarations rather than source. The declarations were an hour and three
+// quarters stale. A green check over an artifact nobody rebuilt is the same
+// shape as a passing test that asserts nothing.
 //
 // Each audit is judged against a reviewed list, in the same shape as a
 // module's `not-applicable`: one `subject: reason` per line. A new entry has to
@@ -202,6 +211,41 @@ const require = (await import("node:module")).createRequire(import.meta.url);
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Every module typechecked against **its own** tsconfig.
+ *
+ * The aggregate `runtime/node/tsconfig.json` cannot do this job, and the reason
+ * is worth the paragraph. It carries `"references": [{ "path":
+ * "../web-platform" }]`, and a project reference resolves through the
+ * referenced project's *built declarations* rather than its source. When
+ * `web-platform` dropped `utf8Decode` from `src/core/utf8.ts`, the declaration
+ * file in its `.tsbuild/dist` still declared it -- built 18:09, source edited
+ * 19:51 -- so the aggregate typecheck read a stale artifact and reported green
+ * while thirteen modules were broken and `buffer` was 0 of 51.
+ *
+ * A per-module config has no reference and resolves `web-platform` through
+ * source, so it fails immediately. That is the whole difference, and it is why
+ * this runs 22 typechecks rather than one.
+ */
+async function typecheckFailures(modules) {
+  const limit = 8;
+  const found = [];
+  const queue = [...modules];
+  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    for (let m = queue.shift(); m !== undefined; m = queue.shift()) {
+      const run = spawnSync(
+        "pnpm",
+        ["exec", "tsc", "--project", join(PROFILE, m, "tsconfig.json"), "--pretty", "false"],
+        { encoding: "utf8", cwd: ROOT, maxBuffer: 32 * 1024 * 1024 },
+      );
+      const out = `${run.stdout ?? ""}${run.stderr ?? ""}`.trim();
+      if (out !== "") found.push({ module: m, first: out.split("\n")[0] });
+    }
+  });
+  await Promise.all(workers);
+  return found.sort((a, b) => a.module.localeCompare(b.module));
+}
+
 const modules = profileModules();
 let failed = false;
 
@@ -237,6 +281,23 @@ if (wants("exports")) {
     console.log(
       "\nNode exports these and the substituted module does not, so no test can reach them.\n" +
         "Implement it, or add a line to tooling/conformance/missing-exports saying why not.",
+    );
+    failed = true;
+  }
+}
+
+if (wants("typecheck")) {
+  const found = await typecheckFailures(modules);
+  console.log(
+    `typecheck: ${modules.length - found.length} of ${modules.length} module(s) ` +
+      `typecheck against their own tsconfig`,
+  );
+  for (const f of found) console.log(`  ${f.module}: ${f.first}`);
+  if (found.length > 0) {
+    console.log(
+      "\nThe aggregate `runtime/node/tsconfig.json` may still be green: it references\n" +
+        "`web-platform` as a project, so it reads that project's built declarations\n" +
+        "rather than its source. Per-module configs read source. Believe these.",
     );
     failed = true;
   }

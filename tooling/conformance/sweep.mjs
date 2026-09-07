@@ -428,11 +428,14 @@ if (usesCompiler) {
   }
 }
 
-// The two audits that look for what is *absent*: a test file no module claims,
-// and an export node has that the shape does not. Both are failures a green
+// The three audits that look for what is *absent*: a test file no module
+// claims, an export node has that the shape does not, and a module that no
+// longer typechecks against its own tsconfig. All three are failures a green
 // sweep is structurally unable to show -- an unclaimed file is in no
-// denominator, and nothing can fail on a function nothing calls -- so they run
-// here rather than when someone remembers. Skipped for a single-module or
+// denominator, nothing can fail on a function nothing calls, and the aggregate
+// typecheck reads a referenced project's built declarations rather than its
+// source, so it stayed green through thirteen broken modules. They run here
+// rather than when someone remembers. Skipped for a single-module or
 // compiler-only run, where a profile-wide answer would be noise.
 if (!withCompiles && modules.length > 1) {
   const audit = spawnSync(process.execPath, [join(HERE, "audit.mjs")], {
