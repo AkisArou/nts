@@ -2884,3 +2884,61 @@ Measured with the same pinned binary built at `43fda4d3`: before, 1,294 primary
 naming: reading `status` from a discriminated union whose members lay their fields out
 differently. That is an ordinary TypeScript result type rather than an exotic shape, so
 it is reported rather than flattened into a single interface with optional members.
+
+## Compression the server can actually perform
+
+The handshake declined every extension offer. That was correct and it was a limit, so
+this removes it: `negotiatePerMessageDeflateOffer` answers a client's RFC 7692 offer
+from the server side, and the handshake uses it when asked to.
+
+It is off by default. A handshake that agrees to compression the embedder cannot
+perform produces a session neither side can read, so negotiating is enabled alongside
+a deflate provider rather than assumed. The agreed parameters are returned on the
+outcome rather than only written into a header, because the embedder has to configure
+its codec with exactly what was agreed and re-parsing its own response to discover
+that would be a second implementation of the same decision.
+
+Directions are named for whose traffic they describe rather than whose parameter they
+came from: `incoming` is client-to-server, governed by the `client_*` parameters, and
+`outgoing` is server-to-client, governed by the `server_*` ones. Reversing them
+produces a session that negotiates successfully and then cannot decompress, which is
+the kind of mistake a name can prevent and a comment cannot.
+
+An offer is accepted only if every parameter in it can be honoured exactly. An unknown
+parameter, a duplicate, a value on a valueless flag, or a window outside 8..15 makes
+that entry unusable and the next entry is tried; accepting while ignoring part of an
+offer would agree to something neither side then implements. A client may send several
+entries in preference order and the first honourable one wins. Nothing usable, or no
+offer, is a successful handshake with no compression — never a failed one.
+
+`client_max_window_bits` gets its own rule because the RFC gives it one: it may appear
+in the response only if the client showed it understands the parameter. A bare
+`client_max_window_bits` states support without requesting a limit, so the server
+imposes none and says nothing; a client that never mentioned it is never sent it,
+because a conforming client fails the handshake on receiving it. Symmetrically a bare
+`server_max_window_bits` leaves the choice to the server, which keeps 15 and therefore
+does not name the parameter either.
+
+Three tests were added, covering the default-off behaviour, each honoured parameter and
+its exact echoed response, and seven distinct unusable offers plus preference-order
+fallback. Two sabotages, both restored: accepting an offer while ignoring parameters it
+could not honour took the corpus from 10/10 to 9/10, and answering
+`client_max_window_bits` when the client never mentioned it took it to 7/10.
+
+The window-bits parser scans digits explicitly rather than using a pattern, for the
+same reason the integrity parser does: it is a two-character decimal range, the shared
+style avoids the regular-expression dependency, and consistency within the runtime is
+worth more than the shorter spelling.
+
+The complete local Node-host/real-socket corpus passes 467/467 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Still not claimed: a WebSocket server. This negotiates compression; it does not
+compress. The shared `PerMessageDeflate` codec exists and is wired for the client
+direction only, and nothing here connects the negotiated parameters to it.
+
+Measured with the same pinned binary built at `43fda4d3`: 1,295 primary `NTS1001`
+before and after, 234 to 235 cascades, with zero `NTS1004`, zero `NTS4xxx` and no
+invalid HIR. One message differs between the runs and it is the same message with a
+shifted type id; the added cascade is the handshake's new call into the negotiator.

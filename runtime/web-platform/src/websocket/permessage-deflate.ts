@@ -141,6 +141,116 @@ export class PerMessageDeflate {
   }
 }
 
+/**
+ * A server's answer to a client's `permessage-deflate` offer.
+ *
+ * Directions are named from the server's side: `incoming` is client-to-server, which
+ * the `client_*` parameters govern, and `outgoing` is server-to-client, which the
+ * `server_*` parameters govern. Getting that backwards produces a session that
+ * negotiates successfully and then cannot decompress, so the names say whose traffic
+ * they describe rather than whose parameter they came from.
+ */
+export interface PerMessageDeflateServerNegotiation {
+  /** The exact `Sec-WebSocket-Extensions` value to send back. */
+  readonly response: string;
+  readonly incomingNoContextTakeover: boolean;
+  readonly outgoingNoContextTakeover: boolean;
+  readonly incomingWindowBits: number;
+  readonly outgoingWindowBits: number;
+}
+
+/** RFC 7692 window bits: decimal digits only, 8 through 15, no sign and no padding. */
+function windowBits(value: string | null): number | null {
+  if (value === null || value.length === 0 || value.length > 2) return null;
+  let bits = 0;
+  for (let index = 0; index < value.length; index++) {
+    const digit = value.charCodeAt(index) - 0x30;
+    if (digit < 0 || digit > 9) return null;
+    bits = bits * 10 + digit;
+  }
+  return bits >= 8 && bits <= 15 ? bits : null;
+}
+
+/**
+ * Chooses a server response to a client's extension offer, or declines.
+ *
+ * The client may send several `permessage-deflate` entries in preference order; the
+ * first one whose parameters can be honoured exactly is accepted and the rest are
+ * ignored, which is what RFC 7692 asks of a server. An entry carrying a parameter this
+ * implementation does not know, a duplicate parameter, or an out-of-range window is
+ * not negotiable and the next entry is tried — accepting an offer while ignoring part
+ * of it would agree to something neither side then implements.
+ *
+ * Declining is always valid and is what an absent or unusable offer produces.
+ */
+export function negotiatePerMessageDeflateOffer(
+  header: string | null,
+): PerMessageDeflateServerNegotiation | null {
+  if (header === null) return null;
+  for (const extension of parseExtensions(header)) {
+    if (extension.name !== "permessage-deflate") continue;
+    let incomingNoContextTakeover = false;
+    let outgoingNoContextTakeover = false;
+    let outgoingWindowBits = 15;
+    let clientWindowBits: number | null = null;
+    let clientSupportsWindowLimit = false;
+    let usable = true;
+    const seen = new Set<string>();
+    for (const parameter of extension.parameters) {
+      if (seen.has(parameter.name)) {
+        usable = false;
+        break;
+      }
+      seen.add(parameter.name);
+      if (parameter.name === "server_no_context_takeover") {
+        if (parameter.value !== null) usable = false;
+        outgoingNoContextTakeover = true;
+      } else if (parameter.name === "client_no_context_takeover") {
+        if (parameter.value !== null) usable = false;
+        incomingNoContextTakeover = true;
+      } else if (parameter.name === "server_max_window_bits") {
+        // A bare parameter leaves the choice to the server; a value is a ceiling.
+        if (parameter.value !== null) {
+          const bits = windowBits(parameter.value);
+          if (bits === null) usable = false;
+          else outgoingWindowBits = bits;
+        }
+      } else if (parameter.name === "client_max_window_bits") {
+        clientSupportsWindowLimit = true;
+        if (parameter.value !== null) {
+          const bits = windowBits(parameter.value);
+          if (bits === null) usable = false;
+          else clientWindowBits = bits;
+        }
+      } else {
+        usable = false;
+      }
+      if (!usable) break;
+    }
+    if (!usable) continue;
+
+    let response = "permessage-deflate";
+    if (outgoingNoContextTakeover) response += "; server_no_context_takeover";
+    if (incomingNoContextTakeover) response += "; client_no_context_takeover";
+    if (outgoingWindowBits !== 15)
+      response += "; server_max_window_bits=" + String(outgoingWindowBits);
+    // `client_max_window_bits` may appear in the response only if the client showed it
+    // understands the parameter. Sending it otherwise fails the handshake at a
+    // conforming client, so the offer decides whether it is even mentionable.
+    if (clientSupportsWindowLimit && clientWindowBits !== null) {
+      response += "; client_max_window_bits=" + String(clientWindowBits);
+    }
+    return {
+      response,
+      incomingNoContextTakeover,
+      outgoingNoContextTakeover,
+      incomingWindowBits: clientWindowBits ?? 15,
+      outgoingWindowBits,
+    };
+  }
+  return null;
+}
+
 function parseExtensions(header: string): Extension[] {
   const extensions: Extension[] = [];
   for (const item of splitOutsideQuotes(header, 44)) {

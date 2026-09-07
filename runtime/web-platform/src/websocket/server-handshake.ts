@@ -4,6 +4,8 @@ import { Headers } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import { hasToken } from "../http/fields.ts";
 import { websocketAccept } from "./handshake.ts";
+import { negotiatePerMessageDeflateOffer } from "./permessage-deflate.ts";
+import type { PerMessageDeflateServerNegotiation } from "./permessage-deflate.ts";
 
 /** The only version RFC 6455 defines, and the only one this server speaks. */
 const VERSION = "13";
@@ -17,6 +19,14 @@ export interface WebSocketUpgradeOptions {
    * what a server that speaks no subprotocol must do.
    */
   readonly protocols?: readonly string[];
+  /**
+   * Negotiate `permessage-deflate` when the client offers it.
+   *
+   * Off by default, because a handshake that agrees to compression the embedder cannot
+   * perform produces a session neither side can read. Turn it on only alongside a
+   * deflate provider, and use the returned negotiation to configure it.
+   */
+  readonly perMessageDeflate?: boolean;
 }
 
 export interface WebSocketUpgradeAccepted {
@@ -26,6 +36,14 @@ export interface WebSocketUpgradeAccepted {
   readonly headers: readonly HeaderEntry[];
   /** The selected subprotocol, or null when none was selected. */
   readonly protocol: string | null;
+  /**
+   * The agreed compression parameters, or null when compression was declined.
+   *
+   * Returned rather than merely echoed in a header: the embedder has to configure its
+   * codec with exactly what was agreed, and re-parsing its own response to find out
+   * would be a second implementation of the same decision.
+   */
+  readonly perMessageDeflate: PerMessageDeflateServerNegotiation | null;
 }
 
 export interface WebSocketUpgradeRefused {
@@ -144,15 +162,20 @@ export function acceptWebSocketUpgrade(
     ["sec-websocket-accept", websocketAccept(key.trim())],
   ];
   if (protocol !== null) responseHeaders.push(["sec-websocket-protocol", protocol]);
-  // Extensions are declined. A server may always decline, and negotiating
-  // permessage-deflate from the server side needs an offer parser this does not have;
-  // answering an offer it cannot fully honour would be worse than declining it.
+  // Declining is always valid, and is what an absent offer, an unusable one, or a
+  // server that cannot compress all produce.
+  const deflate =
+    options.perMessageDeflate === true
+      ? negotiatePerMessageDeflateOffer(headers.get("sec-websocket-extensions"))
+      : null;
+  if (deflate !== null) responseHeaders.push(["sec-websocket-extensions", deflate.response]);
   return {
     accepted: true,
     status: 101,
     statusText: "Switching Protocols",
     headers: responseHeaders,
     protocol,
+    perMessageDeflate: deflate,
   };
 }
 

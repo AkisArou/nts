@@ -125,6 +125,8 @@ export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/d
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
 export { acceptWebSocketUpgrade, serializeUpgradeResponse } from "./websocket/server-handshake.ts";
+export { negotiatePerMessageDeflateOffer } from "./websocket/permessage-deflate.ts";
+export type { PerMessageDeflateServerNegotiation } from "./websocket/permessage-deflate.ts";
 export type {
   WebSocketUpgradeAccepted,
   WebSocketUpgradeOptions,

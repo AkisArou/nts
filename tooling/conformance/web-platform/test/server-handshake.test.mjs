@@ -201,3 +201,91 @@ suite("our own client completes the handshake this server produces", async (t) =
   assert.equal(await message, "round trip");
   socket.close();
 });
+
+suite("compression is declined unless the server asks to negotiate it", () => {
+  const offered = headersOf({ "sec-websocket-extensions": "permessage-deflate" });
+  const off = acceptWebSocketUpgrade("GET", offered);
+  assert.equal(off.perMessageDeflate, null);
+  assert.equal(headerValue(off, "sec-websocket-extensions"), null);
+
+  const on = acceptWebSocketUpgrade("GET", offered, { perMessageDeflate: true });
+  assert.equal(headerValue(on, "sec-websocket-extensions"), "permessage-deflate");
+  assert.deepEqual(on.perMessageDeflate, {
+    response: "permessage-deflate",
+    incomingNoContextTakeover: false,
+    outgoingNoContextTakeover: false,
+    incomingWindowBits: 15,
+    outgoingWindowBits: 15,
+  });
+
+  // No offer at all is declined even when negotiation is enabled.
+  const none = acceptWebSocketUpgrade("GET", headersOf(), { perMessageDeflate: true });
+  assert.equal(none.perMessageDeflate, null);
+});
+
+suite("the negotiated parameters are the ones the server commits to", () => {
+  const negotiate = (value) =>
+    acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-extensions": value }), {
+      perMessageDeflate: true,
+    });
+
+  // A requested no-context-takeover in either direction is honoured and echoed.
+  const both = negotiate(
+    "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
+  );
+  assert.equal(both.perMessageDeflate.outgoingNoContextTakeover, true);
+  assert.equal(both.perMessageDeflate.incomingNoContextTakeover, true);
+  assert.equal(
+    both.perMessageDeflate.response,
+    "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
+  );
+
+  // A window ceiling on the server's own traffic is adopted and echoed.
+  const limited = negotiate("permessage-deflate; server_max_window_bits=10");
+  assert.equal(limited.perMessageDeflate.outgoingWindowBits, 10);
+  assert.match(limited.perMessageDeflate.response, /server_max_window_bits=10/);
+
+  // A bare server_max_window_bits leaves the choice to the server, which keeps 15 and
+  // therefore says nothing about it.
+  const bare = negotiate("permessage-deflate; server_max_window_bits");
+  assert.equal(bare.perMessageDeflate.outgoingWindowBits, 15);
+  assert.equal(bare.perMessageDeflate.response, "permessage-deflate");
+
+  // client_max_window_bits may be answered only because the client mentioned it.
+  const client = negotiate("permessage-deflate; client_max_window_bits=9");
+  assert.equal(client.perMessageDeflate.incomingWindowBits, 9);
+  assert.match(client.perMessageDeflate.response, /client_max_window_bits=9/);
+  // A bare client_max_window_bits states support without asking for a limit, so the
+  // server does not impose one and must not name the parameter.
+  const bareClient = negotiate("permessage-deflate; client_max_window_bits");
+  assert.equal(bareClient.perMessageDeflate.response, "permessage-deflate");
+  // And a client that never mentioned it is never sent it.
+  assert.equal(negotiate("permessage-deflate").perMessageDeflate.response, "permessage-deflate");
+});
+
+suite("an offer that cannot be honoured exactly is passed over", () => {
+  const negotiate = (value) =>
+    acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-extensions": value }), {
+      perMessageDeflate: true,
+    });
+
+  for (const bad of [
+    "permessage-deflate; unknown_parameter",
+    "permessage-deflate; server_max_window_bits=7",
+    "permessage-deflate; server_max_window_bits=16",
+    "permessage-deflate; server_max_window_bits=x",
+    "permessage-deflate; client_max_window_bits=0",
+    "permessage-deflate; server_no_context_takeover=1",
+    "permessage-deflate; server_no_context_takeover; server_no_context_takeover",
+  ]) {
+    const outcome = negotiate(bad);
+    assert.equal(outcome.accepted, true, "a bad extension offer is not a failed handshake");
+    assert.equal(outcome.perMessageDeflate, null, `must not accept: ${bad}`);
+  }
+
+  // Several entries in preference order: the first honourable one wins.
+  const fallback = negotiate("permessage-deflate; unknown_parameter, permessage-deflate");
+  assert.equal(fallback.perMessageDeflate.response, "permessage-deflate");
+  // An unrelated extension is ignored rather than accepted.
+  assert.equal(negotiate("some-other-extension").perMessageDeflate, null);
+});
