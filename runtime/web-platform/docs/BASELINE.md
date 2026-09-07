@@ -3528,3 +3528,73 @@ pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 pass
 failing and 14 named not-applicable. The root TypeScript solution build is green, and
 the NTS frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003`, as expected
 for a slice that adds a test and changes no shared source.
+
+## The durable-storage ABI, shaped by a device rather than by me
+
+The plan's narrow durable-storage ABI is now defined, with a host filesystem
+implementation. The shape was agreed with the JVM owner before anything was written,
+and two of their answers changed it.
+
+**They ran the capability check on a real API-26 device first**, which is now this
+project's habit rather than anyone's caution: `Files.move(ATOMIC_MOVE)` over an existing
+target, `renameTo`, `FileDescriptor.sync()` on the data file and `Os.fsync()` on the
+*directory* all work at the declared floor, and `java.nio.file` is genuinely present
+rather than merely declared. So atomic replace does not have to shape the ABI, which is
+what I would have assumed it might.
+
+**Streaming is asymmetric — write only — and their argument is better than either
+option I proposed.** A whole-value `write(namespace, key, bytes)` cannot serve "spill to
+disk so large payloads are not forced into RAM", because the bytes parameter *is* the
+payload in RAM: the whole-value form contradicts the requirement it exists for. The read
+side has no such problem, because `BlobExternalSource` already does ranged reads and a
+second ranged-read seam in the store would be a second answer to one question. So there
+is one handle type, for writing, and reading is whole-value plus the existing source.
+
+**Commit is a handle operation, not a `begin`/`rollback` pair.** Temp-file-plus-rename
+and a SQLite transaction are both expressible as one `commit`; ABI-level verbs would
+force a filesystem provider to model a transaction it does not have and would let a
+caller open one and never close it.
+
+**Two things are stated in the contract that would otherwise be provider details.**
+What a key holds after a crash mid-write — the old value or the new one, never a mix and
+never absent — because that is what lets a caller reason about recovery without knowing
+which provider it has. And that cancellation is cooperative and checked between chunks:
+a blocking write cannot be interrupted mid-syscall on Android, and closing the
+descriptor underneath one tears the file rather than stopping the write, so the honest
+guarantee is *no partial value becomes visible* rather than *the write stops
+immediately*. A provider promising promptness would have to lie.
+
+Nine tests: whole and ranged reads, absent keys as null rather than errors, nothing
+visible before commit, discard leaving the previous value and no partial behind,
+cancellation leaving the previous value, a simulated crash where the handle is abandoned
+and a reopened store sees the old value with the leftover partial invisible, records
+carrying size and modification time with namespaces separate, keys encoded rather than
+trusted as path segments, and a closed store refusing work.
+
+The crash test asserts that it actually left a partial file before checking that the
+partial is invisible, because a recovery test that never produced anything to recover
+from proves nothing.
+
+Three sabotages, all restored. Writing straight to the target instead of through a
+temporary broke four tests at once — it is the single mechanism behind atomicity,
+discard, cancellation and crash recovery. Never checking the signal between chunks broke
+cancellation. Listing leftover partials as records broke two.
+
+**One guarantee is deliberately untested and named as such.** The directory sync makes
+the *rename* durable, separately from the data sync that makes the bytes durable, and no
+test here can crash a machine to show the difference. It is implemented because the JVM
+owner measured that both syncs are reachable at the floor, and recorded here as
+reasoning rather than as evidence.
+
+**This interface has no consumer yet, which is the thing this ledger keeps warning
+about.** It exists because the implementer of the other side asked for a strawman to
+build against and to converge on the `AbortSignal` spelling where the two seams meet.
+That is a named reason with a named implementer, not the usual accident — but it is
+still an unrouted mechanism until spill-to-disk or a persistent cache store consumes it,
+and it should not be counted as either of those.
+
+The complete local Node-host/real-socket corpus passes 530/530 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green. The NTS
+frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003`: the ABI is
+types-only and the implementation is host tooling outside the compiled project.

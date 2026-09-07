@@ -124,6 +124,10 @@ export type {
 } from "./dispatch/diagnostics.ts";
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
+// The store hands back the same ranged-source seam Blob already consumes, so a
+// provider implementing it needs both types from this boundary.
+export type { BlobExternalReader, BlobExternalSource } from "./file/blob.ts";
+export type { DurableByteStore, DurableRecord, DurableWrite } from "./storage/durable.ts";
 export { VirtualScheduler } from "./provider/virtual-time.ts";
 export type { VirtualSchedulerOptions } from "./provider/virtual-time.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
