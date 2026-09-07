@@ -87,19 +87,19 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     else this.lastAlgorithm.next = algorithm;
     this.lastAlgorithm = algorithm;
     this.abortAlgorithmCount++;
-    this.updateSourceRetention();
-    return () => this.removeAlgorithm(algorithm);
+    this.#updateSourceRetention();
+    return () => this.#removeAlgorithm(algorithm);
   }
 
   /** @internal */ trigger(reason: unknown): void {
-    if (!this.markAborted(reason)) return;
+    if (!this.#markAborted(reason)) return;
 
-    const dependents = this.markDependentsAborted();
-    this.detachFromSources();
-    for (const dependent of dependents) dependent.detachFromSources();
+    const dependents = this.#markDependentsAborted();
+    this.#detachFromSources();
+    for (const dependent of dependents) dependent.#detachFromSources();
 
-    this.runAbortSteps();
-    for (const dependent of dependents) dependent.runAbortSteps();
+    this.#runAbortSteps();
+    for (const dependent of dependents) dependent.#runAbortSteps();
   }
 
   static abort(reason?: unknown): AbortSignal {
@@ -125,15 +125,15 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     }
 
     for (const signal of converted) {
-      if (signal.sourceSignals.length === 0) result.addSourceSignal(signal);
+      if (signal.sourceSignals.length === 0) result.#addSourceSignal(signal);
       else {
         for (const sourceReference of signal.sourceSignals) {
           const source = sourceReference.deref();
-          if (source !== undefined) result.addSourceSignal(source);
+          if (source !== undefined) result.#addSourceSignal(source);
         }
       }
     }
-    result.setListenerObserver((type, added) => result.observeListener(type, added));
+    result.setListenerObserver((type, added) => result.#observeListener(type, added));
     return result;
   }
 
@@ -150,20 +150,20 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     return signal;
   }
 
-  private markAborted(reason: unknown): boolean {
+  #markAborted(reason: unknown): boolean {
     if (this.isAborted) return false;
     this.isAborted = true;
     this.abortReason = reason === undefined ? abortError() : reason;
     return true;
   }
 
-  private markDependentsAborted(): AbortSignal[] {
+  #markDependentsAborted(): AbortSignal[] {
     const pending: AbortSignal[] = [];
     const cleanup = this.dependentCleanup;
     for (const reference of this.dependentSignals) {
       cleanup?.unregister(reference);
       const dependent = reference.deref();
-      if (dependent !== undefined && dependent.markAborted(this.abortReason))
+      if (dependent !== undefined && dependent.#markAborted(this.abortReason))
         pending.push(dependent);
     }
     this.dependentSignals.length = 0;
@@ -171,7 +171,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     return pending;
   }
 
-  private runAbortSteps(): void {
+  #runAbortSteps(): void {
     let algorithm = this.firstAlgorithm;
     this.firstAlgorithm = null;
     this.lastAlgorithm = null;
@@ -195,16 +195,16 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     } finally {
       this.runningAlgorithms = false;
       this.abortAlgorithmCount = 0;
-      this.updateSourceRetention();
+      this.#updateSourceRetention();
     }
     this.dispatchTrustedEvent(new Event("abort"));
   }
 
-  private removeAlgorithm(algorithm: AbortAlgorithm): void {
+  #removeAlgorithm(algorithm: AbortAlgorithm): void {
     if (!algorithm.active) return;
     algorithm.active = false;
     this.abortAlgorithmCount--;
-    this.updateSourceRetention();
+    this.#updateSourceRetention();
     if (this.runningAlgorithms) return;
 
     const previous = algorithm.previous;
@@ -217,29 +217,32 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     algorithm.next = null;
   }
 
-  private addSourceSignal(source: AbortSignal): void {
+  #addSourceSignal(source: AbortSignal): void {
     for (const reference of this.sourceSignals) if (reference.deref() === source) return;
 
-    const sourceReference = source.reference();
+    const sourceReference = source.#reference();
     this.sourceSignals.push(sourceReference);
-    source.addDependentSignal(this, this.reference());
+    source.#addDependentSignal(this, this.#reference());
   }
 
-  private addDependentSignal(
+  #addDependentSignal(
     dependent: AbortSignal,
     dependentReference: WeakRef<AbortSignal>,
   ): void {
     this.dependentSignals.push(dependentReference);
     if (this.dependentCleanup === null) {
-      const sourceReference = this.reference();
+      const sourceReference = this.#reference();
       this.dependentCleanup = new FinalizationRegistry((reference) => {
-        sourceReference.deref()?.removeDependentSignal(reference);
+        // Written out rather than optionally chained: an optional chain cannot carry a
+        // private identifier, and the receiver is another instance of this class.
+        const source = sourceReference.deref();
+        if (source !== undefined) source.#removeDependentSignal(reference);
       });
     }
     this.dependentCleanup.register(dependent, dependentReference, dependentReference);
   }
 
-  private removeDependentSignal(reference: WeakRef<AbortSignal>): void {
+  #removeDependentSignal(reference: WeakRef<AbortSignal>): void {
     this.dependentCleanup?.unregister(reference);
     const index = this.dependentSignals.indexOf(reference);
     if (index < 0) return;
@@ -250,11 +253,11 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     this.dependentSignals.length--;
   }
 
-  private retainDependentSignal(dependent: AbortSignal): void {
+  #retainDependentSignal(dependent: AbortSignal): void {
     if (!this.retainedDependents.includes(dependent)) this.retainedDependents.push(dependent);
   }
 
-  private releaseDependentSignal(dependent: AbortSignal): void {
+  #releaseDependentSignal(dependent: AbortSignal): void {
     const index = this.retainedDependents.indexOf(dependent);
     if (index < 0) return;
     for (let read = index + 1; read < this.retainedDependents.length; read++) {
@@ -264,29 +267,30 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     this.retainedDependents.length--;
   }
 
-  private detachFromSources(): void {
+  #detachFromSources(): void {
     if (this.selfReference !== null) {
       for (const reference of this.sourceSignals) {
-        reference.deref()?.removeDependentSignal(this.selfReference);
+        const source = reference.deref();
+        if (source !== undefined) source.#removeDependentSignal(this.selfReference);
       }
     }
     this.sourceSignals.length = 0;
     this.retainedBySources = false;
   }
 
-  private reference(): WeakRef<AbortSignal> {
+  #reference(): WeakRef<AbortSignal> {
     if (this.selfReference === null) this.selfReference = new WeakRef(this);
     return this.selfReference;
   }
 
-  private observeListener(type: string, added: boolean): void {
+  #observeListener(type: string, added: boolean): void {
     if (type !== "abort") return;
     if (added) this.abortListenerCount++;
     else this.abortListenerCount--;
-    this.updateSourceRetention();
+    this.#updateSourceRetention();
   }
 
-  private updateSourceRetention(): void {
+  #updateSourceRetention(): void {
     const shouldRetain = !this.isAborted && this.abortListenerCount + this.abortAlgorithmCount > 0;
     if (shouldRetain === this.retainedBySources) return;
 
@@ -294,8 +298,8 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     for (const reference of this.sourceSignals) {
       const source = reference.deref();
       if (source === undefined) continue;
-      if (shouldRetain) source.retainDependentSignal(this);
-      else source.releaseDependentSignal(this);
+      if (shouldRetain) source.#retainDependentSignal(this);
+      else source.#releaseDependentSignal(this);
     }
   }
 

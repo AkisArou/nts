@@ -217,7 +217,7 @@ export class Headers {
     return this;
   }
 
-  private sorted(): HeaderEntry[] {
+  #sorted(): HeaderEntry[] {
     if (this.sortedCache !== null) {
       return this.sortedCache;
     }
@@ -253,7 +253,7 @@ export class Headers {
     // Mutations invalidate the cache; ordinary traversal does not sort repeatedly.
     let index = 0;
     while (true) {
-      const entry = this.sorted()[index++];
+      const entry = this.#sorted()[index++];
       if (entry === undefined) {
         return;
       }

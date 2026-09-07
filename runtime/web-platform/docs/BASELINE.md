@@ -5906,3 +5906,63 @@ describe.
 
 Frontier: **1,297 primaries unchanged**, 319 to 321 cascades. 814/814 host, upstream steady
 at 2,410 of 2,418.
+
+## The excuse was measured and it was wrong
+
+The previous entry deferred privatising the sixty-three internal prototype methods, on the
+grounds that "`#private` is not free here — the frontier already carries refusals for
+properties of unrepresentable private type". That cited a real diagnostic and **misread
+it**: the refusal is about a property's *type* being unrepresentable, not about privacy. A
+real observation attached to the wrong claim, and it had been sitting in this ledger as a
+reason not to do work.
+
+Measured instead. Four `TextDecoder` members converted: **1,297/321 before, 1,297/321
+after.** Free.
+
+**And then not believed, because that is exactly what a patch doing nothing would print.**
+Three preconditions had to hold before the zero meant anything: the occurrences really
+`#`-prefixed in source, the emitted JavaScript really carrying `#` members, and the names
+really gone from `TextDecoder.prototype`. All three checked. The first version of that
+measurement had no verification in it at all, and "unchanged" had already been read as good
+news.
+
+### Sixty-three to forty-five, and where it stopped
+
+Eighteen internal methods are now genuinely private: thirteen on `AbortSignal`, four on
+`TextDecoder`, one on `Headers`. Zero frontier cost, 814/814 host, upstream unchanged.
+
+Two files were attempted and reverted, and **the compiler was the oracle for both**:
+
+`core/events.ts` — `initialize` and `applyConvertedEventInit` are called from *outside* the
+`Event` class. A name-based scan said they were single-file and single-file is not
+single-class; `#private` is per-class, and `tsc` said so immediately.
+
+`streams/readable.ts` — several of those names are declared on an **interface**, where a
+private identifier is not legal at all, and others cross between the stream and its byte
+state.
+
+Neither reverted file is a defeat worth hiding: they are the twenty-eight-ish that need a
+different mechanism than privacy, which is what the remaining forty-five now means.
+
+Along the way `?.#member` turned out to be illegal — an optional chain cannot carry a
+private identifier — so four call sites became explicit checks. Behaviourally identical,
+and the comment says why rather than leaving the next reader to rediscover the rule.
+
+### What the peer lane's correction changed about the risk
+
+The NodeJS lane cleared this change to land, then corrected its own scope claim twice: three
+modules became four, and four became **twelve of twenty-two**, because `core/events.ts` is
+upstream of nearly everything they own — `zlib` reaches it in three hops with no mention of
+this runtime anywhere in `zlib`. They replaced recall with a tool that follows imports
+transitively.
+
+That correction arrived after `core/events.ts` had already been reverted for unrelated
+reasons, so the landed change touches **`core/abort.ts`, `core/encoding.ts` and
+`fetch/headers.ts`** and not the file with twelve modules behind it. The two module-level
+helpers they actually depend on — `addInternalEventListener` and `addWeaklyHeldEventListener`
+— live in `core/events.ts`, are exported functions rather than prototype methods, and are
+untouched.
+
+Worth recording because the risk was real and the reason it did not land is not foresight.
+`tsc` refused the file that mattered, for a reason having nothing to do with the twelve
+modules behind it.

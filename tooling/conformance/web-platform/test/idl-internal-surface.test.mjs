@@ -44,26 +44,12 @@ const IDL_CONSTANTS = new Set([
 /**
  * Members this runtime exposes on an interface prototype that Web IDL does not define.
  *
- * Sixty-three of them. Shrinking this table is progress; growing it is a regression.
+ * Forty-five, down from sixty-three. Shrinking this table is progress; growing it is a
+ * regression. The assertion is exact equality in both directions, so a removal has to
+ * change this table and the count below rather than passing silently.
  */
 const INTERNAL_PROTOTYPE_MEMBERS = {
-  AbortSignal: [
-    "addDependentSignal",
-    "addSourceSignal",
-    "detachFromSources",
-    "markAborted",
-    "markDependentsAborted",
-    "observeListener",
-    "reference",
-    "releaseDependentSignal",
-    "removeAlgorithm",
-    "removeDependentSignal",
-    "retainDependentSignal",
-    "runAbortSteps",
-    "subscribe",
-    "trigger",
-    "updateSourceRetention",
-  ],
+  AbortSignal: ["subscribe", "trigger"],
   Event: [
     "applyConvertedEventInit",
     "begin",
@@ -82,7 +68,7 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "setHandler",
     "setListenerObserver",
   ],
-  Headers: ["isImmutable", "makeImmutable", "raw", "sorted", "writable"],
+  Headers: ["isImmutable", "makeImmutable", "raw", "writable"],
   ReadableStream: [
     "attach",
     "attachBYOB",
@@ -104,7 +90,6 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
   ],
   Request: ["contentType"],
   Response: ["contentType"],
-  TextDecoder: ["decodeUTF16", "replacement", "resetSequence", "utf16Error"],
   WebSocket: ["closeForRuntime", "connect", "fail", "finish", "readLoop", "unregister"],
 };
 
@@ -145,7 +130,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 63);
+  assert.equal(total, 45);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {

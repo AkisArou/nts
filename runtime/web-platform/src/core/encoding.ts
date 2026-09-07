@@ -180,7 +180,7 @@ export class TextDecoder {
   get ignoreBOM(): boolean {
     return this.decoderIgnoreBOM;
   }
-  private resetSequence(): void {
+  #resetSequence(): void {
     this.needed = 0;
     this.seen = 0;
     this.code = 0;
@@ -189,8 +189,8 @@ export class TextDecoder {
     this.pendingByte = -1;
     this.pendingLead = -1;
   }
-  private replacement(): void {
-    this.resetSequence();
+  #replacement(): void {
+    this.#resetSequence();
     if (this.decoderFatal) {
       throw new TypeError("Invalid UTF-8");
     }
@@ -204,7 +204,7 @@ export class TextDecoder {
    * trail. A decoder that dropped either would turn a truncated stream into a shorter
    * valid one, which is the failure the `fatal` flag exists to make visible.
    */
-  private decodeUTF16(
+  #decodeUTF16(
     input: Uint8Array,
     stream: boolean,
     emit: (code: number) => void,
@@ -229,7 +229,7 @@ export class TextDecoder {
         }
         // The lead was unpaired. It is an error on its own, and the unit that revealed
         // it is then processed as a fresh one rather than swallowed with it.
-        this.utf16Error();
+        this.#utf16Error();
         emit(0xfffd);
       }
 
@@ -238,7 +238,7 @@ export class TextDecoder {
         continue;
       }
       if (unit >= 0xdc00 && unit <= 0xdfff) {
-        this.utf16Error();
+        this.#utf16Error();
         emit(0xfffd);
         continue;
       }
@@ -249,12 +249,12 @@ export class TextDecoder {
     if (this.pendingLead !== -1 || this.pendingByte !== -1) {
       this.pendingLead = -1;
       this.pendingByte = -1;
-      this.utf16Error();
+      this.#utf16Error();
       emit(0xfffd);
     }
   }
 
-  private utf16Error(): void {
+  #utf16Error(): void {
     if (this.decoderFatal) throw new TypeError("Invalid UTF-16");
   }
 
@@ -262,7 +262,7 @@ export class TextDecoder {
     const input = bufferSourceBytes(args[0]);
     const stream = convertTextDecodeOptions(args[1]);
     if (!this.doNotFlush) {
-      this.resetSequence();
+      this.#resetSequence();
       this.bomSeen = false;
     }
     this.doNotFlush = stream;
@@ -282,7 +282,7 @@ export class TextDecoder {
       }
     };
     if (this.decoderEncoding !== "utf-8") {
-      this.decodeUTF16(input, stream, emit);
+      this.#decodeUTF16(input, stream, emit);
       this.bomSeen = bomSeen;
       pieces.push(ascii);
       return pieces.join("");
@@ -311,12 +311,12 @@ export class TextDecoder {
           if (byte === 0xf0) this.lower = 0x90;
           if (byte === 0xf4) this.upper = 0x8f;
         } else {
-          this.replacement();
+          this.#replacement();
           emit(0xfffd);
         }
       } else {
         if (byte < this.lower || byte > this.upper) {
-          this.replacement();
+          this.#replacement();
           emit(0xfffd);
           continue;
         }
@@ -327,17 +327,17 @@ export class TextDecoder {
         this.seen++;
         if (this.seen === this.needed) {
           const code = this.code;
-          this.resetSequence();
+          this.#resetSequence();
           emit(code);
         }
       }
     }
     if (!stream) {
       if (this.needed !== 0) {
-        this.replacement();
+        this.#replacement();
         emit(0xfffd);
       }
-      this.resetSequence();
+      this.#resetSequence();
       bomSeen = false;
     }
     this.bomSeen = bomSeen;
