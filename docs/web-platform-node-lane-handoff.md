@@ -227,6 +227,37 @@ factories whose capability cannot be supplied as an extra JavaScript argument.
 Web-facing constructors must ignore surplus arguments according to their real API;
 provider context must remain environment-owned.
 
+### Node URL and event reconciliation is coordinated follow-on work
+
+The NodeJS lane has reserved `runtime/node/url/src/url.ts` and
+`runtime/node/buffer/src/blob.ts` from its current tranche so the successor can first
+design the canonical shared URL/Blob surface. Before freezing that surface, coordinate
+these observable Node requirements with that peer:
+
+- `URL.createObjectURL` and `URL.revokeObjectURL` must attach without subclassing or
+  changing constructor identity;
+- `URL.parse` and `URL.canParse` preserve the observable distinction between missing
+  arguments and explicit `undefined`;
+- the Node facade retains its getter/setter-specific brand errors and
+  `ERR_INVALID_ARG_TYPE` behavior;
+- IDNA initialization remains a real module-initialization edge; and
+- the shared parser entry shape must remain consumable by Node's legacy
+  `parse`/`format`/`resolve` implementation.
+
+Node's Blob URL spelling and lookup normalization remain Node-facade policy:
+`blob:nodedata:`, C0/space trimming, embedded tab/CR/LF removal, and query/fragment
+removal for lookup and revocation. The shared store needs a typed raw-lookup seam;
+do not silently impose Node's grammar on every provider. Exact `Blob` constructor
+identity between the shared store and `node:buffer` remains a deliberate
+canonicalization decision, not a wrapper cast.
+
+The NodeJS lane also reported one remaining `node:events` dependency. Node's internal
+abort listener resists an earlier listener's `stopImmediatePropagation()`. Shared
+`EventTarget` needs a private, non-Web-observable listener option for that behavior,
+and the canonical `AbortController`/`AbortSignal` must be installable as the Node test
+globals. Coordinate the internal hook; do not expose it in the public Web API or copy
+the host's private symbol.
+
 ## Recommended next work
 
 1. Reproduce the tests and build a current compiler before editing. Record the exact
@@ -247,7 +278,9 @@ provider context must remain environment-owned.
 7. Reconcile the exact eight upstream structural failures with the current
    compiler/common-runtime work. Do not turn them into local prototype or `.call`
    tricks.
-8. Take the next incomplete row from the plan's full server/mobile feature ledger
+8. Settle the canonical URL/Blob identity and internal abort-listener seam with the
+   NodeJS peer before either lane freezes its facade.
+9. Take the next incomplete row from the plan's full server/mobile feature ledger
    only after this audit; do not guess from the original delivery or copy its layout.
 
 ## Reproduction commands
