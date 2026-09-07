@@ -97,11 +97,28 @@ case "$module" in
     ;;
 esac
 
+# Everything the compiler emitted, rather than the three files it used to
+# emit. `nts_unicode.c` appeared beside them and this script kept naming
+# `program.c`, `nts_runtime.c` and `addon.c`, so the link silently produced an
+# addon with `nts_str_to_lower_case` undefined -- and a shared library links
+# happily with an unresolved symbol, so it surfaced only when a call reached
+# it. That is the same failure the comment above records for `node_all.c`: a
+# hand-maintained list of generated files, updated by hand.
+#
+# `-maxdepth 1` on purpose. `quickjs/libunicode.c` and `quickjs/dtoa.c` are
+# `#include`d by the generated sources rather than compiled beside them, so
+# picking them up here would define every symbol twice.
+generated_c=()
+while IFS= read -r -d '' source; do
+  generated_c+=("$source")
+done < <(find "$work" -maxdepth 1 -name '*.c' -print0)
+[ "${#generated_c[@]}" -gt 0 ] || { echo "the compiler emitted no C into $work" >&2; exit 2; }
+
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
   "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
-  "$work/program.c" "$work/nts_runtime.c" "$work/addon.c" \
+  "${generated_c[@]}" \
   "${module_c[@]}" "${shared_c[@]}" \
   "${module_libraries[@]}" -luv -lm
 

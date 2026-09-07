@@ -122,19 +122,44 @@ four blockers were invisible until someone walked it.**
    one line into the generated `addon.c`**, after which the addon returns
    `decode("maana-pta") === "mañana"` and agrees with host node on every input
    tried. This one blocks every module that ever links, not just this one.
-3. **One undefined runtime symbol.** `nm -D --undefined-only` on the linked
-   addon reports exactly `nts_str_to_lower_case`; everything else resolves.
-   `toUnicode` dies on the lookup.
+3. ~~**One undefined runtime symbol.**~~ **Fixed, and it was this lane's.**
+   `nm -D --undefined-only` reported exactly `nts_str_to_lower_case`, and the
+   cause was in `tooling/conformance/build.sh`: the compiler emits
+   `program.c`, `nts_runtime.c`, `nts_unicode.c` and `addon.c`, and the script
+   named three of them. A shared library links happily with an unresolved
+   symbol, so it surfaced only when a call reached it. The script now compiles
+   every `.c` the compiler emitted, at `-maxdepth 1` because
+   `quickjs/libunicode.c` and `quickjs/dtoa.c` are `#include`d by the generated
+   sources rather than compiled beside them. Verified: no undefined `nts_`
+   symbols, the addon grows from 198,080 to 274,568 bytes, and
+   `toUnicode("xn--maana-pta.com")` returns `"mañana.com"`.
+
+   **This is the second time this script has carried a hand-maintained list of
+   generated files** — its own comment records the first, a
+   `runtime/node/c/node_all.c` that had been deleted. Both were invisible
+   because no module reached the link step.
 4. **A throw does not cross the Node-API boundary.** `decode("-")` should throw
    a catchable `RangeError`; instead the process prints `nts: uncaught
    RangeError: Invalid input` and dies, with the surrounding `try`/`catch`
    never entered. `test-punycode.js` uses `assert.throws`, so this alone fails
    the file even with 2 and 3 fixed.
 
-**The order that follows from this** is 2, then 4, then 3, then 1 — 2 is one
-line in the wrapper generator and unblocks anything that links, 4 decides
-whether *tests* can pass rather than whether code runs, 3 is a single missing
-function, and 1 is specific to `punycode`.
+**The order that follows from this** is 2, then 4, then 1 — 2 is one line in
+the wrapper generator and unblocks anything that links, 4 decides whether
+*tests* can pass rather than whether code runs, and 1 is specific to
+`punycode`. All three are the compiler lane's. With 3 fixed, the compiled
+`punycode` computes every one of its four functions correctly; what it cannot
+yet do is survive its own test file, because that file uses `assert.throws`.
+
+**Blocker 4's mechanism, for whoever takes it.** The generated wrapper calls
+the compiled function directly —
+
+    NtsString *result = decode(a0);
+
+— with no landing pad and no pending-exception check, and the runtime's throw
+path is `_Noreturn void nts_uncaught(NtsValue, const NtsString *)`, which
+prints and terminates. So an addon has no route from a compiled `throw` to
+`napi_throw`, and that is a design decision rather than a missing line.
 
 **And the cost of learning it was seven refusals rather than `fs`'s three
 thousand**, which is the argument for having picked the smallest module made
