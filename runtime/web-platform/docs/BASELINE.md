@@ -1599,3 +1599,54 @@ dependent `NTS1003` cascades, with zero module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. The one-primary and one-cascade increase is final
 frame/reader source reaching existing lowering dependencies; it is not evidence that
 an HTTP/2 connection, multiplexed stream, or provider transport executes yet.
+
+## RFC 9113 HTTP/2 client connection
+
+At `207db600`, the shared HTTP/2 layer has a multiplexed client connection state
+machine over the provider-neutral `ByteConnection`. Startup emits the client preface
+and bounded local settings, refuses any peer whose first frame is not initial
+SETTINGS, acknowledges settings, applies later changes to active streams, and keeps
+write serialization independent from request concurrency. Request streams use odd
+identifiers, respect the peer's concurrent-stream limit, fragment header blocks at
+the negotiated frame size, and reserve connection and stream flow-control credit
+synchronously before any writer can yield.
+
+Responses preserve informational blocks, duplicate regular fields and trailers.
+Inbound flow-control credit returns only when the application consumes or discards
+body bytes, so a stalled body cannot turn into unbounded hidden buffering. Abort
+keeps exact reason identity and sends `CANCEL`; content-length/body rules, forbidden
+response bodies, stream and connection window failures, reset semantics, PING,
+GOAWAY retry boundaries, draining, and extended-CONNECT negotiation have explicit
+state transitions. A malformed stream is reset without killing unrelated streams,
+while connection-scoped framing and compression failures send the corresponding
+GOAWAY.
+
+Header validation is separate from HPACK and implements the HTTP/2 pseudo-header,
+ordering, required-field, lowercase-name, field-value, connection-field, TE,
+content-length, trailer, CONNECT and extended-CONNECT rules. Compressed header blocks
+also carry a fragment-count limit, so unlimited zero-length CONTINUATION frames cannot
+bypass the byte budget. A stream-scoped priority error on fragmented HEADERS is held
+until the complete block has been consumed and decoded; this preserves the
+connection-wide HPACK state before the stream is reset.
+
+The focused frame, header and connection suites pass 27/27. Six connection cases use
+a real Node HTTP/2 server and cleartext socket to exercise multiplexing, tiny inbound
+and outbound windows, peer concurrency, exact cancellation and PING. Six deterministic
+peer cases cover GOAWAY retry boundaries, initial-frame protocol failure, stream-local
+flow failure, compression failure, aborted concurrency waiters, and a malformed
+fragmented header block followed by a valid stream that depends on the dynamic-table
+state established by the malformed block. The complete local Node-host/real-socket
+suite passes 275/275.
+
+The pinned WPT slice remains 2275/2283 applicable cases with 14 named not-applicable
+cases and the same eight visible structural/common-compiler failures. A sabotage
+removed the assembler's deferred handling for the fragmented stream error. The
+HPACK-continuity precondition fell from 1/1 to 0/1 with `Unexpected HTTP/2
+CONTINUATION frame`, then returned to 1/1 after restoration.
+
+The live compiled-source frontier is 1081 primary `NTS1001` refusals and 151
+dependent `NTS1003` cascades, with zero module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase from the frame checkpoint is the final
+shared session and validation source reaching already-visible language prerequisites;
+it is not evidence that the provider transport, ALPN selection or connection pool is
+complete.
