@@ -65,7 +65,36 @@ a subscript.
 
 A measurement is about the thing measured. I treated it as about the mechanism.
 
-The revert is the whole change; nothing of it survives. The next attempt should
-start from the two calls in the subscript — hoisting `elements` out of a loop
-whose view does not change, and getting an integral index to the fast path that
-already exists for it — and should measure `bytes` before touching either.
+The revert is the whole change; nothing of it survives.
+
+## Then I was wrong twice more, which is why this stops here
+
+**"The specialised variant carries `f64` loop counters, and that is why the
+subscript takes the double path."** True of `bytes`. Also true of
+`elementwise` — every block parameter there is `f64` as well, and it runs at
+1.04x Java. Not the discriminator.
+
+**"Then it is the view path itself."** So I built the control: the same
+Adler-32 with `number[]` instead of `Uint8Array`, same lane, same harness.
+
+    Uint8Array   838.80 us/op
+    number[]    2882.85 us/op
+
+The view is **3.4x faster than the alternative it replaced**, for the reason the
+case's own header gives and which I had read without using: a `number[]` is a
+`double[]`, so 4096 elements are 32 KB where the typed array is 4 KB, and one
+fits in L1. The representation is not the cost. It is paying for itself
+enormously against the only other thing a program could write.
+
+So the 1.40x is against **hand-written `byte[]` with `baload`**, and that is the
+whole of it. Three hypotheses, three refutations. What is established and worth
+carrying forward:
+
+- the accessor's internal range test is not it (measured, reverted)
+- the index kind is not it (both rows are `f64`)
+- the representation is not it (3.4x in its favour)
+
+Whoever picks this up should profile the emitted loop before changing anything.
+I spent an afternoon on three guesses that one profile would have ordered
+correctly — which is the mistake the top of this record is about, committed
+three more times after writing it down.
