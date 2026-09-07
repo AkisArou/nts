@@ -2453,3 +2453,61 @@ method call, one promise settled with another promise, one `unknown` narrowed to
 promise, one erased value, and one further `WeakRef` array observation reached through
 `AbortSignal`. These are instances of the plan's existing class/interface, iteration,
 absence and async prerequisites.
+
+## The contract survives a proxy
+
+Protocol selection previously worked only on the direct route. A tunnel reaches the
+peer through the TLS upgrader rather than through a connector, so the negotiated
+result stopped at the tunnel boundary and selection silently degraded to the
+compatible protocol the moment a proxy was involved. This completes the route coverage
+the integration plan requires.
+
+`HttpConnectProxyConnector` and `Socks5ProxyConnector` now carry the negotiated result
+outward. A tunnel's ability to report a selection is its TLS upgrader's ability, since
+that is what negotiates, so the declaration is derived rather than asserted: the shared
+contract's single rule — a connector that cannot report is never offered a choice —
+therefore holds through a proxy without a second implementation of it. A cleartext
+target through a tunnel reports the same absence the direct path reports for a
+cleartext connect. `withConnectDeadline` became generic so the deadline, abort and
+cleanup behaviour is shared unchanged between the reporting and non-reporting entries.
+
+`EnvironmentProxyConnector` declares the conservative conjunction of its direct
+connector and its tunnels' upgrader. Whether a given address is proxied is decided per
+connect while the declaration is read once, so the two possible routes may differ;
+under-declaring costs a protocol, while over-declaring is exactly the mismatch the
+contract exists to prevent.
+
+Three tests run against real proxies rather than scripted byte streams. A real HTTP
+CONNECT proxy and a real SOCKS5 proxy — no authentication, CONNECT by domain name —
+each tunnel to a TLS origin offering `["h2","http/1.1"]`, and selection reaches h2
+through both. The CONNECT request line is `CONNECT target.test:<port>` and the SOCKS
+request carries `target.test:<port>`, so in both cases the logical target crosses the
+wire and is never resolved locally; the direct tests need a loopback resolver stand-in
+and these deliberately do not.
+
+The third test is the one that matters. A tunnel whose TLS upgrader cannot report a
+selection is offered exactly one protocol, and the h2-preferring server therefore
+serves HTTP/1.1. Its behavioural assertions are ordered before the capability
+assertion on purpose, so that overstating the capability fails as a wrong protocol
+rather than as a wrong boolean. The sabotage made a tunnel claim it could report
+regardless of its upgrader: the focused corpus fell from 9/9 to 8/9 with
+`ProtocolError: EOF inside an HTTP line` — an HTTP/1.1 parser reading an h2 connection
+through a proxy, which is the Android-shaped defect reproduced end to end on the route
+that was previously untested.
+
+The complete local Node-host/real-socket corpus passes 427/427 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Still not claimed: HTTP/2 connection coalescing, and any provider other than the
+ordinary-Node conformance host.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,284 primary
+`NTS1001` and 229 `NTS1003`; after, 1,287 primary and 233 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Six messages appeared and three
+disappeared, but three of the six are the same messages with shifted type ids and are
+renumbering rather than movement. The real increase is two further `WeakRef` array
+observations reached through `AbortSignal` and one more `parse` called through an
+interface the lowering cannot resolve in the hierarchy — the interface-method shape
+that is now the most frequent single dependency in this lane's inventory, and which
+the compiler owner has placed ahead of the `BrokenBase` layout defect in their queue.

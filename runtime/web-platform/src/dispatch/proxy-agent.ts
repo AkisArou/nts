@@ -7,10 +7,17 @@ import type { Http1DispatchRoute, Http1Options } from "../http1/transport.ts";
 import type {
   ByteConnection,
   ConnectAddress,
+  NegotiatedConnection,
+  NegotiatingSocketConnector,
   Scheduler,
   SocketConnector,
   TlsUpgrader,
   URLParser,
+} from "../provider/primitives.ts";
+import {
+  connectNegotiated,
+  isNegotiatingSocketConnector,
+  isNegotiatingTlsUpgrader,
 } from "../provider/primitives.ts";
 import {
   basicAuthorization,
@@ -224,7 +231,7 @@ export class Socks5ProxyAgent implements FetchTransport {
  * byte stream, including WebSocket and HTTP/2. Plain HTTP forwarding stays in
  * ProxyAgent because it changes HTTP serialization rather than socket routing.
  */
-export class EnvironmentProxyConnector implements SocketConnector {
+export class EnvironmentProxyConnector implements NegotiatingSocketConnector {
   readonly policy: EnvironmentProxyPolicy;
   private readonly options: EnvironmentProxyConnectorOptions;
   private readonly proxies = new Map<string, SocketConnector>();
@@ -234,9 +241,34 @@ export class EnvironmentProxyConnector implements SocketConnector {
     this.policy = new EnvironmentProxyPolicy(options.urls, options.environment, options);
   }
 
+  /**
+   * Whether a given address is proxied is a policy decision made per connect, while
+   * this declaration is read once. It is therefore the conservative conjunction: only
+   * when both the direct connector and the tunnels' TLS upgrader report a selection is
+   * more than one protocol offered. Declaring less than a route can do costs a
+   * protocol; declaring more than a route can do is the mismatch the contract exists
+   * to prevent.
+   */
+  get reportsNegotiatedProtocol(): boolean {
+    return (
+      isNegotiatingSocketConnector(this.options.connector) &&
+      this.options.connector.reportsNegotiatedProtocol &&
+      isNegotiatingTlsUpgrader(this.options.tls) &&
+      this.options.tls.reportsNegotiatedProtocol
+    );
+  }
+
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+    return this.#route(address).connect(address, signal);
+  }
+
+  connectNegotiated(address: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
+    return connectNegotiated(this.#route(address), address, signal);
+  }
+
+  #route(address: ConnectAddress): SocketConnector {
     const uri = this.policy.proxyForAddress(address);
-    if (uri === null) return this.options.connector.connect(address, signal);
+    if (uri === null) return this.options.connector;
     let connector = this.proxies.get(uri);
     if (connector === undefined) {
       const protocol = this.options.urls.parse(uri).protocol;
@@ -246,7 +278,7 @@ export class EnvironmentProxyConnector implements SocketConnector {
           : new HttpConnectProxyConnector({ ...this.options, uri });
       this.proxies.set(uri, connector);
     }
-    return connector.connect(address, signal);
+    return connector;
   }
 }
 

@@ -11,12 +11,15 @@ import type {
   ByteConnection,
   CancelHandle,
   ConnectAddress,
+  NegotiatedConnection,
+  NegotiatingSocketConnector,
   Scheduler,
   SocketConnector,
   TlsUpgrader,
   URLParser,
   URLRecord,
 } from "../provider/primitives.ts";
+import { isNegotiatingTlsUpgrader, upgradeNegotiated } from "../provider/primitives.ts";
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const DEFAULT_MAXIMUM_AUTHENTICATION_ATTEMPTS = 2;
@@ -267,18 +270,29 @@ async function finishTunnel(
   tls: TlsUpgrader,
   target: ConnectAddress,
   signal: AbortSignal,
-): Promise<ByteConnection> {
+): Promise<NegotiatedConnection> {
   signal.throwIfAborted();
-  if (!target.secure) return connection;
-  return tls.upgrade(connection, target, signal);
+  // A cleartext target through a tunnel negotiates nothing, which is the same absence
+  // the direct path reports for a cleartext connect.
+  if (!target.secure) return { connection, protocol: null, certificateNames: [] };
+  return upgradeNegotiated(tls, connection, target, signal);
 }
 
-function withConnectDeadline(
+/**
+ * A tunnel negotiates through its TLS upgrader, so that is where its ability to report
+ * a selection comes from. Declaring it here keeps the shared contract's one rule --
+ * a connector that cannot report is never offered a choice -- true through a proxy.
+ */
+function tunnelReportsProtocol(tls: TlsUpgrader): boolean {
+  return isNegotiatingTlsUpgrader(tls) && tls.reportsNegotiatedProtocol;
+}
+
+function withConnectDeadline<T>(
   scheduler: Scheduler,
   target: ConnectAddress,
   signal: AbortSignal,
-  operation: (signal: AbortSignal) => Promise<ByteConnection>,
-): Promise<ByteConnection> {
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   if (!Number.isSafeInteger(target.connectTimeoutMs) || target.connectTimeoutMs < 1) {
     return Promise.reject(new RangeError("Connect timeout must be a positive safe integer"));
   }
@@ -294,7 +308,7 @@ function withConnectDeadline(
     unsubscribe();
     return Promise.reject(error);
   }
-  let result: Promise<ByteConnection>;
+  let result: Promise<T>;
   try {
     result = operation(controller.signal);
   } catch (error) {
@@ -307,7 +321,7 @@ function withConnectDeadline(
 }
 
 /** Strict HTTP CONNECT tunneling shared by Fetch, HTTP/2 and WebSocket transports. */
-export class HttpConnectProxyConnector implements SocketConnector {
+export class HttpConnectProxyConnector implements NegotiatingSocketConnector {
   readonly proxy: ProxyEndpoint;
   private readonly connector: SocketConnector;
   private readonly tls: TlsUpgrader;
@@ -338,14 +352,22 @@ export class HttpConnectProxyConnector implements SocketConnector {
         : validateAuthorization(options.authorization);
   }
 
+  get reportsNegotiatedProtocol(): boolean {
+    return tunnelReportsProtocol(this.tls);
+  }
+
   connect(target: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+    return this.connectNegotiated(target, signal).then((result) => result.connection);
+  }
+
+  connectNegotiated(target: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     validateTarget(target);
     return withConnectDeadline(this.scheduler, target, signal, (deadlineSignal) =>
       this.open(target, deadlineSignal),
     );
   }
 
-  private async open(target: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+  private async open(target: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     let authorization = this.initialAuthorization;
     let attempt = 1;
     while (true) {
@@ -529,7 +551,7 @@ async function readSocksReply(reader: BufferedReader): Promise<void> {
 }
 
 /** RFC 1928/1929 tunnel connector. Target DNS is delegated to the proxy. */
-export class Socks5ProxyConnector implements SocketConnector {
+export class Socks5ProxyConnector implements NegotiatingSocketConnector {
   readonly proxy: ProxyEndpoint;
   private readonly connector: SocketConnector;
   private readonly tls: TlsUpgrader;
@@ -557,14 +579,22 @@ export class Socks5ProxyConnector implements SocketConnector {
     }
   }
 
+  get reportsNegotiatedProtocol(): boolean {
+    return tunnelReportsProtocol(this.tls);
+  }
+
   connect(target: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+    return this.connectNegotiated(target, signal).then((result) => result.connection);
+  }
+
+  connectNegotiated(target: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     validateTarget(target);
     return withConnectDeadline(this.scheduler, target, signal, (deadlineSignal) =>
       this.open(target, deadlineSignal),
     );
   }
 
-  private async open(target: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+  private async open(target: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     const connection = await this.connector.connect(proxyAddress(this.proxy, target), signal);
     const unsubscribe = signal.subscribe(() => connection.close());
     try {

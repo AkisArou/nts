@@ -8,14 +8,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import http2 from "node:http2";
 import { createServer as createTlsServer } from "node:tls";
+import { connect as tcpConnect, createServer } from "node:net";
 
 import {
   AbortController,
+  HttpConnectProxyConnector,
   ProtocolMismatchError,
   ProtocolSelectingTransport,
+  Socks5ProxyConnector,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import {
   HostNodeSocketConnector,
+  HostNodeTlsUpgrader,
   createHostNodePrimitives,
   hostNodeURLs,
 } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
@@ -239,4 +243,180 @@ suite("ProtocolMismatchError names both protocols", () => {
   assert.equal(mismatch.selected, "http/1.1");
   assert.match(mismatch.message, /http\/1\.1/);
   assert.equal(new ProtocolMismatchError("h2", null).selected, null);
+});
+
+/** A real HTTP CONNECT proxy that tunnels to the loopback origin. */
+async function connectProxy(t, originPort) {
+  const tunnels = [];
+  const sockets = new Set();
+  const proxy = createServer((downstream) => {
+    sockets.add(downstream);
+    downstream.on("error", () => {});
+    downstream.on("close", () => sockets.delete(downstream));
+    let request = "";
+    const readHead = (chunk) => {
+      request += chunk.toString("latin1");
+      if (!request.includes("\r\n\r\n")) return;
+      downstream.off("data", readHead);
+      tunnels.push(request.split("\r\n")[0]);
+      const upstream = tcpConnect({ host: "127.0.0.1", port: originPort });
+      upstream.once("connect", () => {
+        downstream.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        downstream.pipe(upstream);
+        upstream.pipe(downstream);
+      });
+      upstream.once("error", (error) => downstream.destroy(error));
+    };
+    downstream.on("data", readHead);
+  });
+  proxy.listen(0, "127.0.0.1");
+  await new Promise((resolve) => proxy.once("listening", resolve));
+  t.after(() => {
+    for (const socket of sockets) socket.destroy();
+    return new Promise((resolve) => proxy.close(resolve));
+  });
+  return { port: proxy.address().port, tunnels };
+}
+
+/** A real SOCKS5 proxy: no authentication, CONNECT by domain name. */
+async function socksProxy(t, originPort) {
+  const targets = [];
+  const sockets = new Set();
+  const proxy = createServer((downstream) => {
+    sockets.add(downstream);
+    downstream.on("error", () => {});
+    downstream.on("close", () => sockets.delete(downstream));
+    let stage = "greeting";
+    let buffered = Buffer.alloc(0);
+    downstream.on("data", function onData(chunk) {
+      buffered = Buffer.concat([buffered, chunk]);
+      if (stage === "greeting") {
+        if (buffered.length < 2) return;
+        const count = buffered[1];
+        if (buffered.length < 2 + count) return;
+        buffered = buffered.subarray(2 + count);
+        stage = "request";
+        downstream.write(Buffer.from([5, 0]));
+      }
+      if (stage === "request") {
+        if (buffered.length < 5) return;
+        const length = buffered[4];
+        if (buffered.length < 7 + length) return;
+        const host = buffered.subarray(5, 5 + length).toString("latin1");
+        const port = buffered.readUInt16BE(5 + length);
+        targets.push(`${host}:${port}`);
+        buffered = buffered.subarray(7 + length);
+        stage = "tunnel";
+        downstream.off("data", onData);
+        const upstream = tcpConnect({ host: "127.0.0.1", port: originPort });
+        upstream.once("connect", () => {
+          downstream.write(Buffer.from([5, 0, 0, 1, 0, 0, 0, 0, 0, 0]));
+          if (buffered.length > 0) upstream.write(buffered);
+          downstream.pipe(upstream);
+          upstream.pipe(downstream);
+        });
+        upstream.once("error", (error) => downstream.destroy(error));
+      }
+    });
+  });
+  proxy.listen(0, "127.0.0.1");
+  await new Promise((resolve) => proxy.once("listening", resolve));
+  t.after(() => {
+    for (const socket of sockets) socket.destroy();
+    return new Promise((resolve) => proxy.close(resolve));
+  });
+  return { port: proxy.address().port, targets };
+}
+
+suite("selection works through an HTTP CONNECT tunnel", async (t) => {
+  const { fixture, port, connections } = await originServer(t, ["h2", "http/1.1"]);
+  const proxy = await connectProxy(t, port);
+  const primitives = createHostNodePrimitives();
+  const tls = new HostNodeTlsUpgrader({ ca: fixture.cert.toString() });
+  const connector = new HttpConnectProxyConnector({
+    connector: new HostNodeSocketConnector(),
+    tls,
+    scheduler: primitives.scheduler,
+    urls: hostNodeURLs,
+    uri: `http://127.0.0.1:${proxy.port}`,
+  });
+  // The tunnel negotiates through its TLS upgrader, so it inherits that capability.
+  assert.equal(connector.reportsNegotiatedProtocol, true);
+  const transport = new ProtocolSelectingTransport({
+    scheduler: primitives.scheduler,
+    connector,
+  });
+  t.after(() => transport.close());
+
+  const origin = `https://target.test:${port}`;
+  const response = await transport.dispatch(transportRequest(`${origin}/a`));
+  assert.equal(response.status, 200);
+  assert.equal(await consume(response.body), "served over h2");
+  assert.equal(transport.protocolFor(origin), "h2");
+  // One tunnel, named by the logical target rather than the proxy or an address.
+  assert.deepEqual(proxy.tunnels, [`CONNECT target.test:${port} HTTP/1.1`]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(connections, ["h2"]);
+});
+
+suite("selection works through a SOCKS5 tunnel", async (t) => {
+  const { fixture, port, connections } = await originServer(t, ["h2", "http/1.1"]);
+  const proxy = await socksProxy(t, port);
+  const primitives = createHostNodePrimitives();
+  const connector = new Socks5ProxyConnector({
+    connector: new HostNodeSocketConnector(),
+    tls: new HostNodeTlsUpgrader({ ca: fixture.cert.toString() }),
+    scheduler: primitives.scheduler,
+    urls: hostNodeURLs,
+    uri: `socks5://127.0.0.1:${proxy.port}`,
+  });
+  assert.equal(connector.reportsNegotiatedProtocol, true);
+  const transport = new ProtocolSelectingTransport({
+    scheduler: primitives.scheduler,
+    connector,
+  });
+  t.after(() => transport.close());
+
+  const origin = `https://target.test:${port}`;
+  const response = await transport.dispatch(transportRequest(`${origin}/a`));
+  assert.equal(response.status, 200);
+  assert.equal(await consume(response.body), "served over h2");
+  assert.equal(transport.protocolFor(origin), "h2");
+  // Proxy-side DNS: the target name crosses the wire and is never resolved locally.
+  assert.deepEqual(proxy.targets, [`target.test:${port}`]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(connections, ["h2"]);
+});
+
+suite("a tunnel whose TLS cannot report is not offered a choice", async (t) => {
+  const { fixture, port, connections } = await originServer(t, ["h2", "http/1.1"]);
+  const proxy = await connectProxy(t, port);
+  const primitives = createHostNodePrimitives();
+  const connector = new HttpConnectProxyConnector({
+    connector: new HostNodeSocketConnector(),
+    tls: new HostNodeTlsUpgrader({
+      ca: fixture.cert.toString(),
+      reportsNegotiatedProtocol: false,
+    }),
+    scheduler: primitives.scheduler,
+    urls: hostNodeURLs,
+    uri: `http://127.0.0.1:${proxy.port}`,
+  });
+  const transport = new ProtocolSelectingTransport({
+    scheduler: primitives.scheduler,
+    connector,
+  });
+  t.after(() => transport.close());
+
+  // The behavioural assertions come first deliberately, so that overstating the
+  // capability fails as a wrong protocol rather than as a wrong boolean.
+  const origin = `https://target.test:${port}`;
+  const response = await transport.dispatch(transportRequest(`${origin}/a`));
+  assert.equal(await consume(response.body), "served over HTTP/1.1");
+  assert.equal(transport.protocolFor(origin), "http/1.1");
+  // The contract holds through a proxy: this server prefers h2 and would have
+  // selected it, so being unable to report must mean it was never asked.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(connections, ["http/1.1"]);
+  assert.equal(connector.reportsNegotiatedProtocol, false);
 });
