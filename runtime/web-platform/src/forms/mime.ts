@@ -13,6 +13,26 @@ export interface ParameterizedValue {
   parameters: ReadonlyMap<string, string>;
 }
 
+/** Serialize a parsed MIME type without inventing or reordering parameters. */
+export function serializeMIMEType(mimeType: MIMEType): string {
+  let output = mimeType.essence;
+  for (const [name, value] of mimeType.parameters) {
+    output += ";" + name + "=";
+    if (isToken(value)) {
+      output += value;
+      continue;
+    }
+    output += '"';
+    for (let index = 0; index < value.length; index++) {
+      const character = value.charAt(index);
+      if (character === '"' || character === "\\") output += "\\";
+      output += character;
+    }
+    output += '"';
+  }
+  return output;
+}
+
 function isHTTPQuotedString(value: string): boolean {
   for (let i = 0; i < value.length; ++i) {
     const code = value.charCodeAt(i);

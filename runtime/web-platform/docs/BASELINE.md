@@ -1115,3 +1115,31 @@ green. The live NTS frontier remains 618 primary `NTS1001` refusals, 82 dependen
 `NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics,
 and no invalid HIR. Host conformance remains evidence for the shared algorithms;
 it does not claim that the pending compiler and provider prerequisites are complete.
+
+The Fetch scheme dispatcher now implements the Fetch Standard's `data:` URL
+processor without entering a host networking stack. Percent decoding uses the same
+canonical UTF-8 byte writer as the Node URL implementation, forgiving Base64 is a
+shared allocation-bounded primitive, and MIME parsing plus serialization preserves
+the specified parameter order and quoting. `Request` construction accepts
+non-network schemes as the Fetch API requires; unsupported schemes are rejected
+asynchronously by fetch dispatch rather than synchronously by the constructor.
+Data responses have immutable headers, omit fragments from their response URL,
+preserve exact abort reasons, and apply the specified null-body behavior for
+`HEAD`.
+
+Two complete current WPT data-URL fixtures and their JSON resources are pinned by
+exact Git blob hash. All 154 registered cases pass: 81 in `base64.any.js` and 73 in
+`processing.any.js`. These fixtures register most of their cases after an
+asynchronous support-resource fetch, which exposed a false-green harness shape: a
+single snapshot of pending tests observed only the setup cases. The runner now
+drains registrations to quiescence and ratchets the exact per-fixture counts, so
+restoring the snapshot behavior fails with 1/81 or 1/73 instead of appearing green.
+
+Across the complete pinned slice, 1865 of 1874 applicable cases pass, with seven
+named not-applicable cases. The same nine visible failures remain. The local
+Node-host suite passes 153/153, the root TypeScript solution is green, and the
+pinned URL constructor/origin and setter corpora remain 892/892 and 278/278. The
+live NTS frontier is 619 primary `NTS1001` refusals, 83 dependent `NTS1003`
+cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics, and no
+invalid HIR. The one-primary, one-cascade movement is newly reachable final source,
+not a provider-completion claim.

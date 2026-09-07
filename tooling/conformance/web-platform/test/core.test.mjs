@@ -1968,6 +1968,31 @@ test("Response attributes are read-only and static factories follow Web IDL conv
     SerializationError,
   );
 });
+test("Fetch processes data URLs without entering the network transport", async () => {
+  const response = await api.fetch("data:text/plain;charset=UTF-8,hello%20world#fragment");
+  assert.equal(response.status, 200);
+  assert.equal(response.statusText, "OK");
+  assert.equal(response.type, "basic");
+  assert.equal(response.url, "data:text/plain;charset=UTF-8,hello%20world");
+  assert.equal(response.headers.get("content-type"), "text/plain;charset=UTF-8");
+  assert.equal(await response.text(), "hello world");
+  assert.throws(() => response.headers.set("x-test", "value"), TypeError);
+
+  const head = await api.fetch("data:,body", { method: "HEAD" });
+  assert.equal(head.body, null);
+  assert.equal(head.bodyUsed, false);
+  assert.equal(await head.text(), "");
+
+  const posted = await api.fetch("data:;base64,YQ", { method: "POST", body: "ignored" });
+  assert.equal(await posted.text(), "a");
+  await assert.rejects(api.fetch("data:;base64,a"), TypeError);
+
+  const controller = new AbortController();
+  const reason = new Error("stop data fetch");
+  const pending = api.fetch("data:,not-delivered", { signal: controller.signal });
+  controller.abort(reason);
+  await assert.rejects(pending, (error) => error === reason);
+});
 test("Response applies Web IDL conversion before validation and body extraction", async () => {
   for (const input of [200.9, "201", 65_536 + 204, 65_536 + 599]) {
     const actual = makeResponse(null, { status: input });

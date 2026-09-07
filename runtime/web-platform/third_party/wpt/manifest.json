@@ -5,7 +5,9 @@
   "support": {
     "common/get-host-info.sub.js": "e9ec61659c3927e519170bc4e5253f91b7671945",
     "common/utils.js": "d410b0753582e061572302f3ce9118e95635c6b1",
-    "fetch/api/resources/utils.js": "3721d9bf9cc7cf6d01709aa5e22de2eb9bd4bda7"
+    "fetch/api/resources/utils.js": "3721d9bf9cc7cf6d01709aa5e22de2eb9bd4bda7",
+    "fetch/data-urls/resources/base64.json": "01f981a6502aec41351de52519c5437d6c77a609",
+    "fetch/data-urls/resources/data-urls.json": "f318d1f3e547d3d5b98ec737c231178f796166db"
   },
   "files": {
     "fetch/api/headers/header-setcookie.any.js": "cafb780c2c75a9ae6a84fb842f0d0fa075aeffd8",
@@ -35,6 +37,8 @@
     "fetch/api/response/response-static-json.any.js": "5ec79e69aa3f9c1009050b083e0cf8c0cc76e1dc",
     "fetch/api/response/response-static-redirect.any.js": "b16c56d83003d9b08944e67f9492046e9c890b48",
     "fetch/api/response/response-stream-bad-chunk.any.js": "8e83cd190873a904a366b8eb6cdcc44229f742c0",
+    "fetch/data-urls/base64.any.js": "83f34db1777d99d6c1212a75ab4db44dcbd70720",
+    "fetch/data-urls/processing.any.js": "cec97bd6be2b2e3f1b39c7a5e8128ee48d7ac3d4",
     "xhr/formdata/append.any.js": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
     "xhr/formdata/constructor.any.js": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
     "xhr/formdata/delete.any.js": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
@@ -45,6 +49,10 @@
     "xhr/formdata/set-blob.any.js": "6a8b5c717050598058d44ac6772ed04722924be3",
     "xhr/formdata/set.any.js": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
     "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "expectedTests": {
+    "fetch/data-urls/base64.any.js": 81,
+    "fetch/data-urls/processing.any.js": 73
   },
   "notApplicable": {
     "fetch/api/headers/header-setcookie.any.js": {

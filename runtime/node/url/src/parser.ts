@@ -23,8 +23,10 @@
 
 import { ERR_INVALID_URL } from "../../internal/errors.ts";
 import { decodeIn } from "../../buffer/src/encodings.ts";
-import { utf8Length, utf8Write } from "../../../web-platform/src/core/utf8.ts";
+import { percentDecodeBytes } from "../../../web-platform/src/core/percent.ts";
 import { domainToASCII } from "./idna.ts";
+
+export { percentDecodeBytes };
 
 export function isSpecialScheme(scheme: string): boolean {
   switch (scheme) {
@@ -253,12 +255,6 @@ function lowerHexDigit(value: number): string {
   return String.fromCharCode(value < 10 ? 0x30 + value : 0x61 + value - 10);
 }
 
-function utf8Bytes(str: string): Uint8Array {
-  const out = new Uint8Array(utf8Length(str));
-  utf8Write(out, str, 0, out.length);
-  return out;
-}
-
 /**
  * The percent-encode sets, https://url.spec.whatwg.org/#percent-encoded-bytes.
  *
@@ -353,49 +349,6 @@ function utf8PercentEncodeString(input: string, inSet: EncodeSet): string {
     out += inSet(c) ? percentEncode(ch) : ch;
   }
   return out;
-}
-
-/** `%41` back to `A`, leaving a malformed escape alone. */
-export function percentDecodeBytes(input: string): Uint8Array {
-  const raw = utf8Bytes(input);
-  let decodedLength = raw.length;
-  for (let i = 0; i < raw.length; i++) {
-    const byte = raw[i];
-    const firstHex = raw[i + 1];
-    const secondHex = raw[i + 2];
-    if (
-      byte === 0x25 &&
-      firstHex !== undefined &&
-      secondHex !== undefined &&
-      isAsciiHexDigit(firstHex) &&
-      isAsciiHexDigit(secondHex)
-    ) {
-      decodedLength -= 2;
-      i += 2;
-    }
-  }
-
-  const bytes = new Uint8Array(decodedLength);
-  let output = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const byte = raw[i];
-    if (byte === undefined) break;
-    const firstHex = raw[i + 1];
-    const secondHex = raw[i + 2];
-    if (
-      byte === 0x25 &&
-      firstHex !== undefined &&
-      secondHex !== undefined &&
-      isAsciiHexDigit(firstHex) &&
-      isAsciiHexDigit(secondHex)
-    ) {
-      bytes[output++] = asciiDigitValue(firstHex) * 16 + asciiDigitValue(secondHex);
-      i += 2;
-    } else {
-      bytes[output++] = byte;
-    }
-  }
-  return bytes;
 }
 
 export function percentDecodeString(input: string): string {

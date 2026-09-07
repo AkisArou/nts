@@ -323,10 +323,7 @@ function normalizeReferrer(referrer: string, context: RequestContext): string {
   return parsed.href;
 }
 
-export function validateNetworkURL(url: URLRecord): void {
-  if (url.protocol !== "http:" && url.protocol !== "https:")
-    throw new TypeError("Only HTTP(S) URLs are supported");
-
+export function validateRequestURL(url: URLRecord): void {
   if (url.username !== "" || url.password !== "")
     throw new TypeError("Credentials in URLs are not permitted");
 }
@@ -365,7 +362,7 @@ export class Request extends Body {
     const inputURL = source === null ? coerceToUSVString(input) : source.url;
     const convertedInit = convertRequestInit(init);
     const url = context.urls.parse(inputURL, context.baseURL);
-    validateNetworkURL(url);
+    validateRequestURL(url);
     if (convertedInit.window !== undefined && convertedInit.window !== null) {
       throw new TypeError("Request window must be null");
     }

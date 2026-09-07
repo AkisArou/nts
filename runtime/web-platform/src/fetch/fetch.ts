@@ -4,10 +4,10 @@ import { networkError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
-import { ReadableStream } from "../streams/readable.ts";
+import { bytesStream, ReadableStream } from "../streams/readable.ts";
 import { BodyState } from "./body.ts";
 import { Headers } from "./headers.ts";
-import { Request, validateNetworkURL } from "./request.ts";
+import { Request, validateRequestURL } from "./request.ts";
 import type { RequestContext, RequestInit } from "./request.ts";
 import { isRedirectStatus, nullBodyStatus, Response } from "./response.ts";
 import type {
@@ -16,6 +16,7 @@ import type {
   TransportRequest,
   TransportResponse,
 } from "./transport.ts";
+import { processDataURL } from "./data-url.ts";
 
 declare function nts_environment_platform(): WebPlatformRuntime;
 
@@ -28,7 +29,10 @@ export function fetch(
 }
 
 function checkURL(url: URLRecord): void {
-  validateNetworkURL(url);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new TypeError("Unsupported URL scheme");
+  }
+  validateRequestURL(url);
 
   checkNetworkPort(url.port);
 }
@@ -160,6 +164,24 @@ export class FetchClient {
     let count = 0;
     try {
       while (true) {
+        if (url.protocol === "data:") {
+          await Promise.resolve();
+          request.signal.throwIfAborted();
+          const data = processDataURL(url);
+          if (data === null) throw new TypeError("Invalid data URL");
+          const bodyStream =
+            method === "HEAD" ? null : abortableBody(bytesStream(data.body), request.signal);
+          const fragment = url.href.indexOf("#");
+          return Response.fromTransport(
+            200,
+            "OK",
+            [["content-type", data.mimeType]],
+            bodyStream,
+            fragment < 0 ? url.href : url.href.slice(0, fragment),
+            false,
+            this.context,
+          );
+        }
         checkURL(url);
         request.signal.throwIfAborted();
         const raw = await abortableDispatch(this.transport, {

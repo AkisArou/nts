@@ -120,7 +120,7 @@ async function settleWithCleanups(outcome, cleanups) {
   if (failed) throw failure;
 }
 
-function createWptContext(path, pending, excludedTests, seenExcludedTests) {
+function createWptContext(path, root, verifiedSupport, pending, excludedTests, seenExcludedTests) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
   const context = createContext({
@@ -303,7 +303,21 @@ function createWptContext(path, pending, excludedTests, seenExcludedTests) {
       pending.push(result);
       return test;
     },
-    fetch() {
+    fetch(input, init) {
+      let resolved;
+      try {
+        resolved = new URL(String(input), new URL(path, root));
+      } catch {
+        return hostRuntime.fetch(input, init);
+      }
+      const supportPath = resolved.pathname.slice(root.pathname.length);
+      const support = verifiedSupport.get(supportPath);
+      if (support !== undefined) {
+        return Promise.resolve(
+          new Response(support, { headers: [["content-type", "application/json"]] }),
+        );
+      }
+      if (resolved.protocol === "data:") return hostRuntime.fetch(resolved.href, init);
       throw new Error("Host/network fetch is not an oracle in these tests");
     },
     done() {},
@@ -438,7 +452,14 @@ async function runFixture(root, path, data, verifiedSupport) {
   const pending = [];
   const excludedTests = manifest.notApplicable?.[path] ?? {};
   const seenExcludedTests = new Set();
-  const context = createWptContext(path, pending, excludedTests, seenExcludedTests);
+  const context = createWptContext(
+    path,
+    root,
+    verifiedSupport,
+    pending,
+    excludedTests,
+    seenExcludedTests,
+  );
   const source = data.toString();
   const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
   for (const match of scripts) {
@@ -452,7 +473,20 @@ async function runFixture(root, path, data, verifiedSupport) {
     runInContext(support.toString(), context, { filename: supportPath, timeout: 5000 });
   }
   runInContext(source, context, { filename: path, timeout: 5000 });
-  await Promise.all(pending);
+  let observed = 0;
+  while (observed < pending.length) {
+    const batch = pending.slice(observed);
+    observed = pending.length;
+    await Promise.all(batch);
+  }
+  const expectedTests = manifest.expectedTests?.[path];
+  if (expectedTests !== undefined) {
+    assert.equal(
+      pending.length,
+      expectedTests,
+      `WPT fixture registered an unexpected number of tests: ${path}`,
+    );
+  }
   assert.deepEqual(
     [...seenExcludedTests].sort(),
     Object.keys(excludedTests).sort(),
