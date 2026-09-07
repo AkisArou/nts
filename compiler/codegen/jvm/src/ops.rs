@@ -562,11 +562,58 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
 /// A table rather than a naming rule, because `hir::runtime` is the single
 /// answer about what a helper *takes*. A missing entry is a refusal by name
 /// and never a call to something that does not exist.
+/// The fixed networking intrinsics: the typed boundary a *program* crosses to
+/// reach a provider.
+///
+/// Separate from `core_external` because the source of truth is different.
+/// Those names come from `runtime/c`'s header and the middle end emits them;
+/// these are written by the program itself, as `declare function`, and reach
+/// here as `Callee::External` for the same reason `nts_uv_err_name` does in
+/// `runtime/node`. Nothing in `hir` knows they exist, and nothing should:
+/// inventing a middle-end concept for four static methods would be a second
+/// answer to a question the FFI path already answers.
+///
+/// **Four of nine.** The declarations in
+/// `runtime/web-platform/android/intrinsics.d.ts` also cover connect, read,
+/// write, random-fill and the two reservation calls, and every one of those
+/// takes an environment handle or a byte view. `ManagedType::View` does not
+/// exist and there is no common environment type, so those five are absent
+/// from this table *and* from the fixture -- named as gated rather than left
+/// to look like they were never tried.
+///
+/// The descriptors are not restated from the Java: they are what the
+/// declaration says, `number` being `D` and `void` being `V`, and
+/// `runtime_agrees_with_hir`'s rule applies here too -- a `(D)V` where the
+/// Java takes an `int` would be a wrong conversion in one backend only.
+fn web_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match name {
+        "nts_jvm_web_open_count" => (types::SOCKET, "openCount", "()D"),
+        "nts_jvm_web_network_changed" => (types::SOCKET, "networkChanged", "()D"),
+        "nts_jvm_web_close" => (types::SOCKET, "close", "(D)V"),
+        "nts_jvm_web_cancel_connect" => (types::SOCKET, "cancelConnect", "(D)V"),
+        _ => return None,
+    })
+}
+
+/// The rest of the refusal when `external` has no entry for a name.
+///
+/// A const rather than a literal at the site because it is five lines of
+/// explanation inside a function clippy already thinks is long, and because the
+/// two ways it has been reached -- the coercions and the networking intrinsics
+/// -- are worth naming: both times the helper was in `runtime/jvm` and only the
+/// table was missing, which is the failure this message exists to shorten.
+const NO_NAME_FOR: &str = "which this backend has no name for -- the helper may \
+                           exist in `runtime/jvm` already and be missing from \
+                           the tables `external` consults, which is how the \
+                           coercions were refused and how the networking \
+                           intrinsics were";
+
 fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
     let found = core_external(name)
         .or_else(|| math_external(name))
         .or_else(|| string_external(name))
-        .or_else(|| collection_external(name))?;
+        .or_else(|| collection_external(name))
+        .or_else(|| web_external(name))?;
     Some((found.0, found.1, found.2.to_owned()))
 }
 
@@ -3161,7 +3208,7 @@ impl Emitter<'_> {
                     return Err(refuse(
                         self.func,
                         &format!(
-                            "a call to `{name}`, which this backend has no name for -- the                              helper may exist in `runtime/jvm` already and be missing from                              `core_external`, which is how the coercions were refused"
+                            "a call to `{name}`, {NO_NAME_FOR}"
                         ),
                     ));
                 };

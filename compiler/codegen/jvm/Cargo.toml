@@ -15,5 +15,13 @@ nts-semantic-schema.workspace = true
 
 rustc-hash.workspace = true
 
+[dev-dependencies]
+# The one test that compiles TypeScript rather than driving `nts.rt` from Java.
+# The C lane's `execute.rs` carries exactly this pair for exactly this reason;
+# the alternative was shelling out to a built `nts`, which makes a test depend
+# on a binary the gate happens to have left in `target/`.
+camino.workspace = true
+nts-frontend-ts.workspace = true
+
 [lints]
 workspace = true

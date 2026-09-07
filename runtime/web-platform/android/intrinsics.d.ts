@@ -1,11 +1,19 @@
 // The fixed networking intrinsics: the typed boundary between the shared
 // TypeScript and the JVM providers.
 //
-// This is a **proposal with the JVM side already built**, not a specification
-// waiting for an implementation. Every declaration below has a Java method
-// behind it today, with tests; what is missing is the compiler's side, and two
-// of the four argument kinds the plan names are gated on common types that do
-// not exist yet. Those are marked.
+// Every declaration below has a Java method behind it today, with tests. Four
+// of the nine are **wired end to end** -- a `declare function` in TypeScript,
+// compiled by the JVM backend to `invokestatic nts/rt/NtsSocket`, running
+// against real sockets in `compiler/codegen/jvm/tests/intrinsics.rs`. They are
+// the four whose whole signature is `number` and `void`.
+//
+// The other five take an environment handle or a byte view. There is no common
+// environment type and `ManagedType::View` does not exist, so those cannot be
+// written in TypeScript at all yet; they are marked GATED where they are
+// declared. The split is four/five rather than nine/zero because the four that
+// could be wired were, rather than waiting for the two missing types to arrive
+// together -- and wiring them is what found `ops::web_external` missing, which
+// no Java test could have.
 //
 // There is no general Java binding facility and this is deliberately not one.
 // The plan's boundary is "a small typed runtime-owned intrinsic table whose
@@ -72,7 +80,7 @@ declare function nts_jvm_web_connect(
   onError: (code: string, message: string) => void,
 ): number;
 
-/** Idempotent, safe from any lane, and a late success still closes its socket. */
+/** Idempotent, safe from any lane, and a late success still closes its socket. WIRED. */
 declare function nts_jvm_web_cancel_connect(request: number): void;
 
 /**
@@ -100,7 +108,7 @@ declare function nts_jvm_web_write(
   onError: (code: string, message: string) => void,
 ): void;
 
-/** Idempotent, and what makes a blocked read or write return. */
+/** Idempotent, and what makes a blocked read or write return. WIRED. */
 declare function nts_jvm_web_close(handle: number): void;
 
 /**
@@ -112,10 +120,12 @@ declare function nts_jvm_web_close(handle: number): void;
  * program eventually sees is a timeout arriving long after the cause. Every
  * in-flight completion still arrives -- closing under a blocked worker is what
  * unblocks it -- so nothing the caller reserved is stranded.
+ *
+ * WIRED.
  */
 declare function nts_jvm_web_network_changed(): number;
 
-/** Live connections, for tests and for backpressure reporting. */
+/** Live connections, for tests and for backpressure reporting. WIRED. */
 declare function nts_jvm_web_open_count(): number;
 
 // ---------------------------------------------------------------------------

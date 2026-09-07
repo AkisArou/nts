@@ -189,6 +189,12 @@ pub const BUFFER: &str = "nts/rt/NtsBuffer";
 pub const VIEW: &str = "nts/rt/NtsDataView";
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
 
+/// The reference transport: sockets, TLS, proxies, and the network-change
+/// sweep. Named here rather than only in `web_external` because it is the one
+/// runtime class a *program* reaches by an intrinsic rather than by a type --
+/// there is no `Socket` in TypeScript, only `declare function nts_jvm_web_*`.
+pub const SOCKET: &str = "nts/rt/NtsSocket";
+
 /// The 128-bit integer, which the JVM has no primitive for.
 pub const BIGINT: &str = "nts/rt/NtsBigInt";
 pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";

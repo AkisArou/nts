@@ -134,6 +134,7 @@ dependencies = [
  "anyhow",
  "camino",
  "nts-codegen-c",
+ "nts-codegen-jvm",
  "nts-codegen-llvm",
  "nts-core",
  "nts-frontend-ts",
@@ -199,9 +200,11 @@ dependencies = [
 name = "nts-codegen-jvm"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "nts-codegen-common",
  "nts-core",
  "nts-diagnostics",
+ "nts-frontend-ts",
  "nts-jvm-emitter",
  "nts-semantic-schema",
  "rustc-hash",
