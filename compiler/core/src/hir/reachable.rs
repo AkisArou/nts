@@ -54,7 +54,7 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{Callee, OpKind, Program};
+use super::{Callee, Func, Layout, OpKind, Program};
 
 /// Where a walk over the call graph starts.
 #[derive(Debug, Clone, Copy)]
@@ -75,6 +75,92 @@ pub enum Roots<'a> {
 
 /// Names in a declared surface that the program does not export.
 #[must_use]
+/// The functions the *runtime* can call because a closure was handed to an
+/// external: the methods of whatever was passed, and of everything that
+/// derives from it.
+///
+/// Two passes need exactly this set and had neither. `prune` needs it or the
+/// bodies go and the table is emitted as a null pointer -- the note this rule
+/// carried said that had "no case that executes it", and it does now.
+/// `interprocedural::analyze_program` needs it as an **edge**: a function whose
+/// only caller is the runtime has no call site in the program, so the join over
+/// its callers is BOTTOM, and BOTTOM is the identity for join.
+///
+/// That second one is a miscompilation rather than a missing optimisation. A
+/// module-level `let handle = -1` assigned only inside such a callback keeps
+/// the facts `[-1, -1]`, so every read of it folds to `-1` -- on **all three
+/// backends**, with node printing the real value. It was found by a TypeScript
+/// program calling a networking intrinsic, which is the first thing in this
+/// repository to hand a closure across the boundary and then read what it
+/// stored.
+///
+/// The declared type at the call site is the *base* whenever the closure
+/// reached the intrinsic through a function of its own -- `send(cb)` where
+/// `send` forwards `cb` on -- and that base is abstract, so its own methods are
+/// declarations with no bodies. Hence the implementations, not just the layout.
+fn callback_targets<'p>(
+    program: &'p Program,
+    func: &Func,
+    args: &[super::ValueId],
+) -> Vec<&'p str> {
+    args.iter()
+        .filter_map(|arg| match &func.values[arg.0 as usize].ty {
+            super::HirType::Managed(super::ManagedType::Object(ty)) => Some(*ty),
+            _ => None,
+        })
+        .filter_map(|ty| program.layouts.iter().position(|layout| layout.types.contains(&ty)))
+        .flat_map(|at| implementations(program, at))
+        .flat_map(|layout| layout.methods.iter().filter_map(Option::as_deref))
+        .collect()
+}
+
+/// Every function the runtime can call, across the whole program.
+///
+/// The program-wide union of [`callback_targets`]. `analyze_program` joins this
+/// into its `outward` set, which is the "callers are outside the compiled set"
+/// wall the module's own documentation describes -- and a closure the runtime
+/// invokes is exactly on the far side of it.
+#[must_use]
+pub fn callback_names(program: &Program) -> Vec<&str> {
+    let mut found = Vec::new();
+    for func in &program.funcs {
+        for op in &func.values {
+            let OpKind::Call { callee: Callee::External(_), args, .. } = &op.kind else {
+                continue;
+            };
+            for name in callback_targets(program, func, args) {
+                if !found.contains(&name) {
+                    found.push(name);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// A layout and everything that derives from it, transitively.
+///
+/// For the external-argument rule: a value declared as a base may be any of
+/// its implementations at run time, and the runtime calls through the table of
+/// whichever it actually got.
+///
+/// Breadth-first with a seen set rather than recursion, because a malformed
+/// hierarchy that reaches itself is a wrong answer here and a stack overflow
+/// with recursion -- and this runs on every external call in the program.
+fn implementations(program: &Program, at: usize) -> Vec<&Layout> {
+    let mut seen = vec![at];
+    let mut frontier = vec![at];
+    while let Some(base) = frontier.pop() {
+        for (index, layout) in program.layouts.iter().enumerate() {
+            if program.base_layout(layout) == Some(base) && !seen.contains(&index) {
+                seen.push(index);
+                frontier.push(index);
+            }
+        }
+    }
+    seen.into_iter().filter_map(|index| program.layouts.get(index)).collect()
+}
+
 pub fn undeclared<'a>(program: &Program, declared: &'a [String]) -> Vec<&'a str> {
     declared
         .iter()
@@ -156,20 +242,11 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
                 // it can fire, so the call through the null was never made --
                 // which is what a rule with no case that executes it looks
                 // like from the outside.
-                Callee::External(_) => args
-                    .iter()
-                    .filter_map(|arg| match &func.values[arg.0 as usize].ty {
-                        super::HirType::Managed(super::ManagedType::Object(ty)) => Some(*ty),
-                        _ => None,
-                    })
-                    .filter_map(|ty| {
-                        program
-                            .layouts
-                            .iter()
-                            .find(|layout| layout.types.contains(&ty))
-                    })
-                    .flat_map(|layout| layout.methods.iter().filter_map(Option::as_deref))
-                    .collect(),
+                // An external callee is not in this program and the linker
+                // supplies it -- but a *closure* handed to one is called back
+                // through its method table, which is what `setTimeout` does
+                // with its callback.
+                Callee::External(_) => callback_targets(program, func, args),
                 Callee::Virtual { slot, .. } | Callee::Closure { slot } => program
                     .layouts
                     .iter()

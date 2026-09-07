@@ -89,8 +89,18 @@ struct Crossing {
 #[must_use]
 pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) -> Vec<Analysis> {
     let in_slot = program.slot_targets();
+    // The exports, **and every closure the runtime can call**. Both are the
+    // same wall: a function whose callers are not in the compiled set has no
+    // join to take, and the difference between them is only that one is
+    // declared and the other is handed over as an argument.
+    //
+    // Without the second, such a function's parameters join to BOTTOM -- the
+    // empty interval -- and BOTTOM is the identity for join, so a global
+    // assigned only from a callback keeps its initial value and every read of
+    // it folds to that. See `reachable::callback_names`.
     let outward: rustc_hash::FxHashSet<&str> = super::reachable::root_names(program, roots)
         .into_iter()
+        .chain(super::reachable::callback_names(program))
         .collect();
     let mut caps: Vec<FxHashMap<ValueId, Facts>> =
         program.funcs.iter().map(|_| FxHashMap::default()).collect();
