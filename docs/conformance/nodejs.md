@@ -2352,6 +2352,37 @@ tests resolving `./test/...` find it — so a relative `--addon` resolved agains
 typed. Every existing caller passed an absolute path, so nothing had ever hit
 it. `run.mjs` resolves it against the caller's directory now.
 
+### Past the compile barrier there are exactly two blockers
+
+Eight of twenty-two modules compile now, up from four this morning. That is
+enough to characterise what stops the ones that get that far, and it is not a
+long tail:
+
+| module | compiles | publishes | what stops it |
+| --- | :---: | ---: | --- |
+| `path` | yes | 1 | class values — its surface is `posix`/`win32` namespaces |
+| `buffer` | yes | 0 | class values — `Buffer` is a class |
+| `string_decoder` | yes | 0 | class values — `StringDecoder` is a class |
+| `punycode` | yes | 0 | `module#init` refused, via `emitWarning` — 2 functions lost |
+| `querystring` | yes | 0 | `module#init` refused, via a closure call — 6 lost |
+| `os` | yes | 4 | `module#init` refused, via `readConstants` — 12 lost |
+| `url` | yes | 0 | `module#init` refused, via a closure call — 12 lost |
+| `process` | yes | 0 | `module#init` refused, via `refreshEnvironment` — 30 lost |
+
+**Two causes, five modules and three modules.** `module#init` being refused
+costs **62 functions across five modules**, none of them individually a
+language feature — every one is a cascade from a single initializer that did
+not run. The other three publish nothing because their entire public surface is
+classes, which is the ABI question and a much larger one.
+
+The four immediate causes of the refused init are different — `readConstants`,
+`refreshEnvironment`, `emitWarning`, and a closure call in two modules — and
+their own roots differ again: a call of a function value, a regular-expression
+literal, `this` outside a method, a name from an enclosing scope. So this is
+not one fix. What it is, is **one choke point**: five export tables are empty
+for the same structural reason, and each is one initializer away from
+publishing rather than a module's worth of features away.
+
 ### The shortest path to one green module
 
 Nothing on this axis is close, but `punycode` is closest and it is worth
