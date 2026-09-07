@@ -427,3 +427,19 @@ if (usesCompiler) {
     console.log(`measured with ${compiler}.`);
   }
 }
+
+// The two audits that look for what is *absent*: a test file no module claims,
+// and an export node has that the shape does not. Both are failures a green
+// sweep is structurally unable to show -- an unclaimed file is in no
+// denominator, and nothing can fail on a function nothing calls -- so they run
+// here rather than when someone remembers. Skipped for a single-module or
+// compiler-only run, where a profile-wide answer would be noise.
+if (!withCompiles && modules.length > 1) {
+  const audit = spawnSync(process.execPath, [join(HERE, "audit.mjs")], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const text = `${audit.stdout ?? ""}${audit.stderr ?? ""}`.trimEnd();
+  if (text !== "") console.log(`\n${text}`);
+  if (audit.status !== 0) process.exitCode = 4;
+}

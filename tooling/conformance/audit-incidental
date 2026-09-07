@@ -1,0 +1,22 @@
+# Modules whose presence in a test does not imply the test is about them.
+#
+# The unclaimed audit asks "does this file import a module we implement, and
+# nothing we do not". That question is only useful when an import means the
+# module is the subject. These are the ones where it usually does not: a file
+# reads a fixture, joins a path, or formats a message, and none of that makes
+# it a test of `fs`, `path` or `util`.
+#
+# Getting this list wrong in the permissive direction hides a real find, so
+# each entry needs a reason and the list should stay short. Every historical
+# find is checked against it: test-blocklist (net), test-readable-* (stream),
+# test-als-* (async_hooks), test-fileurltopathbuffer (url), test-socket-*
+# (net) all still surface with these discounted.
+assert: present in almost every file in node's suite and decides nothing
+common: the harness, not a subject
+test: node's own runner
+fs: a test that reads a fixture is not thereby a test of node:fs
+path: joining a path is infrastructure in almost every file that touches disk
+os: platform predicates guard tests about something else
+util: inspect and format are used to build messages for other subjects
+timers: a setTimeout to let something settle is not a test of node:timers
+buffer: a Buffer literal is the currency of most IO tests

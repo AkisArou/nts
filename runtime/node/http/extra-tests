@@ -1,2 +1,9 @@
 test-stream2-httpclient-response-end.js: upstream names this as a stream2 regression, but every behavioral assertion exercises the HTTP server/client response implementation
 test-set-http-max-http-headers.js: node names this for the CLI flag, but every assertion is about node:http honouring --max-http-header-size
+test-outgoing-message-destroy.js: upstream names it for the class rather than the module; the subject is http.OutgoingMessage.destroy
+test-set-incoming-message-header.js: upstream names it for the operation rather than the module; the subject is http.IncomingMessage's headers and trailers setters and _addHeaderLines
+test-pipe-abstract-socket-http.js: an http server over a Linux abstract-namespace socket; the transport is in the name and the subject is node:http
+test-pipe-file-to-http.js: a file piped into an http request; the subject is the request body, not the pipe
+test-pipe-outgoing-message-data-emitted-after-ended.js: the subject is http.OutgoingMessage emitting data after end
+test-gc-http-client-connaborted.js: upstream names it for the collection it forces; the subject is an aborted http client connection
+test-client-request-destroy.js: upstream names it for the class rather than the module; the subject is http.ClientRequest.destroy

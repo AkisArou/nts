@@ -1,0 +1,81 @@
+# Test files the unclaimed audit surfaced and that are deliberately not claimed.
+#
+# The audit asks which files import a module this profile implements and
+# nothing it does not. That question has false positives: a `quic` test imports
+# only `events` and `stream`, so it looks like ours and is not. Each line here
+# is a decision someone made and can be argued with, in the same shape as a
+# module's `not-applicable`.
+#
+# Removing a line makes the audit loud about that file again, which is the
+# intended way to revisit one.
+test-abort-controller-any-timeout.js: the subject is AbortController/AbortSignal, canonical globals owned by runtime/web-platform
+test-abortsignal-any.mjs: the subject is AbortController/AbortSignal, canonical globals owned by runtime/web-platform
+test-async-wrap-constructor.js: the subject is the private async_wrap binding rather than the public node:async_hooks surface
+test-async-wrap-trigger-id.js: the subject is the private async_wrap binding rather than the public node:async_hooks surface
+test-cli-node-cli-manpage-env-vars.mjs: the subject is node's command-line surface rather than a module
+test-cli-node-cli-manpage-options.mjs: the subject is node's command-line surface rather than a module
+test-cli-print-promise.mjs: the subject is node's command-line surface rather than a module
+test-debugger-invalid-json.mjs: the subject is the debugger front end, which this profile does not implement
+test-debugger-unavailable-port.js: the subject is the debugger front end, which this profile does not implement
+test-directory-import.js: the subject is the module loader, which this profile substitutes rather than implements
+test-eventtarget-once-twice.js: the subject is EventTarget, a canonical global owned by runtime/web-platform
+test-fetch.mjs: the subject is fetch, owned by runtime/web-platform
+test-global-setters.js: the subject is node's global object rather than a module
+test-inspector-break-when-eval.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-inspector-debug-async-hook.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-inspector-esm.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-inspector-exception.js: the subject is the V8 inspector protocol, which this profile does not implement
+test-module-prototype-mutation.js: the subject is the module loader, which this profile substitutes rather than implements
+test-quic-blocklist.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-callback-error-onerror.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-busy.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-datagram-status.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-datagram.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-error.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-path.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-session.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-stream.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel-token.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-diagnostics-channel.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-h3-goaway.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-h3-informational-headers.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-h3-stream-idle-timeout.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-h3-trailing-headers.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-internal-endpoint-listen-defaults.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-session-destroy-reentrant.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-session-destroy-validate-options.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-session-unobserved-error-close.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-stream-idle-timeout.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-stream-onblocked.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-stream-reset-before-data.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-version-negotiation.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-quic-zero-rtt-rejected-settings.mjs: the subject is node:quic, which this profile does not implement; it imports only events and stream
+test-repl-definecommand.js: the subject is node:repl, which this profile does not implement
+test-repl-history-dedup-multiline.js: the subject is node:repl, which this profile does not implement
+test-repl-tab-complete-no-warn.js: the subject is node:repl, which this profile does not implement
+test-require-process.js: the subject is the module loader, which this profile substitutes rather than implements
+test-runner-coverage-source-map.js: the subject is node's own test runner, which this profile does not implement
+test-runner-filter-warning.js: the subject is node's own test runner, which this profile does not implement
+test-runner-root-after-with-refed-handles.js: the subject is node's own test runner, which this profile does not implement
+test-sqlite-backup.mjs: the subject is node:sqlite, which this profile does not implement
+test-throw-error-with-getter-throw-traced.mjs: the subject is V8 stack-trace formatting for an uncaught throw
+test-throw-undefined-or-null-traced.mjs: the subject is V8 stack-trace formatting for an uncaught throw
+test-tls-set-default-ca-certificates-append-fetch.mjs: the subject is node:tls, which this profile does not implement
+test-tls-set-default-ca-certificates-reset-fetch.mjs: the subject is node:tls, which this profile does not implement
+test-tty-stdin-pipe.js: the subject is node:tty, which this profile does not implement
+test-urlpattern-invalidthis.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
+test-urlpattern-types.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
+test-urlpattern.js: the subject is URLPattern, a WHATWG global in runtime/web-platform's lane rather than a node:url export
+test-webstream-encoding-inspect.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-abort-controller.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-adapters-writable-buffer-sources.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-compose.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-compression-bad-chunks.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-compression-buffer-source.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-decompression-reject-trailing.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-finished.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-webstreams-pipeline.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-whatwg-readablestream.mjs: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-whatwg-transformstream-cancel-write-race.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-whatwg-webstreams-compression.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+test-whatwg-webstreams-encoding.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream

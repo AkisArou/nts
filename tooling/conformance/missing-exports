@@ -1,0 +1,42 @@
+# Exports node has that the substituted module does not, reviewed.
+#
+# The audit compares the shape a consumer receives against the real `node:`
+# module in the same process. Everything here has been looked at and is not
+# currently claimed; the reason says whether that is a refusal, a dependency,
+# or work that is simply not scheduled. Removing a line makes the audit loud
+# about that name again, which is how to reopen one.
+#
+# Not a rejection list. Several of these are ordinary work nobody has needed
+# yet, and saying so is more useful than an entry that reads like a decision.
+
+# --- deliberate refusals -----------------------------------------------------
+util.inherits: language non-goal (typescript.md section 13); entirely observable function and prototype mutation, and runtime/node/util/not-applicable has excluded its test on the same ground since before this audit existed
+process.binding: the private binding table, which this profile replaces with statically resolved seams rather than exposes
+process.reallyExit: the raw exit that skips node's own exit handlers; process.exit models it internally and exposing it would offer a program a way to bypass this profile's own teardown
+
+# --- needs a subsystem this profile does not have -----------------------------
+console.context: needs node's inspector-facing console contexts
+console.createTask: needs the async context tracking node exposes for the inspector
+process.domain: node:domain is deprecated and not implemented here
+process.dlopen: loads a native addon, which needs the module loader
+process.getBuiltinModule: the module loader, which this profile substitutes rather than implements
+process.moduleLoadList: an inventory kept by the module loader
+process.openStdin: legacy alias that resumes stdin; needs node:tty's terminal handling to be faithful for a terminal
+process.report: node's diagnostic report subsystem
+process.debugPort: the inspector's port
+process.sourceMapsEnabled: needs node's source-map support
+process.setSourceMapsEnabled: as above
+util.getCallSites: needs V8's structured stack API
+util.setTraceSigInt: needs interrupt-safe SIGINT interception and a stack snapshot, and runtime/node/util/not-applicable already records the same blocker for its pinned test
+util.transferableAbortSignal: needs worker_threads transfer
+util.transferableAbortController: needs worker_threads transfer
+url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports it from node:url and this profile will do the same when web-platform installs it
+events.init: node's legacy EventEmitter.init, kept for subclasses that call it before construction; nothing in this profile's corpus reaches it
+
+# --- ordinary work, not scheduled --------------------------------------------
+util.TextDecoder: node re-exports the Encoding globals from node:util; runtime/web-platform has both, so this is a re-export once the canonical globals are installed
+util.TextEncoder: as util.TextDecoder
+util.MIMEType: a real implementation of node's MIME parser; nothing in the corpus has asked for it
+util.MIMEParams: as util.MIMEType
+process.ref: node 24's explicit resource ref; the seam exists per handle and nothing in the corpus calls the process-level form
+process.unref: as process.ref

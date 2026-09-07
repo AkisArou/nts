@@ -5,3 +5,5 @@ test-pipe-stream.js: as test-pipe-address.js; a net.Server over a pipe, piped in
 test-pipe-unref.js: as test-pipe-address.js; net.Server.unref over a pipe transport
 test-listen-fd-ebadf.js: upstream names it for the fd rather than the module; the subject is net.Server.listen refusing a descriptor that is not a socket
 test-destroy-socket-in-lookup.js: upstream names it for the operation rather than the module; the subject is net.Socket.destroy during the DNS lookup that precedes connect
+test-gc-net-timeout.js: upstream names it for the collection it forces; the subject is a net.Socket timeout
+test-ref-unref-return.js: upstream names it for the operation; the subject is that ref and unref return the socket, on both net and dgram

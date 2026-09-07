@@ -339,6 +339,38 @@ export class IncomingMessage extends Readable {
     return headers;
   }
 
+  /**
+   * Node's `_addHeaderLines`, which its own tests call directly.
+   *
+   * Not the same operation as `_addHeaders` below, and both exist because node
+   * has both behaviours in one method. This one *replaces* the raw array and
+   * chooses its destination by `complete`, which is what a caller handing over
+   * a finished header block wants. `_addHeaders` appends, which is what this
+   * profile's parser wants as it delivers a block in pieces. Merging them would
+   * mean giving one caller the other's semantics.
+   */
+  _addHeaderLines(headers: readonly string[] | null | undefined, count: number): void {
+    if (headers === null || headers === undefined || headers.length === 0) return;
+
+    let destination: IncomingHttpHeaders;
+    if (this.complete) {
+      this.rawTrailers = [...headers];
+      destination = this.trailers;
+    } else {
+      this.rawHeaders = [...headers];
+      destination = this.headers;
+    }
+
+    for (let index = 0; index < count; index += 2) {
+      const name = headers[index];
+      const value = headers[index + 1];
+      // Node reads past the end when `count` overshoots and adds nothing;
+      // stopping is the same observable outcome without the undefined pair.
+      if (name === undefined || value === undefined) break;
+      this._addHeaderLine(name, value, destination);
+    }
+  }
+
   /** Called by the parser's `kOnHeadersComplete` equivalent. */
   _addHeaders(raw: string[], maxEntries?: number): void {
     const target = this.#inTrailers ? this.trailers : this.headers;

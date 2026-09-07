@@ -5,3 +5,6 @@ test-webstreams-duplex-fromweb-writev-unhandled-rejection.js
 test-duplex-error.js: upstream names it for the class rather than the module; the subject is stream.Duplex error propagation
 test-readable-large-hwm.js: upstream names it for the class rather than the module; the subject is stream.Readable's high-water mark
 test-readable-single-end.js: upstream names it for the class rather than the module; the subject is stream.Readable emitting end exactly once
+test-pipe-return-val.js: upstream names it for the operation; the subject is stream.pipe's return value
+test-streams-highwatermark.js: plural in the filename where the module is singular; the subject is stream high-water marks
+test-global-webstreams.js: upstream names it for the globals; the subject is the web streams node:stream exposes

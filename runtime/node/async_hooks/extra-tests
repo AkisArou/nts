@@ -1,1 +1,3 @@
 test-asyncresource-bind.js: AsyncResource.bind belongs to node:async_hooks despite its filename
+test-emit-after-uncaught-exception.js: upstream names it for the situation; the subject is async_hooks callbacks continuing to fire after an uncaught exception
+test-queue-microtask-uncaught-asynchooks.js: upstream names it for queueMicrotask; the subject is what async_hooks observes when a microtask throws
