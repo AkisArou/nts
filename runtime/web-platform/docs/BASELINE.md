@@ -4249,3 +4249,58 @@ standing; the alternative is a snapshot that starts lying the moment the socket 
 The complete local Node-host/real-socket corpus passes 663/663 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The tunnel seam gets its consumer, and WebSocket gets the dispatch stack
+
+The previous slice landed a seam whose only consumers were its own tests, which is the
+shape this ledger keeps recording in other people's work and had now produced three
+times running here. `DispatchedWebSocketTransport` is the consumer.
+
+`RawWebSocketTransport` takes a `SocketConnector` and writes the upgrade request itself.
+That is the right shape for the reference path, and it means a WebSocket gets none of
+what the dispatch stack does — no proxy, no DNS cache, no connection accounting, no
+interceptors — each of which would otherwise have to be reimplemented or done without.
+The dispatched transport sends an ordinary request that asks to keep its connection, so
+all of it applies to a WebSocket exactly as it does to a request.
+
+Nothing else changes: the handshake validation, the framing engine and the session are
+the same code either way. `adoptClientWebSocketSession` is the mirror of the server
+adoption added for the server row, and exists for the same reason — masking is the only
+asymmetry in the framing, so the engine takes a role rather than being written twice.
+
+Two refusals are deliberate and each has a test. A response with no connection is an
+error rather than an assumption: a WebSocket whose transport silently declined would
+appear to connect and then read HTTP as frames. And a handshake that fails validation
+closes the connection before throwing, because the connection became ours the moment it
+was handed over and nothing else will close it.
+
+The peer is the shared server pieces over a real socket, so both ends of one engine have
+to agree — with the connection between them having been through a real HTTP transport
+rather than a fake. Text and binary round-trip, and the subprotocol survives.
+
+Five sabotages, all restored. Two would not type-check in their first forms and were
+refused. Substituting a dead connection for a missing one, tolerating a failed
+handshake, leaking the connection when validation fails, dropping the subprotocol offer,
+and not naming the upgrade protocol all fail.
+
+Two tests were wrong first, and neither was the code's fault. A server refusing an
+unoffered subprotocol is not a refusal at all — selecting none is the correct answer to
+an offer it cannot meet, and the client is entitled to proceed without one. That test
+now uses a server that answers `426` instead, through the real transport, which is the
+case worth having anyway. And an aborted session reports `close`, not `closed`; the
+assertion was checking a spelling I had invented.
+
+The echo server harness was extracted rather than copied into a second suite. Two suites
+now need a real peer, and a test harness that exists twice is one that drifts — which
+for a peer means two suites quietly stop testing the same thing.
+
+### What it costs at the frontier
+
+Same pinned compiler as the previous slice, whose measurement is this one's before:
+1,290 to 1,292 primary `NTS1001` and 313 to 314 `NTS1003`, zero `NTS1004`, zero
+`NTS4xxx`, zero invalid HIR, and no new refusal category — the only difference in the
+message set is a type identifier renumbering.
+
+The complete local Node-host/real-socket corpus passes 670/670 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.

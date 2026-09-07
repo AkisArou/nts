@@ -416,6 +416,41 @@ function requireDeflate(provider: WebSocketDeflateProvider | undefined): WebSock
  * `reader` must be the reader that consumed the request head, so bytes a client sent
  * immediately after its handshake are not lost between the two.
  */
+/**
+ * Drives a client session over a connection somebody else obtained and validated.
+ *
+ * The mirror of {@link adoptServerWebSocketSession}, and it exists for the same reason:
+ * masking is the only asymmetry in the framing, so the message engine takes a role
+ * rather than being written twice. What differs here is only where the connection came
+ * from — a transport that dispatched an upgrade through the HTTP stack ends up holding
+ * exactly what {@link RawWebSocketTransport} holds after its own handshake.
+ */
+export function adoptClientWebSocketSession(options: {
+  readonly connection: ByteConnection;
+  readonly reader: BufferedReader;
+  readonly handshake: ValidatedWebSocketHandshake;
+  readonly deflate?: WebSocketDeflateProvider | undefined;
+  readonly random: RandomSource;
+  readonly scheduler: Scheduler;
+  readonly transport?: RawWebSocketOptions;
+  readonly onEnd?: () => void;
+}): WebSocketSession {
+  const end = options.onEnd;
+  return new RawWebSocketSession(
+    options.connection,
+    options.reader,
+    options.handshake,
+    options.deflate,
+    options.random,
+    options.scheduler,
+    options.transport ?? {},
+    () => {
+      if (end !== undefined) end();
+    },
+    "client",
+  );
+}
+
 export function adoptServerWebSocketSession(options: {
   readonly connection: ByteConnection;
   readonly reader: BufferedReader;

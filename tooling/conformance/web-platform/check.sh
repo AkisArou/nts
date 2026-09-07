@@ -14,6 +14,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/coalescing.test.mjs \
   tooling/conformance/web-platform/test/cookies.test.mjs \
   tooling/conformance/web-platform/test/deduplicate.test.mjs \
+  tooling/conformance/web-platform/test/dispatched-websocket.test.mjs \
   tooling/conformance/web-platform/test/diagnostics.test.mjs \
   tooling/conformance/web-platform/test/dns.test.mjs \
   tooling/conformance/web-platform/test/durable-cache-storage.test.mjs \

@@ -379,6 +379,7 @@ export type {
 
 export { WebSocket } from "./websocket/websocket.ts";
 export type { WebSocketData, WebSocketSendData } from "./websocket/websocket.ts";
+export { DispatchedWebSocketTransport } from "./websocket/dispatched-transport.ts";
 export { WebSocketError, WebSocketStream } from "./websocket/websocket-stream.ts";
 export type {
   WebSocketCloseInfo,

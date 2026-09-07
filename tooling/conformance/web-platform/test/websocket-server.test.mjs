@@ -6,144 +6,14 @@
 // show that both ends of one engine actually agree.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createServer } from "node:net";
+import { websocketServer } from "./websocket-echo-server.mjs";
 
-import {
-  acceptWebSocketUpgrade,
-  adoptServerWebSocketSession,
-  BufferedReader,
-  serializeUpgradeResponse,
-  writeAll,
-} from "../node_modules/.tsbuild/host/runtime/web-platform/src/provider.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
-import {
-  HostNodeScheduler,
-  hostNodeRandom,
-} from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
 import { HostNodeWebSocketDeflate } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-websocket-deflate.js";
 
 const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-
-/** Minimal ByteConnection over an accepted Node socket. Test harness, not a provider. */
-function byteConnection(socket) {
-  const pending = [];
-  let waiting = null;
-  let ended = false;
-  socket.on("data", (chunk) => {
-    if (waiting !== null) {
-      const resolve = waiting;
-      waiting = null;
-      resolve(new Uint8Array(chunk));
-      return;
-    }
-    pending.push(new Uint8Array(chunk));
-  });
-  socket.on("end", () => {
-    ended = true;
-    if (waiting !== null) {
-      const resolve = waiting;
-      waiting = null;
-      resolve(null);
-    }
-  });
-  socket.on("error", () => {});
-  return {
-    get closed() {
-      return socket.destroyed;
-    },
-    // The contract is "a nonempty chunk of at most maxBytes"; returning a whole socket
-    // chunk regardless is a contract violation the reader is entitled to trip over.
-    async read(maxBytes) {
-      const take = (chunk) => {
-        if (chunk === null || chunk.length <= maxBytes) return chunk;
-        pending.unshift(chunk.subarray(maxBytes));
-        return chunk.subarray(0, maxBytes);
-      };
-      const next = pending.shift();
-      if (next !== undefined) return take(next);
-      if (ended) return null;
-      return new Promise((resolve) => {
-        waiting = (chunk) => resolve(take(chunk));
-      });
-    },
-    async write(data) {
-      socket.write(Buffer.from(data));
-      return data.length;
-    },
-    close() {
-      socket.destroy();
-    },
-  };
-}
-
-/** Reads the request head through the shared reader, so no byte is lost to the session. */
-async function readRequestHead(reader) {
-  // `BufferedReader.line` already returns a decoded line.
-  const requestLine = await reader.line(8192);
-  const headers = [];
-  while (true) {
-    const line = await reader.line(8192);
-    if (line === "") break;
-    const colon = line.indexOf(":");
-    headers.push([line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()]);
-  }
-  return { method: requestLine.split(" ")[0], headers };
-}
-
-async function websocketServer(t, upgradeOptions, deflate) {
-  const seen = { protocol: null, extensions: null, messages: [], errors: [] };
-  const sockets = new Set();
-  const scheduler = new HostNodeScheduler(() => {});
-  const server = createServer((socket) => {
-    sockets.add(socket);
-    socket.on("error", () => {});
-    socket.on("close", () => sockets.delete(socket));
-    void (async () => {
-      const connection = byteConnection(socket);
-      const reader = new BufferedReader(connection);
-      const request = await readRequestHead(reader);
-      const outcome = acceptWebSocketUpgrade(request.method, request.headers, upgradeOptions);
-      await writeAll(connection, encoder.encode(serializeUpgradeResponse(outcome)));
-      if (!outcome.accepted) {
-        connection.close();
-        return;
-      }
-      seen.protocol = outcome.protocol;
-      seen.extensions = outcome.perMessageDeflate?.response ?? null;
-      // The same reader continues into the frames: bytes a client sent immediately
-      // after its handshake are already buffered here.
-      const session = adoptServerWebSocketSession({
-        connection,
-        reader,
-        protocol: outcome.protocol ?? "",
-        extensions: seen.extensions ?? "",
-        perMessageDeflate: outcome.perMessageDeflate,
-        deflate,
-        random: hostNodeRandom,
-        scheduler,
-      });
-      try {
-        while (true) {
-          const incoming = await session.next();
-          if (incoming.kind === "closed") break;
-          seen.messages.push(incoming);
-          await session.send(incoming);
-        }
-      } catch (error) {
-        seen.errors.push(error);
-      }
-    })();
-  });
-  server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
-  t.after(() => {
-    for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
-  });
-  return { port: server.address().port, seen };
-}
 
 function clientOf(t, options = {}) {
   const api = createHostNodeWebPlatform(options);
