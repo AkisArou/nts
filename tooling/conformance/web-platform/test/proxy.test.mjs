@@ -6,6 +6,7 @@ import {
   AbortController,
   EnvHttpProxyAgent,
   EnvironmentProxyPolicy,
+  EnvironmentProxyConnector,
   HttpConnectProxyConnector,
   NoProxyMatcher,
   ProxyAgent,
@@ -730,6 +731,36 @@ test("EnvHttpProxyAgent snapshots variables and bypasses NO_PROXY destinations",
   assert.match(proxyResponse.writtenText(), /^GET http:\/\/origin\.example\/b HTTP\/1\.1\r\n/);
   agent.close();
   await assert.rejects(agent.dispatch(transportRequest("http://origin.example/")), /closed/);
+});
+
+test("EnvironmentProxyConnector tunnels protocol engines and preserves direct bypass", async () => {
+  const directConnection = new ScriptedConnection([]);
+  const proxyConnection = new ScriptedConnection(["HTTP/1.1 200 Connection Established\r\n\r\n"]);
+  const direct = new QueueConnector([directConnection, proxyConnection]);
+  const tls = new RecordingTls();
+  const connector = new EnvironmentProxyConnector({
+    connector: direct,
+    tls,
+    scheduler,
+    urls: hostNodeURLs,
+    environment: {
+      HTTPS_PROXY: "http://proxy.example:8080",
+      NO_PROXY: "bypass.example",
+    },
+  });
+  const signal = new AbortController().signal;
+  const bypass = target("bypass.example", true);
+  const proxied = { ...target("h2.example", true), alpnProtocols: ["h2"] };
+  assert.equal(await connector.connect(bypass, signal), directConnection);
+  assert.equal(await connector.connect(proxied, signal), proxyConnection);
+  assert.equal(direct.addresses[0], bypass);
+  assert.equal(direct.addresses[1].hostname, "proxy.example");
+  assert.equal(tls.calls[0].target, proxied);
+  assert.deepEqual(tls.calls[0].target.alpnProtocols, ["h2"]);
+  assert.equal(
+    proxyConnection.writtenText(),
+    "CONNECT h2.example:443 HTTP/1.1\r\nHost: h2.example:443\r\n\r\n",
+  );
 });
 
 test("real CONNECT tunnel upgrades TLS against the target identity, not the proxy", async () => {

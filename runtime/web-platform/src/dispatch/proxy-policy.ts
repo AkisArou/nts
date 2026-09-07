@@ -1,4 +1,4 @@
-import type { URLParser, URLRecord } from "../provider/primitives.ts";
+import type { ConnectAddress, URLParser, URLRecord } from "../provider/primitives.ts";
 import { ProxyConfigurationError } from "./proxy.ts";
 
 export interface ProxyEnvironment {
@@ -132,9 +132,12 @@ export class NoProxyMatcher {
   }
 
   bypasses(url: URLRecord): boolean {
+    return this.bypassesAddress(urlHostname(url), urlPort(url));
+  }
+
+  bypassesAddress(hostname: string, port: number): boolean {
     if (this.bypassAll) return true;
-    const hostname = urlHostname(url);
-    const port = urlPort(url);
+    hostname = stripTrailingDot(hostname).toLowerCase();
     for (const entry of this.entries) {
       if (entry.port !== 0 && entry.port !== port) continue;
       if (hostname === entry.hostname) return true;
@@ -207,5 +210,10 @@ export class EnvironmentProxyPolicy {
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
     if (this.noProxy.bypasses(url)) return null;
     return url.protocol === "https:" ? this.httpsProxy : this.httpProxy;
+  }
+
+  proxyForAddress(address: ConnectAddress): string | null {
+    if (this.noProxy.bypassesAddress(address.hostname, address.port)) return null;
+    return address.secure ? this.httpsProxy : this.httpProxy;
   }
 }

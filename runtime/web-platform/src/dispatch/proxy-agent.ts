@@ -1,9 +1,17 @@
+import type { AbortSignal } from "../core/abort.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import { addressOf } from "../http/address.ts";
 import { Http1Transport } from "../http1/transport.ts";
 import type { Http1DispatchRoute, Http1Options } from "../http1/transport.ts";
-import type { Scheduler, SocketConnector, TlsUpgrader, URLParser } from "../provider/primitives.ts";
+import type {
+  ByteConnection,
+  ConnectAddress,
+  Scheduler,
+  SocketConnector,
+  TlsUpgrader,
+  URLParser,
+} from "../provider/primitives.ts";
 import {
   basicAuthorization,
   callAuthenticator,
@@ -36,7 +44,7 @@ export interface ProxyAgentOptions extends Http1Options {
 
 export interface Socks5ProxyAgentOptions extends Http1Options, Socks5ProxyOptions {}
 
-export interface EnvHttpProxyAgentOptions extends Http1Options, EnvironmentProxyOptions {
+export interface EnvironmentProxyConnectorOptions extends EnvironmentProxyOptions {
   readonly connector: SocketConnector;
   readonly tls: TlsUpgrader;
   readonly scheduler: Scheduler;
@@ -47,6 +55,9 @@ export interface EnvHttpProxyAgentOptions extends Http1Options, EnvironmentProxy
   readonly authorization?: string;
   readonly authenticate?: ProxyAuthenticator;
   readonly maximumAuthenticationAttempts?: number;
+}
+
+export interface EnvHttpProxyAgentOptions extends Http1Options, EnvironmentProxyConnectorOptions {
   readonly proxyTunnel?: boolean;
 }
 
@@ -189,6 +200,37 @@ export class Socks5ProxyAgent implements FetchTransport {
 
   close(): void {
     this.transport.close();
+  }
+}
+
+/**
+ * Environment-selected tunnel connector for protocols that require an end-to-end
+ * byte stream, including WebSocket and HTTP/2. Plain HTTP forwarding stays in
+ * ProxyAgent because it changes HTTP serialization rather than socket routing.
+ */
+export class EnvironmentProxyConnector implements SocketConnector {
+  readonly policy: EnvironmentProxyPolicy;
+  private readonly options: EnvironmentProxyConnectorOptions;
+  private readonly proxies = new Map<string, SocketConnector>();
+
+  constructor(options: EnvironmentProxyConnectorOptions) {
+    this.options = options;
+    this.policy = new EnvironmentProxyPolicy(options.urls, options.environment, options);
+  }
+
+  connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+    const uri = this.policy.proxyForAddress(address);
+    if (uri === null) return this.options.connector.connect(address, signal);
+    let connector = this.proxies.get(uri);
+    if (connector === undefined) {
+      const protocol = this.options.urls.parse(uri).protocol;
+      connector =
+        protocol === "socks:" || protocol === "socks5:"
+          ? new Socks5ProxyConnector({ ...this.options, uri })
+          : new HttpConnectProxyConnector({ ...this.options, uri });
+      this.proxies.set(uri, connector);
+    }
+    return connector.connect(address, signal);
   }
 }
 
