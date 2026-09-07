@@ -154,6 +154,36 @@ nothing here broke anything there, and `bfb7d97d` fixed a live `[object Object]`
 `node:util`'s public surface that neither corpus could see alone. Their sweep is 1,803 of
 1,803 across 22 modules with 0 divergences over 11 differential corpora.
 
+**Two Web IDL deviations are measured, pinned and blocked on one refactor.** Forty-five
+internal methods remain publicly reachable on interface prototypes (down from sixty-three),
+and interface members are non-enumerable where Web IDL requires enumerable. The second
+cannot be fixed before the first, because a blanket enumerability pass would enumerate the
+internals too.
+
+`#private` closed eighteen of them and is free on the frontier — measured, after this file
+carried the opposite claim as a reason not to try. The remaining forty-five resist because
+they are a **cross-class protocol**, not an oversight: six are declared on the structural
+interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost` where a private identifier
+is not legal, the rest are `ReadableStream` delegating to `ReadableByteStreamState`, and
+`Event.initialize` is called from outside the `Event` class. All five that looked safe were
+attempted and all five were refused by `tsc`.
+
+**The mechanism that closes both is symbol-keyed members.** `readable.ts` already uses that
+pattern for `readableStreamBrand` and two others, and `Object.getOwnPropertyNames` does not
+report symbol keys — so the members leave the enumerable surface and the enumerability fix
+becomes safe in the same move. It is a cross-module refactor touching `cache/`, `http1/`,
+`dispatch/` and `websocket/`, and it is the single highest-value piece of work left in this
+lane, because it also unblocks `streams/idlharness`.
+
+**`idlharness` runs for `encoding` and is blocked elsewhere by a profile question.** The
+harness classifies its environment as a `Window`, a worker scope, or a plain realm. This
+runner answers "plain realm", which is true — and correct only for `[Exposed=*]` interfaces.
+`Blob` and `File` are `[Exposed=(Window,Worker)]`, so `FileAPI/idlharness` asserts they
+**must not exist**. Declaring a `DedicatedWorkerGlobalScope` would make it pass and would be
+a claim about the environment that is not true. **What this profile claims to be is a
+question for the governing plan and the repository owner**, not for a lane that would answer
+it in whichever direction turns a fixture green.
+
 **Still open, and why.** The **public server module or package** is a repository-layout
 decision. The **Undici API ledger** still cannot be written honestly with nothing pinned.
 **Server-side TLS** — terminating `wss://` — is deliberately separate: it needs a

@@ -4,15 +4,31 @@
 // which is the honest thing to do with a gap too large to close in passing.
 //
 // Web IDL says an interface prototype carries the interface's members and nothing else.
-// These classes carry sixty-three more: `AbortSignal.prototype.trigger` is publicly
-// callable, `ReadableStream.prototype.markDisturbed` is publicly callable, and so on.
-// They are internal wiring between modules in this runtime, reachable because they are
-// ordinary public methods.
+// These classes carry forty-five more, down from sixty-three:
+// `ReadableStream.prototype.markDisturbed` is publicly callable, and so on. They are
+// internal wiring between modules in this runtime, reachable because they are ordinary
+// public methods.
 //
-// **Why they are not simply made private.** `#private` fields are not free here -- the
-// frontier already carries refusals for properties of unrepresentable private type -- so
-// "make them private" is a decision about compiler cost, not a tidy-up, and it belongs to
-// whoever knows what that cost is. Until then the surface is written down.
+// **Why the rest are not simply made private, measured rather than assumed.** This file
+// used to say `#private` was not free here, citing a real diagnostic and misreading it --
+// that refusal is about a property's *type*, not about privacy. Converting four
+// `TextDecoder` members moved the frontier not at all, so eighteen are private now and gone
+// from these prototypes. What remains resists for reasons `tsc` supplies:
+//
+//   - `Event.initialize` and `Event.applyConvertedEventInit` are called from *outside* the
+//     `Event` class. Single-file is not single-class, and `#private` is per class.
+//   - Every one of `ReadableStream`'s seventeen is a cross-class protocol. Six are declared
+//     on the structural interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost`,
+//     where a private identifier is not legal at all; the rest are `ReadableStream`
+//     delegating to `ReadableByteStreamState`, which cannot reach another class's private
+//     members. All five that looked safe were attempted, and all five were refused.
+//   - The remainder are called from other modules entirely.
+//
+// So these are an architecture rather than an oversight. The mechanism that would close
+// them is symbol-keyed members -- which `readable.ts` already uses for `readableStreamBrand`
+// and two others, and which `Object.getOwnPropertyNames` does not report, so it would fix
+// the enumerability deviation below at the same time. That is a cross-module refactor and
+// is not being done in passing.
 //
 // The rule this enforces: **the list may shrink, never grow.** A new public method on an
 // interface prototype fails here and has to be justified, which is the same shape as the
