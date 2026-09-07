@@ -755,6 +755,84 @@ test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel
   agent.close();
 });
 
+// A SOCKS5 tunnel is bound to the target named in its CONNECT, so a tunnel opened
+// for one origin can never carry a request for another. The proxy endpoint being the
+// same is not a reason to share one.
+function socksConnectTarget(connection) {
+  const written = connection.writtenBytes();
+  assert.deepEqual(Array.from(written.subarray(0, 3)), [5, 1, 0], "SOCKS5 greeting");
+  const request = written.subarray(3);
+  assert.deepEqual(Array.from(request.subarray(0, 4)), [5, 1, 0, 3], "SOCKS5 CONNECT by name");
+  const length = request[4];
+  const host = decoder.decode(request.subarray(5, 5 + length));
+  const port = (request[5 + length] << 8) | request[6 + length];
+  return host + ":" + port;
+}
+
+test("one SOCKS proxy endpoint never lets two target origins share a tunnel", async () => {
+  const alpha = new ScriptedConnection([
+    new Uint8Array([5, 0]),
+    new Uint8Array([5, 0, 0, 1, 127, 0, 0, 1, 0, 80]),
+    "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nfirst",
+    "HTTP/1.1 200 OK\r\nContent-Length: 6\r\n\r\nsecond",
+  ]);
+  const beta = new ScriptedConnection([
+    new Uint8Array([5, 0]),
+    new Uint8Array([5, 0, 0, 1, 127, 0, 0, 1, 0, 80]),
+    "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbeta",
+  ]);
+  const direct = new QueueConnector([alpha, beta]);
+  const agent = new Socks5ProxyAgent({
+    connector: direct,
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "socks5://proxy.example:1080",
+  });
+
+  // Two requests to one origin first. Without this the separation below would also
+  // be satisfied by a pool that never reuses anything, which is not the property
+  // being protected.
+  assert.equal(
+    await responseText(await agent.dispatch(transportRequest("http://alpha.example/1"))),
+    "first",
+  );
+  assert.equal(
+    await responseText(await agent.dispatch(transportRequest("http://alpha.example/2"))),
+    "second",
+  );
+  assert.equal(direct.addresses.length, 1, "a same-origin request must reuse the open tunnel");
+
+  // A different logical target through the same proxy endpoint opens its own tunnel.
+  assert.equal(
+    await responseText(await agent.dispatch(transportRequest("http://beta.example/3"))),
+    "beta",
+  );
+  assert.equal(direct.addresses.length, 2, "a second origin must not reuse the first tunnel");
+
+  // Both TCP connections go to the proxy, so the proxy endpoint alone cannot be what
+  // distinguishes them; the CONNECT target is.
+  assert.equal(direct.addresses[0].hostname, "proxy.example");
+  assert.equal(direct.addresses[1].hostname, "proxy.example");
+  assert.equal(socksConnectTarget(alpha), "alpha.example:80");
+  assert.equal(socksConnectTarget(beta), "beta.example:80");
+
+  // The decisive assertion: no request for one origin was ever written to the other
+  // origin's tunnel.
+  const alphaWrites = alpha.writtenText();
+  const betaWrites = beta.writtenText();
+  assert.equal(alphaWrites.includes("beta.example"), false);
+  assert.equal(betaWrites.includes("alpha.example"), false);
+  // Both alpha requests, and only those, travelled down the alpha tunnel.
+  assert.equal(alphaWrites.includes("GET /1 "), true);
+  assert.equal(alphaWrites.includes("GET /2 "), true);
+  assert.equal(alphaWrites.includes("GET /3 "), false);
+  assert.equal(betaWrites.includes("GET /3 "), true);
+  assert.equal(betaWrites.includes("GET /1 "), false);
+  assert.equal(betaWrites.includes("GET /2 "), false);
+  agent.close();
+});
+
 test("EnvHttpProxyAgent snapshots proxy URLs and bypasses NO_PROXY destinations", async () => {
   const directResponse = new ScriptedConnection([
     "HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\ndirect",

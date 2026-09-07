@@ -2177,3 +2177,39 @@ output carries no source locations.
 Note for the earlier entries in this ledger: every frontier recorded above this point
 was measured with a different, unpinned binary. Those numbers remain the honest record
 of what was measured at the time and are not restated here.
+
+## One proxy endpoint is not one connection pool
+
+A SOCKS5 tunnel is bound to the target named in its CONNECT: the proxy resolves and
+connects to that host, and the resulting byte stream reaches nowhere else. Pooling
+that keyed on the proxy endpoint would therefore hand a request for one origin a
+tunnel that terminates at another. That is a cross-origin routing defect rather than a
+performance bug, and it is invisible to any test that only asks whether a response
+came back.
+
+The pool keys on the logical target address, so the invariant already held. It had no
+regression protecting it, which is what this adds. One `Socks5ProxyAgent` with a
+single `socks5://proxy.example:1080` endpoint serves two requests to one origin and
+then one to a second origin. Both TCP connections go to the proxy, so the endpoint
+alone cannot be what distinguishes them; the decoded SOCKS5 CONNECT targets are
+`alpha.example:80` and `beta.example:80`, and each origin's request paths appear only
+in its own tunnel's bytes.
+
+The same-origin pair is load-bearing rather than incidental. Without it the separation
+assertion would also be satisfied by a pool that never reused anything, which is not
+the property being protected; the test asserts that the second same-origin request
+opened no new connection before asserting that the second origin did.
+
+The sabotage reduced the pool key to the connection's secure flag, so one endpoint's
+tunnel looked reusable for any target. The focused proxy corpus fell from 28/28 to
+27/28, and the failure is legible as exactly this defect: `ProtocolError: EOF inside
+an HTTP line`, because the second origin's request was written down a tunnel whose
+scripted peer had already been consumed. Restoring the target in the key returned it
+to 28/28.
+
+The complete local Node-host/real-socket corpus passes 410/410 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. This is host evidence for the shared pooling
+algorithm; it is not evidence about any provider's own connection management, and a
+production dispatcher that owns its connections needs this invariant established
+separately in its own lane.

@@ -286,8 +286,9 @@ finalization runs. The Node facade side of `test-aborted-util.js` and its exclus
 3. Coordinate and land the negotiated-ALPN result in the typed provider ABI. Then
    build automatic HTTP/1.1 versus HTTP/2 selection over one connected stream,
    including direct, HTTP-proxy tunnel, and SOCKS routes.
-4. Add a SOCKS pooling regression proving two logical target origins never reuse one
-   target-bound tunnel merely because the proxy endpoint is the same.
+4. Done. A SOCKS pooling regression proves two logical target origins never reuse one
+   target-bound tunnel merely because the proxy endpoint is the same; see "One proxy
+   endpoint is not one connection pool" in `runtime/web-platform/docs/BASELINE.md`.
 5. Done. The public constructor context-injection paths are removed and internal
    construction and identity are preserved; see the ledger entry named above.
 6. Audit graceful HTTP/2 drain against a connect that is still opening. In particular,
