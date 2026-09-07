@@ -1526,3 +1526,46 @@ dependent `NTS1003` cascades, with zero module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. Relative to the WebSocketStream checkpoint,
 the eight-primary and three-cascade increase is final RFC 7692/provider-contract
 source reaching existing lowering dependencies, not compiled execution evidence.
+
+## RFC 7541 HPACK
+
+The shared HTTP/2 layer now contains one stateful HPACK encoder and decoder rather
+than relying on a provider's header codec. It implements RFC 7541's complete static
+table, dynamic indexing and eviction, all integer and string representations, the
+257-symbol Huffman alphabet and EOS padding rules, the required ordering and count
+of table-size updates, and the distinction between incremental, without-indexing,
+and never-indexed literals. `authorization`, `proxy-authorization`, `cookie`, and
+`set-cookie` default to never-indexed representation unless the caller deliberately
+selects another policy. Header names and values are preserved as HTTP ByteStrings;
+the codec does not silently reinterpret arbitrary octets as UTF-8.
+
+The decoder rejects zero or out-of-range indexes, truncated and oversized integers,
+EOS inside a string, invalid or excessive padding, late or excessive table-size
+updates, omitted required minimum updates, advertised-capacity overflow, oversized
+encoded strings, oversized decoded strings, and oversized header lists. Encoded
+string and decoded header-list budgets are independent. The encoder uses Huffman
+coding only when it shortens a field and emits the smallest and final pending table
+size when multiple peer-setting changes precede the next block.
+
+All six RFC request and response sequences pass in their plain and Huffman forms.
+The complete `http2jp/hpack-test-case` decoding corpus, pinned to commit
+`8a1406e7d14bfcb6c046021f13cc15cfb162726d`, passes 47,142/47,142 cases from 14
+independent encoders. A separate deterministic randomized run encoded 2,000
+stateful header blocks here and decoded all 2,000 with Python `hpack`; it found no
+interoperability mismatch. This is measured here against the final codec, not a
+prediction from instruction shape.
+
+The focused HPACK suite passes 13/13 and the complete local Node-host/real-socket
+suite passes 248/248. The unchanged pinned WPT slice remains 2275/2283 applicable
+cases, with 14 named not-applicable cases and the same eight visible
+structural/common-compiler failures. No HPACK case is excluded from that count; the
+47,142-case interoperability corpus is an explicit offline runner because its
+external checkout is intentionally not downloaded by the ordinary gate.
+
+A sabotage replaced the mandated all-one Huffman tail padding with zero bits. The
+focused precondition fell from 1/1 to 0/1 while decoding the all-256-octet round trip,
+then returned to 1/1 after restoration. The live compiled-source frontier is 1019
+primary `NTS1001` refusals and 149 dependent `NTS1003` cascades, with zero `NTS1004`
+module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. The four new
+primaries and two cascades are the final HPACK table/codec source reaching existing
+lowering dependencies, not compiled-provider or HTTP/2-session evidence.
