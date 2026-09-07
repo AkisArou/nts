@@ -1,8 +1,6 @@
 import { coerceToUSVString, requireArguments } from "../core/webidl.ts";
 import { Blob, File } from "../file/blob.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
-
-declare function nts_environment_platform(): WebPlatformRuntime;
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 
 export type FormDataEntryValue = string | File;
 
@@ -79,7 +77,7 @@ function convertFormDataValue(
     lastModified:
       value instanceof File
         ? value.lastModified
-        : nts_environment_platform().wallTimeMilliseconds(),
+        : currentWebPlatformRuntime().wallTimeMilliseconds(),
   });
 }
 

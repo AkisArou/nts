@@ -7,7 +7,7 @@ import {
   requireDictionary,
 } from "../core/webidl.ts";
 import type { RandomSource, URLParser, URLRecord } from "../provider/primitives.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { Blob } from "../file/blob.ts";
 import type { BlobURLStore } from "../file/object-url.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
@@ -102,8 +102,6 @@ export interface RequestInternalMetadata {
   readonly isReloadNavigation: boolean;
   readonly isHistoryNavigation: boolean;
 }
-
-declare function nts_environment_platform(): WebPlatformRuntime;
 
 interface ConvertedRequestInit {
   readonly body: BodyInit | null | undefined;
@@ -373,7 +371,7 @@ export class Request extends Body {
   constructor(
     input: string | Request,
     init: RequestInit | null | undefined = undefined,
-    context: RequestContext = nts_environment_platform().requestContext,
+    context: RequestContext = currentWebPlatformRuntime().requestContext,
     blobURLObject: Blob | null | undefined = undefined,
     metadata: RequestInternalMetadata | undefined = undefined,
   ) {

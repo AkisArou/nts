@@ -62,6 +62,20 @@ export function toUnsignedLong(value: number): number {
   return unsignedInteger(value, 4_294_967_296);
 }
 
+/** Convert `[EnforceRange] unsigned long long` without narrowing it to a timer ABI. */
+export function toEnforceRangeUnsignedLongLong(value: number): number {
+  const number = +value;
+  if (!Number.isFinite(number)) {
+    throw new TypeError("Value is not a finite unsigned long long");
+  }
+  const integer = number < 0 ? Math.ceil(number) : Math.floor(number);
+  // 2^64 is exactly representable; every representable value below it is in range.
+  if (integer < 0 || integer >= 18_446_744_073_709_551_616) {
+    throw new TypeError("Value is outside the unsigned long long range");
+  }
+  return integer === 0 ? 0 : integer;
+}
+
 /** Convert a number using Web IDL's `[Clamp] unsigned short` rules. */
 export function toClampedUnsignedShort(value: number): number {
   const number = +value;

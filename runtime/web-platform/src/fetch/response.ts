@@ -5,7 +5,7 @@ import {
   toUnsignedShort,
 } from "../core/webidl.ts";
 import type { RandomSource, URLParser } from "../provider/primitives.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import { Blob } from "../file/blob.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
@@ -27,8 +27,6 @@ export interface ResponseContext {
 }
 
 export type ResponseType = "basic" | "cors" | "default" | "error" | "opaque" | "opaqueredirect";
-
-declare function nts_environment_platform(): WebPlatformRuntime;
 
 interface ConvertedResponseInit {
   readonly headers: Headers | undefined;
@@ -79,7 +77,7 @@ export class Response extends Body {
   constructor(
     body: BodyInit | null = null,
     init: ResponseInit | null = {},
-    context: ResponseContext = nts_environment_platform().requestContext,
+    context: ResponseContext = currentWebPlatformRuntime().requestContext,
   ) {
     // Web IDL converts arguments left to right before the constructor algorithm.
     const convertedBody = convertBodyInit(body);
@@ -167,7 +165,7 @@ export class Response extends Body {
   static redirect(url: string, status = 302): Response {
     const convertedURL = coerceToUSVString(url);
     const convertedStatus = toUnsignedShort(status);
-    const runtime = nts_environment_platform();
+    const runtime = currentWebPlatformRuntime();
     const absolute = runtime.requestContext.urls.parse(
       convertedURL,
       runtime.requestContext.baseURL,

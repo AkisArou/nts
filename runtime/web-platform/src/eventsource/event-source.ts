@@ -10,12 +10,10 @@ import {
   requireDictionary,
 } from "../core/webidl.ts";
 import type { CancelHandle, Scheduler, URLParser } from "../provider/primitives.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { RequestInit } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import { parseMIMEType } from "../forms/mime.ts";
-
-declare function nts_environment_platform(): WebPlatformRuntime;
 
 export interface EventSourceInit {
   withCredentials?: boolean;
@@ -258,7 +256,7 @@ export class EventSource extends EventTarget {
     requireArguments(args, 1, "EventSource constructor");
     const input = coerceToUSVString(args[0]);
     const withCredentials = convertEventSourceInit(args[1]);
-    const context = args[2] ?? nts_environment_platform();
+    const context = args[2] ?? currentWebPlatformRuntime();
     super();
     this.setErrorReporter((error) => context.scheduler.reportError(error));
     try {

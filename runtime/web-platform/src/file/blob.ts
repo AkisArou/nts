@@ -8,7 +8,7 @@ import {
   toClampedLongLong,
   toLongLong,
 } from "../core/webidl.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import {
   ReadableStream,
   type ReadableStreamDefaultController,
@@ -18,8 +18,6 @@ import {
 const BLOB_MAX_LENGTH = Number.MAX_SAFE_INTEGER;
 const STREAM_CHUNK_SIZE = 65_536;
 const EMPTY_BLOB_BYTES = new Uint8Array(0);
-
-declare function nts_environment_platform(): WebPlatformRuntime;
 
 export type BlobPart = string | AllowSharedBufferSource | Blob;
 export type BlobEndings = "native" | "transparent";
@@ -178,7 +176,7 @@ function normalizeNativeEndings(value: string): string {
     return value;
   }
 
-  const lineEnding = nts_environment_platform().nativeLineEnding;
+  const lineEnding = currentWebPlatformRuntime().nativeLineEnding;
   let output = value.slice(0, first);
   let textStart = first;
   for (let index = first; index < value.length; index++) {
@@ -619,7 +617,7 @@ export class File extends Blob {
       rawOptions === undefined || rawOptions === null ? undefined : rawOptions.lastModified;
     const lastModified =
       rawLastModified === undefined
-        ? nts_environment_platform().wallTimeMilliseconds()
+        ? currentWebPlatformRuntime().wallTimeMilliseconds()
         : toLongLong(rawLastModified);
 
     super(new BlobPartConstruction(parts, options));

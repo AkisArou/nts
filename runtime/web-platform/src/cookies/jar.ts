@@ -1,9 +1,7 @@
 import { parseCookieForRequest } from "./cookies.ts";
 import type { CookieSameSite } from "./cookies.ts";
 import type { URLParser, URLRecord } from "../provider/primitives.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
-
-declare function nts_environment_platform(): WebPlatformRuntime;
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 
 const maximumPersistentAgeSeconds = 400 * 24 * 60 * 60;
 
@@ -278,9 +276,9 @@ export class CookieJar {
   private nextCreationIndex = 0;
 
   constructor(options: CookieJarOptions = {}) {
-    this.urls = options.urls ?? nts_environment_platform().urls;
+    this.urls = options.urls ?? currentWebPlatformRuntime().urls;
     this.now =
-      options.wallTimeMilliseconds ?? (() => nts_environment_platform().wallTimeMilliseconds());
+      options.wallTimeMilliseconds ?? (() => currentWebPlatformRuntime().wallTimeMilliseconds());
     this.store = options.store ?? new MemoryCookieJarStore();
     this.publicSuffixes = options.publicSuffixes;
     this.secureURL = options.isSecure ?? isSecureURL;

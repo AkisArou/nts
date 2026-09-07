@@ -159,6 +159,7 @@
     "tests": {
       "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
       "dom/abort/event.any.js": "eda769e8d8f39dd16e19a8d24c038e86baf1c459",
+      "dom/abort/timeout.any.js": "61b595e717c844259b6f75d9bd8b1cbd9b66d8d2",
       "dom/events/AddEventListenerOptions-once.any.js": "b4edd4345c5e3431d77a6ed56dc573d4000f4c43",
       "dom/events/AddEventListenerOptions-passive.any.js": "8e59cf5b379f2e806fa52b82d87dd09f90c212d7",
       "dom/events/AddEventListenerOptions-signal.any.js": "e6a34261594bcaf43057fc46ed734bcf105d68ee",

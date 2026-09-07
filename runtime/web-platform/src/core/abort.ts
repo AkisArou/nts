@@ -3,7 +3,8 @@ import type { AbortSignalOperations } from "./abort-brand.ts";
 import type { EventHandlerSlot } from "./events.ts";
 import { Event, EventTarget } from "./events.ts";
 import { abortError, DOMException } from "./errors.ts";
-import type { Scheduler } from "../provider/primitives.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
+import { requireArguments, toEnforceRangeUnsignedLongLong } from "./webidl.ts";
 
 interface AbortAlgorithm {
   callback: () => void;
@@ -136,14 +137,14 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     return result;
   }
 
-  /** Runtime code supplies its owning environment's scheduler. */
-  static timeout(milliseconds: number, scheduler: Scheduler): AbortSignal {
-    if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
-      throw new RangeError("Invalid timeout");
+  static timeout(milliseconds: number): AbortSignal {
+    requireArguments(arguments, 1, "AbortSignal.timeout");
+    const delay = toEnforceRangeUnsignedLongLong(milliseconds);
+    const scheduler = currentWebPlatformRuntime().scheduler;
     const signal = new AbortSignal(abortSignalConstructorKey, (error) =>
       scheduler.reportError(error),
     );
-    scheduler.delay(milliseconds, () =>
+    scheduler.delay(delay, () =>
       signal.trigger(new DOMException("The operation timed out", "TimeoutError")),
     );
     return signal;

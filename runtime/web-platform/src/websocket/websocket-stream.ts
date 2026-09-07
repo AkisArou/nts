@@ -3,6 +3,7 @@ import { DOMException } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import { ignoreRejection } from "../core/promise.ts";
 import { coerceToDOMString, requireArguments, requireDictionary } from "../core/webidl.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import { ReadableStream, type ReadableStreamDefaultController } from "../streams/readable.ts";
 import { WritableStream, type WritableStreamDefaultController } from "../streams/writable.ts";
@@ -45,8 +46,6 @@ export interface WebSocketStreamContext extends WebSocketURLContext {
   registerWebSocketStream(stream: WebSocketStream): void;
   unregisterWebSocketStream(stream: WebSocketStream): void;
 }
-
-declare function nts_environment_platform(): WebSocketStreamContext;
 
 const internalErrorKey: unique symbol = Symbol("construct internal WebSocketError");
 
@@ -128,7 +127,7 @@ export class WebSocketStream {
   ) {
     requireArguments(args, 1, "WebSocketStream constructor");
     requireDictionary(args[1], "WebSocketStream options");
-    const context = args[2] ?? nts_environment_platform();
+    const context = args[2] ?? currentWebPlatformRuntime();
     const parsed = normalizeWebSocketURL(args[0], context);
     const protocols = readProtocols(args[1]?.protocols);
     const signal = args[1]?.signal;

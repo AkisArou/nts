@@ -5,6 +5,7 @@ import { DOMException, LimitError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import { utf8Length } from "../core/utf8.ts";
 import { requireArguments, toUSVString } from "../core/webidl.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { Scheduler, URLParser, URLRecord } from "../provider/primitives.ts";
 import { Blob } from "../file/blob.ts";
 import {
@@ -33,8 +34,6 @@ export interface WebSocketContext {
   registerWebSocket(socket: WebSocket): void;
   unregisterWebSocket(socket: WebSocket): void;
 }
-
-declare function nts_environment_platform(): WebSocketContext;
 
 interface PendingSend {
   size: number;
@@ -127,7 +126,7 @@ export class WebSocket extends EventTarget {
     ...args: [url: string, protocols?: string | readonly string[], context?: WebSocketContext]
   ) {
     requireArguments(args, 1, "WebSocket constructor");
-    const context = args[2] ?? nts_environment_platform();
+    const context = args[2] ?? currentWebPlatformRuntime();
     super();
     this.setErrorReporter((error) => context.scheduler.reportError(error));
     this.context = context;

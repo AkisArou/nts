@@ -5,7 +5,7 @@ import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { networkError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import type { URLRecord } from "../provider/primitives.ts";
-import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import { bytesStream, ReadableStream } from "../streams/readable.ts";
 import { BodyState } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
@@ -25,8 +25,6 @@ import {
   standardContentCodingPolicy,
   type ContentCodingPolicy,
 } from "./content-coding.ts";
-
-declare function nts_environment_platform(): WebPlatformRuntime;
 
 /** Automatic cookie state is opt-in and its site context is supplied per redirect hop. */
 export interface FetchCookiePolicy {
@@ -53,7 +51,7 @@ export function fetch(
   input: string | Request,
   init: RequestInit | undefined = undefined,
 ): Promise<Response> {
-  return nts_environment_platform().fetch(input, init);
+  return currentWebPlatformRuntime().fetch(input, init);
 }
 
 function checkURL(url: URLRecord): void {

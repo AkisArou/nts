@@ -210,6 +210,7 @@ export type {
 } from "./websocket/websocket-stream.ts";
 
 export { WebPlatformRuntime } from "./provider/web-platform-runtime.ts";
+export { currentWebPlatformRuntime, installWebPlatformRuntime } from "./provider/environment.ts";
 export type {
   WebPlatformOptions,
   WebPlatformProxyOptions,

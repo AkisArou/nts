@@ -61,6 +61,10 @@ import {
 import { websocketAccept } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/handshake.js";
 import { negotiatePerMessageDeflate } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/permessage-deflate.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
+import {
+  currentWebPlatformRuntime,
+  installWebPlatformRuntime,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/provider.js";
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
@@ -735,6 +739,54 @@ test("Abort reason identity and independent internal cancellation", () => {
     () => controller.signal.throwIfAborted(),
     (error) => error === reason,
   );
+});
+test("The typed environment slot owns the current Web-platform runtime", () => {
+  assert.equal(currentWebPlatformRuntime(), api);
+  const replacement = { marker: "replacement" };
+  installWebPlatformRuntime(replacement);
+  try {
+    assert.equal(currentWebPlatformRuntime(), replacement);
+  } finally {
+    installWebPlatformRuntime(api);
+  }
+});
+test("AbortSignal.timeout uses the owning environment scheduler and Web IDL conversion", () => {
+  const scheduled = [];
+  const runtime = {
+    scheduler: {
+      delay(milliseconds, task) {
+        const record = { milliseconds, task, canceled: false };
+        scheduled.push(record);
+        return { cancel: () => (record.canceled = true) };
+      },
+      enqueue() {},
+      reportError(error) {
+        throw error;
+      },
+    },
+  };
+  installWebPlatformRuntime(runtime);
+  try {
+    assert.equal(AbortSignal.timeout.length, 1);
+    assert.throws(() => AbortSignal.timeout(), TypeError);
+    for (const value of [NaN, Infinity, -1, 18_446_744_073_709_551_616]) {
+      assert.throws(() => AbortSignal.timeout(value), TypeError, String(value));
+    }
+
+    const fractional = AbortSignal.timeout(1.9);
+    const negativeFraction = AbortSignal.timeout(-0.9);
+    assert.deepEqual(
+      scheduled.map((entry) => entry.milliseconds),
+      [1, 0],
+    );
+    assert.equal(fractional.aborted, false);
+    scheduled[0].task();
+    assert.equal(fractional.aborted, true);
+    assert.equal(fractional.reason.name, "TimeoutError");
+    assert.equal(negativeFraction.aborted, false);
+  } finally {
+    installWebPlatformRuntime(api);
+  }
 });
 test("Public EventTarget and abort constructors do not expose provider hooks", () => {
   assert.throws(() => new AbortSignal(), TypeError);
@@ -1996,7 +2048,7 @@ test("Response attributes are read-only and static factories follow Web IDL conv
     );
   } finally {
     basedRuntime.close();
-    globalThis.nts_environment_platform = () => api;
+    installWebPlatformRuntime(api);
   }
   const redirectOrder = [];
   const redirected = makeRedirectResponse(
@@ -2087,7 +2139,7 @@ test("Blob URLs are environment-owned, revocable, and captured by Request", asyn
   const runtime = createHostNodeWebPlatform({ origin: "https://example.test" });
   const isolated = createHostNodeWebPlatform({ origin: "https://example.test" });
   const nodeCompatible = createHostNodeWebPlatform({ blobURLPrefix: "blob:nodedata:" });
-  globalThis.nts_environment_platform = () => runtime;
+  installWebPlatformRuntime(runtime);
   try {
     const blob = new Blob(["abcdef"], { type: "text/plain" });
     assert.throws(() => runtime.createObjectURL({}), TypeError);
@@ -2142,7 +2194,7 @@ test("Blob URLs are environment-owned, revocable, and captured by Request", asyn
     runtime.close();
     isolated.close();
     nodeCompatible.close();
-    globalThis.nts_environment_platform = () => api;
+    installWebPlatformRuntime(api);
   }
 });
 test("Blob URL Fetch implements the single byte-range algorithm", async () => {
@@ -2195,7 +2247,7 @@ test("Blob URL Fetch implements the single byte-range algorithm", async () => {
     await assert.rejects(runtime.fetch(emptyURL, { headers: { range: "bytes=0-" } }), TypeError);
   } finally {
     runtime.close();
-    globalThis.nts_environment_platform = () => api;
+    installWebPlatformRuntime(api);
   }
 });
 test("Response applies Web IDL conversion before validation and body extraction", async () => {
@@ -2430,9 +2482,9 @@ test("FormData validates callbacks before iteration and keeps iteration live", (
   assert.throws(() => FormData.prototype.forEach.call({}, () => {}), TypeError);
 });
 test("FormData obtains generated File timestamps from its owning environment", () => {
-  const installedRuntime = globalThis.nts_environment_platform;
+  const installedRuntime = currentWebPlatformRuntime();
   const expectedTime = 1_234_567_890;
-  globalThis.nts_environment_platform = () => ({
+  installWebPlatformRuntime({
     wallTimeMilliseconds() {
       return expectedTime;
     },
@@ -2442,7 +2494,7 @@ test("FormData obtains generated File timestamps from its owning environment", (
     form.append("blob", new Blob());
     assert.equal(form.get("blob").lastModified, expectedTime);
   } finally {
-    globalThis.nts_environment_platform = installedRuntime;
+    installWebPlatformRuntime(installedRuntime);
   }
 });
 test("Blob copies every view and applies Web IDL slice conversion", async () => {
