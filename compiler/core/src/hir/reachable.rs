@@ -217,6 +217,11 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                         .public_api
                         .iter()
                         .any(|(emitted, _)| *emitted == func.name)
+                    // A namespace's members are reached only through the object
+                    // the addon builds, which nothing in the IR does.
+                    || program.public_namespaces.iter().any(|(_, properties)| {
+                        properties.iter().any(|(_, emitted)| *emitted == func.name)
+                    })
             })
             .map(|func| func.name.as_str())
             .collect(),

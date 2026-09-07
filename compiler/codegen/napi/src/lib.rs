@@ -439,14 +439,41 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
         }
     }
 
+    /* The CONSTRUCTOR, not a generic error with the name set afterwards.
+     *
+     * Node-API has `napi_create_range_error` and `napi_create_type_error`
+     * beside `napi_create_error`, and they produce genuine `RangeError` and
+     * `TypeError` -- so `e instanceof RangeError` holds and the prototype chain
+     * is node's own. Setting `.name` on a generic error gets `e.name`,
+     * `String(e)` and a regex against the string form right and leaves
+     * `instanceof` and `getPrototypeOf` wrong, which is the shape of a class
+     * that has been flattened rather than raised.
+     *
+     * Found by an identity test in the Node lane written *because* the
+     * compiler had nearly shipped the same flattening in `instanceof Error`:
+     * node's own `test-punycode.js` asserts by regex on the string form, so it
+     * passed against the flattened error. An oracle cannot test an invariant
+     * that cannot fail in the implementation it was written against. */
+    napi_status made = napi_generic_failure;
     napi_value error = NULL;
-    if (napi_create_error(env, NULL, message, &error) != napi_ok) {
+    if (class_name != NULL && strcmp(class_name, "RangeError") == 0) {
+        made = napi_create_range_error(env, NULL, message, &error);
+    } else if (class_name != NULL && strcmp(class_name, "TypeError") == 0) {
+        made = napi_create_type_error(env, NULL, message, &error);
+    } else {
+        made = napi_create_error(env, NULL, message, &error);
+    }
+    if (made != napi_ok) {
         napi_throw_error(env, NULL, "compiled code threw");
         return;
     }
-    /* `e.name`, so `assert.throws(f, RangeError)` and a `name` comparison both
-     * see what the source threw rather than a bare `Error`. */
-    if (class_name != NULL) {
+    /* The name for everything else -- a `SyntaxError`, an `EvalError`, a user
+     * subclass -- which Node-API has no constructor for. `e.name` and
+     * `String(e)` are then right and `instanceof` is not, and that is the
+     * honest limit of what this boundary can express. */
+    if (class_name != NULL && made == napi_ok
+        && strcmp(class_name, "RangeError") != 0
+        && strcmp(class_name, "TypeError") != 0) {
         napi_value name = NULL;
         if (napi_create_string_utf8(env, class_name, NAPI_AUTO_LENGTH, &name) == napi_ok) {
             napi_set_named_property(env, error, "name", name);
@@ -869,19 +896,103 @@ fn published<'a>(program: &'a hir::Program, func: &hir::Func) -> Vec<&'a str> {
 /// a test failure that names nothing -- `punycode.encode is not a function` --
 /// and a day finding out why, where a diagnostic costs a reader one line. Six
 /// of seven exports in one fixture were absent with no warning anywhere.
+/// Exported object literals of functions, built on the JavaScript side out of
+/// the wrappers above.
+///
+/// `punycode` publishes `ucs2 = { decode, encode }` and node's own tests call
+/// `punycode.ucs2.encode`, so this is the shape between a compiled module and
+/// its suite rather than a convenience.
+///
+/// A property whose function has no wrapper is left out and reported, and the
+/// namespace itself is then not exported at all: a half-built one looks exactly
+/// like a whole one from the far side.
+/// Declare `module#init` where the program has one, and say whether it does.
+///
+/// The addon is a separate translation unit from `program.c`, so it declares
+/// everything it calls -- `wrapper` emits one per wrapped function and this is
+/// the one function the addon calls that nothing wraps.
+fn emit_module_init_prototype(program: &hir::Program, out: &mut String) -> bool {
+    let runs = program
+        .funcs
+        .iter()
+        .any(|func| func.name == nts_core::hir::lower::MODULE_INIT);
+    if runs {
+        let _ = writeln!(
+            out,
+            "void {}(void);\n",
+            c_identifier(nts_core::hir::lower::MODULE_INIT)
+        );
+    }
+    runs
+}
+
+fn emit_namespaces(
+    program: &hir::Program,
+    wrapped: &[(&str, &str)],
+    skipped: &mut Vec<Skipped>,
+    out: &mut String,
+) {
+    for (name, properties) in &program.public_namespaces {
+        let object = format!("nts_ns_{}", c_identifier(name));
+        let _ = writeln!(
+            out,
+            "    napi_value {object};\n    if (!nts_napi_check(env, napi_create_object(env, &{object}), \"could not create an exported namespace\")) return NULL;"
+        );
+        let mut whole = true;
+        for (property, emitted) in properties {
+            if !wrapped.iter().any(|(symbol, _)| *symbol == emitted.as_str()) {
+                whole = false;
+                skipped.push(Skipped {
+                    function: format!("{name}.{property}"),
+                    reason: "is a namespace member whose function has no wrapper".to_owned(),
+                });
+                continue;
+            }
+            let symbol = c_identifier(emitted);
+            let key = c_string_literal(property);
+            let _ = write!(
+                out,
+                "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
+            );
+        }
+        if whole {
+            let key = c_string_literal(name);
+            let _ = writeln!(
+                out,
+                "    if (!nts_napi_check(env, napi_set_named_property(env, exports, {key}, {object}), \"could not export a namespace\")) return NULL;"
+            );
+        }
+    }
+}
+
 fn report_unrepresentable_exports(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
     skipped: &mut Vec<Skipped>,
 ) {
     for (emitted, name) in &program.public_api {
-        if wrapped.iter().any(|(_, published)| published == name) {
+        if wrapped.iter().any(|(_, published)| published == name)
+            || program.public_namespaces.iter().any(|(at, _)| at == name)
+        {
             continue;
         }
         skipped.push(Skipped {
             function: name.clone(),
+            // Two different causes, and they send a reader to different
+            // places: one is "teach the backend this export shape" and the
+            // other is "fix the lowering upstream". Saying "is not a function"
+            // for both cost the Node session a build looking at export shapes
+            // for three `export function` declarations that had simply been
+            // refused.
+            // Three causes, and each sends a reader somewhere different: fix
+            // the signature, fix the lowering, or teach the backend a shape.
+            // Told apart by what the SYMBOL declares rather than by whether a
+            // function of that name survived -- inferring from absence made a
+            // string constant read as a refused function.
             reason: if program.funcs.iter().any(|func| func.name == *emitted) {
                 "is exported and its signature does not cross".to_owned()
+            } else if program.public_functions.iter().any(|at| at == name) {
+                "is exported and no function of that name was compiled".to_owned()
             } else {
                 "is exported and is not a function this backend can name".to_owned()
             },
@@ -893,7 +1004,7 @@ fn report_unrepresentable_exports(
 pub fn emit(program: &hir::Program) -> Addon {
     let mut out = String::from("/* Generated by nts. Do not edit. */\n");
     out.push_str(
-        "#include <node_api.h>\n#include <float.h>\n#include <math.h>\n#include <stdlib.h>\n#include \"nts_runtime.h\"\n",
+        "#include <node_api.h>\n#include <string.h>\n#include <float.h>\n#include <math.h>\n#include <stdlib.h>\n#include \"nts_runtime.h\"\n",
     );
     out.push_str(SUPPORT);
     out.push('\n');
@@ -941,21 +1052,7 @@ pub fn emit(program: &hir::Program) -> Addon {
         out.push_str("};\n\n");
     }
 
-    // The initializer's own prototype. The addon is a separate translation unit
-    // from `program.c`, so it declares everything it calls -- `wrapper` emits
-    // one per wrapped function and this is the one function the addon calls
-    // that nothing wraps.
-    let runs_module_init = program
-        .funcs
-        .iter()
-        .any(|func| func.name == nts_core::hir::lower::MODULE_INIT);
-    if runs_module_init {
-        let _ = writeln!(
-            out,
-            "void {}(void);\n",
-            c_identifier(nts_core::hir::lower::MODULE_INIT)
-        );
-    }
+    let runs_module_init = emit_module_init_prototype(program, &mut out);
 
     let mut skipped = Vec::new();
     // The emitted symbol and the name it goes out under, which differ wherever
@@ -963,7 +1060,12 @@ pub fn emit(program: &hir::Program) -> Addon {
     let mut wrapped: Vec<(&str, &str)> = Vec::new();
     for func in &program.funcs {
         let names = published(program, func);
-        if names.is_empty() {
+        // A namespace member needs a wrapper too, and is registered on the
+        // object rather than on `exports`.
+        let in_namespace = program.public_namespaces.iter().any(|(_, properties)| {
+            properties.iter().any(|(_, emitted)| *emitted == func.name)
+        });
+        if names.is_empty() && !in_namespace {
             continue;
         }
         match wrapper(
@@ -1018,6 +1120,7 @@ pub fn emit(program: &hir::Program) -> Addon {
             "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
         );
     }
+    emit_namespaces(program, &wrapped, &mut skipped, &mut out);
     out.push_str("    return exports;\n}\n");
 
     report_unrepresentable_exports(program, &wrapped, &mut skipped);

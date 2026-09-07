@@ -2380,7 +2380,80 @@ fn initializer_function(
         .map(|at| (at, name))
 }
 
-fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, String)> {
+/// The functions an exported object literal's properties name, if all of them
+/// are functions.
+///
+/// See [`super::Program::public_namespaces`]. A literal with anything else in
+/// it is not one, and the backend reports it as an export it cannot name --
+/// half a namespace is worse than none, because the half that is there looks
+/// like the whole.
+fn namespace_of(
+    snapshot: &SemanticSnapshot,
+    naming: &Naming,
+    declaration: NodeId,
+) -> Option<Vec<(String, String)>> {
+    let probe = FuncBuilder::new(snapshot);
+    if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
+        return None;
+    }
+    let children = probe.children(declaration);
+    let name = children.first().copied();
+    let literal = children.iter().rev().find(|child| {
+        Some(**child) != name
+            && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
+    })?;
+    if probe.kind_of(*literal) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+        return None;
+    }
+    let members = probe.children(*literal);
+    if members.is_empty() {
+        return None;
+    }
+    let mut properties = Vec::with_capacity(members.len());
+    for member in members {
+        if probe.kind_of(member) != Some(syntax::PROPERTY_ASSIGNMENT) {
+            return None;
+        }
+        let parts = probe.children(member);
+        let key = parts.first().and_then(|at| probe.node(*at).text.clone())?;
+        // The value, which is the last part rather than the second: a key may
+        // be computed and carry children of its own.
+        let value = parts.last().copied()?;
+        let symbol = probe.node(value).symbol.or_else(|| {
+            probe
+                .children(value)
+                .last()
+                .and_then(|member| probe.node(*member).symbol)
+        })?;
+        let record = snapshot.symbols.get(symbol.0 as usize)?;
+        let record = record
+            .aliased
+            .and_then(|to| snapshot.symbols.get(to.0 as usize))
+            .unwrap_or(record);
+        let at = record
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| probe.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION))?;
+        let emitted = naming
+            .qualified
+            .get(&at)
+            .cloned()
+            .unwrap_or_else(|| record.name.clone());
+        properties.push((key, emitted));
+    }
+    Some(properties)
+}
+
+/// A node's syntax kind, without building a `FuncBuilder` per question.
+fn probe_kind(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
+    match snapshot.nodes.get(id.0 as usize)?.kind {
+        NodeKind::Syntax(kind) => Some(kind),
+        NodeKind::List => None,
+    }
+}
+
+fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> PublicSurface {
     let mut imported = vec![false; snapshot.modules.len()];
     for module in &snapshot.modules {
         for target in &module.imports {
@@ -2390,6 +2463,8 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, Stri
         }
     }
     let mut api: Vec<(String, String)> = Vec::new();
+    let mut namespaces: Vec<(String, Vec<(String, String)>)> = Vec::new();
+    let mut functions: Vec<String> = Vec::new();
     for (module, into) in snapshot.modules.iter().zip(&imported) {
         if *into {
             continue;
@@ -2417,16 +2492,54 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, Stri
             // A declaration whose initializer names a function resolves to that
             // function, so the *binding* decides what the addon calls it and
             // the initializer decides what it calls.
-            let (declaration, name) = initializer_function(snapshot, declaration)
-                .unwrap_or_else(|| (declaration, record.name.clone()));
+            // A type-only export is erased and has nothing to publish. Left in,
+            // it reported as a runtime export the backend could not name --
+            // `export type { ParsedPath }` beside a real missing function, in
+            // the same words, which is a diagnostic that has stopped meaning
+            // "something is absent".
+            //
+            // By what the symbol DECLARES rather than by the `type` keyword:
+            // `export { T }` where `T` is an interface is the same erasure and
+            // does not spell it.
+            if record.declarations.iter().all(|at| {
+                matches!(
+                    probe_kind(snapshot, *at),
+                    Some(syntax::INTERFACE_DECLARATION | syntax::TYPE_ALIAS_DECLARATION)
+                )
+            }) {
+                continue;
+            }
+            if let Some(properties) = namespace_of(snapshot, naming, declaration) {
+                namespaces.push((published.clone(), properties));
+                continue;
+            }
+            let resolved = initializer_function(snapshot, declaration);
+            if resolved.is_some()
+                || probe_kind(snapshot, declaration) == Some(syntax::FUNCTION_DECLARATION)
+            {
+                functions.push(published.clone());
+            }
+            let (declaration, name) =
+                resolved.unwrap_or_else(|| (declaration, record.name.clone()));
             let emitted = naming.qualified.get(&declaration).cloned().unwrap_or(name);
             api.push((emitted, published.clone()));
         }
     }
     api.sort_unstable();
     api.dedup();
-    api
+    namespaces.sort_unstable();
+    namespaces.dedup();
+    functions.sort_unstable();
+    functions.dedup();
+    (api, namespaces, functions)
 }
+
+/// What the entry modules publish: plain names, and namespaces of names.
+type PublicSurface = (
+    Vec<(String, String)>,
+    Vec<(String, Vec<(String, String)>)>,
+    Vec<String>,
+);
 
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
@@ -2568,7 +2681,10 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
-    lowered.program.public_api = public_api(snapshot, &shared.naming);
+    let (api, namespaces, functions) = public_api(snapshot, &shared.naming);
+    lowered.program.public_api = api;
+    lowered.program.public_namespaces = namespaces;
+    lowered.program.public_functions = functions;
 
     canonicalize_objects(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
@@ -11617,20 +11733,18 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Whether `ty` is `class` or extends it, at any depth.
+    /// The hierarchy's own answer, which counts an implemented interface as
+    /// well as an extended class.
+    ///
+    /// This used to walk `hierarchy.base` alone, and an interface has no entry
+    /// there -- `base` is filled from class declarations. That was invisible
+    /// until a `new` began allocating at a declared interface type: an object
+    /// laid out as `Tagged` stopped answering `instanceof Error`, because the
+    /// set of classes the test accepts is built from this and `Tagged` was not
+    /// in it. Two walks over one relation, and the narrower one was the one
+    /// `instanceof` asked.
     fn descends_from(&self, ty: TypeId, class: TypeId) -> bool {
-        let mut at = ty;
-        // Bounded rather than trusted: a cycle in the base map would hang the
-        // compiler, and no hierarchy is this deep.
-        for _ in 0..64 {
-            if at == class {
-                return true;
-            }
-            match self.hierarchy.base.get(&at) {
-                Some(base) => at = *base,
-                None => return false,
-            }
-        }
-        false
+        self.hierarchy.descends_from(ty, class)
     }
 
     /// `outer: for (…) { … }`.
@@ -14834,6 +14948,68 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// The type a `new` should allocate at, which is the declaration's where
+    /// that widens what is being constructed.
+    ///
+    /// Allocate at the type the DECLARATION says, where that is a widening
+    /// of what is being constructed.
+    ///
+    /// ```text
+    /// interface Tagged extends Error { code?: string }
+    /// const warning: Tagged = new Error(m);
+    /// warning.code = c;                       // refused
+    /// ```
+    ///
+    /// TypeScript accepts this -- `code` is optional, so an `Error` is
+    /// assignable -- and the binding coerced to `Tagged`, which for two
+    /// managed types is an upcast and leaves the value's type alone. So the
+    /// receiver stayed an `Error`, which declares no `code`, and the write
+    /// was refused. A factory with a declared RETURN type compiled, because
+    /// there the constructed type is the declared one: the same value under
+    /// the same annotation, differing only in how the annotation arrives.
+    ///
+    /// Allocating the wider layout is what makes the write real, and it is
+    /// sound rather than a cast: `put_bases_first` guarantees the base's
+    /// fields are the prefix, so the constructor writes `message` and `name`
+    /// at the offsets it always did and `code` is the zero a fresh field
+    /// has. Nothing else holds the object -- it was allocated a moment ago.
+    ///
+    /// The Node session isolated this to one root blocking all of
+    /// `node:punycode`, and to the same shape as twenty-one sites in
+    /// `internal/errors.ts` that gate twenty of twenty-two modules.
+    fn widened(&mut self, id: NodeId, ty: HirType) -> HirType {
+        let HirType::Managed(ManagedType::Object(built)) = ty else {
+            return ty;
+        };
+        // Every position the checker gives a `new` a contextual type, which is
+        // the declaration, the `return` and the argument alike. Asking only
+        // about a declaration was one syntactic position short, and the one it
+        // missed produced a heap write past the end of an allocation:
+        //
+        // ```text
+        // function make(m: string): Tagged { return new Error(m); }
+        // const w = make(m); w.code = c;
+        // ```
+        //
+        // `make` allocated two fields and returned them as three, and the
+        // caller then wrote field 2 -- invisible on a pointer-cast backend,
+        // where `examples/declared-wider` agreed with node on both C and LLVM
+        // and raised a floor. The JVM lane refused it: `Type 'Error' is not
+        // assignable to 'Tagged'`. The fourth time that lane has been the only
+        // instrument able to see a lie about a type, and the first where what
+        // it saw was a memory-safety defect rather than a wrong answer.
+        let Some(HirType::Managed(ManagedType::Object(wanted))) =
+            self.contextual_type(id, 0)
+        else {
+            return ty;
+        };
+        if wanted != built && self.hierarchy.descends_from(wanted, built) {
+            HirType::Managed(ManagedType::Object(wanted))
+        } else {
+            ty
+        }
+    }
+
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -14916,10 +15092,8 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
 
-        let ty = self
-            .type_of(id)
-            .ok_or_else(|| self.unrepresentable(id, "a `new`"))?;
-
+        let ty = self.type_of(id);
+        let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
         // The three the runtime builds rather than the program: a class's `new`
         // is a call to its constructor, and none of these has one.
         if let Some(built) = self.lower_new_provided(id, &ty) {

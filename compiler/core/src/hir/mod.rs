@@ -1450,6 +1450,32 @@ pub struct Program {
     /// And a re-export may rename, so the published name is the entry's, not
     /// the declaration's.
     pub public_api: Vec<(String, String)>,
+    /// Exported object literals whose properties are functions, as
+    /// `(exported name, [(property, emitted function)])`.
+    ///
+    /// `export const ucs2 = { decode: codec.ucs2decode, encode: codec.ucs2encode }`
+    /// is a namespace, and node's own `punycode` publishes one. It is not a
+    /// value this compiler can hand across the Node-API boundary as an object,
+    /// because there is no general object marshalling -- but it does not need
+    /// to be: the properties are functions, and a function is exactly what the
+    /// addon already knows how to publish. So the shape is built on the
+    /// JavaScript side out of wrappers, which is what node's own addons do.
+    ///
+    /// The property name and the function name differ by design here --
+    /// `decode: codec.ucs2decode` -- so both are carried, for the reason
+    /// `public_api` carries both: taking one from the other published a
+    /// function under whichever name happened to coincide.
+    pub public_namespaces: Vec<(String, Vec<(String, String)>)>,
+    /// Exported names whose symbol declares a *function*, as opposed to a value.
+    ///
+    /// The backend cannot tell the two apart from `public_api` alone, and the
+    /// difference decides where a reader is sent: an export that declares a
+    /// function and has no compiled body was refused upstream, and one that
+    /// declares a value was never going to be a function. Reporting `export
+    /// const version = "2.1.0"` as "no function of that name was compiled" sent
+    /// the Node session looking for a refusal that does not exist -- the same
+    /// conflation as the message it replaced, pointing the other way.
+    pub public_functions: Vec<String>,
 }
 
 /// A variable that outlives every call.

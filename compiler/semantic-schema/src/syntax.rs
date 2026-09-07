@@ -225,6 +225,9 @@ pub const VARIABLE_DECLARATION: u16 = 261;
 pub const VARIABLE_DECLARATION_LIST: u16 = 262;
 pub const FUNCTION_DECLARATION: u16 = 263;
 pub const INTERFACE_DECLARATION: u16 = 265;
+/// `type X = ...`. Erased, like an interface, and named here so a consumer can
+/// tell a type-only export from a value one.
+pub const TYPE_ALIAS_DECLARATION: u16 = 266;
 pub const ENUM_DECLARATION: u16 = 267;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 /// `value is string`, the return type of a type guard.
