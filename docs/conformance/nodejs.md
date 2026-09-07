@@ -1778,13 +1778,45 @@ which is the objection this document already makes to a hand-copied table.
 Measured across all twenty-two modules with one pinned binary
 (SHA-256 `38a8de6d…`):
 
-**0 of 22 green. Not one module's compiled artifact passes a single test.**
+**The axis is no longer zero.** `path` passes **2 of its 17** applicable tests
+against the compiled artifact. Every earlier measurement, including the one
+this section first carried, was 0 of 22 with no module reaching a single pass.
 
-| stage reached | modules |
-| --- | ---: |
-| the generated C does not compile | 18 |
-| C compiles, addon links, module fails to load | 4 |
-| addon runs and passes anything | 0 |
+| stage reached | modules | |
+| --- | ---: | --- |
+| `c-did-not-compile` | 17 | |
+| `built-exports-nothing` | 2 | `buffer`, `string_decoder` — everything they export is a class |
+| `built-exports-partial` | 2 | `os` (11 names), `querystring` (1) — the table is right, the absent entries cannot cross the ABI |
+| `partial` | 1 | **`path`, 2 / 17** |
+| `green` | 0 | |
+
+Measured with a pinned `nts` whose SHA-256 begins `982ffe1f`, carrying the
+compiler session's layout-merge and export-table fixes. It is a copied binary
+rather than a commit because those fixes were still in their gate when this was
+taken; the figures get re-anchored to a commit when there is one.
+
+What moved, against the `38a8de6d` row above: `path` from one clang error to
+compiling and passing; `async_hooks` 2 errors to 1; `zlib` 16 to 15; `http` 21
+to 20; the whole `use of undeclared identifier` class gone. And the four
+export tables shed the foreign names they had been carrying — `os` 15 published
+to 11, `querystring` 5 to 1, `buffer` and `string_decoder` to none at all.
+**Those last two going to zero is the fix working, not a regression**: their
+surface is classes, and the four names they used to publish were `buffer`
+internals that were never theirs.
+
+**`call to undeclared function` is two different bugs wearing one error
+message,** which is worth separating because only one of them announces
+itself:
+
+- **`punycode`** refuses `error` — `NTS2002 a value of type ``never`` reached
+  code generation`, against `function error(type: ErrorType): never` in
+  `codec.ts` — and then emits its **eight call sites anyway**. A refusal that
+  leaves its callers behind stops being a refusal and becomes a link error.
+- **`net`** calls `updateReadableListening` and two
+  `PriorityQueue_4047___percolate*` methods that are **neither emitted nor
+  refused**. Nothing in the build output mentions them. That is the same
+  outcome reached silently, and it is the worse of the two: a named refusal is
+  a measurement and a missing symbol is not.
 
 None of it is a defect in this profile: every one of those modules is 100% green
 on the TypeScript-on-node lane. The split is entirely between `emit-c` output
