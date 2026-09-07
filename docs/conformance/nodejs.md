@@ -2469,6 +2469,25 @@ long tail:
 | `url` | yes | 0 | `module#init` refused, via a closure call — 12 lost |
 | `process` | yes | 0 | `module#init` refused, via `refreshEnvironment` — 30 lost |
 
+**Measured demonstration that this is a choke point rather than a queue.** Two
+of `punycode`'s three blockers were closed in one compiler change —
+`ucs2decode` as a function value, and `a call of a function value in a program
+with no closures`, which went with it because that refusal fires only when the
+program has no closure slot at all. Both real, both gone. The artifact axis did
+not move by one:
+
+```
+before   14 c-did-not-compile   6 built-exports-nothing   1 partial   1 degenerate   0 green
+after    14                     6                          1           1              0
+```
+
+`punycode` still publishes nothing, because its one remaining root — `code`,
+which `Error` does not declare — still refuses `module#init`, and everything
+else in the module is a cascade from that. Closing two of three left it exactly
+where it was. **A module behind a refused initializer does not get closer to
+publishing until the initializer runs**; there is no partial credit, which is
+what distinguishes a choke point from a list.
+
 **Two causes, five modules and three modules.** `module#init` being refused
 costs **62 functions across five modules**, none of them individually a
 language feature — every one is a cascade from a single initializer that did
