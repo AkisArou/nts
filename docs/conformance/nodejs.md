@@ -332,6 +332,18 @@ row read `26 / 38` when it was written by hand and the applicable count is 36,
 and the whole table sat a thousand files out of date until a run contradicted
 it.
 
+**Sabotage is the floor of this check, not the whole of it.** Blanking a module
+catches a suite that never touched the implementation; it says nothing about a
+suite that touches it and would accept a wrong answer. The other half is
+mutating code the suite already passes and watching it go red. Two, run against
+the tree that produced the table above: deleting the whitespace-before-colon
+refusal from `http/src/parser.ts` — the request-smuggling one — takes
+`http-parser.mjs` to 25 passed, 1 failed; making `net`'s `bytesRead` stop
+counting takes `net` from 132 to 129, named by `test-net-bytes-read.js`,
+`test-net-bytes-stats.js` and `test-net-bytes-written-large.js`. A suite that
+cannot be made to fail on purpose is not evidence, and 0 hollow on its own does
+not establish that it can.
+
 **`hollow` is how many of those passes survive the module being removed.**
 
 ```sh
@@ -1735,26 +1747,56 @@ ENOENT: no such file or directory, stat '/nope/x'
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 
-> **Every number in this section is stale and none of it was re-measured in the
-> pass that produced the current test table.** It was last taken at compiler
-> `9bb54c1`. The reason for saying so rather than quietly reprinting it: this
-> tree is shared with the compiler lane, and `target/release/nts` was rebuilt
-> twice while the last tranche was being written — 01:19:47Z and again at
-> 02:43:11Z. A `--compiles` run spanning either rebuild is the mixed-binary
-> measurement this document already says to discard, so no run was taken. The
-> per-module lowered/refused counts that used to sit in the *Modules* table
-> have been removed from it for the same reason; a stale figure in a live table
-> reads as current.
->
-> The last tranche does not disturb these numbers in either direction. It
-> changed `runtime/node/http` and `runtime/node/net`, and neither module has a
-> compiled half: `net.c` is eleven lines of default values and the socket
-> operations have no C at all, which is also why changing `nts_net_write` from
-> `number[]` to `Uint8Array` and adding `nts_net_lookup_all` touched only the
-> `declare function` and `bindings.node.mjs` rather than the usual triple.
->
-> Re-measure with `sweep.mjs --compiles --no-tests`, `stat`ing the binary
-> before and after and discarding the run if the mtime moved.
+**12,181 functions lower across twenty-two modules.** The prose below was
+written against 1,509, and before that 946; read its *reasoning* and not its
+arithmetic until each claim is re-derived.
+
+| module | lowered / refused | | module | lowered / refused |
+| --- | :---: | --- | --- | :---: |
+| `fs` | 1560 / 1168 | | `console` | 433 / 246 |
+| `http` | 1338 / 989 | | `util` | 408 / 189 |
+| `dgram` | 880 / 555 | | `assert` | 401 / 210 |
+| `zlib` | 829 / 785 | | `os` | 375 / 100 |
+| `net` | 825 / 511 | | `string_decoder` | 371 / 97 |
+| `stream` | 805 / 684 | | `querystring` | 366 / 101 |
+| `url` | 629 / 197 | | `buffer` | 360 / 93 |
+| `readline` | 625 / 363 | | `events` | 331 / 125 |
+| `process` | 575 / 247 | | `timers` | 281 / 66 |
+| `async_hooks` | 259 / 57 | | `diagnostics_channel` | 257 / 59 |
+| `path` | 257 / 33 | | `punycode` | 16 / 3 |
+
+Taken with `sweep.mjs --compiles --no-tests`, `stat`ing `target/release/nts`
+before and after and finding the mtime unchanged across the run. That guard is
+not ceremony here: this tree is shared with the compiler lane and the binary
+moved three times during the tranche that produced the test table — 01:19:47Z,
+02:43:11Z and 03:03:02Z. A run spanning any of those is the mixed-binary
+measurement this document already says to discard. The reason this one could be
+taken at all is that `--compiles --no-tests` finishes in seconds and fitted
+between two rebuilds.
+
+The per-module figures are deliberately *not* in the *Modules* table any more.
+They come from a different run against a different artifact, on a cadence set
+by another session, and a stale figure sitting in a live table reads as
+current — which is how that table came to claim 766 passing files while the
+sweep said 1,719.
+
+**Which half moved is unmeasured, and the total does not say.** 946 → 1,509 →
+12,181 is a joint measurement of two things that both grew: this corpus, and
+the compiler lowering it. A profile total that only rises is measuring reach
+and can call that progress. The decomposition is one clean experiment — run one
+pinned `nts` over `runtime/node` as it stood at `0cd8645f`, the commit that
+introduced the 1,509, and again over the corpus as it stands now; the
+difference is the corpus's contribution and the remainder is the compiler's.
+It has not been run, because it needs a binary that holds still. Until it has,
+this section reports the number and the anchor and declines to attribute it.
+
+The tranche that produced the current test numbers does not disturb these. It
+changed `runtime/node/http` and `runtime/node/net`, and neither module has a
+compiled half: `net.c` is eleven lines of default values and the socket
+operations have no C at all. That is also why changing `nts_net_write` from
+`number[]` to `Uint8Array` and adding `nts_net_lookup_all` touched only the
+`declare function` and `bindings.node.mjs` rather than the usual triple — and
+those are the shapes that C has to satisfy whenever it is written.
 
 **Three causes account for most of it, measured across the two largest
 modules.** In `process` (219 refusals) and `stream` (498):
