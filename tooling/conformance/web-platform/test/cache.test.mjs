@@ -14,7 +14,7 @@ import {
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 
-createHostNodeWebPlatform();
+const bootstrapRuntime = createHostNodeWebPlatform();
 
 test("Cache-Control parses tokens, quoted strings, extensions and saturated deltas", () => {
   const parsed = parseCacheControl(
@@ -236,6 +236,7 @@ function cacheRuntime(transport, now, options = {}) {
     store,
     type: options.type,
     wallTimeMilliseconds: () => now.value,
+    urls: bootstrapRuntime.urls,
     diagnostics: options.diagnostics,
   });
   return createHostNodeWebPlatform({ fetchTransport: transport, httpCache });
@@ -475,10 +476,16 @@ test("cancelled response bodies never publish an incomplete cache entry", async 
 test("unsafe successful methods invalidate the target URI", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let gets = 0;
+  let postStatus = 500;
   const transport = {
     async dispatch(request) {
       if (request.method === "POST") {
-        return { status: 204, statusText: "No Content", headers: [], body: null };
+        return {
+          status: postStatus,
+          statusText: postStatus === 204 ? "No Content" : "Server Error",
+          headers: [],
+          body: null,
+        };
       }
       gets++;
       return {
@@ -493,7 +500,103 @@ test("unsafe successful methods invalidate the target URI", async () => {
   assert.equal(await (await runtime.fetch("https://cache.test/item")).text(), "get-1");
   assert.equal(await (await runtime.fetch("https://cache.test/item")).text(), "get-1");
   await runtime.fetch("https://cache.test/item", { method: "POST", body: "update" });
+  assert.equal(await (await runtime.fetch("https://cache.test/item")).text(), "get-1");
+  postStatus = 204;
+  await runtime.fetch("https://cache.test/item", { method: "POST", body: "update" });
   assert.equal(await (await runtime.fetch("https://cache.test/item")).text(), "get-2");
+});
+
+test("unsafe responses invalidate same-origin Location targets but never cross origins", async () => {
+  const now = { value: Date.UTC(2026, 0, 1) };
+  const calls = new Map();
+  const transport = {
+    async dispatch(request) {
+      if (request.method === "POST") {
+        if (request.url.pathname === "/target") {
+          return {
+            status: 201,
+            statusText: "Created",
+            headers: [
+              ["location", "/location#new"],
+              ["content-location", "https://cache.test/content#representation"],
+            ],
+            body: body("updated"),
+          };
+        }
+        return {
+          status: 204,
+          statusText: "No Content",
+          headers: [
+            ["location", "https://other.test/cross-origin"],
+            ["content-location", "https://cache.test/ambiguous-one"],
+            ["content-location", "https://cache.test/ambiguous-two"],
+          ],
+          body: null,
+        };
+      }
+      const href = request.url.href;
+      const count = (calls.get(href) ?? 0) + 1;
+      calls.set(href, count);
+      return {
+        status: 200,
+        statusText: "OK",
+        headers: [["cache-control", "max-age=60"]],
+        body: body(`${href}:${count}`),
+      };
+    },
+  };
+  const runtime = cacheRuntime(transport, now);
+  const target = "https://cache.test/target";
+  const location = "https://cache.test/location";
+  const content = "https://cache.test/content";
+  const crossOrigin = "https://other.test/cross-origin";
+  const ambiguous = "https://cache.test/ambiguous-one";
+  for (const url of [target, location, content, crossOrigin, ambiguous]) {
+    await (await runtime.fetch(url)).text();
+  }
+
+  assert.equal(
+    await (await runtime.fetch(target, { method: "POST", body: "change" })).text(),
+    "updated",
+  );
+  assert.match(await (await runtime.fetch(target)).text(), /:2$/);
+  assert.match(await (await runtime.fetch(location)).text(), /:2$/);
+  assert.match(await (await runtime.fetch(content)).text(), /:2$/);
+
+  await runtime.fetch("https://cache.test/second", { method: "POST", body: "change" });
+  assert.match(await (await runtime.fetch(crossOrigin)).text(), /:1$/);
+  assert.match(await (await runtime.fetch(ambiguous)).text(), /:1$/);
+});
+
+test("invalidation store failures are diagnostic and do not replace the network response", async () => {
+  const now = { value: Date.UTC(2026, 0, 1) };
+  const errors = [];
+  class FailingDeleteStore extends MemoryHttpCacheStore {
+    async delete() {
+      throw new TypeError("persistent store unavailable");
+    }
+  }
+  const transport = {
+    async dispatch() {
+      return {
+        status: 200,
+        statusText: "OK",
+        headers: [["location", "/also-invalidated"]],
+        body: body("network answer"),
+      };
+    },
+  };
+  const runtime = cacheRuntime(transport, now, {
+    store: new FailingDeleteStore(),
+    diagnostics: { storeError: (error) => errors.push(error) },
+  });
+  assert.equal(
+    await (
+      await runtime.fetch("https://cache.test/item", { method: "POST", body: "change" })
+    ).text(),
+    "network answer",
+  );
+  assert.equal(errors.length, 2);
 });
 
 test("bounded store refusal and store failures never fail the network response", async () => {

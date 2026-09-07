@@ -1,6 +1,6 @@
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { ignoreRejection } from "../core/promise.ts";
-import type { URLRecord } from "../provider/primitives.ts";
+import type { URLParser, URLRecord } from "../provider/primitives.ts";
 import { ReadableStream } from "../streams/readable.ts";
 import type { RequestCache } from "../fetch/request.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
@@ -34,6 +34,8 @@ export interface HttpCacheOptions {
   readonly store: HttpCacheStore;
   readonly type?: HttpCacheType;
   readonly wallTimeMilliseconds: () => number;
+  /** Canonical environment URL parser used for relative invalidation targets. */
+  readonly urls: URLParser;
   readonly heuristicFraction?: number;
   readonly diagnostics?: HttpCacheDiagnostics;
 }
@@ -380,6 +382,7 @@ export class HttpCache {
   private readonly store: HttpCacheStore;
   private readonly shared: boolean;
   private readonly clock: () => number;
+  private readonly urls: URLParser;
   private readonly heuristicFraction: number | undefined;
   private readonly diagnostics: HttpCacheDiagnostics | undefined;
   private readonly background: BackgroundRevalidation[] = [];
@@ -388,6 +391,7 @@ export class HttpCache {
     this.store = options.store;
     this.shared = options.type === "shared";
     this.clock = options.wallTimeMilliseconds;
+    this.urls = options.urls;
     this.heuristicFraction = options.heuristicFraction;
     this.diagnostics = options.diagnostics;
   }
@@ -419,7 +423,7 @@ export class HttpCache {
     if (outbound.method !== "GET" && outbound.method !== "HEAD") {
       const response = await transport.dispatch(outbound);
       if (this.isUnsafe(outbound.method) && response.status >= 200 && response.status <= 399) {
-        await this.store.delete(keyURL(outbound.url));
+        await this.invalidate(outbound.url, response.headers);
       }
       return { response, receivedHeaders: response.headers, cacheState: "network" };
     }
@@ -478,6 +482,35 @@ export class HttpCache {
 
   private isUnsafe(method: string): boolean {
     return method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  }
+
+  private async invalidate(
+    target: URLRecord,
+    responseHeaders: readonly HeaderEntry[],
+  ): Promise<void> {
+    const urls = [keyURL(target)];
+    for (const name of ["location", "content-location"]) {
+      const values = headerValues(responseHeaders, name);
+      // These fields carry one URI-reference, not a comma-list. Ambiguous duplicate
+      // fields cannot be resolved safely and never suppress target invalidation.
+      if (values.length !== 1) continue;
+      let candidate: URLRecord;
+      try {
+        candidate = this.urls.parse(values[0] ?? "", target.href);
+      } catch {
+        continue;
+      }
+      if (candidate.origin !== target.origin) continue;
+      const key = keyURL(candidate);
+      if (!urls.includes(key)) urls.push(key);
+    }
+    for (const url of urls) {
+      try {
+        await this.store.delete(url);
+      } catch (error) {
+        this.reportStoreError(error);
+      }
+    }
   }
 
   private async select(request: TransportRequest): Promise<SelectedEntry | null> {

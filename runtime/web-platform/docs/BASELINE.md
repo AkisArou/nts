@@ -1401,3 +1401,15 @@ diagnostics, and no invalid HIR. One visible Cache-specific primary says that
 interface; this is kept in final source for the compiler lane rather than hidden by
 a cast or alternate architecture. These counts measure newly reachable final source,
 not compiled-provider completion.
+
+RFC 9111 Section 4.4 invalidation is now complete for the shared cache policy. A
+successful unsafe request invalidates its target plus unambiguous `Location` and
+`Content-Location` references resolved by the environment's canonical URL parser,
+but only when the resolved origin equals the request target's origin. Malformed or
+duplicate reference fields are ignored without weakening target invalidation, and a
+storage failure is reported diagnostically without replacing the successful network
+response. The focused HTTP-cache suite passes 25/25 and the complete local suite
+passes 216/216. Removing the origin check makes the focused suite fail 24/25 by
+deleting an attacker-selected cross-origin entry; restoring it returns 25/25. The
+live source frontier is 806 primary `NTS1001` refusals and 128 dependent `NTS1003`
+cascades, with zero module or JVM-backend diagnostics and no invalid HIR.
