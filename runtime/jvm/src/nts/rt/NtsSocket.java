@@ -555,18 +555,24 @@ public final class NtsSocket {
                         // and a proxy that could satisfy the check with its own
                         // certificate is a proxy that can read what it forwards.
                         params.setEndpointIdentificationAlgorithm("HTTPS");
-                        // **The SNI name is what the check runs against**, and
-                        // that is not what this comment used to say. JSSE
-                        // identifies the endpoint against the server name when
-                        // one is set and against the socket's peer host only
-                        // when one is not -- so an implementation that passed
-                        // the proxy to `createSocket` and the target to
-                        // `setServerNames` is accidentally *correct*, and one
-                        // that gets them the other way round is wrong with the
-                        // peer host right in front of it. Measured: giving
-                        // `createSocket` a name in neither certificate changed
-                        // nothing for a host, and changed the error message for
-                        // an address.
+                        // **The line above is the guard, and the SNI name is
+                        // not.** This comment claimed the opposite for a while
+                        // -- that JSSE identifies the endpoint against the
+                        // server name when one is set -- and it cost two wrong
+                        // sabotages before the measurement was made. Setting the
+                        // SNI name to one in *no* certificate leaves `TlsTest`
+                        // accepting the right name and refusing every other, so
+                        // identification here does not run against it. Removing
+                        // `setEndpointIdentificationAlgorithm` accepts a
+                        // wrong-name certificate, so it does run against that.
+                        //
+                        // What it *does* check the name from is not established
+                        // here -- presumably the peer host `createSocket` was
+                        // given -- and this comment is deliberately not going to
+                        // guess a third time. `dropping_endpoint_identification_
+                        // lets_a_wrong_name_through` in `tests/transport.rs` is
+                        // the part that is measured, and it is the part that
+                        // would notice the guard going away.
                         //
                         // No SNI for an address. RFC 6066 says the name must be
                         // a DNS name and `SNIHostName` will accept `127.0.0.1`
