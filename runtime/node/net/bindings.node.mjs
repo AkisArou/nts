@@ -94,6 +94,22 @@ globalThis.nts_net_connect = (host, port, path, localAddress, localPort, cb) => 
 // it will later listen or connect. Node 24 exposes precisely this native
 // operation as BoundSocket, so the stand-in preserves the same handle and
 // single-owner transfer semantics as the compiled binding.
+/**
+ * Adopt a descriptor the process already owns, for `new net.Socket({ fd })`.
+ *
+ * The real seam hands libuv an open fd and lets it decide the handle kind.
+ * Here node's own `net.Socket` does that decision, which is why the fd is
+ * given to it rather than to `adopt` directly: a pipe, a socket and a TTY all
+ * arrive as fd 0 and only the host can tell them apart.
+ */
+globalThis.nts_net_adopt_fd = (fd, readable, writable) => {
+  try {
+    return adopt(new net.Socket({ fd, readable, writable, allowHalfOpen: true }));
+  } catch (error) {
+    return codeOf(error);
+  }
+};
+
 globalThis.nts_net_bind = (host, port, path, pipe, ipv6Only, reusePort) => {
   try {
     const bound = pipe

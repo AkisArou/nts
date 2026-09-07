@@ -83,6 +83,14 @@ export { BlockList, SocketAddress };
  * The callback reports the outcome: a connection is not established when
  * `connect` returns, and everything above this seam is written around that.
  */
+/**
+ * Take over a descriptor this process already has, returning a handle.
+ *
+ * Negative on failure, as every seam here reports. What the descriptor *is* --
+ * pipe, socket, terminal -- is decided below this line, because fd 0 looks the
+ * same from up here whichever it happens to be.
+ */
+declare function nts_net_adopt_fd(fd: number, readable: boolean, writable: boolean): number;
 declare function nts_net_connect(
   host: string,
   port: number,
@@ -622,12 +630,25 @@ export class Socket extends Duplex {
       this.#resetAsyncIdentity(this.#provider);
       this._handle = consumeBoundSocket(options.handle);
       this.#boundSource = true;
-    } else if (options.handle !== undefined) {
+    } else if (options.fd !== undefined || options.handle !== undefined) {
+      // An `fd` is an unopened form of `handle`: adopt it first, then take the
+      // identical path. Node treats the two the same way once the descriptor
+      // has a handle, and so does everything below.
+      let handle = options.handle;
+      if (handle === undefined) {
+        const adopted = nts_net_adopt_fd(
+          options.fd ?? -1,
+          options.readable ?? true,
+          options.writable ?? true,
+        );
+        if (adopted < 0) throw uvException(adopted, "open");
+        handle = adopted;
+      }
       this.#provider = options.handleType === "pipe" ? "PIPEWRAP" : "TCPWRAP";
       // Before the handle is touched, because taking an existing one starts
       // reading and a read can complete before the constructor returns.
       this.#resetAsyncIdentity(this.#provider);
-      this._handle = options.handle;
+      this._handle = handle;
       this.#capture();
       if (options.noDelay) this.setNoDelay(true);
       if (options.keepAlive) {

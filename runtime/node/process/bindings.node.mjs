@@ -16,7 +16,15 @@ import "../internal/bindings.node.mjs";
 // than in `uses`, which is about test-visible shared state.
 import "../os/bindings.node.mjs";
 import "../events/bindings.node.mjs";
+// `process.stdin` reads fd 0 through `node:net` or `node:fs` depending on
+// what the descriptor is, so both native halves have to be present too --
+// even though the stream itself is not built until a program asks for it.
+import "../net/bindings.node.mjs";
+import "../fs/bindings.node.mjs";
 import host from "node:process";
+// `process.stdin` is chosen by what fd 0 is, and only the host can say.
+import tty from "node:tty";
+import fsHost from "node:fs";
 
 // The runner itself owns its stdout/stderr pipes. Node's upstream process
 // tests run without those harness-only resources and compare exact counts, so
@@ -182,6 +190,22 @@ globalThis.nts_process_metadata = (name) => JSON.stringify(host[name] ?? {});
 globalThis.nts_process_active_resources = resourcesAfterHarness;
 globalThis.nts_process_active_handles = () => host._getActiveHandles();
 globalThis.nts_process_active_requests = () => host._getActiveRequests();
+
+// What fd 0 is. The real seam asks libuv, which reports the handle kind it
+// opened; here the host's own `isatty` plus an `fstat` answer the same
+// question from the descriptor.
+globalThis.nts_stdin_handle_type = () => {
+  try {
+    if (tty.isatty(0)) return "TTY";
+    const stats = fsHost.fstatSync(0);
+    if (stats.isFile()) return "FILE";
+    if (stats.isFIFO()) return "PIPE";
+    if (stats.isSocket()) return "TCP";
+    return "UNKNOWN";
+  } catch {
+    return "UNKNOWN";
+  }
+};
 
 globalThis.nts_process_execve = (path, args, env) => host.execve(path, args,
   Object.fromEntries(env.map((pair) => {

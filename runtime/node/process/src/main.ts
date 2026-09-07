@@ -11,10 +11,16 @@
 // `uncaughtException`, `unhandledRejection` and every signal are delivered as
 // events, and a program's only way to react to its own shutdown is to listen.
 // So `process` is one of the few objects that has to exist before almost
-// anything else, and `node:events` is its one sibling dependency.
+// anything else, and `node:events` is very nearly its one sibling dependency.
+// The exception is `process.stdin`, which needs `node:net` or `node:fs`
+// depending on what fd 0 turns out to be. That is node's shape too, and node
+// keeps it out of the bootstrap the same way: the stream is built inside the
+// getter, so nothing is required until a program actually reads stdin.
 
 import { EventEmitter } from "../../events/src/main.ts";
 import { stderr, stdout } from "../../internal/stdio.ts";
+import { stdinStream } from "./stdin.ts";
+import type { Readable } from "../../stream/src/main.ts";
 import { env, refreshEnvironment } from "./env.ts";
 import { createProcessFinalization } from "./finalization.ts";
 import { emitWarningFor, onWarningFor } from "./warning.ts";
@@ -281,6 +287,16 @@ class Process extends EventEmitter {
 
   readonly stdout = stdout;
   readonly stderr = stderr;
+
+  /**
+   * Built on first use, as node builds it, and for node's reason: acquiring a
+   * handle on fd 0 is not free and a program that never reads stdin should not
+   * pay for one. See `stdin.ts` for how the descriptor's kind picks the
+   * stream.
+   */
+  get stdin(): Readable {
+    return stdinStream();
+  }
 
   /** The normalized code a graceful or explicit exit will report. */
   get exitCode(): number | undefined {

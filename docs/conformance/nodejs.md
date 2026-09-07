@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,743 of node's own applicable test files pass** across twenty-two modules,
+**1,748 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -342,11 +342,14 @@ in this file that nothing was checking.
 **The denominators moved too, and that is the part to read carefully.** 421
 files across the profile are excluded, each with an individually named reason
 in its module's `not-applicable`. Read as buckets: 149 are §13 language
-non-goals, roughly 140 are private V8 or engine internals, 62 depend on a
+non-goals, roughly 141 are private V8 or engine internals, 62 depend on a
 module that does not exist here yet (`http2`, `worker_threads`, `cluster`,
-`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 46 are temporary
-runtime gaps, 15 are harness or runner limitations that `tooling/conformance`
+`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 39 are temporary
+runtime gaps, 16 are harness or runner limitations that `tooling/conformance`
 owns and can recover, and 9 exist *because* the file passed under sabotage.
+Seven left the runtime-gap bucket in the tranche below by being implemented
+rather than re-argued, which is the direction that bucket is supposed to
+move.
 That last bucket is the healthy one --
 `test-console-self-assign.js` is excluded on the grounds that "assigning any
 writable global property to itself has no observable assertion and passes
@@ -361,8 +364,8 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,743
-measured, 421 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,748
+measured, 416 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of
@@ -395,7 +398,7 @@ still.
 | `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
-| `process` | **76 / 76** | 0 | complete but for `process.binding`, `stdin` and workers |
+| `process` | **81 / 81** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
@@ -831,10 +834,15 @@ is correct for `Map`, `Set` and `WeakMap`, so this is specific. It is not
 listed in any exclusion, and the fuzzing this document reports for `inspect` —
 480,000 structures for the comparisons, 5,000 for `inspect` itself — evidently
 never generated a promise, which is a useful thing to know about a generator
-that reports 88.5% agreement. The fix needs a native binding: a promise's state
-is not reachable from JavaScript, and `process.binding("util")` in the pinned
-node no longer carries `getPromiseDetails`. Recorded here as a measured gap
-with its dependency named.
+that reports 88.5% agreement. The fix needs a runtime helper, and the
+first version of this paragraph got the seam wrong. It said V8, reasoning from
+the fact that `process.binding("util")` in the pinned node no longer carries
+`getPromiseDetails` — which is true of the JavaScript *host shim* and
+irrelevant to a runtime that has no V8 in it at all. In the compiled profile a
+promise is `NtsPromise`, a struct the runtime allocates, and its state and
+settled value are fields that runtime owns. So this is `nts_promise_state`-
+shaped work in the compiler lane rather than an engine internal to reach for,
+and it is cheaper than the original note claimed.
 
 The remaining 29 are not all work to do. `util.inherits` should stay missing
 and is excluded by name. Others are host-process facts (`process.ppid`,
@@ -883,15 +891,40 @@ spawned child read it as ESM and it dies on `require` before reaching the
 behaviour under test. That is the same cause already recorded for
 `test-process-execve.js` and its siblings.
 
-Seven need `process.stdin`, and the blocker under it is specific enough to
-write down. (The eleventh is the hollow one above.) Node builds `stdin` from fd 0 according to what the descriptor
-*is* — a `net.Socket` for a pipe, an `fs.ReadStream` for a file, a
-`tty.ReadStream` for a terminal. Our `net.SocketOptions` already declares `fd`,
-and the constructor ignores it: a socket built on fd 0 constructs without
-complaint and never delivers a byte. So the first piece of work is not
-`process.stdin` at all, it is adopting an already-open descriptor in
-`net.Socket`, and `tty` is a module this profile does not have. Recorded here
-rather than attempted halfway.
+Seven needed `process.stdin`, and the blocker under it turned out to be one
+level down, which is why it is worth having written out. Node builds `stdin`
+from fd 0 according to what the descriptor *is* — a `net.Socket` for a pipe,
+an `fs.ReadStream` for a file, a `tty.ReadStream` for a terminal. Our
+`net.SocketOptions` already declared `fd` and the constructor ignored it: a
+socket built on fd 0 constructed without complaint and never delivered a byte.
+So the first piece of work was not `process.stdin` at all.
+
+**Both are now done, and `process` is at 81.** `net.Socket` adopts an
+already-open descriptor: an `fd` is an unopened form of the `handle` option, so
+it is adopted and then takes the identical path, which is how node treats the
+two once a descriptor has a handle. `process.stdin` is built on top of that,
+lazily and by descriptor kind, as node builds it — lazily because acquiring a
+handle on fd 0 is not free and a program that never reads stdin should not pay
+for one. Five of the seven pass. A terminal is read through the same socket as
+a pipe, because this profile has no `node:tty`: the bytes are right and
+`isTTY`/`setRawMode` are absent, which is a difference recorded rather than
+hidden.
+
+The remaining two are excluded and neither is a `process.stdin` gap.
+`test-stdin-child-proc.js` spawns `test-stdin-pause-resume.js` and asserts it
+exits 0, and neither spawn path can satisfy that: unrouted the child dies in
+16ms with code 1 on the `type: module` boundary, routed its exit does not
+arrive within the runner's window — while the file it spawns passes standalone
+and is measured directly. `test-stdout-close-unref.js` reaches for
+`process.stdin._handle` and calls `close()` and `unref()` on it; node's
+`_handle` is a libuv object with those methods and ours is a number, which is
+the flat object model working as intended.
+
+Adding `stdin` gave `process` two implementation dependencies it did not have,
+`node:net` and `node:fs`, against a header that said `node:events` was its one
+sibling. That header now says otherwise and says why: node has the same shape
+and keeps it out of the bootstrap the same way, by building the stream inside
+the getter, so nothing is required until a program actually reads stdin.
 
 ## `path`
 
@@ -1299,7 +1332,55 @@ a file that is otherwise entirely correct. The measures that say more:
   including `-0`, bigints, `numericSeparator`, and deferring to a custom
   `toString`.
 - **`inspect` agrees with node on 88.5% of 5,000 random nested structures.**
-  What is left is line-breaking of deeply nested values, not content.
+  What that pool disagrees about is line-breaking of deeply nested values. What
+  it *never asked about* is the subject of the next paragraph, and the sentence
+  that used to end this bullet — "not content" — was wrong.
+
+**A census beats a bigger pool, and this is the evidence for it.**
+`tooling/conformance/census-inspect.mjs` enumerates 61 value kinds by hand,
+runs them through the substitution and through host node, and diffs. **35 of
+61 agree.** Two pools of 5,000 and 480,000 random structures had reported
+health for `inspect` while every `Promise` printed as `{}`, because neither
+generator ever produced one; growing either pool samples the same distribution
+more times. Sixty-one deliberate kinds found ten gaps in a single run.
+
+Of the 26 that differ, seven are §13 refusals and are not defects: `[Function]`
+where node prints `[Function: named]`, `[AsyncFunction: af]`,
+`[GeneratorFunction: gf]` or `[class Klass]`, and `{ x: 1 }` where node prints
+`Point { x: 1 }`. A function's name and a constructor's name are exactly the
+observable-metadata this profile refuses.
+
+The rest are genuine, and none of them appears in any exclusion:
+
+| kind | ours | node |
+| --- | --- | --- |
+| `Promise` pending / resolved / rejected | `{}` | `Promise { <pending> }`, `Promise { 7 }`, `Promise { <rejected> ... }` |
+| boxed `BigInt`, boxed `Symbol` | `{}` | `[BigInt: 10n]`, `[Symbol: Symbol(s)]` |
+| `WeakRef`, `FinalizationRegistry` | `{}` | `WeakRef {}`, `FinalizationRegistry {}` |
+| generator and async-generator objects | `{}` | `Object [Generator] {}` |
+| `Map`/`Set`/array/string iterators | `{}` | `[Map Entries] { [ 'a', 1 ] }` |
+| null-prototype object | `{}` | `[Object: null prototype] {}` |
+| `arguments` | `{ '0': 1 }` | `[Arguments] { '0': 1 }` |
+| `Symbol.toStringTag` | omitted | shown among the keys |
+| `AggregateError`, `Error` with `cause` | omitted | `{ [errors]: [...] }`, `{ [cause]: ... }` |
+
+**And one of the 26 is not a formatting difference at all: `inspect` invokes
+getters.** Node prints `[Getter]` and calls nothing; ours calls the accessor
+and prints its value, and an accessor that throws makes `inspect` itself
+throw rather than printing `[Getter]` and carrying on. `inspect` is what runs
+in logging, error paths and assertion messages, so today logging an object
+performs its side effects, and logging an object with a throwing getter takes
+down the logger. That is a correctness and robustness defect rather than a
+cosmetic one.
+
+Its fix has a prerequisite outside this profile's current vocabulary.
+`inspect` walks `Object.keys` and reads `value[key]`, and telling an accessor
+from a data property has no route other than
+`Object.getOwnPropertyDescriptor` — which appears nowhere in `runtime/node` at
+all. Whether that is representable in the compiled model is a question for the
+compiler lane, and it is asked there. If it is a refusal then "does not invoke
+getters" is unreachable here and belongs in the exclusions with that named
+blocker; if it is representable, this is ordinary work.
 
 Three things about `inspect` are worth recording because they look arbitrary
 and are not. `groupArrayElements` lays short array entries out as a padded grid
