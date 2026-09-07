@@ -17,6 +17,8 @@ export interface TransportResponse {
   readonly statusText: string;
   readonly headers: readonly HeaderEntry[];
   readonly body: ReadableStream<Uint8Array> | null;
+  /** Settles after the body terminates; absent when a provider cannot expose trailers. */
+  readonly trailers?: Promise<readonly HeaderEntry[]>;
 }
 
 /** No redirects, cookie jar, automatic retry or authentication in this contract. */

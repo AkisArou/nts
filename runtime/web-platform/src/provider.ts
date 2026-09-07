@@ -23,6 +23,31 @@ export type {
   TransportResponse,
 } from "./fetch/transport.ts";
 
+export {
+  MockAgent,
+  MockCallHistory,
+  MockCallHistoryLog,
+  MockClient,
+  MockInterceptor,
+  MockNotMatchedError,
+  MockPool,
+  MockScope,
+} from "./mock/mock-agent.ts";
+export type {
+  MockAgentOptions,
+  MockBodyMatcher,
+  MockCallHistoryPredicate,
+  MockHeadersMatcher,
+  MockInterceptorOptions,
+  PendingMockInterceptor,
+  MockReply,
+  MockReplyBody,
+  MockReplyFactory,
+  MockReplyOptions,
+  MockRequestSnapshot,
+  MockStringMatcher,
+} from "./mock/mock-agent.ts";
+
 export { Http2Transport } from "./http2/transport.ts";
 export type { Http2TransportOptions } from "./http2/transport.ts";
 

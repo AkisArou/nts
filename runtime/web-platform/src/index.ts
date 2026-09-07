@@ -96,6 +96,31 @@ export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 export { fetch, ServerCookiePolicy } from "./fetch/fetch.ts";
 export type { FetchCookiePolicy } from "./fetch/fetch.ts";
 
+export {
+  MockAgent,
+  MockCallHistory,
+  MockCallHistoryLog,
+  MockClient,
+  MockInterceptor,
+  MockNotMatchedError,
+  MockPool,
+  MockScope,
+} from "./mock/mock-agent.ts";
+export type {
+  MockAgentOptions,
+  MockBodyMatcher,
+  MockCallHistoryPredicate,
+  MockHeadersMatcher,
+  MockInterceptorOptions,
+  PendingMockInterceptor,
+  MockReply,
+  MockReplyBody,
+  MockReplyFactory,
+  MockReplyOptions,
+  MockRequestSnapshot,
+  MockStringMatcher,
+} from "./mock/mock-agent.ts";
+
 export { MAX_DELTA_SECONDS, parseCacheControl, parseDeltaSeconds } from "./cache/cache-control.ts";
 export type {
   CacheControlDirectives,
