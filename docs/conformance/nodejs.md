@@ -4185,6 +4185,42 @@ neither had been compiled — the module having lost its initializer. **A groupe
 diagnostic is not a cause**, three times in one day, and twice it was passed to
 another lane before being checked.
 
+## Two implementations of one thing, and the small one was wrong
+
+`internal/errors.ts` built its inspected strings from `JSON.stringify(value)
+.slice(1, -1)`, patched the NUL case, and shipped everything else in JSON's
+notation rather than node's. The two agree on almost nothing across U+0000 to
+U+009F: JSON writes four-digit lower-case unicode escapes, node writes two-digit
+upper-case hex ones, and JSON does not escape U+007F to U+009F at all. So an
+error message naming a string with a control character in it was wrong in every
+case but one.
+
+`runtime/node/util/src/inspect.ts` **already had node's table exactly right**,
+including the five named escapes and the surrogate handling. The wrong copy is
+the private one in `internal/`, and the correct implementation had been in the
+tree the whole time. Checked after aligning them: 165 cases compared against
+node across that range plus surrogate and non-ASCII inputs, 0 differing.
+
+**The duplication is deliberate and should stay.** There is no cycle —
+`util/src/inspect.ts` imports only its own siblings, so `internal/errors.ts`
+could import it — but `internal/errors.ts` is compiled into all twenty-two
+programs and `util.inspect` is large, so deduplicating would put a full
+inspector into every artifact to serve error messages that need a fraction of
+it. The function's own header already says a real `util.inspect` belongs in
+`node:util` and will replace it. What was wrong was not that a second copy
+exists; it was that nothing compared the two.
+
+Quote selection remains an approximation, and is now documented as one rather
+than left to be discovered: node picks its quote character to avoid escaping, so
+`util.inspect("it's")` is double-quoted, and this always single-quotes and
+escapes.
+
+Found by following a defect the web-platform lane hit from the other direction.
+Theirs was an encoder written on the premise that `JSON.stringify` output is
+ASCII, which would have refused a legitimate cookie octet; this is a formatter
+written on the premise that its escapes are node's. **Same premise, opposite
+consequence**, and neither lane's tests could have found the other's.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
