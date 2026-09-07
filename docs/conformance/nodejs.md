@@ -654,15 +654,28 @@ does not exist yet, so it is recorded here rather than guessed at.
 ## The channels node publishes, and the bind that was a tick late
 
 `node:diagnostics_channel` was complete as a mechanism and had almost nothing
-to observe. Node's own subsystems publish to ten well-known channels — two in
-`net`, one in `dgram`, seven across `_http_client` and `_http_server` — and of
-those we published one. The six pinned tests that check them were excluded on
-the grounds that they needed the publishing subsystem to be ours. It now is,
-for all three, so the channels were implemented and the tests un-excluded:
-`diagnostics_channel` goes from 26 to 32, with `net`, `http`, `dgram` and
-`stream` re-measured unchanged and empty-module sabotage failing all 32.
+to observe. Counted from node's own `lib/`, the subsystems this profile owns
+publish to sixteen well-known channels: five in `console`, one in `dgram`, two
+plus the `net.server.listen` tracing channel in `net`, seven across
+`_http_client` and `_http_server`, and one in `process`. We published six of
+them — `console`'s five and `udp.socket`. The six pinned tests that check the
+others were excluded on the grounds that they needed the publishing subsystem
+to be ours. It now is, for all of them, so the channels were implemented and
+the tests un-excluded: `diagnostics_channel` goes from 26 to 32, with `net`,
+`http`, `dgram`, `process` and `stream` re-measured unchanged, empty-module
+sabotage failing all 32, and mutation leaving none of the 32 alive.
 
-Three things came out of it that are worth more than the six files.
+The sixteenth has no pinned test at all. Node publishes `process.execve` with
+`{ execPath, args, env }` immediately before the syscall, and no file in
+`test/parallel` subscribes to it — so it is implemented and covered locally
+instead, in `process/test/execve-success.js`. The assertion is made in the
+*replacement* image, because nothing the calling process writes after
+`execve(2)` survives: node hands the subscriber the very array it is about to
+pass to the syscall, so an entry the subscriber pushes onto it has to show up
+in the environment of the process that replaces it. Deleting the publish takes
+that file from pass to fail, which is the only reason it is worth having.
+
+Three things came out of the rest of it that are worth more than the six files.
 
 **A bind that was a tick late.** `test-diagnostics-channel-net.js` subscribes
 to the `net.server.listen` tracing channel, calls `listen()` on a port already

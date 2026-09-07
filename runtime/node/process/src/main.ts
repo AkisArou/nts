@@ -67,6 +67,9 @@ import { nextTick } from "../../internal/tick.ts";
 import { setProcessWarningHandler } from "../../internal/process-warning.ts";
 import { format } from "../../util/src/format.ts";
 import type { Architecture, Platform } from "../../os/src/main.ts";
+import { channel } from "../../diagnostics_channel/src/main.ts";
+
+const execveChannel = channel("process.execve");
 
 declare function nts_process_pid(): number;
 declare function nts_process_ppid(): number;
@@ -586,6 +589,14 @@ function processExecve(
       );
     }
     pairs[i] = `${key}=${value}`;
+  }
+
+  // Node publishes the array it is about to hand to the syscall, not a copy of
+  // it, so a subscriber can still add to the environment the replacement image
+  // will see. Published last, once the arguments have been validated: a call
+  // that is going to throw never happened.
+  if (execveChannel.hasSubscribers) {
+    execveChannel.publish({ execPath, args, env: pairs });
   }
 
   return nts_process_execve(execPath, args, pairs);
