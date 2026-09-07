@@ -5,6 +5,28 @@ records what to do about it, and why in that order. Every number here was
 measured on the date of the commit that introduced it; re-measure before acting
 on any of them.
 
+## Three is a milestone, not the finish line
+
+The working goal for this lane names "at least three modules pass node's own
+tests as compiled addons". That threshold exists because a goal needs a checkable
+condition and this axis sat at 0 of 22, then 1 of 22, for a long time — three is
+evidence the axis moves at all. **It is not where the work stops.** When it is
+met, the next module starts.
+
+The reason is arithmetic rather than ambition. The blockers are *shared*: the
+module-evaluation excision unblocked twelve modules at once, a class export
+unblocks four, and the shorthand-property fix closes a `node` blocker and a
+web-platform one together. So the second and third modules are the expensive
+ones and the tenth is nearly free. Stopping at the threshold would end the work
+exactly where it starts paying.
+
+The order falls out of measurement, not preference, and today it reads:
+`string_decoder` (one class export and nothing else), then `os` (a computed
+member write, then five more names), then `querystring` and `path`, then the
+modules waiting on class exports — `buffer`, `url`, `stream`. Re-derive it from
+`blockers-check.mjs` and the per-module `no wrapper` lines rather than from this
+sentence, which will go stale.
+
 ## The situation in one paragraph
 
 Two axes move independently. **TypeScript-on-node: 1,803 of 1,803 across 22

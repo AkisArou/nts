@@ -81,6 +81,32 @@ function reach(start) {
   return found;
 }
 
+/**
+ * The canonical globals a module's *tests* are given, which are not imports.
+ *
+ * `run-one.mjs` reads a module's `globals` file and installs web-platform
+ * classes onto `globalThis` for its test run. `events` declares `abort` and so
+ * receives the canonical `AbortController`, but nothing in `events/src` imports
+ * `core/abort.ts` — so an import scan reports no reach and the module is fully
+ * exposed anyway. Found by checking a module the scan said was safe, which is
+ * the same miss this whole file exists to stop me repeating.
+ */
+const GLOBAL_GROUPS = {
+  abort: "runtime/web-platform/src/core/abort.ts",
+  encoding: "runtime/web-platform/src/core/encoding.ts",
+};
+
+function installedGlobals(module) {
+  const file = join(NODE_ROOT, module, "globals");
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"))
+    .map((group) => GLOBAL_GROUPS[group])
+    .filter((path) => path !== undefined);
+}
+
 const modules = readdirSync(NODE_ROOT, { withFileTypes: true })
   .filter((e) => e.isDirectory() && e.name !== "node_modules" && e.name !== "internal")
   .map((e) => e.name)
@@ -89,6 +115,9 @@ const modules = readdirSync(NODE_ROOT, { withFileTypes: true })
 let any = 0;
 for (const module of modules) {
   const found = reach(join(NODE_ROOT, module, "src"));
+  for (const path of installedGlobals(module)) {
+    if (!found.has(path)) found.set(path, ["(installed for its tests by `globals`)"]);
+  }
   const hits = [...found.entries()].filter(
     ([rel]) => wanted.length === 0 || wanted.some((w) => rel.endsWith(w)),
   );
@@ -98,7 +127,7 @@ for (const module of modules) {
   for (const [rel, path] of hits.sort()) {
     // Only the hops that are not the module's own first file, since "it starts
     // in its own source" is not information.
-    const via = path.slice(1);
+    const via = path[0].startsWith("(") ? path : path.slice(1);
     const suffix = via.length > 0 ? `   via ${via.join(" -> ")}` : "";
     console.log(`      ${rel.replace("runtime/web-platform/src/", "")}${suffix}`);
   }
