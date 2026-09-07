@@ -4117,10 +4117,21 @@ A test written for a failure that has never been demonstrated is a claim.
 **The `querystring` and `os` cases are the pair worth remembering, because they
 are indistinguishable in the compiler's output and opposite in the source.**
 `emit-c` says "refused by nothing" for both `export const totalmem =
-nts_os_totalmem` and `export const decode = parse`. The first is a bug — the
-alias was putting the *binding's* name on the public surface, so `os.freemem
-.name` was `"nts_os_freemem"` where node has `"freemem"` — and rewriting it as a
-function fixed the surface and doubled what `os` publishes. The second is
+nts_os_totalmem` and `export const decode = parse`. The first is a bug — the alias put a
+function with **no name** on the public surface, `os.freemem.name` being `""`
+where node has `"freemem"` — and rewriting it as a function fixed the surface
+and doubled what `os` publishes.
+
+*That sentence first read "the binding's name was on the public surface, so
+`os.freemem.name` was `"nts_os_freemem"`", and it was wrong.* The host stand-in
+is `globalThis.nts_os_freemem = () => os.freemem()`, and a property assignment
+infers no name, so the alias carries an empty one rather than the binding's. It
+was corrected by running the control for `os/test/binding-name-static.js`, which
+printed `freemem.name is empty` where the claim predicted a leaked symbol — the
+defect is real, the fix is unchanged, and the detail that made it sound urgent
+had gone into a commit message, this document and two other lanes unchecked.
+Twelve `process` functions had the same emptiness, which is the whole of the
+defect in both modules. The second is
 correct as written, and the same rewrite would destroy it. The compiler cannot
 tell them apart; only the source can.
 

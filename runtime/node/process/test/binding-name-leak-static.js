@@ -3,9 +3,11 @@
 // `os` had four exports written as `export const totalmem = nts_os_totalmem`.
 // That aliases the binding straight out of the module, and the consequence is
 // not only that the Node-API backend cannot name it: on the interpreted lane
-// `os.freemem.name` was `"nts_os_freemem"` where node has `"freemem"`, so the
-// binding's identity was on the public surface. `process` is written the same
-// way in a dozen places -- `cwd`, `uptime`, `abort`, `getuid`, `getgid`,
+// `os.freemem.name` was `""` where node has `"freemem"`, so a function reached
+// the public surface with no name at all. (Reported at first as the *binding's*
+// name being observable, which is the alarming version and is wrong: the host
+// stand-in is assigned to a property, and a property assignment infers no name.)
+// `process` is written the same way in a dozen places -- `cwd`, `uptime`, `abort`, `getuid`, `getgid`,
 // `geteuid`, `getegid`, `getgroups`, `availableMemory`, `constrainedMemory`,
 // `reallyExit`.
 //
