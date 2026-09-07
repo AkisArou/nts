@@ -1769,3 +1769,35 @@ is 1164 primary `NTS1001` refusals and 188 dependent `NTS1003` cascades, with ze
 `NTS1004` module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. These
 counts describe new shared source reaching existing language prerequisites, not
 compiled SnapshotAgent execution.
+
+## Typed interceptor composition and retry policy
+
+At `0f758afb`, the shared transport has immutable typed interceptor composition and
+a retry layer whose request ordering is explicit. The first interceptor is the
+outermost request observer, while responses and errors unwind in reverse order.
+`RetryInterceptor` and `RetryAgent` retry the configured idempotent methods for typed
+transport failures and configured HTTP statuses, with bounded exponential delay,
+`Retry-After` support, custom decisions, non-semantic observers, and exact abort
+reason propagation.
+
+Request-body replay is metadata rather than a guess. `BodyState` exposes a fresh
+Blob-backed stream factory at the provider-neutral transport boundary; a one-shot
+stream has no factory and cannot be retried after consumption. Every factory carries
+and validates its byte length. Retried response bodies are canceled before the next
+attempt, huge decimal `Retry-After` values clamp to the configured maximum, and
+observer failures are reported without changing dispatch. Partial-response resume
+with `Range`/ETag and the exact standalone-Undici package facades remain visible in
+the API ledger rather than being claimed by this checkpoint.
+
+The focused retry corpus passes 11/11 and the complete local Node-host/real-socket
+suite passes 311/311. The pinned WPT slice remains 2275/2283 applicable cases with
+14 named not-applicable cases and the same eight visible structural/common-compiler
+failures.
+
+A sabotage removed the Fetch-to-transport replay factory while leaving the retry
+implementation intact. The ordinary `fetch()` body-replay precondition fell from
+1/1 to 0/1 with `UnreplayableRequestError`, then returned to 1/1 after restoration.
+The live compiled-source frontier is 1172 primary `NTS1001` refusals and 194 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase is new policy source reaching existing
+language prerequisites; it is not compiled retry or provider evidence.
