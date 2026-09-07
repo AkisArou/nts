@@ -1,6 +1,7 @@
 package org.nts.web;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import okhttp3.Call;
@@ -9,6 +10,7 @@ import okhttp3.CookieJar;
 import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -84,6 +86,25 @@ public final class OkHttpNetworking {
             .cookieJar(CookieJar.NO_COOKIES)
             .cache(null)
             .retryOnConnectionFailure(false)
+            // The explicit protocol list the plan requires, and HTTP/1.1 is a
+            // decision rather than a default.
+            //
+            // Left unset, OkHttp offers h2 in ALPN and negotiates it over TLS
+            // with any peer that accepts. The deterministic reference transport
+            // speaks HTTP/1.1, and the two-adapter corpus compares what the two
+            // expose. Two adapters speaking different protocols do not
+            // disagree about policy -- they disagree about framing, and the
+            // corpus would either report that as a defect or, worse, be taught
+            // to tolerate it, which is how a real difference gets hidden behind
+            // an exception for a protocol nobody chose.
+            //
+            // So this is not "HTTP/2 is unsupported". It is the plan's rule
+            // that platform facilities are "exposed only through the typed
+            // dispatcher capabilities actually negotiated by the provider":
+            // advertising h2 would have the shared layer offering a capability
+            // nothing on this side can verify. It becomes a capability when the
+            // reference can match it, and the corpus is where that is settled.
+            .protocols(Collections.singletonList(Protocol.HTTP_1_1))
             .build();
     }
 

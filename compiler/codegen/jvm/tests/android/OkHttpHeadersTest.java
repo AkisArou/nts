@@ -255,8 +255,19 @@ public final class OkHttpHeadersTest {
             check(client.cache() == null, "the client has an HTTP cache");
             check(client.cookieJar() == okhttp3.CookieJar.NO_COOKIES,
                 "the client has a cookie jar of its own");
+            // The explicit protocol list. Unset, OkHttp offers h2 in ALPN and
+            // takes it over TLS with any peer that accepts -- while the
+            // deterministic reference speaks HTTP/1.1, so the two-adapter
+            // corpus would be comparing two protocols and calling the framing
+            // difference a defect.
+            check(client.protocols().size() == 1
+                    && client.protocols().get(0) == okhttp3.Protocol.HTTP_1_1,
+                "the client offers " + client.protocols() + " rather than HTTP/1.1 alone");
         } finally {
-            client.dispatcher().executorService().shutdown();
+            // The adapter's own teardown rather than half of it. This line used
+            // to stop the executor and leave the connection pool running, which
+            // is the shape of the defect record 0187 is about.
+            OkHttpNetworking.shutdown(client);
         }
     }
 

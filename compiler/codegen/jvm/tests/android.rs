@@ -482,14 +482,14 @@ fn okhttp_does_not_rewrite_what_the_server_sent() {
     // The **count**, not only the zero: a suite that stopped running half its
     // cases reports no failures perfectly well. Same assertion as `PASS: 11`
     // above, which is where the idea came from and where it stopped.
-    assert!(said.ends_with("18 checks, 0 failures"), "{said}");
+    assert!(said.ends_with("19 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The two adapters, over one server, answering the same.
 ///
 /// The plan's central two-adapter requirement, and the one thing the suites
-/// around it could not check. `OkHttpHeadersTest` drives OkHttp alone and
+/// around it could not check. `OkHttpHeadersTest` drives `OkHttp` alone and
 /// asserts what it does; `HttpGzipTest` drives the reference alone and asserts
 /// what it does, closing with "this is the observable the production adapter has
 /// to match". Nothing checked that it matched. Two suites agreeing with their
@@ -621,15 +621,29 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         return;
     };
     let Some(r8) = fetch(&["tool"]).and_then(|jars| jars.into_iter().next()) else { return };
+    // The production adapter is compiled and shrunk here too. It was not, and
+    // it has no caller in Java either -- so every method on it was one R8 run
+    // away from being removed from a release build, exactly the way
+    // `AndroidNetworking`'s keep rule once matched nothing because this test
+    // never compiled `src/android`.
+    let Some(jars) = dependencies() else { return };
     let dir = std::env::temp_dir().join(format!("nts-r8-{}", std::process::id()));
     let classes = dir.join("classes");
     let out = dir.join("out");
     std::fs::create_dir_all(&classes).unwrap();
     std::fs::create_dir_all(&out).unwrap();
 
+    let compile_path = std::iter::once(platform.display().to_string())
+        .chain(jars.iter().map(|jar| jar.display().to_string()))
+        .collect::<Vec<_>>()
+        .join(":");
     let mut compile = Command::new(&javac);
-    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&platform).arg("-d").arg(&classes);
-    for path in sources(&android().join("src/main")).into_iter().chain(sources(&android().join("src/android"))) {
+    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&compile_path).arg("-d").arg(&classes);
+    for path in sources(&android().join("src/main"))
+        .into_iter()
+        .chain(sources(&android().join("src/android")))
+        .chain(sources(&android().join("src/okhttp")))
+    {
         compile.arg(path);
     }
     let built = compile.output().unwrap();
@@ -640,7 +654,15 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         .arg("-cp")
         .arg(&r8)
         .args(["com.android.tools.r8.R8", "--release", "--min-api", "26", "--lib"])
-        .arg(&platform)
+        .arg(&platform);
+    // The third-party jars as libraries rather than inputs: what is being
+    // shrunk is NTS-owned Java, and dexing OkHttp here would be measuring
+    // someone else's artifact -- which `the_pinned_dependencies_dex_at_the_same_api_floor`
+    // already does, on its own terms.
+    for jar in &jars {
+        shrink.arg("--lib").arg(jar);
+    }
+    shrink
         .arg("--pg-conf")
         .arg(android().join("consumer-rules.pro"))
         .arg("--output")
@@ -668,6 +690,8 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         "Lorg/nts/web/NetworkPrimitives$ReadCallback;",
         "Lorg/nts/web/NetworkPrimitives$WriteCallback;",
         "Lorg/nts/web/NetworkPrimitives$CleartextPolicy;",
+        "Lorg/nts/web/OkHttpNetworking;",
+        "Lorg/nts/web/OkHttpNetworking$ResponseCallback;",
     ] {
         assert!(
             listing.contains(kept),
