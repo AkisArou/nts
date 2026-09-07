@@ -131,6 +131,85 @@ export const CORPORA = {
     ],
   },
 
+  events: {
+    // A state-machine fuzz rather than a value fuzz. The input is a *program*
+    // over an EventEmitter -- each character is an operation -- and the result
+    // is the log it produces. EventEmitter's subtleties are all sequencing:
+    // a `once` that fires during an emit it was added in, a listener removed
+    // while the same emit is walking the list, `prependListener` against
+    // registration order, and what `listenerCount` says in the middle of it.
+    //
+    // Comparing a value would not reach any of that. There is no input to
+    // `emit` that makes removal-during-emit happen; only an order of calls
+    // does.
+    fixed: [
+      "oe", "ne", "nee", "oe", "ope", "onpe", "oree", "oaee", "ooee", "nnee",
+      "orea", "opnre", "oo", "e", "", "onpeeree", "nre", "opre", "aoe", "ocec",
+    ],
+    input: (rnd) => {
+      const OPS = "onpercab";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 10);
+      for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "emitter-program",
+        call: (m, program) => {
+          const emitter = new m.EventEmitter();
+          const log = [];
+          const made = [];
+          const listener = (tag) => {
+            const fn = () => log.push(tag);
+            made.push(fn);
+            return fn;
+          };
+          let n = 0;
+          for (const op of program) {
+            n++;
+            try {
+              if (op === "o") emitter.on("x", listener(`on${n}`));
+              else if (op === "n") emitter.once("x", listener(`once${n}`));
+              else if (op === "p") emitter.prependListener("x", listener(`pre${n}`));
+              else if (op === "e") log.push(`emit=${emitter.emit("x")}`);
+              else if (op === "r") {
+                if (made.length > 0) emitter.removeListener("x", made[0]);
+              } else if (op === "c") log.push(`count=${emitter.listenerCount("x")}`);
+              else if (op === "a") emitter.removeAllListeners("x");
+              else if (op === "b") log.push(`names=${emitter.eventNames().join("+")}`);
+            } catch (error) {
+              log.push(`threw=${error.name}`);
+            }
+          }
+          return log.join(",") + `|final=${emitter.listenerCount("x")}`;
+        },
+      },
+      {
+        label: "remove-during-emit",
+        call: (m, program) => {
+          const emitter = new m.EventEmitter();
+          const log = [];
+          // A listener that removes another one while the emit is in flight,
+          // which is where implementations disagree about whether the list was
+          // copied.
+          const b = () => log.push("b");
+          const a = () => {
+            log.push("a");
+            emitter.removeListener("x", b);
+          };
+          emitter.on("x", a);
+          emitter.on("x", b);
+          for (const op of program) {
+            if (op === "e") log.push(`emit=${emitter.emit("x")}`);
+            else if (op === "o") emitter.on("x", b);
+          }
+          return log.join(",") + `|final=${emitter.listenerCount("x")}`;
+        },
+      },
+    ],
+  },
+
   util: {
     // `format`'s specifiers, where the input is the *template* rather than the
     // value. The rules are fiddly and positional: a specifier consumes the next
