@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,764 of node's own applicable test files pass** across twenty-two modules,
+**1,768 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -364,7 +364,7 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,764
+warns about elsewhere, so the two numbers belong next to each other: **1,768
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -395,14 +395,14 @@ still.
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
-| `net` | **143 / 143** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `net` | **144 / 144** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
 | `process` | **84 / 84** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
-| `stream` | **241 / 241** | 0 | the core, the operators, `Readable.from` and the async iterator |
+| `stream` | **244 / 244** | 0 | the core, the operators, `Readable.from` and the async iterator |
 | `string_decoder` | **3 / 3** | 0 | complete |
 | `timers` | **53 / 53** | 0 | complete |
 | `url` | **45 / 45** | 0 | complete; exact on the Web Platform Tests corpus |
@@ -1488,15 +1488,32 @@ by the compiler rather than finding it at run time. Adding a member-name table
 is a descriptor change across three backends and a per-object cost paid by
 every program to answer a question almost none of them ask.
 
-So the blocker is not accessors at all. It is **dynamic member access on a
-typed object**, which is the dynamic ordinary-object map this compiler exists
-not to have. That makes the compiled half of this a `∅` rather than a `✗`:
-not "unbuilt", but "would require giving up the representation". The shape that
-does fit is an `inspect` written as a per-type walk rather than a per-key one,
-since `Object.keys` of a known layout is decided at compile time and each
-member access would then be a literal. That is a different `inspect` and no
-longer node's, which is a real choice rather than a blocked one, and it is not
-being made here today.
+So the blocker is not accessors. It is the computed member read, and there are
+three spellings of that rather than the two this paragraph first claimed:
+
+| spelling | status |
+| --- | --- |
+| `p[key]`, `key: string`, `p` a fixed struct | TypeScript's own `TS7053` — never reaches the compiler |
+| `p[key]`, `key: keyof P` | the layout is fully known and the compiler holds the field names; **refused today**, a `✗` on the compiler lane and being taken there |
+| `p[key]` through an index signature | needs the dynamic ordinary-object map this compiler exists not to have — a `∅` |
+
+**`inspect` is in the third row, and that is a fact about this source rather
+than about the compiler.** Its walk runs on `InspectableObject`, which is
+`{ readonly [key: string]: unknown }`, reached by narrowing an `unknown`
+parameter — because `inspect` is polymorphic over every object a program can
+hold. There is no `T` whose `keyof` could type the key, and no single layout
+for `Object.keys` to enumerate. So even when the second row is built, it will
+not reach here.
+
+The shape that would fit is an `inspect` written as a per-type walk rather than
+a per-key one, since `Object.keys` of a *known* layout is decided at compile
+time and each member access would then be a literal. That is a different
+`inspect` and no longer node's: a transcription changes when node changes,
+while a reinvention has to be re-derived, and `test-util-inspect.js` is already
+excluded as an irreducible mix, so a divergent formatter would have almost no
+oracle left to check it against. Carrying a named refusal is the better trade
+than an unfalsifiable formatter, and that is the choice being made here rather
+than a blockage being reported.
 
 The rest are genuine formatting gaps, and none appears in any exclusion:
 

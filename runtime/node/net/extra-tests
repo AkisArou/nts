@@ -4,3 +4,4 @@ test-pipe-writev.js: as test-pipe-address.js; exercises net.Socket's vectored wr
 test-pipe-stream.js: as test-pipe-address.js; a net.Server over a pipe, piped into and out of
 test-pipe-unref.js: as test-pipe-address.js; net.Server.unref over a pipe transport
 test-listen-fd-ebadf.js: upstream names it for the fd rather than the module; the subject is net.Server.listen refusing a descriptor that is not a socket
+test-destroy-socket-in-lookup.js: upstream names it for the operation rather than the module; the subject is net.Socket.destroy during the DNS lookup that precedes connect

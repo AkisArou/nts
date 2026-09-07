@@ -914,6 +914,11 @@ export class Socket extends Duplex {
             const current = address[index];
             if (current !== undefined) {
               this.emit("lookup", null, current.address, current.family, host);
+              // Re-checked after every emit, as node does, because the listener
+              // it just ran may have destroyed this socket. Without it a
+              // handler that calls `destroy()` on the first address still sees
+              // `lookup` for the second, and the connect it stopped goes on.
+              if (!this.connecting) return;
             }
           }
           const ordered = orderLookupAddresses(address, options.blockList, host, port);

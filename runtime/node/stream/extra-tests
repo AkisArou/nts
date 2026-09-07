@@ -2,3 +2,6 @@ test-readable-from.js
 test-readable-from-iterator-closing.js
 test-readable-from-web-enqueue-then-close.js
 test-webstreams-duplex-fromweb-writev-unhandled-rejection.js
+test-duplex-error.js: upstream names it for the class rather than the module; the subject is stream.Duplex error propagation
+test-readable-large-hwm.js: upstream names it for the class rather than the module; the subject is stream.Readable's high-water mark
+test-readable-single-end.js: upstream names it for the class rather than the module; the subject is stream.Readable emitting end exactly once
