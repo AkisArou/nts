@@ -64,10 +64,21 @@ They are running. A plain `WeakReference` with no queue at all is not cleared
 either, so it is not a queueing problem. Whatever prevents collection there, it
 is not the thing I said, and I had already shipped the sentence.
 
-The control does not care. It detects the condition without naming a cause,
-which is the whole reason it is a control and not a diagnosis — and is why the
-fix survived the explanation being wrong. The cause is now left unnamed in the
-code, which is the honest state.
+A second explanation followed, and it is wrong too. Perhaps the frame pins the
+most recent allocation and my control used exactly one object. Two hundred
+references, made in a loop in another method: **none of them clear either**.
+
+What is established is the scope, which is what the check actually needs:
+
+    desktop JVM   clears and enqueues
+    API 36 ART    clears and enqueues
+    API 26 ART    neither, under `app_process`
+
+The cause is unnamed, and stays unnamed. That costs the check nothing, and it
+is the point worth keeping: **a control detects a condition; a diagnosis names a
+cause.** I had quietly turned the first into the second, twice, in a paragraph
+that read as confident both times. The control was correct through both wrong
+explanations precisely because it never depended on either.
 
 ## Why this one is worse than the others
 

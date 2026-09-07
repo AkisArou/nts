@@ -166,15 +166,23 @@ public final class EnvTest {
         // close, the runtime still retains its callbacks": a false accusation
         // against code that had released correctly.
         //
-        // **Why it does not clear is not established.** The first explanation
-        // written here was that ART's reference-processing daemons are started
-        // by the zygote and not by a bare `app_process`. That is wrong:
-        // `java.lang.Daemons.start()` reflectively answers `IllegalStateException:
-        // already running`, so they are up. A plain `WeakReference` with no
-        // queue is not cleared either, so it is not a queueing problem. The
-        // cause is left unnamed rather than guessed a second time -- the
-        // control detects the condition whatever it is, which is all the test
-        // needs from it.
+        // **The scope is measured; the mechanism is not.** Where it holds:
+        //
+        //     desktop JVM   clears and enqueues -- the check below runs
+        //     API 36 ART    clears and enqueues -- the check below runs
+        //     API 26 ART    neither, under `app_process`
+        //
+        // Two explanations were tried and both are wrong. It is *not* that the
+        // reference-processing daemons are unstarted: `java.lang.Daemons.start()`
+        // reflectively answers `IllegalStateException: already running`. It is
+        // *not* that the last allocation is pinned by the frame: two hundred
+        // references made in a loop in another method clear none of them, and a
+        // plain `WeakReference` with no queue is not cleared either.
+        //
+        // So the cause is left unnamed rather than guessed a third time. That
+        // costs this check nothing: a control detects a condition, where a
+        // diagnosis names a cause, and turning the first into the second is
+        // exactly the mistake that produced the false accusation above.
         //
         // It cost an hour and two wrong diagnoses before the control was
         // written, and the control is four lines. A test whose instrument can
