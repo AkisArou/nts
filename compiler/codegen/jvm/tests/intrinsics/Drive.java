@@ -72,6 +72,110 @@ public final class Drive {
         }
     }
 
+    /** Reads five bytes and writes them straight back, once, then closes. */
+    static final class Echo implements Runnable {
+        final ServerSocket listener;
+        volatile boolean stop;
+
+        Echo() throws IOException {
+            listener = new ServerSocket(0, 4, java.net.InetAddress.getByName("127.0.0.1"));
+        }
+
+        int port() {
+            return listener.getLocalPort();
+        }
+
+        @Override
+        public void run() {
+            try {
+                Socket peer = listener.accept();
+                byte[] seen = new byte[5];
+                int at = 0;
+                while (at < seen.length) {
+                    int n = peer.getInputStream().read(seen, at, seen.length - at);
+                    if (n < 0) {
+                        break;
+                    }
+                    at += n;
+                }
+                peer.getOutputStream().write(seen, 0, at);
+                peer.getOutputStream().flush();
+                peer.close();
+            } catch (IOException stopping) {
+                // the listener was closed, which is how this ends
+            }
+        }
+
+        void close() {
+            stop = true;
+            try {
+                listener.close();
+            } catch (IOException ignored) {
+                // stopping
+            }
+        }
+    }
+
+    /** Call an exported function that answers nothing. */
+    static void run(String method, double... argument) throws Exception {
+        Class<?> program = Class.forName("nts.gen.Program");
+        if (argument.length == 0) {
+            program.getMethod(method).invoke(null);
+        } else {
+            program.getMethod(method, double.class).invoke(null, Double.valueOf(argument[0]));
+        }
+    }
+
+    /**
+     * A round trip driven from the compiled TypeScript.
+     *
+     * <p>Java owns the peer and the loop; the program owns the connection. Each
+     * step starts an operation and returns, because a completion arrives when
+     * the environment is drained and only this side can drain it -- which is
+     * also the shape a provider written in TypeScript would have.
+     */
+    static void roundTrip() throws Exception {
+        Echo echo = new Echo();
+        Thread thread = new Thread(echo, "intrinsic-echo");
+        thread.setDaemon(true);
+        thread.start();
+
+        NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 8);
+        NtsEnv previous = NtsEnv.enterEnv(env);
+        try {
+            run("open", echo.port());
+            NtsEnv.drain(env);
+            System.out.println("round-trip open " + (int) call("status")
+                + " live " + (int) NtsSocket.openCount());
+
+            run("send");
+            NtsEnv.drain(env);
+            System.out.println("round-trip wrote " + (int) call("written"));
+
+            run("receive");
+            NtsEnv.drain(env);
+            System.out.println("round-trip read " + (int) call("received"));
+            System.out.println("round-trip checksum " + (int) call("checksum"));
+
+            run("shut");
+        } catch (Throwable failed) {
+            // Printed here because the `finally` below closes the environment,
+            // and closing one with an unsettled completion throws -- so the
+            // refusal about a held credit replaces whatever actually went
+            // wrong. Every diagnosis in this file so far has been of the
+            // second exception rather than the first.
+            Throwable cause = failed instanceof java.lang.reflect.InvocationTargetException
+                ? ((java.lang.reflect.InvocationTargetException) failed).getCause()
+                : failed;
+            System.out.println("round-trip failed: " + cause + " -- " + text("whyItFailed"));
+            throw failed;
+        } finally {
+            NtsEnv.close(env);
+            NtsEnv.leaveEnv(env, previous);
+            echo.close();
+        }
+    }
+
     /** The two closures a completion is, held together for the test's convenience. */
     static final class Result implements NtsNumberCallback, NtsTextPairCallback {
         double handle = Double.NaN;
@@ -100,7 +204,19 @@ public final class Drive {
         return ((Double) answer).doubleValue();
     }
 
+    /** An exported function that answers a string. */
+    static String text(String method) throws Exception {
+        return (String) Class.forName("nts.gen.Program").getMethod(method).invoke(null);
+    }
+
     public static void main(String[] args) throws Exception {
+        // The module initializer, which is what allocates a module-level
+        // `const inbound = new Uint8Array(16)`. The JVM's own `<clinit>` sets
+        // the scalar globals to their constants; anything that has to be
+        // *built* is in here, and a driver that does not call it reads null --
+        // which is what the differential's harness does and this did not.
+        Class.forName("nts.gen.Program").getMethod("module$init").invoke(null);
+
         Listener server = new Listener();
         Thread thread = new Thread(server, "intrinsic-listener");
         thread.setDaemon(true);
@@ -170,5 +286,11 @@ public final class Drive {
             NtsEnv.leaveEnv(env, previous);
             server.close();
         }
+
+        // Last, and in its own environment: it opens a real connection through
+        // the compiled program, and the counts above are asserted against a
+        // provider holding nothing else.
+        roundTrip();
+        NtsSocket.shutdown();
     }
 }

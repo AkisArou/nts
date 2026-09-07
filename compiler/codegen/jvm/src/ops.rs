@@ -609,39 +609,55 @@ pub struct Intrinsic {
 /// asserts the two lists are complements rather than merely both present.
 pub const WEB_INTRINSICS: &[Intrinsic] = &[
     Intrinsic {
-        declared: "nts_jvm_web_open_count",
-        owner: types::SOCKET,
-        member: "openCount",
-        descriptor: "()D",
+        declared: "nts_jvm_web_connect",
+        owner: types::WEB,
+        member: "connect",
+        descriptor: "(Ljava/lang/String;DZDLjava/lang/String;DDLnts/rt/NtsNumberCallback;\
+                     Lnts/rt/NtsTextPairCallback;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_cancel_connect",
+        owner: types::WEB,
+        member: "cancelConnect",
+        descriptor: "(D)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_read",
+        owner: types::WEB,
+        member: "read",
+        descriptor: "(DLnts/rt/NtsViewU8;Lnts/rt/NtsNumberCallback;\
+                     Lnts/rt/NtsTextPairCallback;)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_write",
+        owner: types::WEB,
+        member: "write",
+        descriptor: "(DLnts/rt/NtsViewU8;Lnts/rt/NtsNumberCallback;\
+                     Lnts/rt/NtsTextPairCallback;)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_close",
+        owner: types::WEB,
+        member: "close",
+        descriptor: "(D)V",
     },
     Intrinsic {
         declared: "nts_jvm_web_network_changed",
-        owner: types::SOCKET,
+        owner: types::WEB,
         member: "networkChanged",
         descriptor: "()D",
     },
     Intrinsic {
-        declared: "nts_jvm_web_close",
-        owner: types::SOCKET,
-        member: "close",
-        descriptor: "(D)V",
+        declared: "nts_jvm_web_open_count",
+        owner: types::WEB,
+        member: "openCount",
+        descriptor: "()D",
     },
-    // Ungated by `ManagedType::View` landing: a `Uint8Array` is
-    // `Lnts/rt/NtsViewU8;` now, where before there was no type to write it in.
-    // The first of the five gated entries to come off, and it came off because
-    // its whole signature is one byte view -- the other four also want an
-    // environment handle, which still has no common type.
     Intrinsic {
         declared: "nts_jvm_web_random_fill",
-        owner: types::SOCKET,
+        owner: types::WEB,
         member: "randomFill",
         descriptor: "(Lnts/rt/NtsViewU8;)V",
-    },
-    Intrinsic {
-        declared: "nts_jvm_web_cancel_connect",
-        owner: types::SOCKET,
-        member: "cancelConnect",
-        descriptor: "(D)V",
     },
 ];
 

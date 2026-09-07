@@ -100,3 +100,109 @@ export function randomBytes(): number {
 // property is real and is asserted in `Drive.java`, where a window can be built
 // -- named here rather than left out, because a fill that ignored the view's
 // offset would pass every case above.
+
+// ---------------------------------------------------------------------------
+// A round trip, driven from TypeScript.
+//
+// The four scalar intrinsics prove a call arrives. This proves the rest of the
+// ABI: a closure written in TypeScript, compiled to a class implementing an
+// `nts.rt` interface, called back by a worker thread and delivered on the owner
+// lane; and a `Uint8Array` crossing as a view that carries its own window.
+//
+// Split into start/step/report because a completion arrives when the
+// environment is drained, and only the driver can drain it. Module state holds
+// what the callbacks saw, which is also what a provider written in this
+// language would do.
+// ---------------------------------------------------------------------------
+
+let state = 0;
+let failure = "";
+let handle = -1;
+let wrote = 0;
+let got = 0;
+const inbound = new Uint8Array(16);
+
+/** 0 pending, 1 open, 2 written, 3 read; negative is the step that failed. */
+export function status(): number {
+  return state;
+}
+
+export function open(port: number): void {
+  socket.connect(
+    "127.0.0.1", port, false, 4000, null, 0, socket.DIRECT,
+    (h: number): void => {
+      handle = h;
+      state = 1;
+    },
+    (code: string, message: string): void => {
+      state = -1;
+      failure = code + ": " + message;
+    },
+  );
+}
+
+/** Five bytes, written from a view. */
+export function send(): void {
+  const out = new Uint8Array(5);
+  out[0] = 110;
+  out[1] = 116;
+  out[2] = 115;
+  out[3] = 45;
+  out[4] = 106;
+  socket.write(
+    handle, out,
+    (n: number): void => {
+      wrote = n;
+      state = 2;
+    },
+    (code: string, message: string): void => {
+      state = -2;
+      failure = code + ": " + message;
+    },
+  );
+}
+
+export function receive(): void {
+  socket.read(
+    handle, inbound,
+    (n: number): void => {
+      got = n;
+      state = 3;
+    },
+    (code: string, message: string): void => {
+      state = -3;
+      failure = code + ": " + message;
+    },
+  );
+}
+
+export function received(): number {
+  return got;
+}
+
+/** The bytes read back, summed, so one number says whether they came through. */
+export function checksum(): number {
+  let total = 0;
+  for (let i = 0; i < got; i = i + 1) {
+    total = total + inbound[i]!;
+  }
+  return total;
+}
+
+/** What the last failing callback was told, for a driver to print. */
+export function whyItFailed(): string {
+  return failure;
+}
+
+/** The handle the open callback was given. */
+export function currentHandle(): number {
+  return handle;
+}
+
+export function written(): number {
+  return wrote;
+}
+
+export function shut(): void {
+  socket.close(handle);
+}

@@ -1,19 +1,26 @@
 // The fixed networking intrinsics: the typed boundary between the shared
 // TypeScript and the JVM providers.
 //
-// Every declaration below has a Java method behind it today, with tests. Four
-// of the nine are **wired end to end** -- a `declare function` in TypeScript,
-// compiled by the JVM backend to `invokestatic nts/rt/NtsSocket`, running
-// against real sockets in `compiler/codegen/jvm/tests/intrinsics.rs`. They are
-// the four whose whole signature is `number` and `void`.
+// **All eight are wired end to end**: a `declare function` in TypeScript,
+// compiled by the JVM backend to `invokestatic nts/rt/NtsWeb`, running against
+// real sockets in `compiler/codegen/jvm/tests/intrinsics.rs`. Nothing here is
+// gated and nothing here is aspirational.
 //
-// The other five take an environment handle or a byte view. There is no common
-// environment type and `ManagedType::View` does not exist, so those cannot be
-// written in TypeScript at all yet; they are marked GATED where they are
-// declared. The split is four/five rather than nine/zero because the four that
-// could be wired were, rather than waiting for the two missing types to arrive
-// together -- and wiring them is what found `ops::web_external` missing, which
-// no Java test could have.
+// # There is no environment handle, and that is not a workaround
+//
+// Five of these were gated on "a common environment type" that did not exist,
+// and the gate was wrong. The environment is **ambient in both runtimes**:
+// `nts_environment_current` in `runtime/c` -- "the environment this lane is
+// running in; never null" -- and `NtsEnv.current` on the JVM, backed by a
+// `ThreadLocal` whose own comment records that a hidden parameter on every call
+// was the alternative and was rejected.
+//
+// So the parameter was not merely unrepresentable. It was redundant, and worse
+// than redundant: a parameter is something a program can get *wrong*, and an
+// intrinsic handed the wrong environment would deliver its completion to a lane
+// that does not own it. Reading the current one cannot have that bug.
+//
+// Two entries are withdrawn rather than wired; see below.
 //
 // There is no general Java binding facility and this is deliberately not one.
 // The plan's boundary is "a small typed runtime-owned intrinsic table whose
@@ -41,15 +48,9 @@
 // provider-local error class is exactly the JVM-only semantics this boundary
 // exists to avoid.
 
-/** An environment handle. GATED: there is no common environment type yet. */
-type JvmEnv = unknown;
+// There is no environment handle. See the note above.
 
-/**
- * A byte view. No longer gated -- `ManagedType::View` exists and a `Uint8Array`
- * lowers to `Lnts/rt/NtsViewU8;`. `random_fill` is wired because its whole
- * signature is one of these; `read` and `write` still want an environment
- * handle, which has no common type.
- */
+/** A byte view: `Lnts/rt/NtsViewU8;`, carrying its own window. */
 type JvmBytes = Uint8Array;
 
 // ---------------------------------------------------------------------------
@@ -71,9 +72,10 @@ declare const NTS_JVM_SOCKS_PROXY: 2;
  *
  * TLS through a `CONNECT` tunnel verifies the certificate against the
  * **target**, never the proxy. `proxyHost` is `null` for a direct connection.
+ *
+ * WIRED.
  */
 declare function nts_jvm_web_connect(
-  env: JvmEnv,
   host: string,
   port: number,
   secure: boolean,
@@ -92,23 +94,22 @@ declare function nts_jvm_web_cancel_connect(request: number): void;
  * Read into a caller-owned view. `onRead` reports the count, or `-1` at end of
  * stream.
  *
- * GATED on the byte-view type: the JVM side takes `(byte[], offset, length)`
- * and a `Uint8Array` cannot yet be lowered to those three. Until then the
- * transport is reachable from Java and not from TypeScript.
+ * WIRED. The view carries its own window, so this reads into the view's bytes
+ * and not into its buffer -- the ones outside belong to whatever else is
+ * looking at that buffer. A detached buffer is a synchronous `TypeError`, as
+ * the language specifies, rather than a completion: the operation never starts.
  */
 declare function nts_jvm_web_read(
-  env: JvmEnv,
   handle: number,
-  into: JvmBytes,
+  into: Uint8Array,
   onRead: (count: number) => void,
   onError: (code: string, message: string) => void,
 ): void;
 
-/** Write from a caller-owned view, borrowed until the completion. GATED as above. */
+/** Write from a caller-owned view, borrowed until the completion. WIRED. */
 declare function nts_jvm_web_write(
-  env: JvmEnv,
   handle: number,
-  from: JvmBytes,
+  from: Uint8Array,
   onWrote: (count: number) => void,
   onError: (code: string, message: string) => void,
 ): void;
@@ -134,15 +135,24 @@ declare function nts_jvm_web_network_changed(): number;
 declare function nts_jvm_web_open_count(): number;
 
 // ---------------------------------------------------------------------------
-// Completion reservations. A credit is taken *before* the I/O is submitted, so
-// backpressure is refusal rather than an unbounded queue.
+// Completion reservations: WITHDRAWN, and why
 // ---------------------------------------------------------------------------
-
-/** Reserve a completion credit, or report that none is available. */
-declare function nts_jvm_web_launch(env: JvmEnv): boolean;
-
-/** Give a reserved credit back without having used it. */
-declare function nts_jvm_web_cancel_launch(env: JvmEnv): void;
+//
+// `nts_jvm_web_launch` and `nts_jvm_web_cancel_launch` were here: reserve a
+// completion credit before submitting work, hand it back if the work was not
+// submitted. They are withdrawn rather than implemented.
+//
+// A credit is only useful attached to the operation that will consume it, and
+// every operation below now takes its own before submitting -- `connect`,
+// `read` and `write` each reserve, and the socket layer reports "no credit"
+// through the failure callback like any other outcome, which is what keeps
+// backpressure in the same position in the task order as a connection refusal.
+// A reservation threaded through TypeScript would be a handle whose only
+// correct use is to give it straight back to the next call.
+//
+// An intrinsic that exists because a design once implied it is a worse thing to
+// have than a gap: it is a name the shared layer may call, that the provider
+// must keep working, and that nothing needs.
 
 // ---------------------------------------------------------------------------
 // Randomness. Filling in place, so the provider never allocates a buffer the

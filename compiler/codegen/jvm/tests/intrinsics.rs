@@ -69,6 +69,10 @@ after cancel 2
 changed 2
 open 0
 changed 0
+round-trip open 1 live 1
+round-trip wrote 5
+round-trip read 5
+round-trip checksum 492
 ";
 
 #[test]
@@ -167,33 +171,78 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Split a parameter list on the commas that separate parameters.
+///
+/// Not `split(',')`: a callback parameter is `(code: string, message: string)
+/// => void`, whose own comma is not a separator. That version parsed every
+/// scalar declaration correctly and could not see a single one that took a
+/// closure -- which was fine while none did.
+fn parameters(list: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut depth = 0i32;
+    let mut one = String::new();
+    // Not `<` and `>`. The arrow in `=> void` is a `>`, so counting it as a
+    // closer put the depth at -1 and the separator after a callback parameter
+    // then never matched -- which read as "this declaration has one parameter"
+    // rather than as an error. No declaration here is generic; if one ever is,
+    // this needs to tell an arrow from a bracket rather than gaining a case.
+    for c in list.chars() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => {
+                found.push(std::mem::take(&mut one));
+                continue;
+            }
+            _ => {}
+        }
+        one.push(c);
+    }
+    if !one.trim().is_empty() {
+        found.push(one);
+    }
+    found
+}
+
 /// How a declared type is spelled in a descriptor.
 ///
-/// Only the kinds a wired declaration uses, so an unrecognised type is a `None`
-/// that fails loudly rather than a silent default -- which is what every gated
-/// entry is, seen from this side.
-///
-/// `JvmBytes` is the alias the declarations write and `Uint8Array` is what it
-/// aliases; both are here because the parser reads whichever the declaration
-/// spelled. It was deliberately absent until `ManagedType::View` landed, on the
-/// grounds that there was nothing to be right about yet.
-fn descriptor_of(ts: &str) -> Option<&'static str> {
-    Some(match ts.trim() {
-        "number" => "D",
-        "void" => "V",
-        "boolean" => "Z",
-        "string" => "Ljava/lang/String;",
-        "JvmBytes" | "Uint8Array" => "Lnts/rt/NtsViewU8;",
-        _ => return None,
-    })
+/// `None` for a type this cannot spell, which then fails loudly rather than
+/// defaulting. A **function** type is spelled by building its own descriptor
+/// and asking `types::callback_interface` for the `nts.rt` interface with that
+/// shape -- so this checks the callback ABI as well as this one, and a closure
+/// shape nothing implements is a failure here rather than a `NoSuchMethodError`
+/// at run time.
+fn descriptor_of(ts: &str) -> Option<String> {
+    let ts = ts.trim();
+    // `string | null` is a string; the absence is `null` either way, and Java
+    // has no other spelling for it.
+    let ts = ts.strip_suffix("| null").map_or(ts, str::trim_end);
+    if let Some((arguments, returns)) = ts.split_once("=>") {
+        let arguments = arguments.trim().strip_prefix('(')?.strip_suffix(')')?;
+        let mut shape = String::from("(");
+        for one in parameters(arguments) {
+            shape.push_str(&descriptor_of(one.split_once(':')?.1)?);
+        }
+        shape.push(')');
+        shape.push_str(&descriptor_of(returns)?);
+        let interface = nts_codegen_jvm::types::callback_interface(&shape)?;
+        return Some(format!("L{interface};"));
+    }
+    Some(
+        match ts {
+            "number" => "D",
+            "void" => "V",
+            "boolean" => "Z",
+            "string" => "Ljava/lang/String;",
+            "JvmBytes" | "Uint8Array" => "Lnts/rt/NtsViewU8;",
+            _ => return None,
+        }
+        .to_owned(),
+    )
 }
 
 /// Every `declare function nts_jvm_web_*` in the declarations, as
 /// `(name, descriptor_or_none, wired)`.
-///
-/// A declaration whose types this test cannot spell gets `None` rather than a
-/// guess -- that is every gated one, and it is the same fact as "cannot be
-/// written in TypeScript yet" seen from the other side.
 fn declarations() -> Vec<(String, Option<String>, bool)> {
     let text = std::fs::read_to_string(
         repository().join("runtime/web-platform/android/intrinsics.d.ts"),
@@ -203,8 +252,6 @@ fn declarations() -> Vec<(String, Option<String>, bool)> {
     let mut found = Vec::new();
     let mut rest = text.as_str();
     while let Some(at) = rest.find("declare function nts_jvm_web_") {
-        // Back up over the doc comment to find whether it says WIRED, stopping
-        // at the previous declaration so a marker cannot be read twice.
         // The doc comment immediately before this declaration: between the last
         // `/**` and its `*/`, and only when nothing but whitespace separates
         // that `*/` from the `declare`. The version without that last condition
@@ -227,28 +274,18 @@ fn declarations() -> Vec<(String, Option<String>, bool)> {
         let open = signature.find('(').expect("a declaration has parameters");
         let name = signature[..open].trim().to_owned();
         let close = signature.rfind(')').expect("a declaration closes them");
-        let parameters = &signature[open + 1..close];
-        let returns = signature[close + 1..].trim_start_matches(':').trim();
 
-        // A parameter is `name: type`, and a type may itself contain a colon
-        // only inside a closure -- which is a type this test cannot spell, so
-        // splitting on the first colon is enough for everything it can.
         let mut descriptor = String::from("(");
         let mut spellable = true;
-        for one in parameters.split(',') {
-            let one = one.trim();
-            if one.is_empty() {
-                continue;
-            }
-            let ty = one.split_once(':').map_or("", |it| it.1);
-            match descriptor_of(ty) {
-                Some(it) => descriptor.push_str(it),
+        for one in parameters(&signature[open + 1..close]) {
+            match one.split_once(':').and_then(|it| descriptor_of(it.1)) {
+                Some(it) => descriptor.push_str(&it),
                 None => spellable = false,
             }
         }
         descriptor.push(')');
-        match descriptor_of(returns) {
-            Some(it) => descriptor.push_str(it),
+        match descriptor_of(signature[close + 1..].trim_start_matches(':')) {
+            Some(it) => descriptor.push_str(&it),
             None => spellable = false,
         }
         found.push((name, spellable.then_some(descriptor), wired));
@@ -310,12 +347,21 @@ fn the_declarations_the_table_and_the_jar_agree() {
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");
 
+    // Every class the table names, read from the table rather than written
+    // down again -- the version that hardcoded one owner passed until the day
+    // an entry moved, and then failed on the owner rather than on anything
+    // about the ABI.
+    let mut owners: Vec<&str> =
+        nts_codegen_jvm::ops::WEB_INTRINSICS.iter().map(|it| it.owner).collect();
+    owners.sort_unstable();
+    owners.dedup();
+
     // `-s` prints descriptors, so this compares the emitted descriptor against
     // the shipped method's rather than against its Java signature reformatted.
     let listed = Command::new(&javap)
         .args(["-p", "-s", "-cp"])
         .arg(&jar)
-        .arg("nts.rt.NtsSocket")
+        .args(owners.iter().map(|it| it.replace('/', ".")))
         .output()
         .expect("javap runs");
     assert!(listed.status.success(), "{}", String::from_utf8_lossy(&listed.stderr));
@@ -323,7 +369,6 @@ fn the_declarations_the_table_and_the_jar_agree() {
     let _ = std::fs::remove_dir_all(&dir);
 
     for entry in nts_codegen_jvm::ops::WEB_INTRINSICS {
-        assert_eq!(entry.owner, "nts/rt/NtsSocket", "this half only reads one class");
         let at = text
             .find(&format!(" {}(", entry.member))
             .unwrap_or_else(|| panic!("`{}` is not in the shipped jar", entry.member));

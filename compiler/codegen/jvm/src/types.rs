@@ -228,11 +228,16 @@ pub fn view_class(element: &HirType) -> Option<&'static str> {
 }
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
 
-/// The reference transport: sockets, TLS, proxies, and the network-change
-/// sweep. Named here rather than only in `web_external` because it is the one
-/// runtime class a *program* reaches by an intrinsic rather than by a type --
-/// there is no `Socket` in TypeScript, only `declare function nts_jvm_web_*`.
-pub const SOCKET: &str = "nts/rt/NtsSocket";
+/// The fixed networking intrinsics: the one runtime class a *program* reaches
+/// by an intrinsic rather than by a type.
+///
+/// A facade over `NtsSocket` and `NtsEnv` rather than either of them. The
+/// entries pointed at `NtsSocket` while they were four scalar calls, and that
+/// stopped being honest the moment `connect` and `read` arrived: those need an
+/// environment and a completion credit, which are not the socket layer's to
+/// decide. One class that *is* the table keeps "what a program may call"
+/// answerable by reading one file.
+pub const WEB: &str = "nts/rt/NtsWeb";
 
 /// The 128-bit integer, which the JVM has no primitive for.
 pub const BIGINT: &str = "nts/rt/NtsBigInt";

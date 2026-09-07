@@ -21,14 +21,12 @@
 //
 // # What is not here
 //
-// Connect, read, write and the two completion reservations. They take an
-// environment handle, which has no common type yet; see the GATED markers in
-// `intrinsics.d.ts`. Wrapping them here with `unknown` in the gaps would make
-// this module look complete and make the gap invisible, which is the opposite
-// of what a boundary is for.
-//
-// Random-fill *was* in that list and is not any more: it wanted a byte view and
-// `ManagedType::View` supplied one.
+// Nothing, now. Every declaration in `intrinsics.d.ts` has a wrapper below.
+// Connect, read and write were gated on an environment handle that turned out
+// to be redundant -- the environment is ambient in both runtimes -- and
+// random-fill was gated on a byte view, which `ManagedType::View` supplied.
+// The two completion reservations are withdrawn rather than missing; the
+// declarations say why.
 
 /**
  * How many connections the provider is holding.
@@ -86,4 +84,60 @@ export function networkChanged(): number {
  */
 export function randomFill(into: Uint8Array): void {
   nts_jvm_web_random_fill(into);
+}
+
+/** No proxy. */
+export const DIRECT = 0;
+/** An HTTP proxy, reached with `CONNECT` and tunnelled through. */
+export const HTTP_PROXY = 1;
+/** A SOCKS proxy, which the platform speaks below TLS. */
+export const SOCKS_PROXY = 2;
+
+/**
+ * Connect, optionally through a proxy. Answers a cancellation handle at once;
+ * every callback happens later, including the ones already decided.
+ *
+ * TLS through a `CONNECT` tunnel verifies the certificate against the
+ * **target**, never the proxy.
+ */
+export function connect(
+  host: string,
+  port: number,
+  secure: boolean,
+  timeoutMs: number,
+  proxyHost: string | null,
+  proxyPort: number,
+  proxyKind: number,
+  onOpen: (handle: number) => void,
+  onError: (code: string, message: string) => void,
+): number {
+  return nts_jvm_web_connect(
+    host, port, secure, timeoutMs, proxyHost, proxyPort, proxyKind, onOpen, onError,
+  );
+}
+
+/**
+ * Read into a caller-owned view. `onRead` reports the count, or -1 at end of
+ * stream.
+ *
+ * The view's own window, so a view onto part of a buffer reads only its own
+ * bytes.
+ */
+export function read(
+  handle: number,
+  into: Uint8Array,
+  onRead: (count: number) => void,
+  onError: (code: string, message: string) => void,
+): void {
+  nts_jvm_web_read(handle, into, onRead, onError);
+}
+
+/** Write from a caller-owned view, borrowed until the completion. */
+export function write(
+  handle: number,
+  from: Uint8Array,
+  onWrote: (count: number) => void,
+  onError: (code: string, message: string) => void,
+): void {
+  nts_jvm_web_write(handle, from, onWrote, onError);
 }
