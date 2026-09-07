@@ -1778,16 +1778,40 @@ which is the objection this document already makes to a hand-copied table.
 Measured across all twenty-two modules with one pinned binary
 (SHA-256 `38a8de6d…`):
 
-**The axis is no longer zero.** `path` passes **2 of its 17** applicable tests
-against the compiled artifact. Every earlier measurement, including the one
-this section first carried, was 0 of 22 with no module reaching a single pass.
+**The axis is still at zero, and the two passes that said otherwise are the
+reason this document keeps a hollow column.** `path` reports 2 of its 17
+against the compiled artifact, and both are degenerate. They are:
+
+```js
+assert.strictEqual(require('path/posix'), require('path').posix);
+assert.strictEqual(require('path/win32'), require('path').win32);
+```
+
+The addon publishes exactly one name, `toNamespacedPath`. `path.posix` and
+`path.win32` are both `undefined`, so each assertion compares `undefined` with
+`undefined` and holds. Nothing about the module is being measured; the test is
+satisfied by the surface being *equally absent* on both sides.
+
+**Sabotage does not catch this one, and the reason is worth keeping.** Blanking
+the module makes both files fail — so the hollow column reads 0 — but they fail
+because the subpath stops resolving, not because the comparison stops holding.
+The control fires for the wrong reason and reports a clean bill. That is the
+second time this document has recorded a pass that survives its own control:
+the first was `test-console-self-assign.js`, satisfied by assigning a writable
+global to itself.
+
+So the honest headline is unchanged from the previous measurement: **no
+module's compiled artifact passes a test that measures it.** I published the
+opposite for about twenty minutes on the strength of a number I had not asked
+the standard question of, which is the question this file exists to insist
+on — *what would this test have to see to fail?*
 
 | stage reached | modules | |
 | --- | ---: | --- |
 | `c-did-not-compile` | 17 | |
 | `built-exports-nothing` | 2 | `buffer`, `string_decoder` — everything they export is a class |
 | `built-exports-partial` | 2 | `os` (11 names), `querystring` (1) — the table is right, the absent entries cannot cross the ABI |
-| `partial` | 1 | **`path`, 2 / 17** |
+| `partial` | 1 | `path`, 2 / 17 — **both degenerate; see above** |
 | `green` | 0 | |
 
 Measured with a pinned `nts` whose SHA-256 begins `982ffe1f`, carrying the
@@ -1796,7 +1820,8 @@ rather than a commit because those fixes were still in their gate when this was
 taken; the figures get re-anchored to a commit when there is one.
 
 What moved, against the `38a8de6d` row above: `path` from one clang error to
-compiling and passing; `async_hooks` 2 errors to 1; `zlib` 16 to 15; `http` 21
+compiling at all, which is real even though its passes are not; `async_hooks` 2
+errors to 1; `zlib` 16 to 15; `http` 21
 to 20; the whole `use of undeclared identifier` class gone. And the four
 export tables shed the foreign names they had been carrying — `os` 15 published
 to 11, `querystring` 5 to 1, `buffer` and `string_decoder` to none at all.
