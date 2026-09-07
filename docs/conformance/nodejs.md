@@ -387,7 +387,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,796 applicable test files pass** across twenty-two modules,
+**1,803 applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -517,8 +517,13 @@ model that makes *Y* inapplicable" — which a reader should not confuse with a
 claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,796
+warns about elsewhere, so the two numbers belong next to each other: **1,803
 measured, 420 excluded, 0 hollow.**
+
+The seven added since are all assertions node's own tests had no reason to make
+— four object identities, two on function names, one on Web IDL surface shape —
+so the denominator grew because this profile asked harder questions of itself,
+not because more of node's corpus became applicable.
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of

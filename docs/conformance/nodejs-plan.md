@@ -7,8 +7,9 @@ on any of them.
 
 ## The situation in one paragraph
 
-Two axes move independently. **TypeScript-on-node: 1,796 of 1,796 across 22
-modules, 0 hollow, nothing failing.** **Compiled artifact: 1 of 22.**
+Two axes move independently. **TypeScript-on-node: 1,803 of 1,803 across 22
+modules, 0 hollow, nothing failing.** **Compiled artifact: 1 of 22**, with `os`
+loading and answering on 17 of the 23 names its shape wants.
 
     1 of 22 modules' compiled artifacts pass every applicable test.
 
