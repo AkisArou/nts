@@ -1247,3 +1247,63 @@ diagnostics, and no invalid HIR. Relative to the readable-byte-stream checkpoint
 additional final EventSource source exposes eight primary dependencies and fourteen
 dependent call-site cascades; this is a source frontier, not compiled-provider
 progress.
+
+## Cookies
+
+The shared runtime now implements the standalone Undici cookie helper shape and an
+explicit RFC6265bis cookie policy. The living references were pinned for this tranche
+to `draft-ietf-httpbis-rfc6265bis-22` (published 2025-12-01) and standalone Undici
+`8.10.2`, git tree `5e541e0b9df7563e5766bbd469fbfe383d9ae6ca`, npm integrity
+`sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==`.
+The repository's bundled Node reference remains Undici `7.29.0`; it is a second
+compatibility point and not the standalone ceiling.
+
+`parseCookie`, `serializeCookie`, `getSetCookies`, `setCookie`, and `deleteCookie`
+follow the pinned standalone helper behavior where it is compatible with the newer
+RFC. A seeded 20,000-case ASCII Set-Cookie parser differential against the exact
+standalone package found zero differences. A seeded 5,000-case valid serializer
+differential likewise found zero differences. Three deliberate differences are
+recorded rather than hidden: the shared serializer emits epoch zero when explicitly
+requested, enforces `__Host-` and `__Secure-` case-insensitively as the current RFC
+requires, and reports invalid producer input with `TypeError`. The shared static API
+returns typed ordered `CookiePair` values from `getCookiePairs`; Undici's dynamic
+record-returning `getCookies` belongs to the separate Node compatibility facade and
+must preserve this shared implementation rather than introduce a second parser.
+
+`CookieJar` implements domain and path matching, host-only state, Secure and
+HttpOnly restrictions, SameSite receipt and retrieval, the prefix rules, the
+400-day lifetime ceiling, Max-Age precedence, expiry, creation-order-preserving
+replacement, secure-cookie overlay protection, request-header ordering, current-PSL
+rechecking, deterministic RFC-priority eviction, session retirement, and atomic
+persistent-snapshot replacement. Operations serialize through escaping
+`Promise.withResolvers` waiters so concurrent Fetch responses cannot lose updates;
+a failed persistent save does not commit partial in-memory state or strand the next
+waiter. Store snapshots are cloned, validated and de-duplicated before becoming live.
+Eviction is bounded by sorting one candidate set rather than repeatedly rescanning the
+whole jar.
+
+Automatic Fetch use is opt-in through `FetchCookiePolicy`. Every redirect response is
+stored before following it, the outbound Cookie field is recomputed for every hop,
+`omit` and `same-origin` credentials are enforced, cross-origin redirects cannot leak
+same-origin jar state, and an explicit caller Cookie field is never overwritten.
+`ServerCookiePolicy` deliberately supplies same-site context because the
+server/mobile profile has no browser document principal. Applications that have a
+different site policy inject it explicitly; no ambient browser cookie store is
+invented.
+
+The shared layer exposes provider seams rather than embedding platform policy: a
+pinned Public Suffix List checker and an atomically replacing durable store remain
+Node/mobile provider obligations. The runtime does not own or close an injected jar.
+The in-memory store is complete for session use and deterministic tests, but is not
+misrepresented as durable production storage.
+
+At `63d09fc4`, all 11 focused cookie tests and all 176 local Node-host/real-socket
+tests pass. The full unchanged upstream slice remains 2143/2151 applicable cases,
+with eight named not-applicable cases and exactly the same eight visible failures:
+three Headers iterator-shape cases, two Promise-observation cases, two typed
+explicit-receiver cases, and the Web-IDL async-iterator prototype/object-shape case.
+The cookie tranche introduces no WPT failure or exclusion. The live compiled-source
+frontier is 754 primary `NTS1001` refusals and 105 dependent `NTS1003` cascades, with
+zero `NTS1004` module diagnostics, zero JVM-backend diagnostics, and no invalid HIR.
+This is the final-source dependency frontier, not evidence that cookies execute on a
+compiled provider yet.
