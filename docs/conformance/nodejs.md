@@ -4221,6 +4221,40 @@ ASCII, which would have refused a legitimate cookie octet; this is a formatter
 written on the premise that its escapes are node's. **Same premise, opposite
 consequence**, and neither lane's tests could have found the other's.
 
+## A refusal count measures the module as written
+
+Every per-module frontier number in this document is a property of the source,
+not of the module. That sounds obvious written down and it is not how any of
+these counts have been read.
+
+The web-platform lane measured it directly. One spec requirement — Web IDL's
+`@@toStringTag` as a data property on thirty-five interface prototypes —
+implemented three equally conformant ways:
+
+| spelling | primary refusals |
+| --- | ---: |
+| a shared helper called from each class | **42** |
+| module-scope `Object.defineProperty` per interface | one per interface |
+| a `static {}` block inside each class | **0** |
+
+The helper costs 42 because passing a class or a prototype to a function is
+`a class used as a value`, which the lowering does not do yet. The `static {}`
+block costs nothing because `this` inside it is not the class used as a value.
+Their slice ended **eight primaries below where it started** while adding
+conformance, which is not the direction that number normally moves.
+
+**So a falling frontier count is not on its own evidence that the compiler
+grew**, and a module with a high one is not necessarily using more of the
+language. Where several conformant spellings exist, the count is measuring which
+was chosen. That does not weaken any blocker filed here — each is a construct
+with no conformant alternative, which is what a fixture demonstrates and a count
+cannot — but it does mean the per-module tables above answer "what does this
+source ask for" rather than "what does this module need".
+
+It is the same distinction as `punycode` publishing its `ucs2` only because its
+imports forced explicit keys on it: a number that describes the writing, read as
+though it described the thing written.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
