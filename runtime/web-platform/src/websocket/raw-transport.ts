@@ -17,6 +17,7 @@ import { createKey, validateHandshake, type ValidatedWebSocketHandshake } from "
 import { closePayload, encodeFrame, parseClose, readFrame } from "./codec.ts";
 import type { Frame } from "./codec.ts";
 import { perMessageDeflateOffer, PerMessageDeflate } from "./permessage-deflate.ts";
+import type { PerMessageDeflateNegotiation } from "./permessage-deflate.ts";
 import type {
   SocketIncoming,
   SocketMessage,
@@ -36,6 +37,9 @@ export interface RawWebSocketOptions {
   outgoingFrameBytes?: number;
   maxFragments?: number;
 }
+
+/** Which end of a connection a session is. Masking is the only framing asymmetry. */
+export type WebSocketRole = "client" | "server";
 
 export class RawWebSocketTransport implements WebSocketTransport {
   private readonly sockets: SocketConnector;
@@ -188,6 +192,16 @@ class RawWebSocketSession implements WebSocketSession {
   private fragments = 0;
   private readonly compression: PerMessageDeflate | null;
   private readonly onEnd: (session: RawWebSocketSession) => void;
+  /**
+   * Which end of the connection this is.
+   *
+   * RFC 6455 makes masking the one asymmetry in the framing: a client masks every
+   * frame it sends and a server masks none, and each rejects the other spelling. The
+   * message engine is otherwise identical in both directions, so the role is a field
+   * rather than a reason for a second implementation of fragmentation, UTF-8
+   * validation, compression and the close handshake.
+   */
+  private readonly role: WebSocketRole;
 
   constructor(
     connection: ByteConnection,
@@ -198,7 +212,9 @@ class RawWebSocketSession implements WebSocketSession {
     scheduler: Scheduler,
     options: RawWebSocketOptions,
     onEnd: (session: RawWebSocketSession) => void,
+    role: WebSocketRole = "client",
   ) {
+    this.role = role;
     this.onEnd = onEnd;
     this.connection = connection;
     this.reader = reader;
@@ -215,7 +231,7 @@ class RawWebSocketSession implements WebSocketSession {
   private write(frame: Frame, owned = false): Promise<void> {
     const write = this.writeTail.then(async () => {
       if (this.ended) throw new DOMException("WebSocket transport is closed", "InvalidStateError");
-      for (const part of encodeFrame(frame, this.random, true, owned))
+      for (const part of encodeFrame(frame, this.random, this.role === "client", owned))
         await writeAll(this.connection, part);
     });
     this.writeTail = write;
@@ -287,7 +303,7 @@ class RawWebSocketSession implements WebSocketSession {
       while (true) {
         const frame = await readFrame(
           this.reader,
-          false,
+          this.role === "server",
           this.options.maxFrameBytes ?? 16 * 1024 * 1024,
           this.compression !== null,
         );
@@ -387,4 +403,47 @@ function requireDeflate(provider: WebSocketDeflateProvider | undefined): WebSock
     throw new ProtocolError("permessage-deflate was negotiated without a provider");
   }
   return provider;
+}
+
+/**
+ * @internal Adopt an already-upgraded connection as the server end of a session.
+ *
+ * The handshake is the caller's: `acceptWebSocketUpgrade` decides the response and the
+ * embedding HTTP server writes it and hands over the socket. What arrives here is a
+ * byte stream that is already a WebSocket, so this only has to drive the shared
+ * message engine from the other side.
+ *
+ * `reader` must be the reader that consumed the request head, so bytes a client sent
+ * immediately after its handshake are not lost between the two.
+ */
+export function adoptServerWebSocketSession(options: {
+  readonly connection: ByteConnection;
+  readonly reader: BufferedReader;
+  readonly protocol: string;
+  readonly extensions: string;
+  readonly perMessageDeflate: PerMessageDeflateNegotiation | null;
+  readonly deflate?: WebSocketDeflateProvider | undefined;
+  readonly random: RandomSource;
+  readonly scheduler: Scheduler;
+  readonly transport?: RawWebSocketOptions;
+  readonly onEnd?: () => void;
+}): WebSocketSession {
+  const end = options.onEnd;
+  return new RawWebSocketSession(
+    options.connection,
+    options.reader,
+    {
+      protocol: options.protocol,
+      extensions: options.extensions,
+      perMessageDeflate: options.perMessageDeflate,
+    },
+    options.deflate,
+    options.random,
+    options.scheduler,
+    options.transport ?? {},
+    () => {
+      if (end !== undefined) end();
+    },
+    "server",
+  );
 }

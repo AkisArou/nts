@@ -127,6 +127,12 @@ export { VirtualScheduler } from "./provider/virtual-time.ts";
 export type { VirtualSchedulerOptions } from "./provider/virtual-time.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
 export { acceptWebSocketUpgrade, serializeUpgradeResponse } from "./websocket/server-handshake.ts";
+// A caller cannot use `adoptServerWebSocketSession` without being able to construct the
+// reader it takes, and an embedding server needs `writeAll` to put its response on the
+// wire, so both are part of this boundary rather than internal layout.
+export { BufferedReader, writeAll } from "./http1/io.ts";
+export { adoptServerWebSocketSession } from "./websocket/raw-transport.ts";
+export type { WebSocketRole } from "./websocket/raw-transport.ts";
 export { negotiatePerMessageDeflateOffer } from "./websocket/permessage-deflate.ts";
 export type { PerMessageDeflateServerNegotiation } from "./websocket/permessage-deflate.ts";
 export type {

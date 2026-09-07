@@ -3035,3 +3035,64 @@ pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 pass
 failing and 14 named not-applicable. The root TypeScript solution build is green. The
 NTS frontier is unchanged at 1,298 primary `NTS1001` and 240 `NTS1003`, which is the
 expected result for a slice that adds tests and changes no shared source.
+
+## One engine, both ends
+
+RFC 6455 makes masking the single asymmetry in WebSocket framing: a client masks every
+frame it sends, a server masks none, and each rejects the other spelling. Everything
+else — fragmentation, UTF-8 validation, control frames, the close handshake,
+compression, message limits — is identical in both directions. So the session engine
+takes a role rather than being written twice, and `adoptServerWebSocketSession` drives
+it from the server side over a connection the caller has already upgraded.
+
+`readFrame` already took an `expectMasked` parameter and `encodeFrame` already took a
+`masked` one; both were passed constants. Making them follow the role is the whole
+change to the engine. A second server-side implementation of message assembly would
+have been the alternative, and it would have been the copy that drifts.
+
+The handshake stays the caller's. `acceptWebSocketUpgrade` decides the response, the
+embedding HTTP server writes it, and the byte stream that arrives here is already a
+WebSocket. The factory takes the `BufferedReader` that consumed the request head, so
+bytes a client sent immediately after its own handshake are not lost between the two —
+which is why `BufferedReader` and `writeAll` are now part of the provider boundary: a
+caller cannot use the factory without being able to construct the reader it takes.
+
+The negotiated compression parameters connect to the codec unchanged, because both
+negotiators name their directions from their own side: the client maps
+`server_no_context_takeover` to *incoming* and the server maps it to *outgoing*, and
+each is right about its own traffic. `PerMessageDeflate` therefore consumes either
+without knowing which end it is on.
+
+Four tests run the canonical client against a server built from these pieces over a
+real socket: a text and a binary message round-tripping in order with `binaryType`
+deciding what a message is, a masked-frame round trip, a compressed round trip of a
+5,200-character payload with both ends reporting `permessage-deflate`, and a handshake
+that selects no subprotocol still opening.
+
+Two sabotages, both restored. Making the server mask what it sends took the corpus from
+4/4 to 1/4; making it expect unmasked frames from a client did the same. Both fail as
+the client rejecting the connection rather than as a bookkeeping assertion, which is
+the point of running a real client rather than asserting on bytes.
+
+Three defects in the test harness were found on the way, and one of them is worth
+keeping: the byte-connection adapter returned whole socket chunks regardless of the
+`maxBytes` the reader asked for. That is a contract violation the reader is entitled to
+trip over, and it presented as the session simply never producing a message.
+
+The complete local Node-host/real-socket corpus passes 484/484 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Still not claimed: a WebSocket **server**. There is no accept loop, no connection
+lifecycle owner, no backpressure policy above the session, and no separate public
+module — the plan asks for all of those. What exists now is a session that speaks the
+server end correctly, which is the part that had to be shared rather than written
+twice.
+
+Measured with the same pinned binary built at `43fda4d3`: 1,298 primary `NTS1001`
+before and after, 240 to 241 cascades, with zero `NTS1004`, zero `NTS4xxx` and no
+invalid HIR. Two messages differ between the runs and both are the same messages with
+shifted type ids. An earlier revision wrote the end callback as `() => end?.()`, which
+cost one primary for a function returning `undefined | void`; rewriting it as a block
+moved the diagnostic to the optional call rather than removing it, and an explicit
+`if (end !== undefined)` — the spelling this codebase uses elsewhere — costs nothing.
