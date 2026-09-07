@@ -151,7 +151,8 @@ function headersMatch(matcher: MockHeadersMatcher, entries: readonly HeaderEntry
   return true;
 }
 
-async function readRequestBody(
+/** @internal Shared by the deterministic snapshot transport. */
+export async function captureMockRequest(
   request: TransportRequest,
   maximumBytes: number,
 ): Promise<MockRequestSnapshot> {
@@ -198,7 +199,11 @@ async function readRequestBody(
   };
 }
 
-function replayRequest(request: TransportRequest, snapshot: MockRequestSnapshot): TransportRequest {
+/** @internal Reconstructs a consumed request without sharing its captured bytes. */
+export function replayMockRequest(
+  request: TransportRequest,
+  snapshot: MockRequestSnapshot,
+): TransportRequest {
   return {
     url: request.url,
     method: request.method,
@@ -576,20 +581,20 @@ export class MockAgent implements FetchTransport {
     this.inFlight++;
     try {
       if (!this.active) return await this.dispatchFallback(request);
-      const snapshot = await readRequestBody(request, this.maximumBodyBytes);
+      const snapshot = await captureMockRequest(request, this.maximumBodyBytes);
       request.signal.throwIfAborted();
       this.history?.record(snapshot);
       if (preferredPool !== null) {
         const dispatch = preferredPool.find(snapshot, this.ignoreTrailingSlash);
         if (dispatch !== null) return await this.reply(dispatch, snapshot, request.signal);
-        return await this.dispatchNetwork(replayRequest(request, snapshot));
+        return await this.dispatchNetwork(replayMockRequest(request, snapshot));
       }
       for (const pool of this.pools) {
         if (!originMatches(pool.origin, request.url.origin)) continue;
         const dispatch = pool.find(snapshot, this.ignoreTrailingSlash);
         if (dispatch !== null) return await this.reply(dispatch, snapshot, request.signal);
       }
-      return await this.dispatchNetwork(replayRequest(request, snapshot));
+      return await this.dispatchNetwork(replayMockRequest(request, snapshot));
     } finally {
       this.inFlight--;
       if (this.closed && this.inFlight === 0) this.inFlightDone?.resolve();

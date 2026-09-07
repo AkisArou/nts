@@ -120,6 +120,24 @@ export type {
   MockRequestSnapshot,
   MockStringMatcher,
 } from "./mock/mock-agent.ts";
+export {
+  MemorySnapshotStore,
+  SnapshotAgent,
+  SnapshotNotFoundError,
+  SnapshotRecorder,
+} from "./mock/snapshot-agent.ts";
+export type {
+  SnapshotAgentOptions,
+  SnapshotBodyNormalizer,
+  SnapshotData,
+  SnapshotInfo,
+  SnapshotMode,
+  SnapshotQueryNormalizer,
+  SnapshotRequestPredicate,
+  SnapshotRequestRecord,
+  SnapshotResponseRecord,
+  SnapshotStore,
+} from "./mock/snapshot-agent.ts";
 
 export { MAX_DELTA_SECONDS, parseCacheControl, parseDeltaSeconds } from "./cache/cache-control.ts";
 export type {

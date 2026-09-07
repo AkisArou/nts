@@ -92,17 +92,17 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 
 ## Mocking, replay, and observability
 
-| Undici surface          | Status   | NTS mapping or remaining obligation                                                                                                                                                            |
-| ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MockAgent`             | facade   | The shared typed agent implements activation, graceful close, bounded body capture/history, network policy and pending assertions; exact Node constructor/dispatcher overloads remain.         |
-| `MockClient`            | facade   | The shared single-origin client dispatches through its owning mock pool; the exact Undici class hierarchy and Node overloads remain.                                                           |
-| `MockPool`              | facade   | Shared origin selection and strict per-pool interceptor ownership exist; the package facade remains.                                                                                           |
-| mock interceptor        | facade   | Shared path/method/body/header/query matching, sequential replies, error identity, abortable delay, persistence/times and default headers/trailers exist; dynamic Node reply overloads remain. |
-| `MockCallHistory` / log | facade   | Shared bounded drop-oldest history exposes immutable ordered request records, predicate filtering and clear semantics; exact convenience filters remain.                                       |
-| mock error taxonomy     | facade   | `MockNotMatchedError` has the stable `UND_MOCK_ERR_MOCK_NOT_MATCHED` code; exact package exports remain.                                                                                       |
-| `SnapshotAgent`         | missing  | Deterministic record/replay format, redaction, body bounds and mismatch diagnostics remain.                                                                                                    |
-| protocol fuzzing        | provider | Focused malformed-wire and sabotage tests exist; persistent fuzz corpora and compiled-provider execution remain.                                                                               |
-| virtual-time provider   | provider | Host tests use deterministic scheduler injection where relevant; compiled providers need the common environment mode.                                                                          |
+| Undici surface          | Status   | NTS mapping or remaining obligation                                                                                                                                                                                             |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MockAgent`             | facade   | The shared typed agent implements activation, graceful close, bounded body capture/history, network policy and pending assertions; exact Node constructor/dispatcher overloads remain.                                          |
+| `MockClient`            | facade   | The shared single-origin client dispatches through its owning mock pool; the exact Undici class hierarchy and Node overloads remain.                                                                                            |
+| `MockPool`              | facade   | Shared origin selection and strict per-pool interceptor ownership exist; the package facade remains.                                                                                                                            |
+| mock interceptor        | facade   | Shared path/method/body/header/query matching, sequential replies, error identity, abortable delay, persistence/times and default headers/trailers exist; dynamic Node reply overloads remain.                                  |
+| `MockCallHistory` / log | facade   | Shared bounded drop-oldest history exposes immutable ordered request records, predicate filtering and clear semantics; exact convenience filters remain.                                                                        |
+| mock error taxonomy     | facade   | `MockNotMatchedError` has the stable `UND_MOCK_ERR_MOCK_NOT_MATCHED` code; exact package exports remain.                                                                                                                        |
+| `SnapshotAgent`         | facade   | Shared record/playback/update modes, normalization and redaction, strict body/count/total bounds, sequential replies, stable mismatch diagnostics and an injected atomic store exist; the exact Node file-store facade remains. |
+| protocol fuzzing        | provider | Focused malformed-wire and sabotage tests exist; persistent fuzz corpora and compiled-provider execution remain.                                                                                                                |
+| virtual-time provider   | provider | Host tests use deterministic scheduler injection where relevant; compiled providers need the common environment mode.                                                                                                           |
 
 ## Web APIs and helpers exported by Undici
 

@@ -47,6 +47,24 @@ export type {
   MockRequestSnapshot,
   MockStringMatcher,
 } from "./mock/mock-agent.ts";
+export {
+  MemorySnapshotStore,
+  SnapshotAgent,
+  SnapshotNotFoundError,
+  SnapshotRecorder,
+} from "./mock/snapshot-agent.ts";
+export type {
+  SnapshotAgentOptions,
+  SnapshotBodyNormalizer,
+  SnapshotData,
+  SnapshotInfo,
+  SnapshotMode,
+  SnapshotQueryNormalizer,
+  SnapshotRequestPredicate,
+  SnapshotRequestRecord,
+  SnapshotResponseRecord,
+  SnapshotStore,
+} from "./mock/snapshot-agent.ts";
 
 export { Http2Transport } from "./http2/transport.ts";
 export type { Http2TransportOptions } from "./http2/transport.ts";
