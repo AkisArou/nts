@@ -105,6 +105,41 @@ lane's to fix. What is ours:
 **Done looks like:** `tooling/conformance/check.sh punycode` green on the addon
 axis. That would be the first non-zero this axis has ever reported.
 
+### The blockers are fixtures, not sentences
+
+`tooling/conformance/blockers/` holds a minimal reproduction of every
+compiled-axis blocker this lane has reported, and `blockers-check.mjs`
+re-measures them against whatever compiler is current:
+
+    NTS_COMPILER=<a pinned copy> node tooling/conformance/blockers-check.mjs
+
+    guard ok    annotated-const-write     fixed; the first repair broke `instanceof`
+    guard ok    f64-parameter             fixed 22:54
+    guard ok    f64-return                fixed 22:54
+    reproduces  instanceof-no-class       DataView, Map, Set, Date
+    reproduces  narrowed-bigint           gates 11 of `path`'s exports
+    reproduces  promise-with-resolvers    292 of `fs`'s 2,078
+    reproduces  type-parameter-optional   what `Fifo<T>` has
+    reproduces  value-export              `punycode`'s `version`
+
+**It reports `FIXED` loudly rather than as a pass**, which is how the `f64[]`
+repair was noticed within a minute of the binary landing rather than at the next
+time somebody thought to look. A fixture that expects *no* refusal is a
+regression guard, and the annotated-const one exists because that repair landed
+twice — the first laid the object out as the declared type and broke
+`instanceof`, one relation recorded and a narrower one walked.
+
+**Two of the eight are invisible to `nts hir`.** `f64[]` lowers cleanly and
+fails at the wrapper, so the usual instrument reports "nothing refused" and says
+nothing; the runner takes its command from the expectation. That was worth
+encoding rather than remembering — this document quoted those two from
+`punycode`'s build for hours without noticing the discrepancy.
+
+**And the reason the directory exists at all**: the largest blocker in `fs` was
+reported here for hours as "nullable properties", which is a description of a
+grouped diagnostic rather than of anything that refuses. A plain nullable
+property compiles. One fixture would have caught it the first day.
+
 ### What the last mile actually contains, measured
 
 **Scoreboard, re-measured on each new compiler binary rather than remembered:**
