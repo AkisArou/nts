@@ -253,14 +253,14 @@ function addKeyVal(
     // preserve everything already parsed. NTS records have no prototype, but
     // taking the same path keeps both representations observably identical.
     if (key === "__proto__") {
-      const replacement: ParsedUrlQuery = { ["__proto__"]: value };
-      for (const existingKey of Object.keys(obj)) {
-        const existingValue = obj[existingKey];
-        if (existingValue !== undefined) {
-          replacement[existingKey] = existingValue;
-        }
-      }
-      return replacement;
+      // The computed key must come *last*, not first. Node appends this key
+      // where it is encountered like any other, and building the replacement
+      // with `__proto__` at the front put it ahead of everything already
+      // parsed -- so `parse("a&__proto__")` enumerated as `__proto__, a` and
+      // `stringify(parse(s))` came back with the pairs reordered. A
+      // differential against node over 4,000 generated queries found it; none
+      // of the four pinned `querystring` files covers key order.
+      return { ...obj, ["__proto__"]: value };
     }
     obj[key] = value;
   } else if (Array.isArray(current)) {
