@@ -4113,3 +4113,75 @@ compiler lane rather than worked around.
 The complete local Node-host/real-socket corpus passes 636/636 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The dispatcher operations, and the two that are deliberately missing
+
+`DispatcherOperations` gives any `FetchTransport` the Undici-shaped `request`, `stream`
+and `pipeline`. They are methods rather than exported functions because those are the
+names the shape is known by, and three module exports called `request`, `stream` and
+`pipeline` would be indefensible in a shared namespace — quite apart from what a backend
+that resolves collisions by qualifying both names would make of them.
+
+**This is not a parity claim, and the ledger should not be read as one.** No Undici
+revision is pinned in this repository, so the API ledger the plan asks for cannot be
+written honestly; that remains a dependency decision for the repository owner. What the
+plan does require separately is the architecture and behaviour, and that is what is here
+and tested. Nothing below says "the same as Undici"; it says what these do.
+
+`connect` and `upgrade` are absent, and the absence is the finding rather than a gap to
+fill quietly. Both must hand the caller a connection, and `FetchTransport` answers with
+a response and no way to reach the socket underneath it. Adding one changes what every
+transport in this lane promises, so it is a seam decision to be agreed rather than an
+operation to write.
+
+Three behaviours carry the weight. A status a caller would call a failure is still a
+result, because deciding what a 404 means belongs to the caller and a dispatcher that
+threw on it would put the body out of reach. The `stream` factory is called once, from
+the head, before anything is written to what it returns — and if it throws, the response
+is cancelled rather than left unread. And `pipeline` returns its stream before the
+dispatch completes, so a dispatch failure surfaces on that stream rather than as a
+rejected promise nobody is awaiting.
+
+Six sabotages, all restored. One would not type-check in its first form and was refused.
+
+Two tests were wrong before the code was, and both in the same way as the spill slice:
+**an assertion about a stream that the stream itself already invalidated.** "A body past
+`maxBytes` cancels the response" passed a two-chunk body that had already been buffered
+and closed, and cancelling a closed stream is a no-op — so it asserted nothing. It uses
+twenty chunks now, so the body is still producing when the limit trips. And "the factory
+sees the head before any byte is read" could never hold: a stream fills its queue on
+construction, so the body has been read from before any operation touches it. What this
+operation controls is the *order* — destination chosen, then written to — and that is
+what is asserted.
+
+### The instrument was hiding a caught sabotage
+
+One sabotage read as a survivor and was not. `sabotage-run.sh` piped its output through
+`head -14`; this suite has fifteen tests and the sabotage broke the fifteenth, so the
+only line that mattered was the one cut off. Run directly, it fails cleanly.
+
+That is the wrong way round for a tool of this kind. A survivor is a claim that a test
+is too weak, and the honest response to it is to go and weaken something else — so a
+truncating instrument does not merely lose information, it actively argues for damage.
+The `head` is gone, and passing lines are dropped instead, since a sabotage run is only
+ever read for what broke.
+
+The blast radius is bounded and worth stating: every other suite sabotaged this session
+is split across two backends with the host block first, so the truncation cut the second
+backend's repeat of results the first had already given. This suite is the only single
+block long enough to lose a real one.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,279 to 1,285 primary `NTS1001` and 311 to 312
+`NTS1003`, zero `NTS1004`, zero `NTS4xxx`, zero invalid HIR.
+
+Two more **"a declaration outside every walk"**, and these sharpen the question the last
+slice raised. One is `start`, an object-literal method, which is at least unsurprising.
+The other is `pipeline` — a **public method of an exported class**, reachable from
+outside the module by definition. Whatever that message means, it cannot mean what it
+says about that one. Raised with the compiler lane; left standing.
+
+The complete local Node-host/real-socket corpus passes 651/651 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.

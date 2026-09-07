@@ -34,6 +34,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/integrity.test.mjs \
   tooling/conformance/web-platform/test/mock-agent.test.mjs \
   tooling/conformance/web-platform/test/negotiated-connect.test.mjs \
+  tooling/conformance/web-platform/test/operations.test.mjs \
   tooling/conformance/web-platform/test/network.test.mjs \
   tooling/conformance/web-platform/test/policy-interceptors.test.mjs \
   tooling/conformance/web-platform/test/pool.test.mjs \

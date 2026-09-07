@@ -294,6 +294,15 @@ export type {
   HttpCacheState,
   HttpCacheType,
 } from "./cache/http-cache.ts";
+export { DispatcherOperations } from "./dispatch/operations.ts";
+export type {
+  BufferedOptions,
+  BufferedResult,
+  DispatchInfo,
+  PipelineHandler,
+  StreamedResult,
+  StreamFactory,
+} from "./dispatch/operations.ts";
 export { spilledRequestBodyStore } from "./dispatch/replay-store.ts";
 export { DurableSpillArea } from "./storage/spill.ts";
 export type { DurableSpillAreaOptions, SpilledBody } from "./storage/spill.ts";
