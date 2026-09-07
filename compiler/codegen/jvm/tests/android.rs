@@ -748,6 +748,35 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         "R8 refused the library:\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
+    // **And it resolved everything, which is the closure obligation.**
+    //
+    // `dependencies.tsv` pins versions and digests; what it cannot say is
+    // whether the set is *complete*. R8 walks the shipped library's references
+    // against `android.jar` and the pinned jars and names anything it cannot
+    // find, which is the closure question asked of the artifact rather than of
+    // the file that lists its inputs.
+    //
+    // **Today this is a second line rather than the only one**, and it is worth
+    // saying which: with no `-dontwarn` in `consumer-rules.pro`, R8 treats a
+    // missing class as an error and the status check above already fails --
+    // verified by withholding a pinned jar, which produces `Error: Missing
+    // class okhttp3.Cache` and four more. One `-dontwarn` added for any reason
+    // turns those into warnings, R8 exits zero, the dex is produced, and the
+    // failure moves to whichever device path first touches the class. This is
+    // the assertion that survives that edit.
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&ran.stderr),
+        String::from_utf8_lossy(&ran.stdout)
+    );
+    let missing: Vec<&str> =
+        said.lines().filter(|it| it.contains("Missing class")).collect();
+    assert!(
+        missing.is_empty(),
+        "the shipped library references classes outside the pinned set, so the transitive \
+         closure in `dependencies.tsv` is incomplete:\n{}",
+        missing.join("\n")
+    );
 
     let dumped = Command::new(tools.join("dexdump"))
         .arg("-d")
