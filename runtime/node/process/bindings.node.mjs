@@ -122,6 +122,37 @@ globalThis.nts_process_chdir = (directory) => errnoOf(() => host.chdir(directory
 globalThis.nts_process_umask = (mask) => host.umask(mask);
 globalThis.nts_process_umask_read = () => host.umask();
 globalThis.nts_process_kill = (pid, signal) => host._kill(pid, signal);
+
+// Signal delivery. The real seam is a libuv signal watcher per name; the host
+// stands in with its own `process.on`, which installs the same watcher and
+// suppresses the default action the same way. Node unrefs its handle so that
+// waiting for a signal is not work; `host.on` for a signal does not hold the
+// loop open either, so that parity lives in the host rather than being
+// restated here.
+const installedSignalHandlers = new Map();
+
+globalThis.nts_process_signal_start = (name) => {
+  if (installedSignalHandlers.has(name)) return 0;
+  // Emitted with the name as its argument, as node does: one handler shared
+  // between several signals has no other way to tell which one arrived.
+  const handler = () => {
+    installedProcess()?.emit(name, name);
+  };
+  try {
+    host.on(name, handler);
+  } catch (error) {
+    return typeof error?.errno === "number" ? -Math.abs(error.errno) : -1;
+  }
+  installedSignalHandlers.set(name, handler);
+  return 0;
+};
+
+globalThis.nts_process_signal_stop = (name) => {
+  const handler = installedSignalHandlers.get(name);
+  if (handler === undefined) return;
+  installedSignalHandlers.delete(name);
+  host.removeListener(name, handler);
+};
 globalThis.nts_process_abort = () => host.abort();
 
 globalThis.nts_process_getuid = () => host.getuid();

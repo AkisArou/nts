@@ -53,6 +53,7 @@ import {
   setgid,
   setgroups,
   setuid,
+  isSignalName,
   signalNumber,
   umask,
 } from "./control.ts";
@@ -128,6 +129,16 @@ declare function nts_process_raw_debug(text: string): void;
  * once, when it really is over. Both are the loop's to notice; nothing above
  * this seam can see that the queues have gone empty.
  */
+/**
+ * Start delivering `name` to this process's emitter. Negative on failure.
+ *
+ * The watcher must not keep the process alive: waiting for a signal is not
+ * work, and a program whose only remaining listener is a signal handler
+ * should still exit when its work is done.
+ */
+declare function nts_process_signal_start(name: string): number;
+/** Stop delivering `name`, restoring the operating system's default action. */
+declare function nts_process_signal_stop(name: string): void;
 declare function nts_process_on_before_exit(callback: (code: number) => void): void;
 declare function nts_process_on_exit(callback: (code: number) => void): void;
 
@@ -264,6 +275,7 @@ export interface ProcessVersions {
 class Process extends EventEmitter {
   constructor() {
     super();
+    this.#watchSignalListeners();
     nts_process_on_before_exit((code) => {
       this.emit("beforeExit", this.exitCode ?? code);
     });
@@ -287,6 +299,33 @@ class Process extends EventEmitter {
 
   readonly stdout = stdout;
   readonly stderr = stderr;
+
+  /**
+   * Signals are delivered as events, so the operating-system watcher has to
+   * follow the listeners: installed when a signal gets its first one and
+   * retired when it loses its last. Node does exactly this, on the same two
+   * events, and it matters in both directions -- without the install a
+   * `SIGINT` listener never runs and the default action kills the process
+   * instead, and without the retirement a program that stops listening has
+   * quietly kept the default action suppressed.
+   *
+   * The watcher does not hold the process open. A program waiting only for a
+   * signal it may never receive should still exit when its work is done, which
+   * is why node unrefs the handle and why this seam does not count as work.
+   */
+  #watchSignalListeners(): void {
+    this.on("newListener", (event: string) => {
+      if (typeof event === "string" && isSignalName(event) && this.listenerCount(event) === 0) {
+        const failure = nts_process_signal_start(event);
+        if (failure < 0) throw uvException(failure, "uv_signal_start");
+      }
+    });
+    this.on("removeListener", (event: string) => {
+      if (typeof event === "string" && isSignalName(event) && this.listenerCount(event) === 0) {
+        nts_process_signal_stop(event);
+      }
+    });
+  }
 
   /**
    * Built on first use, as node builds it, and for node's reason: acquiring a

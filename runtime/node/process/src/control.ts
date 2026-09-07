@@ -101,6 +101,17 @@ export function signalNumber(signal: string | number | null | undefined): number
   return number;
 }
 
+/**
+ * Whether an event name is a signal this platform has.
+ *
+ * `signalNumber` throws for anything else, which is right for `process.kill`
+ * and wrong here: every `process.on(name)` passes through this, and almost
+ * none of them are signals.
+ */
+export function isSignalName(name: string): boolean {
+  return constants.signals[name] !== undefined;
+}
+
 /** The raw system call, which `process.kill` validates for. */
 export const rawKill = nts_process_kill;
 

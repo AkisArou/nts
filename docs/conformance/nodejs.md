@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,760 of node's own applicable test files pass** across twenty-two modules,
+**1,764 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -364,8 +364,8 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,760
-measured, 419 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,764
+measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of
@@ -395,10 +395,10 @@ still.
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
-| `net` | **142 / 142** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `net` | **143 / 143** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
-| `process` | **81 / 81** | 0 | complete but for `process.binding`, `stdin` and workers |
+| `process` | **84 / 84** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
@@ -1463,16 +1463,40 @@ performs its side effects, and logging an object with a throwing getter takes
 down the logger. That is a correctness and robustness defect, and it sits above
 every row in the table below.
 
+**And it is true of one axis only, which the first version of this paragraph
+did not say.** The census runs through the conformance substitution, so it
+measures `inspect` running on node against this source — the behaviour axis,
+which is the right thing for it to measure and is not evidence about the
+compiled artifact. On the compiled axis the defect is not reachable, because
+the property walk does not lower at all: reading a member by a *runtime* key is
+refused (`NTS1001 key, which Point does not declare`), so `formatProperty` and
+the loop that calls it are a refusal rather than a wrong answer. "Our `inspect`
+invokes getters" is therefore true for a program that runs this source on node
+and vacuous for a compiled one, and a reader who is not told that will assume
+it means both.
+
 Its fix needs one bit per key — *is this an accessor?* — and the first version
 of this paragraph asked for the wrong thing. It asked for
 `Object.getOwnPropertyDescriptor`, which is a refusal and, more to the point,
 the wrong shape: a descriptor is a dynamic object this compiler has no map for,
-while "field or accessor" is something a layout already knows. The narrow
-primitive is buildable; the descriptor is a long way off. Because `inspect`
-walks `Object.keys` and reads `value[key]` with `key` a loop variable, the
-version that fits is a run-time helper reading the layout's field table rather
-than anything folded at lowering. That is asked for in the compiler lane in
-those terms.
+while "field or accessor" is something a layout already knows. The descriptor is a long way off — but so, it
+turns out, is the narrow primitive, and for a reason that goes deeper than
+either. A helper taking a key string has nothing to look the key up in: a
+descriptor here records where an object's references *are* and not what they
+are called, deliberately, which is why an uncaught throw is handed its message
+by the compiler rather than finding it at run time. Adding a member-name table
+is a descriptor change across three backends and a per-object cost paid by
+every program to answer a question almost none of them ask.
+
+So the blocker is not accessors at all. It is **dynamic member access on a
+typed object**, which is the dynamic ordinary-object map this compiler exists
+not to have. That makes the compiled half of this a `∅` rather than a `✗`:
+not "unbuilt", but "would require giving up the representation". The shape that
+does fit is an `inspect` written as a per-type walk rather than a per-key one,
+since `Object.keys` of a known layout is decided at compile time and each
+member access would then be a literal. That is a different `inspect` and no
+longer node's, which is a real choice rather than a blocked one, and it is not
+being made here today.
 
 The rest are genuine formatting gaps, and none appears in any exclusion:
 

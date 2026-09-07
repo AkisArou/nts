@@ -1,1 +1,1 @@
-^(test-process(-.*)?|test-std(in|out|err)(-.*)?)\.(?:js|mjs)$
+^(test-process(-.*)?|test-std(in|out|err)(-.*)?|test-signal-.*)\.(?:js|mjs)$
