@@ -551,6 +551,90 @@ fn okhttp_does_not_rewrite_what_the_server_sent() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// And the sabotage that would let `OkHttp` rewrite the response fires.
+///
+/// The plan asks for sabotage evidence that transparent decompression cannot
+/// change exposed headers unnoticed. That evidence existed as a paragraph in the
+/// doc comment above -- run once, by hand, on an afternoon -- which says nothing
+/// about the tree a month later, and nothing at all about *which* cases the
+/// sabotage broke.
+///
+/// One line does it: the provider sets `Accept-Encoding` itself so `OkHttp`
+/// leaves the body alone. Remove it and `OkHttp` adds its own, decompresses, and
+/// strips `Content-Encoding` and `Content-Length` because they describe bytes it
+/// has replaced. Correct of `OkHttp`; wrong here, because the shared TypeScript
+/// owns that observable.
+///
+/// The three cases below are named rather than counted. A sabotage that broke
+/// some other case, or that threw before reaching these, would satisfy "the
+/// suite went red" and mean nothing.
+#[test]
+fn removing_the_encoding_header_lets_okhttp_rewrite_the_response() {
+    const LINE: &str =
+        "if (!acceptEncoding) { request.addHeader(\"Accept-Encoding\", \"gzip\"); }";
+
+    let (Some(javac), Some(java), Some(jars)) = (tool("javac"), tool("java"), dependencies())
+    else {
+        return;
+    };
+    let root = repository();
+    let dir = std::env::temp_dir().join(format!("nts-okhttp-sabotage-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let classpath = jars
+        .iter()
+        .map(|jar| jar.display().to_string())
+        .chain(std::iter::once(dir.display().to_string()))
+        .collect::<Vec<_>>()
+        .join(":");
+
+    // A copy, never the checkout: three sessions build from this tree, and a
+    // window in which it holds wrong source is a correct-looking tree that
+    // produced a wrong binary.
+    let provider = android().join("src/okhttp/java/org/nts/web/OkHttpNetworking.java");
+    let sabotaged = dir.join("OkHttpNetworking.java");
+    let text = std::fs::read_to_string(&provider).unwrap();
+    assert!(text.contains(LINE), "the sabotage no longer matches: {LINE}");
+    std::fs::write(&sabotaged, text.replace(LINE, "// sabotaged: left to OkHttp")).unwrap();
+
+    for source in [sabotaged, root.join("compiler/codegen/jvm/tests/android/OkHttpHeadersTest.java")]
+    {
+        let compiled = Command::new(&javac)
+            .args(["--release", "8", "-Xlint:-options", "-cp"])
+            .arg(&classpath)
+            .arg("-d")
+            .arg(&dir)
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{} did not compile under the sabotage:\n{}",
+            source.display(),
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+
+    let ran = Command::new(&java)
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("OkHttpHeadersTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout);
+    let failed: Vec<&str> = said.lines().filter(|it| it.starts_with("FAIL")).collect();
+    for one in
+        ["Content-Encoding came back as", "Content-Length came back as", "the body was"]
+    {
+        assert!(
+            failed.iter().any(|it| it.contains(one)),
+            "the sabotage should have broken `{one}` and did not:\n{said}\n{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The two adapters, over one server, answering the same.
 ///
 /// The plan's central two-adapter requirement, and the one thing the suites

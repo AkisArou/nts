@@ -25,6 +25,9 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod common;
+
+use common::copy_tree;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -200,6 +203,100 @@ fn keystores(keytool: &Path, dir: &Path) -> (PathBuf, PathBuf) {
         .unwrap();
     assert!(imported.status.success(), "keytool: {}", String::from_utf8_lossy(&imported.stderr));
     (server, trust)
+}
+
+/// And the sabotage that verifies the certificate against the proxy fires.
+///
+/// The plan asks for sabotage evidence for TLS verification. That evidence was a
+/// paragraph below, run once by hand -- which says nothing about the tree later
+/// and nothing at all about *which* case it broke.
+///
+/// The sabotage is the mistake an implementation actually makes: hand the
+/// **proxy's** name to `createSocket` instead of the target's. The chain still
+/// validates and the name does not, so a tunnel to `localhost` through a proxy
+/// on `127.0.0.1` fails with `No subject alternative names matching IP address
+/// 127.0.0.1` -- the proxy's address arriving where the target's name should be.
+/// A proxy that could satisfy the check with its own certificate is a proxy that
+/// can read what it forwards.
+#[test]
+fn dropping_endpoint_identification_lets_a_wrong_name_through() {
+    // **The guard the runtime's own comment names**, arrived at after two wrong
+    // targets. Handing `createSocket` the proxy's name changed nothing, and so
+    // did replacing the SNI name -- so neither is what the check runs against
+    // here, whatever the comments beside them say. What the check runs against
+    // is the algorithm being set at all: "without this the chain is validated
+    // and the *name* is not".
+    const LINE: &str = "params.setEndpointIdentificationAlgorithm(\"HTTPS\");";
+
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-proxy-sabotage-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (server, trust) = keystores(&keytool, &dir);
+
+    // A copy of the runtime, edited and compiled here, so the checkout never
+    // holds wrong source -- three sessions build from it.
+    let src = dir.join("src");
+    copy_tree(&repository().join("runtime/jvm/src"), &src);
+    let socket = src.join("nts/rt/NtsSocket.java");
+    let text = std::fs::read_to_string(&socket).unwrap();
+    assert!(text.contains(LINE), "the TLS sabotage no longer matches: {LINE}");
+    std::fs::write(
+        &socket,
+        text.replace(LINE, "/* sabotaged: the name is not checked */"),
+    )
+    .unwrap();
+
+    let classes = dir.join("classes");
+    let mut compile = Command::new(&javac);
+    compile.args(["--release", "8", "-Xlint:-options", "-d"]).arg(&classes);
+    for entry in std::fs::read_dir(src.join("nts/rt")).unwrap().flatten() {
+        compile.arg(entry.path());
+    }
+    let built = compile.output().unwrap();
+    assert!(
+        built.status.success(),
+        "the sabotaged runtime did not compile:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let built = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&classes)
+        .arg("-d")
+        .arg(&classes)
+        .arg(repository().join("compiler/codegen/jvm/tests/socket/TlsTest.java"))
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "TlsTest did not compile against the sabotaged runtime:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+
+    let ran = Command::new(&java)
+        .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
+        .arg("-Djavax.net.ssl.keyStorePassword=changeit")
+        .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
+        .arg(format!("-Djavax.net.ssl.trustStore={}", trust.display()))
+        .arg("-Djavax.net.ssl.trustStorePassword=changeit")
+        .arg("-Djavax.net.ssl.trustStoreType=PKCS12")
+        .arg("-cp")
+        .arg(&classes)
+        .arg("TlsTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout);
+    let failed: Vec<&str> = said.lines().filter(|it| it.starts_with("FAIL")).collect();
+    assert!(
+        !failed.is_empty(),
+        "without endpoint identification a wrong-name certificate should be accepted, and \
+         `TlsTest` should notice; it did not:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// An HTTP `CONNECT` tunnel, a SOCKS5 hop, and the certificate check a tunnel
