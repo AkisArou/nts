@@ -327,6 +327,31 @@ halves are worth stating as measured results rather than left as assumptions —
 together they are the claim that keeps the denominators honest, and until now
 neither had been tested.
 
+**A third audit exists now, because the same failure got into the checker.**
+The baseline command in this lane is
+
+    pnpm exec tsc --project runtime/node/tsconfig.json
+
+and that config carries `"references": [{ "path": "../web-platform" }]`. A
+TypeScript project reference resolves through the referenced project's **built
+declarations**, not its source. So when `utf8Decode` left
+`web-platform/src/core/utf8.ts`, the declaration file in its `.tsbuild/dist`
+still declared it — built 18:09, source edited 19:51 — and the aggregate
+typecheck read an artifact an hour and three quarters stale and reported green.
+
+At that moment **thirteen of the twenty-two modules did not typecheck** against
+their own configs, and `buffer` was **0 of 51**: every file failing to load on
+an export that was not there. A per-module config carries no reference and
+resolves `web-platform` through source, so it fails immediately.
+
+The breakage was another lane's work in flight and was restored within minutes
+of being reported — `utf8Decode` is back, with a comment naming this lane as
+its consumer. What remains is the audit: `audit.mjs --typecheck` runs all 22
+module configs and now reports 22 of 22, which is the first time that number
+has been measured rather than assumed. **A green check over an artifact nobody
+rebuilt is the same shape as a passing test that asserts nothing**, and this
+document had been quoting that green number all day.
+
 A wider version of the second audit — *which node tests require this module but
 are not in its set* — is not worth running. 3,868 files `require('assert')`,
 because nearly every test in node's suite does, and requiring a module is not
