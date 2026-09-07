@@ -1832,11 +1832,34 @@ require('target/node/punycode.node').decode('abc')           -> SIGSEGV
 The two that work are the two that return before touching the string's
 contents. Everything that iterates it dies.
 
-**This document's own instrument was hiding it, which is why the stage list
-now has a `built-but-crashes`.** The sweep reported `built-exports-partial
-0 / 1, 4 names published` — which reads as *the test failed for want of
+**And it is not a `punycode` bug.** `querystring` compiles too, publishes
+`escape`, and fails with an identical signature:
+
+```
+querystring.escape('')    -> ""
+querystring.escape('a')   -> SIGSEGV
+```
+
+Two independently written modules sharing no code — `punycode.encode` goes
+through `ucs2decode`, `querystring.escape` through `encodeStr` and a lookup
+table — and in both **the empty string works and any non-empty string dies.**
+The string object arrives and its length reads as zero correctly; it is
+indexing past that point that kills the process. The common factor is string
+element access in compiled code, not a missing symbol.
+
+That withdraws the first guess recorded here. `punycode.encode` calls the
+still-refused `ucs2decode`, which made the dangling-call defect an attractive
+explanation; it does not explain `querystring.escape`, which calls nothing
+refused.
+
+**This document's own instrument was hiding both, which is why the stage list
+now has a `built-but-crashes`.** The sweep reported `punycode` as
+`built-exports-partial 0 / 1, 4 names published` and `querystring` as
+`0 / 4, 1 name published` — which reads as *the test failed for want of
 exports* and is indistinguishable from `os`, whose surface genuinely is
-incomplete. A crash and a coverage gap want completely different work, and it
+incomplete. **Two of the four artifacts that build were segfaulting and both
+were being reported as coverage gaps**, and on an axis that has never had a
+pass they would have gone on being reported that way indefinitely. A crash and a coverage gap want completely different work, and it
 was found only by running the test by hand to check a prediction about why it
 had failed. The sweep loads each artifact in a child process and calls every
 export once before it judges anything now; a segfault reported as a missing
