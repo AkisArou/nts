@@ -1850,41 +1850,71 @@ to 11, `querystring` 5 to 1, `buffer` and `string_decoder` to none at all.
 surface is classes, and the four names they used to publish were `buffer`
 internals that were never theirs.
 
-**Three causes keep the export tables short, not two, and the third is the
-cheapest.** Comparing what each built addon publishes against what its
-`main.ts` declares separates them:
+**The export tables are short for two causes and one cascade, and the cascade
+is where the leverage is.** I recorded a third cause here — optional and
+defaulted parameters — on the strength of four published names taking only
+required parameters and four unpublished ones taking optional ones. **That was
+a coincidence in a sample of four.** The compiler session asked the compiler
+instead of the signatures:
 
 ```
-PUBLISHED                                 NOT PUBLISHED
-escape(str: string): string               unescape(s: string, decodeSpaces?: boolean): string
-hostname(): string                        getPriority(pid = 0): number
-uptime(): number                          setPriority(priority: number): void      [3 overloads]
-toNamespacedPath(path: string): string    unescapeBuffer(s: string, decodeSpaces = false): Buffer
+os/src/main.ts:410  NTS1003 `getPriority` cannot be compiled because it calls
+                    `validateInt32`, which was refused above
 ```
 
-Every name on the right is scalar in and scalar out. None needs a class value
-or an object return. The only thing separating the columns is **an optional
-parameter, a defaulted parameter, or an overload set**. So:
+`getPriority` and `setPriority` never reach the N-API wrapper at all. They are
+refusal *cascades*, and following one down lands on a single root:
 
-| cause | what it costs |
-| --- | --- |
-| object and array returns | `os.cpus`, `os.networkInterfaces`, `os.userInfo`, `querystring.parse` |
-| class values | `StringDecoder` and `Buffer` — *the entire surface* of two modules |
-| **optional / default / overload** | `querystring.unescape`, `os.getPriority`, `os.setPriority` |
+```
+internal/validators.ts:21  `validateString`   ... calls `ERR_INVALID_ARG_TYPE#constructor`
+internal/validators.ts:27  `validateObject`   ... calls `ERR_INVALID_ARG_TYPE#constructor`
+internal/validators.ts:33  `validateNumber`   ... calls `ERR_INVALID_ARG_TYPE#constructor`
+internal/validators.ts:39  `validateBoolean`  ... calls `ERR_INVALID_ARG_TYPE#constructor`
+internal/validators.ts:68  `validateFunction` ... calls `ERR_INVALID_ARG_TYPE#constructor`
+```
 
-**107 of the profile's 719 exported functions take an optional or defaulted
-parameter** — 15% of the surface. Unlike the other two it is not a
-type-representation problem: N-API supplies an argument count, so this is
-arity handling. It is also the only one of the three that could plausibly land
-before class values do, and separating it matters beyond its own size: while
-three causes are tangled in one number, no one can say how much of the gap each
-owns.
+**`ERR_INVALID_ARG_TYPE` is the validator node's internals reach for
+everywhere,** so one refused constructor takes every argument-validating
+function in the profile with it — which is most of the public surface, because
+node validates its arguments everywhere. Its own roots are five refusals in
+`internal/errors.ts`: an `instanceof` against a class the compiler has none
+for, `Array.isArray` of an open type, `JSON.stringify`, a regular-expression
+literal, and an `unknown` narrowed to BigInt.
 
-Recorded as inference rather than proof. It comes from four modules and a
-signature comparison, and confirming it would mean deleting an optional
-parameter from node's source to watch a name appear — rewriting correct source
-to probe a compiler behaviour, which this document forbids for better reasons
-than this one is worth.
+That is better news than the cause I inferred. Optional parameters would have
+bought `querystring` two names and `os` two. A cascade is a tree, so the
+leverage is at the root and it is profile-wide.
+
+**Every absence has one of four shapes and they are distinguishable without
+editing a line of source:**
+
+```sh
+NTS_TSGO=<tsgo> <nts> emit-c runtime/node/<mod>/tsconfig.json --out /tmp/x --napi 2>&1 | grep <name>
+```
+
+`no wrapper for X: <reason>` — the N-API wrapper declined it.
+`NTS1001` — the lowering refused it.
+`NTS1003` — something it calls was refused; follow it to the root.
+*silence* — it is not a function at all, like `export const totalmem`.
+
+**Measured: the cascade is larger than the refusal in every module checked,
+and the ledger's refusal count excludes it.**
+
+| module | root refusals (`NTS1001`) | cascaded (`NTS1003`) | what this file's `refused` column says |
+| --- | ---: | ---: | ---: |
+| `os` | 100 | 127 | 100 |
+| `querystring` | 101 | 126 | 101 |
+| `string_decoder` | 97 | 129 | 97 |
+| `buffer` | 93 | 123 | 93 |
+| `path` | 33 | 52 | 33 |
+
+The `refused` column matches `NTS1001` exactly in all five, so **6,878 counts
+root refusals and is not inflated by cascades** — the concern that it might be
+does not survive the check. What it does mean is that a cascaded function is
+counted neither as lowered nor as refused, so `lowered + refused` is not the
+function total and the lowering *rates* above are computed over a subset. The
+rates remain comparable to each other, since all three rows were taken the same
+way; they are not a share of the whole profile.
 
 **`call to undeclared function` is two different bugs wearing one error
 message,** which is worth separating because only one of them announces
