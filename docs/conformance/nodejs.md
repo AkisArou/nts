@@ -2874,6 +2874,35 @@ These, by contrast, are real and hold today, and nothing asserts them:
 `url.URL === globalThis.URL`, `url.URLSearchParams`, `buffer.Buffer`,
 `buffer.Blob`, `buffer.File` and `buffer.atob`, each identical to its global.
 
+**Export key order diverges in eight modules, and is recorded rather than
+fixed.** `Object.keys(require(m))` is observable, and CommonJS preserves
+assignment order, so a shape assembled in a different order is a different
+object to anything that enumerates. Measured against node for all 22:
+
+| module | first divergence |
+| --- | --- |
+| `dgram` | node `createSocket, Socket` — ours `Socket, createSocket` |
+| `events` | node `addAbortListener, once, on` — ours `captureRejections, …` |
+| `http` | node `METHODS, STATUS_CODES, Agent` — ours `Agent, ClientRequest, …` |
+| `net` | node `SocketAddress, BoundSocket` — ours `BoundSocket, Server` |
+| `process` | node `version, versions, arch` — ours `_events, _eventsCount, …` |
+| `stream` | node `isDestroyed, isDisturbed` — ours `Stream, Duplex` |
+| `url` | node `Url, parse, resolve` — ours `URL, URLSearchParams, Url` |
+| `util` | node `_errnoException, …` — ours `TextDecoder, TextEncoder, …` |
+
+**Exactly one pinned test in node's whole `parallel/` suite enumerates a
+module's keys** (`test-permission-fs-supported.js`, and the permission model is
+not in this profile), so the oracle cannot see any of this. It is listed because
+an unobserved difference is still a difference, and because `punycode`'s
+`shape.mjs` goes out of its way to preserve node's insertion order — somebody
+already decided this mattered, for one module, and the other twenty-one were
+never checked.
+
+`util`'s entry is a regression this document's own author introduced, and it is
+the only one worth fixing on sight: before the Encoding re-export was added,
+`util`'s order matched node's. Node places `TextDecoder` at index 28, after
+`parseArgs`; the new export went in at the top of `main.ts`.
+
 Three exist now.
 
 **`punycode/test/error-identity-static.js`** was the first, and it was proved by
