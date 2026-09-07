@@ -3183,3 +3183,65 @@ The complete local Node-host/real-socket corpus passes 492/492 with zero skipped
 pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
 failing and 14 named not-applicable. The NTS frontier is unchanged, as expected for a
 slice that adds tests and changes no shared source.
+
+## Something that knows how many sessions are open
+
+`WebSocketServer` owns the lifetime of server-side sessions. It is deliberately not an
+accept loop: listening, TLS and HTTP request parsing belong to the server this is
+embedded in, which already has all three. What existed nowhere else is something that
+knows how many sessions are open, refuses when that is too many, and can close all of
+them once.
+
+`upgrade()` completes the handshake on an already-read request and adopts the session.
+The response is written there rather than returned, because the handshake and the first
+frame share one connection and one reader — handing the response back would let a
+caller write it late, or not at all, while this object already believed the session was
+live. Registration happens before the session is handed out, so a caller that starts
+reading immediately cannot retire a session the server has not counted.
+
+The connection bound is not optional. A server that accepts every upgrade has no way to
+shed load, so `maxConnections` defaults to 1,024 and a non-positive or non-integer bound
+is refused at construction. Being above the bound produces a real `503` rather than a
+dropped socket, so a client learns it was turned away instead of timing out. The same
+response is given once the server is closing.
+
+`close()` stops accepting and closes every open session with code 1001, waiting for each
+to settle; repeated calls share one shutdown rather than starting a second. `destroy()`
+abandons them without a close handshake. Sessions remove themselves when they end, so
+the count follows reality rather than being maintained by whoever remembers to.
+
+Five tests drive it with the canonical client over real sockets: the count rising and
+falling with live sessions, a refusal above the bound arriving as a 503 that does not
+become a held session, `close()` reaching every session with a clean 1001 and being one
+shutdown for two callers, a closed server refusing new upgrades, and an invalid bound
+refused at construction.
+
+Two sabotages, both restored. Not enforcing the bound was caught. Never unregistering a
+session that ended was caught, with the count stuck at two.
+
+**A third sabotage failed to demonstrate anything, and the comment it targeted was
+wrong.** The shutdown snapshots the session set, and the comment claimed that iterating
+while the set empties would skip sessions. Deleting the element currently being visited
+during JavaScript `Set` iteration is safe, so that hazard is not real here. The rewritten
+comment claimed instead that the snapshot lets closes start concurrently — and a
+sequential shutdown passes these tests too. The comment now says the snapshot exists
+because a `Set` cannot be mapped, that concurrency is a preference, and that nothing
+here checks it. A comment asserting a property no test covers is the same defect as a
+test asserting nothing, and it is harder to notice.
+
+The complete local Node-host/real-socket corpus passes 497/497 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Still not claimed: a listening server, TLS termination, HTTP routing, backpressure
+policy above the session, or the separate public module the plan asks for. The last is a
+packaging decision touching repository layout and is worth agreeing before building.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,298 primary
+`NTS1001` and 241 `NTS1003`; after, 1,302 primary and 242 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Four new primaries, none disappearing:
+`close` and `abort` called through the `WebSocketSession` interface, a promise settled
+with another promise, and a spread of a `Set`. The first two are the interface-method
+shape the compiler owner has just implemented, so this slice should be among the
+diagnostics that disappear when that lands — which makes it a useful check on their
+change rather than only a cost.

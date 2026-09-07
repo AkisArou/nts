@@ -132,6 +132,8 @@ export { acceptWebSocketUpgrade, serializeUpgradeResponse } from "./websocket/se
 // wire, so both are part of this boundary rather than internal layout.
 export { BufferedReader, writeAll } from "./http1/io.ts";
 export { adoptServerWebSocketSession } from "./websocket/raw-transport.ts";
+export { WebSocketServer } from "./websocket/server.ts";
+export type { WebSocketServerOptions, WebSocketUpgradeResult } from "./websocket/server.ts";
 export type { WebSocketRole } from "./websocket/raw-transport.ts";
 export { negotiatePerMessageDeflateOffer } from "./websocket/permessage-deflate.ts";
 export type { PerMessageDeflateServerNegotiation } from "./websocket/permessage-deflate.ts";
