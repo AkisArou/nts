@@ -167,9 +167,35 @@ let apiUnreadable;
     // still printed.
     apiUnreadable = layouts.trim().split("\n").slice(-2).join(" / ");
   }
+  // Three shapes appear under `public api`, and the third arrived after this
+  // parser did:
+  //
+  //     name -> target                      an ordinary export
+  //     name -> target  (no function ...)   named, and nothing answers to it
+  //     name (namespace)                    an object of functions, with its
+  //       member -> target                  members indented beneath it
+  //
+  // Reading only the first two made `punycode`'s `ucs2` "not listed" while the
+  // built addon published it and `ucs2.encode` worked. A namespace publishes
+  // whole -- a member without a wrapper drops the object -- so it counts as
+  // published exactly when every member resolves.
+  let namespaceOf = null;
   for (let i = start + 1; start >= 0 && i < lines.length; i++) {
-    const m = /^\s{2}(\S+) -> (\S+)(\s+\(no function of that name\))?\s*$/.exec(lines[i]);
+    const line = lines[i];
+    const ns = /^\s{2}(\S+) \(namespace\)\s*$/.exec(line);
+    if (ns !== null) {
+      namespaceOf = { name: ns[1], target: ns[1], published: true };
+      api.push(namespaceOf);
+      continue;
+    }
+    const member = /^\s{4}(\S+) -> (\S+)(\s+\(no function of that name\))?\s*$/.exec(line);
+    if (member !== null && namespaceOf !== null) {
+      if (member[3] !== undefined) namespaceOf.published = false;
+      continue;
+    }
+    const m = /^\s{2}(\S+) -> (\S+)(\s+\(no function of that name\))?\s*$/.exec(line);
     if (m === null) break;
+    namespaceOf = null;
     api.push({ name: m[1], target: m[2], published: m[3] === undefined });
   }
 }
