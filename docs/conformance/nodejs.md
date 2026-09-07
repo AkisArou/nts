@@ -1749,9 +1749,26 @@ ENOENT: no such file or directory, stat '/nope/x'
 
 `check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
 tests against it. That is the artifact that ships, and the `--ts` lane is the
-interim gate for a module whose prerequisites have not landed. Measured across
-all twenty-two modules with one pinned binary
-(SHA-256 `38a8de6d…`, addressed through `NTS_COMPILER`):
+interim gate for a module whose prerequisites have not landed.
+
+```sh
+NTS_BIN=<a pinned copy> node tooling/conformance/sweep.mjs --addons --no-tests
+```
+
+reports every module and, more usefully, **where each one stops** —
+`emit-refused`, `c-did-not-compile`, `built-but-dead` (it links, it loads, and
+it exports the wrong things), or `green` — with the clang error-class
+histogram. The stage is the actionable half: a count of "not green" tells a
+compiler session nothing, and the stage tells it which pass to look at.
+
+That command exists because this axis had a result before it had an
+instrument. It was first measured by a shell loop typed by hand, whose first
+version mis-parsed its own output and reported every module as failed. A
+hand-typed loop is not something a later reader can re-run to check the claim,
+which is the objection this document already makes to a hand-copied table.
+
+Measured across all twenty-two modules with one pinned binary
+(SHA-256 `38a8de6d…`):
 
 **0 of 22 green. Not one module's compiled artifact passes a single test.**
 
