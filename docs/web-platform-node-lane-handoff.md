@@ -58,23 +58,32 @@ flat adapter, spill-to-disk, and a replay body for retry that is released when t
 dispatch settles; the caching row — a persistent `HttpCacheStore` and a durable
 `CacheStorageStore` serving the real `Cache`/`CacheStorage` API; Undici-shaped `request`,
 `stream` and `pipeline`; a transport seam that surrenders its connection on a protocol
-switch, with `connect` and `upgrade` built on it; and a WebSocket client that opens
-through the HTTP dispatch stack and therefore works through a CONNECT proxy.
+switch, with `connect` and `upgrade` built on it; a WebSocket client that opens through
+the HTTP dispatch stack and therefore works through a CONNECT proxy; the WebSocket
+**accept loop**, which was the largest open row; `Event.timeStamp`; and the portable half
+of system proxy resolution.
 
 **Current numbers**, all with one binary pinned from the current tree and the same
 binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 
-- 1,296 primary `NTS1001`, 314 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
+- 1,302 primary `NTS1001`, 317 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
   — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
-- local Node-host/real-socket corpus **717/717**, zero skipped;
-- pinned upstream corpus **2,433 tests, 2,418 applicable, 2,408 passing, 10 failing** —
-  the eight long-standing structural failures plus the two `Event.timeStamp` assertions;
+- local Node-host/real-socket corpus **777/777**, zero skipped;
+- pinned upstream corpus **2,433 tests, 2,418 applicable, 2,410 passing, 8 failing** —
+  the eight long-standing structural failures, with the two `Event.timeStamp` assertions
+  now passing;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
   with the four declines being the out-of-range typed-array read reported to the compiler
   lane with a minimal reproduction;
-- `unrouted.mjs` clean over 101 audited files and 719 corpus files.
+- `unrouted.mjs` clean over 102 audited files and 752 corpus files.
+
+**Measure the frontier with `NTS_TSGO="$PWD/target/tsgo"` set.** Without it the check
+fails at the frontend transport and every diagnostic count reads **zero** — which looks
+exactly like a clean tree. `tooling/conformance/web-platform/compiled/check.sh` sets it;
+an ad-hoc invocation does not, and an all-zeros result should be read as a broken
+instrument until the output is inspected.
 
 **The upstream corpus grew from 2,300 by pinning fixtures already sitting in Node's
 vendored checkout** — nothing was fetched. That vein is now exhausted for in-profile
@@ -84,38 +93,80 @@ reason is not evidence. Three conformance gaps it exposed are fixed (UTF-16 deco
 `Event.isTrusted` as an unforgeable own accessor, `Blob.stream()` as a byte stream) and
 one boundary is recorded as not applicable with its reason.
 
+**The monotonic-clock ABI is closed.** `nts_environment_has_platform` landed in the C
+runtime, the LLVM signatures and the JVM op table — where it turned out **all eight**
+environment intrinsics were missing rather than the one — and `Event.timeStamp` shipped
+on `monotonicMilliseconds()` the same hour. Both provider lanes measured their clock on
+real hardware before the contract was written, which is why it says non-decreasing and
+deliberately **not** "measures elapsed real time": both stall rather than reverse across
+a device suspend.
+
+That slice also broke three of the NodeJS lane's tests, and the reason generalises.
+`hasWebPlatformRuntime()` reads like a total predicate and is not one: **asking is still
+a call, and an undefined binding throws where a `false` was wanted.** Their harness
+imported shared source directly without installing the environment slot, so the guarded
+branch never ran. It presents as a listener called zero times with no error, because the
+throw happens inside `abort()` and whatever awaited the event simply never hears it. That
+signature is what an environment-slot problem looks like from outside.
+
+**One ABI proposal is outstanding: a system proxy lookup.** `systemProxyFor(url)`
+returning the classic result string, proposed to the JVM lane with four questions that
+have to be answered by measurement rather than by design — whether `ProxySelector` can be
+called synchronously on the request path, whether the answer is per-URL or global,
+whether it already has the bypass rules applied, and what it returns for an unconfigured
+host. The portable half is landed and does not depend on the answer. **If Android's proxy
+story is too thin to be worth an ABI slot, the row stays open with a named reason rather
+than closed with a primitive nobody implements.**
+
 **Still open, and why.** The **public server module or package** is a repository-layout
-decision. The **Undici API ledger** still cannot be written honestly with nothing
-pinned. **Server-side TLS** — terminating `wss://` — is deliberately separate: it needs a
+decision. The **Undici API ledger** still cannot be written honestly with nothing pinned.
+**Server-side TLS** — terminating `wss://` — is deliberately separate: it needs a
 certificate and a private key, which on Android means a key store and a set of questions
 about where the key lives, and coupling it to the listener would have held the listener
 behind it. And whether the dispatched WebSocket transport should become the *default* has
 been left as a deliberate decision rather than taken by accident.
 
-**One ABI proposal is outstanding: a monotonic clock.** `Event.timeStamp` is two failing
-upstream assertions and cannot be implemented without one — shared source has no clock
-by convention (`defaultNow()` returns literal `0`), and `new Event("x")` is constructible
-with no runtime to inject into. The JVM lane has measured `System.nanoTime()` on a device
-and confirmed the contract is keepable, with the caveat that it stalls rather than
-reverses during deep sleep. The Node lane has not answered yet.
+**The node `TextDecoder` divergence is characterised and not filed.** Node gives two
+distinct answers for one byte sequence across nine chunk splits; the table and the
+argument that closes off the charitable reading are in
+`docs/records/0207-the-oracle-gave-two-answers-and-neither-of-us-was-careless.md`.
+Filing it is an outward-facing action and needs the repository owner's say-so.
 
 **One ABI change went in and the JVM lane has confirmed it on a device.**
 `DurableByteStore.source` now promises that a reader keeps reading what it was opened
 over even after the key is replaced or deleted. Without it nothing above the seam can
 release stored bytes while anything might still be reading them.
 
-**Two instrument defects found here.** `tooling/conformance/web-platform/check.sh` had
-stopped running its compiled axis entirely: the upstream corpus above it exits nonzero
-while the eight named failures stand, and `set -e` made every later step unreachable.
-And the local `sabotage-run.sh` truncated its output, so a sabotage that broke a late
-test read as a **survivor** — the dangerous direction, because the honest response to a
-survivor is to go and weaken a test that was fine.
+**Instrument defects found here, and the pattern they share.**
+`tooling/conformance/web-platform/check.sh` had stopped running its compiled axis
+entirely: the upstream corpus above it exits nonzero while the eight named failures
+stand, and `set -e` made every later step unreachable. The local `sabotage-run.sh`
+truncated its output, so a sabotage that broke a late test read as a **survivor** — the
+dangerous direction, because the honest response to a survivor is to go and weaken a test
+that was fine. `unrouted.mjs` searched one lane and reported, in the language of a general
+fact, an answer true only of that subset, and a function thirteen other modules depended
+on was deleted on its word.
 
-`cargo clippy --workspace --all-targets` does not currently build: `hir::Layout` gained
-an `interfaces` field and six initializers in `compiler/core` test code were left behind.
-The library and the `nts` binary build clean, so pinned measurements are trustworthy,
-but `commit-mine.sh` refuses until it is fixed and every commit here has used
-`NTS_SKIP_CLIPPY=1`.
+And the sharpest one: **a guard is only worth what the runs that use it are worth.**
+`sabotage-run.sh` refuses when `tsc` has output, precisely so a mutation that fails to
+compile cannot be scored against a stale emit. Two `Event.timeStamp` sabotages were then
+run through an inline runner written in the moment, both failed to type-check, both ran
+against the previous mutation's emit, and both reported a failure belonging to a
+different mutation. Use the script.
+
+**`cargo clippy --workspace --all-targets` does not currently build:** `hir::Layout`
+gained an `interfaces` field and six initializers in `compiler/core` test code were left
+behind. The library and the `nts` binary build clean, so pinned measurements are
+trustworthy, but `commit-mine.sh` refuses until it is fixed and every commit here has
+used `NTS_SKIP_CLIPPY=1`.
+
+**A standing note on new tests.** Several slices here produced a suite that passed on its
+first run and could not have failed. The remedies that keep recurring: assert on *order*
+or *call counts* rather than on a final value a broken implementation also reaches; check
+that a "nothing installed" case is not being satisfied by state a previous test in the
+same file installed, since the environment slot is process-global; and remember that a
+`ReadableStream` fills its queue on construction under the default high-water mark, so
+"nothing has read it yet" is untestable without `{ highWaterMark: 0 }`.
 
 ## Ownership and coordination
 
