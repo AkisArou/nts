@@ -2143,6 +2143,29 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     drop_callers_of_refused(lowered);
 }
 
+/// Everything that has to happen to a freshly lowered program before any
+/// analysis reads it, in the one order that works.
+///
+/// Each step's reason is local and they compound, which is why they are here
+/// together rather than scattered up the pipeline.
+fn settle(lowered: &mut lower::Lowered) {
+    // First of all: everything below reads the block graph, and a block nothing
+    // can reach is not part of it. See `dce::prune_unreachable`.
+    dce::prune_unreachable_blocks(&mut lowered.program);
+    // Before anything looks at the program: a function that calls a refused one
+    // has a call to nothing in it.
+    drop_callers_of_refused(lowered);
+    drop_classes_without_layouts(&mut lowered.program);
+    // Before anything looks at the shape of a function: a suspension rewrites
+    // one function into two and moves its locals into a frame, and every
+    // analysis after this should see the result rather than the source.
+    let split = suspend::transform(&mut lowered.program);
+    lowered.diagnostics.extend(split);
+    // Last, because it reports against `module#init` and the passes above are
+    // what decide whether there is one.
+    drop_readers_of_unwritten_globals(lowered);
+}
+
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
         // A function about to be split by `suspend` provides two names: its
@@ -2239,18 +2262,7 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     let mut lowered = lower::lower(snapshot);
-    // Before anything looks at the program: a function that calls a refused one
-    // has a call to nothing in it.
-    drop_callers_of_refused(&mut lowered);
-    drop_classes_without_layouts(&mut lowered.program);
-    // Before anything looks at the shape of a function: a suspension rewrites
-    // one function into two and moves its locals into a frame, and every
-    // analysis after this should see the result rather than the source.
-    lowered
-        .diagnostics
-        .extend(suspend::transform(&mut lowered.program));
-    drop_readers_of_unwritten_globals(&mut lowered);
-
+    settle(&mut lowered);
     let mut program = lowered.program;
 
     // First, before anything expensive. Everything that survives here gets

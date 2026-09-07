@@ -723,7 +723,25 @@ pub(super) fn reachable_blocks(func: &Func) -> FxHashSet<BlockId> {
         if !seen.insert(block) {
             continue;
         }
-        worklist.extend(func.blocks[block.0 as usize].terminator.successors());
+        let block = &func.blocks[block.0 as usize];
+        worklist.extend(block.terminator.successors());
+        // A terminator is not the only thing that names a block. `Await`
+        // carries the handler its promise rejects into -- the one edge into a
+        // handler that no `throw` wrote -- and it is a real edge at run time,
+        // so a handler reachable only that way is reachable.
+        //
+        // Found by removing unreachable blocks and deleting one of these. The
+        // verifier had the same blind spot and had never reported it, because
+        // every handler it had seen was also reachable from a `throw`.
+        for value in &block.ops {
+            if let OpKind::Await {
+                rejects_to: Some(rejection),
+                ..
+            } = &func.values[value.0 as usize].kind
+            {
+                worklist.push(rejection.handler);
+            }
+        }
     }
     seen
 }

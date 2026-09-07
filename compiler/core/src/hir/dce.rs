@@ -243,3 +243,101 @@ pub fn prune_parameters(func: &mut Func) -> usize {
         }
     }
 }
+
+/// [`prune_unreachable`] over every function, which is how the pipeline uses it.
+///
+/// Called before anything else looks at the program, because everything below
+/// reads the block graph and a block nothing can reach is not part of it.
+pub fn prune_unreachable_blocks(program: &mut super::Program) -> usize {
+    program.funcs.iter_mut().map(prune_unreachable).sum()
+}
+
+/// Drop blocks the entry cannot reach, renumbering what is left.
+///
+/// A loop whose body always leaves — `for (const k of m.keys()) { ...; break; }`
+/// — has a latch nothing jumps to. The block is built before the body is
+/// lowered, because `continue` needs its id, and by the time the body turns out
+/// never to fall through it is already there with a `BlockId` that other
+/// terminators are numbered around.
+///
+/// That is dead code and not a malformed graph, and the difference matters
+/// because the verifier reported it as `invalid HIR` and refused the program.
+/// A correct source construct was rejected with a message about the compiler's
+/// own bookkeeping: the shared DNS cache's eviction loop, and twelve lines
+/// reproduce it.
+///
+/// # Why remove rather than tolerate
+///
+/// The verifier's check earns its place on the other side: a dead block reaches
+/// the C backend as a label nothing jumps to, and the generated file is
+/// compiled with `-Werror`, where `-Wunused-label` is fatal. So the block has to
+/// go, and the check stays as the assertion that it went.
+///
+/// Renumbering is the whole cost. A `BlockId` is an index, so removing one
+/// shifts every later block, and every terminator naming one has to move with
+/// it. Values are left alone: a dropped block's parameters stay in the arena
+/// with no readers, which is exactly what [`eliminate`] above is for.
+pub fn prune_unreachable(func: &mut Func) -> usize {
+    let reachable = super::verify::reachable_blocks(func);
+    if reachable.len() == func.blocks.len() {
+        return 0;
+    }
+    // Old index to new, for the ones that survive.
+    let mut next = 0u32;
+    let moved: Vec<Option<BlockId>> = (0..func.blocks.len())
+        .map(|index| {
+            let id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+            reachable.contains(&id).then(|| {
+                let at = BlockId(next);
+                next += 1;
+                at
+            })
+        })
+        .collect();
+    let removed = func.blocks.len() - reachable.len();
+    let mut index = 0;
+    func.blocks.retain(|_| {
+        let id = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+        index += 1;
+        reachable.contains(&id)
+    });
+    // `moved` is total over the survivors, so an unwrap here would be a
+    // successor of a reachable block that is itself unreachable -- which the
+    // walk above cannot produce.
+    let to = |old: BlockId| moved[old.0 as usize].unwrap_or(old);
+    for block in &mut func.blocks {
+        match &mut block.terminator {
+            Terminator::Jump { target, .. } => *target = to(*target),
+            Terminator::Branch {
+                then_target,
+                else_target,
+                ..
+            } => {
+                *then_target = to(*then_target);
+                *else_target = to(*else_target);
+            }
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
+        }
+    }
+    // A terminator is not the only thing that names a block. `Await` carries
+    // the handler its promise rejects into, because a rejection is the one edge
+    // into a handler that no `throw` wrote and the lowering is the only place
+    // that knows it exists.
+    //
+    // Missing it did not produce a wrong answer, which is the part worth
+    // recording: `suspend` reads that id as an index into its segment layout,
+    // and a stale one was out of bounds rather than merely wrong. The whole
+    // shared web-platform tree went from a verifier error to a panic, and the
+    // panic is the better outcome -- an id that had shifted by one would have
+    // resumed into the wrong handler and said nothing.
+    for op in &mut func.values {
+        if let OpKind::Await {
+            rejects_to: Some(rejection),
+            ..
+        } = &mut op.kind
+        {
+            rejection.handler = to(rejection.handler);
+        }
+    }
+    removed
+}
