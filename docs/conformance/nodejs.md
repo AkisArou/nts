@@ -1780,15 +1780,35 @@ by another session, and a stale figure sitting in a live table reads as
 current — which is how that table came to claim 766 passing files while the
 sweep said 1,719.
 
-**Which half moved is unmeasured, and the total does not say.** 946 → 1,509 →
-12,181 is a joint measurement of two things that both grew: this corpus, and
-the compiler lowering it. A profile total that only rises is measuring reach
-and can call that progress. The decomposition is one clean experiment — run one
-pinned `nts` over `runtime/node` as it stood at `0cd8645f`, the commit that
-introduced the 1,509, and again over the corpus as it stands now; the
-difference is the corpus's contribution and the remainder is the compiler's.
-It has not been run, because it needs a binary that holds still. Until it has,
-this section reports the number and the anchor and declines to attribute it.
+**Which half moved, measured rather than assumed.** 946 → 1,509 → 12,181 is a
+joint measurement of two things that both grew — this corpus, and the compiler
+lowering it — and a profile total that only rises is measuring reach and can
+call that progress. One pinned binary over two corpora separates them:
+
+| | lowered | refused |
+| --- | ---: | ---: |
+| `runtime/node` at `0cd8645f`, compiler of that day | 1,509 | — |
+| `runtime/node` at `0cd8645f`, **today's** compiler | **6,576** | 3,969 |
+| `runtime/node` today, today's compiler | **12,181** | 6,878 |
+
+**The compiler is 4.4× on identical source.** Holding the corpus fixed at the
+commit that introduced the 1,509 and changing only the binary accounts for
+5,067 of the 10,672 — the compiler learned to lower things it previously
+refused, on source that did not move. Corpus growth accounts for the other
+5,605. Neither half is the story on its own, which is the reason for splitting
+them: the total would have read the same if the compiler had stood still and
+this profile had simply doubled in size.
+
+Both rows below the first were taken with one `nts` copied out of
+`target/release` and addressed through `NTS_BIN`, so the two corpora are
+compared against the same compiler by construction rather than by two runs
+happening not to straddle a rebuild.
+
+**One number here is inherited rather than re-measured, and it is the one the
+attribution rests on.** The 1,509 comes from this document at `0cd8645f`,
+taken by another session at compiler `9bb54c1`. If it was measured over a
+corpus state other than the one that commit records, the split moves. Both
+6,576 and 12,181 are mine and were taken minutes apart with the same binary.
 
 The tranche that produced the current test numbers does not disturb these. It
 changed `runtime/node/http` and `runtime/node/net`, and neither module has a
