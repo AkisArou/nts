@@ -2379,7 +2379,25 @@ The four immediate causes of the refused init are different — `readConstants`,
 `refreshEnvironment`, `emitWarning`, and a closure call in two modules — and
 their own roots differ again: a call of a function value, a regular-expression
 literal, `this` outside a method, a name from an enclosing scope. So this is
-not one fix. What it is, is **one choke point**: five export tables are empty
+not one fix.
+
+**And none of it is this profile's to fix, which was checked rather than
+assumed.** The one category that would be ours is a place where this source
+*deviates* from node's and the deviation causes a refusal — that would be a
+fidelity bug, and correcting it would improve faithfulness and reduce refusals
+at the same time. Checked at the roots:
+
+| refusal site | ours | node's |
+| --- | --- | --- |
+| `internal/validators.ts:15` | a regex literal, `LINK_HEADER_VALUE` | `internal/validators.js:59`, `const octalReg = /^[0-7]+$/` |
+| `internal/net.ts:54` | `Number.parseInt(part, range)` | `NumberParseInt` from `primordials`, which *is* `Number.parseInt` |
+
+Same constructs. The `primordials` difference is the one *Conventions* already
+prescribes — node destructures its primitives to survive a program that
+reassigns `String.prototype.slice`, and a compiled program has no such
+prototype — so the ordinary spelling is the faithful one here rather than a
+deviation. **There is no source change available in this lane that would be
+anything other than rewriting node's library to suit what lowers.** What it is, is **one choke point**: five export tables are empty
 for the same structural reason, and each is one initializer away from
 publishing rather than a module's worth of features away.
 
