@@ -8,6 +8,7 @@ import type {
 } from "../fetch/transport.ts";
 import type { FetchInterceptor } from "./interceptor.ts";
 import { collectResponseBody } from "./response-body.ts";
+import { headersRawEntries } from "../fetch/headers.ts";
 
 /**
  * One challenge from a `WWW-Authenticate` field.
@@ -327,7 +328,7 @@ export class AuthenticationInterceptor implements FetchInterceptor {
       current = {
         url: request.url,
         method: request.method,
-        headers: headers.raw(),
+        headers: headers[headersRawEntries](),
         body: replayBody(request),
         bodyLength: request.bodyLength,
         replayBody: request.replayBody,

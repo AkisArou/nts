@@ -84,7 +84,6 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "setHandler",
     "setListenerObserver",
   ],
-  Headers: ["isImmutable", "makeImmutable", "raw", "writable"],
   ReadableStream: [
     "attach",
     "attachBYOB",
@@ -146,7 +145,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 45);
+  assert.equal(total, 41);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {
@@ -159,10 +158,10 @@ suite("interface members are not enumerable, which Web IDL requires them to be",
   // Not fixed in passing because a blanket pass would also enumerate the sixty-three
   // internal members above, making a second deviation worse to improve the first. The
   // two have to be closed in that order.
-  const descriptor = Object.getOwnPropertyDescriptor(api.Headers.prototype, "append");
+  const descriptor = Object.getOwnPropertyDescriptor(api.ReadableStream.prototype, "cancel");
   assert.equal(descriptor.enumerable, false, "if this is true, the deviation is fixed");
   assert.equal(
-    Object.getOwnPropertyDescriptor(globalThis.Headers.prototype, "append").enumerable,
+    Object.getOwnPropertyDescriptor(globalThis.ReadableStream.prototype, "cancel").enumerable,
     true,
     "and this is what it should be",
   );

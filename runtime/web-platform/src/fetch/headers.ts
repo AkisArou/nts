@@ -89,6 +89,18 @@ function convertHeaderSequenceEntry(entry: HeaderSequenceEntry): HeaderEntry {
   return [name, value];
 }
 
+/**
+ * Keys for the members other modules in this runtime need and Web IDL does not define.
+ *
+ * Symbols rather than names, so they do not appear on the interface prototype: Web IDL says
+ * a prototype carries the interface's members and nothing else, and `getOwnPropertyNames`
+ * does not report symbol keys. Deliberately **not** re-exported from the public barrel --
+ * reachable from this runtime, invisible to a consumer.
+ */
+export const headersRawEntries: unique symbol = Symbol("Headers raw entries");
+export const headersGuardIsImmutable: unique symbol = Symbol("Headers guard is immutable");
+export const headersMakeImmutable: unique symbol = Symbol("Headers make immutable");
+
 export class Headers {
   private readonly list: HeaderEntry[] = [];
   private guard: HeaderGuard = "none";
@@ -111,7 +123,7 @@ export class Headers {
     }
   }
 
-  private writable(): void {
+  #writable(): void {
     if (this.guard === "immutable") {
       throw new TypeError("Headers are immutable");
     }
@@ -120,7 +132,7 @@ export class Headers {
   append(name: string, value: string): void {
     const key = normalizeName(name);
     const normalized = normalizeValue(value);
-    this.writable();
+    this.#writable();
     this.sortedCache = null;
     this.list.push([key, normalized]);
   }
@@ -128,7 +140,7 @@ export class Headers {
   set(name: string, value: string): void {
     const key = normalizeName(name);
     const normalized = normalizeValue(value);
-    this.writable();
+    this.#writable();
     this.sortedCache = null;
     let found = false;
     let write = 0;
@@ -148,7 +160,7 @@ export class Headers {
 
   delete(name: string): void {
     const key = normalizeName(name);
-    this.writable();
+    this.#writable();
     this.sortedCache = null;
     let write = 0;
     for (const entry of this.list) {
@@ -199,7 +211,7 @@ export class Headers {
   }
 
   /** @internal Returns independent tuples; callers cannot mutate the header list. */
-  raw(): HeaderEntry[] {
+  [headersRawEntries](): HeaderEntry[] {
     const result: HeaderEntry[] = [];
 
     for (const entry of this.list) {
@@ -208,11 +220,11 @@ export class Headers {
     return result;
   }
 
-  /** @internal */ get isImmutable(): boolean {
+  get [headersGuardIsImmutable](): boolean {
     return this.guard === "immutable";
   }
 
-  /** @internal */ makeImmutable(): this {
+  [headersMakeImmutable](): this {
     this.guard = "immutable";
     return this;
   }
@@ -290,6 +302,18 @@ export class Headers {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+    // and attribute accessors `{ enumerable: true, configurable: true }`. Safe here now that
+    // this prototype carries no non-standard names: the internals other modules need are
+    // symbol-keyed, and `getOwnPropertyNames` does not report symbols, so this loop cannot
+    // reach them.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "Headers",
       writable: false,

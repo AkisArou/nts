@@ -12,6 +12,7 @@ import type {
 import type { URLRecord } from "../provider/primitives.ts";
 import type { CancelHandle, Scheduler } from "../provider/primitives.ts";
 import { bytesStream, type ReadableStream } from "../streams/readable.ts";
+import { headersRawEntries } from "../fetch/headers.ts";
 
 export type MockStringMatcher = string | RegExp | ((value: string) => boolean);
 export type MockBodyMatcher =
@@ -734,9 +735,9 @@ export class MockAgent implements FetchTransport {
     return {
       status: reply.status,
       statusText: reply.statusText ?? "",
-      headers: headers.raw(),
+      headers: headers[headersRawEntries](),
       body: body === null ? null : bytesStream(body),
-      trailers: Promise.resolve(trailers.raw()),
+      trailers: Promise.resolve(trailers[headersRawEntries]()),
     };
   }
 

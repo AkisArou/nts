@@ -33,6 +33,14 @@ import {
   WritableStreamDefaultController,
   WritableStreamDefaultWriter,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+// The keys for members Web IDL does not define. Symbol-keyed so they do not sit on the
+// interface prototype, and deliberately not on the public barrel -- a test is a consumer
+// too, so it reaches them the same way the runtime does.
+import {
+  headersGuardIsImmutable,
+  headersMakeImmutable,
+  headersRawEntries,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/fetch/headers.js";
 import { encodeMultipart } from "../node_modules/.tsbuild/host/runtime/web-platform/src/forms/multipart.js";
 import { _createBlobFromExternalSource } from "../node_modules/.tsbuild/host/runtime/web-platform/src/file/blob.js";
 import {
@@ -424,14 +432,14 @@ test("Headers validation, guard and raw ownership", () => {
     ["a", "2"],
   ]);
   headers.set("A", "3");
-  assert.deepEqual(headers.raw(), [
+  assert.deepEqual(headers[headersRawEntries](), [
     ["a", "3"],
     ["b", "x"],
   ]);
-  const raw = headers.raw();
+  const raw = headers[headersRawEntries]();
   raw[0][1] = "bad";
   assert.equal(headers.get("a"), "3");
-  headers.makeImmutable();
+  headers[headersMakeImmutable]();
   assert.throws(() => headers.delete("a"), TypeError);
 });
 test("Headers enforces sequence pairs and ByteString boundary conversion", () => {
@@ -489,9 +497,9 @@ test("Headers compacts duplicate fields in place at their first wire position", 
     input.push(index % 3 === 1 ? ["target", String(index)] : [`x-${index}`, String(index)]);
   }
   const headers = new Headers(input);
-  const firstTarget = headers.raw().findIndex((entry) => entry[0] === "target");
+  const firstTarget = headers[headersRawEntries]().findIndex((entry) => entry[0] === "target");
   headers.set("TARGET", "final");
-  const replaced = headers.raw();
+  const replaced = headers[headersRawEntries]();
   assert.equal(
     replaced.findIndex((entry) => entry[0] === "target"),
     firstTarget,
@@ -501,7 +509,7 @@ test("Headers compacts duplicate fields in place at their first wire position", 
 
   headers.delete("target");
   assert.equal(headers.has("target"), false);
-  assert.equal(headers.raw().length, 2050 - Math.floor(2050 / 3));
+  assert.equal(headers[headersRawEntries]().length, 2050 - Math.floor(2050 / 3));
 });
 test("UTF-8 encode and encodeInto match host including lone surrogates", () => {
   for (const text of [

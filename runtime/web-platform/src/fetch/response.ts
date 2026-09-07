@@ -12,6 +12,7 @@ import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
 import type { HeaderEntry, HeadersInit } from "./headers.ts";
+import { headersGuardIsImmutable, headersMakeImmutable } from "./headers.ts";
 
 export interface ResponseInit {
   status?: number;
@@ -159,7 +160,7 @@ export class Response extends Body {
     copy.wasRedirected = this.wasRedirected;
     copy.responseType = this.responseType;
     copy.bodyState = state;
-    if (this.headers.isImmutable) copy.headers.makeImmutable();
+    if (this.headers[headersGuardIsImmutable]) copy.headers[headersMakeImmutable]();
     return copy;
   }
 
@@ -167,7 +168,7 @@ export class Response extends Body {
     const result = new Response();
     result.responseStatus = 0;
     result.responseType = "error";
-    result.headers.makeImmutable();
+    result.headers[headersMakeImmutable]();
     return result;
   }
 
@@ -184,7 +185,7 @@ export class Response extends Body {
       status: convertedStatus,
       headers: [["location", absolute]],
     });
-    result.headers.makeImmutable();
+    result.headers[headersMakeImmutable]();
     return result;
   }
 
@@ -222,7 +223,7 @@ export class Response extends Body {
     result.responseURL = url;
     result.wasRedirected = redirected;
     result.responseType = "basic";
-    result.headers.makeImmutable();
+    result.headers[headersMakeImmutable]();
     return result;
   }
 
@@ -246,7 +247,7 @@ export class Response extends Body {
     result.responseURL = url;
     result.wasRedirected = redirected;
     result.responseType = type;
-    result.headers.makeImmutable();
+    result.headers[headersMakeImmutable]();
     return result;
   }
 

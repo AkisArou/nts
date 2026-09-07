@@ -24,6 +24,7 @@ import type { HeaderEntry } from "../fetch/headers.ts";
 import { Response } from "../fetch/response.ts";
 import type { ResponseContext, ResponseType } from "../fetch/response.ts";
 import { Blob } from "../file/blob.ts";
+import { headersMakeImmutable, headersRawEntries } from "../fetch/headers.ts";
 
 export interface CacheQueryOptions {
   ignoreSearch?: boolean;
@@ -340,7 +341,7 @@ function requestRecord(request: Request): CacheStorageRequestRecord {
     urlWithoutFragment: keys.withoutFragment,
     urlWithoutSearchOrFragment: keys.withoutSearchOrFragment,
     method: request.method,
-    headers: request.headers.raw(),
+    headers: request.headers[headersRawEntries](),
     destination: request.destination,
     referrer: request.referrer,
     referrerPolicy: request.referrerPolicy,
@@ -359,7 +360,7 @@ function requestRecord(request: Request): CacheStorageRequestRecord {
 async function responseRecord(response: Response): Promise<CacheStorageResponseRecord> {
   const status = response.status;
   const statusText = response.statusText;
-  const headers = response.headers.raw();
+  const headers = response.headers[headersRawEntries]();
   const url = response.url;
   const redirected = response.redirected;
   const type = response.type;
@@ -398,7 +399,7 @@ function restoreRequest(record: CacheStorageRequestRecord, context: RequestConte
       isHistoryNavigation: record.isHistoryNavigation,
     },
   );
-  request.headers.makeImmutable();
+  request.headers[headersMakeImmutable]();
   return request;
 }
 
@@ -447,7 +448,7 @@ function varyNames(headers: readonly HeaderEntry[]): VaryNames | null {
 }
 
 function responseHasVaryStar(response: Response): boolean {
-  return varyNames(response.headers.raw())?.star === true;
+  return varyNames(response.headers[headersRawEntries]())?.star === true;
 }
 
 function requestMatches(

@@ -30,6 +30,7 @@ import {
   standardContentCodingPolicy,
   type ContentCodingPolicy,
 } from "./content-coding.ts";
+import { headersRawEntries } from "./headers.ts";
 
 /** Automatic cookie state is opt-in and its site context is supplied per redirect hop. */
 export interface FetchCookiePolicy {
@@ -389,7 +390,7 @@ export class FetchClient {
         const transportRequest: TransportRequest = {
           url,
           method,
-          headers: dispatchHeaders.raw(),
+          headers: dispatchHeaders[headersRawEntries](),
           body: body.stream,
           bodyLength: body.length,
           replayBody: body.transportBodySource(),

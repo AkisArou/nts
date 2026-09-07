@@ -135,3 +135,40 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
     );
   }
 });
+
+/**
+ * Interfaces whose prototypes carry no non-standard members, and whose members are therefore
+ * safe to make enumerable as Web IDL requires.
+ *
+ * The list is short because the rest still expose internals; see
+ * `idl-internal-surface.test.mjs`. Adding a class here without first clearing its internals
+ * would enumerate those too, which is the ordering that makes this list the interesting part.
+ */
+const FULLY_CONFORMANT = ["Headers", "TextDecoder", "TextEncoder", "TextDecoderStream", "TextEncoderStream"];
+
+suite("members of a cleared interface are enumerable, as Web IDL requires", () => {
+  const wrong = [];
+  for (const name of FULLY_CONFORMANT) {
+    for (const key of Object.getOwnPropertyNames(api[name].prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(api[name].prototype, key);
+      if (!descriptor.enumerable) wrong.push(`${name}.${key}`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
+suite("making them enumerable did not expose an internal", () => {
+  // The other half of the same change. `getOwnPropertyNames` skips symbol keys, so the
+  // internals other modules reach are untouched by the enumerability pass -- and that is
+  // exactly why the pass is safe on these classes and not on the rest.
+  for (const name of FULLY_CONFORMANT) {
+    const conformant = globalThis[name];
+    if (typeof conformant !== "function") continue;
+    const theirs = new Set(Object.getOwnPropertyNames(conformant.prototype));
+    const extra = Object.getOwnPropertyNames(api[name].prototype).filter(
+      (key) => key !== "constructor" && !theirs.has(key),
+    );
+    assert.deepEqual(extra, [], `${name} must expose no non-standard names`);
+  }
+});

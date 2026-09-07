@@ -29,6 +29,7 @@ import {
 import type { HeadLimits } from "./parser.ts";
 import { ConnectionPool } from "./pool.ts";
 import type { PoolOptions } from "./pool.ts";
+import { headersRawEntries } from "../fetch/headers.ts";
 
 export interface Http1Options extends PoolOptions {
   connectTimeoutMs?: number;
@@ -130,7 +131,7 @@ function requestHead(
     throw new TypeError("URL parser produced an invalid HTTP request target");
   let head = request.method + " " + (target || "/") + " HTTP/1.1\r\n";
 
-  for (const [name, value] of headers.raw()) {
+  for (const [name, value] of headers[headersRawEntries]()) {
     validateWireValue(value);
     head += name + ": " + value + "\r\n";
   }

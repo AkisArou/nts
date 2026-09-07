@@ -23,6 +23,7 @@ import { HTTP2_REFUSED_STREAM, Http2WireError } from "./frame.ts";
 import { Http2ClientConnection } from "./connection.ts";
 import type { Http2ClientResponse, Http2ConnectionOptions } from "./connection.ts";
 import type { HpackHeaderField } from "./hpack.ts";
+import { headersRawEntries } from "../fetch/headers.ts";
 
 export interface Http2TransportOptions {
   connectTimeoutMs?: number;
@@ -137,7 +138,7 @@ function requestFields(request: TransportRequest): HpackHeaderField[] {
     { name: ":authority", value: request.url.host },
     { name: ":path", value: path === "" ? "/" : path },
   ];
-  for (const [name, value] of headers.raw()) fields.push({ name, value });
+  for (const [name, value] of headers[headersRawEntries]()) fields.push({ name, value });
   return fields;
 }
 

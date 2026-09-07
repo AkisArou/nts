@@ -6162,3 +6162,47 @@ with the fixture: support that nothing loads is an unrouted mechanism, which thi
 against elsewhere and should not exempt itself from.
 
 Upstream steady at **2,602 tests, 2,566 passing, 8 failing**, 814/814 host.
+
+## Symbol keys, proved on `Headers` before anyone tries it on streams
+
+The previous entry named symbol-keyed members as the mechanism that closes both remaining
+Web IDL deviations at once, and left it as a cross-module refactor not to be done in passing.
+`Headers` is that refactor at a size where it can be checked: four internals, seven consuming
+modules, and one test file.
+
+**`Headers` now has nothing non-standard on its prototype, and its members are enumerable.**
+It is the first interface in this runtime that is fully conformant on both counts.
+
+One of the four never needed a symbol at all. `writable` was already TypeScript `private` and
+called only from inside the class — it was on the prototype purely because TS `private`
+compiles to an ordinary method and enforces nothing at runtime. That is the same fact that
+made the brand checks free, seen from the other side: **`private` is a compile-time comment,
+`#` is a runtime guarantee, and only one of them affects the shape a consumer sees.**
+
+The other three — `raw`, `isImmutable`, `makeImmutable` — are genuinely cross-module and are
+symbol-keyed now. `Object.getOwnPropertyNames` does not report symbols, so they leave the
+enumerable surface entirely while staying reachable from the seven modules that need them,
+and the keys are deliberately **not** re-exported from the public barrel: reachable inside
+this runtime, invisible to a consumer.
+
+### What the change cost, and what it proved
+
+Frontier unchanged at 1,407/337. Upstream unchanged. Two host tests broke and **that was the
+change working**: `core.test.mjs` reached `headers.raw()` directly, and a test is a consumer
+like any other, so it now imports the key the same way the runtime does.
+
+Two sabotages, and the more interesting one could not run. Dropping the enumerability pass is
+caught. Renaming a symbol-keyed member back to a name is **refused by `tsc` at every call
+site** — the type system prevents that regression outright, which is a stronger guarantee
+than a test and is a property of the mechanism rather than of the discipline around it. So
+the third sabotage asks the question that is still open: adding a *new* named method to
+`Headers` is caught, by the assertion that a cleared interface exposes no non-standard names.
+
+**The number that matters for whoever does streams**: 63 → 45 by privatisation, 45 → 41 here.
+The remaining 41 are the ones needing this same treatment, and `ReadableStream`'s seventeen
+are the bulk of it. A name-based scan counts 202 call sites across them, but that number is
+**conflated and useless**: `enqueue`, `read` and `desiredSize` are legitimate Web IDL members
+on controllers and readers as well as internals on the stream, and only a type-aware pass can
+separate the two. Do not do that one with a regular expression.
+
+814/814 host, upstream 2,602 tests with 2,566 passing and the same eight failures.
