@@ -31,6 +31,7 @@ runtime/web-platform/src/fetch          Fetch objects, body and policy algorithm
 runtime/web-platform/src/file           canonical File API objects and storage algorithms
 runtime/web-platform/src/forms          FormData, URL-encoding, MIME and multipart algorithms
 runtime/web-platform/src/http1          portable deterministic HTTP/1 reference engine
+runtime/web-platform/src/http2          portable HTTP/2 framing and HPACK engine
 runtime/web-platform/src/provider       native capability contracts and runtime assembly
 runtime/web-platform/src/streams        canonical Web Streams implementation
 runtime/web-platform/src/websocket      WebSocket API, protocol and reference engine
@@ -86,3 +87,12 @@ The ordinary-Node provider used to exercise this code on the host lives under
 test infrastructure, not the native Node-compatible provider. The latter belongs
 under `runtime/node/internal/web-platform` and calls the common runtime's typed native
 capabilities.
+
+The HPACK codec implements RFC 7541's complete static and dynamic tables, integer
+and string representations, Huffman alphabet, table-size synchronization, sensitive
+never-indexed fields, and independent encoded-string/header-list resource limits.
+Its focused suite includes every RFC request/response vector. The wider
+interoperability runner consumes the upstream `http2jp/hpack-test-case` repository
+pinned at `8a1406e7d14bfcb6c046021f13cc15cfb162726d`; pass that clean checkout to
+`tooling/conformance/web-platform/test-hpack-upstream.mjs`. It is intentionally not
+downloaded by the ordinary offline conformance gate.
