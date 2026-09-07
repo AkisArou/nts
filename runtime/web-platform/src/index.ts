@@ -92,7 +92,35 @@ export type {
 export { Response } from "./fetch/response.ts";
 export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 
-export { fetch } from "./fetch/fetch.ts";
+export { fetch, ServerCookiePolicy } from "./fetch/fetch.ts";
+export type { FetchCookiePolicy } from "./fetch/fetch.ts";
+
+export {
+  deleteCookie,
+  getCookiePairs,
+  getSetCookies,
+  parseCookie,
+  parseCookieDate,
+  serializeCookie,
+  setCookie,
+} from "./cookies/cookies.ts";
+export type {
+  Cookie,
+  CookiePair,
+  CookieSameSite,
+  DeleteCookieAttributes,
+} from "./cookies/cookies.ts";
+export { CookieJar, MemoryCookieJarStore, domainMatches, pathMatches } from "./cookies/jar.ts";
+export type {
+  CookieAccessContext,
+  CookieAccessType,
+  CookieJarOptions,
+  CookieJarStore,
+  CookieSameSiteStatus,
+  PublicSuffixChecker,
+  StoredCookie,
+  StoredSameSite,
+} from "./cookies/jar.ts";
 
 export { EventSource } from "./eventsource/event-source.ts";
 export type { EventSourceInit } from "./eventsource/event-source.ts";

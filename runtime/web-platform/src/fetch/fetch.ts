@@ -1,4 +1,5 @@
 import { AbortSignal } from "../core/abort.ts";
+import type { CookieAccessContext, CookieJar } from "../cookies/jar.ts";
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { networkError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
@@ -20,6 +21,26 @@ import { processDataURL } from "./data-url.ts";
 import { fetchBlob } from "./blob-url.ts";
 
 declare function nts_environment_platform(): WebPlatformRuntime;
+
+/** Automatic cookie state is opt-in and its site context is supplied per redirect hop. */
+export interface FetchCookiePolicy {
+  readonly jar: CookieJar;
+
+  contextFor(url: URLRecord, initialURL: URLRecord, method: string): CookieAccessContext;
+}
+
+/** Server/mobile policy with no browser principal: every eligible request is same-site. */
+export class ServerCookiePolicy implements FetchCookiePolicy {
+  readonly jar: CookieJar;
+
+  constructor(jar: CookieJar) {
+    this.jar = jar;
+  }
+
+  contextFor(_url: URLRecord, _initialURL: URLRecord, method: string): CookieAccessContext {
+    return { type: "http", sameSite: "same-site", topLevelNavigation: false, method };
+  }
+}
 
 /** Canonical environment-scoped Fetch entry point. */
 export function fetch(
@@ -138,17 +159,20 @@ export class FetchClient {
   private readonly context: RequestContext;
   private readonly decoder: ContentDecoder | undefined;
   private readonly maxRedirects: number;
+  private readonly cookies: FetchCookiePolicy | undefined;
 
   constructor(
     transport: FetchTransport,
     context: RequestContext,
     decoder?: ContentDecoder,
     maxRedirects = 20,
+    cookies?: FetchCookiePolicy,
   ) {
     this.transport = transport;
     this.context = context;
     this.decoder = decoder;
     this.maxRedirects = maxRedirects;
+    this.cookies = cookies;
   }
 
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
@@ -156,6 +180,11 @@ export class FetchClient {
     const request = new Request(input, init, this.context);
     request.signal.throwIfAborted();
     let url = request.parsedURL;
+    const initialURL = url;
+    const credentialsOrigin =
+      this.context.origin === undefined
+        ? initialURL.origin
+        : this.context.urls.parse(this.context.origin).origin;
     let method = request.method;
     let body = request.getState();
     const headers = new Headers(request.headers);
@@ -206,10 +235,27 @@ export class FetchClient {
         }
         checkURL(url);
         request.signal.throwIfAborted();
+        const dispatchHeaders = new Headers(headers);
+        const cookiePolicy = this.cookies;
+        const cookiesAllowed =
+          cookiePolicy !== undefined &&
+          request.credentials !== "omit" &&
+          (request.credentials === "include" || url.origin === credentialsOrigin);
+        const cookieContext = cookiesAllowed
+          ? cookiePolicy.contextFor(url, initialURL, method)
+          : undefined;
+        if (
+          cookiePolicy !== undefined &&
+          cookieContext !== undefined &&
+          !dispatchHeaders.has("cookie")
+        ) {
+          const cookie = await cookiePolicy.jar.getCookieHeader(url, cookieContext);
+          if (cookie.length > 0) dispatchHeaders.set("cookie", cookie);
+        }
         const raw = await abortableDispatch(this.transport, {
           url,
           method,
-          headers: headers.raw(),
+          headers: dispatchHeaders.raw(),
           body: body.stream,
           bodyLength: body.length,
           signal: request.signal,
@@ -220,6 +266,11 @@ export class FetchClient {
           if (raw.status < 200 || raw.status > 599)
             throw new TypeError("Invalid final HTTP response status");
           const responseHeaders = new Headers(raw.headers);
+          if (cookiePolicy !== undefined && cookieContext !== undefined) {
+            for (const value of responseHeaders.getSetCookie()) {
+              await cookiePolicy.jar.setCookie(value, url, cookieContext);
+            }
+          }
           const location = responseHeaders.get("location");
           if (isRedirectStatus(raw.status) && location !== null && request.redirect !== "manual") {
             if (request.redirect === "error")

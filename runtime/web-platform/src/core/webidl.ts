@@ -12,7 +12,11 @@ function roundTiesToEven(value: number): number {
 }
 
 /** Enforce Web IDL's required-argument check before converting any argument. */
-export function requireArguments<T>(args: readonly T[], required: number, operation: string): void {
+export function requireArguments(
+  args: { readonly length: number },
+  required: number,
+  operation: string,
+): void {
   if (args.length < required) {
     throw new TypeError(operation + " requires at least " + required + " argument(s)");
   }
@@ -93,6 +97,11 @@ export function toLongLong(value: number): number {
   }
 
   const integer = number < 0 ? Math.ceil(number) : Math.floor(number);
+  // Every safe JavaScript integer is already within the signed 64-bit range.
+  // Returning it directly also avoids losing the low bits while adding 2^64.
+  if (Number.isSafeInteger(integer)) {
+    return integer;
+  }
   const modulus = 18_446_744_073_709_551_616;
   const signedBoundary = 9_223_372_036_854_775_808;
   let wrapped = integer % modulus;
