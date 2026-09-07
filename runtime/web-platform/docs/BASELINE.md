@@ -5108,3 +5108,34 @@ entry followed by a token with no dash. The parser was right and the case was re
 
 Local corpus 717/717 with zero skipped, upstream unchanged at 2,408 of 2,418, frontier
 unchanged at 1,296 primary `NTS1001` and 314 `NTS1003`.
+
+### The same audit over every other path, and it was the only one
+
+One fix is worth less than knowing it was the only one needed, so the shape was chased
+across the whole lane: **a Web IDL `DOMString` field feeding a path that requires bytes.**
+
+Every caller of `encodeByteString` was checked against where its input comes from. The
+answer is a clean rule rather than a list. `Headers` coerces every name and value with
+`coerceToByteString`, which refuses a code unit above 255 at the boundary, so everything
+header-derived — the HTTP/1 head, HPACK values, the multipart boundary, the proxy
+`CONNECT` line, the WebSocket handshake — is already bytes before it arrives.
+
+`Request.integrity` was the **only** field on any of those paths declared
+`coerceToDOMString`. The bug lived exactly where the Web IDL type said "any string" and
+the consumer needed "bytes", which is not a coincidence and is the thing to look for
+next time.
+
+The two remaining `DOMString` fields that plausibly reach a byte path do not, and both
+were probed rather than reasoned about:
+
+`Blob.type` normalises. A type containing anything outside U+0020–U+007E becomes the
+empty string, as the File API requires — measured with a high code unit and a control
+character, both giving `""`. So a `Blob` cannot smuggle one into a `Content-Type` header.
+
+WebSocket subprotocols are validated as HTTP tokens and a non-token throws a
+`SyntaxError` at the constructor, so nothing above U+007F reaches
+`Sec-WebSocket-Protocol`.
+
+Cache names reach a `TextEncoder`, which encodes any string.
+
+One instance, found, fixed, and the rest checked.
