@@ -1577,8 +1577,38 @@ fn field_of(
 }
 
 /// The C spelling of an array's element type.
+/// Which addressing an element access uses.
+///
+/// An array's elements sit inline after its header; a view's are in a buffer
+/// somewhere else. The two macros differ only in how they find the base.
+fn items_macro(receiver: &HirType) -> &'static str {
+    match receiver {
+        HirType::Managed(ManagedType::View(_)) => "NTS_VIEW_ITEMS",
+        _ => "NTS_ITEMS",
+    }
+}
+
+/// Where a value's length comes from.
+///
+/// A string *is* a header, so its length is a direct member. An array, a map
+/// and a set have one as their first field and reach through it. A view has
+/// neither: its length is **computed**, because one built without an explicit
+/// count follows its buffer through `resize` -- so there is no field to read,
+/// which is the point of it.
+fn length_expression(ty: &HirType, value: ValueId) -> String {
+    match ty {
+        HirType::Managed(ManagedType::View(_)) => {
+            format!("nts_view_length({})", value_name(value))
+        }
+        HirType::Managed(
+            ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_),
+        ) => format!("{}->header.length", value_name(value)),
+        _ => format!("{}->length", value_name(value)),
+    }
+}
+
 fn element_type(program: &Program, array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
-    let HirType::Managed(ManagedType::Array(element)) = array else {
+    let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) = array else {
         return Err(Diagnostic::error(
             "NTS2005",
             "an array operation on something that is not an array",
@@ -1626,14 +1656,22 @@ fn index_expression(func: &Func, array: ValueId, index: ValueId, checked: bool) 
         // arrived in.
         return format!("(uint32_t){}", value_name(index));
     }
+    // A view's bound is computed rather than stored, so it has its own pair of
+    // helpers. The choice is the receiver's type, exactly as the addressing is.
+    let view = matches!(
+        func.values[array.0 as usize].ty,
+        HirType::Managed(ManagedType::View(_))
+    );
     if matches!(func.values[index.0 as usize].ty, HirType::Int { .. }) {
+        let helper = if view { "nts_view_check" } else { "nts_check" };
         format!(
-            "nts_check({}, (uint32_t){})",
+            "{helper}({}, (uint32_t){})",
             value_name(array),
             value_name(index)
         )
     } else {
-        format!("nts_index({}, {})", value_name(array), value_name(index))
+        let helper = if view { "nts_view_index" } else { "nts_index" };
+        format!("{helper}({}, {})", value_name(array), value_name(index))
     }
 }
 
@@ -1825,6 +1863,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
+        HirType::Managed(ManagedType::View(_)) => "NtsView *",
         HirType::Managed(ManagedType::DataView) => "NtsDataView *",
         // One runtime type whatever it carries. The payload's representation is
         // in the HIR type for the compiler's sake -- it says which
@@ -2634,17 +2673,10 @@ fn managed_op(
             // Everything else here has one as its first field and reaches
             // through it -- an array because it can grow and a string cannot, a
             // table because it owns three arrays besides.
-            let of = if matches!(
-                func.values[array.0 as usize].ty,
-                HirType::Managed(
-                    ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_)
-                )
-            ) {
-                format!("{}->header.length", value_name(*array))
-            } else {
-                format!("{}->length", value_name(*array))
-            };
-            format!("{name} = ({target}){of};")
+            format!(
+                "{name} = ({target}){};",
+                length_expression(&func.values[array.0 as usize].ty, *array)
+            )
         }
         OpKind::ArrayGet {
             array,
@@ -2657,8 +2689,13 @@ fn managed_op(
                 &op.origin,
             )?;
             let slot = index_expression(func, *array, *index, *checked);
+            // A view's elements are not inline, so they are addressed through
+            // the buffer it names. Same operation, different storage -- which
+            // is the whole reason `ArrayGet` takes both rather than there
+            // being a second opcode.
+            let items = items_macro(&func.values[array.0 as usize].ty);
             format!(
-                "{name} = NTS_ITEMS({}, {element})[{slot}];",
+                "{name} = {items}({}, {element})[{slot}];",
                 value_name(*array)
             )
         }
@@ -2674,8 +2711,9 @@ fn managed_op(
                 &op.origin,
             )?;
             let slot = index_expression(func, *array, *index, *checked);
+            let items = items_macro(&func.values[array.0 as usize].ty);
             format!(
-                "NTS_ITEMS({}, {element})[{slot}] = {};",
+                "{items}({}, {element})[{slot}] = {};",
                 value_name(*array),
                 value_name(*stored)
             )

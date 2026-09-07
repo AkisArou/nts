@@ -2575,6 +2575,14 @@ uint32_t nts_index_fn(const NtsArray *array, double index) {
   return nts_index(array, index);
 }
 
+uint32_t nts_view_check_fn(const NtsView *view, uint32_t index) {
+  return nts_view_check(view, index);
+}
+
+uint32_t nts_view_index_fn(const NtsView *view, double index) {
+  return nts_view_index(view, index);
+}
+
 /* The frame-placed substring, likewise. Under `-flto` this is inlined and the
  * fast path costs a backend that cannot read the header nothing; without it,
  * one call -- still far cheaper than the allocation it replaces. */
@@ -4650,9 +4658,20 @@ NtsView *nts_view_subarray(const NtsView *view, double from, double to) {
   /* The same buffer, offset further in. No copy, and no tracking: a subarray
      has the length it was cut to, which is why `new Uint8Array(buffer)` and
      `view.subarray(0)` behave differently on a later `resize`. */
+  /* The KIND, not the width. `nts_view_new` derives the width from the kind
+     and the two agree only for a one-byte element, so passing the width made a
+     `Uint16Array`'s subarray claim to be a `Uint8ClampedArray`.
+
+     Narrower than it looks, which is why it hid: indexed access is emitted
+     from the *HIR* element type, so `window[0]` still reads two bytes at the
+     right offset. What the runtime kind decides is `byteLength`, and the
+     element conversions `set` and `copyWithin` go through -- so a wrong kind
+     is a wrong byte length and a wrong cross-width `set`, and every read looks
+     fine. It survived because the only subarray anything took was of a
+     `Uint8Array`, where 1 and 1 are the same number. */
   return nts_view_new(view->buffer,
                       (double)(view->byte_offset + (size_t)start * view->width),
-                      (double)count, (double)view->width, false);
+                      (double)count, (double)view->kind, false);
 }
 
 NtsView *nts_view_slice(const NtsView *view, double from, double to) {
@@ -4670,7 +4689,7 @@ NtsView *nts_view_slice(const NtsView *view, double from, double to) {
     memcpy(copy->bytes, source + (size_t)start * view->width, bytes);
   }
   NtsView *out =
-      nts_view_new(copy, 0.0, (double)count, (double)view->width, false);
+      nts_view_new(copy, 0.0, (double)count, (double)view->kind, false);
   /* `nts_view_new` retained it, and this function is the only other owner. */
   nts_release((NtsHeader *)copy);
   return out;

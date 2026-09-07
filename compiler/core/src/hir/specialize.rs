@@ -604,7 +604,15 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                     value: stored,
                     checked,
                 } => match &func.values[array.0 as usize].ty {
-                    HirType::Managed(super::ManagedType::Array(element)) => {
+                    // A view's slot has to agree with what is stored into it
+                    // for the same reason an array's does, and specialization
+                    // narrows a parameter without knowing where it will be
+                    // stored. Missing this put an `i32` into a `Float64Array`
+                    // -- which C converts silently at the assignment and LLVM
+                    // refuses outright, so only the second backend said so.
+                    HirType::Managed(
+                        super::ManagedType::Array(element) | super::ManagedType::View(element),
+                    ) => {
                         let want = (**element).clone();
                         let stored = convert(func, &mut rewritten, &mut count, stored, &want);
                         Some(OpKind::ArraySet {

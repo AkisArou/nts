@@ -320,6 +320,15 @@ pub const READS_ONLY: &[&str] = &[
     // back a reference the view already holds.
     "nts_dataview_byte_length",
     "nts_dataview_byte_offset",
+    // The bigint pair is `pure` for a reason the rest of the family does not
+    // need stated: it returns `__int128` **by value**, so unlike every other
+    // helper that yields a `bigint` it allocates nothing and there is nothing
+    // for a folded-away second call to leak. Both were marked in the header and
+    // neither was listed here, which is a missed elision rather than a hazard --
+    // and it survived a commit because the two lists are checked by a test and
+    // the commit wrapper runs clippy, not tests.
+    "nts_dataview_get_bigint64",
+    "nts_dataview_get_biguint64",
     "nts_dataview_get_float32",
     "nts_dataview_get_float64",
     "nts_dataview_get_int16",

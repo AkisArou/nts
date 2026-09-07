@@ -1,8 +1,17 @@
-// A typed array is an ordinary array whose element width was *written down*
-// rather than inferred. `hir::elements` proves that a `number[]` of small whole
-// numbers can be an `int32_t[]`; `Int32Array` is the same storage, chosen by
-// the author. So this needs no new representation -- the descriptors, the
-// bounds checks and the escape analysis already work on one.
+// A typed array is a **view**: a window onto an `ArrayBuffer`, which is what
+// the specification says one is and what `ManagedType::View` now models.
+//
+// This file used to open by arguing the opposite -- that a typed array is an
+// ordinary array whose element width was written down, so it needed no
+// representation of its own. That was true of everything this file does and
+// false of the language: it has no `subarray`, hands no `.buffer` to a second
+// constructor, and never makes two views name the same bytes. Every case below
+// would pass against a lowering that copied, which is why the argument survived
+// as long as it did.
+//
+// `examples/typed-array-aliasing` is where that property is tested. What is
+// here is the *elements*: the widths, the stores, and the conversions each one
+// makes.
 //
 // What is new is the *store*. `u8[i] = v` is not a cast: ECMAScript truncates
 // toward zero and takes the result modulo the width, and every non-finite value

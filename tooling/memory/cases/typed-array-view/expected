@@ -1,0 +1,53 @@
+ideal 170
+allocated 85
+because Argued before measuring, and the numbers below are the argument
+because rather than the measurement -- they are written first on purpose and
+because `tooling/memory/run.sh` is what decides whether the argument was
+because right.
+because
+because Allocations: eighty-five. Seventeen iterations -- `i < 16 + n` with
+because `n` of one, which is the loop `array-buffer` uses and the reason its
+because thirty-four is not thirty-two -- and five per iteration: the
+because buffer's struct and its block of bytes, then three `NtsView` structs
+because and NOTHING for their contents. A view owns no storage: it is an
+because offset, a length, a kind and a borrowed pointer to the buffer, so the
+because second and third views over one buffer must cost exactly what the
+because first did. Any number above eighty-five means something copied, and a
+because copy is invisible in every answer this program computes.
+because
+because The `subarray` is the one worth stating separately. `window` is cut
+because from `bytes`, and it must hold the BUFFER rather than the view it came
+because from -- a window on a window is still one window. A chain would show
+because up here as a retain rather than as an allocation, so it is the
+because operation count that carries it, not this line.
+because
+because Operations: a hundred and seventy, which is ten per iteration. The
+because argument written here before measuring said "eight", and the
+because arithmetic written directly underneath it said ten -- four releases
+because for the four objects that die each iteration, plus three pairs for
+because the views retaining and releasing the buffer they borrow. Four plus
+because six is ten. The prose had it right and the number at the top of this
+because file did not, which is the smallest possible version of the failure
+because this directory exists to catch: a figure and its own derivation, one
+because line apart, disagreeing, with nobody adding them up.
+because
+because The alternative was written down too -- "if it lands on ten per
+because iteration the argument was wrong by two and the count is a hundred
+because and seventy" -- and that is what it measured. Recorded because a
+because prediction that names its own failure mode and then meets it is worth
+because more than one that was simply right.
+because
+because Nothing is elided: naive a hundred and seventy, actual a hundred and
+because seventy, nought per cent. That is not a finding, it is the family --
+because `array-buffer` is seventeen and seventeen for the same reason. A
+because struct that owns a heap block cannot be placed in the frame, because
+because frame storage never reaches `nts_free` and the block would leak. The
+because cases that elide in this suite are the ones that own nothing.
+because
+because What this case guards, and `examples/typed-array-aliasing` cannot: a
+because lowering that COPIED would agree with node on every answer here.
+because `words[0]` after `bytes[0] = i` is the one line that would disagree,
+because and it is one line -- the aliasing example is where that argument is
+because made properly. Here the subject is the price, which a correct
+because implementation and a copying one do not share even when their answers
+because are identical.

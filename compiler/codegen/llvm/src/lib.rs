@@ -289,7 +289,9 @@ fn tbaa(ty: &str) -> &'static str {
 /// through a `double *` and C converts on the way in. Here it is written down.
 fn array_element(func: &Func, array: ValueId) -> Result<&HirType, Diagnostic> {
     match &func.values[array.0 as usize].ty {
-        HirType::Managed(nts_core::hir::ManagedType::Array(element)) => Ok(element),
+        HirType::Managed(
+            nts_core::hir::ManagedType::Array(element) | nts_core::hir::ManagedType::View(element),
+        ) => Ok(element),
         _ => Err(refuse(
             func,
             "an element access on something that is not an array",
@@ -618,11 +620,34 @@ fn index_lines(
     index: ValueId,
     checked: bool,
 ) -> Result<Vec<String>, Diagnostic> {
-    let mut lines = vec![format!(
-        "{out}.blk = getelementptr i8, ptr {}, i64 {}",
-        name(array),
-        nts_codegen_common::layout::ELEMENTS_OFFSET
-    )];
+    // An array's elements sit at a fixed offset inside its header; a view's are
+    // in a buffer somewhere else, so the block is a call rather than an offset.
+    // The helper is pure, so repeated accesses in one function fold to one.
+    let view = matches!(
+        func.values[array.0 as usize].ty,
+        HirType::Managed(nts_core::hir::ManagedType::View(_))
+    );
+    //
+    // Both branches leave `%out.block` holding the *elements* pointer, so the
+    // callers index it the same way. An array's `elements` is a field, so its
+    // address is an offset and the pointer is loaded out of it; a view's bytes
+    // are what `nts_view_bytes` already returns, and loading from that would
+    // read the first eight bytes of the data as an address.
+    let mut lines = if view {
+        vec![format!(
+            "{out}.block = call ptr @nts_view_bytes(ptr {})",
+            name(array)
+        )]
+    } else {
+        vec![
+            format!(
+                "{out}.blk = getelementptr i8, ptr {}, i64 {}",
+                name(array),
+                nts_codegen_common::layout::ELEMENTS_OFFSET
+            ),
+            format!("{out}.block = load ptr, ptr {out}.blk{}", tbaa("ptr")),
+        ]
+    };
     let held = &func.values[index.0 as usize].ty;
     let integral = matches!(held, HirType::Int { .. });
     if checked {
@@ -632,10 +657,11 @@ fn index_lines(
         // need narrowing is exactly the one where saying `i32` and meaning
         // `i64` is wrong. Found by a benchmark whose counter is bounded by a
         // length rather than a constant.
-        let helper = if integral {
-            "nts_check_fn"
-        } else {
-            "nts_index_fn"
+        let helper = match (view, integral) {
+            (true, true) => "nts_view_check_fn",
+            (true, false) => "nts_view_index_fn",
+            (false, true) => "nts_check_fn",
+            (false, false) => "nts_index_fn",
         };
         let at = helper_operand(func, out, helper, 1, index, &mut lines)?;
         lines.push(format!(
@@ -921,6 +947,13 @@ fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
 /// table as everything else so there is one place a signature comes from.
 pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_array_new",
+    // The view trio. Emitted as raw IR from `index_lines` rather than as HIR
+    // calls, so `externals` -- which reads `OpKind::Call` -- cannot see them
+    // and would leave every element access referring to an undeclared symbol.
+    "nts_view_bytes",
+    "nts_view_length",
+    "nts_view_check_fn",
+    "nts_view_index_fn",
     "nts_array_new_uninitialized",
     "nts_bigint_shl",
     "nts_bigint_shr",
@@ -1888,10 +1921,6 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked)?;
             lines.push(format!(
-                "{out}.block = load ptr, ptr {out}.blk{}",
-                tbaa("ptr")
-            ));
-            lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
             lines.push(format!(
@@ -1908,10 +1937,6 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
         } => {
             let element = ty_of(array_element(func, *array)?, func)?;
             let mut lines = index_lines(func, &out, *array, *index, *checked)?;
-            lines.push(format!(
-                "{out}.block = load ptr, ptr {out}.blk{}",
-                tbaa("ptr")
-            ));
             lines.push(format!(
                 "{out}.at = getelementptr {element}, ptr {out}.block, i32 {out}.i"
             ));
@@ -2070,6 +2095,28 @@ fn text_operation(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
             let returns = ty_of(&op.ty, func)?;
             let at = format!("{out}.at");
             let raw = format!("{out}.raw");
+            // A view's length is computed rather than stored -- one built
+            // without a count follows its buffer through `resize` -- so there
+            // is no field at `LENGTH_OFFSET` to load.
+            if matches!(
+                func.values[of.0 as usize].ty,
+                HirType::Managed(nts_core::hir::ManagedType::View(_))
+            ) {
+                let counted = format!("{out}.n");
+                let mut lines = vec![format!(
+                    "{counted} = call double @nts_view_length(ptr {})",
+                    name(*of)
+                )];
+                // `converted` refuses a conversion to the type it already
+                // has, which is right for it and means the common case here --
+                // a length used as a number -- has to be a move.
+                lines.push(if returns == "double" {
+                    format!("{out} = fadd double {counted}, 0.0")
+                } else {
+                    converted(&out, "double", returns, &counted, func)?
+                });
+                return Ok(lines.join("\n  "));
+            }
             let offset = nts_codegen_common::layout::LENGTH_OFFSET;
             let mut lines = vec![
                 format!("{at} = getelementptr i8, ptr {}, i64 {offset}", name(*of)),

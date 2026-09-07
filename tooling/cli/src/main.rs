@@ -856,6 +856,9 @@ fn render(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
         HirType::Managed(ManagedType::Date) => "managed<date>".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "managed<buffer>".to_owned(),
+        HirType::Managed(ManagedType::View(element)) => {
+            format!("managed<view<{}>>", render(element))
+        }
         HirType::Managed(ManagedType::DataView) => "managed<dataview>".to_owned(),
         // Named by the part of the synthetic space it is in. Every one of them
         // printed as `closure#N` before, which is the one thing an `async`

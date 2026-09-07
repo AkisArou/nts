@@ -781,8 +781,15 @@ fn transfer_op(
         //
         // So `hir::elements` decides the storage, and the fact follows it.
         OpKind::ArrayGet { array, .. } => match &func.values[array.0 as usize].ty {
-            super::HirType::Managed(super::ManagedType::Array(element))
-                if matches!(**element, super::HirType::Int { .. }) =>
+            // A view's element carries the same fact for the same reason: the
+            // width *is* the range. Missing this left a `Uint8Array` read with
+            // no bound, so the arithmetic around it could not specialize and
+            // the byte went `u8 -> f64 -> i32` after all -- which the
+            // optimisation test asserts against, and which is the only place
+            // that would have said so.
+            super::HirType::Managed(
+                super::ManagedType::Array(element) | super::ManagedType::View(element),
+            ) if matches!(**element, super::HirType::Int { .. }) =>
             {
                 // The width *is* a range, whatever the stores say. A
                 // `Uint8Array`'s element is 0 to 255 by construction, and

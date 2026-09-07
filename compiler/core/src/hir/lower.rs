@@ -3351,7 +3351,7 @@ fn representation_of(
         // one.
         TypeKind::Object { properties } => match inherited_typed_array(snapshot, ty) {
             Some(element) if !declares_storage(properties) => {
-                HirType::Managed(ManagedType::Array(Box::new(element)))
+                HirType::Managed(ManagedType::View(Box::new(element)))
             }
             _ => HirType::Managed(ManagedType::Object(ty)),
         },
@@ -3497,7 +3497,13 @@ fn representation_of(
             }
             let name = named(snapshot, ty)?;
             if let Some(element) = super::builtin::typed_array_element(name) {
-                HirType::Managed(ManagedType::Array(Box::new(element)))
+                // A view rather than an array. The specification says so --
+                // `new Uint8Array(8)` allocates a buffer and returns a window
+                // onto it -- and until now this compiler said otherwise, which
+                // is the precision loss §16 records: `number[]` and
+                // `Float64Array` were one representation, so nothing could
+                // tell them apart at runtime.
+                HirType::Managed(ManagedType::View(Box::new(element)))
             } else if super::builtin::is_error(name) {
                 HirType::Managed(ManagedType::Object(ty))
             } else {
@@ -9912,9 +9918,13 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
         match (&ty, forced) {
-            (HirType::Managed(ManagedType::Array(element)), None) => {
-                Ok(Walk::Counted((**element).clone()))
-            }
+            // A view walks by count exactly as an array does -- `length` and
+            // an index, which is what `Walk::Counted` is. The loop it emits
+            // reads through `ArrayGet`, and that already takes both.
+            (
+                HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)),
+                None,
+            ) => Ok(Walk::Counted((**element).clone())),
             (HirType::Managed(ManagedType::String), None) => Ok(Walk::Text),
             // A `Set`'s elements are its keys, so iterating one, its `keys()`
             // and its `values()` are the same walk -- which is what JavaScript
@@ -11936,8 +11946,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, "an assignment that reads through an accessor"));
             }
             Place::Element { array, index } => {
-                let HirType::Managed(ManagedType::Array(element)) =
-                    self.values[array.0 as usize].ty.clone()
+                let HirType::Managed(
+                    ManagedType::Array(element) | ManagedType::View(element),
+                ) = self.values[array.0 as usize].ty.clone()
                 else {
                     return Err(self.not_an_array(id));
                 };
@@ -11978,7 +11989,13 @@ impl<'a> FuncBuilder<'a> {
     /// already known, which is the common case in a loop that built the value.
     fn coerce_element(&mut self, id: NodeId, array: ValueId, value: ValueId) -> ValueId {
         let numeric = |ty: &HirType| matches!(ty, HirType::Int { .. } | HirType::Float { .. });
-        let HirType::Managed(ManagedType::Array(element)) =
+        // A view coerces exactly as an array does. This is the site the
+        // typed-array representation change would most easily have lost: the
+        // pattern is a `let else`, so a view simply fails to match and the
+        // store becomes a C assignment of a `double` into a `uint8_t` slot --
+        // which is undefined behaviour rather than the modulo the language
+        // specifies, and produces no diagnostic anywhere.
+        let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
             return value;
@@ -14297,8 +14314,16 @@ impl<'a> FuncBuilder<'a> {
             .node_types
             .get(&id)
             .is_none_or(|constructed| self.hierarchy.constructor(*constructed).is_none());
-        if class == "Array" || super::builtin::typed_array_element(&class).is_some() || is_an_array
-        {
+        // A typed array is a view now, and `new Uint8Array(8)` is what the
+        // specification says it is: allocate a buffer of the right byte length
+        // and return a window onto it. Handled before the `new Array` path
+        // below, which is about a *different* representation with its elements
+        // inline.
+        if let Some(element) = super::builtin::typed_array_element(&class) {
+            return self.lower_new_typed_array(id, &class, element);
+        }
+
+        if class == "Array" || is_an_array {
             let ty = self
                 .type_of(id)
                 .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
@@ -14426,6 +14451,16 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Date) => Some(self.lower_new_date(id)),
             HirType::Managed(ManagedType::Buffer) => Some(self.lower_new_buffer(id)),
             HirType::Managed(ManagedType::DataView) => Some(self.lower_new_data_view(id)),
+            // `class Bytes extends Uint8Array {}` *is* that view, so `new
+            // Bytes(8)` builds one. Reached through the type rather than the
+            // name, because the name is the subclass's and
+            // `typed_array_element` only knows the eight it provides -- which
+            // is why these two examples went bare the moment typed arrays
+            // stopped being arrays.
+            HirType::Managed(ManagedType::View(element)) => {
+                let element = element.as_ref().clone();
+                Some(self.lower_new_typed_array(id, "typed array", element))
+            }
             _ => None,
         }
     }
@@ -14461,6 +14496,329 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Date),
             &origin,
         ))
+    }
+
+    /// `new Uint8Array(n)`, and the buffer underneath it.
+    ///
+    /// Two allocations because there are two objects: the specification's
+    /// constructor makes an `ArrayBuffer` of `n * width` bytes and returns a
+    /// view over the whole of it. That was invisible while a typed array owned
+    /// its elements inline, and it is the observable difference now -- `.buffer`
+    /// answers, and two views over one buffer alias.
+    ///
+    /// The length is `ToIndex` and the *byte* length is what the buffer needs,
+    /// so the guard is on the element count and the multiplication happens
+    /// after it. Guarding the product instead would refuse a count the language
+    /// allows on a width the language allows.
+    fn lower_new_typed_array(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        element: HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        // Refused by name rather than defaulted. An element with no kind is a
+        // typed array this compiler does not know how to store, and saying so
+        // is the difference between a refusal and a silent `f64`.
+        let (Some(width), Some(kind)) = (
+            super::builtin::element_width(&element),
+            super::builtin::element_kind(&element),
+        ) else {
+            return Err(self.unsupported(
+                id,
+                &format!("a `new {class}`, whose element this compiler has no storage kind for"),
+            ));
+        };
+        let width = f64::from(width);
+        let kind = f64::from(kind);
+        let ty = HirType::Managed(ManagedType::View(Box::new(element)));
+        let origin = self.origin(id);
+        let arguments = self.arguments_of(id);
+
+        let Some(first) = arguments.first() else {
+            // `new Uint8Array()` is an empty one, which is a buffer of no
+            // bytes rather than a refusal.
+            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            return self.view_over_fresh_buffer(id, zero, zero, kind, &ty);
+        };
+        let count = self.lower_expression(*first)?;
+        // `new Uint8Array(buffer, offset, length)` is a *window* onto storage
+        // that already exists, which is the whole reason a view is a distinct
+        // representation: it is how two of them come to name the same bytes.
+        if matches!(
+            self.values[count.0 as usize].ty,
+            HirType::Managed(ManagedType::Buffer)
+        ) {
+            return self.lower_view_over(id, count, &arguments[1..], width, kind, &ty);
+        }
+        // `new Uint8Array([1, 2, 3])` and `new Uint8Array(other)` copy from
+        // what they are given rather than sizing to it. Refused by name rather
+        // than read as a length, which would allocate whatever the pointer
+        // happened to be.
+        if !matches!(
+            self.values[count.0 as usize].ty,
+            HirType::Int { .. } | HirType::Float { .. }
+        ) {
+            return Err(self.unsupported(id, &format!("a `new {class}` from a value")));
+        }
+        // To a number before the guard and the multiplication. A specialized
+        // copy hands this an `i32`, and the guard compares against constants
+        // that are doubles: C converts at the comparison and LLVM refuses the
+        // IR, so the backend that checks is the one that noticed.
+        let count = self.coerce(count, &HirType::NUMBER, id)?;
+        self.guard_buffer_length(id, count, "Invalid typed array length")?;
+        let width_value = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let bytes = self.push(
+            OpKind::Binary {
+                op: BinOp::Mul,
+                lhs: count,
+                rhs: width_value,
+            },
+            HirType::NUMBER,
+            origin,
+        );
+        self.view_over_fresh_buffer(id, bytes, count, kind, &ty)
+    }
+
+    /// `new Uint8Array(buffer)`, `(buffer, offset)` and `(buffer, offset, length)`.
+    ///
+    /// A window onto bytes that already exist, and the only way in the language
+    /// to make two views name the same storage. Everything the representation
+    /// was introduced for is reachable from here.
+    ///
+    /// Three checks, and node distinguishes all three:
+    ///
+    ///   * an offset that is not a multiple of the element width --
+    ///     `start offset of Uint16Array should be a multiple of 2`
+    ///   * an offset past the end -- `Start offset 20 is outside the bounds`
+    ///   * a length that does not fit -- `Invalid typed array length: 20`
+    ///
+    /// Omitting the length is not the same as passing the remainder: the view
+    /// **tracks**, so it follows the buffer through `resize`. That is the
+    /// observable difference between `new Uint8Array(buffer)` and
+    /// `view.subarray(0)`, and it is why `tracking` is a constructor argument
+    /// rather than something the runtime infers from a zero.
+    fn lower_view_over(
+        &mut self,
+        id: NodeId,
+        buffer: ValueId,
+        rest: &[NodeId],
+        width: f64,
+        kind: f64,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let offset = match rest.first() {
+            Some(node) => {
+                let value = self.lower_expression(*node)?;
+                let value = self.coerce(value, &HirType::NUMBER, id)?;
+                self.guard_buffer_length(
+                    id,
+                    value,
+                    "Start offset is outside the bounds of the buffer",
+                )?;
+                // Past this line the value is an INDEX, and every guard below
+                // is written against one. `guard_buffer_length` is the last
+                // thing that may look at the argument, because its two bounds
+                // are the only ones truncation cannot move: `<= -1` and
+                // `>= 2**53` answer the same before and after.
+                //
+                // Nothing else does. Comparing the argument cost four wrong
+                // answers, and each looked like its own bug: `(NaN, 15)` built
+                // a fifteen-element window over eight bytes because every
+                // comparison against NaN is false; offset `8.7` refused a
+                // program node accepts, because `8.7 > 8` and `8 > 8` differ;
+                // and `(0, 8.9)` and `(7.9, 1)` refused for the same reason one
+                // addition later.
+                let value =
+                    self.call_runtime("nts_to_index", vec![value], HirType::NUMBER, &origin);
+                self.guard_aligned_offset(id, value, width)?;
+                value
+            }
+            None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+        };
+        let byte_length = self.call_runtime(
+            "nts_buffer_byte_length",
+            vec![buffer],
+            HirType::NUMBER,
+            &origin,
+        );
+        self.guard_within(
+            id,
+            offset,
+            byte_length,
+            "Start offset is outside the bounds of the buffer",
+        )?;
+
+        let width_value = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let kind_value = self.push(OpKind::ConstFloat(kind), HirType::NUMBER, origin.clone());
+        let (count, tracking) = if let Some(node) = rest.get(1) {
+            {
+                let value = self.lower_expression(*node)?;
+                let value = self.coerce(value, &HirType::NUMBER, id)?;
+                self.guard_buffer_length(id, value, "Invalid typed array length")?;
+                let value =
+                    self.call_runtime("nts_to_index", vec![value], HirType::NUMBER, &origin);
+                // The window has to fit: `offset + length * width` bytes. Both
+                // operands are indices, so the sum is the one the runtime will
+                // actually lay out rather than the one the arguments spell.
+                let span = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Mul,
+                        lhs: value,
+                        rhs: width_value,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
+                let end = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: offset,
+                        rhs: span,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
+                self.guard_within(id, end, byte_length, "Invalid typed array length")?;
+                let fixed = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+                (value, fixed)
+            }
+        } else {
+            {
+                // No length: the view is whatever remains and follows the
+                // buffer. The count the runtime is handed is ignored while
+                // `tracking` is set, so zero is the honest placeholder.
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let tracks = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+                (zero, tracks)
+            }
+        };
+        let view = self.call_runtime(
+            "nts_view_new",
+            vec![buffer, offset, count, kind_value, tracking],
+            ty.clone(),
+            &origin,
+        );
+        self.guard_allocated_view(id, view)?;
+        Ok(view)
+    }
+
+    /// `new Uint16Array(buffer, 3)` is a `RangeError`: an element cannot start
+    /// half way through itself. One byte wide is always aligned, so the check
+    /// is emitted only where it can fail.
+    fn guard_aligned_offset(
+        &mut self,
+        id: NodeId,
+        offset: ValueId,
+        width: f64,
+    ) -> Result<(), Diagnostic> {
+        if width <= 1.0 {
+            return Ok(());
+        }
+        let origin = self.origin(id);
+        // `offset` is already an index -- see `lower_view_over`, which converts
+        // before it guards. This function used to convert again, privately,
+        // and was the only guard that had the rule right; it read as this
+        // call site's own quirk rather than as the rule, so the four guards
+        // around it went on comparing the argument. Truncating once, above,
+        // is the same fix stated where it cannot be missed.
+        let index = offset;
+        let width_value = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let remainder = self.push(
+            OpKind::Binary {
+                op: BinOp::Rem,
+                lhs: index,
+                rhs: width_value,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let misaligned = self.push(
+            OpKind::Binary {
+                op: BinOp::Ne,
+                lhs: remainder,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(
+            id,
+            misaligned,
+            "RangeError",
+            "start offset should be a multiple of the element size",
+        )
+    }
+
+    /// Refuse when `value` is past `limit`.
+    fn guard_within(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        limit: ValueId,
+        message: &str,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let past = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: value,
+                rhs: limit,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(id, past, "RangeError", message)
+    }
+
+    /// A buffer of `bytes`, and a view of `count` elements over the whole of it.
+    fn view_over_fresh_buffer(
+        &mut self,
+        id: NodeId,
+        bytes: ValueId,
+        count: ValueId,
+        kind: f64,
+        ty: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let buffer = self.call_runtime(
+            "nts_buffer_new",
+            vec![bytes],
+            HirType::Managed(ManagedType::Buffer),
+            &origin,
+        );
+        self.guard_allocated(id, buffer)?;
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let kind_value = self.push(OpKind::ConstFloat(kind), HirType::NUMBER, origin.clone());
+        // Not tracking: a view constructed from a length has that length, and
+        // only `new Uint8Array(buffer)` follows the buffer through a resize.
+        let tracking = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
+        let view = self.call_runtime(
+            "nts_view_new",
+            vec![buffer, zero, count, kind_value, tracking],
+            ty.clone(),
+            &origin,
+        );
+        self.guard_allocated_view(id, view)?;
+        Ok(view)
+    }
+
+    /// The same null check `guard_allocated` makes, for a view.
+    fn guard_allocated_view(&mut self, id: NodeId, view: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let ty = self.values[view.0 as usize].ty.clone();
+        let null = self.push(OpKind::ConstNull, ty, origin.clone());
+        let failed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: view,
+                rhs: null,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(id, failed, "RangeError", "Array buffer allocation failed")
     }
 
     /// `new ArrayBuffer(n)` and `new ArrayBuffer(n, { maxByteLength: m })`.
@@ -14852,7 +15210,11 @@ impl<'a> FuncBuilder<'a> {
         // there is no `undefined` to put in a double. What is stored in the
         // slot is a number; the `!` the author wrote is the claim that one is
         // there, and the bounds test is what checks it.
-        let HirType::Managed(ManagedType::Array(element)) =
+        // A view indexes exactly as an array does: same operation, different
+        // storage, which is what lets the bounds check, its elimination and the
+        // verifier go on working unchanged. The backends decide the addressing
+        // from the receiver's type.
+        let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
             return Err(self.not_an_array(id));
@@ -15073,7 +15435,7 @@ impl<'a> FuncBuilder<'a> {
         let array_value = self.lower_expression(*array)?;
         if !matches!(
             self.values[array_value.0 as usize].ty,
-            HirType::Managed(ManagedType::Array(_))
+            HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))
         ) {
             return Err(self.not_an_array(id));
         }
@@ -15456,6 +15818,9 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
         }
 
+        if let HirType::Managed(ManagedType::View(_)) = self.values[value.0 as usize].ty {
+            return self.view_property(id, value, member_name);
+        }
         let sequence = matches!(
             self.values[value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
@@ -16673,6 +17038,19 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return self.lower_string_method(id, receiver, *member, arguments);
         }
+        // A view takes the same two steps as an array, and for the same reason:
+        // `class Bytes extends Uint8Array` declares its own methods, and the
+        // representation says how the bytes are arranged rather than what
+        // declared them. The fall-through differs -- an array has the runtime's
+        // helpers behind it and a view does not yet -- so the second half is a
+        // refusal that names the method instead.
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::View(_))
+        ) {
+            return self.lower_view_method(id, receiver, *receiver_node, *member, arguments);
+        }
+
         if let HirType::Managed(ManagedType::Array(element)) =
             self.values[receiver.0 as usize].ty.clone()
         {
@@ -17003,6 +17381,210 @@ impl<'a> FuncBuilder<'a> {
             }
             None => Ok(self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone())),
         }
+    }
+
+    /// A method call on a typed array.
+    ///
+    /// Two steps, the same two an array takes: the receiver's *declared* class
+    /// first, because `class Bytes extends Uint8Array` writes its own methods
+    /// and the representation says how the bytes are arranged rather than what
+    /// declared them; then the built-ins.
+    ///
+    /// The second step is where a view differs. An array falls through to the
+    /// runtime's helpers, which read a block at one width and know nothing
+    /// about an offset; a view has none of those yet, so the fall-through is a
+    /// refusal naming the method rather than a helper handed the wrong shape.
+    fn lower_view_method(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        receiver_node: NodeId,
+        member: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if let Some(declared) = self
+            .snapshot
+            .node_types
+            .get(&receiver_node)
+            .copied()
+            .map(|ty| self.class_behind(ty))
+            && let Some(name) = self.literal_name(member)
+            && self.hierarchy.declaring(declared, &name).is_some()
+        {
+            return self.lower_object_method(id, receiver, declared, member, arguments);
+        }
+        let name = self
+            .literal_name(member)
+            .unwrap_or_else(|| "a computed name".to_owned());
+        let origin = self.origin(id);
+        let ty = self.values[receiver.0 as usize].ty.clone();
+        // The relative-index pair, which the runtime clamps the way
+        // `nts_array_slice` does -- a negative endpoint counts from the end and
+        // is not an error. `to` defaults to the length, read back rather than
+        // spelled, because a tracking view's length is not known here.
+        let endpoints = |me: &mut Self| -> Result<(ValueId, ValueId), Diagnostic> {
+            let from = match arguments.first() {
+                Some(node) => {
+                    let value = me.lower_expression(*node)?;
+                    me.coerce(value, &HirType::NUMBER, id)?
+                }
+                None => me.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+            };
+            let to = match arguments.get(1) {
+                Some(node) => {
+                    let value = me.lower_expression(*node)?;
+                    me.coerce(value, &HirType::NUMBER, id)?
+                }
+                None => {
+                    me.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin)
+                }
+            };
+            Ok((from, to))
+        };
+        match name.as_str() {
+            // Aliases. Two views over one buffer, which is the property the
+            // representation exists for.
+            "subarray" => {
+                let (from, to) = endpoints(self)?;
+                let view = self.call_runtime(
+                    "nts_view_subarray",
+                    vec![receiver, from, to],
+                    ty,
+                    &origin,
+                );
+                self.guard_allocated_view(id, view)?;
+                Ok(view)
+            }
+            // Copies, and the difference between this and `subarray` is the
+            // case that fails if the two are implemented the same way.
+            "slice" => {
+                let (from, to) = endpoints(self)?;
+                let view =
+                    self.call_runtime("nts_view_slice", vec![receiver, from, to], ty, &origin);
+                self.guard_allocated_view(id, view)?;
+                Ok(view)
+            }
+            "copyWithin" | "set" => self.lower_view_move(id, receiver, &name, arguments),
+            other => Err(self.unsupported(
+                id,
+                &format!("`{other}` on a typed array, which this compiler does not provide yet"),
+            )),
+        }
+    }
+
+    /// `copyWithin` and `set`: the two that move bytes within storage the
+    /// receiver may share with the source.
+    ///
+    /// Both are the family whose whole difficulty is that the ranges can
+    /// intersect -- `copyWithin` with its destination past its source reads
+    /// what it has already written, and `set` between two windows over one
+    /// buffer does the same one level up, at two element widths. The runtime
+    /// owns both answers; what is here is the arguments and their defaults.
+    fn lower_view_move(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        name: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        if name == "copyWithin" {
+            let Some(target_node) = arguments.first() else {
+                return Err(self.unsupported(id, "a `copyWithin` with no target"));
+            };
+                let target = self.lower_expression(*target_node)?;
+                let target = self.coerce(target, &HirType::NUMBER, id)?;
+                let from = match arguments.get(1) {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        self.coerce(value, &HirType::NUMBER, id)?
+                    }
+                    None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+                };
+                let to = match arguments.get(2) {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        self.coerce(value, &HirType::NUMBER, id)?
+                    }
+                    None => self.call_runtime(
+                        "nts_view_length",
+                        vec![receiver],
+                        HirType::NUMBER,
+                        &origin,
+                    ),
+                };
+            return Ok(self.call_runtime(
+                "nts_view_copy_within",
+                vec![receiver, target, from, to],
+                HirType::Void,
+                &origin,
+            ));
+        }
+        // `set`, between two views which may overlap at different element
+        // widths -- the runtime snapshots the source when they share a buffer,
+        // and converts *values* rather than bytes.
+        {
+            {
+                let Some(source_node) = arguments.first() else {
+                    return Err(self.unsupported(id, "a `set` with no source"));
+                };
+                let source = self.lower_expression(*source_node)?;
+                if !matches!(
+                    self.values[source.0 as usize].ty,
+                    HirType::Managed(ManagedType::View(_))
+                ) {
+                    return Err(self.unsupported(
+                        id,
+                        "a `set` from something other than a typed array",
+                    ));
+                }
+                let offset = match arguments.get(1) {
+                    Some(node) => {
+                        let value = self.lower_expression(*node)?;
+                        self.coerce(value, &HirType::NUMBER, id)?
+                    }
+                    None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+                };
+                Ok(self.call_runtime(
+                    "nts_view_set",
+                    vec![receiver, source, offset],
+                    HirType::Void,
+                    &origin,
+                ))
+            }
+        }
+    }
+
+    /// What a typed-array view answers, and why `length` is a call.
+    ///
+    /// A view built without an explicit length follows its buffer through
+    /// `resize`, so the length is computed rather than read out of a header --
+    /// which is the whole difference between `new Uint8Array(buffer)` and
+    /// `view.subarray(0)` on a resizable buffer, and it is observable.
+    ///
+    /// `buffer`, `byteLength` and `byteOffset` are the three an array does not
+    /// have and a view does. They are the reason this is a separate
+    /// representation rather than a flag.
+    fn view_property(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let (helper, ty) = match member_name {
+            "length" => ("nts_view_length", HirType::NUMBER),
+            "byteLength" => ("nts_view_byte_length", HirType::NUMBER),
+            "byteOffset" => ("nts_view_byte_offset", HirType::NUMBER),
+            "buffer" => ("nts_view_buffer", HirType::Managed(ManagedType::Buffer)),
+            other => {
+                return Err(self.unsupported(
+                    id,
+                    &format!("`{other}` on a typed array, which this compiler does not provide"),
+                ));
+            }
+        };
+        Ok(self.call_runtime(helper, vec![value], ty, &origin))
     }
 
     /// The four an `ArrayBuffer` has.

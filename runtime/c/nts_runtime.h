@@ -974,6 +974,16 @@ NtsBuffer *nts_view_buffer(const NtsView *view);
  * element access goes through it, so it is the one place detachment is seen. */
 NTS_READS_ONLY unsigned char *nts_view_bytes(const NtsView *view);
 
+/* An element of a view, addressed. The mirror of `NTS_ITEMS` for storage that
+ * is not inline.
+ *
+ * A call per access rather than a field read, and it costs nothing: the helper
+ * is genuinely pure -- it reads the view and its buffer and writes nothing --
+ * so repeated accesses in one expression fold to one load. That is what `pure`
+ * is *for*, and it is safe here for the reason it was not safe on
+ * `nts_view_buffer`: this one does not retain. */
+#define NTS_VIEW_ITEMS(view, type) ((type *)nts_view_bytes(view))
+
 /* A view over the same bytes: no copy, and mutations are visible through both.
  * The difference between this and `slice` is the whole point of a view. */
 NTS_ALLOCATES_OR_NULL NtsView *nts_view_subarray(const NtsView *view,
@@ -1317,6 +1327,11 @@ double nts_max_fn(double a, double b);
  * are still not pure. */
 uint32_t nts_check_fn(const NtsArray *array, uint32_t index);
 uint32_t nts_index_fn(const NtsArray *array, double index);
+/* The same pair over a view, for the backend that cannot call a `static
+ * inline`. A view's bound is computed rather than read, so these are not the
+ * array helpers with a cast. */
+uint32_t nts_view_check_fn(const NtsView *view, uint32_t index);
+uint32_t nts_view_index_fn(const NtsView *view, double index);
 /* `nts_str_substring_into` as a linkable symbol, for the same reason.
  *
  * The inline is a fast path -- a narrow string with whole, in-range bounds is a
@@ -1629,6 +1644,27 @@ static inline uint32_t nts_index(const NtsArray *array, double index) {
   if (!(index >= 0.0 && index < (double)array->header.length &&
         index == (double)(uint32_t)index)) {
     nts_bounds(index, array->header.length);
+  }
+  return (uint32_t)index;
+}
+
+/* The same two checks over a view, whose length is computed rather than read
+ * out of a header -- a view built without one follows its buffer through
+ * `resize`, so there is no stored count to compare against. A detached view
+ * reports zero and every index is out of range, which is what the language
+ * says: reading one is `undefined` rather than a fault. */
+static inline uint32_t nts_view_check(const NtsView *view, uint32_t index) {
+  double length = nts_view_length(view);
+  if ((double)index >= length) {
+    nts_bounds((double)index, (uint32_t)length);
+  }
+  return index;
+}
+
+static inline uint32_t nts_view_index(const NtsView *view, double index) {
+  double length = nts_view_length(view);
+  if (!(index >= 0.0 && index < length && index == (double)(uint32_t)index)) {
+    nts_bounds(index, (uint32_t)length);
   }
   return (uint32_t)index;
 }

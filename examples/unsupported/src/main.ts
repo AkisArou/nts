@@ -34,13 +34,11 @@ export function callsErrorToString(): number {
   return new Coded("x").toString().length;
 }
 
-// A typed array here is an array of a known width, not a view onto storage
-// something else can also see -- so it has a `length` and nothing else, and the
-// runtime's array helpers are compiled for `double` and must not be handed one.
-export function readsATypedArrayBuffer(): number {
-  return new Uint8Array(4).buffer.byteLength;
-}
-
+// A typed array is a view onto storage something else can also see, and since
+// `ManagedType::View` it is one here too -- so `.buffer` left this file for
+// `examples/typed-array-aliasing`, which tests what it is *for*. What remains
+// refused is a method the lowering has no arm for: the runtime's array helpers
+// are compiled for `double` and must not be handed a window of bytes.
 export function callsAMethodOnATypedArray(): number {
   return new Uint8Array(4).indexOf(7);
 }

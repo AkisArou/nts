@@ -240,6 +240,7 @@ fn c_type(ty: &HirType) -> &'static str {
         HirType::Managed(nts_core::hir::ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(nts_core::hir::ManagedType::Date) => "NtsDate *",
         HirType::Managed(nts_core::hir::ManagedType::Buffer) => "NtsBuffer *",
+        HirType::Managed(nts_core::hir::ManagedType::View(_)) => "NtsView *",
         HirType::Managed(nts_core::hir::ManagedType::DataView) => "NtsDataView *",
         // As with the promise below: the harness never drives one, because it
         // generates calls from scalar signatures, so this is here to be right

@@ -210,6 +210,23 @@ pub enum ManagedType {
     /// are not inline; a `Float64Array` reading a buffer that began at an
     /// 8-byte boundary is the case that cost `elementwise` 33%.
     Buffer,
+    /// A typed-array view: a window onto a [`ManagedType::Buffer`].
+    ///
+    /// Carries its element, the way [`ManagedType::Array`] does, and for the
+    /// same reason: the width is what an access is emitted at. What it does
+    /// *not* share with an array is ownership -- an array owns its elements
+    /// inline, and a view names bytes something else may also see.
+    ///
+    /// That distinction is why this is a variant rather than a flag on
+    /// `Array`. `number[]` and `Float64Array` were one type here, which §16
+    /// records as a precision loss: `Array.isArray` cannot answer on an open
+    /// value, and neither can `instanceof Uint8Array`, because there was
+    /// nothing in the representation to tell them apart. There is now.
+    ///
+    /// An `ArrayGet` or `ArraySet` whose receiver is one of these is the same
+    /// *operation* over different storage, which is what lets the bounds
+    /// checks, their elimination and the verifier go on working unchanged.
+    View(Box<HirType>),
     /// A `DataView`: a window on a [`ManagedType::Buffer`] with explicit
     /// endianness and no element type.
     ///

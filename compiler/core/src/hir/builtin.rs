@@ -141,6 +141,53 @@ pub(super) fn typed_array_element(name: &str) -> Option<HirType> {
     })
 }
 
+/// Which of the runtime's nine element kinds an element type is.
+///
+/// The width does not answer this: `Int16Array` and `Uint16Array` are two bytes
+/// each and differ on read, `Int32Array` and `Float32Array` are four each and
+/// differ on both. `set` between two views converts *values*, so the runtime
+/// stores the kind rather than inferring it from a width.
+///
+/// The numbers are `NTS_ELEMENT_*` in `nts_runtime.h`. `Uint8ClampedArray` is
+/// absent from [`typed_array_element`] -- clamping is a different store, and
+/// giving it the wrapping conversion would be silently wrong -- so its kind is
+/// unreachable from here until the name is accepted.
+///
+/// `Option`, and deliberately no catch-all. A `_ => 8` arm reads as a default
+/// and is a trap: an element this does not name would become `f64` silently, on
+/// C and LLVM, with no diagnostic anywhere. Every element reaches a real arm
+/// today, so the arm would be harmless -- and the day `BigInt64Array` gets a
+/// lowering its element becomes a double and nothing says so. That is the same
+/// shape as a `let else` on `ManagedType::Array` that a view falls through, and
+/// it cost a wrong answer once already this week.
+///
+/// Kind 2 is `Uint8ClampedArray`, which [`typed_array_element`] does not accept:
+/// clamping and wrapping disagree on exactly the inputs typed-array code is
+/// written for, so the slot is reserved rather than aliased onto `u8`.
+#[must_use]
+pub(super) fn element_kind(element: &HirType) -> Option<u32> {
+    Some(match element {
+        HirType::Int { bits: 8, signed: true } => 0,
+        HirType::Int { bits: 8, signed: false } => 1,
+        HirType::Int { bits: 16, signed: true } => 3,
+        HirType::Int { bits: 16, signed: false } => 4,
+        HirType::Int { bits: 32, signed: true } => 5,
+        HirType::Int { bits: 32, signed: false } => 6,
+        HirType::Float { bits: 32 } => 7,
+        HirType::Float { bits: 64 } => 8,
+        _ => return None,
+    })
+}
+
+/// Bytes per element, which the kind decides.
+#[must_use]
+pub(super) fn element_width(element: &HirType) -> Option<u32> {
+    Some(match element {
+        HirType::Int { bits, .. } | HirType::Float { bits } => u32::from(*bits) / 8,
+        _ => return None,
+    })
+}
+
 /// The runtime helper that turns a `number` into what a typed array stores.
 ///
 /// Storing into an integer typed array is not a cast. `u8[i] = 300` stores 44,
