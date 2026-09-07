@@ -154,7 +154,7 @@ property compiles. One fixture would have caught it the first day.
 | 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
 | 5c | no exported object literal of functions — `ucs2` as a namespace | **fixed**, verified here |
 | 5d | `number[]` cannot cross the Node-API boundary in either direction | **fixed**, verified here |
-| 7 | an addon's process warning goes to stderr, not `process.emitWarning` | **open**, compiler lane |
+| 7 | an addon's process warning goes to stderr, not `process.emitWarning` | **written here**, needs one line from the backend |
 | 6 | the Node-API boundary flattens a thrown error's class | **fixed**, verified here |
 
 **Blocker 6 is fixed, and the loop it closed is the argument for this whole
@@ -202,8 +202,33 @@ The reasoning for the current behaviour is in this profile's own source, and it
 is right for the case it was written about: `internal/process-warning.ts` says a
 native program has no process EventEmitter, so the C half writes to the
 diagnostic stream. **A Node-API addon is not that case.** It runs inside node,
-there is a `process` to emit on, and `napi_get_global` → `process.emitWarning`
-is the faithful route. Blocker 7.
+there is a `process` to emit on.
+
+**And the sink is `runtime/node/internal/process.c`, which is this lane's, not
+`runtime/c`.** That was reported to the compiler lane as theirs before the
+symbol was followed. It now tries `process.emitWarning(message, name, code)`
+through Node-API and falls back to stderr only when there is no host — guarded
+on `__has_include(<node_api.h>)`, since `build.sh` already compiles that
+directory with `-I$napi`.
+
+**One line remains, and only `NAPI_MODULE_INIT` can write it.** The runtime
+needs the `napi_env`, and nothing in the generated program has one:
+
+    nts_napi_set_env(env);
+    module__init();
+
+Order matters — `module__init()` is where the top-level `emitWarning` runs.
+Until that call exists the env is null and the behaviour is what it was, so the
+change is inert in the tree.
+
+**Getting there cost two mistakes worth keeping.** Reading the code back off the
+warning object reintroduced blocker 1's *read* variant and cascaded to every
+`punycode` export: the allocation-site repair covers a `new` initializer, and
+this one is a parameter. That is now `blockers/annotated-const-read`. And moving
+the host call up into `emitWarning` emitted a `NtsObj_ProcessWarning *` against
+a declaration saying `NtsObj_Error *` — widening at an assignment does not
+change what a value *is*, only a parameter's type does. The call stays where the
+parameter is typed `Error`, and the code rides beside it.
 
 **The green row is pre-validated as real, not degenerate.** The sweep's harder
 question — keep the addon's names and destroy its behaviour — was asked of
