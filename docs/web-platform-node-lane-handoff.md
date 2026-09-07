@@ -70,18 +70,17 @@ of system proxy resolution.
 **Current numbers**, all with one binary pinned from the current tree and the same
 binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 
-- 1,297 primary `NTS1001`, 321 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
+- 1,407 primary `NTS1001`, 337 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
   — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
 - local Node-host/real-socket corpus **814/814**, zero skipped;
-- pinned upstream corpus **2,433 tests, 2,418 applicable, 2,410 passing, 8 failing** —
-  the eight long-standing structural failures, with the two `Event.timeStamp` assertions
-  now passing;
+- pinned upstream corpus **2,602 tests, 2,574 applicable, 2,566 passing, 8 failing** —
+  grown by 169 today and still the same eight long-standing structural failures;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
   with the four declines being the out-of-range typed-array read reported to the compiler
   lane with a minimal reproduction;
-- `unrouted.mjs` clean over 104 audited files and 758 corpus files.
+- `unrouted.mjs` clean over 105 audited files and 1,361 corpus files.
 
 **Measure the frontier with `NTS_TSGO="$PWD/target/tsgo"` set.** Without it the check
 fails at the frontend transport and every diagnostic count reads **zero** — which looks
@@ -89,13 +88,30 @@ exactly like a clean tree. `tooling/conformance/web-platform/compiled/check.sh` 
 an ad-hoc invocation does not, and an all-zeros result should be read as a broken
 instrument until the output is inspected.
 
-**The upstream corpus grew from 2,300 by pinning fixtures already sitting in Node's
-vendored checkout** — nothing was fetched. That vein is now exhausted for in-profile
-areas: the remaining unpinned Encoding fixtures test legacy single-byte and ISO-2022
-encodings this profile does not claim, and pinning a test to watch it fail for a known
-reason is not evidence. Three conformance gaps it exposed are fixed (UTF-16 decoding,
-`Event.isTrusted` as an unforgeable own accessor, `Blob.stream()` as a byte stream) and
-one boundary is recorded as not applicable with its reason.
+**The upstream corpus grew from 2,300 to 2,602 by pinning fixtures already sitting in
+Node's vendored checkout** — nothing was ever fetched. Two claims about that vein being
+exhausted were both wrong and both corrected by looking:
+
+- The `encoding/streams` fixtures read as out of profile. They were out of profile because
+  `TextDecoderStream` and `TextEncoderStream` **did not exist**, not because the area does
+  not apply. They exist now and the fixtures pass.
+- `idlharness` was recorded as needing the IDL definitions and a parser, "a much larger
+  dependency than a fixture file". True, and not a reason: `resources/idlharness.js`, the
+  `webidl2` parser and `interfaces/*.idl` are all in the same checkout. It runs, and it
+  found seven real conformance defects in one afternoon.
+
+**A caution for whoever measures this next.** Counting `.js` files under
+`runtime/web-platform/third_party/wpt/` says 82 and is the wrong object: the manifest also
+pins 100+ fixtures read directly from Node's checkout under `nodeWpt.tests`. An area can be
+thoroughly pinned and appear entirely absent from the local directory.
+
+**Running idlharness needs a per-fixture realm choice**, and this is the one piece of the
+runner that cannot be made uniform. The harness runs in a `vm` context, the implementation
+lives in the host realm, and `Object.prototype` is therefore two different objects. Most
+fixtures compare against host-realm implementation objects and need the host's `Object`
+injected; webidl2 walks its own objects' chains until `Object.prototype` and runs off the end
+when it is the host's. Removing the injection fixed idlharness and broke seventeen tests in
+five other fixtures. The real fix is for harness and implementation to share a realm.
 
 **The monotonic-clock ABI is closed.** `nts_environment_has_platform` landed in the C
 runtime, the LLVM signatures and the JVM op table — where it turned out **all eight**
