@@ -22,6 +22,29 @@
 # dependency -- but a build tool that can be swapped silently is a supply-chain
 # problem of exactly the same shape, which is why it is in the same file.
 #
+# `license` is an SPDX identifier and not the whole of the obligation, so here
+# is the rest of it, checked rather than assumed. The three `runtime` jars ship
+# inside the APK -- `build.gradle.kts` declares them `implementation`, not
+# `compileOnly` -- so whoever packages the app redistributes Apache-2.0 code and
+# owes its recipients a copy of the licence.
+#
+# **None of the three carries a `META-INF/NOTICE` or `META-INF/LICENSE`**, which
+# was checked by listing them rather than inferred from the license field:
+#
+#     unzip -Z1 okhttp-4.12.0.jar | grep -i META-INF
+#
+# So section 4(d) -- propagate the NOTICE -- has nothing to propagate, and the
+# remaining duty is section 4(a), which is a packaging step in the consuming
+# app rather than something this library can discharge. Recorded because "we
+# looked and there is none" and "we did not look" are different statements and
+# only one of them survives being asked.
+#
+# One thing that listing turned up and is worth knowing if you shrink: OkHttp
+# ships its own R8 rules at `META-INF/proguard/okhttp3.pro`. They are applied
+# automatically to an app that bundles the jar; they are *not* applied by
+# `r8_keeps_the_ffi_surface_and_removes_the_rest`, which passes these jars as
+# `--lib` and shrinks only NTS-owned Java.
+#
 # `repository` because they are not all in one place. R8 is published to
 # Google's Maven and not to Central, and a fetcher that assumed one host would
 # quietly fail over to "cannot reach the network" for an artifact that is
