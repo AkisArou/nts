@@ -137,7 +137,17 @@ function rootsBehind(name, seen = new Set()) {
 // namespace or an erased type, and what it is waiting on is the *backend*
 // learning to name that kind of export. Ranking them together would put
 // `determineSpecificType` and a string constant in one list.
-const inCascade = (name) => refusedNames.has(name) || calleeNames.has(name);
+// A class export is only as published as its methods are compiled. The cascade
+// names those `StringDecoder#flush`, never `StringDecoder`, so an exported
+// class whose every method is refused used to read here as "refused by
+// nothing" -- backend work only. `string_decoder` needs its class exported
+// *and* `Buffer#toString` lowered, and reporting the first without the second
+// would have called it one feature away when it is two.
+const membersOf = (name) =>
+  [...refusedNames].filter((n) => n.startsWith(`${name}#`));
+
+const inCascade = (name) =>
+  refusedNames.has(name) || calleeNames.has(name) || membersOf(name).length > 0;
 
 const gatedBy = new Map();
 const unnameable = [];
@@ -147,7 +157,17 @@ for (const entry of api) {
     unnameable.push(entry);
     continue;
   }
-  for (const root of new Set(rootsBehind(entry.target))) {
+  // Only walk the export itself when the cascade actually names it. A class
+  // reached solely through its methods is not its own blocker, and listing it
+  // as one puts `StringDecoder -- 1 export(s)` at the top of a ranking whose
+  // whole job is to say what to go and fix.
+  const named = edges.has(entry.target) || refusedNames.has(entry.target) ||
+    calleeNames.has(entry.target);
+  const behind = [
+    ...(named ? rootsBehind(entry.target) : []),
+    ...membersOf(entry.target).flatMap((m) => rootsBehind(m)),
+  ];
+  for (const root of new Set(behind)) {
     if (!gatedBy.has(root)) gatedBy.set(root, []);
     gatedBy.get(root).push(entry.name);
   }
