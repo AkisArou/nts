@@ -2,6 +2,7 @@
 //
 //   node tooling/conformance/blockers.mjs path
 //   node tooling/conformance/blockers.mjs path --log <a saved emit-c log>
+//   node tooling/conformance/blockers.mjs --all      # every module, plus a table
 //
 // Walking `path`'s last mile by hand took five builds and three wrong
 // hypotheses -- the star re-export, the export name, the signature -- before
@@ -35,9 +36,55 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 
 const argv = process.argv.slice(2);
+
+// `--all` re-runs this script once per module and prints the summary table.
+// Done by re-exec rather than by looping in-process, so every module is
+// measured by exactly the code path a single-module run uses -- a summary
+// assembled a second way is a second thing to keep true.
+if (argv.includes("--all")) {
+  const { readdirSync, existsSync: exists } = await import("node:fs");
+  const profile = join(ROOT, "runtime/node");
+  const modules = readdirSync(profile, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && exists(join(profile, e.name, "tsconfig.json")))
+    .map((e) => e.name)
+    .sort();
+
+  const rows = [];
+  for (const name of modules) {
+    const run = spawnSync(process.execPath, [fileURLToPath(import.meta.url), name], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: process.env,
+    });
+    const out = `${run.stdout ?? ""}`;
+    process.stdout.write(`########## ${name}\n${out}${run.stderr ?? ""}\n`);
+    const shape = /shape needs (\d+) name\(s\), (\d+) published/.exec(out);
+    const root = /^chain roots[^\n]*\n  (\S+)  --  (\d+) export/m.exec(out);
+    rows.push({
+      name,
+      needs: shape === null ? null : Number(shape[1]),
+      published: shape === null ? null : Number(shape[2]),
+      root: root === null ? "" : `${root[1]} (${root[2]})`,
+    });
+  }
+
+  console.log("\n| module | shape needs | published | largest chain root |");
+  console.log("| --- | ---: | ---: | --- |");
+  for (const r of rows.sort((a, b) => (b.published ?? -1) - (a.published ?? -1))) {
+    const needs = r.needs === null ? "?" : r.needs;
+    const pub = r.published === null ? "unreadable" : r.published;
+    console.log(`| \`${r.name}\` | ${needs} | ${pub} | ${r.root} |`);
+  }
+  const unreadable = rows.filter((r) => r.needs === null).map((r) => r.name);
+  if (unreadable.length > 0) {
+    console.log(`\n${unreadable.length} module(s) could not be read: ${unreadable.join(", ")}`);
+  }
+  process.exit(0);
+}
+
 const module = argv.find((a) => !a.startsWith("--"));
 if (module === undefined) {
-  console.error("usage: blockers.mjs <module> [--log <emit-c output>]");
+  console.error("usage: blockers.mjs <module> [--log <emit-c output>]   |   blockers.mjs --all");
   process.exit(2);
 }
 const logFlag = argv.indexOf("--log");
