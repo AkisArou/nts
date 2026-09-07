@@ -13,6 +13,7 @@
 // events — is here.
 
 import { Buffer } from "../../buffer/src/main.ts";
+import { channel, tracingChannel } from "../../diagnostics_channel/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
 import type { BufferedWrite } from "../../stream/src/writable.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
@@ -199,6 +200,28 @@ declare function nts_net_server_close(handle: number, callback: () => void): voi
 declare function nts_net_server_ref(handle: number, keepProcessAlive: boolean): void;
 declare function nts_net_default_auto_select_family(): boolean;
 declare function nts_net_default_auto_select_family_attempt_timeout(): number;
+
+/**
+ * The two channels node publishes from `net`, from v24.20.0 `lib/net.js:173`.
+ *
+ * A tool watching connections cannot ask a socket where it came from after the
+ * fact, so node announces each one as it is made: `net.client.socket` when a
+ * socket begins connecting, `net.server.socket` when a server accepts. Both
+ * are guarded by `hasSubscribers`, because the common case is nobody listening
+ * and the guard is what keeps that case free.
+ */
+const netClientSocketChannel = channel("net.client.socket");
+const netServerSocketChannel = channel("net.server.socket");
+
+/**
+ * `listen` as a traced operation rather than an event, from `lib/net.js:175`.
+ *
+ * Binding is asynchronous and can fail for reasons only the kernel has, so the
+ * interesting thing is not that it was called but how it ended. Node publishes
+ * to the sub-channels directly rather than through `traceSync`, because the
+ * work spans a native callback and there is no single function to wrap.
+ */
+const netServerListen = tracingChannel("net.server.listen");
 
 let autoSelectFamilyDefault = nts_net_default_auto_select_family();
 let autoSelectFamilyAttemptTimeoutDefault = nts_net_default_auto_select_family_attempt_timeout();
@@ -778,6 +801,11 @@ export class Socket extends Duplex {
       this.#boundSource = false;
       this.#boundPipe = false;
       this.#boundPath = undefined;
+    }
+
+    // Before the callback is registered, as node does.
+    if (netClientSocketChannel.hasSubscribers) {
+      netClientSocketChannel.publish({ socket: this });
     }
 
     if (callback !== undefined) this.once("connect", callback);
@@ -1785,6 +1813,22 @@ export class Server extends EventEmitter {
     if (this._handle !== null) throw new ERR_SERVER_ALREADY_LISTEN();
 
     const { options, callback } = normaliseListenArguments(args);
+
+    // Node publishes before registering the `listening` callback, and it
+    // publishes the caller's own options object rather than the normalized
+    // one -- `normalizeArgs` hands back `arg0` itself for the options form, so
+    // a subscriber sees unknown keys the application put there. Ours builds a
+    // typed `ListenOptions`, which would drop them, so the raw object is what
+    // goes on the channel.
+    if (netServerListen.hasSubscribers) {
+      const first = args[0];
+      const published =
+        typeof first === "object" && first !== null && !(first instanceof BoundSocket)
+          ? first
+          : options;
+      netServerListen.asyncStart.publish({ server: this, options: published });
+    }
+
     if (callback) this.once("listening", callback);
 
     const boundSocket = options.boundSocket;
@@ -1872,6 +1916,12 @@ export class Server extends EventEmitter {
 
           if (!this.#options.pauseOnConnect) socket.resume();
           this.emit("connection", socket);
+          // After the event, which is node's order: a `connection` listener
+          // may destroy the socket, and a subscriber should see the socket the
+          // application saw rather than one nothing has touched yet.
+          if (netServerSocketChannel.hasSubscribers) {
+            netServerSocketChannel.publish({ socket });
+          }
         }),
       (errno: number) =>
         this.#inScope(() => {
@@ -1879,13 +1929,26 @@ export class Server extends EventEmitter {
           this.listening = false;
           this.#handleClosed = true;
           this.#clearAbort();
-          this.emit("error", listenError(errno, host, port, path));
+          const failure = listenError(errno, host, port, path);
+          if (netServerListen.hasSubscribers) {
+            netServerListen.error.publish({ server: this, error: failure });
+          }
+          this.emit("error", failure);
         }),
     );
 
     if (handle < 0) {
       this.#handleClosed = true;
-      nextTick(() => this.emit("error", listenError(handle, host, port, path)));
+      // The bind failed synchronously, so node builds the error and puts it on
+      // the channel synchronously too -- only `emit("error")` is deferred. A
+      // subscriber that unsubscribes as soon as `listen` returns still sees it.
+      const failure = listenError(handle, host, port, path);
+      if (netServerListen.hasSubscribers) {
+        netServerListen.error.publish({ server: this, error: failure });
+      }
+      nextTick(() => {
+        this.emit("error", failure);
+      });
       return this;
     }
 
@@ -2004,6 +2067,9 @@ export class Server extends EventEmitter {
 function emitServerListening(server: Server): void {
   if (server._handle === null) return;
   server.listening = true;
+  if (netServerListen.hasSubscribers) {
+    netServerListen.asyncEnd.publish({ server });
+  }
   server.emit("listening");
 }
 

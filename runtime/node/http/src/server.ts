@@ -46,6 +46,10 @@ import {
 } from "../../internal/errors.ts";
 import { STATUS_CODES } from "./status.ts";
 import { emitHttpDebugWarning } from "./debug.ts";
+import { channel } from "../../diagnostics_channel/src/main.ts";
+
+const serverRequestStartChannel = channel("http.server.request.start");
+const serverResponseFinishChannel = channel("http.server.response.finish");
 
 export interface HttpServerOptions extends NetServerOptions {
   /** How long a connection may sit idle between requests. */
@@ -666,6 +670,16 @@ export class Server extends NetServer {
 
       const finished = response;
       finished.once("finish", () => {
+        // First, as node has it in `resOnFinish`: the request is still intact
+        // here, before its abort signal is detached and its body drained.
+        if (serverResponseFinishChannel.hasSubscribers) {
+          serverResponseFinishChannel.publish({
+            request: message,
+            response: finished,
+            socket,
+            server: this,
+          });
+        }
         message._detachAbortSignal();
         if (activeResponse !== finished) {
           throw new Error("HTTP response queue completed out of order");
@@ -674,6 +688,15 @@ export class Server extends NetServer {
         nextTick(() => finished._closeAfterFinish());
         this.#afterResponse(socket, parser, message, finished, advanceResponseQueue);
       });
+
+      if (serverRequestStartChannel.hasSubscribers) {
+        serverRequestStartChannel.publish({
+          request: message,
+          response: finished,
+          socket,
+          server: this,
+        });
+      }
 
       if (
         this.#optimizeEmptyRequests &&

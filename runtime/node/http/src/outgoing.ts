@@ -48,6 +48,9 @@ import {
 } from "../../internal/validators.ts";
 import type { IncomingMessage } from "./incoming.ts";
 import { STATUS_CODES } from "./status.ts";
+import { channel } from "../../diagnostics_channel/src/main.ts";
+
+const serverResponseCreatedChannel = channel("http.server.response.created");
 
 /** As much of a socket as an outgoing message uses. */
 export interface OutgoingSocket {
@@ -364,6 +367,8 @@ export class OutgoingMessage<
       }
       if (queuedSize > 0) this.#pendingDataObserver?.(-queuedSize);
     }
+
+    this.#reportFinish();
   }
 
   /** Put a queued network completion callback on the last real byte. */
@@ -1063,6 +1068,7 @@ export class OutgoingMessage<
       if (batchWrites) socket.uncork?.();
     }
 
+    this.#reportFinish();
     return this;
   }
 
@@ -1124,6 +1130,33 @@ export class OutgoingMessage<
     this.emit("close");
   }
 
+  /**
+   * Node's `_finish`: the message has handed all of its bytes to the socket.
+   *
+   * Node reaches this through `prefinish`, so it runs before the `end()`
+   * callbacks and before any `finish` listener. Subclasses that report the
+   * moment a request left override it.
+   */
+  protected _finish(): void {}
+
+  #finishReported = false;
+
+  /**
+   * Node's condition for calling `_finish`: the message is ended and its
+   * whole output has been handed to an assigned socket. Handed over, not
+   * written out -- a request to a host that never resolves still gets here,
+   * because the bytes reached the socket's own buffer.
+   *
+   * Node can reach the call more than once, since every later drain retries
+   * it; the report itself is a one-time transition, so it is latched.
+   */
+  #reportFinish(): void {
+    if (this.#finishReported) return;
+    if (!this.finished || this.#socket === null || this.#pending.length > 0) return;
+    this.#finishReported = true;
+    this._finish();
+  }
+
   #queueEndCallback(callback: EndCallback): void {
     if (this.writableFinished) {
       callback(new ERR_STREAM_ALREADY_FINISHED("end"));
@@ -1182,6 +1215,9 @@ export class ServerResponse extends OutgoingMessage {
       headerContainsChunked(request.headers.te);
     this.hasBody = request.method !== "HEAD";
     this.sendDate = true;
+    if (serverResponseCreatedChannel.hasSubscribers) {
+      serverResponseCreatedChannel.publish({ request, response: this });
+    }
   }
 
   /**

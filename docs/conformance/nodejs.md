@@ -248,9 +248,21 @@ earlier and also still hold.
 **The file set each module measures was audited for the obvious way to lose
 tests silently**: three modules are named with underscores while node names
 their tests with hyphens. `string_decoder` matches
-`^test-string-decoder(-.*)?`, `diagnostics_channel` finds all 57 of node's
-files, and `async_hooks` carries a second alternation for
-`test-async-local-storage-*`. None of the three loses a file to its own name.
+`^test-string-decoder(-.*)?` and `async_hooks` carries a second alternation for
+`test-async-local-storage-*`; neither loses a file to its own name.
+
+**That audit missed two files, and the miss is worth recording.** It said
+`diagnostics_channel` found all 57 of node's files, which was true of the 57 it
+went looking for. Node also ships
+`test-diagnostic-channel-http-request-created.js` and
+`test-diagnostic-channel-http-response-created.js` — *diagnostic*, singular —
+and the module's pattern required the plural. Those two applicable pinned files
+matched no module's pattern anywhere, so no run reported them: not as failures,
+not as skips, not in any denominator. The pattern is now
+`^test-diagnostics?-channel(-.*)?`, both files run, and both pass. A test that
+matches nothing is the one kind of missing coverage a green sweep cannot show,
+which is the argument for auditing a pattern against node's directory rather
+than against the pattern's own output.
 
 **No exclusion has gone stale, and no module is silently missing tests.** Both
 halves are worth stating as measured results rather than left as assumptions —
@@ -292,13 +304,24 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,719 of node's own applicable test files pass** across twenty-two modules,
+**1,725 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
-The whole table comes from a single `sweep.mjs` run at runtime `c78170fc`, with
-sabotage on. It is one run rather than two anchored separately, which is the
-first time that has been true here.
+The whole table comes from a single `sweep.mjs` run over the tree this tranche
+commits, with sabotage on. It is one run rather than two anchored separately,
+which is the first time that has been true here.
+
+It is also the second run of that sweep, and the first one is worth keeping.
+It reported 1,724, with `util` at 19/20 — a module this tranche does not touch
+and whose dependencies it does not touch either. Two direct re-runs of `util`
+gave 20/20, the second sweep gave 20/20 and 1,725, and 1,725 is exactly the
+1,719 above plus the six this tranche adds. So the 19 was one intermittently
+failing file rather than a regression. It is recorded rather than quietly
+dropped, because a sweep that can print a number one lower than the truth is a
+fact about the instrument: a single green run here is weaker evidence than this
+document's arithmetic has been treating it as, and the next unexplained -1
+should be re-run before it is believed *or* acted on.
 
 **The previous revision of this section was wrong by about a thousand files, in
 the flattering direction.** It read 766 passing of 1,462 applicable with 22
@@ -308,10 +331,10 @@ nobody had re-run the sweep that would have said so. A stale ledger is a
 weaker failure than a wrong measurement, but it is the same failure: a number
 in this file that nothing was checking.
 
-**The denominators moved too, and that is the part to read carefully.** 412
+**The denominators moved too, and that is the part to read carefully.** 408
 files across the profile are excluded, each with an individually named reason
 in its module's `not-applicable`. Read as buckets: 149 are §13 language
-non-goals, roughly 140 are private V8 or engine internals, 66 depend on a
+non-goals, roughly 140 are private V8 or engine internals, 62 depend on a
 module that does not exist here yet (`http2`, `worker_threads`, `cluster`,
 `child_process`, `tls`, `vm`, `crypto`, the ESM loader), 37 are temporary
 runtime gaps, 12 are harness or runner limitations that `tooling/conformance`
@@ -321,9 +344,17 @@ That last bucket is the healthy one --
 writable global property to itself has no observable assertion and passes
 empty-module sabotage", which is a pass being deleted rather than banked.
 
+That fourth bucket is four smaller than it was. Six of this tranche's passes
+came from it and from a source no bucket had: four were excluded as needing a
+publishing subsystem that is now ours, and two were in no bucket and no
+denominator at all, because their filenames matched no module's test pattern.
+The first four are a denominator shrinking for the right reason — the
+exclusions were conditional and the condition was met. The last two are the
+denominator having been wrong.
+
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,719
-measured, 412 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,725
+measured, 408 excluded, 0 hollow.**
 
 **The `compiles` column is not in this table, and its absence is deliberate.**
 It was last measured at compiler `9bb54c1`, which is long superseded, and it
@@ -342,7 +373,7 @@ still.
 | `buffer` | **50 / 50** | 0 | the read/write surface, validated against node's boundary values |
 | `console` | **17 / 17** | 0 | complete |
 | `dgram` | **75 / 75** | 0 | UDP |
-| `diagnostics_channel` | **26 / 26** | 0 | complete |
+| `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **328 / 328** | 0 | sync, callback and promise surfaces, file streams, watchers |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
 | `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
@@ -410,6 +441,10 @@ static* method throwing, exported object facades have their function members
 replaced.
 
 Measured across **all twenty-two modules: 1,719 passes, 32 survive mutation.**
+That run predates the tranche below, so it does not cover its six new passes.
+`diagnostics_channel` was re-measured under mutation afterwards on its own:
+**0 of 32 pass, 0 survive.** Each of the six notices when the module's exports
+are poisoned, which is the part sabotage cannot establish.
 Eleven modules drop to zero, including `dgram` 75, `zlib` 66 and `url` 44 — a
 suite where every export throws and not one file fails to notice.
 
@@ -615,6 +650,56 @@ read still copies: the binding hands over a view and the socket does
 `stream_base` pushes the buffer it was given. Removing it means deciding who
 owns the bytes after the callback returns, which is a question for the C that
 does not exist yet, so it is recorded here rather than guessed at.
+
+## The channels node publishes, and the bind that was a tick late
+
+`node:diagnostics_channel` was complete as a mechanism and had almost nothing
+to observe. Node's own subsystems publish to ten well-known channels — two in
+`net`, one in `dgram`, seven across `_http_client` and `_http_server` — and of
+those we published one. The six pinned tests that check them were excluded on
+the grounds that they needed the publishing subsystem to be ours. It now is,
+for all three, so the channels were implemented and the tests un-excluded:
+`diagnostics_channel` goes from 26 to 32, with `net`, `http`, `dgram` and
+`stream` re-measured unchanged and empty-module sabotage failing all 32.
+
+Three things came out of it that are worth more than the six files.
+
+**A bind that was a tick late.** `test-diagnostics-channel-net.js` subscribes
+to the `net.server.listen` tracing channel, calls `listen()` on a port already
+in use, and unsubscribes *synchronously*, on the line after. Node's `error`
+publish still lands, because node binds through libuv, which is synchronous:
+`createServerHandle` returns the errno, node publishes it, and only the
+`emit('error')` is deferred to a tick. Ours published from inside that deferred
+tick, so a synchronous unsubscriber saw nothing — and the same seam is why an
+ephemeral port has to be readable the instant `listen()` returns. Two fixes:
+the module now builds the error and publishes it before deferring the emit, as
+node does, and the host binding stopped modelling a synchronous bind with an
+asynchronous one. `net.BoundSocket` is the one public API with libuv's timing —
+it throws the bind errno rather than emitting it a tick later, and it refuses
+hostnames for exactly the reason we have to screen them out — so a literal
+address binds through it and a hostname keeps the deferred, DNS-shaped path,
+which is the split node itself makes.
+
+**The two publish sites that differ only in when they fire.**
+`http.client.request.created` and `http.client.request.start` carry the same
+payload, and `test-diagnostic-channel-http-request-created.js` distinguishes
+them by setting a header between the two: the first must not see it, the second
+must. That makes `start` an ordering assertion rather than a payload one, and
+it landed on the one seam node has and we did not. Node calls `_finish` when
+the message has handed all its bytes to an assigned socket — handed over, not
+written out. A request to a host that never resolves reaches it, because the
+bytes still reached the socket's own buffer; a completion callback would not,
+because that write never completes. Anchoring on our flush callback published
+once where node publishes twice. `OutgoingMessage` now has node's `_finish`
+seam, called under node's condition and latched, since node can reach the call
+again on every later drain.
+
+**A test that matched nothing.** Node names two of these files
+`test-diagnostic-channel-*`, singular. Every module's pattern wanted the
+plural, so the two matched nothing anywhere and appeared in no denominator on
+either axis — the failure mode a green sweep is structurally unable to show.
+Both are now claimed and both pass. The completeness audit above has been
+corrected rather than quietly amended, because it is the audit that was wrong.
 
 ## `path`
 
@@ -943,13 +1028,34 @@ Complete, from node v24.20.0 `lib/diagnostics_channel.js`: `channel`,
 `subscribe`, `unsubscribe`, `hasSubscribers`, `tracingChannel`, `Channel` and
 `TracingChannel` with `traceSync`, `tracePromise` and `traceCallback`.
 
-All 26 applicable files pass. The exclusions are one cause: they assert
-that *node's own* `http`, `net`, `udp`, `worker_threads`, `child_process` or
-module loader publish to a well-known channel. Those subsystems publish into
-node's registry, not ours, and no substitution can bridge that — the tests pass
-when the subsystem is ours, and not before. They are left failing rather than
-marked not-applicable, because they are applicable; they are just blocked. 22
-more skip on `--expose-gc` or on node internals.
+All 32 applicable files pass. Six of them were exclusions until this tranche,
+and they are the six worth explaining, because the reason they were excluded
+was a prediction. They assert that *node's own* `http`, `net` or `udp`
+publishes to a well-known channel, and a subsystem that is node's publishes
+into node's registry rather than into ours. The note here said they would pass
+when the subsystem was ours and not before. That is now measured instead of
+predicted: `net`, `http` and `dgram` are substituted alongside this module
+through `uses`, they publish, and the six pass.
+
+| test | what it exercises |
+| --- | --- |
+| `test-diagnostics-channel-net.js` | `net.client.socket`, `net.server.socket`, and the `net.server.listen` tracing channel across a successful and a failing bind |
+| `test-diagnostics-channel-udp.js` | `udp.socket` |
+| `test-diagnostics-channel-http.js` | all seven `http.*` channels, including the error channel on a request whose host never resolves |
+| `test-diagnostics-channel-http-server-start.js` | `http.server.request.start` and `http.server.response.finish`, carrying an `AsyncLocalStorage` context between them |
+| `test-diagnostic-channel-http-request-created.js` | `http.client.request.created` against `http.client.request.start` — a header set after construction must be absent from the first and present in the second |
+| `test-diagnostic-channel-http-response-created.js` | `http.server.response.created` |
+
+The last of those is the sharpest, and it is the reason two of the seven http
+publish sites are where they are rather than one line earlier: `created` and
+`start` differ only in *when* they fire, so a subscriber can tell them apart
+only by what the request looked like at the time.
+
+The exclusions that remain name subsystems we do not have — `http2`, `tls`,
+`worker_threads`, `child_process`, `cluster`, Web Locks and the module loader.
+They stay excluded under the same rule, which is now a rule with a
+demonstrated positive case rather than only negative ones. 22 more skip on
+`--expose-gc` or on node internals.
 
 `node:console` is the first caller: `console.log` publishes its raw arguments
 before formatting them, so a subscriber sees the objects that were logged
@@ -2576,7 +2682,7 @@ generalised so that the same refusal about two different names counts once:
 | `punycode` | **3** | 1 |
 | `path` | **17** | 17 |
 | `async_hooks` | **23** | 110 |
-| `diagnostics_channel` | **24** | 26 |
+| `diagnostics_channel` | **24** | 32 |
 | `timers` | **30** | 53 |
 | `os` | **33** | 6 |
 | `buffer` | **33** | 50 |

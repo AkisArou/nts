@@ -1,1 +1,1 @@
-^test-diagnostics-channel(-.*)?\.(?:js|mjs)$
+^test-diagnostics?-channel(-.*)?\.(?:js|mjs)$

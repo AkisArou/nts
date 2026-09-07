@@ -317,15 +317,20 @@ globalThis.nts_net_listen = (
     else if (path && (readableAll || writableAll)) {
       server.listen({ path, backlog, readableAll, writableAll });
     } else if (path) server.listen(path, backlog);
-    // Omitting Node's default wildcard host is observable here: public
-    // `Server.listen(port)` binds synchronously, while supplying the literal
-    // `"::"` takes the DNS-shaped asynchronous path. The real libuv binding
-    // is synchronous, and callers may inspect an ephemeral port immediately
-    // after `listen()` returns.
-    else if (ipv6Only || reusePort) {
+    // Node binds a literal address synchronously and takes the deferred,
+    // DNS-shaped path only for a hostname, which the real libuv binding
+    // matches. The difference is observable twice over: callers read an
+    // ephemeral port straight after `listen()` returns, and a
+    // `net.server.listen` subscriber that unsubscribes just as synchronously
+    // still has to have seen a bind failure. `BoundSocket` is the public API
+    // with that timing -- it throws the bind errno rather than emitting it a
+    // tick later, and it refuses hostnames for the same reason we screen them
+    // out here.
+    else if (net.isIP(host)) {
+      server.listen(new net.BoundSocket({ host, port, ipv6Only, reusePort }), backlog);
+    } else if (ipv6Only || reusePort) {
       server.listen({ port, host, backlog, ipv6Only, reusePort });
-    } else if (host === "::") server.listen(port, backlog);
-    else server.listen(port, host, backlog);
+    } else server.listen(port, host, backlog);
     servers.set(handle, server);
     return handle;
   } catch (e) {

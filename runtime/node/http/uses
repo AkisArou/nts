@@ -2,3 +2,4 @@ buffer
 events
 net
 stream
+diagnostics_channel

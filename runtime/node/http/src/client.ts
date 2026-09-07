@@ -44,6 +44,12 @@ import type { AgentConnectionOptions } from "./agent.ts";
 import { emitHttpDebugWarning } from "./debug.ts";
 import { selectProxy } from "./proxy.ts";
 import type { ProxyConfig } from "./proxy.ts";
+import { channel } from "../../diagnostics_channel/src/main.ts";
+
+const clientRequestCreatedChannel = channel("http.client.request.created");
+const clientRequestStartChannel = channel("http.client.request.start");
+const clientRequestErrorChannel = channel("http.client.request.error");
+const clientResponseFinishChannel = channel("http.client.response.finish");
 
 export type RequestHeaderPair = readonly [string, OutgoingHeaderValue];
 export type RequestHeaderArray = readonly (string | RequestHeaderPair)[];
@@ -596,6 +602,31 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     // for that permission before writing the body. Queue the head immediately
     // (or send it when the socket arrives) to avoid deadlocking both sides.
     if (this.hasHeader("expect")) this.flushHeaders();
+
+    // Last, as node has it: a subscriber sees a request whose socket work is
+    // already under way, which is what makes the channel usable for tracing.
+    if (clientRequestCreatedChannel.hasSubscribers) {
+      clientRequestCreatedChannel.publish({ request: this });
+    }
+  }
+
+  protected override _finish(): void {
+    super._finish();
+    if (clientRequestStartChannel.hasSubscribers) {
+      clientRequestStartChannel.publish({ request: this });
+    }
+  }
+
+  /**
+   * Node's `emitErrorEvent`: every request failure reaches the channel before
+   * the event, so a subscriber cannot be pre-empted by a listener that
+   * destroys the request.
+   */
+  #emitError(error: unknown): void {
+    if (clientRequestErrorChannel.hasSubscribers) {
+      clientRequestErrorChannel.publish({ request: this, error });
+    }
+    this.emit("error", error);
   }
 
   protected override _implicitHeader(): void {
@@ -865,6 +896,9 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       // public request state and the later pool decision agree.
       if (this.shouldKeepAlive && !info.shouldKeepAlive) this.shouldKeepAlive = false;
 
+      if (clientResponseFinishChannel.hasSubscribers) {
+        clientResponseFinishChannel.publish({ request: this, response: message });
+      }
       response = message;
       this.res = message;
       socket.on("timeout", onResponseTimeout);
@@ -1006,7 +1040,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   #fail(error: unknown, allowAfterAbort = false): void {
     if ((!allowAfterAbort && this.aborted) || this.#errorEmitted) return;
     this.#errorEmitted = true;
-    this.emit("error", error);
+    this.#emitError(error);
     super.destroy(error);
   }
 
@@ -1014,7 +1048,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   #failWithoutSocketError(error: unknown, allowAfterAbort = false): void {
     if ((!allowAfterAbort && this.aborted) || this.#errorEmitted) return;
     this.#errorEmitted = true;
-    this.emit("error", error);
+    this.#emitError(error);
     super.destroy();
   }
 
@@ -1037,7 +1071,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       nextTick(() => {
         if (this.#errorEmitted || this.aborted) return;
         this.#errorEmitted = true;
-        this.emit("error", failure);
+        this.#emitError(failure);
       });
     }
     return super.destroy(error);
