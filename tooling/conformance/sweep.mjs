@@ -45,7 +45,7 @@
 
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import process from "node:process";
 
@@ -252,7 +252,43 @@ function compiles(module) {
   if (match === null) {
     throw new Error(`could not read lowering totals for ${module}`);
   }
-  return { lowered: Number(match[1]), refused: Number(match[2]) };
+  return { lowered: Number(match[1]), refused: Number(match[2]), backend: backendRefusals(module) };
+}
+
+/**
+ * Functions the C backend refuses that the lowering accepted.
+ *
+ * `nts hir` cannot see this: the pass that drops callers of a refused function
+ * runs long before a backend can refuse anything. So `lowered` is an upper
+ * bound on what reaches an artifact, and this is the distance between the two.
+ *
+ * It is a quantity in its own right rather than a correction. `punycode`
+ * reports 16 lowered and 3 refused while its artifact publishes nothing,
+ * because `emit-c` refuses five more that `hir` never sees -- and nobody knew
+ * that number existed until an artifact came out empty.
+ */
+function backendRefusals(module) {
+  // `spawnSync` rather than `execFileSync`, because the diagnostics are on
+  // stderr and `execFileSync` returns only stdout when the command succeeds --
+  // which made this function report zero backend refusals for every module,
+  // including one known to have six.
+  const run = spawnSync(
+    compiler,
+    ["emit-c", join(PROFILE, module, "tsconfig.json"), "--out", join(ROOT, "target/node", `${module}.gap`), "--napi"],
+    {
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
+    },
+  );
+  const out = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+  // One name per function the backend declined, however many times it is cited.
+  const names = new Set();
+  for (const line of out.split("\n")) {
+    const named = /NTS\d+ `([^`]+)` cannot be compiled/.exec(line);
+    if (named !== null) names.add(named[1]);
+  }
+  return names.size;
 }
 
 /** One module, one mode. Returns the tally the runner reported. */
@@ -303,7 +339,7 @@ for (const module of modules) {
           `${hollow === null ? "" : ` hollow ${hollow}`}` +
           `${compiled === null ? "" : ` addon ${compiled.stage}`}` +
           `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`
-        : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused` : "no compiler"}\n`,
+        : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused, ${lowering.backend} backend-refused` : "no compiler"}\n`,
   );
 }
 
@@ -349,8 +385,8 @@ if (withAddons && !withTests) {
   console.log(`\n| module | node's tests | hollow |${withCompiles ? " compiles |" : ""}`);
   console.log(`| --- | :---: | :---: |${withCompiles ? " :---: |" : ""}`);
 } else {
-  console.log(`\n| module | lowered / refused |`);
-  console.log(`| --- | :---: |`);
+  console.log(`\n| module | lowered / refused | backend-refused |`);
+  console.log(`| --- | :---: | :---: |`);
 }
 let totalLowered = 0;
 for (const { module, pass, applicable, hollow, lowering } of withAddons && !withTests ? [] : rows) {
@@ -361,7 +397,7 @@ for (const { module, pass, applicable, hollow, lowering } of withAddons && !with
   console.log(
     withTests
       ? `| \`${module}\` | ${count} | ${hollow ?? "—"} |${withCompiles ? ` ${compiled} |` : ""}`
-      : `| \`${module}\` | ${compiled} |`,
+      : `| \`${module}\` | ${compiled} | ${lowering ? lowering.backend : "—"} |`,
   );
 }
 if (withTests) {
@@ -382,7 +418,11 @@ if (usesCompiler) {
     );
     process.exitCode = 3;
   } else if (withCompiles) {
-    console.log(`${totalLowered} functions lower, measured with ${compiler}.`);
+    const totalBackend = rows.reduce((n, r) => n + (r.lowering?.backend ?? 0), 0);
+    console.log(
+      `${totalLowered} functions lower to HIR, measured with ${compiler}.\n` +
+        `${totalBackend} of them are refused afterwards by the C backend, which this axis cannot see.`,
+    );
   } else {
     console.log(`measured with ${compiler}.`);
   }

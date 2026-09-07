@@ -2659,6 +2659,27 @@ about what it looked at applies to a green number too.
 The prose below was written against 1,509, and before that 946; read its
 *reasoning* and not its arithmetic until each claim is re-derived.
 
+> **Measured: 4,498 of the 12,298 — 36.6% — are refused afterwards by the C
+> backend.** So roughly 7,800 functions reach an artifact, and this column has
+> been about 1.6× that all along. `sweep.mjs --compiles` reports the third
+> figure per module now.
+>
+> | module | backend-refused | | module | backend-refused |
+> | --- | ---: | --- | --- | ---: |
+> | `fs` | 715 | | `readline` | 259 |
+> | `http` | 577 | | `process` | 252 |
+> | `dgram` | 394 | | `url` | 231 |
+> | `net` | 316 | | `os` | 144 |
+> | `zlib` | 308 | | `querystring` | 137 |
+> | `stream` | 295 | | `punycode` | 6 |
+>
+> Every module loses a substantial fraction, so this is not one pathological
+> case — it is the ordinary distance between the two stages. The compiler
+> session predicted the quantity existed and guessed its scale from the one
+> instance either of us had seen: *"today it was five functions in one module
+> and nobody knew."* It is five functions in `punycode` and 4,498 across the
+> profile.
+>
 > **This column counts HIR lowering and is blind to what the C backend
 > refuses.** `nts hir` reports `punycode` at **16 functions lowered, 3
 > refused**. `emit-c --napi` on the same module and the same binary then
