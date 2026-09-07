@@ -118,10 +118,44 @@ axis. That would be the first non-zero this axis has ever reported.
 | 5a | the addon named exports after the function, not the binding | **fixed**, verified here |
 | 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
 | 5c | no exported object literal of functions — `ucs2` as a namespace | **fixed**, verified here |
-| 5d | `number[]` cannot cross the Node-API boundary in either direction | **open**, compiler lane |
+| 5d | `number[]` cannot cross the Node-API boundary in either direction | **fixed**, verified here |
+| 7 | an addon's process warning goes to stderr, not `process.emitWarning` | **open**, compiler lane |
 | 6 | the Node-API boundary flattens a thrown error's class | **open**, compiler lane |
 
-**The last mile is now one marshalling gap.** Namespace registration landed, so
+**`punycode` now fails on one thing, and it is not a marshalling gap or a
+missing export.** `f64[]` crosses in both directions, `ucs2` publishes, and the
+addon's surface is `decode, encode, toASCII, toUnicode, ucs2`. **Every assertion
+in `test-punycode.js` passes.** What fails is at exit:
+
+    anonymous was called 0 times, expected 1   (test-punycode.js:32:8)
+
+which is `common.expectWarning('DeprecationWarning', ..., 'DEP0040')`, registered
+on line 30 and never satisfied. Probed directly:
+
+    process.on("warning", ...) then require(addon)
+      stderr:  (node:…) DeprecationWarning: The `punycode` module is deprecated…
+      events:  0
+
+**The addon writes the warning to stderr instead of emitting it as a process
+event.** The TypeScript lane passes the same test because
+`internal/bindings.node.mjs` routes `nts_process_emit_warning_object` to
+`process.emitWarning`, and node defers the `'warning'` event to a later tick —
+so an expectation registered after the module loads still catches it.
+
+The reasoning for the current behaviour is in this profile's own source, and it
+is right for the case it was written about: `internal/process-warning.ts` says a
+native program has no process EventEmitter, so the C half writes to the
+diagnostic stream. **A Node-API addon is not that case.** It runs inside node,
+there is a `process` to emit on, and `napi_get_global` → `process.emitWarning`
+is the faithful route. Blocker 7.
+
+**Two caveats, so "punycode green" would mean what it says.** `version` still
+does not publish — a string constant node's test never touches, so the test can
+pass with the module incomplete. And `local/error-identity-static.js` will still
+fail on blocker 6. So `punycode` would pass **node's own tests** and not this
+profile's sweep, and both sentences are true.
+
+**The history below is what the last mile looked like from further back.** Namespace registration landed, so
 `ucs2` is no longer unnameable; the two functions that would hang off it have no
 wrapper because `number[]` cannot cross the boundary:
 
