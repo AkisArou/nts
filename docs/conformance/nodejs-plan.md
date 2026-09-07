@@ -120,7 +120,28 @@ axis. That would be the first non-zero this axis has ever reported.
 | 5c | no exported object literal of functions — `ucs2` as a namespace | **fixed**, verified here |
 | 5d | `number[]` cannot cross the Node-API boundary in either direction | **fixed**, verified here |
 | 7 | an addon's process warning goes to stderr, not `process.emitWarning` | **open**, compiler lane |
-| 6 | the Node-API boundary flattens a thrown error's class | **open**, compiler lane |
+| 6 | the Node-API boundary flattens a thrown error's class | **fixed**, verified here |
+
+**Blocker 6 is fixed, and the loop it closed is the argument for this whole
+section.** The difference was found this morning, written into this document as
+"`instanceof RangeError` being false is a real difference and is recorded as
+one, but no pinned assertion touches it", and left. It became an assertion in
+the evening, fired on its first run against a real addon, was reported, and is
+now repaired and verified by the same file:
+
+    before                                     now
+    constructor.name       = Error             = RangeError
+    instanceof RangeError  = false             = true
+    getPrototypeOf === RangeError.prototype  false  ->  true
+
+    local/error-identity-static.js   FAIL  ->  pass
+
+Node's own test could not have caught it: it asserts the error's *string form*,
+which an `Error` wearing the name satisfies. **The gap between "recorded as a
+difference" and "asserted" was the whole distance**, and it was a day.
+
+The addon is still bit-identical to node across 80,128 comparisons after the
+repair.
 
 **`punycode` now fails on one thing, and it is not a marshalling gap or a
 missing export.** `f64[]` crosses in both directions, `ucs2` publishes, and the
