@@ -113,15 +113,29 @@ axis. That would be the first non-zero this axis has ever reported.
 | 1 | an annotated `const` takes its receiver type from the initializer | open, compiler lane |
 | 2 | the Node-API wrapper never called `module__init` | **fixed**, verified here |
 | 3 | `build.sh` named three of the four generated `.c` files | **fixed**, this lane |
-| 4 | a compiled `throw` did not cross the boundary | **fixed**, but the error *class* is flattened |
+| 4 | a compiled `throw` did not cross the boundary | **fixed**, and sufficient |
 | 5 | the addon exports functions only — no values, no namespaces | open, compiler lane |
 
-**Blocker 4's remainder is measurable across three lanes**, which is the only
-way to see it: `codec.ts:36` throws `new RangeError("Invalid input")`; host
-node and TypeScript-on-node both report `RangeError`; the compiled addon
-reports `Error`. The message survives, the constructor does not. It decides the
-test, because `test-punycode.js` matches on the error's string form —
-`/^RangeError: Invalid input$/` — and `Error: Invalid input` does not match.
+**Blocker 4 is fixed and sufficient, and the paragraph that used to be here was
+wrong.** It claimed the error class was flattened in a way that decided the
+test. Measured properly:
+
+    e.name                  = RangeError
+    e.constructor.name      = Error
+    String(e)               = "RangeError: Invalid input"
+    e instanceof RangeError = false
+    /^RangeError: Invalid input$/.test(String(e))  = true
+
+`assert.throws(fn, /regex/)` matches the error's *string form*, which is built
+from `name`, so all three of `test-punycode.js`'s throw assertions pass against
+the compiled addon today. `instanceof RangeError` being false is a real
+difference and is recorded as one, but no pinned assertion touches it.
+
+The mistake is worth keeping because of its shape: `e.constructor.name` was
+read and the test's behaviour inferred from it, while the evidence against was
+already on screen — the test run had reached line **257**, which is past the
+throws at 58-66. **One property was measured and a different property's
+behaviour was reported.**
 
 **Blocker 5 only became visible once 4 stopped killing the process.** The
 pinned test then ran past every throw and died on `punycode.ucs2.encode`.
@@ -133,6 +147,22 @@ undefined (reading 'UV_UDP_REUSEADDR')`, because `os.constants` is a table
 rather than a function. **A module whose public API is not purely functions
 cannot currently be an addon, and that is most of them** — which makes 5 a
 wider gate than 1, since 1 is specific to `punycode`.
+
+**But for `punycode` specifically, 5 is narrower than that.** Counting what the
+test actually uses: `decode` ×10, `encode` ×7, `ucs2.encode` ×6, `toUnicode`
+×2, `toASCII` ×2, and `version` **×0**. The four functions already work, and
+the one plain value in the shape is never touched. So what stands between
+`punycode` and a passing compiled addon is a *namespace containing two
+functions* — not general support for exporting values. `os` still needs the
+general form, since `os.constants` is a table and every one of its tests dies
+on it.
+
+**Which leaves the shortest path to the first passing addon at two compiler
+items: blocker 1, and namespace exports.** Every other candidate is further:
+`querystring` has the only other purely-functional shape worth trying — seven
+functions, no values, four tests — and its roots are all in `buffer`
+(`ArrayBuffer.isView` with no definition, BigInt where `unknown` is expected,
+a conversion to number), not in itself.
 
 
 
