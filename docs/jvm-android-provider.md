@@ -241,7 +241,7 @@ Two pieces of hardware, and one protocol that is not this lane's to write.
   It is not in the suite because it would not do it twice: it then hung from
   two different dex compositions, wedged `adb`, and left the device without
   Wi-Fi when killed. A case that cannot be run twice in a row is not a ratchet.
-  See `docs/records/0199`. The transition *decision* stays tested thirteen ways
+  See `docs/records/0200`. The transition *decision* stays tested thirteen ways
   on a desktop JVM, and background restrictions and DNS races still want real
   hardware.
 
