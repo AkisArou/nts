@@ -115,6 +115,32 @@ The plan's ownership table is authoritative. At handoff time the active split wa
 Before sending an Orcode message, list the live peers. Peer messages are useful for
 coordination but do not authorize work in another session.
 
+### What other lanes depend on from this one
+
+Not derivable from this directory, and the reason each is written down is that the
+usual instruments cannot see it.
+
+**`core/utf8.ts` exports `utf8Decode`, and the Node lane needs exactly that decoder.**
+It is re-exported through `runtime/node/internal/utf8.ts` and called by
+`runtime/node/buffer/src/encodings.ts` for `Buffer.toString("utf8")`, which must **not**
+consume a leading BOM — which is the one behaviour where it differs from
+`core/encoding.ts`'s WHATWG `decodeUTF8`. Removing it broke thirteen of their modules;
+*swapping* it for the WHATWG decoder would have been worse, because every test on both
+sides stays green and the difference only appears on a buffer beginning `EF BB BF`.
+
+**`util` re-exports this lane's `TextEncoder` and `TextDecoder` by identity.** Node's
+`test-global-encoder.js` asserts `TextDecoder === util.TextDecoder`, so the *identity and
+module location* of the Encoding classes are load-bearing outside this directory. Two
+separately correct implementations fail that test.
+
+That second one is the more dangerous shape and worth stating as a rule rather than an
+item: `tooling/conformance/web-platform/unrouted.mjs` now scans the whole repository, so
+breaking a *reference* from another lane is caught. **An identity requirement is not a
+reference.** `TextDecoder` stays referenced whether or not `===` still holds, so nothing
+mechanical here will notice. Identity constraints live only in the other lane's test and
+in an agreement; ask before moving or re-wrapping a shared class, and do not expect a
+gate to ask for you.
+
 ## Last completed slice
 
 Commit `03c03d93` removed repeated ambient declarations and made the environment slot
