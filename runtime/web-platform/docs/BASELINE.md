@@ -4489,3 +4489,30 @@ Raised with the compiler lane. Nothing here is worked around.
 
 Local corpus 674/674, upstream unchanged at 2,278 of 2,286, whole-project frontier
 unchanged at 1,292 primary `NTS1001` and 312 `NTS1003`.
+
+### And then it more than doubled, for nothing
+
+The axis is **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm. It
+was 54 across 5 this morning.
+
+Almost all of that came free, and the reason it was not free earlier is worth naming.
+The frontier here has always been about *import edges* — a module either compiles or
+pulls in the whole runtime — so once `core/ascii.ts` and `core/utf8.ts` are on the axis
+at all, every remaining function in them costs a wrapper and nothing else. The fixture
+had been exercising two of the seven ASCII predicates and none of the UTF-8 codec,
+purely because those were the two the first slice happened to need.
+
+Three whitespace definitions that differ by two characters each are exactly where a
+transcription slip lives, and now all three are checked against the oracle rather than
+one of them.
+
+The addition worth having is `utf8RoundTrip`: encode with `utf8Write` into a buffer sized
+by `utf8Length`, then decode. It is scalar-value normalisation with the codec doing the
+work, and it is the most demanding string case on this axis — a lone surrogate must
+become U+FFFD and a valid pair must survive, so a backend whose strings are not UTF-16
+code units, or whose replacement differs, disagrees here rather than somewhere subtler.
+All three agree.
+
+The four declines are unchanged and still the percent-decoder's out-of-range reads.
+
+Local corpus 674/674, upstream unchanged at 2,278 of 2,286.
