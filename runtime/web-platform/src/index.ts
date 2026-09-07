@@ -68,7 +68,16 @@ export { Headers } from "./fetch/headers.ts";
 export type { HeaderSequenceEntry, HeadersInit } from "./fetch/headers.ts";
 
 export { Request } from "./fetch/request.ts";
-export type { RequestCredentials, RequestInit, RequestRedirect } from "./fetch/request.ts";
+export type {
+  ReferrerPolicy,
+  RequestCache,
+  RequestCredentials,
+  RequestDestination,
+  RequestInit,
+  RequestMode,
+  RequestPriority,
+  RequestRedirect,
+} from "./fetch/request.ts";
 
 export { Response } from "./fetch/response.ts";
 export type { ResponseInit } from "./fetch/response.ts";

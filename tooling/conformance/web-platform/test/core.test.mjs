@@ -1643,6 +1643,10 @@ test("Request converts its Web IDL arguments and dictionary in observable order"
           },
         };
       },
+      get cache() {
+        order.push("cache");
+        return "no-cache";
+      },
       get credentials() {
         order.push("credentials");
         return undefined;
@@ -1658,17 +1662,45 @@ test("Request converts its Web IDL arguments and dictionary in observable order"
           yield ["x-order", "1"];
         })();
       },
+      get integrity() {
+        order.push("integrity");
+        return "sha256-test";
+      },
+      get keepalive() {
+        order.push("keepalive");
+        return 0;
+      },
       get method() {
         order.push("method");
         return "POST";
+      },
+      get mode() {
+        order.push("mode");
+        return "cors";
+      },
+      get priority() {
+        order.push("priority");
+        return "high";
       },
       get redirect() {
         order.push("redirect");
         return undefined;
       },
+      get referrer() {
+        order.push("referrer");
+        return "about:client";
+      },
+      get referrerPolicy() {
+        order.push("referrerPolicy");
+        return "strict-origin";
+      },
       get signal() {
         order.push("signal");
         return undefined;
+      },
+      get window() {
+        order.push("window");
+        return null;
       },
     },
   );
@@ -1676,16 +1708,169 @@ test("Request converts its Web IDL arguments and dictionary in observable order"
     "input",
     "body",
     "body conversion",
+    "cache",
     "credentials",
     "duplex",
     "headers",
     "header iteration",
+    "integrity",
+    "keepalive",
     "method",
+    "mode",
+    "priority",
     "redirect",
+    "referrer",
+    "referrerPolicy",
     "signal",
+    "window",
   ]);
   assert.equal(await request.text(), "payload");
   assert.equal(request.headers.get("content-type"), "text/plain;charset=UTF-8");
+});
+test("Request exposes the complete readonly metadata surface", () => {
+  const request = makeRequest("https://example.test/path");
+  const native = new NativeRequest("https://example.test/path");
+  for (const name of [
+    "method",
+    "url",
+    "destination",
+    "referrer",
+    "referrerPolicy",
+    "mode",
+    "credentials",
+    "cache",
+    "redirect",
+    "integrity",
+    "keepalive",
+    "isReloadNavigation",
+    "isHistoryNavigation",
+    "duplex",
+  ]) {
+    assert.equal(request[name], native[name], name);
+    assert.throws(() => {
+      request[name] = "changed";
+    }, TypeError);
+  }
+  assert.equal(request.headers, request.headers);
+  assert.equal(request.signal, request.signal);
+  assert.throws(() => {
+    request.headers = new Headers();
+  }, TypeError);
+  assert.throws(() => {
+    request.signal = new AbortController().signal;
+  }, TypeError);
+  for (const internalName of ["priority", "internalpriority", "blocking"]) {
+    assert.equal(internalName in request, false, internalName);
+  }
+});
+test("Request validates Fetch metadata and preserves it through clone", () => {
+  for (const cache of [
+    "default",
+    "no-store",
+    "reload",
+    "no-cache",
+    "force-cache",
+    "only-if-cached",
+  ]) {
+    const init = cache === "only-if-cached" ? { cache, mode: "same-origin" } : { cache };
+    assert.equal(makeRequest("https://example.test", init).cache, cache);
+  }
+  for (const mode of ["same-origin", "no-cors", "cors"]) {
+    assert.equal(makeRequest("https://example.test", { mode }).mode, mode);
+  }
+  for (const policy of [
+    "",
+    "no-referrer",
+    "no-referrer-when-downgrade",
+    "origin",
+    "origin-when-cross-origin",
+    "same-origin",
+    "strict-origin",
+    "strict-origin-when-cross-origin",
+    "unsafe-url",
+  ]) {
+    assert.equal(
+      makeRequest("https://example.test", { referrerPolicy: policy }).referrerPolicy,
+      policy,
+    );
+  }
+  for (const priority of ["high", "low", "auto"]) {
+    const request = makeRequest("https://example.test", { priority });
+    assert.equal("priority" in request, false);
+  }
+  for (const [member, value] of [
+    ["cache", "invalid"],
+    ["credentials", "invalid"],
+    ["duplex", "full"],
+    ["mode", "invalid"],
+    ["priority", "invalid"],
+    ["redirect", "invalid"],
+    ["referrerPolicy", "invalid"],
+  ]) {
+    assert.throws(() => makeRequest("https://example.test", { [member]: value }), TypeError);
+  }
+  assert.throws(() => makeRequest("https://example.test", { cache: "only-if-cached" }), TypeError);
+  assert.throws(() => makeRequest("https://example.test", { mode: "navigate" }), TypeError);
+  assert.throws(
+    () => makeRequest("https://example.test", { mode: "no-cors", method: "PUT" }),
+    TypeError,
+  );
+  assert.throws(() => makeRequest("https://example.test", { window: 0 }), TypeError);
+
+  const source = makeRequest("https://example.test/path", {
+    cache: "reload",
+    credentials: "include",
+    integrity: "sha256-test",
+    keepalive: true,
+    method: "POST",
+    mode: "same-origin",
+    priority: "high",
+    redirect: "manual",
+    referrer: "https://example.test/referrer#fragment",
+    referrerPolicy: "origin",
+    body: "payload",
+  });
+  const clone = source.clone();
+  for (const name of [
+    "cache",
+    "credentials",
+    "integrity",
+    "keepalive",
+    "method",
+    "mode",
+    "redirect",
+    "referrer",
+    "referrerPolicy",
+  ]) {
+    assert.equal(clone[name], source[name], name);
+  }
+});
+test("Request body inheritance is transactional around validation and overrides", async () => {
+  for (const invalidInit of [{ method: "GET" }, { method: "TRACE" }]) {
+    const source = makeRequest("https://example.test", { method: "POST", body: "source" });
+    assert.throws(() => makeRequest(source, invalidInit), TypeError);
+    assert.equal(source.bodyUsed, false);
+  }
+
+  const locked = makeRequest("https://example.test", { method: "POST", body: "source" });
+  locked.body.getReader();
+  assert.throws(() => makeRequest(locked), TypeError);
+  const override = makeRequest(locked, { body: "replacement" });
+  assert.equal(await override.text(), "replacement");
+  assert.equal(locked.bodyUsed, false);
+
+  const keepalive = makeRequest("https://example.test", { keepalive: 1 });
+  assert.equal(keepalive.keepalive, true);
+  assert.throws(
+    () =>
+      makeRequest("https://example.test", {
+        method: "POST",
+        body: new ReadableStream(),
+        duplex: "half",
+        keepalive: true,
+      }),
+    TypeError,
+  );
 });
 test("Response static factories, immutable redirects, JSON and no-content statuses", async () => {
   const r = Response.json({ ok: true });

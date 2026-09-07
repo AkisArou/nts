@@ -1053,3 +1053,35 @@ dependent `NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` modul
 diagnostics, and no invalid HIR. The previously visible type-only-import cycle is no
 longer present. These counts are the current final-source dependency frontier, not
 compiled-provider completion.
+
+The canonical `Request` now carries the complete Fetch object-model metadata rather
+than only method, headers, signal, redirect, and credentials. Cache, mode, referrer,
+referrer policy, integrity, keepalive, priority, destination, navigation flags, and
+duplex are converted and validated in Web IDL dictionary order. Public attributes
+are getter-backed read-only values; internal priority remains unexposed. Constructor
+validation covers forbidden and no-CORS methods, `only-if-cached`, `navigate`, the
+nullable window member, stream duplex, keepalive with a stream body, and referrer
+normalization against an explicitly configured environment origin. All validation
+precedes transfer of an inherited body. Supplying a replacement body consequently
+leaves even a locked or consumed source body alone, while a failed method validation
+cannot disturb an otherwise usable source.
+
+Eight complete current WPT Request fixtures and their two META support scripts are
+pinned by exact Git blob hash. They add 97 source cases. Of the 96 applicable cases,
+all 96 pass. One exact case is recorded as not applicable: the fixture itself marks
+its expectation that an empty `FormData` body serialize to an empty string as
+unclear, while the multipart serializer and standalone Undici emit the closing MIME
+boundary required to make the payload structurally complete. The harness now
+applies named applicability entries to both synchronous and promise tests, injects
+the canonical `URLSearchParams`, and resolves relative Request URLs through a
+declared environment base URL. It still fails if an exclusion is stale or unobserved.
+
+The full pinned host result is now 1598 of 1607 applicable cases, with two named
+not-applicable cases. The same nine documented failures remain: three Headers
+iterator-shape cases, one readable byte/BYOB tee case, two direct-promise-fulfillment
+cases, two explicit-receiver callback cases, and one readable async-iterator shape
+case. The local Node-host suite passes 151/151 and the root TypeScript solution is
+green. The live compiled-source frontier is 618 primary `NTS1001` refusals, 82
+`NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics,
+and no invalid HIR. The changed frontier is final Request source reaching existing
+compiler dependencies; it is not compiled-provider progress.

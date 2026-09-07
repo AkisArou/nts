@@ -55,11 +55,15 @@ const {
   TextEncoder,
   TransformStream,
   TransformStreamDefaultController,
+  URLSearchParams,
   WritableStream,
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 const { createHostNodeWebPlatform } =
   await import("./node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js");
-const hostRuntime = createHostNodeWebPlatform();
+const hostRuntime = createHostNodeWebPlatform({
+  baseURL: "https://example.test/fetch/",
+  origin: "https://example.test",
+});
 
 let passed = 0;
 let failed = 0;
@@ -164,6 +168,7 @@ function createWptContext(path, pending, excludedTests, seenExcludedTests) {
     Uint8ClampedArray,
     Uint16Array,
     Uint32Array,
+    URLSearchParams,
     WebAssembly,
     WritableStream,
     WebSocket: class {
@@ -306,6 +311,13 @@ function createWptContext(path, pending, excludedTests, seenExcludedTests) {
       return JSON.stringify(value);
     },
     promise_test(fn, name) {
+      const reason = excludedTests[name];
+      if (reason !== undefined) {
+        assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
+        seenExcludedTests.add(name);
+        reportNotApplicable(path, name, reason);
+        return;
+      }
       const asynchronousFailure = Promise.withResolvers();
       const cleanups = [];
       const test = {
@@ -449,6 +461,9 @@ async function runFixture(root, path, data, verifiedSupport) {
 }
 
 const localSupport = new Map();
+for (const [path, expectedHash] of Object.entries(manifest.support ?? {})) {
+  localSupport.set(path, readVerified(localWptRoot, path, expectedHash));
+}
 for (const [path, expectedHash] of Object.entries(manifest.files)) {
   if (fixtureFilter !== undefined && path !== fixtureFilter) continue;
   const data = readVerified(localWptRoot, path, expectedHash);

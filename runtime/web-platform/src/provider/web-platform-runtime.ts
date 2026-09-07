@@ -60,6 +60,7 @@ export class WebPlatformRuntime {
       random: primitives.random,
       bodyPolicy,
       baseURL: options.baseURL,
+      origin: options.origin,
     };
     this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
 
