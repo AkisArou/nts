@@ -5225,10 +5225,12 @@ test pins, because the weaker one has a charitable reading that this removes.
     split 1 / 3 / 1                    U+FFFD U+0041           differs
     split 1 / 4                        U+FFFD U+0041           differs
 
-**Node disagrees split-versus-split.** Two distinct answers for one byte sequence across
-eight splits; this decoder gives one. The `1/4` row was not in the report and turned up
-on verifying it, which is the argument for checking a peer's finding rather than
-accepting it — the same argument that has now been made in three directions today.
+**Node disagrees split-versus-split.** Two distinct answers for one byte sequence; this
+decoder gives one. The table grew to nine splits over three passes by two lanes, each
+verifying the last rather than accepting it — `1/4` and `1/2/2` turned up on checking the
+report, `3/2` and `2/2/1` on checking that. `docs/records/0207` carries the full table and
+what it cost to establish; this entry does not repeat it, because two copies of a table
+are two things that can drift.
 
 The trigger is precise: node drops the code point only when a **complete** `EF BB BF`
 begins at the head of a decode call following a call that emitted nothing. Byte-at-a-time

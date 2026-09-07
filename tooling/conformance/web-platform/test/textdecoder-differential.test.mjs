@@ -141,7 +141,21 @@ suite("node's answer depends on where the chunk boundary falls; this one does no
     }
     return out;
   };
-  const splits = [[5], [1, 3, 1], [1, 1, 1, 1, 1], [4, 1], [2, 3], [1, 4], [3, 2], [1, 2, 2]];
+  // Nine splits, built in three passes by two lanes each verifying the last. `1/2/2` is
+  // the row that does the work: same empty first chunk as the two failures, but an
+  // incomplete `EF BB` at the head, and node gets it right -- so the trigger needs both
+  // halves and neither alone.
+  const splits = [
+    [5],
+    [1, 3, 1],
+    [1, 1, 1, 1, 1],
+    [4, 1],
+    [2, 3],
+    [1, 4],
+    [3, 2],
+    [1, 2, 2],
+    [2, 2, 1],
+  ];
   const correct = "\uFFFD\uFEFF\u0041";
 
   const nodeAnswers = new Set();
