@@ -5496,3 +5496,75 @@ commit appeared, which is what the holding was for.
 
 Local corpus 752/752 with zero skipped, compiled axis 138 of 142 across 13 functions on
 all three backends.
+
+## System proxies, and the interpreter that is deliberately not here
+
+The Proxies row named one thing this lane had never built: "system/PAC proxy integration
+where a mobile provider exposes it." What landed is the half that needs no agreement from
+anybody, and the omission is the more interesting part.
+
+**There is no PAC interpreter, and there should not be one.** A PAC file is a JavaScript
+program — `FindProxyForURL(url, host)` returning a string — so evaluating one needs a
+JavaScript engine. Every platform this project targets already has that engine wired to its
+own proxy stack: Android resolves PAC inside `ProxySelector`, Apple inside
+`CFNetworkCopyProxiesForURL`. Writing a second interpreter would ship a worse answer to a
+question the host already answers, and would answer it *differently from every other
+application on the same device*, which is the failure nobody would debug.
+
+So the portable contract is "ask the host which proxy applies to this URL", and what comes
+back is the classic result grammar. That grammar is identical whether a PAC file produced it
+or a settings panel did, which is exactly why parsing it is shared source while producing it
+is not. `parseProxyResult` and `SystemProxyPolicy` are that half; the provider primitive
+behind the resolver is an ABI change and is not being made unilaterally.
+
+### Where a plausible implementation would go wrong
+
+There is no upstream fixture for any of this — WPT does not test proxies, because a
+browser's proxy stack sits below everything WPT can observe. So the cases worth writing are
+the ones where two reasonable implementations diverge.
+
+**`SOCKS` means SOCKS4, and SOCKS4 is not SOCKS5.** Folding one into the other type-checks,
+looks like support, and produces a connection that fails inside a handshake the peer never
+agreed to speak. They are kept apart, and a SOCKS4 directive is reported as unusable.
+
+That in turn forces a distinction the obvious return type cannot make: a host that answers
+`SOCKS s:1080` and a host that answers nothing **both go direct**, and only one of them is a
+configuration somebody expected to work. So the resolution carries the rejected directives
+verbatim beside the usable routes, and a test asserts the two cases are distinguishable —
+because a caller that cannot tell them apart cannot report the difference.
+
+The rest of the pinned behaviour: one unusable directive does not take the usable ones
+beside it down; a result that never says `DIRECT` still ends there, since a fallback list
+that runs out would otherwise fail a request that going direct would have served; an
+unbracketed IPv6 literal is refused, because `::1:8080` is a valid address as well as a host
+and a port and there is no honest way to choose; and the bypass list is consulted **before**
+the host is asked, asserted by counting resolver calls rather than by looking at the answer,
+since checking afterwards gives the same routes while paying for a lookup on every request
+to a bypassed origin.
+
+Seventeen tests, green on the first run — which is the shape that usually means something
+could not have failed, so all six sabotages were run before believing it. Every one was
+caught, including the SOCKS4 fold, which takes down three tests rather than one.
+
+### One compiler defect, found by writing ordinary code
+
+The module costs three primary refusals and two cascades: 1,299/315 to 1,302/317 on a
+binary pinned for both measurements. Two are shapes already refused elsewhere in this corpus
+(an empty array literal with the annotation on the variable, ×6 before this; a module-scope
+const whose initializer was refused, ×13). The third narrowed to something small and sharp.
+
+A shorthand property whose value is a **narrowed nullable scalar** loses the narrowing. The
+same program written the long way lowers cleanly:
+
+    const port = decimalPort(text);          // number | null
+    if (port === null) return null;
+    return { hostname, port };               // refused: an erased value ...
+    return { hostname, port: port };         // clean
+
+Controlled per property, so it is not the object literal and not the narrowing on its own:
+`{ hostname: hostname, port }` is refused and `{ hostname, port: port }` is clean. The
+string shorthand survives because a nullable string is already a reference; only the scalar
+loses it. TypeScript treats the two forms as the same program, and so should the lowering.
+
+The shorthand stays. Rewriting it would be a compiler-gap workaround, and the refusal is
+worth more visible than absent.

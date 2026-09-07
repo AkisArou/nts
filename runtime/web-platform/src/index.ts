@@ -127,6 +127,17 @@ export {
   Socks5ProxyError,
 } from "./dispatch/proxy.ts";
 export { EnvironmentProxyPolicy, NoProxyMatcher } from "./dispatch/proxy-policy.ts";
+export {
+  directResolution,
+  parseProxyResult,
+  SystemProxyPolicy,
+} from "./dispatch/proxy-resolution.ts";
+export type {
+  ProxyResolution,
+  ProxyRoute,
+  ProxyRouteKind,
+  SystemProxyResolver,
+} from "./dispatch/proxy-resolution.ts";
 export type {
   EnvironmentProxyOptions,
   NoProxyEntry,
