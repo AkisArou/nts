@@ -1430,8 +1430,8 @@ a file that is otherwise entirely correct. The measures that say more:
 
 **A census beats a bigger pool, and this is the evidence for it.**
 `tooling/conformance/census-inspect.mjs` enumerates 61 value kinds by hand,
-runs them through the substitution and through host node, and diffs. **35 of
-61 agree.** The 61 are enumerated *against a written-down set*, and that is the
+runs them through the substitution and through host node, and diffs. **38 of
+61 agree**, up from 35 when it was written. The 61 are enumerated *against a written-down set*, and that is the
 whole difference from a pool: every kind `formatByShape` has a branch for, plus
 every kind node's own `inspect` special-cases that ours does not. Anyone can
 tell whether the list has fallen behind by reading those two branch lists
@@ -1521,13 +1521,39 @@ The rest are genuine formatting gaps, and none appears in any exclusion:
 | --- | --- | --- |
 | `Promise` pending / resolved / rejected | `{}` | `Promise { <pending> }`, `Promise { 7 }`, `Promise { <rejected> ... }` |
 | boxed `BigInt`, boxed `Symbol` | `{}` | `[BigInt: 10n]`, `[Symbol: Symbol(s)]` |
-| `WeakRef`, `FinalizationRegistry` | `{}` | `WeakRef {}`, `FinalizationRegistry {}` |
 | generator and async-generator objects | `{}` | `Object [Generator] {}` |
 | `Map`/`Set`/array/string iterators | `{}` | `[Map Entries] { [ 'a', 1 ] }` |
 | null-prototype object | `{}` | `[Object: null prototype] {}` |
 | `arguments` | `{ '0': 1 }` | `[Arguments] { '0': 1 }` |
 | `Symbol.toStringTag` | omitted | shown among the keys |
-| `AggregateError`, `Error` with `cause` | omitted | `{ [errors]: [...] }`, `{ [cause]: ... }` |
+
+**Three of those rows are closed, and which three is the useful part.**
+`AggregateError`'s `[errors]` and an `Error`'s `[cause]` are printed now, and
+they were the ones worth doing first: both are set by the constructor as
+non-enumerable, so `Object.keys` never reports them and an error printed from
+its enumerable keys alone was dropping exactly the part a reader needs — what
+it was caused by, or what the aggregate aggregates. Node adds the two by name
+and brackets them, which is how it spells a key that is not enumerable, and
+a `cause` a program assigns itself *is* enumerable and prints unbracketed in
+both. `WeakRef` and `FinalizationRegistry` now show their brand rather than
+`{}`, recognised with `instanceof` against the real classes.
+
+**Most of what is left shares one root, and it is not `inspect`'s.** Boxed
+`BigInt` and `Symbol`, generator objects, all four iterator kinds and
+`arguments` are each downstream of a `util.types` predicate that answers
+`false` on purpose — `isGeneratorObject`, `isMapIterator`, `isArgumentsObject`
+and their siblings each carry a comment saying a runtime kind tag for an erased
+value is what they need, and that inspecting an object's shape instead would
+accept user objects incorrectly. Those are honest stubs rather than gaps, and
+they close together or not at all.
+
+**One row is deliberately left open, which is worth saying out loud.** The
+null-prototype marker needs `Object.getPrototypeOf`, and the only `Object`
+statics this profile lowers are `keys` and `hasOwn`; everything else is a
+refusal. Writing it would buy `[Object: null prototype] {}` on the
+TypeScript-on-node axis at the cost of another `NTS1001` on a shared gate whose
+ceiling this corpus has already moved twice today. A cosmetic row is not worth
+that, and the trade is recorded rather than the row being silently skipped.
 
 The `Promise` row is the compiler lane's on both sides, and cheaply so: a
 promise here is `NtsPromise`, a struct that runtime allocates, and its state is

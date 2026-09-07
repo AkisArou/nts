@@ -677,7 +677,10 @@ function formatObject(ctx: Context, value: InspectableObject, recurseTimes: numb
   }
   if (value instanceof Error) {
     const base = formatError(value);
-    if (Object.keys(value).length === 0) return base;
+    // `hiddenErrorKeys` and not just `Object.keys`: an error whose only extra
+    // is a non-enumerable `cause` has no enumerable keys at all, and returning
+    // early here would drop the cause before anything could print it.
+    if (Object.keys(value).length === 0 && hiddenErrorKeys(value).length === 0) return base;
   }
   if (isBoxedPrimitive(value)) {
     const wrapped = value.valueOf();
@@ -794,7 +797,15 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
     );
   }
   if (value instanceof Error) {
-    return formatWithKeys(ctx, value, recurseTimes, formatError(value), ["{", "}"], []);
+    return formatWithKeys(
+      ctx,
+      value,
+      recurseTimes,
+      formatError(value),
+      ["{", "}"],
+      [],
+      hiddenErrorKeys(value),
+    );
   }
   if (isBoxedPrimitive(value)) {
     return formatWithKeys(
@@ -808,6 +819,17 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
   }
   if (isURLValue(value)) {
     return formatWithKeys(ctx, value, recurseTimes, value.href, ["{", "}"], []);
+  }
+  // `WeakRef` and `FinalizationRegistry` have no contents to show -- node
+  // prints the brand and empty braces -- but the brand is the whole point: a
+  // bare `{}` tells a reader nothing about what they are holding. Recognised
+  // by `instanceof` against the real classes, which is an ordinary test rather
+  // than a metaobject observation.
+  if (value instanceof WeakRef) {
+    return formatWithKeys(ctx, value, recurseTimes, "WeakRef", ["{", "}"], []);
+  }
+  if (value instanceof FinalizationRegistry) {
+    return formatWithKeys(ctx, value, recurseTimes, "FinalizationRegistry", ["{", "}"], []);
   }
   if (isWeakMap(value)) {
     return formatWithKeys(
@@ -1003,6 +1025,15 @@ function formatWithKeys(
   base: string,
   braces: [string, string],
   output: string[],
+  /**
+   * Own keys `Object.keys` does not report, spelled in brackets.
+   *
+   * The bracket is not decoration: it is how node distinguishes a key it had
+   * to know about from one the object advertises. Everything here is a key
+   * this module named on purpose, so the distinction survives without reading
+   * a descriptor.
+   */
+  hiddenKeys: readonly string[] = [],
 ): string {
   const isArrayLike = Array.isArray(value) || isTypedArray(value) || isStringObject(value);
 
@@ -1027,6 +1058,11 @@ function formatWithKeys(
   try {
     for (const key of keys) {
       output.push(formatProperty(ctx, value, key, recurseTimes));
+    }
+    for (const key of hiddenKeys) {
+      output.push(
+        `[${key}]: ${formatValue(ctx, value[key], recurseTimes + 1)}`,
+      );
     }
   } finally {
     ctx.indentationLvl -= 2;
@@ -1053,6 +1089,34 @@ function formatWithKeys(
  *
  * An identifier prints bare and any other field name is quoted.
  */
+/**
+ * The own keys of an error that `Object.keys` does not report.
+ *
+ * `cause` and `errors` are set by the constructor as non-enumerable, so an
+ * error printed from its enumerable keys alone loses exactly the part a reader
+ * needs: what it was caused by, or what an `AggregateError` aggregates. Node
+ * adds these two to the key list by name and prints them bracketed, which is
+ * how it spells a key that is not enumerable.
+ *
+ * Named rather than discovered. Reading a descriptor is not available here,
+ * and these are the only two node adds -- so a `cause` the program assigned
+ * itself is enumerable, appears in `Object.keys`, and is printed unbracketed,
+ * which is also what node does.
+ */
+function hiddenErrorKeys(value: InspectableObject): string[] {
+  const own = Object.keys(value);
+  const hidden: string[] = [];
+  if (Object.hasOwn(value, "cause") && !own.includes("cause")) hidden.push("cause");
+  if (
+    Object.hasOwn(value, "errors") &&
+    !own.includes("errors") &&
+    Array.isArray(value["errors"])
+  ) {
+    hidden.push("errors");
+  }
+  return hidden;
+}
+
 function formatKey(ctx: Context, key: string): string {
   return /^[a-zA-Z_][a-zA-Z_0-9]*$/.test(key)
     ? ctx.stylize(key, "name")
