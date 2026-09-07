@@ -2766,8 +2766,18 @@ ENOENT: no such file or directory, stat '/nope/x'
 
 ## The compiled artifact, which is the gate and is entirely red
 
-**Latest measurement: still 0 of 22, and for the first time that number is one
-feature from moving.** `punycode` lowers completely — 21 functions, nothing
+**`punycode` passes node's own test as a compiled addon**, with one line
+hand-written into the generated `addon.c` — `nts_napi_set_env(env)` before
+`module__init()`, which only `NAPI_MODULE_INIT` can write and which the emitter
+does not yet. 2 of 2, not degenerate under poison, and 80,128 differential
+comparisons against node with no divergence.
+
+**The axis still reads 0**, and this document is not going to say otherwise: the
+patch is in generated output, the generator belongs to the compiler lane, and it
+is not committed. What changed is that the remaining distance is now known to be
+21 characters rather than estimated. See `nodejs-plan.md` for the evidence.
+
+**The measurement below predates that and is otherwise current.** `punycode` lowers completely — 21 functions, nothing
 refused, all of it verifying — builds to a 275KB `.node`, and computes
 `decode`, `encode`, `toASCII` and `toUnicode` correctly on real vectors while
 emitting DEP0040 through the native warning seam. Node's own test now fails on
