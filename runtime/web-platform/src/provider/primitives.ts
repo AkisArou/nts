@@ -90,6 +90,96 @@ export interface ByteConnection {
   close(): void;
 }
 
+export interface ListenAddress {
+  readonly hostname: string;
+  /** Zero asks the provider to choose one; {@link BoundAddress.port} reports which. */
+  readonly port: number;
+  /**
+   * How many connections may be waiting for an {@link SocketListener.accept},
+   * **wherever the waiting happens**.
+   *
+   * The wording is deliberate and was corrected by the Node lane, which has written the
+   * adapter. `net.Server` is not pull-based: libuv accepts a connection and node emits
+   * it before any consumer is consulted, so on that provider there are two queues -- the
+   * kernel's and the adapter's -- and "the OS backlog is the only queue" would have been
+   * a false sentence about a real implementation.
+   *
+   * So this bounds the total. A provider that cannot defer the OS accept may hold up to
+   * `backlog` connections itself and closes them past that, as the kernel would have
+   * dropped them. One number, one meaning, on every provider.
+   */
+  readonly backlog?: number;
+}
+
+export interface BoundAddress {
+  /**
+   * The literal address bound, never the name that was asked for.
+   *
+   * `listen({ hostname: "localhost" })` binds `::1` or `127.0.0.1` depending on
+   * resolution order, and a caller that echoes back `"localhost"` and connects to it can
+   * reach the other family and fail intermittently on a machine with both. Answering
+   * with the literal is what makes this field worth having.
+   */
+  readonly hostname: string;
+  readonly port: number;
+}
+
+/**
+ * A bound socket that accepts inbound connections.
+ *
+ * Pull-shaped rather than push-shaped: the caller loops on {@link accept}, mirroring
+ * {@link SocketConnector.connect}. A callback or stream would put the concurrency policy
+ * in the provider, which cannot see how many sessions the server above is willing to
+ * hold.
+ */
+export interface SocketListener {
+  readonly address: BoundAddress;
+
+  /**
+   * The next inbound connection, or `null` once the listener is closed.
+   *
+   * `null` rather than an error, matching {@link ByteConnection.read} at end of stream:
+   * a listener is a stream of connections and its end should spell the same way, so that
+   * `while ((c = await accept(signal)) !== null)` is the correct loop rather than a
+   * `try`/`catch` around every shutdown.
+   *
+   * An aborted `signal` **rejects**, and aborting one `accept` does not close the
+   * listener -- abort is a caller changing its mind about one call, close is the
+   * listener finishing. Collapsing them loses a distinction the rest of the platform
+   * makes, and is the kind of thing implemented the other way round exactly once.
+   */
+  accept(signal: AbortSignal): Promise<ByteConnection | null>;
+
+  close(): void;
+}
+
+/**
+ * Binds listening sockets. Optional, and on policy grounds rather than capability.
+ *
+ * The Android provider measured this on a device: `bind` with port 0 works, reports the
+ * port it got, and needs no permission beyond the `INTERNET` one a client already
+ * declares. So a provider omitting it is choosing not to expose a server on a client
+ * target, which is what the governing plan asks for by default -- not working around
+ * something the platform cannot do.
+ *
+ * Three things a provider should surface rather than translate: binding below port 1024
+ * needs root as on any Unix; a socket on `0.0.0.0` is reachable only while an interface
+ * exists; and a mobile platform's background execution limits govern whether the
+ * *process* survives, not whether the bind is legal, so that failure is the server being
+ * killed and is the embedder's problem rather than this interface's.
+ */
+export interface SocketBinder {
+  /**
+   * Binds and begins listening.
+   *
+   * Rejects if the bind fails. A provider whose platform reports bind failure
+   * asynchronously -- node emits `'error'` a tick after `listen()` returns -- must wire
+   * that to this promise, or a taken port becomes an unhandled event rather than a
+   * rejection.
+   */
+  listen(address: ListenAddress, signal: AbortSignal): Promise<SocketListener>;
+}
+
 export interface SocketConnector {
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection>;
 

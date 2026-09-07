@@ -1,8 +1,8 @@
 // Ordinary-Node primitives for host-level conformance tests. This code never
 // delegates Fetch or WebSocket behavior to Node, Undici, or node:http(s).
 
-import { connect as tcpConnect, isIP } from "node:net";
-import type { Socket } from "node:net";
+import { connect as tcpConnect, createServer, isIP } from "node:net";
+import type { Server, Socket } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
 import { checkServerIdentity, connect as tlsConnect } from "node:tls";
 import type { TLSSocket } from "node:tls";
@@ -14,9 +14,13 @@ import type { Readable } from "node:stream";
 import { DOMException } from "../../../runtime/web-platform/src/core/errors.ts";
 import type { AbortSignal } from "../../../runtime/web-platform/src/core/abort.ts";
 import type {
+  BoundAddress,
   ByteConnection,
   CancelHandle,
   ConnectAddress,
+  ListenAddress,
+  SocketBinder,
+  SocketListener,
   DnsAddress,
   DnsResolveOptions,
   DigestProvider,
@@ -311,6 +315,110 @@ export interface HostNodeSocketOptions {
    * inventing a second provider. A real provider decides this from the platform.
    */
   reportsNegotiatedProtocol?: boolean;
+}
+
+/**
+ * A listening socket over `net.Server`.
+ *
+ * Node is push-shaped: libuv accepts a connection and `'connection'` fires before any
+ * consumer is consulted, so this adapter holds what has arrived and hands it out on
+ * `accept`. That queue is the reason `backlog` is specified as "waiting for an accept,
+ * wherever the waiting happens" rather than "in the kernel" -- on this provider it is
+ * partly here, and past the bound the excess is destroyed as the kernel would have
+ * dropped it.
+ */
+class HostNodeSocketListener implements SocketListener {
+  readonly address: BoundAddress;
+  private readonly server: Server;
+  private readonly backlog: number;
+  private readonly waiting: Socket[] = [];
+  private readonly askers: PromiseWithResolvers<ByteConnection | null>[] = [];
+  private closed = false;
+
+  constructor(server: Server, address: BoundAddress, backlog: number) {
+    this.server = server;
+    this.address = address;
+    this.backlog = backlog;
+    server.on("connection", (socket: Socket) => {
+      const asker = this.askers.shift();
+      if (asker !== undefined) {
+        asker.resolve(new HostNodeByteConnection(socket));
+        return;
+      }
+      if (this.waiting.length >= this.backlog) {
+        socket.destroy();
+        return;
+      }
+      this.waiting.push(socket);
+    });
+    server.on("error", () => {});
+  }
+
+  accept(signal: AbortSignal): Promise<ByteConnection | null> {
+    if (signal.aborted) return Promise.reject(signal.reason);
+    if (this.closed) return Promise.resolve(null);
+    const socket = this.waiting.shift();
+    if (socket !== undefined) return Promise.resolve(new HostNodeByteConnection(socket));
+
+    const asker = Promise.withResolvers<ByteConnection | null>();
+    this.askers.push(asker);
+    // Aborting one accept removes that caller and leaves the listener open.
+    const detach = signal.subscribe(() => {
+      const index = this.askers.indexOf(asker);
+      if (index >= 0) this.askers.splice(index, 1);
+      asker.reject(signal.reason);
+    });
+    return asker.promise.finally(detach);
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const socket of this.waiting.splice(0)) socket.destroy();
+    // A closed listener is a normal ending, so everyone waiting gets `null`.
+    for (const asker of this.askers.splice(0)) asker.resolve(null);
+    this.server.close();
+  }
+}
+
+/** Binds listening sockets on the ordinary-Node host. */
+export class HostNodeSocketBinder implements SocketBinder {
+  listen(address: ListenAddress, signal: AbortSignal): Promise<SocketListener> {
+    signal.throwIfAborted();
+    const backlog = address.backlog ?? 511;
+    if (!Number.isSafeInteger(backlog) || backlog < 1) {
+      return Promise.reject(new RangeError("backlog must be a positive safe integer"));
+    }
+    const server = createServer();
+    const result = Promise.withResolvers<SocketListener>();
+    // Node reports a bind failure on `'error'` a tick after `listen()` returns, not from
+    // the call. Wiring the rejection to the call instead would turn a taken port into an
+    // unhandled event on the server.
+    const onError = (error: unknown): void => {
+      server.removeListener("listening", onListening);
+      result.reject(error);
+    };
+    const onListening = (): void => {
+      server.removeListener("error", onError);
+      const bound = server.address();
+      if (bound === null || typeof bound === "string") {
+        server.close();
+        result.reject(new TypeError("The host did not report a bound address"));
+        return;
+      }
+      result.resolve(
+        new HostNodeSocketListener(
+          server,
+          { hostname: bound.address, port: bound.port },
+          backlog,
+        ),
+      );
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen({ host: address.hostname, port: address.port, backlog });
+    return result.promise;
+  }
 }
 
 export class HostNodeSocketConnector implements NegotiatingSocketConnector {

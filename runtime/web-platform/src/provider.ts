@@ -5,9 +5,13 @@
  * entry point instead of depending on the shared runtime's internal layout.
  */
 export type {
+  BoundAddress,
   ByteConnection,
   CancelHandle,
   ConnectAddress,
+  ListenAddress,
+  SocketBinder,
+  SocketListener,
   DnsAddress,
   DnsAddressFamily,
   DnsResolveOptions,
@@ -145,6 +149,8 @@ export { defaultHeadLimits, readRequestHead } from "./http1/parser.ts";
 export type { HeadLimits, RequestHead } from "./http1/parser.ts";
 export { adoptServerWebSocketSession } from "./websocket/raw-transport.ts";
 export { WebSocketServer } from "./websocket/server.ts";
+export { serveWebSocketUpgrades } from "./websocket/accept-loop.ts";
+export type { WebSocketAcceptOptions } from "./websocket/accept-loop.ts";
 export type { WebSocketServerOptions, WebSocketUpgradeResult } from "./websocket/server.ts";
 export type { WebSocketRole } from "./websocket/raw-transport.ts";
 export { negotiatePerMessageDeflateOffer } from "./websocket/permessage-deflate.ts";

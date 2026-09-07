@@ -4912,3 +4912,77 @@ The corpus is **2,433 tests, 2,418 applicable, 2,408 passing, 10 failing**: the 
 long-standing structural failures and the two `Event.timeStamp` assertions, which stay
 open pending a clock primitive. Local corpus 705/705 with zero skipped, compiled axis
 138 of 142 across 13 functions on all three backends.
+
+## The largest open row: a WebSocket server that listens
+
+The handshake existed, the server-side session existed, the connection lifetime owner
+existed. What did not was a way to obtain a connection at all, because the provider ABI
+had `connect` and no `listen` — so the row sat open behind an ABI addition rather than
+behind code.
+
+Both peer lanes answered before anything was written, and every decision they
+contributed has a test.
+
+**The JVM lane measured it on an API-26 device rather than reasoning about Android.**
+`ServerSocket.bind` with port 0 works and reports the port it got; `accept` returns a
+real connection; no permission beyond the `INTERNET` one a client already declares. So
+`SocketBinder` is optional on **policy** grounds — a client SDK should not silently grow
+the ability to listen — and explicitly not on capability grounds, which is a distinction
+worth keeping because the two would be written the same way and mean different things.
+
+**The Node lane corrected the contract, having written the adapter.** `net.Server` is
+not pull-based: libuv accepts and node emits `'connection'` before any consumer is
+consulted, so on that provider there are two queues and my "the OS backlog is the only
+queue" was a false sentence about a real implementation. `backlog` now bounds
+connections waiting for an accept **wherever the waiting happens**, and a provider that
+cannot defer the OS accept may hold up to that many itself. One number, one meaning,
+across providers.
+
+They also settled three smaller things, each of which is a test: `close()` resolves a
+waiting `accept` with `null` rather than rejecting, because a listener is a stream of
+connections and its end should spell the same way as `ByteConnection.read` — which makes
+`while ((c = await accept(signal)) !== null)` the correct loop instead of a `try`/`catch`
+around every shutdown. An aborted signal **rejects**, and aborting one `accept` leaves
+the listener open. And `BoundAddress.hostname` is the literal address bound, never the
+name requested, because `listen({ hostname: "localhost" })` binds `::1` or `127.0.0.1`
+and a caller echoing the name back can reach the other family.
+
+`serveWebSocketUpgrades` is the loop, and it is deliberately not part of
+`WebSocketServer`: listening and framing are separable, and an embedder that already has
+a server wants the second without the first. **The loop is the backpressure** — it
+accepts one connection at a time and does not ask for the next until the current one has
+become a session or been refused, which is the only thing that makes a `backlog` mean
+anything.
+
+The end-to-end test drives the canonical client against it over a real socket:
+handshake, subprotocol, a message each way, and the server counting the session it owns.
+
+### Three of my tests could not have failed, in three different ways
+
+Seven sabotages. One hangs the suite rather than failing an assertion — resolving
+`listen()` on the call instead of on `'listening'` produces a listener bound to nothing,
+and everything waits for ever. Informative, not a clean control, and recorded as such.
+
+The other three survivors were all my tests being unable to distinguish the mutation:
+
+**The bound-address test asked for `127.0.0.1`**, so the requested name and the literal
+address were the same string and reporting either passed. It binds `localhost` now and
+asserts the answer is *not* `localhost`.
+
+**The "loop carries on" test used a plain HTTP request**, which the server refuses with a
+status — a normal return, not a throw, so the loop's error path was never reached. It
+now also sends a malformed request line, which is the case that actually throws.
+
+**The aborted-signal test could not see the up-front check**, because subscribing to an
+already-aborted signal fires immediately and rejects anyway. The two differ in exactly
+one case: a listener that is *already closed* answers `null`, and abort has to win,
+because abort is about this call rather than about the listener. That case is a test now,
+and it is the only reason the check earns its place.
+
+One bound is honestly untested: that the adapter destroys connections past `backlog`.
+Provoking it means racing several clients against a listener that is not accepting, and a
+timing-dependent test asserting a discard is worse than an admission.
+
+Local corpus 714/714 with zero skipped, upstream unchanged at 2,408 of 2,418, compiled
+axis 138 of 142 across 13 functions. Frontier 1,294 to 1,296 primary `NTS1001`, cascades
+unchanged at 314, zero `NTS1004` and zero invalid HIR.
