@@ -39,6 +39,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/protocol-select.test.mjs \
   tooling/conformance/web-platform/test/proxy.test.mjs \
   tooling/conformance/web-platform/test/request-fields.test.mjs \
+  tooling/conformance/web-platform/test/request-replay.test.mjs \
   tooling/conformance/web-platform/test/retry.test.mjs \
   tooling/conformance/web-platform/test/server-handshake.test.mjs \
   tooling/conformance/web-platform/test/snapshot-agent.test.mjs \

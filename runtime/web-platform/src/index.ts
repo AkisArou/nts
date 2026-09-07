@@ -102,7 +102,12 @@ export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 export { fetch, ServerCookiePolicy } from "./fetch/fetch.ts";
 export type { FetchCookiePolicy } from "./fetch/fetch.ts";
 export { TransportError } from "./fetch/transport.ts";
-export type { TransportBodySource, TransportErrorCode } from "./fetch/transport.ts";
+export type {
+  HeldRequestBody,
+  RequestBodyStore,
+  TransportBodySource,
+  TransportErrorCode,
+} from "./fetch/transport.ts";
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
@@ -289,6 +294,7 @@ export type {
   HttpCacheState,
   HttpCacheType,
 } from "./cache/http-cache.ts";
+export { spilledRequestBodyStore } from "./dispatch/replay-store.ts";
 export { DurableSpillArea } from "./storage/spill.ts";
 export type { DurableSpillAreaOptions, SpilledBody } from "./storage/spill.ts";
 export { DurableHttpCacheStore } from "./cache/durable-store.ts";

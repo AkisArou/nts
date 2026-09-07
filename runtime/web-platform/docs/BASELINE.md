@@ -3969,3 +3969,68 @@ and the constructor off `AbortController#get signal`.
 The complete local Node-host/real-socket corpus passes 602/602 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## A one-shot body becomes replayable only because somewhere was offered to hold it
+
+The retry interceptor refused every streaming request body with
+`UnreplayableRequestError`, which was correct and unhelpful in equal measure: a body it
+cannot replay is a body it must not retry, and buffering an arbitrary upload to fix that
+is a guess about memory the interceptor has no standing to make.
+
+`RetryOptions.requestBodyStore` is the standing. A body is held only because a caller
+supplied somewhere to hold it, and absent one the refusal is exactly what it was. The
+spill area supplies the somewhere, so a small body stays in memory and a large one goes
+to the byte store — the caller chooses *whether*, not *how big*.
+
+It is also the spill area's first caller. Spilling had been a mechanism with no
+consumer for one slice, which is the pattern this ledger keeps naming in other people's
+work and had now produced twice in a row here.
+
+The seam is two interfaces in `fetch/transport.ts` rather than a direct dependency,
+because both ends need it and neither should import the other: a retry policy must not
+know about storage, and storage must not know about dispatch. The adapter that joins
+them lives in `dispatch`, which is the direction that composes — a policy may know about
+storage; storage knowing about policy is how a byte store ends up carrying the
+vocabulary of every consumer that ever wanted bytes.
+
+Three decisions are visible in the tests because each could have gone the other way
+silently. A body is held **before the first attempt**, since by the time a retry is
+wanted the body has been sent and there is nothing left to hold. A body is **not** held
+for a method the interceptor would never retry, or for a body that can already replay
+itself. And `bodyLength` is carried over from the request rather than taken from the
+held source, so a request that declared a length its body does not have is still an
+error: correcting it here would turn a caller's inconsistency into a silent success.
+
+### An ABI guarantee that was true, depended upon, and unwritten
+
+Releasing the held body when the dispatch settles is only safe if a transport still
+reading it keeps reading the original bytes. That rests on a property of the byte store
+which both providers already had and neither had promised: **a reader keeps reading what
+it was opened over, even after the key is deleted.**
+
+The replacement half was already required — a Blob composes and slices immutable ranges,
+and a reader that saw a replacement mid-read would break it. Deletion is the same
+guarantee, and it is what makes a lifetime possible above the seam at all: without it
+nothing can release stored bytes while anything might still be reading them, and every
+caller ends up either leaking or guessing.
+
+It is on `DurableByteStore.source` now, with a test on both providers. The test was not
+free: written against the host store it failed first time on a range one byte short of
+the string, which is the sort of failure that would have read as "the property does not
+hold" to anyone less suspicious. Reverting the host reader to reopen by path on every
+read fails it, so it is not vacuous.
+
+The JVM lane owns the third provider and now owes this too. Told, rather than assumed.
+
+Five sabotages for the wiring, all restored: never releasing, holding for an ineligible
+method, holding a body that can already replay itself, taking the length from the held
+source, and returning one stream from every `open()` instead of a fresh one.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,267 to 1,269 primary `NTS1001` and 296 to 297
+`NTS1003`, zero `NTS1004`, zero `NTS4xxx`, zero invalid HIR, no new refusal category.
+
+The complete local Node-host/real-socket corpus passes 612/612 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.

@@ -68,6 +68,15 @@ export interface DurableByteStore {
    *
    * This is the large-value read path, and it is the seam Blob already consumes, so a
    * spilled body is read back through the same code as any other external Blob.
+   *
+   * **A reader that has been opened keeps reading what it was opened over, even after
+   * the key is replaced or deleted.** The replacement half of that was already required
+   * -- a Blob composes and slices immutable ranges, and a reader that saw a replacement
+   * mid-read would break it. Deletion is the same guarantee and it is what makes a
+   * lifetime possible above this seam: without it nothing can release stored bytes
+   * while anything might still be reading them, and every caller ends up either leaking
+   * or guessing. Both current providers already behave this way; it is written down
+   * here because it is now depended upon rather than merely true.
    */
   source(namespace: string, key: string, signal: AbortSignal): Promise<BlobExternalSource | null>;
 

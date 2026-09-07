@@ -4,6 +4,8 @@ import { ignoreRejection } from "../core/promise.ts";
 import { Headers } from "../fetch/headers.ts";
 import type {
   FetchTransport,
+  HeldRequestBody,
+  RequestBodyStore,
   TransportBodySource,
   TransportErrorCode,
   TransportRequest,
@@ -61,6 +63,14 @@ export interface RetryOptions {
   readonly decide?: RetryDecider;
   readonly classifyError?: RetryErrorClassifier;
   readonly onRetry?: RetryObserver;
+  /**
+   * Somewhere to hold a streaming request body so it can be replayed.
+   *
+   * Absent, a body that cannot replay itself is still an
+   * {@link UnreplayableRequestError} -- the interceptor does not decide on a caller's
+   * behalf that an arbitrary upload may be buffered.
+   */
+  readonly requestBodyStore?: RequestBodyStore;
 }
 
 export class RetryExhaustedError extends Error {
@@ -168,6 +178,28 @@ async function waitForRetry(
   }
 }
 
+/**
+ * The same request, reading from the held body instead of the stream it arrived on.
+ *
+ * `bodyLength` is carried over rather than taken from the source, so a request that
+ * declared a length the body does not have is still an error. Correcting it here would
+ * turn a caller's inconsistency into a silent success.
+ */
+function replayableRequest(
+  request: TransportRequest,
+  source: TransportBodySource,
+): TransportRequest {
+  return {
+    url: request.url,
+    method: request.method,
+    headers: request.headers,
+    body: source.open(),
+    bodyLength: request.bodyLength,
+    replayBody: source,
+    signal: request.signal,
+  };
+}
+
 function requestForRetry(request: TransportRequest): TransportRequest {
   if (request.body === null) {
     return {
@@ -244,6 +276,7 @@ export class RetryInterceptor implements FetchInterceptor {
   private readonly decide: RetryDecider | undefined;
   private readonly classifyError: RetryErrorClassifier | undefined;
   private readonly observer: RetryObserver | undefined;
+  private readonly requestBodyStore: RequestBodyStore | undefined;
 
   constructor(options: RetryOptions) {
     this.scheduler = options.scheduler;
@@ -260,6 +293,7 @@ export class RetryInterceptor implements FetchInterceptor {
     this.decide = options.decide;
     this.classifyError = options.classifyError;
     this.observer = options.onRetry;
+    this.requestBodyStore = options.requestBodyStore;
     validateCount(this.maximumRetries, "Maximum retry count");
     validateDelay(this.minimumTimeout, "Minimum retry timeout");
     validateDelay(this.maximumTimeout, "Maximum retry timeout");
@@ -274,8 +308,39 @@ export class RetryInterceptor implements FetchInterceptor {
     }
   }
 
-  async dispatch(request: TransportRequest, next: FetchTransport): Promise<TransportResponse> {
-    const method = request.method.toUpperCase();
+  async dispatch(incoming: TransportRequest, next: FetchTransport): Promise<TransportResponse> {
+    const method = incoming.method.toUpperCase();
+    // Held before the first attempt, not on the first failure. By the time a retry is
+    // wanted the body has already been sent, and there is nothing left to hold.
+    const held = await this.holdRequestBody(incoming, method);
+    const request = held === null ? incoming : replayableRequest(incoming, held.source);
+    try {
+      return await this.attempts(request, method, next);
+    } finally {
+      // Safe while a transport is still uploading: `source()` was resolved when the
+      // body was held, and a source pins what it was opened over, so a reader opened
+      // from it reads the original bytes whether or not the key still exists.
+      if (held !== null) await held.release();
+    }
+  }
+
+  private async holdRequestBody(
+    request: TransportRequest,
+    method: string,
+  ): Promise<HeldRequestBody | null> {
+    if (this.requestBodyStore === undefined) return null;
+    if (request.body === null) return null;
+    if (request.replayBody !== null && request.replayBody !== undefined) return null;
+    // A method this interceptor would never retry is a body held for nothing.
+    if (!this.methodEligible(method)) return null;
+    return this.requestBodyStore.hold(request.body, request.signal);
+  }
+
+  private async attempts(
+    request: TransportRequest,
+    method: string,
+    next: FetchTransport,
+  ): Promise<TransportResponse> {
     let retryCount = 0;
     let attempt = request;
     while (true) {

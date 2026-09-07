@@ -53,6 +53,26 @@ suite("a committed value reads back whole and by range", async (t) => {
   await reader.close();
 });
 
+suite("a reader opened before a delete keeps reading", async (t) => {
+  const { store: target } = store(t);
+  await put(target, "cache", "doomed", "bytes that outlive their key");
+
+  const source = await target.source("cache", "doomed", none());
+  assert.equal(source.size, 28);
+  const reader = source.open(0, source.size);
+  assert.equal(decoder.decode(await reader.read(6)), "bytes ");
+
+  assert.equal(await target.delete("cache", "doomed", none()), true);
+  assert.equal(await target.read("cache", "doomed", none()), null, "the key is gone");
+
+  // A descriptor pins what it was opened over -- the same guarantee that makes a
+  // replaced value invisible to an open reader, extended to a removed one. Without it
+  // nothing can release stored bytes while a reader might still hold them.
+  assert.equal(decoder.decode(await reader.read(64)), "that outlive their key");
+  assert.equal(await reader.read(64), undefined);
+  await reader.close();
+});
+
 suite("an absent key is null rather than an error", async (t) => {
   const { store: target } = store(t);
   assert.equal(await target.read("cache", "missing", none()), null);

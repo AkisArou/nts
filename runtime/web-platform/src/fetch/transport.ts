@@ -10,6 +10,31 @@ export interface TransportBodySource {
   open(): ReadableStream<Uint8Array>;
 }
 
+/**
+ * A one-shot request body put somewhere it can be read more than once.
+ *
+ * Declared here rather than where it is used because both ends need it and neither
+ * should have to import the other: a retry policy must not know about storage, and
+ * storage must not know about dispatch.
+ */
+export interface HeldRequestBody {
+  readonly source: TransportBodySource;
+
+  /** Releases whatever holding the body cost. Idempotent. */
+  release(): Promise<void>;
+}
+
+/**
+ * Somewhere a streaming request body can be held so that it can be replayed.
+ *
+ * Nothing here guesses: a body is held only because a caller supplied a place to hold
+ * it, which is why an unreplayable body remains an error rather than becoming a silent
+ * buffer the size of whatever arrived.
+ */
+export interface RequestBodyStore {
+  hold(body: ReadableStream<Uint8Array>, signal: AbortSignal): Promise<HeldRequestBody>;
+}
+
 export type TransportErrorCode =
   | "ECONNRESET"
   | "ECONNREFUSED"

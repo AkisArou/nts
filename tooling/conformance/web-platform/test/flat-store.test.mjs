@@ -130,6 +130,26 @@ suite("each ranged read owns its chunk", async () => {
   await reader.close();
 });
 
+suite("a reader opened before a delete keeps reading", async () => {
+  const { store } = adapted();
+  await put(store, "cache", "doomed", encoder.encode("bytes that outlive their key"));
+
+  const source = await store.source("cache", "doomed", none());
+  assert.equal(source.size, 28);
+  const reader = source.open(0, source.size);
+  assert.equal(decoder.decode(await reader.read(6)), "bytes ");
+
+  assert.equal(await store.delete("cache", "doomed", none()), true);
+  assert.equal(await store.read("cache", "doomed", none()), null, "the key is gone");
+
+  // The reader pins what it was opened over. Without this a caller cannot release
+  // stored bytes while anything might still be reading them, which is the whole
+  // lifetime story for a spilled body.
+  assert.equal(decoder.decode(await reader.read(64)), "that outlive their key");
+  assert.equal(await reader.read(64), undefined);
+  await reader.close();
+});
+
 suite("an absent key is null rather than an error", async () => {
   const { store } = adapted();
   assert.equal(await store.read("cache", "missing", none()), null);
