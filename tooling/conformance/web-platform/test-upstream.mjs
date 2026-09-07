@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createContext, runInContext } from "node:vm";
 import { MessageChannel } from "node:worker_threads";
@@ -41,6 +43,7 @@ const {
   CustomEvent,
   CountQueuingStrategy,
   Event,
+  EventSource,
   EventTarget,
   File,
   FormData,
@@ -63,10 +66,6 @@ const {
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 const { createHostNodeWebPlatform } =
   await import("./node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js");
-const hostRuntime = createHostNodeWebPlatform({
-  baseURL: "https://example.test/fetch/",
-  origin: "https://example.test",
-});
 
 let passed = 0;
 let failed = 0;
@@ -81,6 +80,81 @@ function readVerified(root, path, expectedHash) {
   assert.equal(gitBlobHash(data), expectedHash, `Upstream source changed: ${path}`);
   return data;
 }
+
+const eventSourceResources = new Map();
+for (const resourcePath of [
+  "eventsource/resources/accept.event_stream",
+  "eventsource/resources/last-event-id.py",
+  "eventsource/resources/message.py",
+  "eventsource/resources/message2.py",
+]) {
+  eventSourceResources.set(
+    resourcePath,
+    readVerified(localWptRoot, resourcePath, manifest.support[resourcePath]),
+  );
+}
+
+function serveEventSourceResource(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  const path = url.pathname.replace(/^\//, "");
+  if (!eventSourceResources.has(path)) {
+    response.writeHead(404);
+    response.end();
+    return;
+  }
+
+  if (path === "eventsource/resources/message.py") {
+    const mime = url.searchParams.get("mime") ?? "text/event-stream";
+    const message = url.searchParams.get("message") ?? "data: data";
+    const newline = url.searchParams.get("newline") === "none" ? "" : "\n\n";
+    const wait = Number(url.searchParams.get("sleep") ?? "0");
+    setTimeout(() => {
+      response.writeHead(200, { "Content-Type": mime });
+      response.end(Buffer.from(message + newline + "\n"));
+    }, wait);
+    return;
+  }
+
+  if (path === "eventsource/resources/message2.py") {
+    response.writeHead(200, {
+      "Cache-Control": "no-cache",
+      "Content-Type": "text/event-stream",
+    });
+    response.end(
+      "data:msg\ndata: msg\n\n:\nfalsefield:msg\n\nfalsefield:msg\nData:data\n\ndata\n\ndata:end\n\n",
+    );
+    return;
+  }
+
+  if (path === "eventsource/resources/last-event-id.py") {
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    const lastEventId = request.headers["last-event-id"];
+    if (typeof lastEventId === "string" && lastEventId !== "") {
+      response.write("data: ");
+      response.write(Buffer.from(lastEventId, "latin1"));
+      response.end("\n\n");
+    } else {
+      response.end("id: …\nretry: 200\ndata: hello\n\n");
+    }
+    return;
+  }
+
+  response.writeHead(200, { "Content-Type": "text/event-stream" });
+  response.end("data: " + (request.headers.accept ?? "") + "\n\n");
+}
+
+const eventSourceServer = createServer(serveEventSourceResource);
+eventSourceServer.listen(0, "127.0.0.1");
+await once(eventSourceServer, "listening");
+const eventSourceAddress = eventSourceServer.address();
+assert.notEqual(typeof eventSourceAddress, "string");
+assert.notEqual(eventSourceAddress, null);
+const eventSourceRoot = new URL(`http://127.0.0.1:${eventSourceAddress.port}/`);
+
+const hostRuntime = createHostNodeWebPlatform({
+  baseURL: "https://example.test/fetch/",
+  origin: "https://example.test",
+});
 
 function reportPass(path, name) {
   passed++;
@@ -139,6 +213,7 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     DataView,
     DOMException,
     Event,
+    EventSource,
     EventTarget,
     File,
     Float16Array,
@@ -151,6 +226,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     Int8Array,
     Int16Array,
     Int32Array,
+    location: path.startsWith("eventsource/")
+      ? new URL(path, eventSourceRoot)
+      : new URL(path, root),
     MessageChannel,
     Request,
     Response,
@@ -205,6 +283,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     assert_less_than_equal(actual, expected, message) {
       assert.ok(actual <= expected, message);
     },
+    assert_own_property(object, property, message) {
+      assert.equal(Object.prototype.hasOwnProperty.call(object, property), true, message);
+    },
     assert_not_equals(actual, expected, message) {
       assert.notStrictEqual(actual, expected, message);
     },
@@ -238,6 +319,13 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
     assert_throws_exactly(expected, callback, message) {
       assert.throws(callback, (error) => error === expected, message);
     },
+    assert_throws_dom(name, callback, message) {
+      assert.throws(
+        callback,
+        (error) => error instanceof DOMException && error.name === name,
+        message,
+      );
+    },
     assert_true(value, message) {
       assert.equal(value, true, message);
     },
@@ -256,9 +344,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
         5000,
       );
       const test = {
-        step(callback) {
+        step(callback, thisObject = test) {
           try {
-            return callback.call(test);
+            return callback.call(thisObject);
           } catch (error) {
             capability.reject(error);
             return undefined;
@@ -345,9 +433,9 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
         add_cleanup(cleanup) {
           cleanups.push(cleanup);
         },
-        step(callback) {
+        step(callback, thisObject = test) {
           try {
-            return callback.call(test);
+            return callback.call(thisObject);
           } catch (error) {
             asynchronousFailure.reject(error);
             return undefined;
@@ -456,6 +544,13 @@ function createWptContext(path, root, verifiedSupport, pending, excludedTests, s
 }
 
 async function runFixture(root, path, data, verifiedSupport) {
+  const eventSourceFixture = path.startsWith("eventsource/");
+  const fixtureRuntime = eventSourceFixture
+    ? createHostNodeWebPlatform({
+        baseURL: new URL(path, eventSourceRoot).href,
+        origin: eventSourceRoot.origin,
+      })
+    : null;
   const pending = [];
   const excludedTests = manifest.notApplicable?.[path] ?? {};
   const seenExcludedTests = new Set();
@@ -499,6 +594,10 @@ async function runFixture(root, path, data, verifiedSupport) {
     Object.keys(excludedTests).sort(),
     `Stale or unobserved WPT exclusions: ${path}`,
   );
+  if (fixtureRuntime !== null) {
+    fixtureRuntime.close();
+    globalThis.nts_environment_platform = () => hostRuntime;
+  }
 }
 
 const localSupport = new Map();
@@ -540,4 +639,7 @@ console.log(
   }),
 );
 hostRuntime.close();
+await new Promise((resolve, reject) =>
+  eventSourceServer.close((error) => (error === undefined ? resolve() : reject(error))),
+);
 process.exit(failed === 0 ? 0 : 1);

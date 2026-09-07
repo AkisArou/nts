@@ -94,6 +94,9 @@ export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 
 export { fetch } from "./fetch/fetch.ts";
 
+export { EventSource } from "./eventsource/event-source.ts";
+export type { EventSourceInit } from "./eventsource/event-source.ts";
+
 export { Blob, File } from "./file/blob.ts";
 export type { BlobEndings, BlobOptions, BlobPart, FileOptions } from "./file/blob.ts";
 

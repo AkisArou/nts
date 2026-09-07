@@ -11,6 +11,7 @@ import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling
 import {
   ReadableStream,
   AbortController,
+  EventSource,
   fetch as webFetch,
   Request,
   TextEncoder,
@@ -893,4 +894,40 @@ suite("TLS: HTTPS and WSS trust validation, custom root and hostname mismatch", 
   await e.opened;
   ws.close(1000);
   assert.equal((await e.closed).wasClean, true);
+});
+
+suite("EventSource reconnects through the real HTTP transport", async (t) => {
+  let requests = 0;
+  const headers = [];
+  const s = await server(t, (req, res) => {
+    requests++;
+    headers.push(req.headers);
+    if (requests === 1) {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      const message = Buffer.from("data: Καλημέρα\nid: live-1\nretry: 0\n\n");
+      res.write(message.subarray(0, 9));
+      res.end(message.subarray(9));
+    } else {
+      res.writeHead(204);
+      res.end();
+    }
+  });
+  const api = runtime(t, { eventSource: { initialReconnectDelayMs: 60_000 } });
+  const source = new EventSource(s.url + "/events");
+  const message = Promise.withResolvers();
+  const failed = Promise.withResolvers();
+  source.onmessage = (event) => message.resolve(event);
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) failed.resolve();
+  };
+
+  const event = await message.promise;
+  await failed.promise;
+  assert.equal(event.data, "Καλημέρα");
+  assert.equal(event.lastEventId, "live-1");
+  assert.equal(event.origin, s.url);
+  assert.equal(headers[0].accept, "text/event-stream");
+  assert.equal(headers[0]["last-event-id"], undefined);
+  assert.equal(headers[1]["last-event-id"], "live-1");
+  assert.equal(api.http1.pool.stats.idle, 1);
 });
