@@ -68,6 +68,21 @@ export class ConnectionLease {
     this.released = true;
     this.pool.release(this.record, reusable);
   }
+
+  /**
+   * Gives the connection to the caller and forgets it, without closing it.
+   *
+   * A protocol switch ends this pool's interest in the socket while the socket is very
+   * much still alive: `release(false)` would close it, and `release(true)` would offer
+   * a connection now speaking someone else's protocol to the next HTTP request. The
+   * accounting is freed either way, so a detached connection does not go on occupying
+   * a slot it no longer competes for.
+   */
+  detach(): void {
+    if (this.released) return;
+    this.released = true;
+    this.pool.detach(this.record);
+  }
 }
 
 export class ConnectionPool {
@@ -167,6 +182,14 @@ export class ConnectionPool {
     record.timer?.cancel();
     record.connection.close();
     this.changeCount(record.key, -1);
+  }
+
+  /** @internal Forget a record without closing it; see {@link ConnectionLease.detach}. */
+  detach(record: RecordEntry): void {
+    if (!this.records.delete(record)) return;
+    record.timer?.cancel();
+    this.changeCount(record.key, -1);
+    this.pump();
   }
   private pump(): void {
     if (this.destroyed) return;

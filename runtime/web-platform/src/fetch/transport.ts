@@ -1,5 +1,5 @@
 import type { AbortSignal } from "../core/abort.ts";
-import type { URLRecord } from "../provider/primitives.ts";
+import type { ByteConnection, URLRecord } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import type { HeaderEntry } from "./headers.ts";
 
@@ -89,6 +89,29 @@ export interface TransportRequest {
    * and does not change the request.
    */
   readonly onInformational?: (response: TransportInformationalResponse) => void;
+  /**
+   * Ask for the connection itself if this request results in a protocol switch.
+   *
+   * A `CONNECT` that succeeds and a request answered with `101` both stop being HTTP
+   * exchanges at that point: what follows on the socket is somebody else's protocol,
+   * and a transport that framed it as a response body would be reading it as HTTP.
+   * Fetch never sets this, which is why `101` remains an error there.
+   *
+   * A transport that cannot surrender its connection ignores this and answers
+   * normally; a caller that needs one therefore checks
+   * {@link TransportResponse.connection} rather than assuming.
+   */
+  readonly acceptTunnel?: boolean;
+  /**
+   * The protocol token to ask for, as an `Upgrade` request.
+   *
+   * A field rather than a caller-supplied `Connection`/`Upgrade` header pair, because
+   * those stay transport-managed: framing coherence is the transport's job, and an
+   * upgrade is the one case where the caller must nonetheless name something. Requires
+   * {@link TransportRequest.acceptTunnel}, since asking a server to switch and then
+   * having nowhere to put the switched connection is not a request worth sending.
+   */
+  readonly upgradeProtocol?: string;
 }
 
 export interface TransportResponse {
@@ -96,6 +119,16 @@ export interface TransportResponse {
   readonly statusText: string;
   readonly headers: readonly HeaderEntry[];
   readonly body: ReadableStream<Uint8Array> | null;
+  /**
+   * The connection underneath, when the response was a protocol switch.
+   *
+   * Present only when the request set {@link TransportRequest.acceptTunnel} and the
+   * server actually switched; a request that asked and was declined gets an ordinary
+   * response with a body, because being declined is a normal answer and its body is
+   * usually the explanation. When this is present the caller owns the connection --
+   * nothing else will close it, and it has left its pool.
+   */
+  readonly connection?: ByteConnection;
   /** Settles after the body terminates; absent when a provider cannot expose trailers. */
   readonly trailers?: Promise<readonly HeaderEntry[]>;
 }

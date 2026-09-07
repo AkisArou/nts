@@ -1,5 +1,6 @@
 import { ignoreRejection } from "../core/promise.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
+import type { ByteConnection } from "../provider/primitives.ts";
 import type {
   FetchTransport,
   TransportRequest,
@@ -31,6 +32,20 @@ export interface BufferedResult extends DispatchInfo {
 export interface StreamedResult extends DispatchInfo {
   readonly trailers: readonly HeaderEntry[] | undefined;
 }
+
+export interface TunnelEstablished extends DispatchInfo {
+  readonly tunnelled: true;
+  /** The caller owns it: it has left its pool and nothing else will close it. */
+  readonly connection: ByteConnection;
+}
+
+export interface TunnelDeclined {
+  readonly tunnelled: false;
+  /** An ordinary response, body included -- usually the explanation. */
+  readonly response: TransportResponse;
+}
+
+export type TunnelOutcome = TunnelEstablished | TunnelDeclined;
 
 export interface BufferedOptions {
   /** Required, and validated. A default here would be a size limit nobody chose. */
@@ -79,10 +94,10 @@ async function discard(response: TransportResponse, reason: unknown): Promise<vo
  * an API ledger with evidence per export cannot honestly be written. What is written
  * down here is what these operations do, tested — not what somebody else's do.
  *
- * `connect` and `upgrade` are deliberately absent. Both must hand the caller a
- * connection, and {@link FetchTransport} answers with a response and no way to reach
- * the socket underneath it. Adding one would change what every transport in this lane
- * promises, so it is a seam decision rather than an operation to write.
+ * `connect` and `upgrade` need a transport that can surrender its connection, which is
+ * what `TransportRequest.acceptTunnel` and `TransportResponse.connection` are for. A
+ * transport that cannot do it answers normally, so both operations report a response
+ * that was not a switch rather than pretending; they never invent a connection.
  */
 export class DispatcherOperations {
   readonly #transport: FetchTransport;
@@ -152,6 +167,44 @@ export class DispatcherOperations {
     }
 
     return { ...info, trailers: await settleResponseTrailers(response, request.signal) };
+  }
+
+  /**
+   * Opens a tunnel with `CONNECT` and hands back the connection.
+   *
+   * The request is dispatched through the whole stack, so proxies, DNS and pooling
+   * apply to the tunnel exactly as they do to a request — which is the reason for
+   * routing it through `dispatch` rather than reaching for a connector.
+   */
+  async connect(request: TransportRequest): Promise<TunnelOutcome> {
+    return this.#tunnel({ ...request, method: "CONNECT", acceptTunnel: true });
+  }
+
+  /**
+   * Asks the server to switch to `protocol` and hands back the connection if it does.
+   *
+   * The protocol is named here rather than through `Connection` and `Upgrade` headers,
+   * which the transport manages; omitting it sends no upgrade request at all, which is
+   * still useful for a server that switches on its own terms.
+   */
+  async upgrade(request: TransportRequest, protocol?: string): Promise<TunnelOutcome> {
+    return this.#tunnel({
+      ...request,
+      acceptTunnel: true,
+      ...(protocol === undefined ? {} : { upgradeProtocol: protocol }),
+    });
+  }
+
+  async #tunnel(request: TransportRequest): Promise<TunnelOutcome> {
+    const response = await this.#transport.dispatch(request);
+    const connection = response.connection;
+    if (connection === undefined) {
+      // Declined, or a transport that cannot surrender its socket. Either way the
+      // response is the answer, body and all, and the caller can tell the difference
+      // by reading it.
+      return { tunnelled: false, response };
+    }
+    return { tunnelled: true, ...infoOf(response), connection };
   }
 
   /**

@@ -4185,3 +4185,67 @@ says about that one. Raised with the compiler lane; left standing.
 The complete local Node-host/real-socket corpus passes 651/651 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The seam the last slice refused to guess at
+
+`connect` and `upgrade` were recorded as absent because `FetchTransport` answered with a
+response and no way to reach the socket underneath, and that was called a seam decision
+rather than an operation to write. This is the decision, made rather than deferred: a
+request may set `acceptTunnel`, and a transport that can surrender its connection
+returns it on `TransportResponse.connection`.
+
+Fetch never sets it, so `101` remains an error there — the behaviour that was already
+right stays exactly as it was, and the new path is reached only by asking.
+
+**The bytes behind the head are the whole difficulty.** Parsing a response head reads
+from a buffered reader, and that reader will happily have pulled bytes past the end of
+the head — bytes which, after a switch, are the first thing the new protocol says. The
+handed-over connection therefore reads through the reader rather than the socket. The
+test writes the `101` and the tunnelled text in one packet, and the sabotage that reads
+the socket directly does not fail an assertion: it **times out**, because those bytes
+are not late, they are gone.
+
+Three smaller decisions, each with its own test. A switch while the request body is
+still uploading is refused, because handing over a connection with an upload still
+writing into it interleaves HTTP bytes with the new protocol's. The lease is **detached**
+rather than released: `release(false)` would close a socket that is very much alive, and
+`release(true)` would offer a connection now speaking someone else's protocol to the
+next HTTP request. And a server that declines gets to answer normally, body and all,
+because being declined is a normal answer and its body is usually the explanation.
+
+### A field that could only receive, never ask
+
+The first version let a caller accept a switch and not request one. The transport
+manages `Connection` and `Upgrade` as framing headers and rejects them from callers, so
+an upgrade request could not be expressed — the seam could hear an answer to a question
+it had no way to put.
+
+This was found by the test using the real transport rather than a fake. A fake would
+have accepted the headers and every assertion would have passed.
+
+The fix is a field, `upgradeProtocol`, not a relaxation: framing coherence stays the
+transport's job, and an upgrade is the one case where the caller must nonetheless name
+something. It is validated as a token, and it requires `acceptTunnel` — asking a server
+to switch with nowhere to put the switched connection is not a request worth sending.
+
+And it is asserted **on the wire**. A field the transport reads and never sends would be
+exactly the inert mechanism this ledger keeps recording: every other test in the file
+would still have passed, because the raw server switches whether or not it was asked.
+
+Six sabotages, all restored; one was refused for not type-checking and its retyped form
+is the timeout above.
+
+### What it costs at the frontier
+
+Same pinned compiler as the previous slice, whose measurement is this one's before:
+1,285 to 1,290 primary `NTS1001` and 312 to 313 `NTS1003`, zero `NTS1004`, zero
+`NTS4xxx`, zero invalid HIR.
+
+One new category: **a `get accessor` in an object literal**. That is `get closed()` on
+the handed-over connection, which exists because `ByteConnection.closed` is a property
+and the tunnel must report the underlying socket's rather than a copy taken once. Left
+standing; the alternative is a snapshot that starts lying the moment the socket closes.
+
+The complete local Node-host/real-socket corpus passes 663/663 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.

@@ -302,6 +302,9 @@ export type {
   PipelineHandler,
   StreamedResult,
   StreamFactory,
+  TunnelDeclined,
+  TunnelEstablished,
+  TunnelOutcome,
 } from "./dispatch/operations.ts";
 export { spilledRequestBodyStore } from "./dispatch/replay-store.ts";
 export { DurableSpillArea } from "./storage/spill.ts";

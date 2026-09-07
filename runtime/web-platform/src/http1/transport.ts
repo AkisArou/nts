@@ -1,4 +1,4 @@
-import { Headers } from "../fetch/headers.ts";
+import { Headers, isToken } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import { nullBodyStatus } from "../fetch/response.ts";
@@ -17,6 +17,7 @@ import type {
 import { addressOf } from "../http/address.ts";
 import { contentLength, hasToken } from "../http/fields.ts";
 import { writeAll } from "./io.ts";
+import type { BufferedReader } from "./io.ts";
 import {
   parseChunkSize,
   readHead,
@@ -95,6 +96,16 @@ function requestHead(
   headers.delete("content-length");
 
   headers.set("host", request.url.host);
+  if (request.upgradeProtocol !== undefined) {
+    if (request.acceptTunnel !== true) {
+      throw new TypeError("An upgrade request must accept the connection it asks for");
+    }
+    if (!isToken(request.upgradeProtocol)) {
+      throw new TypeError("Invalid Upgrade protocol token");
+    }
+    headers.set("connection", "upgrade");
+    headers.set("upgrade", request.upgradeProtocol);
+  }
   for (const [name, value] of route.headers ?? []) {
     if (isRouteManagedHeader(name.toLowerCase())) {
       throw new TypeError("HTTP route cannot replace framing header: " + name.toLowerCase());
@@ -152,6 +163,38 @@ async function upload(
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * Whether this status ends the HTTP exchange and starts something else.
+ *
+ * `101` for any method, and any 2xx for `CONNECT`: a proxy answering `200` to a
+ * `CONNECT` has opened a tunnel, and there is no body to read because everything that
+ * follows belongs to the tunnelled protocol.
+ */
+function isProtocolSwitch(method: string, status: number): boolean {
+  if (status === 101) return true;
+  return method.toUpperCase() === "CONNECT" && status >= 200 && status < 300;
+}
+
+/**
+ * The connection as the caller receives it: buffered leftovers first, then the socket.
+ */
+function tunnelConnection(reader: BufferedReader, connection: ByteConnection): ByteConnection {
+  return {
+    get closed(): boolean {
+      return connection.closed;
+    },
+    read(maxBytes: number): Promise<Uint8Array | null> {
+      return reader.some(maxBytes);
+    },
+    write(data: Uint8Array): Promise<number> {
+      return connection.write(data);
+    },
+    close(): void {
+      connection.close();
+    },
+  };
 }
 
 export class Http1Transport implements FetchTransport {
@@ -257,6 +300,30 @@ export class Http1Transport implements FetchTransport {
       timer.current?.cancel();
       timer.current = null;
       if (hasFailure) throw failure;
+      if (request.acceptTunnel === true && isProtocolSwitch(request.method, head.status)) {
+        if (!uploadDone) {
+          // A switch while the request body is still going out means the two sides
+          // disagree about what is on the wire. Refusing is the only safe answer:
+          // handing over a connection with an upload still writing into it would
+          // interleave HTTP bytes with the new protocol's.
+          throw new ProtocolError("HTTP protocol switch before the request body finished");
+        }
+        dispose();
+        finalized = true;
+        // Detached rather than released: the socket is alive and is no longer HTTP, so
+        // it must neither be closed nor offered to the next request.
+        lease.detach();
+        return {
+          status: head.status,
+          statusText: head.statusText,
+          headers: head.headers,
+          body: null,
+          // Reads go through the buffered reader, not the raw connection. Parsing the
+          // head may have pulled bytes past it, and those bytes are the first thing
+          // the new protocol says -- read the socket directly and they are gone.
+          connection: tunnelConnection(lease.reader, lease.connection),
+        };
+      }
       if (head.status === 101) throw new ProtocolError("Unexpected HTTP upgrade in Fetch");
       const headers = new Headers(head.headers);
       const reusable =
