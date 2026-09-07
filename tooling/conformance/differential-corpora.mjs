@@ -111,6 +111,84 @@ export const CORPORA = {
     ],
   },
 
+  assert: {
+    // The comparisons and, just as much, the *messages*. `deepStrictEqual`'s
+    // failure text is a diff produced by `inspect`, and it is the part a person
+    // reads -- an implementation can decide the same comparisons correctly and
+    // still print something else entirely.
+    //
+    // The input is a small program describing a structure, and the pair is that
+    // structure against a perturbation of it, so most pairs differ somewhere and
+    // the message is exercised rather than the fast path.
+    fixed: [
+      "n", "s", "a", "o", "d", "u", "l", "b", "g", "m", "e", "t",
+      "aa", "oo", "ao", "oa", "nn", "ss", "aaa", "ooo", "ml", "gt", "eu",
+    ],
+    input: (rnd) => {
+      const K = "nsaodulbgmet";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 4);
+      for (let i = 0; i < k; i++) out += K[Math.floor(rnd() * K.length)];
+      return out;
+    },
+    calls: (() => {
+      // Both sides build the structures identically; only the module differs.
+      const build = (program, tweak) => {
+        let node = tweak ? 1 : 0;
+        const make = (i) => {
+          if (i >= program.length) return tweak ? "end*" : "end";
+          const rest = make(i + 1);
+          switch (program[i]) {
+            case "n": return node++;
+            case "s": return `s${rest}`;
+            case "a": return [rest, node];
+            case "o": return { k: rest, n: node };
+            case "d": return new Date(0);
+            case "u": return undefined;
+            case "l": return null;
+            case "b": return tweak ? false : true;
+            case "g": return BigInt(node);
+            case "m": return new Map([["k", rest]]);
+            case "e": return new Set([rest]);
+            case "t": return new Uint8Array([node % 256]);
+            default: return rest;
+          }
+        };
+        return make(0);
+      };
+      const attempt = (fn) => {
+        try {
+          fn();
+          return "ok";
+        } catch (error) {
+          return `${error.name}|${error.code}|${error.message}`;
+        }
+      };
+      return [
+        {
+          label: "deepStrictEqual(a,b)",
+          call: (m, p) => attempt(() => m.deepStrictEqual(build(p, false), build(p, true))),
+        },
+        {
+          label: "deepStrictEqual(a,a)",
+          call: (m, p) => attempt(() => m.deepStrictEqual(build(p, false), build(p, false))),
+        },
+        {
+          label: "notDeepStrictEqual(a,a)",
+          call: (m, p) => attempt(() => m.notDeepStrictEqual(build(p, false), build(p, false))),
+        },
+        {
+          label: "deepEqual(a,b)",
+          call: (m, p) => attempt(() => m.deepEqual(build(p, false), build(p, true))),
+        },
+        {
+          label: "strictEqual(a,b)",
+          call: (m, p) => attempt(() => m.strictEqual(build(p, false), build(p, true))),
+        },
+      ];
+    })(),
+  },
+
   buffer: {
     // Encoding round trips, which is where a byte-level implementation
     // diverges if it is going to: base64 padding, hex casing, latin1 above
