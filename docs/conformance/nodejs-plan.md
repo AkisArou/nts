@@ -481,11 +481,36 @@ legible:
 | 82 | a member of a class this compiler has no type for | `web-platform/streams/readable.ts` |
 | 77 | assigning to this property | `node/url/searchparams.ts`, `streams/fifo.ts` |
 
-Roughly **450 of the 2,077 are in three web-platform stream files**, and the
-single largest kind is a **nullable or optional property** — `T | null` and
-`T | undefined` together are 305 sites. That is not an exotic construct. It is
-how anyone writes a linked list, a pending slot or an options bag, and it is why
-`fs`, `stream`, `readline` and `http` all sit where they do.
+Roughly **450 of the 2,077 are in three web-platform stream files** — but that
+is **two compiler features, not one**, and the first version of this section ran
+them together.
+
+**305 are a nullable or optional property**: `T | null` and `T | undefined`. Not
+an exotic construct — it is how anyone writes a linked list, a pending slot or
+an options bag.
+
+**164 are something else.** The web-platform lane caught this: `writable.ts:50`,
+cited here as a plain unrepresentable property, is `#capability:
+PromiseWithResolvers<void>` — not nullable at all, but an object with function
+members. So it is a second blocker sitting in the same files, and unblocking
+`fs`, `stream` and `readline` needs both.
+
+**And the nullable ones divide in a way that matters before the fix is
+designed, not after.** Some are nullable *as a domain value* — a list head with
+nothing in it, a session before connect, an option nobody set. Others are
+nullable *to release*: `Fifo`'s `#values: (T | undefined)[]` sets the slot to
+`undefined` on dequeue precisely so the dequeued value is not retained, and
+`readable.ts`'s async iterator drops `#stream`, `#reader` and its algorithms
+after use. **A representation that boxed a nullable property would satisfy the
+type and defeat the purpose if the box retained the old value**, and every
+value that ever passed through the queue would be leaked. That is worth knowing
+while the representation is being chosen.
+
+One diagnostic note for whoever chases these: the NTS1001 location for a
+property-type refusal is the **use** site, not the declaration. `writable.ts:59`,
+`:63` and `:69` are all closing braces; the property is declared at `:49`.
+
+This is why `fs`, `stream`, `readline` and `http` all sit where they do.
 
 **This is a different tier from the `punycode` work, and the table above hides
 that.** `f64[]` and the error class buy one module with one pinned test file.
