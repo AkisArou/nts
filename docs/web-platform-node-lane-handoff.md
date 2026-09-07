@@ -266,15 +266,33 @@ the host's private symbol. `resistStopPropagation` itself is still open: the cur
 NodeJS session confirmed that no pinned test it has claimed depends on it, and asked
 for the weak-handler half separately.
 
-The `node:util` half of that dependency is now implemented on the shared side.
+The `node:util` half of that dependency is implemented on the shared side.
 `addWeaklyHeldEventListener` in `runtime/web-platform/src/core/events.ts` registers a
 listener whose lifetime is bounded by a caller-supplied resource, with no
 `addEventListener` option and no new property on `EventTarget` or its prototype. See
 "A listener whose lifetime is bounded by a caller-supplied resource" in
 `runtime/web-platform/docs/BASELINE.md` for the tests, the two verified sabotages, and
 the one branch recorded as untested because this host cannot force the window before
-finalization runs. The Node facade side of `test-aborted-util.js` and its exclusion in
-`runtime/node/util/not-applicable` remain the NodeJS lane's to retire.
+finalization runs.
+
+**This does not unblock `test-aborted-util.js`, and the reason is the interesting
+part.** The NodeJS lane wired `util.aborted` to the seam at `2512b7c7` and then
+measured which branch actually ran, through the conformance substitution rather than
+by reading the code. It printed `strong`. The registration reaches an ECMAScript
+private member of the canonical `EventTarget`, so only an instance of that class can
+accept it, and `runtime/node/**` installs no canonical abort globals: a pinned test's
+`new AbortController()` is still the host's. The seam is correct and the caller cannot
+reach it.
+
+The consequence is that Node currently forks on whether the signal is canonical, which
+the NodeJS lane explicitly does not defend as design. It is a weaker guarantee rather
+than a different API — nothing observable differs until the resource is collected,
+which is precisely the case the ordinary listener cannot serve — and it disappears when
+Node reexports the canonical abort globals. That reexport, not the hook, is the
+remaining dependency, and it belongs to the canonical-ownership row in the plan rather
+than to this listener option. Neither lane can currently produce evidence for the
+dispatch-time liveness branch: the Node gc case does not reach the shared registration
+at all.
 
 ## Recommended next work
 

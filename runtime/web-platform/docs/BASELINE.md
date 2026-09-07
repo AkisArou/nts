@@ -2213,3 +2213,21 @@ failing and 14 named not-applicable. This is host evidence for the shared poolin
 algorithm; it is not evidence about any provider's own connection management, and a
 production dispatcher that owns its connections needs this invariant established
 separately in its own lane.
+
+### Correction: the weakly held seam is not yet reachable from Node
+
+The entry above should not be read as retiring Node's `test-aborted-util.js`
+exclusion. After wiring `util.aborted` to the seam, the NodeJS lane measured which
+branch ran — through the conformance substitution, with a temporary probe, rather
+than by reading the code — and it reported `strong`. The registration reaches an
+ECMAScript-private member of the canonical `EventTarget`, so only an instance of that
+class can accept it, and nothing under `runtime/node/**` installs the canonical
+`AbortController`/`AbortSignal` as globals. A pinned test's `new AbortController()` is
+still the host's, so the weak path is not taken.
+
+The shared seam is correct and its tests stand; the caller cannot reach it yet. The
+remaining dependency is Node reexporting the canonical abort globals, which is the
+plan's canonical-ownership row rather than anything about this listener option. It
+also means the dispatch-time liveness branch has no evidence from either lane: the
+Node gc case does not reach the shared registration at all, and this host cannot force
+the window. Recording that here so the absence is not later mistaken for agreement.
