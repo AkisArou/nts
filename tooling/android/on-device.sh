@@ -99,6 +99,10 @@ run() {
 }
 
 run org.nts.web.NetworkPrimitivesTest /data/local/tmp/store.p12
+# Which default-network events mean the open sockets are dead. The decision runs
+# on a desktop too; what a device adds is that it runs on ART, in the same dex
+# as the callback that will drive it.
+run org.nts.web.DefaultNetworkWatchTest
 run EnvTest
 run CloseRaceTest
 run Stress

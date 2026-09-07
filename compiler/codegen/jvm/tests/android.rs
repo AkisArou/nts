@@ -133,6 +133,43 @@ fn the_primitives_pass_their_own_suite_against_real_sockets_and_tls() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Which default-network events mean the open sockets are dead.
+///
+/// `NetworkPrimitives.networkChanged` closes every connection and says why: a
+/// socket on a replaced network reports nothing, so a read blocks for as long
+/// as the kernel will allow and the failure a program sees is a timeout long
+/// after the cause. **Nothing called it.** There was no `ConnectivityManager`
+/// and no `NetworkCallback` anywhere in this library, so on a real handover the
+/// sweep never happened -- the method was reachable only from a test and from
+/// the shared layer asking by hand, which is not where a handover is noticed.
+///
+/// The decision lives in `DefaultNetworkWatch`, with no `android.*` import, so
+/// it runs here without a device. What still needs one is the registration:
+/// that `ConnectivityManager` delivers these events at all, and in this order.
+#[test]
+fn a_handover_sweeps_the_sockets_and_nothing_else_does() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let dir = std::env::temp_dir().join(format!("nts-network-watch-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(&dir)
+        .arg("org.nts.web.DefaultNetworkWatchTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the default-network suite failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    // The count, not only the zero.
+    assert!(said.contains("PASS: 13 default-network cases, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The Android SDK's `d8`, `android.jar` and a build-tools directory that has
 /// both, or `None`.
 fn sdk() -> Option<(PathBuf, PathBuf)> {
