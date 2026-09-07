@@ -859,11 +859,26 @@ node has a second function.
 
 **`util.aborted` is implemented**, and its file is claimed but excluded, with
 the reason measured rather than asserted: four of its five cases pass, and the
-fifth wants two things this profile does not have. Node registers the abort
-listener as a *weak* handler keyed on the caller's resource, so collecting the
-resource detaches it and a later abort leaves the promise pending; web-platform's
-`EventTarget` has no weak-listener option, so ours resolves. That case then
-inspects the promise — and found a second gap worth more than the test.
+fifth wants two things. Node registers the abort listener as a *weak* handler
+keyed on the caller's resource, so collecting the resource detaches it and a
+later abort leaves the promise pending.
+
+That half is no longer missing — the web-platform lane built
+`addWeaklyHeldEventListener` for it, and `util.aborted` uses it — but it does
+not reach this test, and the reason is worth recording because it is not a
+defect in either piece. The registration reaches the canonical `EventTarget`'s
+own internals, so only an instance of that class can accept it. This profile
+installs no canonical abort globals, so a pinned test's `new AbortController()`
+is the host's, and the weak path is measurably not taken: a probe through the
+substitution reports the ordinary registration. The seam is right, the caller is
+right, and the two will meet when Node reexports the canonical abort globals.
+Until then `util.aborted` uses the weak registration where it can and the
+ordinary one otherwise, which is a weaker guarantee rather than a different API:
+nothing observable differs until the resource is collected, which is precisely
+the case the ordinary listener cannot serve.
+
+That case then inspects the promise — and found a second gap worth more than
+the test.
 
 **`util.inspect` renders every Promise as `{}`.** Node renders
 `Promise { <pending> }`, `Promise { 42 }`, `Promise { <rejected> ... }`. Ours

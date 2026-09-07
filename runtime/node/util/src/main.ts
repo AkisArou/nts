@@ -23,6 +23,7 @@ import {
 import { nextTick } from "../../internal/tick.ts";
 import { deprecate } from "../../internal/deprecate.ts";
 import type { AbortSignalLike } from "../../internal/abort.ts";
+import { EventTarget as WebEventTarget, addWeaklyHeldEventListener } from "../../../web-platform/src/core/events.ts";
 import {
   validateBoolean, validateFunction, validateNumber, validateObject, validateOneOf, validateString,
   validateStringArray,
@@ -163,7 +164,29 @@ export async function aborted(signal: AbortSignalLike, resource: object): Promis
   validateObject(resource, "resource");
   if (signal.aborted) return;
   const settled = Promise.withResolvers<void>();
-  signal.addEventListener("abort", () => settled.resolve(), { once: true });
+  // Node holds this listener weakly against `resource`, so that collecting the
+  // resource retires the listener and a later abort leaves the promise pending
+  // forever. A wait keyed to something already dead must stop keeping the
+  // signal alive.
+  //
+  // The canonical `EventTarget` is the only one that can offer that, since the
+  // registration reaches its own internals. A signal from elsewhere -- which is
+  // what a test gets today, because this profile does not install the canonical
+  // abort globals -- takes the ordinary registration and keeps the resource
+  // alive. That is a weaker guarantee, not a different API: nothing observable
+  // differs until the resource is collected, which is exactly the case the
+  // ordinary listener cannot serve.
+  //
+  // Deliberately not closing over `resource` here. A callback that captured it
+  // would defeat the weakness at the closure rather than at the registration,
+  // and the failure would look like the seam's.
+  if (signal instanceof WebEventTarget) {
+    addWeaklyHeldEventListener(signal, "abort", () => settled.resolve(), resource, {
+      once: true,
+    });
+  } else {
+    signal.addEventListener("abort", () => settled.resolve(), { once: true });
+  }
   await settled.promise;
 }
 
