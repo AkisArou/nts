@@ -26,10 +26,17 @@ import(corporaPath).then(({ CORPORA }) => {
   const inputs = JSON.parse(readFileSync(inputsPath, "utf8"));
 
   const rows = inputs.map((input) =>
-    corpus.calls.map(({ name, args }) => {
-      const fn = target[name];
+    corpus.calls.map((spec) => {
+      if (typeof spec.call === "function") {
+        try {
+          return { value: spec.call(target, input) };
+        } catch (error) {
+          return { threw: `${error.name}: ${error.message}` };
+        }
+      }
+      const fn = target[spec.name];
       if (typeof fn !== "function") return { absent: true };
-      return call(fn, args(input));
+      return call(fn, spec.args(input));
     })
   );
   console.log("NTSDIFF " + JSON.stringify(rows));

@@ -9,6 +9,13 @@
 // make with it. Keep the generators seeded and pure -- both lanes generate the
 // inputs independently and must produce the identical sequence, so anything
 // non-deterministic here silently compares different things.
+//
+// A call is either `{ name, args }`, which invokes `module[name](...args)`, or
+// `{ label, call }`, which is handed the module and the input and does
+// whatever it likes. The second exists because the interesting behaviour is
+// not always a top-level function: `Buffer.from(s, "base64").toString("utf8")`
+// is a round trip through two encodings and one class, and there is no export
+// named for it.
 
 /** A seeded PRNG. Same seed, same sequence, in every process. */
 export function makeRandom(seed = 0x9e3779b9) {
@@ -78,6 +85,66 @@ export const CORPORA = {
       { name: "join", args: (s) => [s, "z"] },
       { name: "resolve", args: (s) => [s] },
       { name: "relative", args: (s) => [s, "/tmp"] },
+    ],
+  },
+
+  buffer: {
+    // Encoding round trips, which is where a byte-level implementation
+    // diverges if it is going to: base64 padding, hex casing, latin1 above
+    // 0x7f, utf16le on an odd length, and what a lone surrogate becomes.
+    fixed: [
+      "", "a", "ab", "abc", "abcd", "\u0000", "ÿ", "€", "😀", "\uD800",
+      "\uDC00", "a\uD800b", "ü".repeat(40), "=", "==", "===", "AA", "AAA",
+      "AAAA", "A===", "+/", "-_", "\n", "a\nb", "0123456789abcdef",
+    ],
+    input: (rnd) => unicodeWord(rnd),
+    calls: [
+      { name: "atob", args: (s) => [s] },
+      { name: "btoa", args: (s) => [s] },
+      ...["utf8", "utf16le", "latin1", "base64", "base64url", "hex", "ascii", "binary", "ucs2"]
+        .flatMap((enc) => [
+          {
+            label: `from(${enc}).toString(${enc})`,
+            call: (m, s) => m.Buffer.from(s, enc).toString(enc),
+          },
+          {
+            label: `from(utf8).toString(${enc})`,
+            call: (m, s) => m.Buffer.from(s, "utf8").toString(enc),
+          },
+          {
+            label: `byteLength(${enc})`,
+            call: (m, s) => m.Buffer.byteLength(s, enc),
+          },
+        ]),
+    ],
+  },
+
+  url: {
+    // The legacy parser is the interesting half: `url.parse` predates WHATWG,
+    // has its own rules for slashes, auth and hosts, and 45 pinned files is
+    // thin for a surface that large.
+    fixed: [
+      "", "/", "//", "///", "http://a", "http://a/", "http://a:1/b?c#d",
+      "//a/b", "a:b", "a://b", "http://user:pass@host:8080/p?q=1#f",
+      "HTTP://A.COM/B", "http://[::1]:8080/", "http://a..b/", "file:///a/b",
+      "mailto:a@b.c", "javascript:alert(1)", "http://ü.com/日", "?q", "#f",
+      "http://a/%2e%2e/b", "http://a/../b", "http://a\\b", "  http://a  ",
+    ],
+    input: (rnd) => {
+      const SCHEME = ["http:", "https:", "file:", "ftp:", "a+b:", "", "mailto:"];
+      const SLASH = ["//", "/", "", "///"];
+      const HOST = ["a.com", "ü.com", "[::1]", "1.2.3.4", "a..b", "", "A.COM", "a:1", "u:p@h"];
+      const PATH = ["", "/", "/a", "/a/b", "/a%2Fb", "/..", "/./", "/日", "//x"];
+      const TAIL = ["", "?q=1", "?", "#f", "#", "?q=1#f", "?a=%zz"];
+      return choose(rnd, SCHEME) + choose(rnd, SLASH) + choose(rnd, HOST) +
+        choose(rnd, PATH) + choose(rnd, TAIL);
+    },
+    calls: [
+      { name: "parse", args: (s) => [s] },
+      { name: "format", args: (s) => [s] },
+      { name: "resolve", args: (s) => ["http://base.example/x/y", s] },
+      { name: "domainToASCII", args: (s) => [s] },
+      { name: "domainToUnicode", args: (s) => [s] },
     ],
   },
 

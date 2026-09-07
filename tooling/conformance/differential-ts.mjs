@@ -100,25 +100,35 @@ for (const name of modules) {
   let compared = 0;
   let diverged = 0;
   const absent = new Set();
+  // Per call, because the total says how bad and this says where. A run that
+  // reports 4,142 divergences over 29 calls is a different problem from one
+  // that reports 4,142 over two, and only one of those is a single bug.
+  const byCall = new Map();
   for (let i = 0; i < inputs.length; i++) {
     for (let c = 0; c < corpus.calls.length; c++) {
-      const { name: fnName, args } = corpus.calls[c];
+      const spec = corpus.calls[c];
+      const fnName = spec.label ?? spec.name;
       const mine = ours[i][c];
       if (mine.absent === true) {
         absent.add(fnName);
         continue;
       }
-      const fn = upstream[fnName];
-      if (typeof fn !== "function") continue;
       let theirs;
       try {
-        theirs = { value: fn(...args(inputs[i])) };
+        if (typeof spec.call === "function") {
+          theirs = { value: spec.call(upstream, inputs[i]) };
+        } else {
+          const fn = upstream[spec.name];
+          if (typeof fn !== "function") continue;
+          theirs = { value: fn(...spec.args(inputs[i])) };
+        }
       } catch (error) {
         theirs = { threw: `${error.name}: ${error.message}` };
       }
       compared++;
       if (show(mine) === show(theirs)) continue;
       diverged++;
+      byCall.set(fnName, (byCall.get(fnName) ?? 0) + 1);
       if (diverged <= 8) {
         console.log(`  ${fnName}(${JSON.stringify(inputs[i])})`);
         console.log(`     ours ${show(mine)}`);
@@ -130,9 +140,15 @@ for (const name of modules) {
   if (absent.size > 0) {
     console.log(`  ${name}: not compared, absent from the module: ${[...absent].join(", ")}`);
   }
+  if (byCall.size > 0) {
+    console.log(`  ${name}: divergences by call --`);
+    for (const [label, count] of [...byCall].sort((a, b) => b[1] - a[1])) {
+      console.log(`      ${String(count).padStart(6)}  ${label}`);
+    }
+  }
   console.log(
     `  ${name}: ${compared} comparison(s) over ${inputs.length} inputs, ` +
-      `${diverged} divergence(s)`,
+      `${diverged} divergence(s) across ${byCall.size} call(s)`,
   );
   if (diverged > 0) failed = true;
 }
