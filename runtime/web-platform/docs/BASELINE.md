@@ -2997,3 +2997,41 @@ a homogeneous array, one assignment to an array's `length` in the compaction pat
 same shape recorded for `Headers` and `FormData` — and one property access the lowering
 does not find declared on the type. The five cascades are the call graph from the tests
 of those paths.
+
+## The timing EventSource is specified in terms of
+
+The EventSource suite used `retry: 0` throughout. That was not carelessness: with a
+real clock, asserting that a reconnect happens after three seconds and not before means
+either sleeping for three seconds or asserting nothing, and the suite chose neither by
+removing the delay from every test. Reconnection timing — a requirement the plan names
+explicitly — had no coverage at all.
+
+Four tests now run EventSource against a `VirtualScheduler`. They assert the scheduled
+deadline directly rather than inferring it from when a request happened to appear, then
+advance to one millisecond short of it and confirm nothing reconnected, then advance the
+last millisecond and confirm it did. They cover the configured delay, a `retry:` field
+replacing it and persisting across a later reconnect that does not mention one,
+`Last-Event-ID` carried into the retry, `close()` cancelling a pending reconnect
+permanently, and a 204 being fatal rather than a slow retry.
+
+**The measurement that justifies the slice**: with the reconnect delay removed
+entirely, so every reconnect fires immediately, the pre-existing EventSource suite
+still passes 5/5 while these fall to 1/4. The old suite could not see timing, which is
+what having built the clock buys. Ignoring the stream's `retry:` field takes the new
+suite to 3/4 while the old one again notices nothing.
+
+Two things about using a clock that moves only when told to, both learned by getting
+them wrong. Real promise turns and virtual drains have to alternate: awaiting real
+ticks alone watches a queue that never empties, and the first version of this file
+reported that no request was ever made. And the reconnect timer does not exist the
+instant a stream ends — it is scheduled several microtask turns later — so advancing
+too early moves the clock past a deadline that has not been set yet, which reads as
+"the reconnect never happened" and is really "the test asked too early". Both are
+recorded in the helper, because the next person to reach for this clock will hit them
+in that order.
+
+The complete local Node-host/real-socket corpus passes 480/480 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green. The
+NTS frontier is unchanged at 1,298 primary `NTS1001` and 240 `NTS1003`, which is the
+expected result for a slice that adds tests and changes no shared source.
