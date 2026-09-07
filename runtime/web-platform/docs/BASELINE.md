@@ -2232,6 +2232,21 @@ also means the dispatch-time liveness branch has no evidence from either lane: t
 Node gc case does not reach the shared registration at all, and this host cannot force
 the window. Recording that here so the absence is not later mistaken for agreement.
 
+**Correction to that correction: the JVM lane can evidence it.** An earlier report
+that ART on API 26 under `app_process` never clears or enqueues a weak reference to a
+plainly dead object was measured and was true of the measuring loop rather than of the
+platform. `System.gc()` requests a collection and ART hands reference *processing* to a
+daemon without waiting for it, so sixty requests and 64 MB of churn watched an empty
+queue while every collection asked for had happened; one `System.gc()` followed by
+`System.runFinalization()` enqueued on the first attempt with 1.6 MB of churn. The JVM
+retirement check now runs on API 26 rather than skipping.
+
+So the window this branch exists for is real on ART and measurable on the declared
+floor, and that lane can produce the evidence once the seam is executable from a
+compiled program. The general caution is worth repeating for any collector-dependent
+conformance case here: a reference-queue test that only calls `gc` is testing whether
+the collector ran, not whether references were processed, and on ART those come apart.
+
 ## The connect result reports what TLS negotiated
 
 `ConnectAddress.alpnProtocols` said what a caller requested and nothing said what TLS

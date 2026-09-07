@@ -307,9 +307,10 @@ than a different API — nothing observable differs until the resource is collec
 which is precisely the case the ordinary listener cannot serve — and it disappears when
 Node reexports the canonical abort globals. That reexport, not the hook, is the
 remaining dependency, and it belongs to the canonical-ownership row in the plan rather
-than to this listener option. Neither lane can currently produce evidence for the
-dispatch-time liveness branch: the Node gc case does not reach the shared registration
-at all.
+than to this listener option. The Node gc case cannot evidence the dispatch-time
+liveness branch, because it does not reach the shared registration at all. The JVM lane
+can: its API-26 retirement check runs rather than skipping, once `System.runFinalization()`
+was found to be what actually drains ART's reference queue.
 
 ## Recommended next work
 
