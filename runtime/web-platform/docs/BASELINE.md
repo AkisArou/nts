@@ -3647,3 +3647,60 @@ The complete local Node-host/real-socket corpus passes 530/530 with zero skipped
 pinned upstream corpus is unchanged at 2,278 of 2,286 applicable, and the whole-project
 frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003` — this slice adds a
 fixture and changes no shared source.
+
+## Sequential per key means refused, not queued
+
+The JVM owner built the provider half and asked three contract questions rather than
+choosing and telling me. Answering them is what this slice is.
+
+**A second concurrent write to a key that already has one is refused.** Their argument
+decided it: the ABI is sequential per key, and honouring that by *waiting* would turn a
+caller's mistake into a pause, with the pause as the only evidence it made one. A caller
+that genuinely wants the later value serializes above this seam — where it can also
+decide which value should win, which the store cannot know. It is in the interface doc
+rather than left to providers, because a store that queued and one that refused would
+both satisfy a contract that did not say.
+
+**`list()` is one observation rather than a key list plus a lookup per key.** Two calls
+cannot be made atomic, so a key created or removed between them makes the metadata
+disagree with the names and the caller cannot tell which half is stale. That is now
+stated on the method.
+
+The host strawman implements the refusal, and three tests cover it: a second write
+refused while the first is open with the first undisturbed, the key writable again once
+that write settles, and — the one that matters for abandonment — **discard and cancel
+both releasing the key**, since a write that locked its key on being abandoned would be
+worse than one that queued.
+
+Three sabotages, all restored. Allowing the concurrent second write breaks the refusal
+test. Never releasing on discard breaks the abandonment test. Keying the guard on the
+key alone, ignoring the namespace, breaks the concurrency test — but only after that
+test was changed: it originally committed `cache/a` before opening `cookies/a`, so the
+collision it was written to detect never happened, and the sabotage passed 12/12. The
+two writes now overlap deliberately.
+
+**The directory sync has evidence now, and it is not mine.** This ledger recorded it as
+reasoning, because no test here can crash a machine. The JVM lane checked the *cause*
+instead, with an `LD_PRELOAD` shim reporting the syscalls a commit makes: `fsync` on the
+temporary, `rename`, `fsync` on the directory, in that order. It is not a power-cut
+test and they say so. What it rules out is the change that silently removes the
+guarantee — and they confirmed both removing the directory sync and *moving it before
+the rename* fail it, **while the functional suite stays green through both**. That
+asymmetry is the argument for the test, and it is the same shape as everything else this
+session has turned up: the guarantee whose absence no ordinary assertion can see.
+
+They also measured away a platform seam I would have accepted: syncing a directory
+looked like it needed the Android SDK, and `FileChannel.open(dir, READ).force(true)`
+works at API 26, checked on-device with `Os.fsync` as a control so a failure would have
+been about the portable route rather than the directory. One SDK-free class, and the
+desktop JVM suite becomes real evidence about Android rather than a proxy for it.
+
+The complete local Node-host/real-socket corpus passes 533/533 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions agreeing on all three backends, the
+pinned upstream corpus is unchanged at 2,278 of 2,286 applicable, and the whole-project
+frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003`.
+
+Still open on this ABI: `source()` is unimplemented on the Java side and should reuse
+the existing `BlobExternalSource` shape rather than growing a second ranged reader; the
+intrinsic surface is unbound and its names are being agreed before either lane binds
+one; and the ABI still has no consumer, which remains the honest status.

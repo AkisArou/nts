@@ -201,3 +201,66 @@ suite("delete removes a key and a closed store refuses work", async (t) => {
   await assert.rejects(target.read("cache", "key", none()), /closed/);
   await assert.rejects(target.write("cache", "key", none()), /closed/);
 });
+
+suite("a second concurrent write to one key is refused, not queued", async (t) => {
+  const { store: target } = store(t);
+  await put(target, "cache", "key", "original");
+
+  const first = await target.write("cache", "key", none());
+  await first.append(encoder.encode("mine"));
+
+  // Refused rather than queued. Queueing would turn a caller's mistake into a pause,
+  // with the pause as the only evidence it made one.
+  await assert.rejects(target.write("cache", "key", none()), /already open/);
+  // And the first writer is undisturbed by the attempt.
+  await first.commit();
+  assert.equal(decoder.decode(await target.read("cache", "key", none())), "mine");
+
+  // Once settled, the key is writable again -- the guard tracks a write, not a key.
+  const second = await target.write("cache", "key", none());
+  await second.append(encoder.encode("later"));
+  await second.commit();
+  assert.equal(decoder.decode(await target.read("cache", "key", none())), "later");
+});
+
+suite("a discarded or cancelled write releases the key", async (t) => {
+  const { store: target } = store(t);
+  // Discarding must release, or one abandoned write locks a key for the process.
+  const discarded = await target.write("cache", "key", none());
+  await discarded.discard();
+  const afterDiscard = await target.write("cache", "key", none());
+  await afterDiscard.append(encoder.encode("after discard"));
+  await afterDiscard.commit();
+  assert.equal(decoder.decode(await target.read("cache", "key", none())), "after discard");
+
+  // The same for a cancelled one, which is the path most likely to be abandoned.
+  const controller = new AbortController();
+  const cancelled = await target.write("cache", "key", controller.signal);
+  controller.abort(new Error("gone"));
+  await cancelled.discard();
+  const afterCancel = await target.write("cache", "key", none());
+  await afterCancel.append(encoder.encode("after cancel"));
+  await afterCancel.commit();
+  assert.equal(decoder.decode(await target.read("cache", "key", none())), "after cancel");
+});
+
+suite("two different keys write concurrently without interfering", async (t) => {
+  const { store: target } = store(t);
+  // Sequential *per key* -- not one write at a time for the whole store.
+  const a = await target.write("cache", "a", none());
+  const b = await target.write("cache", "b", none());
+  await a.append(encoder.encode("first"));
+  await b.append(encoder.encode("second"));
+  // The same key name in another namespace is a different key, and this is opened
+  // while `cache/a` is still unsettled -- committing first would let a guard that
+  // ignored the namespace pass.
+  const other = await target.write("cookies", "a", none());
+  await other.append(encoder.encode("elsewhere"));
+
+  await b.commit();
+  await a.commit();
+  await other.commit();
+  assert.equal(decoder.decode(await target.read("cache", "a", none())), "first");
+  assert.equal(decoder.decode(await target.read("cache", "b", none())), "second");
+  assert.equal(decoder.decode(await target.read("cookies", "a", none())), "elsewhere");
+});

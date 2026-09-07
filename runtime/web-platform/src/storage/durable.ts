@@ -79,13 +79,25 @@ export interface DurableByteStore {
    * one produces a torn file rather than a stopped write. So the guarantee this makes
    * is *no partial value becomes visible* -- not that the write stops immediately. A
    * provider that promised promptness would have to lie about it.
+   *
+   * **A second concurrent write to a key that already has one is refused, not queued.**
+   * This ABI is sequential per key, and honouring that by waiting would turn a caller's
+   * mistake into a pause -- with the pause as the only evidence it made one. Refusing
+   * names it. A caller that genuinely wants the later value serializes above this seam,
+   * where it can also decide which value should win; the store cannot know that.
    */
   write(namespace: string, key: string, signal: AbortSignal): Promise<DurableWrite>;
 
   /** Removes a key. Absent is not an error; the result says whether anything went. */
   delete(namespace: string, key: string, signal: AbortSignal): Promise<boolean>;
 
-  /** Every committed record in a namespace. Uncommitted writes are not records. */
+  /**
+   * Every committed record in a namespace. Uncommitted writes are not records.
+   *
+   * One observation, not a key list plus a lookup per key. Two calls cannot be made
+   * atomic, so a key created or removed between them makes the metadata disagree with
+   * the names, and the caller has no way to tell which half is stale.
+   */
   list(namespace: string, signal: AbortSignal): Promise<readonly DurableRecord[]>;
 
   /** Total committed bytes retained in a namespace. */

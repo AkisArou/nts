@@ -38,6 +38,7 @@ class HostNodeDurableWrite implements DurableWrite {
   readonly #signal: AbortSignal;
   #handle: import("node:fs/promises").FileHandle | null = null;
   #settled = false;
+  readonly #release: () => void;
 
   constructor(
     handle: import("node:fs/promises").FileHandle,
@@ -45,7 +46,9 @@ class HostNodeDurableWrite implements DurableWrite {
     target: string,
     directory: string,
     signal: AbortSignal,
+    release: () => void,
   ) {
+    this.#release = release;
     this.#handle = handle;
     this.#temporary = temporary;
     this.#target = target;
@@ -70,6 +73,7 @@ class HostNodeDurableWrite implements DurableWrite {
     this.#signal.throwIfAborted();
     this.#settled = true;
     this.#handle = null;
+    this.#release();
     // The data sync makes the bytes durable; the rename makes them the value; the
     // directory sync makes the rename durable. Skipping the third leaves a committed
     // value losable to a crash while never leaving a partial one, which is the subtle
@@ -90,6 +94,7 @@ class HostNodeDurableWrite implements DurableWrite {
     this.#settled = true;
     const handle = this.#handle;
     this.#handle = null;
+    this.#release();
     if (handle !== null) await handle.close();
     // The target is untouched throughout, so discarding leaves whatever it held.
     await rm(this.#temporary, { force: true });
@@ -98,6 +103,8 @@ class HostNodeDurableWrite implements DurableWrite {
 
 export class HostNodeDurableStore implements DurableByteStore {
   readonly #root: string;
+  /** Keys with an open, unsettled write. The ABI is sequential per key. */
+  readonly #writing = new Set<string>();
   #closed = false;
 
   constructor(options: HostNodeDurableStoreOptions) {
@@ -185,6 +192,13 @@ export class HostNodeDurableStore implements DurableByteStore {
 
   async write(namespace: string, key: string, signal: AbortSignal): Promise<DurableWrite> {
     signal.throwIfAborted();
+    // Refused rather than queued: see the ABI. The guard is taken before any file
+    // exists, so two writers cannot both believe they own the key.
+    const guard = namespace + "\u0000" + key;
+    if (this.#writing.has(guard)) {
+      throw new TypeError("A write to this key is already open");
+    }
+    this.#writing.add(guard);
     const directory = await this.#namespaceDirectory(namespace, true);
     const target = this.#path(directory, key);
     // A per-write temporary name, so two writers to one key cannot share a partial.
@@ -193,7 +207,9 @@ export class HostNodeDurableStore implements DurableByteStore {
       TEMP_PREFIX + encodeSegment(key) + "-" + String(process.pid) + "-" + String(counter++),
     );
     const handle = await openFile(temporary, "w");
-    return new HostNodeDurableWrite(handle, temporary, target, directory, signal);
+    return new HostNodeDurableWrite(handle, temporary, target, directory, signal, () => {
+      this.#writing.delete(guard);
+    });
   }
 
   async delete(namespace: string, key: string, signal: AbortSignal): Promise<boolean> {
