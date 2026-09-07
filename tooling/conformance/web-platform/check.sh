@@ -16,6 +16,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/deduplicate.test.mjs \
   tooling/conformance/web-platform/test/diagnostics.test.mjs \
   tooling/conformance/web-platform/test/dns.test.mjs \
+  tooling/conformance/web-platform/test/error-taxonomy.test.mjs \
   tooling/conformance/web-platform/test/eventsource.test.mjs \
   tooling/conformance/web-platform/test/eventsource-timing.test.mjs \
   tooling/conformance/web-platform/test/file-url.test.mjs \

@@ -3146,3 +3146,40 @@ pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 pass
 failing and 14 named not-applicable. The NTS frontier is unchanged at 1,298 primary
 `NTS1001` and 241 `NTS1003`, as expected for a slice that adds tests and changes no
 shared source.
+
+## The error taxonomy is a contract, so it is now asserted
+
+Consumers switch on `error.name`, and two dispatch policies switch on whether an error
+is a `TransportError`: `RetryInterceptor` retries only typed transport failures, and
+only typed transport failures reduce a `BalancedPool` upstream's health. Both are
+load-bearing and neither was asserted anywhere, so a class added to the wrong base — or
+renamed — would have changed retry and routing behaviour silently.
+
+The twenty exported error classes are now pinned in a table with how to construct each
+and whether it belongs to the transport set. The exported set must equal the table
+exactly, so adding an error class fails until the retry-and-routing decision is made,
+and removing one fails as the compatibility break it is. Every instance must report its
+own export name, names must be unique, and the two classes with a non-`Error` base keep
+it: `MockNotMatchedError` is a `TypeError` because an unmatched mock is a programming
+mistake, and `WebSocketError` is a `DOMException` because the WebSockets standard says
+so.
+
+**Writing it down surfaced a classification worth naming.** `ProxyResponseError`,
+`Socks5ProxyError` and `ProxyConfigurationError` are not `TransportError`s, so a failing
+proxy upstream never loses health and a proxy failure is never retried. For
+configuration and authentication that is correct — retrying cannot help, and penalising
+an upstream for a fixed misconfiguration would route traffic away from it forever. For a
+transient 502 from a proxy it is arguably wrong. It is pinned with that reasoning rather
+than changed, because changing it changes routing and that is a decision rather than a
+tidy-up.
+
+Two sabotages, both restored. Renaming `DnsNoAddressError` was caught. Moving
+`ProxyResponseError` into the transport set was caught by two tests at once. That second
+one also found a structural guard already in place: `TransportError` requires a
+`TransportErrorCode`, so the move does not even compile until the error's own
+`UND_ERR_PRX` code is removed — the type system objects before the test does.
+
+The complete local Node-host/real-socket corpus passes 492/492 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The NTS frontier is unchanged, as expected for a
+slice that adds tests and changes no shared source.
