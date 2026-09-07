@@ -2918,12 +2918,23 @@ Current state, all lanes:
 | `punycode`, compiled addon | 80,128 | 0 |
 | `path`, TypeScript | 36,234 | 0 |
 | `querystring`, TypeScript | 16,076 | 0 |
-| `url`, TypeScript | 20,120 | 0 |
+| `url` incl. file URLs, TypeScript | 12,192 | 0 |
+| `assert` incl. failure messages, TypeScript | 7,615 | 0 |
+| `events` as a state machine, TypeScript | 6,040 | 0 |
 | `buffer`, TypeScript | 44,225 | 0 |
 | `path` with `win32`, TypeScript | 42,882 | 0 |
 | `string_decoder`, TypeScript | 14,688 | 0 |
 | `util` (`format`, `%o`), TypeScript | 7,416 | 0 |
 | `zlib` byte-for-byte, TypeScript | 3,130 | 0 |
+
+Ten corpora. **Four found bugs and six did not**, and the six matter: until
+today the answer for each of them was that nobody had asked. `assert` compares
+the full `deepStrictEqual` failure text, not only the verdict — an
+implementation can decide every comparison correctly and print something else.
+`events` is a state-machine fuzz over generated *programs*, because its
+subtleties are all sequencing and no argument to `emit` makes
+removal-during-emit happen. `zlib` is byte-for-byte against node's compressor at
+three levels, not merely a round trip.
 
 Two processes are needed on the TypeScript lane, because inside the
 substitution `require("node:path")` and `require("path")` are the same object
