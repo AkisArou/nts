@@ -69,6 +69,32 @@ export const CORPORA = {
       { name: "toASCII", args: (s) => [s] },
       { name: "toUnicode", args: (s) => [s] },
     ],
+    // `decode(encode(s))` is the identity on anything `encode` accepts, checked
+    // against the implementation alone rather than against node: a round trip
+    // that agrees with node while losing the input would be two bugs
+    // cancelling. Used by the addon lane, which is the one that can regress.
+    property: (m, input) => {
+      let encoded;
+      try {
+        encoded = m.encode(input);
+      } catch {
+        // Refusing an input is not a round-trip failure; there is nothing to
+        // decode. A divergence in *whether* it refuses is caught by the
+        // comparison, which is where it belongs.
+        return undefined;
+      }
+      try {
+        const back = m.decode(encoded);
+        return back === input ? undefined : `round-trip returned ${JSON.stringify(back)}`;
+      } catch (error) {
+        // The loudest round-trip failure there is: `encode` produced something
+        // its own `decode` rejects. Reported rather than propagated -- letting
+        // it throw crashed the whole run the first time this had a real defect
+        // in front of it, which is a differential failing to report the thing
+        // it exists to report.
+        return `encode produced ${JSON.stringify(encoded)}, which its own decode rejects: ${error.message}`;
+      }
+    },
   },
 
   path: {

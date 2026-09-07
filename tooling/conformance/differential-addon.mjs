@@ -23,6 +23,13 @@ import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+// The *same* corpora the TypeScript lane uses, imported rather than restated.
+// This file kept its own copy, which made that file's comment about sharing
+// them false and, worse, meant the two lanes asked `punycode` different
+// questions -- so a divergence between lanes could not be told from a
+// divergence between corpora, which is exactly what that comment warns against.
+import { CORPORA, makeRandom } from "./differential-corpora.mjs";
+
 const require_ = createRequire(import.meta.url);
 
 const argv = process.argv.slice(2);
@@ -39,73 +46,9 @@ if (!existsSync(addonPath)) {
   process.exit(2);
 }
 
-// Deterministic, so a divergence is replayable from the seed printed below.
-let seed = 0x2545f491;
-const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 0x100000000);
-const pick = (a) => a[Math.floor(rnd() * a.length)];
-
-// Chosen to cross the boundaries a codec actually has: ASCII, Latin-1
-// supplement, Greek and Cyrillic, CJK, emoji, and the astral planes, which are
-// where surrogate handling either works or does not.
-const RANGES = [
-  [0x20, 0x7e], [0xa0, 0x24f], [0x370, 0x4ff],
-  [0x4e00, 0x9fff], [0x1f300, 0x1f9ff], [0x10000, 0x10ffff],
-];
-
-function randomString(maxLength = 12) {
-  const n = 1 + Math.floor(rnd() * maxLength);
-  let s = "";
-  for (let i = 0; i < n; i++) {
-    const [lo, hi] = pick(RANGES);
-    s += String.fromCodePoint(lo + Math.floor(rnd() * (hi - lo + 1)));
-  }
-  return s;
-}
-
-const CORPORA = {
-  punycode: {
-    // Every published function takes one string and returns one string, so all
-    // four take the same generated input; the fixed list carries the shapes a
-    // generator will not reach on its own.
-    functions: ["encode", "decode", "toASCII", "toUnicode"],
-    fixed: [
-      "", "a", "abc", "-", "--", "xn--", "0", "z", " ", "  ", "\t", "\n",
-      ".", "..", "a..b", "a.", ".a", "xn--a", "xn--0zwm56d",
-      "mañana", "bücher", "日本語", "☃", "😀", "a😀b", "\u{10FFFF}",
-      "москва", "北京", "ｅｘａｍｐｌｅ", "ß", "a".repeat(200), "ü".repeat(60),
-    ],
-    random: () => randomString(),
-    // decode(encode(s)) is the identity on anything encode accepts. Checked on
-    // the addon alone, because a round trip that agrees with node while losing
-    // the input would be two bugs cancelling.
-    property: (m, input) => {
-      let encoded;
-      try {
-        encoded = m.encode(input);
-      } catch {
-        // `encode` refusing an input is not a round-trip failure; there is
-        // nothing to decode. A divergence in *whether* it refuses is caught by
-        // the comparison above, which is where it belongs.
-        return undefined;
-      }
-      // `decode` throwing here is the loudest possible round-trip failure --
-      // `encode` produced something its own `decode` rejects -- so it is
-      // reported rather than propagated. Letting it throw crashed the whole
-      // run the first time this had a real defect to find, which is a
-      // differential failing to report the thing it exists to report.
-      try {
-        const back = m.decode(encoded);
-        return back === input ? undefined : `round-trip returned ${JSON.stringify(back)}`;
-      } catch (error) {
-        return `encode produced ${JSON.stringify(encoded)}, which its own decode rejects: ${error.message}`;
-      }
-    },
-  },
-};
-
 const corpus = CORPORA[name];
 if (corpus === undefined) {
-  console.error(`no corpus for ${name}; add one to CORPORA in this file`);
+  console.error(`no corpus for ${name}; add one to differential-corpora.mjs`);
   process.exit(2);
 }
 
@@ -113,41 +56,53 @@ process.noDeprecation = true;
 const compiled = require_(resolve(addonPath));
 const upstream = require_(`node:${name}`);
 
-const call = (fn, input) => {
-  try {
-    return { value: fn(input) };
-  } catch (error) {
-    return { threw: `${error.name}: ${error.message}` };
-  }
-};
 const show = (r) => ("threw" in r ? `throw ${r.threw}` : JSON.stringify(r.value));
 
 let compared = 0;
 let diverged = 0;
 let propertyFailures = 0;
 
-function compare(fnName, input) {
-  const ours = compiled[fnName];
-  const theirs = upstream[fnName];
-  if (typeof ours !== "function" || typeof theirs !== "function") return;
+const absent = new Set();
+
+function invoke(target, spec, input) {
+  try {
+    if (typeof spec.call === "function") return { value: spec.call(target, input) };
+    const fn = target[spec.name];
+    if (typeof fn !== "function") return { missing: true };
+    return { value: fn(...spec.args(input)) };
+  } catch (error) {
+    return { threw: `${error.name}: ${error.message}` };
+  }
+}
+
+function compare(spec, input) {
+  const label = spec.label ?? spec.name;
+  const a = invoke(compiled, spec, input);
+  const b = invoke(upstream, spec, input);
+  // An addon that does not publish the function is named rather than counted
+  // as agreeing: a differential over three of four functions reporting zero
+  // says less than it appears to.
+  if (a.missing === true) {
+    absent.add(label);
+    return;
+  }
+  if (b.missing === true) return;
   compared++;
-  const a = call(ours, input);
-  const b = call(theirs, input);
   if (show(a) === show(b)) return;
   diverged++;
   if (diverged <= 10) {
-    console.log(`  ${fnName}(${JSON.stringify(input)})`);
+    console.log(`  ${label}(${JSON.stringify(input)})`);
     console.log(`     compiled: ${show(a)}`);
     console.log(`     node:     ${show(b)}`);
   }
 }
 
-for (const input of corpus.fixed) {
-  for (const fnName of corpus.functions) compare(fnName, input);
-}
-for (let i = 0; i < ITERATIONS; i++) {
-  const input = corpus.random();
-  for (const fnName of corpus.functions) compare(fnName, input);
+const rnd = makeRandom();
+const inputs = [...corpus.fixed];
+for (let i = 0; i < ITERATIONS; i++) inputs.push(corpus.input(rnd));
+
+for (const input of inputs) {
+  for (const spec of corpus.calls) compare(spec, input);
   if (corpus.property !== undefined) {
     const failure = corpus.property(compiled, input);
     if (failure !== undefined) {
@@ -157,12 +112,8 @@ for (let i = 0; i < ITERATIONS; i++) {
   }
 }
 
-// Functions the addon does not publish are named rather than silently skipped:
-// a differential over three of four functions that reports "0 divergences"
-// says less than it appears to.
-const absent = corpus.functions.filter((f) => typeof compiled[f] !== "function");
-if (absent.length > 0) {
-  console.log(`\n  not compared, absent from the addon: ${absent.join(", ")}`);
+if (absent.size > 0) {
+  console.log(`\n  not compared, absent from the addon: ${[...absent].join(", ")}`);
 }
 
 console.log(
