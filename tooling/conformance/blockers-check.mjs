@@ -140,8 +140,17 @@ for (const name of names) {
     ? isClean
     : output.includes(wanted);
 
+  // A fixture is a *guard* if it says so, not if its expectation happens to be
+  // phrased as a clean one. `emits-c` and `emits-addon` are used both ways --
+  // `undefined-required-field` asserts that bad C is still emitted, and
+  // `modscope-refusing-call` asserts that a good export still is -- so the
+  // expectation form cannot tell them apart. Deciding the label from
+  // `expectsClean` printed "reproduces" for a passing guard, which read as a
+  // still-open blocker on a binary where the thing had been fixed. The verdict
+  // was right and the word was wrong, which is the worse of the two failures.
+  const isGuard = expectsClean || /^\/\/\s+FIXED\b/m.test(source);
   if (holds) {
-    console.log(`  ${expectsClean ? "guard ok  " : "reproduces"}  ${name}`);
+    console.log(`  ${isGuard ? "guard ok  " : "reproduces"}  ${name}`);
     continue;
   }
   unexpected++;
