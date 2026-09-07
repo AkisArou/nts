@@ -46,9 +46,35 @@ for module in $modules; do
     failures=$((failures + 1))
     continue
   fi
+  # Probe that the switch did what it claims, because this lane cannot report
+  # anything trustworthy otherwise. The first run of it passed `punycode` 2/2
+  # and the build directory held *zero* retain/release sites -- a green row from
+  # an uncounted build, which is precisely the false negative the lane exists to
+  # prevent. `--rc` on punycode emits 55 sites, so 0 is never legitimate here.
+  program="$PWD/target/node/$module.build/program.c"
+  sites=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null || echo 0)
+  if [ "$sites" -eq 0 ]; then
+    echo "NOT COUNTED -- built clean but emitted no retain/release; result would be meaningless"
+    failures=$((failures + 1))
+    continue
+  fi
+
   result=$(timeout 1800 node tooling/conformance/run.mjs \
     --module "$module" --addon "$PWD/target/node/$module.node" 2>&1 | tail -1)
-  echo "$result"
+
+  # And again afterwards. Three sessions share this tree and `target/node` is
+  # not owned by any of them, so another lane rebuilding the same module during
+  # the test run silently substitutes the artifact under test. That is how the
+  # first punycode row came to disagree with its own build directory: the
+  # directory was rewritten fifteen seconds after this lane wrote it.
+  after=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null || echo 0)
+  if [ "$after" -ne "$sites" ]; then
+    echo "OVERWRITTEN mid-run ($sites -> $after sites) -- another session rebuilt it; rerun when quiet"
+    failures=$((failures + 1))
+    continue
+  fi
+
+  echo "$result  [$sites rc sites]"
   printf '%s' "$result" | grep -q ' 0 failed' || failures=$((failures + 1))
 done
 

@@ -4018,6 +4018,54 @@ it. Nothing in it has been reduced or bisected by hand, deliberately: three of
 these classes may be one bug, and hand-reduction would cost a day to establish
 what one fix will show for free.
 
+## The counted lane, run for the first time
+
+The default provider never frees. That is fine for a bump-allocated program that
+exits, and it makes a whole class of defect *structurally* invisible: a release
+too few leaks where nobody looks, and a release too many is never observed.
+`tooling/conformance/counted-lane.sh` builds every module that builds under
+`NTS_CONFORMANCE_RC=1` — `--rc` on `emit-c` and `-DNTS_PROVIDER_RC` on clang,
+both halves, since either alone compares a program that never releases against
+an allocator expecting it to — with `-DNTS_POISON=1` riding along so a freed
+slot reads `a5d03c3c3c3c3c3c` rather than a zero indistinguishable from a
+legitimate one.
+
+| module | result | rc sites |
+| --- | --- | ---: |
+| `buffer` | 0 passed, 54 failed, 41 n/a | 271 |
+| `os` | 0 passed, 6 failed, 4 n/a | 203 |
+| `path` | 2 passed, 16 failed, 1 skipped | 98 |
+| `punycode` | **2 passed, 0 failed** | 55 |
+| `querystring` | 0 passed, 5 failed, 1 n/a | 209 |
+| `string_decoder` | 0 passed, 3 failed, 1 n/a | 272 |
+| `url` | 0 passed, 47 failed, 3 n/a | 328 |
+
+**Every number is identical to the uncounted run.** Six of the seven fail at the
+export table, which they do either way, so counting tells us nothing new about
+them. The one that matters is `punycode`: it passes both its tests with 55
+retain/release sites live and poison on, so the green module does not depend on
+an allocator that never frees, and nothing on its paths reads a slot after
+release. That is the first evidence on this axis that the passing module passes
+for the right reason.
+
+**The first run of this lane reported the same green row and it was worthless,
+which is the part worth keeping.** It passed `punycode` 2/2 while
+`punycode.build/program.c` held *zero* retain/release sites — an uncounted build
+reported as a counted pass, the exact false negative the lane exists to prevent.
+The cause was not the switch: `build.sh` under `NTS_CONFORMANCE_RC=1` emits 55
+sites, verified by diffing against a build without it. The cause is that
+`target/node` belongs to no session and three of them share this tree, so
+another lane rebuilt `punycode` fifteen seconds after this one wrote it and
+substituted the artifact under test.
+
+So the lane now probes its own switch twice: once after the build, where zero
+sites under the counted flag is never legitimate and is reported as NOT COUNTED
+rather than run; and once after the tests, where a changed site count means
+another session rebuilt the module mid-run and the row is discarded as
+OVERWRITTEN. A lane that cannot tell a counted build from an uncounted one
+cannot report anything, and this one could not, twice, before it printed a
+number anybody would have believed.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
