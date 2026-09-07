@@ -68,17 +68,27 @@ A second explanation followed, and it is wrong too. Perhaps the frame pins the
 most recent allocation and my control used exactly one object. Two hundred
 references, made in a loop in another method: **none of them clear either**.
 
-What is established is the scope, which is what the check actually needs:
+I then wrote that the cause was unestablished and would stay that way, which was
+the honest state and was also giving up one probe too early.
 
-    desktop JVM   clears and enqueues
-    API 36 ART    clears and enqueues
-    API 26 ART    neither, under `app_process`
+## The cause, on the fourth attempt
 
-The cause is unnamed, and stays unnamed. That costs the check nothing, and it
-is the point worth keeping: **a control detects a condition; a diagnosis names a
-cause.** I had quietly turned the first into the second, twice, in a paragraph
-that read as confident both times. The control was correct through both wrong
-explanations precisely because it never depended on either.
+    System.gc();                 60 attempts, 64 MB of churn   ->  never enqueued
+    System.gc();
+    System.runFinalization();    1 attempt,  1.6 MB of churn   ->  enqueued
+
+Isolated: it is `runFinalization`, not the allocation volume. Four hundred times
+the churn without it still never enqueues.
+
+`System.gc()` is a *request for a collection*. ART hands reference processing to
+a daemon and `gc` does not wait for it, so a loop that asks sixty times and
+never waits can watch a queue stay empty forever while every collection it asked
+for happened. `runFinalization` waits. The daemons were running the whole time,
+which is why that explanation looked so plausible when I tested it and found
+them up.
+
+**So the skip is gone.** The retirement check runs on API 26 now and the runtime
+passes it -- 26 checks, no skip, on the floor this library declares.
 
 ## Why this one is worse than the others
 

@@ -255,8 +255,10 @@ living in `/system/bin` rather than an APEX, and a retirement check that was
 to a plainly dead object is neither cleared nor enqueued. See
 `docs/records/0197`, including the explanation I got wrong on the way.
 
-One check skips there and says so: weak-reference retirement, because the queue
-on that configuration would stay empty whatever the subject did.
+Nothing skips there any more. The retirement check did, until the cause was
+found on a fourth attempt: `System.gc()` asks for a collection and does not wait
+for reference processing, which ART hands to a daemon. `System.runFinalization()`
+waits, and with it the first attempt enqueues where sixty without it never did.
 
 Everything else the plan asks of this lane has evidence, and since
 `tooling/android/on-device.sh` started running, that evidence is from ART rather

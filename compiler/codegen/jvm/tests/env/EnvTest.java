@@ -166,23 +166,22 @@ public final class EnvTest {
         // close, the runtime still retains its callbacks": a false accusation
         // against code that had released correctly.
         //
-        // **The scope is measured; the mechanism is not.** Where it holds:
+        // **The control, because this check once accused the code under test.**
+        // On API 26 it reported "after close, the runtime still retains its
+        // callbacks" about a runtime that had released correctly.
         //
-        //     desktop JVM   clears and enqueues -- the check below runs
-        //     API 36 ART    clears and enqueues -- the check below runs
-        //     API 26 ART    neither, under `app_process`
+        // The cause took three wrong answers to find and is one line: `gc` does
+        // not wait for reference processing. ART hands that to a daemon, and
+        // the loop below asked sixty times and never waited. `runFinalization`
+        // waits, and with it the first attempt succeeds -- on the same device,
+        // the same heap, the same references.
         //
-        // Two explanations were tried and both are wrong. It is *not* that the
-        // reference-processing daemons are unstarted: `java.lang.Daemons.start()`
-        // reflectively answers `IllegalStateException: already running`. It is
-        // *not* that the last allocation is pinned by the frame: two hundred
-        // references made in a loop in another method clear none of them, and a
-        // plain `WeakReference` with no queue is not cleared either.
-        //
-        // So the cause is left unnamed rather than guessed a third time. That
-        // costs this check nothing: a control detects a condition, where a
-        // diagnosis names a cause, and turning the first into the second is
-        // exactly the mistake that produced the false accusation above.
+        // The control stays anyway. It was right through all three wrong
+        // explanations precisely because it never depended on one: it asks
+        // whether a reference to an object with no relationship to this runtime
+        // gets cleared, and skips if not. A control detects a condition; a
+        // diagnosis names a cause; turning the first into the second is what
+        // produced the false accusation.
         //
         // It cost an hour and two wrong diagnoses before the control was
         // written, and the control is four lines. A test whose instrument can
@@ -214,6 +213,13 @@ public final class EnvTest {
         WeakReference<Object> dead = deadReference(control);
         for (int attempt = 0; attempt < 60; attempt++) {
             System.gc();
+            // **`gc` alone is not enough on ART**, and this is the whole of why
+            // the check below used to skip on API 26. A collection happens;
+            // reference *processing* is handed to a daemon, and `gc` does not
+            // wait for it. `runFinalization` does, and with it the very first
+            // attempt enqueues on API 26 -- where sixty attempts of `gc` and
+            // four hundred times the allocation churn never did.
+            System.runFinalization();
             for (int i = 0; i < 200; i++) {
                 byte[] waste = new byte[8192];
                 waste[0] = 1;
@@ -296,6 +302,9 @@ public final class EnvTest {
         List<Named> seen = new ArrayList<Named>();
         for (int attempt = 0; attempt < 60 && seen.size() < want; attempt++) {
             System.gc();
+            // `gc` is a hint and does not wait for reference processing, which
+            // ART hands to a daemon; `runFinalization` waits. See the control.
+            System.runFinalization();
             // Allocation as well as a request. `System.gc()` is a hint on ART,
             // and a hint is not a guarantee that reference processing ran.
             for (int i = 0; i < 200; i++) {
