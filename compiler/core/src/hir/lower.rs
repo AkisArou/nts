@@ -921,9 +921,32 @@ fn collect_function_values(
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        // Being called is not being used as a value, and neither is being the
-        // name after a dot.
-        if probe.is_callee(id) || probe.names_a_member(id) {
+        // Being called is not being used as a value. Being the name after a dot
+        // is not either, EXCEPT through a namespace import: `codec.ucs2decode`
+        // is a property access whose symbol is an ordinary module function, and
+        // `punycode` hands exactly that to an object literal --
+        // `export const ucs2 = { decode: codec.ucs2decode, ... }`.
+        //
+        // The test is on the property access rather than on the identifier,
+        // because it is the access that would be a callee: in `codec.decode(x)`
+        // the call's callee is `codec.decode`, not `decode`, so asking the
+        // identifier gives `false` for every namespaced call in the program and
+        // would wrap every function any module reaches that way. A wrapper for
+        // each of those would give a closure table to programs that are nothing
+        // but ordinary calls.
+        //
+        // A class method is excluded by the symbol checks below rather than
+        // here: its declaration is a `METHOD_DECLARATION` and needs a receiver,
+        // which is a different feature and not this one.
+        let used_as_value = if probe.names_a_member(id) {
+            node.parent.is_some_and(|parent| {
+                probe.kind_of(parent) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
+                    && !probe.is_callee(parent)
+            })
+        } else {
+            !probe.is_callee(id)
+        };
+        if !used_as_value {
             continue;
         }
         let Some(symbol) = node.symbol else {
@@ -932,6 +955,14 @@ fn collect_function_values(
         let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
             continue;
         };
+        // An imported name is a local symbol whose whole content is a pointer
+        // to the declaring module's, and the frontend has followed the chain to
+        // the end -- so one hop reaches the declaration however many files the
+        // name travelled through.
+        let record = record
+            .aliased
+            .and_then(|to| snapshot.symbols.get(to.0 as usize))
+            .unwrap_or(record);
         if !record.flags.contains(SymbolFlags::FUNCTION) {
             continue;
         }
