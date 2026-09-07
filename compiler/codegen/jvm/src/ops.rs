@@ -1813,6 +1813,19 @@ impl Emitter<'_> {
                 }
                 ("ofNumber", "(D)Lnts/rt/NtsValue;")
             }
+            // Already erased, so this is identity: the value on the stack is
+            // an `NtsValue` and wrapping it in another would be a second tag
+            // over the first.
+            //
+            // The lowering emits it because `throw` in an `async` function
+            // erases its reason on the way to `nts_promise_reject_value`, and
+            // it does not ask first whether the reason was erased to begin
+            // with -- `throw someUnknown` is. Refusing here made the first
+            // program to write that line uncompilable on this lane, which is a
+            // backend declining a shape the IR is entitled to produce.
+            HirType::Erased => {
+                return Ok(Placed::OnStack);
+            }
             other => {
                 return Err(refuse(self.func, &format!("erasing {}", types::describe(other))));
             }
