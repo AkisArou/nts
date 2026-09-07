@@ -191,6 +191,19 @@ public abstract class NtsView {
      * `Uint16Array` is one element, not one and a half, and not an out-of-range
      * read of the fourth byte.
      */
+    /**
+     * The element count, as the `int` a bounds check wants.
+     *
+     * <p>Public where `count` is not, because the backend's indexing path needs
+     * it and `length` answers in a `double`: comparing an index against a
+     * widened length costs an instruction per access and buys nothing, which is
+     * the same reason `checked_subscript` keeps `arraylength`'s `int` for a
+     * bare array rather than promoting it.
+     */
+    public static int elements(NtsView view) {
+        return count(view);
+    }
+
     static int count(NtsView view) {
         if (view.buffer.bytes == null) { return 0; }
         if (view.declared >= 0) { return view.declared; }

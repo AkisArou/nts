@@ -28,6 +28,29 @@ public final class NtsViewU64 extends NtsView {
     }
 
     /** `new BigUint64Array(n)`: its own buffer, zero filled. */
+    /**
+     * The lowering's constructor, as `nts_view_new` spells it.
+     *
+     * <p>A transliteration of the C signature, `kind` and all -- and `kind` is
+     * unused here, deliberately. That struct carries a kind because it is one
+     * type for nine element widths; this runtime has eleven classes, so the
+     * class *is* the kind and the argument is already answered by the method
+     * being called at all. Record 0182 is why it is eleven classes: 0.177
+     * ns/element through a monomorphic accessor against 0.924 through one that
+     * switches.
+     *
+     * <p>It stays in the signature because the repository's rule for runtime
+     * helpers is that the Java transliterates the C header, `double` parameters
+     * and all, so that `hir::runtime` remains the single answer about what a
+     * helper takes. Dropping it would make this the one helper whose arity a
+     * backend decided for itself, and the extern table would need argument
+     * surgery no other entry performs.
+     */
+    public static NtsViewU64 create(NtsBuffer buffer, double byteOffset, double length,
+                            double kind, boolean tracking) {
+        return tracking ? over(buffer, byteOffset) : part(buffer, byteOffset, length);
+    }
+
     public static NtsViewU64 of(double length) {
         int n = NtsBuffer.toIndex(length, "length");
         return new NtsViewU64(NtsBuffer.allocate((double) n * 8), 0, n);

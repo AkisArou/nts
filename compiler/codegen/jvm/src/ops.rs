@@ -654,6 +654,97 @@ const NO_NAME_FOR: &str = "which this backend has no name for -- the helper may 
                            coercions were refused and how the networking \
                            intrinsics were";
 
+/// The typed-array helpers.
+///
+/// Split from `external` for the reason `array_external` is: one of these needs
+/// to know which class, and the name alone does not say. `nts_view_new` returns
+/// a view, so the class comes from the call's **result** type rather than from
+/// an argument -- which is the one place this differs from the array family,
+/// where the subject is always something passed in.
+///
+/// Everything else takes a view and is declared on the base class, so a
+/// `NtsViewU8` reaches `NtsView.length` without a per-element entry. That is
+/// not laziness about performance: these are the property reads, which happen
+/// once per expression, and record 0182's measurement is about *indexing*,
+/// which does not come through here at all -- `ArrayGet` and `ArraySet` are ops
+/// and are emitted inline, exactly as the C header says they must be.
+/// The typed-array helper for a call, if its subject or its result is a view.
+///
+/// The subject first, then the result: every helper but one takes a view, and
+/// the one that does not -- `nts_view_new` -- takes a buffer and *answers* a
+/// view, so its class is only knowable from where the value is going.
+fn view_helper(
+    name: &str,
+    subject: Option<&HirType>,
+    result: &HirType,
+) -> Option<(&'static str, &'static str, String)> {
+    let of = |ty: &HirType| match ty {
+        HirType::Managed(ManagedType::View(element)) => types::view_class(element),
+        _ => None,
+    };
+    view_external(name, subject.and_then(of).or_else(|| of(result))?)
+}
+
+/// The accessor that reads an element, and what it answers in.
+///
+/// Not `getAt`, which answers in a `double` because that is what the *language*
+/// reads out of a typed array. HIR types `array.get xs[i]` as the element --
+/// `u8`, an `I` here -- so `getAt` would mean a widening in the runtime and a
+/// narrowing in the emitted code, per element, to arrive back where it started.
+///
+/// `None` for the 64-bit elements. `view_class` already refuses those, so this
+/// is unreachable through it and is here so that the two lists cannot drift
+/// into disagreeing about which elements exist.
+fn view_read(element: &HirType) -> Option<(&'static str, &'static str)> {
+    Some(match element {
+        HirType::Int { bits: 64, .. } | HirType::BigInt => return None,
+        HirType::Int { .. } => ("getInt", "I"),
+        HirType::Float { bits: 32 } => ("getFloat", "F"),
+        HirType::Float { .. } => ("getAt", "D"),
+        _ => return None,
+    })
+}
+
+/// The accessor that writes one, and what it takes.
+fn view_write(element: &HirType) -> Option<(&'static str, &'static str)> {
+    Some(match view_read(element)? {
+        ("getInt", _) => ("setInt", "I"),
+        ("getFloat", _) => ("setFloat", "F"),
+        _ => ("setAt", "D"),
+    })
+}
+
+fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str, String)> {
+    Some(match name {
+        "nts_view_new" => (
+            leak(class.to_owned()),
+            "create",
+            format!("(L{};DDDZ)L{class};", types::BUFFER),
+        ),
+        "nts_view_length" => (types::VIEW_BASE, "length", format!("(L{};)D", types::VIEW_BASE)),
+        "nts_view_byte_length" => {
+            (types::VIEW_BASE, "byteLength", format!("(L{};)D", types::VIEW_BASE))
+        }
+        "nts_view_byte_offset" => {
+            (types::VIEW_BASE, "byteOffset", format!("(L{};)D", types::VIEW_BASE))
+        }
+        "nts_view_buffer" => (
+            types::VIEW_BASE,
+            "buffer",
+            format!("(L{};)L{};", types::VIEW_BASE, types::BUFFER),
+        ),
+        // The generic pair, which exists for `set` across two element kinds and
+        // for `DataView`. Not the indexing path.
+        "nts_view_get" => {
+            (types::VIEW_BASE, "getElement", format!("(L{};D)D", types::VIEW_BASE))
+        }
+        "nts_view_put" => {
+            (types::VIEW_BASE, "putElement", format!("(L{};DD)V", types::VIEW_BASE))
+        }
+        _ => return None,
+    })
+}
+
 fn external(name: &str) -> Option<(&'static str, &'static str, String)> {
     let found = core_external(name)
         .or_else(|| math_external(name))
@@ -1891,6 +1982,29 @@ impl Emitter<'_> {
                 );
                 Ok(Placed::Stored)
             }
+            // A typed array. Its elements are bytes in a buffer something else
+            // may also be looking at, so a subscript is a call on the element's
+            // own class rather than an `aaload`.
+            //
+            // Eleven classes rather than one with a kind field, and the call is
+            // monomorphic because of it: record 0182 measured 0.177 ns/element
+            // through a class-specific accessor against 0.924 through one that
+            // switches on a kind. The C header says the same thing from the
+            // other side -- "ordinary indexed access is emitted inline by the
+            // backends, because a call per element is not a price a typed array
+            // can pay" -- and an `invokestatic` that inlines to a shift and a
+            // load is that inlining, on this lane.
+            //
+            // Before the growable arms, and not after: `arrays_can_grow` is a
+            // fact about *arrays*. A view cannot grow, its length comes from
+            // the buffer it names, and a program that pushes somewhere must not
+            // put its typed arrays behind a wrapper that has no storage to
+            // wrap.
+            OpKind::ArrayGet { array, .. } | OpKind::ArraySet { array, .. }
+                if self.view_receiver(*array).is_some() =>
+            {
+                self.view_element(code, pool, kind, origin)
+            }
             OpKind::ArrayNew { length, .. } => {
                 let element = self.element_descriptor(ty)?;
                 self.subscript(code, pool, *length, origin)?;
@@ -1914,6 +2028,98 @@ impl Emitter<'_> {
             }
             _ => Err(refuse(self.func, "an array operation this backend does not spell")),
         }
+    }
+
+    /// One element of a typed array, read or written.
+    ///
+    /// Read and write in one method because they differ by two lines and agree
+    /// on everything that is easy to get wrong: which class, which accessor,
+    /// and what the subscript has to do first. Splitting them is how the
+    /// growable array family ended up with two answers to "which wrapper", and
+    /// that put `NtsArrayD.pop` where an `NtsValue` was wanted.
+    fn view_element(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        kind: &OpKind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        let (array, index, value, checked) = match *kind {
+            OpKind::ArrayGet { array, index, checked } => (array, index, None, checked),
+            OpKind::ArraySet { array, index, value, checked } => {
+                (array, index, Some(value), checked)
+            }
+            _ => return Err(refuse(self.func, "a view element operation that is neither")),
+        };
+        let (class, element) = self.view_receiver(array).expect("the arm tested this");
+        let accessor = if value.is_some() { view_write(&element) } else { view_read(&element) };
+        let Some((member, spelled)) = accessor else {
+            return Err(refuse(
+                self.func,
+                "a typed array whose element this backend has no accessor for",
+            ));
+        };
+        self.load(code, pool, array)?;
+        self.view_subscript(code, pool, index, checked, origin)?;
+        let Some(value) = value else {
+            code.invoke_static(origin, pool, &class, member, &format!("(L{class};I){spelled}"));
+            return Ok(Placed::OnStack);
+        };
+        // The value in the element's own representation, not in a `double`: the
+        // middle end has already put it there -- `coerce_element` is what makes
+        // `u8[i] = 300` store 44 -- and widening it here only to have the
+        // runtime narrow it back is the round trip `getInt` exists to avoid on
+        // the way out.
+        self.load(code, pool, value)?;
+        code.invoke_static(origin, pool, &class, member, &format!("(L{class};I{spelled})V"));
+        Ok(Placed::Stored)
+    }
+
+    /// The class and element of a value that is a typed array, or `None`.
+    fn view_receiver(&self, value: ValueId) -> Option<(String, HirType)> {
+        match self.ty(value) {
+            HirType::Managed(ManagedType::View(element)) => {
+                types::view_class(element).map(|class| (class.to_owned(), (**element).clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// An index for a typed array.
+    ///
+    /// The element accessor checks the range itself and refuses with the prefix
+    /// the harness reads, so an integral index needs nothing here -- and
+    /// `hir::specialize` turns a loop counter into an `i32`, which is the path
+    /// that matters and the one that then pays for exactly one check.
+    ///
+    /// A `double` index can be **fractional**, which no range check catches:
+    /// `xs[0.5]` is `undefined` in JavaScript and `xs[0]` after a `d2i`. That
+    /// goes through `bounds`, the same helper the bare-array path uses, with
+    /// the view's element count in place of `arraylength`. The accessor then
+    /// checks again, which is a redundant compare on the path that was already
+    /// the slow one.
+    fn view_subscript(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        index: ValueId,
+        checked: bool,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        if !checked || self.kind_of(index)? == Kind::Int {
+            return self.subscript(code, pool, index, origin);
+        }
+        code.dup(origin);
+        code.invoke_static(
+            origin,
+            pool,
+            types::VIEW_BASE,
+            "elements",
+            &format!("(L{};)I", types::VIEW_BASE),
+        );
+        self.push_as(code, pool, index, Kind::Double, origin)?;
+        code.invoke_static(origin, pool, RUNTIME, "bounds", "(ID)I");
+        Ok(())
     }
 
     /// An index for a bare array, checked where the IR says it must be.
@@ -3190,6 +3396,14 @@ impl Emitter<'_> {
                     external(name)
                         .or_else(|| element.as_deref().and_then(|e| array_external(name, e)))
                 };
+                // The typed-array family, whose subject may be the *result*
+                // rather than an argument -- `nts_view_new` takes a buffer and
+                // answers a view. Tried after the tables above and before the
+                // refusal, so a name in both would keep the older answer; there
+                // is none, and this order makes adding one a visible decision
+                // rather than a silent override.
+                let found = found
+                    .or_else(|| view_helper(name, subject.as_ref(), self.ty(value)));
                 // `String(n)` where `n` is provably an `i32`.
                 //
                 // `hir::runtime` types `nts_number_to_string` as taking a

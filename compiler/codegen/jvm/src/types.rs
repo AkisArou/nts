@@ -188,6 +188,14 @@ pub const BUFFER: &str = "nts/rt/NtsBuffer";
 /// A `DataView`: a buffer, an offset, and a length that may track the buffer's.
 pub const VIEW: &str = "nts/rt/NtsDataView";
 
+/// The base every typed-array class extends.
+///
+/// The properties -- `length`, `byteLength`, `byteOffset`, `buffer` -- are
+/// declared here and take a base-typed receiver, so they need no per-element
+/// dispatch. Only construction does, because only construction has to *name* a
+/// class rather than accept one.
+pub const VIEW_BASE: &str = "nts/rt/NtsView";
+
 /// The class for a typed array over `element`.
 ///
 /// Eleven classes rather than one with a kind field, and the difference is
