@@ -397,6 +397,43 @@ be re-rolled away. Four re-runs produced four clean numbers and no
 understanding; one deliberate attempt to reproduce produced the cause. **Re-run
 to check a number, reproduce to learn anything.**
 
+**Then it was made deterministic, which turned it into a control.** An
+intermittent failure cannot be used to judge a fix; a threshold can. Bisecting
+`node --stack-size=<n> run-one.mjs util test-util-inspect-long-running.js`:
+
+    984  pass          <- node's own default is about this
+    900  Maximum call stack
+    850  Maximum call stack
+    600  fail (a different, real failure)
+
+So the test needed about 950KB of a 984KB stack — **three and a half percent of
+headroom**, which is why a loaded machine tipped it over and an idle one never
+did.
+
+`formatProperty` had exactly one caller and sat on the recursion path, so every
+level of structure paid for a frame that existed for readability. Inlining it
+moves the threshold to between 850 and 900: **about eight percent**, measured
+the same way. Two controls say it changed stack usage and not behaviour — the
+`inspect` census is unchanged at 38 of 61 kinds, and `util` is 20/20 over six
+isolated runs and a full sweep.
+
+**The gap that remains is larger than the one that was closed, and is worth
+writing down rather than implying it is fixed.** Node renders the same object in
+under **100KB** of stack; this profile needs about **875KB**. The obvious
+explanation — that node cuts the traverse off earlier — is wrong, and was
+checked rather than assumed: node's output for that object measures **1002
+levels of nesting and 135MB**, with the same `2 ** 27` budget cut-off firing and
+the same `[Object]` markers in it. Node performs the identical traverse. The
+whole difference is frame *size*: roughly 100 bytes per level against our 875.
+
+One tempting explanation was also eliminated. Our recursion path wraps its
+recursive call in `try/finally` to restore `indentationLvl` and pop `ctx.seen`,
+and node's `formatRaw` — read, not remembered — wraps its own recursive call in
+`try/catch` for the same reason. It is not the handler. What is left is register
+pressure across four functions on the recursion path, which is a V8 tuning
+exercise on the green axis, and the compiled axis is the product. Recorded as a
+named residual rather than carried as a mystery.
+
 **The previous revision of this section was wrong by about a thousand files, in
 the flattering direction.** It read 766 passing of 1,462 applicable with 22
 hollow. The modules had moved a long way past it -- `fs` from 72/214 to 328/328,
@@ -2687,6 +2724,19 @@ ENOENT: no such file or directory, stat '/nope/x'
 ```
 
 ## The compiled artifact, which is the gate and is entirely red
+
+**Latest measurement: still 0 of 22, and for the first time that number is one
+feature from moving.** `punycode` lowers completely — 21 functions, nothing
+refused, all of it verifying — builds to a 275KB `.node`, and computes
+`decode`, `encode`, `toASCII` and `toUnicode` correctly on real vectors while
+emitting DEP0040 through the native warning seam. Node's own test now fails on
+`Cannot read properties of undefined (reading 'encode')` rather than on
+`punycode.encode is not a function`: every assertion passes until it reaches
+`ucs2`, an exported object literal of two functions, which the backend cannot
+yet name. That measurement required routing around the annotated-const write
+refusal locally; the workaround was reverted and is not in the tree, so the
+figure is the compiled axis *with one gap bypassed* and is labelled as such
+wherever it appears. The full traverse is in `nodejs-plan.md`.
 
 `check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
 tests against it. That is the artifact that ships, and the `--ts` lane is the

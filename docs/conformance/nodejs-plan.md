@@ -110,11 +110,51 @@ axis. That would be the first non-zero this axis has ever reported.
 
 | # | blocker | state |
 | --- | --- | --- |
-| 1 | an annotated `const` takes its receiver type from the initializer | open, compiler lane |
+| 1 | an annotated `const` takes its receiver type from the initializer | **open**, compiler lane |
 | 2 | the Node-API wrapper never called `module__init` | **fixed**, verified here |
 | 3 | `build.sh` named three of the four generated `.c` files | **fixed**, this lane |
 | 4 | a compiled `throw` did not cross the boundary | **fixed**, and sufficient |
-| 5 | the addon exports functions only — no values, no namespaces | open, compiler lane |
+| 5a | the addon named exports after the function, not the binding | **fixed**, verified here |
+| 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
+| 5c | no exported object literal of functions — `ucs2` as a namespace | **open**, compiler lane |
+
+**Blocker 1 is half fixed, and the half that is left is the half that matters.**
+The first repro sent to the compiler lane was too weak: it *read* `w.message`,
+which `Error` declares, so it passed for a reason unrelated to the fix while the
+real pattern — *writing* a property `Error` does not declare — stayed refused.
+The isolation is two fixtures that attach the same type to the same value and
+differ only in how it is attached:
+
+    interface Tagged extends Error { code?: string }
+
+    const w: Tagged = new Error(m); w.code = c;     // NTS1001, `code`
+    function make(m: string): Tagged { ... }        // 2 functions, nothing refused
+    const w = make(m);              w.code = c;
+
+A declared **return type** widens the receiver and the member set follows; a
+`const` **annotation** does not. The capability is present and one path does not
+reach it. A class with a declared field compiles for the same reason.
+
+**Blocker 5 was three bugs wearing one symptom**, and the count matters more
+than the fix: "the addon exports functions only" was a description of what was
+observed, not of what was wrong. Exports were named after the function they were
+bound to rather than after the binding, so `export const upper = impl.upper`
+published and `export const alias = impl.upper` vanished — the same shape,
+working or not depending on whether two names happened to coincide. One function
+exported under two names published once. A module-private function was pruned out
+from under its own export, because reachability was rooted at the export flag,
+which a private function does not carry however many aliases export it. All three
+are fixed; verified in this lane on a fixture that publishes `direct`, `upper`,
+`alias` and `localAlias`, four names from three functions.
+
+**And an export the backend cannot represent now says so:**
+
+    no wrapper for ucs2: is exported and is not a function this backend can name
+    no wrapper for version: is exported and is not a function this backend can name
+
+That diagnostic is worth more than the feature it announces. The silent drop was
+the expensive half: a refusal costs an hour, and an export that is simply absent
+costs a day of chasing a runtime `is not a function` that names nothing.
 
 **Blocker 4 is fixed and sufficient, and the paragraph that used to be here was
 wrong.** It claimed the error class was flattened in a way that decided the
@@ -165,6 +205,55 @@ functions, no values, four tests — and its roots are all in `buffer`
 a conversion to number), not in itself.
 
 
+
+### punycode works as native code, and that is now measured rather than hoped
+
+The most useful thing found today is that there is nothing else wrong with it.
+The two open blockers are the entire remaining distance, and behind them the
+module is finished.
+
+Measured by applying the form-C workaround to `internal/process-warning.ts`
+**temporarily**, taking the numbers, and reverting it. It is not committed; the
+file is clean. Every figure below is therefore the compiled axis *with the
+receiver-type gap routed around locally*, and nothing else changed:
+
+    nts hir runtime/node/punycode/tsconfig.json
+      21 function(s), nothing refused
+      all of it verifies (21 after pruning unreachable functions)
+
+That is the whole module. **The earlier figure of 19 lowered, 1 refused and 6
+backend-refused is obsolete**: the six were downstream of the same root rather
+than independent, which is only visible once the root is gone. A cascade counted
+as six blockers is six times the work it actually is.
+
+It builds — `target/node/punycode.node`, 275120 bytes — and it computes:
+
+    decode("maana-pta")             -> "mañana"             ok
+    encode("mañana")                -> "maana-pta"          ok
+    toASCII("mañana.com")           -> "xn--maana-pta.com"  ok
+    toUnicode("xn--maana-pta.com")  -> "mañana.com"         ok
+
+Loading the addon also printed the real DEP0040 `DeprecationWarning`, so
+`module__init` ran and `emitWarning` crossed into the host through the native
+warning seam. The RFC 3492 codec, the surrogate pair handling, the unicode
+tables and the warning path all work as compiled native code.
+
+Against node's own test, the failure moved:
+
+    before:  punycode.encode is not a function
+    now:     Cannot read properties of undefined (reading 'encode')
+
+From "nothing is there" to "`ucs2` is undefined". The test's 10 `decode`, 7
+`encode`, 2 `toUnicode` and 2 `toASCII` assertions all pass before it reaches
+`ucs2.encode`. **One compiler feature and one type-checker path stand between
+this project and its first working compiled addon.**
+
+Ranked by what they buy: 5c buys the first module; blocker 1 buys most of the
+rest, since it is the same shape as the 21 root sites in `internal/errors.ts`
+that gate 20 of the 22 modules. If only one can be taken first, take blocker 1.
+
+The workaround was not kept, and should not be. A corpus bent around a compiler
+gap stops being evidence about node, which is the only thing it is for.
 
 The path was walked end to end by routing around the first refusal temporarily.
 The workaround was reverted; what it bought was an inventory, and **three of the
