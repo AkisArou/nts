@@ -8,8 +8,9 @@ on any of them.
 ## The situation in one paragraph
 
 Two axes move independently, and right now one is finished and the other has
-never started. **TypeScript-on-node: 1,786 of 1,786 across 22 modules, 0
-hollow, nothing failing.** **Compiled artifact: 0 of 22.** Not one module
+never started. **TypeScript-on-node: 1,787 of 1,787 across 22 modules, 0
+hollow, nothing failing.** **Compiled artifact: 0 of 22, and one compiler
+feature from 1.** Not one module
 produces a working addon. The project exists to compile TypeScript to native
 code, so the green axis is the *preparation* and the red one is the product. A
 plan that spends its next month on the green axis is a plan to build a very
