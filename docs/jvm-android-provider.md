@@ -221,11 +221,25 @@ Three things, and only one of them is code.
   manifestation is tested; only the hardware reordering that would expose a
   missing barrier is not. See `docs/records/0181` for the five routes and which
   one worked.
-- **An ARM device.** The emulator on this machine is `x86_64`, so the ordering
-  hazard is still unobtainable there too -- and an ARM system image under full
-  emulation is a model of a weak memory system rather than one, which is worth
-  no more than the x86 run.
-- **The command-line SDK tools, before API 26 can be tested at all.** There is
+- **An ARM device**, for the reordering itself. The emulator here is `x86_64`
+  and the only system image is `android-36.1`, so the hazard is unobtainable --
+  and an ARM image under full emulation is a *model* of a weak memory system
+  rather than one, worth no more than the x86 run.
+
+  The other half is done and is in the device suite: `tooling/android/
+  barrier.sh` compiles two methods differing only in the keyword with **ART's
+  own AOT compiler** and disassembles them with its own dumper. `volatile` gets
+  `lock add [rsp], 0` and plain gets nothing. That does not show the race; it
+  shows the compiler on the platform we ship to discharging the obligation the
+  JMM gives it, which is the mechanism ARM correctness rests on. It had been
+  written weeks before there was a device and never run.
+- **The command-line SDK tools, before API 26 can be *run* at all.** The
+  artifact question is answered without them: `SDK_MEMBERS` records every
+  Android member this library names with the level that introduced it, ten of
+  them, extracted from the constant pools rather than from a list of files.
+  `--min-api 26` only proves the bytecode is acceptable -- a call to a method
+  added in API 31 dexes perfectly well and throws `NoSuchMethodError` on the
+  floor we declare. What is missing is running *on* 26, and that needs: There is
   no `cmdline-tools` in this SDK and therefore no `sdkmanager` or `avdmanager`,
   so an API-26 system image cannot be installed and an AVD at that level cannot
   be created. Getting them means fetching an unpinned SDK component, which is
