@@ -2853,11 +2853,33 @@ compiled: object identity, prototype chains, error subclassing,
 `Symbol.toStringTag`. `local/*-static.js` is where those belong, because upstream
 will never assert them.
 
-`punycode/test/error-identity-static.js` is the first. It was proved by mutation
-rather than assumed: replacing `throw new RangeError(m)` with a plain `Error`
-carrying `name = "RangeError"` leaves `test-punycode.js` **passing** and fails
-the new file with *"decode(" ") threw RangeError that is not a RangeError"*.
-Upstream cannot see the defect; this can.
+Three exist now.
+
+**`punycode/test/error-identity-static.js`** was the first, and it was proved by
+mutation rather than assumed: replacing `throw new RangeError(m)` with a plain
+`Error` carrying `name = "RangeError"` leaves `test-punycode.js` **passing** and
+fails the new file with *"decode(" ") threw RangeError that is not a
+RangeError"*. Upstream cannot see the defect; this can. **It then found a real
+one on its first run against the compiled addon** — see blocker 6 in
+`nodejs-plan.md`.
+
+**`path/test/error-identity-static.js`** is the same for
+`ERR_INVALID_ARG_TYPE`, which is the most-thrown error in the profile:
+`validateString` is upstream of eleven of `path`'s exports by itself. Upstream
+asserts it as `{ code, name }` — two own properties, both assignable to a plain
+`Error`. Replacing `validateString`'s throw with exactly that leaves **all 17
+upstream `path` files passing** and fails only this one.
+
+**`buffer/test/uint8array-identity-static.js`** asserts that a `Buffer` is a
+`Uint8Array`. **Zero** of node's 76 `test-buffer-*.js` files check that. It is
+the most load-bearing structural invariant here — the relationship is what lets
+a `Buffer` reach anything expecting bytes, and `fs`, `stream`, `net` and `zlib`
+all move bytes through it. Unlike the other two it is *not* demonstrated by
+mutation, and the file says so: the invariant is structural, so the TypeScript
+edits that break it break indexing and every method with it, and upstream fails
+too. What is checked is that it is not hollow — blanking the module fails it on
+`Buffer.from` being undefined, so it is this profile's `Buffer` under test and
+not the host's.
 
 `check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
 tests against it. That is the artifact that ships, and the `--ts` lane is the
