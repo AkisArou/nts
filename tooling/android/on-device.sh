@@ -40,16 +40,40 @@ jar="$here/runtime/jvm/nts-runtime.jar"
 #     `-keep class org.nts.web.AndroidNetworking { public *; }`
 #
 # One of the three rules was guarding a class that was never there.
-javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
+#
+# `src/okhttp` too, and it was missing for the same reason and found the same
+# way: `consumer-rules.pro` keeps `OkHttpNetworking`, this script never compiled
+# it, and R8 said the rule matched nothing. That is the third time in this lane
+# that the keep rules and the compiled source list have disagreed. The rule and
+# the run are now wrong together or right together, which is the only
+# arrangement that stays true.
+#
+# The pinned dependencies come from the cache the Rust suite fills, because that
+# is where they are hash-verified against `dependencies.tsv`. Fetching them here
+# as well would be a second, unverified way to get the same jars.
+deps=${NTS_OKHTTP_DEPS:-${TMPDIR:-/tmp}/nts-okhttp-deps}
+okhttp=$(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar 2>/dev/null | tr '\n' ':')
+# `--lib` takes one file per flag, so the classpath form is no use to d8 or R8.
+okhttp_libs=$(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar 2>/dev/null \
+  | sed 's/^/--lib /' | tr '\n' ' ')
+[ -n "$okhttp" ] || {
+  echo "no pinned OkHttp jars in $deps -- run \`cargo test -p nts-codegen-jvm --test android\`" >&2
+  echo "once to fetch and hash-verify them, or set NTS_OKHTTP_DEPS" >&2
+  exit 1
+}
+
+javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes" \
   "$here"/runtime/jvm/web-platform/android/src/main/java/org/nts/web/*.java \
   "$here"/runtime/jvm/web-platform/android/src/android/java/org/nts/web/*.java \
+  "$here"/runtime/jvm/web-platform/android/src/okhttp/java/org/nts/web/*.java \
   "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
   "$here"/compiler/codegen/jvm/tests/inbox/Stress.java
 
 # shellcheck disable=SC2046
-"$tools/d8" --min-api 26 --lib "$platform" --output "$work/dex" \
+# shellcheck disable=SC2086
+"$tools/d8" --min-api 26 --lib "$platform" $okhttp_libs --output "$work/dex" \
   "$jar" $(find "$work/classes" -name '*.class')
 
 # The certificate names the *address*, because the imported suite connects to
@@ -100,7 +124,13 @@ if [ -n "$r8" ]; then
   # Both streams. R8 prints this on **stdout**, and capturing only stderr made
   # the check pass for a rule naming a class that does not exist -- a check
   # that could not fail, guarding against checks that cannot fail.
+  # The third-party jars as libraries rather than inputs: what is being shrunk
+  # is NTS-owned Java. Dexing OkHttp here would be measuring someone else's
+  # artifact, which `the_pinned_dependencies_dex_at_the_same_api_floor` already
+  # does on its own terms.
+  # shellcheck disable=SC2086
   java -cp "$r8" com.android.tools.r8.R8 --release --min-api 26 --lib "$platform" \
+    $okhttp_libs \
     --pg-conf "$here/runtime/jvm/web-platform/android/consumer-rules.pro" \
     --output "$work/shrunk" \
     $(find "$work/classes" -path '*org/nts/web/*' -name '*.class') > "$work/r8.log" 2>&1 || {
