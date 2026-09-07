@@ -2673,6 +2673,23 @@ The prose below was written against 1,509, and before that 946; read its
 > | `zlib` | 308 | | `querystring` | 137 |
 > | `stream` | 295 | | `punycode` | 6 |
 >
+> **And 95% of it is call cascades, which corrects the emphasis elsewhere on
+> this page.** Grouped by the reason the backend gives:
+>
+> ```
+> 4,267   cannot be compiled because it calls X      (95%)
+>   231   cannot be compiled because it reads X      (5%, all lost initializers)
+>    12   module#init itself
+> ```
+>
+> The `module#init` choke point is real and it is what empties five modules'
+> *export tables* — but it accounts for 231 of the 4,498, not the bulk. The
+> mass is ordinary cascade from root refusals: a function refused because
+> something it calls was refused. **Those are two different facts and this
+> document had been letting the first stand for both.** The choke point governs
+> whether a module publishes; the cascades govern how much of it would be there
+> if it did.
+>
 > Every module loses a substantial fraction, so this is not one pathological
 > case — it is the ordinary distance between the two stages. The compiler
 > session predicted the quantity existed and guessed its scale from the one
