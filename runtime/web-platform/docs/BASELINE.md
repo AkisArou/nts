@@ -5014,3 +5014,53 @@ It pairs with the correction two entries above. A backend defect behind a *langu
 refusal is invisible until the refusal is fixed; a backend defect behind a *permissive*
 backend is invisible until a stricter one sees it. Both are the same shape: the
 instrument's silence is a fact about the instrument.
+
+## The clock is agreed and still blocked, on something smaller than expected
+
+Both peer lanes answered the `MonotonicClock` proposal with device measurements, and the
+contract they produced between them is better than the one I proposed.
+
+**The JVM lane, on an API-26 device:** `System.nanoTime()` is non-decreasing over 200,000
+reads with a 36ns smallest step, so sub-millisecond precision is not the constraint. Its
+qualification is the important part — `CLOCK_MONOTONIC` **stalls** during deep sleep
+rather than reversing, so *non-decreasing* is keepable and *measures elapsed real time*
+is not. The stronger version would need `elapsedRealtimeNanos`, an Android SDK member,
+which would make the interface unimplementable as one thing.
+
+**The Node lane, on the host:** `performance.now()` is exactly this — milliseconds since
+`performance.timeOrigin`, backed by `uv_hrtime`, so a system clock change cannot move it.
+Not `process.hrtime.bigint()`, whose origin is documented as "an arbitrary time in the
+past" and which would put a `BigInt` in an interface two other providers implement.
+
+**And they corrected themselves before answering, which changed the contract.** They were
+going to say a worker thread has its own time origin, because that is how a browser
+behaves and what the specification asks for. Measured, Node's `performance.timeOrigin` is
+**process-wide**: every worker shares the main thread's, differing by 0.000 ms. So the
+contract must not promise per-realm origins *or* cross-thread comparability — the first
+is the spec's shape, the second is an accident of one host, and writing either down would
+make a correct provider look broken. What it should say is what a caller needs:
+*milliseconds since an origin fixed for the lifetime of this provider; two values from
+the same provider are comparable, values from different providers are not.*
+
+### The blocker is not the clock
+
+`Event.timeStamp` still cannot be implemented, and the reason turned out to be somewhere
+else entirely. An `Event` would reach a clock through the environment slot — except
+`currentWebPlatformRuntime()` **throws** when nothing is installed, and `new Event("x")`
+in a bare context must not throw. The environment ABI has a read and no way to ask
+whether there is anything to read.
+
+A `try`/`catch` around the environment read would work today and is the wrong answer.
+It puts a thrown exception in the constructor of the most-constructed object in the
+platform, on the path taken whenever no runtime is installed — and performance is the
+reason this project exists, so a design whose fallback is *throw and catch, every time*
+is not one to reach for quietly.
+
+So this is an environment-ABI question and it belongs to the compiler lane: a
+non-throwing way to ask whether a runtime is installed. It is a smaller thing than the
+clock, and until it exists, landing `MonotonicClock` on its own would put an interface in
+shared source that nothing can route through — which is the defect this lane has spent
+the day building a gate against.
+
+The two `Event.timeStamp` assertions stay visible. The contract above is recorded so the
+next attempt starts from two device measurements rather than from an argument.
