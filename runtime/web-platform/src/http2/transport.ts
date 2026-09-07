@@ -310,7 +310,7 @@ export class Http2Transport implements FetchTransport {
     let connection: Http2ClientConnection | null = null;
     try {
       const bytes = await this.connector.connect(
-        addressOf(request.url, this.connectTimeoutMs),
+        addressOf(request.url, this.connectTimeoutMs, ["h2"]),
         cancellation.signal,
       );
       if (!this.accepting) {

@@ -154,7 +154,7 @@ export class Http1Transport implements FetchTransport {
     if (serialized.bytes.length > this.limits.maxHeaderBytes)
       throw new LimitError("Request headers exceed configured limit");
     const lease = await this.pool.acquire(
-      addressOf(request.url, this.connectTimeout),
+      addressOf(request.url, this.connectTimeout, ["http/1.1"]),
       request.signal,
     );
     let uploadReader: ReadableStreamDefaultReader<Uint8Array> | null = null;

@@ -97,9 +97,11 @@ suite(
     const primitives = createHostNodePrimitives();
     const hostConnector = new HostNodeSocketConnector();
     let connectCalls = 0;
+    const connectAddresses = [];
     const connector = {
       connect(address, signal) {
         connectCalls++;
+        connectAddresses.push(address);
         return hostConnector.connect(address, signal);
       },
     };
@@ -145,6 +147,7 @@ suite(
       ],
     );
     assert.equal(connectCalls, 1);
+    assert.deepEqual(connectAddresses[0].alpnProtocols, ["h2"]);
   },
 );
 

@@ -4,7 +4,7 @@
 import { connect as tcpConnect, isIP } from "node:net";
 import type { Socket } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
-import { connect as tlsConnect } from "node:tls";
+import { checkServerIdentity, connect as tlsConnect } from "node:tls";
 import { randomFillSync } from "node:crypto";
 import { EOL } from "node:os";
 import { URL } from "node:url";
@@ -23,11 +23,26 @@ import type {
   RandomSource,
   Scheduler,
   SocketConnector,
+  TlsUpgrader,
   URLParser,
 } from "../../../runtime/web-platform/src/provider.ts";
 
 const MAX_IO_BYTES = 64 * 1024;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function requiredAlpn(address: ConnectAddress): readonly string[] {
+  return address.alpnProtocols ?? ["http/1.1"];
+}
+
+function validateAlpn(selected: string | false | null, requested: readonly string[]): void {
+  if (selected === false || selected === null || selected === "") {
+    if (requested.includes("http/1.1")) return;
+    throw new TypeError("TLS peer did not negotiate a required application protocol");
+  }
+  if (!requested.includes(selected)) {
+    throw new TypeError("TLS peer negotiated an unexpected application protocol: " + selected);
+  }
+}
 
 export const hostNodeURLs: URLParser = {
   parse(input, base) {
@@ -109,6 +124,15 @@ export class HostNodeScheduler implements Scheduler {
 /** Paused-mode reader. Node retains only its stream high-water mark when no one reads. */
 export class HostNodeReadable {
   private readonly input: Readable;
+  private readonly onReadable = (): void => this.pump();
+  private readonly onEnd = (): void => {
+    this.ended = true;
+    this.pump();
+  };
+  private readonly onError = (error: unknown): void => this.fail(error);
+  private readonly onClose = (): void => {
+    if (!this.ended && !this.failed) this.fail(new TypeError("Transport closed before EOF"));
+  };
   private pending: {
     max: number;
     result: PromiseWithResolvers<Uint8Array | null>;
@@ -119,15 +143,10 @@ export class HostNodeReadable {
 
   constructor(input: Readable) {
     this.input = input;
-    input.on("readable", () => this.pump());
-    input.on("end", () => {
-      this.ended = true;
-      this.pump();
-    });
-    input.on("error", (error) => this.fail(error));
-    input.on("close", () => {
-      if (!this.ended && !this.failed) this.fail(new TypeError("Transport closed before EOF"));
-    });
+    input.on("readable", this.onReadable);
+    input.on("end", this.onEnd);
+    input.on("error", this.onError);
+    input.on("close", this.onClose);
   }
 
   read(max: number): Promise<Uint8Array | null> {
@@ -178,6 +197,15 @@ export class HostNodeReadable {
     this.pending = null;
     pending?.result.reject(error);
   }
+
+  /** Stop consuming the plaintext socket before a provider wraps it in TLS. */
+  detach(): void {
+    if (this.pending !== null) throw new TypeError("Cannot start TLS during a pending read");
+    this.input.off("readable", this.onReadable);
+    this.input.off("end", this.onEnd);
+    this.input.off("error", this.onError);
+    this.input.off("close", this.onClose);
+  }
 }
 
 export class HostNodeByteConnection implements ByteConnection {
@@ -185,25 +213,28 @@ export class HostNodeByteConnection implements ByteConnection {
   private readonly reader: HostNodeReadable;
   private writer: PromiseWithResolvers<number> | null = null;
   private locallyClosed = false;
+  private readonly onSocketError = (error: unknown): void => {
+    this.writer?.reject(error);
+    this.writer = null;
+  };
+  private readonly onSocketClose = (): void => {
+    this.writer?.reject(new TypeError("Socket closed during write"));
+    this.writer = null;
+  };
 
   constructor(socket: Socket) {
     this.socket = socket;
     this.reader = new HostNodeReadable(socket);
     socket.setNoDelay(true);
-    socket.on("error", (error) => {
-      this.writer?.reject(error);
-      this.writer = null;
-    });
-    socket.on("close", () => {
-      this.writer?.reject(new TypeError("Socket closed during write"));
-      this.writer = null;
-    });
+    socket.on("error", this.onSocketError);
+    socket.on("close", this.onSocketClose);
   }
 
   get closed(): boolean {
     return this.locallyClosed || this.socket.destroyed || this.socket.readableEnded;
   }
   read(maxBytes: number): Promise<Uint8Array | null> {
+    if (this.locallyClosed) return Promise.reject(new TypeError("Socket is closed"));
     return this.reader.read(maxBytes);
   }
   write(data: Uint8Array): Promise<number> {
@@ -237,6 +268,17 @@ export class HostNodeByteConnection implements ByteConnection {
     this.writer = null;
     this.socket.destroy();
   }
+
+  /** @internal Host-only ownership transfer used by HostNodeTlsUpgrader. */
+  detachForTls(): Socket {
+    if (this.locallyClosed) throw new TypeError("Socket is closed");
+    if (this.writer !== null) throw new TypeError("Cannot start TLS during a pending write");
+    this.reader.detach();
+    this.socket.off("error", this.onSocketError);
+    this.socket.off("close", this.onSocketClose);
+    this.locallyClosed = true;
+    return this.socket;
+  }
 }
 
 export interface HostNodeSocketOptions {
@@ -268,7 +310,7 @@ export class HostNodeSocketConnector implements SocketConnector {
             servername: isIP(address.hostname) === 0 ? address.hostname : undefined,
             rejectUnauthorized: true,
             minVersion: "TLSv1.2",
-            ALPNProtocols: ["http/1.1"],
+            ALPNProtocols: requiredAlpn(address).slice(),
             ca,
           })
         : tcpConnect({ host: physicalHostname, port: address.port });
@@ -305,11 +347,101 @@ export class HostNodeSocketConnector implements SocketConnector {
           finishError(signal.reason);
           return;
         }
+        if (address.secure) {
+          try {
+            if (!("alpnProtocol" in socket)) throw new TypeError("TLS socket has no ALPN result");
+            validateAlpn(socket.alpnProtocol, requiredAlpn(address));
+          } catch (error) {
+            finishError(error);
+            return;
+          }
+        }
         settled = true;
         const connection = new HostNodeByteConnection(socket);
         cleanup();
         resolve(connection);
       });
+    });
+  }
+}
+
+/** Host-only TLS primitive used to test shared CONNECT/SOCKS tunnel policy. */
+export class HostNodeTlsUpgrader implements TlsUpgrader {
+  private readonly options: HostNodeSocketOptions;
+
+  constructor(options: HostNodeSocketOptions = {}) {
+    this.options = options;
+  }
+
+  upgrade(
+    connection: ByteConnection,
+    target: ConnectAddress,
+    signal: AbortSignal,
+  ): Promise<ByteConnection> {
+    if (!(connection instanceof HostNodeByteConnection)) {
+      return Promise.reject(new TypeError("Host TLS requires a HostNodeByteConnection"));
+    }
+    if (!target.secure) return Promise.reject(new TypeError("TLS target must be secure"));
+    if (signal.aborted) {
+      connection.close();
+      return Promise.reject(signal.reason);
+    }
+    let raw: Socket;
+    try {
+      raw = connection.detachForTls();
+    } catch (error) {
+      connection.close();
+      return Promise.reject(error);
+    }
+    return new Promise<ByteConnection>((resolve, reject) => {
+      const ca = typeof this.options.ca === "string" ? this.options.ca : this.options.ca?.slice();
+      const socket = tlsConnect({
+        socket: raw,
+        servername: isIP(target.hostname) === 0 ? target.hostname : undefined,
+        checkServerIdentity: (_hostname, certificate) =>
+          checkServerIdentity(target.hostname, certificate),
+        rejectUnauthorized: true,
+        minVersion: "TLSv1.2",
+        ALPNProtocols: requiredAlpn(target).slice(),
+        ca,
+      });
+      let settled = false;
+      let unsubscribe = (): void => {};
+      const cleanup = (): void => {
+        unsubscribe();
+        socket.off("error", fail);
+        socket.off("close", closed);
+        socket.off("secureConnect", connected);
+      };
+      const fail = (error: unknown): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        socket.on("error", () => {});
+        socket.destroy();
+        reject(error);
+      };
+      const closed = (): void => fail(new TypeError("TLS tunnel closed during handshake"));
+      const connected = (): void => {
+        if (settled) return;
+        if (signal.aborted) {
+          fail(signal.reason);
+          return;
+        }
+        try {
+          validateAlpn(socket.alpnProtocol, requiredAlpn(target));
+        } catch (error) {
+          fail(error);
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(new HostNodeByteConnection(socket));
+      };
+      socket.once("error", fail);
+      socket.once("close", closed);
+      socket.once("secureConnect", connected);
+      unsubscribe = signal.subscribe(() => fail(signal.reason));
     });
   }
 }

@@ -91,7 +91,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
     signal: AbortSignal,
   ): Promise<WebSocketSession> {
     const connection = await this.sockets.connect(
-      addressOf(handshake.url, this.options.connectTimeoutMs ?? 30000),
+      addressOf(handshake.url, this.options.connectTimeoutMs ?? 30000, ["http/1.1"]),
       signal,
     );
     const dispose = signal.subscribe(() => connection.close());

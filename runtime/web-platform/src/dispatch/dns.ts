@@ -623,14 +623,25 @@ export class DnsConnector implements SocketConnector {
       active++;
       const controller = new AbortController();
       controllers.add(controller);
-      const target: ConnectAddress = {
-        hostname: logical.hostname,
-        port: logical.port,
-        secure: logical.secure,
-        connectTimeoutMs: logical.connectTimeoutMs,
-        resolvedAddress: resolved.address,
-        resolvedFamily: resolved.family,
-      };
+      const target: ConnectAddress =
+        logical.alpnProtocols === undefined
+          ? {
+              hostname: logical.hostname,
+              port: logical.port,
+              secure: logical.secure,
+              connectTimeoutMs: logical.connectTimeoutMs,
+              resolvedAddress: resolved.address,
+              resolvedFamily: resolved.family,
+            }
+          : {
+              hostname: logical.hostname,
+              port: logical.port,
+              secure: logical.secure,
+              connectTimeoutMs: logical.connectTimeoutMs,
+              alpnProtocols: logical.alpnProtocols,
+              resolvedAddress: resolved.address,
+              resolvedFamily: resolved.family,
+            };
       connectWith(this.connector, target, controller.signal).then(
         (connection) => {
           controllers.delete(controller);

@@ -1,7 +1,11 @@
 import type { ConnectAddress, URLRecord } from "../provider/primitives.ts";
 
 /** Convert a parsed network URL to the provider-neutral socket boundary. */
-export function addressOf(url: URLRecord, connectTimeoutMs: number): ConnectAddress {
+export function addressOf(
+  url: URLRecord,
+  connectTimeoutMs: number,
+  alpnProtocols: readonly string[],
+): ConnectAddress {
   const secure = url.protocol === "https:" || url.protocol === "wss:";
   const hostname =
     url.hostname.startsWith("[") && url.hostname.endsWith("]")
@@ -12,5 +16,6 @@ export function addressOf(url: URLRecord, connectTimeoutMs: number): ConnectAddr
     port: url.port === "" ? (secure ? 443 : 80) : Number(url.port),
     secure,
     connectTimeoutMs,
+    alpnProtocols,
   };
 }

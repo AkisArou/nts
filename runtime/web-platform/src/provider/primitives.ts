@@ -43,6 +43,8 @@ export interface ConnectAddress {
   readonly port: number;
   readonly secure: boolean;
   readonly connectTimeoutMs: number;
+  /** Ordered application protocols required of a TLS connection. */
+  readonly alpnProtocols?: readonly string[];
   /** Optional physical endpoint selected by the shared resolver; never use it as TLS identity. */
   readonly resolvedAddress?: string;
   readonly resolvedFamily?: DnsAddressFamily;
@@ -90,6 +92,21 @@ export interface ByteConnection {
 
 export interface SocketConnector {
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection>;
+}
+
+/**
+ * Provider-owned TLS over an already connected byte stream.
+ *
+ * The target carries the logical hostname used for SNI and certificate
+ * verification. The upgrader consumes the input connection immediately and must
+ * close it if the handshake fails; callers never reuse the plaintext handle.
+ */
+export interface TlsUpgrader {
+  upgrade(
+    connection: ByteConnection,
+    target: ConnectAddress,
+    signal: AbortSignal,
+  ): Promise<ByteConnection>;
 }
 
 export interface PlatformPrimitives {

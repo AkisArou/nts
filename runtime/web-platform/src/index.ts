@@ -114,6 +114,21 @@ export {
   DnsNoAddressError,
 } from "./dispatch/dns.ts";
 export type { DnsCacheOptions, DnsCacheStats, DnsConnectorOptions } from "./dispatch/dns.ts";
+export {
+  HttpConnectProxyConnector,
+  ProxyConfigurationError,
+  ProxyResponseError,
+  Socks5ProxyConnector,
+  Socks5ProxyError,
+} from "./dispatch/proxy.ts";
+export type {
+  HttpConnectProxyOptions,
+  ProxyAuthenticationContext,
+  ProxyAuthenticator,
+  ProxyEndpoint,
+  ProxyKind,
+  Socks5ProxyOptions,
+} from "./dispatch/proxy.ts";
 export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
 export type {
   AgentOptions,

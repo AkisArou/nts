@@ -22,7 +22,7 @@ export function tlsFixture() {
         "-subj",
         "/CN=NTS test only",
         "-addext",
-        "subjectAltName=IP:127.0.0.1",
+        "subjectAltName=IP:127.0.0.1,DNS:target.test",
         "-keyout",
         join(dir, "key.pem"),
         "-out",
