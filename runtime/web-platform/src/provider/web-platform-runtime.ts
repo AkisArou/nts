@@ -36,8 +36,13 @@ import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
 import type { RawWebSocketOptions } from "../websocket/raw-transport.ts";
 import type { WebSocketDeflateProvider, WebSocketTransport } from "../websocket/transport.ts";
-import { WebSocket, type WebSocketContext } from "../websocket/websocket.ts";
 import {
+  createInternalWebSocket,
+  WebSocket,
+  type WebSocketContext,
+} from "../websocket/websocket.ts";
+import {
+  createInternalWebSocketStream,
   WebSocketStream,
   type WebSocketStreamContext,
   type WebSocketStreamOptions,
@@ -238,12 +243,12 @@ export class WebPlatformRuntime
 
   createWebSocket(url: string, protocols: string | readonly string[] = []): WebSocket {
     if (this.closed) throw new TypeError("Web-platform runtime is closed");
-    return new WebSocket(url, protocols, this);
+    return createInternalWebSocket(url, protocols, this);
   }
 
   createWebSocketStream(url: string, options: WebSocketStreamOptions | null = {}): WebSocketStream {
     if (this.closed) throw new TypeError("Web-platform runtime is closed");
-    return new WebSocketStream(url, options, this);
+    return createInternalWebSocketStream(url, options, this);
   }
 
   registerWebSocket(socket: WebSocket): void {

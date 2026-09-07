@@ -9,7 +9,7 @@ import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import { bytesStream, ReadableStream } from "../streams/readable.ts";
 import { BodyState } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
-import { Request, validateRequestURL } from "./request.ts";
+import { createInternalRequest, Request, validateRequestURL } from "./request.ts";
 import type { RequestContext, RequestInit } from "./request.ts";
 import { isRedirectStatus, nullBodyStatus, Response } from "./response.ts";
 import type {
@@ -191,7 +191,7 @@ export class FetchClient {
 
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
     // Construction errors reject this async API; the constructor still throws synchronously.
-    const request = new Request(input, init, this.context);
+    const request = createInternalRequest(input, init, this.context);
     request.signal.throwIfAborted();
     let url = request.parsedURL;
     const initialURL = url;

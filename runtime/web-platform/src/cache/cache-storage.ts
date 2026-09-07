@@ -7,7 +7,7 @@ import {
   requireArguments,
   requireDictionary,
 } from "../core/webidl.ts";
-import { Request } from "../fetch/request.ts";
+import { createInternalRequest, Request } from "../fetch/request.ts";
 import type {
   ReferrerPolicy,
   RequestCache,
@@ -287,11 +287,11 @@ function convertMultiQueryOptions(
 }
 
 function convertRequestInfo(input: RequestInfo, context: RequestContext): Request {
-  return input instanceof Request ? input : new Request(input, undefined, context);
+  return input instanceof Request ? input : createInternalRequest(input, undefined, context);
 }
 
 function cloneRequestForFetch(input: RequestInfo, context: RequestContext): Request {
-  return new Request(input, undefined, context);
+  return createInternalRequest(input, undefined, context);
 }
 
 function convertRequestSequence(input: Iterable<RequestInfo>): RequestInfo[] {
@@ -375,7 +375,7 @@ async function responseRecord(response: Response): Promise<CacheStorageResponseR
 }
 
 function restoreRequest(record: CacheStorageRequestRecord, context: RequestContext): Request {
-  const request = new Request(
+  const request = createInternalRequest(
     record.url,
     {
       method: record.method,
@@ -563,7 +563,7 @@ async function fetchCacheOperations(
     const source = cloneRequestForFetch(input, requestContext);
     ensureCacheableRequest(source);
     requestList.push(
-      new Request(
+      createInternalRequest(
         source,
         {
           cache: source.cache,

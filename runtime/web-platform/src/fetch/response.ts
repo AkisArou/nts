@@ -59,6 +59,8 @@ export function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
+const responseConstructorKey: unique symbol = Symbol("construct NTS Response");
+
 export class Response extends Body {
   private readonly context: ResponseContext;
   private responseStatus: number;
@@ -69,16 +71,23 @@ export class Response extends Body {
   private responseType: ResponseType = "default";
 
   constructor(body?: BodyInit | null, init?: ResponseInit);
-  /** @internal */ constructor(
+  /** @internal Reached only through {@link createInternalResponse}. */ constructor(
     body: BodyInit | null | undefined,
     init: ResponseInit | null | undefined,
-    context: ResponseContext,
+    key: typeof responseConstructorKey,
+    internalContext: ResponseContext,
   );
   constructor(
     body: BodyInit | null = null,
     init: ResponseInit | null = {},
-    context: ResponseContext = currentWebPlatformRuntime().requestContext,
+    key: typeof responseConstructorKey | undefined = undefined,
+    internalContext: ResponseContext | undefined = undefined,
   ) {
+    // The public API is `(body, init)`. Surplus arguments are ignored because the
+    // construction key is module-private and therefore unforgeable by script, so a
+    // caller cannot substitute the body policy or randomness this response uses.
+    const internal = key === responseConstructorKey && internalContext !== undefined;
+    const context = internal ? internalContext : currentWebPlatformRuntime().requestContext;
     // Web IDL converts arguments left to right before the constructor algorithm.
     const convertedBody = convertBodyInit(body);
     const convertedInit = convertResponseInit(init);
@@ -136,7 +145,7 @@ export class Response extends Body {
 
   clone(): Response {
     const state = this.bodyState.clone();
-    const copy = new Response(
+    const copy = createInternalResponse(
       null,
       {
         status: this.status === 0 ? 200 : this.status,
@@ -202,7 +211,7 @@ export class Response extends Body {
     redirected: boolean,
     context: ResponseContext,
   ): Response {
-    const result = new Response(null, { status, statusText, headers }, context);
+    const result = createInternalResponse(null, { status, statusText, headers }, context);
     result.bodyState = new BodyState(
       stream,
       result.headers.get("content-type"),
@@ -228,7 +237,7 @@ export class Response extends Body {
     type: ResponseType,
     context: ResponseContext,
   ): Response {
-    const result = new Response(
+    const result = createInternalResponse(
       body,
       { status: status === 0 ? 200 : status, statusText, headers },
       context,
@@ -244,4 +253,18 @@ export class Response extends Body {
   get [Symbol.toStringTag](): string {
     return "Response";
   }
+}
+
+/**
+ * Construct a Response owned by an explicit context.
+ *
+ * The capability travels through this module-private factory rather than a public
+ * constructor argument, so script cannot supply it as a surplus argument.
+ */
+function createInternalResponse(
+  body: BodyInit | null | undefined,
+  init: ResponseInit | null | undefined,
+  context: ResponseContext,
+): Response {
+  return new Response(body, init, responseConstructorKey, context);
 }

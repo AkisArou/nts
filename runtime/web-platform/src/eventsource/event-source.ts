@@ -246,17 +246,14 @@ export class EventSource extends EventTarget {
     listener: null,
   };
 
-  constructor(url: string, init?: EventSourceInit);
-  /** @internal */ constructor(
-    url: string,
-    init: EventSourceInit | undefined,
-    context: EventSourceContext,
-  );
-  constructor(...args: [url: string, init?: EventSourceInit, context?: EventSourceContext]) {
+  constructor(...args: [url: string, init?: EventSourceInit]) {
     requireArguments(args, 1, "EventSource constructor");
     const input = coerceToUSVString(args[0]);
     const withCredentials = convertEventSourceInit(args[1]);
-    const context = args[2] ?? currentWebPlatformRuntime();
+    // The public API is `(url, init)`. Nothing constructs an EventSource with an
+    // explicit context, so the capability is never an argument: it is read from the
+    // environment and cannot be substituted by a surplus argument.
+    const context = currentWebPlatformRuntime();
     super();
     this.setErrorReporter((error) => context.scheduler.reportError(error));
     try {

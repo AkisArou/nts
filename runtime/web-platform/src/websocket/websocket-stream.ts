@@ -85,6 +85,8 @@ export class WebSocketError extends DOMException {
 type ConnectionState = "connecting" | "open" | "closing" | "closed";
 type CloseOrigin = "public" | "readable-cancel" | "writable-abort" | "writable-close";
 
+const webSocketStreamConstructorKey: unique symbol = Symbol("construct NTS WebSocketStream");
+
 /** A backpressure-aware WebSocket exposed as a readable/writable stream pair. */
 export class WebSocketStream {
   readonly url: string;
@@ -113,21 +115,30 @@ export class WebSocketStream {
   #registered = false;
 
   constructor(url: string, options?: WebSocketStreamOptions | null);
-  /** @internal */ constructor(
+  /** @internal Reached only through {@link createInternalWebSocketStream}. */ constructor(
     url: string,
     options: WebSocketStreamOptions | null | undefined,
+    key: typeof webSocketStreamConstructorKey,
     context: WebSocketStreamContext,
   );
   constructor(
     ...args: [
       url: string,
       options?: WebSocketStreamOptions | null,
+      key?: typeof webSocketStreamConstructorKey,
       context?: WebSocketStreamContext,
     ]
   ) {
     requireArguments(args, 1, "WebSocketStream constructor");
     requireDictionary(args[1], "WebSocketStream options");
-    const context = args[2] ?? currentWebPlatformRuntime();
+    // The public API is `(url, options)`. Surplus arguments are ignored because the
+    // construction key is module-private and therefore unforgeable by script, so a
+    // caller cannot substitute the transports, proxy policy or scheduler in use.
+    const supplied = args[3];
+    const context =
+      args[2] === webSocketStreamConstructorKey && supplied !== undefined
+        ? supplied
+        : currentWebPlatformRuntime();
     const parsed = normalizeWebSocketURL(args[0], context);
     const protocols = readProtocols(args[1]?.protocols);
     const signal = args[1]?.signal;
@@ -499,4 +510,18 @@ function createConnectionError(message: string, close: NormalizedWebSocketClose)
     key: internalErrorKey,
     reason: close.reason,
   });
+}
+
+/**
+ * @internal Construct a WebSocketStream owned by an explicit runtime.
+ *
+ * The capability travels through this module-private factory rather than a public
+ * constructor argument, so script cannot supply it as a surplus argument.
+ */
+export function createInternalWebSocketStream(
+  url: string,
+  options: WebSocketStreamOptions | null | undefined,
+  context: WebSocketStreamContext,
+): WebSocketStream {
+  return new WebSocketStream(url, options, webSocketStreamConstructorKey, context);
 }

@@ -40,6 +40,8 @@ interface PendingSend {
   value: string | Blob | Uint8Array;
 }
 
+const webSocketConstructorKey: unique symbol = Symbol("construct NTS WebSocket");
+
 export class WebSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -117,16 +119,29 @@ export class WebSocket extends EventTarget {
   }
 
   constructor(url: string, protocols?: string | readonly string[]);
-  /** @internal */ constructor(
+  /** @internal Reached only through {@link createInternalWebSocket}. */ constructor(
     url: string,
     protocols: string | readonly string[] | undefined,
+    key: typeof webSocketConstructorKey,
     context: WebSocketContext,
   );
   constructor(
-    ...args: [url: string, protocols?: string | readonly string[], context?: WebSocketContext]
+    ...args: [
+      url: string,
+      protocols?: string | readonly string[],
+      key?: typeof webSocketConstructorKey,
+      context?: WebSocketContext,
+    ]
   ) {
     requireArguments(args, 1, "WebSocket constructor");
-    const context = args[2] ?? currentWebPlatformRuntime();
+    // The public API is `(url, protocols)`. Surplus arguments are ignored because the
+    // construction key is module-private and therefore unforgeable by script, so a
+    // caller cannot substitute the transports, proxy policy or scheduler in use.
+    const supplied = args[3];
+    const context =
+      args[2] === webSocketConstructorKey && supplied !== undefined
+        ? supplied
+        : currentWebPlatformRuntime();
     super();
     this.setErrorReporter((error) => context.scheduler.reportError(error));
     this.context = context;
@@ -318,4 +333,18 @@ function isSocketMessageEvent(event: Event): event is MessageEvent<WebSocketData
   if (!(event instanceof MessageEvent)) return false;
   const data: unknown = event.data;
   return typeof data === "string" || data instanceof Blob || data instanceof ArrayBuffer;
+}
+
+/**
+ * @internal Construct a WebSocket owned by an explicit runtime.
+ *
+ * The capability travels through this module-private factory rather than a public
+ * constructor argument, so script cannot supply it as a surplus argument.
+ */
+export function createInternalWebSocket(
+  url: string,
+  protocols: string | readonly string[] | undefined,
+  context: WebSocketContext,
+): WebSocket {
+  return new WebSocket(url, protocols, webSocketConstructorKey, context);
 }

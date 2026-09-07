@@ -218,14 +218,16 @@ have landed partially or completely since the plan baseline. Inspect current cod
 rebuild the compiler, and measure the current source; do not preserve a stale refusal
 count or add a temporary source substitute.
 
-### Public constructor capability injection remains transitional
+### Public constructor capability injection is closed
 
-Request, Response, EventSource, WebSocket, and WebSocketStream now default to the
-current environment, but several internal overload implementations still inspect an
-extra context argument. Audit and replace those escape hatches with private/internal
-factories whose capability cannot be supplied as an extra JavaScript argument.
-Web-facing constructors must ignore surplus arguments according to their real API;
-provider context must remain environment-owned.
+Resolved. Request, Response, EventSource, WebSocket, and WebSocketStream no longer
+accept a provider context as a surplus JavaScript argument. Each class gates internal
+construction behind a module-private `unique symbol` key and an internal factory, in
+the convention already used by `abortSignalConstructorKey`; EventSource lost its third
+parameter outright because nothing constructed it with an explicit context. See the
+"Environment-owned capability confinement in public constructors" entry in
+`runtime/web-platform/docs/BASELINE.md` for the tests, the three sabotages, and the
+resulting compiler dependency on `unique symbol` representation.
 
 ### Node URL and event reconciliation is coordinated follow-on work
 
@@ -282,8 +284,8 @@ positive and collection-bounded tests.
    including direct, HTTP-proxy tunnel, and SOCKS routes.
 4. Add a SOCKS pooling regression proving two logical target origins never reuse one
    target-bound tunnel merely because the proxy endpoint is the same.
-5. Remove the remaining public constructor context-injection paths while preserving
-   internal construction and identity.
+5. Done. The public constructor context-injection paths are removed and internal
+   construction and identity are preserved; see the ledger entry named above.
 6. Audit graceful HTTP/2 drain against a connect that is still opening. In particular,
    prove `drain()` cannot report completion while provider work from a cancelled open
    remains outstanding, even if cancellation settles late.

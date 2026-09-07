@@ -1974,3 +1974,111 @@ primary `NTS1001` refusals and 205 dependent `NTS1003` cascades, with zero `NTS1
 module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. The increase
 is new shared dispatcher source reaching existing language prerequisites; it is not
 compiled pool evidence.
+
+## Proxy routing and the environment-owned runtime
+
+These commits followed the dispatcher-pool entry above and were recorded in
+`docs/web-platform-node-lane-handoff.md` rather than here. They are summarized now so
+the ledger is continuous again; each was verified in its own commit, and this entry
+does not re-measure them.
+
+- `8948eca6` added portable HTTP CONNECT and SOCKS5 tunnel connectors.
+- `52b629fa` added environment proxy policy with modern Undici-style `NO_PROXY`
+  matching.
+- `93364490` added proxy dispatch agents, including absolute-form HTTP and tunneled
+  TLS.
+- `185145f9` and `1db768c0` routed protocol connections and sockets through the
+  environment policy.
+- `44eea06a` made `WebPlatformRuntime` the owner of the proxy routing used by Fetch,
+  EventSource and WebSocket.
+- `dcfb2a78` separated graceful pool drain from forceful destroy.
+- `03c03d93` removed the repeated ambient declarations and made the environment slot
+  the single shared access seam. `runtime/web-platform/src/provider/environment.ts`
+  owns the typed ambient natives `nts_environment_install_platform` and
+  `nts_environment_platform`; the ordinary-Node conformance host supplies a
+  deliberately host-only single-runtime shim, and shared TypeScript contains no
+  process-global fallback.
+
+The security invariants established across those commits — TLS identity verified
+against the logical target rather than the proxy, typed proxy authentication, dynamic
+bypass policy, and provider shutdown — are preserved by the entry below.
+
+## Environment-owned capability confinement in public constructors
+
+The transitional constructor capability injection recorded as an open decision in the
+Node-lane handoff is closed. `Request`, `Response`, `WebSocket`, `WebSocketStream` and
+`EventSource` previously accepted a provider context as a surplus third JavaScript
+argument. Script holding any `WebPlatformRuntime` could therefore bind a canonical Web
+value to that runtime and substitute the URL parser, body policy, randomness,
+transports and proxy policy the value used, even though the environment slot was
+already the intended single source of that capability.
+
+Each class now has a module-private `unique symbol` construction key, the same
+convention already used by `abortSignalConstructorKey`. A public constructor ignores
+surplus arguments: a third argument that is not the key leaves the value bound to the
+environment's runtime. Internal construction travels through factories instead of a
+public parameter — `createInternalRequest` for Fetch and Cache, module-private
+`createInternalResponse` for `clone()`, `fromTransport()` and `fromCache()`, and
+`createInternalWebSocket`/`createInternalWebSocketStream` for the runtime's own
+factories. `EventSource` had no internal caller with an explicit context, so its third
+parameter is removed outright rather than gated. Constructor identity, public arity and
+the Web IDL conversion order are unchanged; no process-global, cast or prototype
+workaround was introduced.
+
+Two focused tests cover both directions. The first proves the public constructors
+ignore a surplus capability: a second live runtime is passed at the old injection
+position and the environment's base URL, body policy and WebSocket transport are still
+the ones used. The second proves internal factories still deliver an explicit
+capability: `Cache` reaches the internal Request and Response factories, so the
+non-ambient runtime's base URL resolves the stored request and that runtime's
+four-byte consumption limit governs the response it produced, while the runtime's own
+`createWebSocket`/`createWebSocketStream` bind to that runtime's transport. A live
+second runtime is used deliberately as the forged capability, because it is the most
+plausible thing a caller could obtain and it fails loudly rather than inertly.
+
+Three sabotages were run, each with a fresh host emit and a verified precondition.
+Restoring the context to public position three on `Request` made the focused suite fall
+from 2/2 to 1/2, resolving `https://other.test/relative` instead of
+`https://environment.test/base/relative`. The same restoration on `WebSocket` made the
+environment transport carry one socket instead of two. Making the internal Response
+factory drop its context produced `Missing expected rejection`, because the cached
+response then consumed past the owning runtime's four-byte limit. The third sabotage
+also caught a real defect during development: `createInternalResponse` was initially
+dead code, because `clone()` and the two static factories still called the constructor
+directly. Every internal construction was rerouted through the factory before the
+sabotage was rerun, and all three were restored to green.
+
+The complete local Node-host/real-socket corpus passes 404/404 with zero skipped, up
+from the 402/402 checkpoint by exactly these two tests, and the new file is registered
+in `tooling/conformance/web-platform/check.sh`. The pinned upstream corpus is unchanged
+at 2,300 total, 2,286 applicable, 2,278 passing, 8 failing and 14 named
+not-applicable, with the same eight visible structural/common-compiler failures and the
+same expected nonzero exit. The root TypeScript solution build is green. This is host
+evidence for the shared algorithm; it is not compiled-provider evidence.
+
+The NTS frontier was measured with the release binary present in this tree at
+2026-09-07 12:43, against repository HEAD `7a376cde`. That binary reproduces the
+handoff's recorded 1,264/228 figures exactly for unmodified source, which is why it is
+named rather than replaced: two JVM codegen files postdate it and the compiler lane's
+`compiler/core/src/hir` files are dirty in the shared worktree, so rebuilding would have
+overwritten a binary the other lanes are using. Because the compiler is moving, the
+delta was isolated by measuring HEAD's source and this slice's source with that one
+binary rather than comparing against a figure produced by a different compiler.
+
+Before: 1,264 primary `NTS1001`, 228 `NTS1003`, zero `NTS1004`, zero `NTS4xxx`, no
+invalid HIR. After: 1,266 primary `NTS1001`, 228 `NTS1003`, zero `NTS1004`, zero
+`NTS4xxx`, no invalid HIR. The net two-primary increase is seven new messages against
+five that disappeared. Five of the seven name the construction keys directly: two
+module-scope key constants of unrepresentable type, and three key-typed parameters
+(`requestConstructorKey`, a `requestConstructorKey | undefined` union, and
+`webSocketConstructorKey`). This makes the `unique symbol` construction-key
+representation an explicit compiler dependency of this lane; it is reported rather than
+avoided, since the alternative is either a process-global capability slot or leaving the
+injection hatch open. The remaining two new messages and the five that disappeared are
+reachability movement caused by the changed overload declarations, including four
+`a method without a body` diagnostics. Those per-site attributions are not
+independently verified: this `check` output carries no source locations, so the
+accounting is a set difference over diagnostic text.
+
+The counts are a dependency frontier, not completed compiler work and not a
+regression.

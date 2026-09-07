@@ -338,6 +338,8 @@ export function validateRequestURL(url: URLRecord): void {
     throw new TypeError("Credentials in URLs are not permitted");
 }
 
+const requestConstructorKey: unique symbol = Symbol("construct NTS Request");
+
 export class Request extends Body {
   private readonly requestMethod: string;
   private readonly requestHeaders: Headers;
@@ -361,20 +363,30 @@ export class Request extends Body {
   private readonly context: RequestContext;
 
   constructor(input: string | Request, init?: RequestInit);
-  /** @internal */ constructor(
+  /** @internal Reached only through {@link createInternalRequest}. */ constructor(
     input: string | Request,
     init: RequestInit | null | undefined,
-    context: RequestContext,
-    blobURLObject?: Blob | null,
-    metadata?: RequestInternalMetadata,
+    key: typeof requestConstructorKey,
+    internalContext: RequestContext,
+    internalBlobURLObject?: Blob | null,
+    internalMetadata?: RequestInternalMetadata,
   );
   constructor(
     input: string | Request,
     init: RequestInit | null | undefined = undefined,
-    context: RequestContext = currentWebPlatformRuntime().requestContext,
-    blobURLObject: Blob | null | undefined = undefined,
-    metadata: RequestInternalMetadata | undefined = undefined,
+    key: typeof requestConstructorKey | undefined = undefined,
+    internalContext: RequestContext | undefined = undefined,
+    internalBlobURLObject: Blob | null | undefined = undefined,
+    internalMetadata: RequestInternalMetadata | undefined = undefined,
   ) {
+    // The public API is `(input, init)`. Surplus arguments are ignored because the
+    // construction key is module-private and therefore unforgeable by script, so a
+    // caller cannot substitute the URL parser, body policy or randomness this
+    // request uses. Only this module's internal factory supplies another context.
+    const internal = key === requestConstructorKey && internalContext !== undefined;
+    const context = internal ? internalContext : currentWebPlatformRuntime().requestContext;
+    const blobURLObject = internal ? internalBlobURLObject : undefined;
+    const metadata = internal ? internalMetadata : undefined;
     const source = input instanceof Request ? input : null;
     const inputURL = source === null ? coerceToUSVString(input) : source.url;
     const convertedInit = convertRequestInit(init);
@@ -530,7 +542,7 @@ export class Request extends Body {
 
   clone(): Request {
     const state = this.bodyState.clone();
-    const result = new Request(
+    const result = createInternalRequest(
       this.url,
       {
         method: this.method,
@@ -561,4 +573,20 @@ export class Request extends Body {
   get [Symbol.toStringTag](): string {
     return "Request";
   }
+}
+
+/**
+ * @internal Construct a Request owned by an explicit context.
+ *
+ * The capability travels through this module-private factory rather than a public
+ * constructor argument, so script cannot supply it as a surplus argument.
+ */
+export function createInternalRequest(
+  input: string | Request,
+  init: RequestInit | null | undefined,
+  context: RequestContext,
+  blobURLObject?: Blob | null,
+  metadata?: RequestInternalMetadata,
+): Request {
+  return new Request(input, init, requestConstructorKey, context, blobURLObject, metadata);
 }
