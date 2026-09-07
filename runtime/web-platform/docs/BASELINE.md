@@ -2572,3 +2572,78 @@ Measured with the same pinned binary built at `43fda4d3`: before, 1,287 primary
 disappeared, but that pair is one message with a shifted type id. The single real
 addition is a `PromiseWithResolvers` property, the representation dependency recorded
 since the Streams work.
+
+## file:, and the two things a provider must own
+
+The plan requires a capability-scoped `file:` extension for server and mobile use.
+Until now every non-HTTP scheme except `data:` and `blob:` failed as unsupported, so
+this is a feature row rather than a refinement.
+
+Absent a provider, nothing changes: `file:` fails with the same "Unsupported URL
+scheme" as before, so serving local files is always a deliberate act rather than a
+default. The capability is environment-owned, supplied as `WebPlatformOptions.fileURLs`
+and reached through the request context, not read from a global.
+
+The split follows what each layer can actually know. Shared code owns which URLs are
+fetchable at all — credentials refused, a port refused, a host permitted only when it
+is empty or `localhost` — which methods apply, and the shape of the response. The
+provider owns URL-to-path mapping and the scope it will serve, because path grammar is
+platform policy and which directories an application may read is not something shared
+networking code can decide. Bodies reuse the existing external-Blob source, so every
+consumer opens its own independent range and no filesystem enters shared code; range
+requests reuse the same `fetchBlob` path as `blob:` and are therefore correct for free.
+
+Errors surface as Fetch specifies: an opaque `TypeError: Network request failed` with
+the reason on the cause chain. That is the required behaviour and it is also why a
+refused path never puts a filesystem detail into the message script sees. The tests
+assert through the cause chain rather than the message, which is what made this
+visible.
+
+The host provider is scoped to a root and resolves before it compares. A URL leaving
+the root arrives already normalized — the URL parser collapses dot segments, so
+`.../nested/../../secret.txt` reaches the provider as the parent path rather than as
+traversal it must detect textually, and the test asserts that normalization rather than
+assuming it. A symlink is the case a textual check cannot see: `root/escape.txt` is
+inside the root by every string comparison and outside it in fact. The provider calls
+`realpath` on both the root and the target before comparing.
+
+Eight tests cover serving with length and media type, HEAD without a body, a byte
+range, a rejected method, a remote host, credentials, the normalized escape, and the
+symlink. The sabotage replaced resolved containment with the textual path: the corpus
+fell from 8/8 to 7/8 with `Missing expected rejection`, having served a file from
+outside the permitted root.
+
+The complete local Node-host/real-socket corpus passes 441/441 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: directory listings, which have no defined representation here and are
+refused; conditional requests or `Last-Modified` on file responses; and any provider
+other than the ordinary-Node conformance host. One provider's scoping is not another's,
+and a mobile provider's is its own to prove.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,288 primary
+`NTS1001` and 233 `NTS1003`; after, 1,290 primary and 233 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Three messages appeared and one
+disappeared, but that pair is one message with a shifted type id. The two real
+additions are one further `this` outside a method (eight to nine) and one further
+top-level `await` (two to three), both existing diagnostics of the enclosing `fetch`
+arrow property gaining another occurrence rather than new dependencies.
+
+## The Undici API ledger cannot be written yet, and that is a finding
+
+The plan requires an explicit API ledger against a pinned standalone Undici release,
+in which each exported operation is marked implemented, deliberately different, or not
+applicable *with evidence*, and states that "architecturally supported" does not count
+as API compatibility.
+
+No Undici revision is pinned or vendored in this repository, and nothing records one.
+The plan also says immutable revisions must be recorded at implementation start and
+that an unpinned `main` is not a conformance claim. Writing the ledger from memory of
+Undici's surface would produce exactly the asserted compatibility the plan forbids, so
+it is not written. Pinning a revision means introducing a third-party dependency, which
+belongs to the repository's reviewed dependency process rather than to this lane acting
+alone.
+
+Recording it here so the gap is visible: the ledger is an unmet plan requirement whose
+blocker is a dependency decision, not effort.

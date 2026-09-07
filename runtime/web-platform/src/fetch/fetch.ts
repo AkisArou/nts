@@ -20,6 +20,8 @@ import type {
 } from "./transport.ts";
 import { processDataURL } from "./data-url.ts";
 import { fetchBlob } from "./blob-url.ts";
+import { fileURLMethodAllowed, validateFileURL } from "./file-url.ts";
+import { _createBlobFromExternalSource as createBlobFromExternalSource } from "../file/blob.ts";
 import {
   decodeContentCodings,
   standardContentCodingPolicy,
@@ -220,6 +222,32 @@ export class FetchClient {
             "OK",
             [["content-type", data.mimeType]],
             bodyStream,
+            fragment < 0 ? url.href : url.href.slice(0, fragment),
+            false,
+            this.context,
+          );
+        }
+        if (url.protocol === "file:") {
+          await Promise.resolve();
+          request.signal.throwIfAborted();
+          const files = this.context.fileURLs;
+          // Without a provider this is exactly an unsupported scheme, and says so in
+          // the same words, so enabling local reads is never accidental.
+          if (files === undefined) throw new TypeError("Unsupported URL scheme");
+          if (!fileURLMethodAllowed(method)) {
+            throw new TypeError("A file URL answers only GET and HEAD");
+          }
+          validateFileURL(url);
+          const entry = await files.open(url, request.signal);
+          const fileBlob = createBlobFromExternalSource(entry.source, entry.type);
+          const fileResponse = fetchBlob(fileBlob, headers.get("range"));
+          if (fileResponse === null) throw new TypeError("Invalid file URL range");
+          const fragment = url.href.indexOf("#");
+          return Response.fromTransport(
+            fileResponse.status,
+            fileResponse.statusText,
+            fileResponse.headers,
+            method === "HEAD" ? null : abortableBody(fileResponse.body.stream(), request.signal),
             fragment < 0 ? url.href : url.href.slice(0, fragment),
             false,
             this.context,

@@ -14,6 +14,7 @@ import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
 import type { HeadersInit } from "./headers.ts";
+import type { FileURLProvider } from "./file-url.ts";
 import { ReadableStream } from "../streams/readable.ts";
 
 export type RequestRedirect = "follow" | "error" | "manual";
@@ -94,6 +95,8 @@ export interface RequestContext {
   baseURL?: string;
   origin?: string;
   blobURLs: BlobURLStore;
+  /** Absent unless the environment was given one; `file:` is otherwise unsupported. */
+  fileURLs?: FileURLProvider;
 }
 
 /** @internal Metadata set by Fetch rather than by the public RequestInit dictionary. */

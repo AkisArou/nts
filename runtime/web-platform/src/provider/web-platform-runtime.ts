@@ -19,6 +19,7 @@ import { FetchClient } from "../fetch/fetch.ts";
 import type { FetchCookiePolicy } from "../fetch/fetch.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import type { RequestContext, RequestInit } from "../fetch/request.ts";
+import type { FileURLProvider } from "../fetch/file-url.ts";
 import { Request } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import type { ContentDecoder, FetchTransport } from "../fetch/transport.ts";
@@ -65,6 +66,11 @@ export interface WebPlatformOptions {
   baseURL?: string;
   origin?: string;
   bodyPolicy?: Partial<BodyPolicy>;
+  /**
+   * Capability-scoped `file:` access. Absent by default, in which case a `file:` URL
+   * fails exactly like any other unsupported scheme.
+   */
+  fileURLs?: FileURLProvider;
   http1?: Http1Options;
   /** Environment/explicit proxy policy shared by Fetch, EventSource and WebSocket. */
   proxy?: WebPlatformProxyOptions;
@@ -155,6 +161,7 @@ export class WebPlatformRuntime
       baseURL: options.baseURL,
       origin: options.origin,
       blobURLs: this.blobURLs,
+      fileURLs: options.fileURLs,
     };
     this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
 

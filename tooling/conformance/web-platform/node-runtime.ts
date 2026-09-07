@@ -26,6 +26,7 @@ globalThis.nts_environment_platform = (): WebPlatformRuntime => {
 };
 
 export * from "./node-content-decoder.ts";
+export * from "./node-file-urls.ts";
 export * from "./node-primitives.ts";
 export * from "./node-websocket-deflate.ts";
 

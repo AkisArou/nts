@@ -123,6 +123,7 @@ export type {
 } from "./dispatch/diagnostics.ts";
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
+export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
 export { certificateCovers, dnsNameCovers } from "./http/certificate.ts";
 export {
   defaultProtocolPreference,
