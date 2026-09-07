@@ -4,11 +4,15 @@
 // URL parsing, and protocol code. A backend may recognize these operations as
 // intrinsics, but their observable fallback semantics live here once.
 //
-// Encoding only. Decoding lives in `core/encoding.ts`, because what callers need is
-// decoding *plus* the WHATWG policy around it -- the replacement character, `fatal`,
-// and whether a leading BOM is consumed. A decoder here as well was written and never
-// called; it agreed with the used one on every malformed sequence tried and differed
-// only on the BOM, which is precisely the policy that does not belong at this level.
+// Both directions live here. `core/encoding.ts` has its own decoder because what a Web
+// caller needs is decoding *plus* WHATWG policy -- the replacement character, `fatal`,
+// and consuming a leading BOM. The two agree on every malformed sequence tried and
+// differ only on the BOM, which is the policy that does not belong at this level.
+//
+// `utf8Decode` is the codec without that policy, and the Node lane's `Buffer` needs
+// exactly that: `toString("utf8")` does not consume a BOM. It is re-exported through
+// `runtime/node/internal/utf8.ts`, so it is consumed from outside this directory --
+// which is why an audit scoped to this lane called it dead and was wrong.
 
 /** The number of UTF-8 bytes a string needs. */
 export function utf8Length(input: string): number {
@@ -113,3 +117,75 @@ export function utf8Write(
  * continuation byte is reprocessed as a possible new leading byte, and a
  * sequence cut off by the end of the input emits one replacement character.
  */
+
+export function utf8Decode(bytes: Uint8Array, start: number, end: number): string {
+  let output = "";
+  let codePoint = 0;
+  let bytesSeen = 0;
+  let bytesNeeded = 0;
+  let lowerBoundary = 0x80;
+  let upperBoundary = 0xbf;
+  let index = start;
+
+  while (index < end) {
+    const byte = bytes[index];
+    if (byte === undefined) break;
+
+    if (bytesNeeded === 0) {
+      index++;
+      if (byte <= 0x7f) {
+        output += String.fromCharCode(byte);
+      } else if (byte >= 0xc2 && byte <= 0xdf) {
+        bytesNeeded = 1;
+        codePoint = byte & 0x1f;
+      } else if (byte >= 0xe0 && byte <= 0xef) {
+        if (byte === 0xe0) lowerBoundary = 0xa0;
+        if (byte === 0xed) upperBoundary = 0x9f;
+        bytesNeeded = 2;
+        codePoint = byte & 0x0f;
+      } else if (byte >= 0xf0 && byte <= 0xf4) {
+        if (byte === 0xf0) lowerBoundary = 0x90;
+        if (byte === 0xf4) upperBoundary = 0x8f;
+        bytesNeeded = 3;
+        codePoint = byte & 0x07;
+      } else {
+        output += "\ufffd";
+      }
+      continue;
+    }
+
+    if (byte < lowerBoundary || byte > upperBoundary) {
+      codePoint = 0;
+      bytesNeeded = 0;
+      bytesSeen = 0;
+      lowerBoundary = 0x80;
+      upperBoundary = 0xbf;
+      output += "\ufffd";
+      continue;
+    }
+
+    lowerBoundary = 0x80;
+    upperBoundary = 0xbf;
+    codePoint = (codePoint << 6) | (byte & 0x3f);
+    bytesSeen++;
+    index++;
+
+    if (bytesSeen === bytesNeeded) {
+      if (codePoint > 0xffff) {
+        const supplementary = codePoint - 0x10000;
+        output += String.fromCharCode(
+          0xd800 + (supplementary >> 10),
+          0xdc00 + (supplementary & 0x3ff),
+        );
+      } else {
+        output += String.fromCharCode(codePoint);
+      }
+      codePoint = 0;
+      bytesNeeded = 0;
+      bytesSeen = 0;
+    }
+  }
+
+  if (bytesNeeded !== 0) output += "\ufffd";
+  return output;
+}

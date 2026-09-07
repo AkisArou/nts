@@ -12,11 +12,26 @@
 // The allowlist is the interesting part. Every entry is a decision with a reason, and a
 // name that stops being unreferenced must be removed from it, so the list cannot quietly
 // become a place where findings go to be forgotten.
+//
+// **The corpus is the whole repository, and that is the correction this tool exists in.**
+// Its first version searched this lane and its tests only, called `utf8Decode` dead, and
+// it was removed -- breaking thirteen modules in the Node lane, which re-exports it
+// through `runtime/node/internal/utf8.ts` for `Buffer.toString("utf8")`. A check whose
+// corpus is smaller than the set of possible callers does not answer "is this used"; it
+// answers "is this used *here*", confidently, in the same words.
+//
+// Build output is excluded for the mirror reason. A stale `.d.ts` still declares what
+// the source has dropped -- the Node lane's aggregate typecheck read one that was nearly
+// two hours old and reported green over a broken tree -- so counting generated
+// declarations as references would keep dead exports alive by their own shadows.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const SOURCE = "runtime/web-platform/src";
-const TESTS = "tooling/conformance/web-platform";
+/** Every place a caller could live. Add to this rather than narrowing it. */
+const CORPUS = ["runtime", "tooling", "examples"];
+/** Generated: it declares what source no longer has. */
+const GENERATED = new Set(["node_modules", ".tsbuild", "dist", "target", "build"]);
 const BARRELS = [join(SOURCE, "index.ts"), join(SOURCE, "provider.ts")];
 
 /**
@@ -42,10 +57,16 @@ const ALLOWED = new Map([
 function sources(directory, extensions) {
   const out = [];
   const walk = (path) => {
-    for (const entry of readdirSync(path)) {
+    let entries;
+    try {
+      entries = readdirSync(path);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
       const full = join(path, entry);
       if (statSync(full).isDirectory()) {
-        if (entry === "node_modules") continue;
+        if (GENERATED.has(entry)) continue;
         walk(full);
         continue;
       }
@@ -62,8 +83,10 @@ const sourceFiles = sources(SOURCE, [".ts"]);
 // trivially "referenced" -- a check whose corpus contains its own answer. The first
 // version did exactly that and reported the allowlist as stale, which is the only
 // reason it was noticed.
-const SELF = join(TESTS, "unrouted.mjs");
-const otherFiles = sources(TESTS, [".mjs", ".ts"]).filter((file) => file !== SELF);
+const SELF = join("tooling", "conformance", "web-platform", "unrouted.mjs");
+const otherFiles = CORPUS.flatMap((directory) =>
+  sources(directory, [".mjs", ".ts", ".js", ".mts", ".cts"]),
+).filter((file) => file !== SELF && !sourceFiles.includes(file));
 const text = new Map(sourceFiles.map((file) => [file, readFileSync(file, "utf8")]));
 const elsewhere = otherFiles.map((file) => readFileSync(file, "utf8")).join("\n");
 
@@ -109,5 +132,6 @@ if (unexpected.length !== 0 || stale.length !== 0) {
   process.exit(1);
 }
 console.log(
-  `unrouted: no unexplained exports (${findings.length} allowed, ${text.size} files scanned)`,
+  `unrouted: no unexplained exports (${findings.length} allowed, ` +
+    `${text.size} audited + ${otherFiles.length} corpus files scanned)`,
 );

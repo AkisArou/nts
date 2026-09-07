@@ -4385,3 +4385,48 @@ it.
 The complete local corpus passes 674/674 with zero skipped, the compiled axis holds at
 54 cases across 5 functions on jvm, c and llvm, and the pinned upstream corpus is
 unchanged at 2,278 of 2,286 applicable.
+
+## The check that was too small, and what it cost
+
+The unrouted-export gate landed and immediately did real damage. It called `utf8Decode`
+dead and it was removed; the Node lane re-exports it through
+`runtime/node/internal/utf8.ts` for `Buffer.toString("utf8")`, and **thirteen of their
+modules stopped type-checking.** They found it, not me, and they found it within the
+hour.
+
+The defect is the one this ledger has been circling all session, in its purest form yet.
+The tool searched `runtime/web-platform/src` and `tooling/conformance/web-platform`. It
+then reported, in the language of a general fact, an answer that was only true of that
+subset: *"declared and never mentioned again"* actually meant *"never mentioned again
+here"*. A corpus smaller than the set of possible callers does not answer the question
+it appears to answer — and it is worse than no check, because a manual look would not
+have carried the same authority.
+
+It is also, precisely, the shape the JVM lane described earlier the same day and that
+I had already reproduced once in this very file, when the allowlist sat inside the
+corpus being searched. Twice, in one tool, in one day: **the corpus is the check.**
+
+The corpus is now every `.ts`, `.mts`, `.cts`, `.mjs` and `.js` under `runtime`,
+`tooling` and `examples` — 702 files rather than 60. Even within `tooling`, the original
+scan had missed `tooling/conformance/audit.mjs`, which also names `utf8Decode`.
+
+Build output is excluded, for the mirror reason. A stale `.d.ts` declares what the
+source has dropped, so counting generated declarations as references would keep dead
+exports alive by their own shadows. That is not hypothetical either: the Node lane's
+aggregate typecheck reads this project through its built declarations, and those were
+nearly two hours stale — so *their* gate reported green over the tree I had broken. Two
+different checks, both confidently wrong about the same edit, for two different reasons,
+in the same afternoon.
+
+The control is the same input under both corpora: narrow, `utf8Decode` has no references
+and is dead; wide, it has two real consumers and is live. Nothing about the code changed
+between those two answers.
+
+`utf8Decode` is restored, its header now says why it exists next to the WHATWG decoder —
+`Buffer.toString("utf8")` must not consume a BOM, which is exactly the policy difference
+measured when this started — and it records that it is consumed from outside this
+directory. `bodyFromBytes` and `normalizeMethod` stay removed: under the wide corpus they
+appear only in stale build output, which is not a reference.
+
+Local corpus 674/674, upstream unchanged at 2,278 of 2,286, compiled axis 54 cases across
+5 functions on jvm, c and llvm. The frontier is unchanged from before the removal.
