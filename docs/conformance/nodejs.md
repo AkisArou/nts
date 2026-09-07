@@ -1386,13 +1386,40 @@ health for `inspect` while every `Promise` printed as `{}`, because neither
 generator ever produced one; growing either pool samples the same distribution
 more times. Sixty-one deliberate kinds found ten gaps in a single run.
 
-Of the 26 that differ, seven are §13 refusals and are not defects: `[Function]`
-where node prints `[Function: named]`, `[AsyncFunction: af]`,
-`[GeneratorFunction: gf]` or `[class Klass]`, and `{ x: 1 }` where node prints
-`Point { x: 1 }`. A function's name and a constructor's name are exactly the
-observable-metadata this profile refuses.
+Of the 26 that differ, seven are refusals today: `[Function]` where node
+prints `[Function: named]`, `[AsyncFunction: af]`, `[GeneratorFunction: gf]` or
+`[class Klass]`, and `{ x: 1 }` where node prints `Point { x: 1 }`. A
+function's name and a constructor's name are the observable metadata this
+profile does not represent at run time.
 
-The rest are genuine, and none of them appears in any exclusion:
+They are recorded as rows to look at again rather than as closed non-goals, and
+the distinction matters. The compiler lane's view is that a function's name is
+a fact it *has* at lowering and simply does not carry into the running program,
+because until now nothing needed it — and `inspect` is something that needs it.
+Filing them permanently under §13 would turn "nothing asked for this yet" into
+"this cannot be done", which is the kind of hardening a ledger should resist.
+
+**The most serious difference is not in that list and is not about
+formatting.** Node prints `[Getter]` and calls nothing; ours calls the accessor
+and prints its value, and an accessor that throws makes `inspect` itself throw
+rather than printing `[Getter]` and carrying on. `inspect` is what runs in
+logging, error paths and assertion messages, so today logging an object
+performs its side effects, and logging an object with a throwing getter takes
+down the logger. That is a correctness and robustness defect, and it sits above
+every row in the table below.
+
+Its fix needs one bit per key — *is this an accessor?* — and the first version
+of this paragraph asked for the wrong thing. It asked for
+`Object.getOwnPropertyDescriptor`, which is a refusal and, more to the point,
+the wrong shape: a descriptor is a dynamic object this compiler has no map for,
+while "field or accessor" is something a layout already knows. The narrow
+primitive is buildable; the descriptor is a long way off. Because `inspect`
+walks `Object.keys` and reads `value[key]` with `key` a loop variable, the
+version that fits is a run-time helper reading the layout's field table rather
+than anything folded at lowering. That is asked for in the compiler lane in
+those terms.
+
+The rest are genuine formatting gaps, and none appears in any exclusion:
 
 | kind | ours | node |
 | --- | --- | --- |
@@ -1406,23 +1433,9 @@ The rest are genuine, and none of them appears in any exclusion:
 | `Symbol.toStringTag` | omitted | shown among the keys |
 | `AggregateError`, `Error` with `cause` | omitted | `{ [errors]: [...] }`, `{ [cause]: ... }` |
 
-**And one of the 26 is not a formatting difference at all: `inspect` invokes
-getters.** Node prints `[Getter]` and calls nothing; ours calls the accessor
-and prints its value, and an accessor that throws makes `inspect` itself
-throw rather than printing `[Getter]` and carrying on. `inspect` is what runs
-in logging, error paths and assertion messages, so today logging an object
-performs its side effects, and logging an object with a throwing getter takes
-down the logger. That is a correctness and robustness defect rather than a
-cosmetic one.
-
-Its fix has a prerequisite outside this profile's current vocabulary.
-`inspect` walks `Object.keys` and reads `value[key]`, and telling an accessor
-from a data property has no route other than
-`Object.getOwnPropertyDescriptor` — which appears nowhere in `runtime/node` at
-all. Whether that is representable in the compiled model is a question for the
-compiler lane, and it is asked there. If it is a refusal then "does not invoke
-getters" is unreachable here and belongs in the exclusions with that named
-blocker; if it is representable, this is ordinary work.
+The `Promise` row is the compiler lane's on both sides, and cheaply so: a
+promise here is `NtsPromise`, a struct that runtime allocates, and its state is
+a field it owns.
 
 Three things about `inspect` are worth recording because they look arbitrary
 and are not. `groupArrayElements` lays short array entries out as a padded grid
