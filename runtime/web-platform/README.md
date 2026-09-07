@@ -68,6 +68,14 @@ also terminates streams when the environment closes. The API surface follows
 Chromium's current experimental IDL and the WPT `websockets/stream/tentative`
 corpus; RFC 6455 remains the wire-protocol authority.
 
+The raw transport offers RFC 7692 `permessage-deflate` only when a provider supplies
+bounded raw-DEFLATE contexts. Negotiation, RSV1 validation, fragmentation, the flush
+tail transformation, context-takeover reset rules, decompressed-size enforcement,
+and close-code selection remain shared TypeScript. The ordinary-Node conformance
+provider supplies only the zlib primitive. Both its incremental output cap and the
+shared postcondition enforce the configured message limit, so a provider cannot
+silently turn a compressed message into unbounded retained output.
+
 `index.ts` is deliberately narrower than the source tree: parsers, pools, codecs,
 transport requests, provider primitives, policy helpers, and internal error types are
 not Web globals. Providers use `provider.ts`; focused conformance tests import an

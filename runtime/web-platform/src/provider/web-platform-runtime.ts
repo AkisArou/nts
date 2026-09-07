@@ -25,7 +25,7 @@ import { Http1Transport } from "../http1/transport.ts";
 import type { Http1Options } from "../http1/transport.ts";
 import { RawWebSocketTransport } from "../websocket/raw-transport.ts";
 import type { RawWebSocketOptions } from "../websocket/raw-transport.ts";
-import type { WebSocketTransport } from "../websocket/transport.ts";
+import type { WebSocketDeflateProvider, WebSocketTransport } from "../websocket/transport.ts";
 import { WebSocket, type WebSocketContext } from "../websocket/websocket.ts";
 import {
   WebSocketStream,
@@ -44,6 +44,8 @@ export interface WebPlatformOptions {
   maxWebSocketBufferedAmount?: number;
   fetchTransport?: FetchTransport;
   webSocketTransport?: WebSocketTransport;
+  /** Raw DEFLATE contexts. RFC 7692 negotiation and framing remain shared. */
+  webSocketDeflate?: WebSocketDeflateProvider | null;
   contentDecoder?: ContentDecoder;
   /** Configurable server/mobile defense against decompression bombs. */
   contentCodingPolicy?: Partial<ContentCodingPolicy>;
@@ -126,6 +128,7 @@ export class WebPlatformRuntime
         primitives.random,
         primitives.scheduler,
         options.websocket,
+        options.webSocketDeflate ?? undefined,
       );
       this.transport = transport;
       this.ownedWebSocketTransport = transport;

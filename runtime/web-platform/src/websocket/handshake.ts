@@ -3,6 +3,10 @@ import type { RandomSource } from "../provider/primitives.ts";
 import { Headers } from "../fetch/headers.ts";
 import { hasToken } from "../http1/parser.ts";
 import { ProtocolError } from "../core/errors.ts";
+import {
+  negotiatePerMessageDeflate,
+  type PerMessageDeflateNegotiation,
+} from "./permessage-deflate.ts";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -99,12 +103,19 @@ export function createKey(random: RandomSource): string {
   return base64(bytes);
 }
 
+export interface ValidatedWebSocketHandshake {
+  readonly protocol: string;
+  readonly extensions: string;
+  readonly perMessageDeflate: PerMessageDeflateNegotiation | null;
+}
+
 export function validateHandshake(
   status: number,
   headers: Headers,
   key: string,
   protocols: readonly string[],
-): string {
+  perMessageDeflateOffered = false,
+): ValidatedWebSocketHandshake {
   if (
     status !== 101 ||
     !hasToken(headers, "connection", "upgrade") ||
@@ -116,17 +127,23 @@ export function validateHandshake(
   if (headers.get("sec-websocket-accept") !== websocketAccept(key))
     throw new ProtocolError("Invalid Sec-WebSocket-Accept");
 
-  if (headers.has("sec-websocket-extensions"))
-    throw new ProtocolError("Unsolicited WebSocket extension");
+  const extensionHeader = headers.get("sec-websocket-extensions");
+  const perMessageDeflate = negotiatePerMessageDeflate(extensionHeader, perMessageDeflateOffered);
   const selected = headers.get("sec-websocket-protocol");
 
   if (selected === null) {
-    if (protocols.length !== 0)
-      throw new ProtocolError("Server did not select an offered subprotocol");
-    return "";
+    return {
+      protocol: "",
+      extensions: extensionHeader ?? "",
+      perMessageDeflate,
+    };
   }
 
   if (!protocols.includes(selected))
     throw new ProtocolError("Unsolicited or ambiguous subprotocol");
-  return selected;
+  return {
+    protocol: selected,
+    extensions: extensionHeader ?? "",
+    perMessageDeflate,
+  };
 }

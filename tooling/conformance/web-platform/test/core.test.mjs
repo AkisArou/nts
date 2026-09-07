@@ -59,6 +59,7 @@ import {
   readFrame,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/codec.js";
 import { websocketAccept } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/handshake.js";
+import { negotiatePerMessageDeflate } from "../node_modules/.tsbuild/host/runtime/web-platform/src/websocket/permessage-deflate.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
@@ -2865,6 +2866,64 @@ test("Frame rejects nonminimal length, masking, reserved bits and bad controls",
   assert.deepEqual(parseClose(closePayload(1000, "Καλημέρα")), { code: 1000, reason: "Καλημέρα" });
   assert.throws(() => parseClose(Uint8Array.of(1)));
   assert.throws(() => closePayload(1006, ""));
+});
+test("permessage-deflate negotiation and RSV1 framing are strict", async () => {
+  assert.equal(negotiatePerMessageDeflate(null, true), null);
+  assert.deepEqual(
+    negotiatePerMessageDeflate(
+      'permessage-deflate; server_no_context_takeover; client_no_context_takeover; server_max_window_bits="10"',
+      true,
+    ),
+    {
+      response:
+        'permessage-deflate; server_no_context_takeover; client_no_context_takeover; server_max_window_bits="10"',
+      incomingNoContextTakeover: true,
+      outgoingNoContextTakeover: true,
+      incomingWindowBits: 10,
+      outgoingWindowBits: 15,
+    },
+  );
+  for (const response of [
+    "permessage-deflate; client_max_window_bits=10",
+    "permessage-deflate; server_no_context_takeover=1",
+    "permessage-deflate; server_max_window_bits=09",
+    "permessage-deflate; server_max_window_bits=16",
+    "permessage-deflate; server_max_window_bits=10; server_max_window_bits=9",
+    "permessage-deflate; unknown",
+    "permessage-deflate, other",
+  ]) {
+    assert.throws(() => negotiatePerMessageDeflate(response, true), { name: "ProtocolError" });
+  }
+  assert.throws(() => negotiatePerMessageDeflate("permessage-deflate", false), {
+    name: "ProtocolError",
+  });
+
+  const wire = Buffer.concat(
+    encodeFrame(
+      { compressed: true, fin: true, opcode: 2, payload: Uint8Array.of(1, 2, 3) },
+      { fill: (bytes) => bytes.fill(0) },
+      false,
+    ),
+  );
+  await assert.rejects(readFrame(readerFrom(wire), false, 100, false), {
+    name: "ProtocolError",
+  });
+  const compressed = await readFrame(readerFrom(wire), false, 100, true);
+  assert.equal(compressed.compressed, true);
+  for (const invalid of [Uint8Array.of(0xc0, 0), Uint8Array.of(0xc9, 0)]) {
+    await assert.rejects(readFrame(readerFrom(invalid), false, 100, true), {
+      name: "ProtocolError",
+    });
+  }
+  assert.throws(
+    () =>
+      encodeFrame(
+        { compressed: true, fin: true, opcode: 0, payload: new Uint8Array() },
+        { fill() {} },
+        false,
+      ),
+    { name: "ProtocolError" },
+  );
 });
 test("WebSocket public and wire close-code domains remain distinct", () => {
   for (const code of [1000, 1001, 1002, 1003, 1007, 1011, 1012, 1013, 1014, 3000, 4999]) {

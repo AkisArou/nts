@@ -5,7 +5,16 @@ import http from "node:http";
 import net from "node:net";
 import https from "node:https";
 import { createHash } from "node:crypto";
-import { gzipSync, brotliCompressSync, deflateRawSync, deflateSync } from "node:zlib";
+import {
+  brotliCompressSync,
+  constants as zlibConstants,
+  createDeflateRaw,
+  createInflateRaw,
+  deflateRawSync,
+  deflateSync,
+  gzipSync,
+  inflateRawSync,
+} from "node:zlib";
 import { once } from "node:events";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 import {
@@ -734,10 +743,10 @@ suite("ConnectionPool skips a waiter blocked by its origin cap", async () => {
 });
 
 // Independent test-server frame encoder/parser. These do not call the implementation's codec.
-function frame(opcode, payload = Buffer.alloc(0), fin = true) {
+function frame(opcode, payload = Buffer.alloc(0), fin = true, compressed = false) {
   const bytes = Buffer.from(payload);
   const head = Buffer.alloc(bytes.length < 126 ? 2 : bytes.length <= 65535 ? 4 : 10);
-  head[0] = (fin ? 128 : 0) | opcode;
+  head[0] = (fin ? 128 : 0) | (compressed ? 64 : 0) | opcode;
   if (head.length === 2) head[1] = bytes.length;
   else if (head.length === 4) {
     head[1] = 126;
@@ -773,8 +782,55 @@ function peerParser(socket, onFrame) {
       const payload = Buffer.from(data.subarray(offset, offset + length));
       for (let i = 0; i < payload.length; i++) payload[i] ^= key[i % 4];
       data = data.subarray(offset + length);
-      onFrame({ opcode: first & 15, fin: !!(first & 128), payload });
+      onFrame({ opcode: first & 15, fin: !!(first & 128), compressed: !!(first & 64), payload });
     }
+  });
+}
+
+function zlibMessage(transform, input) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const accept = (chunk) => chunks.push(Buffer.from(chunk));
+    const fail = (error) => {
+      transform.off("data", accept);
+      transform.off("error", fail);
+      reject(error);
+    };
+    transform.on("data", accept);
+    transform.once("error", fail);
+    transform.write(input, (writeError) => {
+      if (writeError) {
+        fail(writeError);
+        return;
+      }
+      transform.flush(zlibConstants.Z_SYNC_FLUSH, () => {
+        transform.off("data", accept);
+        transform.off("error", fail);
+        resolve(Buffer.concat(chunks));
+      });
+    });
+  });
+}
+
+function stripDeflateTail(bytes) {
+  assert.deepEqual(bytes.subarray(bytes.length - 4), Buffer.from([0, 0, 255, 255]));
+  return bytes.subarray(0, bytes.length - 4);
+}
+
+function deflateMessage(bytes, windowBits = 15) {
+  return stripDeflateTail(
+    deflateRawSync(bytes, {
+      finishFlush: zlibConstants.Z_SYNC_FLUSH,
+      flush: zlibConstants.Z_SYNC_FLUSH,
+      windowBits,
+    }),
+  );
+}
+
+function inflateMessage(bytes, windowBits = 15) {
+  return inflateRawSync(Buffer.concat([bytes, Buffer.from([0, 0, 255, 255])]), {
+    finishFlush: zlibConstants.Z_SYNC_FLUSH,
+    windowBits,
   });
 }
 async function websocketServer(t, onOpen, { badAccept = false, extra = "", secure = false } = {}) {
@@ -1219,6 +1275,213 @@ suite("WebSocketStream exchanges text and binary over the real transport", async
   assert.deepEqual(await stream.closed, { closeCode: 1005, reason: "" });
   await closing;
 });
+
+suite("WebSocket accepts a server that declines every offered subprotocol", async (t) => {
+  const s = await websocketServer(t, (socket) =>
+    peerParser(socket, (incoming) => {
+      if (incoming.opcode === 8) socket.end(frame(8, incoming.payload));
+    }),
+  );
+  runtime(t);
+  const stream = new WebSocketStream(s.url, { protocols: ["first", "second"] });
+  const { writable, protocol } = await stream.opened;
+  assert.equal(protocol, "");
+  const closing = writable.getWriter().close();
+  await stream.closed;
+  await closing;
+});
+
+suite("permessage-deflate preserves context across fragmented messages", async (t) => {
+  const serverDeflater = createDeflateRaw({ chunkSize: 65536, windowBits: 15 });
+  const serverInflater = createInflateRaw({ chunkSize: 65536, windowBits: 15 });
+  t.after(() => {
+    serverDeflater.destroy();
+    serverInflater.destroy();
+  });
+  let serverError = null;
+  const original = "context takeover makes this repeated message smaller ".repeat(20);
+  let firstWireSize = 0;
+  let secondWireSize = 0;
+  let messageNumber = 0;
+  let opcode = 0;
+  let compressed = false;
+  let parts = [];
+  let pong = false;
+
+  const s = await websocketServer(
+    t,
+    (socket, request) => {
+      assert.equal(request.headers["sec-websocket-extensions"], "permessage-deflate");
+      peerParser(socket, (incoming) => {
+        if (incoming.opcode === 10) {
+          pong = true;
+          return;
+        }
+        if (incoming.opcode === 8) {
+          socket.end(frame(8, incoming.payload));
+          return;
+        }
+        if (incoming.opcode !== 0) {
+          opcode = incoming.opcode;
+          compressed = incoming.compressed;
+          parts = [];
+        } else {
+          assert.equal(incoming.compressed, false, "RSV1 is clear on continuation frames");
+        }
+        parts.push(incoming.payload);
+        if (!incoming.fin) return;
+        void (async () => {
+          assert.equal(opcode, 1);
+          assert.equal(compressed, true);
+          const wire = Buffer.concat(parts);
+          messageNumber++;
+          if (messageNumber === 1) firstWireSize = wire.length;
+          else secondWireSize = wire.length;
+          const inflated = await zlibMessage(
+            serverInflater,
+            Buffer.concat([wire, Buffer.from([0, 0, 255, 255])]),
+          );
+          assert.equal(inflated.toString(), original);
+          const echoed = stripDeflateTail(await zlibMessage(serverDeflater, inflated));
+          const split = Math.max(1, Math.floor(echoed.length / 2));
+          socket.write(
+            Buffer.concat([
+              frame(1, echoed.subarray(0, split), false, true),
+              frame(9, Buffer.from("compressed-ping")),
+              frame(0, echoed.subarray(split), true),
+            ]),
+          );
+        })().catch((error) => {
+          serverError = error;
+          socket.destroy();
+        });
+      });
+    },
+    { extra: "Sec-WebSocket-Extensions: permessage-deflate\r\n" },
+  );
+
+  runtime(t, { websocket: { outgoingFrameBytes: 2 } });
+  const stream = new WebSocketStream(s.url);
+  const { readable, writable, extensions } = await stream.opened;
+  assert.equal(extensions, "permessage-deflate");
+  const reader = readable.getReader();
+  const writer = writable.getWriter();
+  await writer.write(original);
+  assert.deepEqual(await reader.read(), { done: false, value: original });
+  await writer.write(original);
+  assert.deepEqual(await reader.read(), { done: false, value: original });
+  assert.equal(secondWireSize < firstWireSize, true, "the second message must reuse LZ77 context");
+  assert.equal(pong, true, "control frames remain uncompressed and interleave with fragments");
+  const closing = writer.close();
+  await stream.closed;
+  await closing;
+  if (serverError !== null) throw serverError;
+});
+
+suite("permessage-deflate resets negotiated contexts and bounds inflation", async (t) => {
+  const original = "no context takeover ".repeat(20);
+  const wireMessages = [];
+  let parts = [];
+  let compressed = false;
+  const s = await websocketServer(
+    t,
+    (socket) =>
+      peerParser(socket, (incoming) => {
+        if (incoming.opcode === 8) {
+          socket.end(frame(8, incoming.payload));
+          return;
+        }
+        if (incoming.opcode !== 0) {
+          parts = [];
+          compressed = incoming.compressed;
+        }
+        parts.push(incoming.payload);
+        if (!incoming.fin) return;
+        assert.equal(compressed, true);
+        const wire = Buffer.concat(parts);
+        wireMessages.push(wire);
+        const plain = inflateMessage(wire);
+        assert.equal(plain.toString(), wireMessages.length <= 2 ? original : "");
+        socket.write(frame(1, deflateMessage(plain, 10), true, true));
+      }),
+    {
+      extra:
+        "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover; server_max_window_bits=10\r\n",
+    },
+  );
+  runtime(t, { websocket: { outgoingFrameBytes: 3 } });
+  const stream = new WebSocketStream(s.url);
+  const { readable, writable } = await stream.opened;
+  const reader = readable.getReader();
+  const writer = writable.getWriter();
+  await writer.write(original);
+  assert.deepEqual(await reader.read(), { done: false, value: original });
+  await writer.write(original);
+  assert.deepEqual(await reader.read(), { done: false, value: original });
+  assert.deepEqual(
+    wireMessages[1],
+    wireMessages[0],
+    "client context must reset after each message",
+  );
+  await writer.write("");
+  assert.deepEqual(await reader.read(), { done: false, value: "" });
+  assert.equal(wireMessages[2].length <= 1, true, "empty compression adds no data payload");
+  const closing = writer.close();
+  await stream.closed;
+  await closing;
+
+  let closeCode = 0;
+  const receivedClose = Promise.withResolvers();
+  const bomb = await websocketServer(
+    t,
+    (socket) => {
+      peerParser(socket, (incoming) => {
+        if (incoming.opcode !== 8) return;
+        closeCode = incoming.payload.readUInt16BE();
+        receivedClose.resolve();
+        socket.end(frame(8, incoming.payload));
+      });
+      socket.write(frame(2, deflateMessage(Buffer.alloc(4096, 65)), true, true));
+    },
+    { extra: "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n" },
+  );
+  const bombRuntime = runtime(t, { websocket: { maxMessageBytes: 64 } });
+  const socket = bombRuntime.createWebSocket(bomb.url);
+  const events = wsEvents(socket);
+  const closed = await events.closed;
+  await receivedClose.promise;
+  assert.equal(closeCode, 1009);
+  assert.equal(closed.code, 1006);
+  assert.deepEqual(events.log, ["open", "error", "close"]);
+});
+
+for (const [name, payload, expectedCode] of [
+  ["invalid DEFLATE", Buffer.from([255]), 1002],
+  ["invalid decompressed UTF-8", deflateMessage(Buffer.from([255])), 1007],
+]) {
+  suite("permessage-deflate rejects " + name, async (t) => {
+    const closeCode = Promise.withResolvers();
+    const s = await websocketServer(
+      t,
+      (socket) => {
+        peerParser(socket, (incoming) => {
+          if (incoming.opcode !== 8) return;
+          closeCode.resolve(incoming.payload.readUInt16BE());
+          socket.end(frame(8, incoming.payload));
+        });
+        socket.write(frame(1, payload, true, true));
+      },
+      { extra: "Sec-WebSocket-Extensions: permessage-deflate\r\n" },
+    );
+    const api = runtime(t);
+    const socket = api.createWebSocket(s.url);
+    const events = wsEvents(socket);
+    const closed = await events.closed;
+    assert.equal(await closeCode.promise, expectedCode);
+    assert.equal(closed.code, 1006);
+    assert.deepEqual(events.log, ["open", "error", "close"]);
+  });
+}
 suite("WebSocket masked sends, independent echo, subprotocol, clean close", async (t) => {
   const s = await websocketServer(
     t,
@@ -1384,7 +1647,7 @@ for (const [name, options] of [
 ])
   suite("WebSocket rejects " + name, async (t) => {
     const s = await websocketServer(t, () => {}, options);
-    const api = runtime(t);
+    const api = runtime(t, name === "unsolicited extension" ? { webSocketDeflate: null } : {});
     const ws = api.createWebSocket(s.url);
     const e = wsEvents(ws);
     const close = await e.closed;

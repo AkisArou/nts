@@ -1,5 +1,5 @@
 import { Headers } from "../fetch/headers.ts";
-import { concatBytes, encodeByteString, TextDecoder, utf8 } from "../core/encoding.ts";
+import { concatBytes, decodeUTF8, encodeByteString, TextDecoder, utf8 } from "../core/encoding.ts";
 import { DOMException, LimitError, ProtocolError } from "../core/errors.ts";
 import { AbortController } from "../core/abort.ts";
 import type { AbortSignal } from "../core/abort.ts";
@@ -13,12 +13,14 @@ import type {
 import { addressOf } from "../http1/transport.ts";
 import { BufferedReader, writeAll } from "../http1/io.ts";
 import { defaultHeadLimits, readHead, validateWireValue } from "../http1/parser.ts";
-import { createKey, validateHandshake } from "./handshake.ts";
+import { createKey, validateHandshake, type ValidatedWebSocketHandshake } from "./handshake.ts";
 import { closePayload, encodeFrame, parseClose, readFrame } from "./codec.ts";
 import type { Frame } from "./codec.ts";
+import { perMessageDeflateOffer, PerMessageDeflate } from "./permessage-deflate.ts";
 import type {
   SocketIncoming,
   SocketMessage,
+  WebSocketDeflateProvider,
   WebSocketHandshake,
   WebSocketSession,
   WebSocketTransport,
@@ -30,6 +32,7 @@ export interface RawWebSocketOptions {
   closeTimeoutMs?: number;
   maxFrameBytes?: number;
   maxMessageBytes?: number;
+  maxCompressedMessageBytes?: number;
   outgoingFrameBytes?: number;
   maxFragments?: number;
 }
@@ -39,6 +42,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
   private readonly random: RandomSource;
   private readonly scheduler: Scheduler;
   private readonly options: RawWebSocketOptions;
+  private readonly deflate: WebSocketDeflateProvider | undefined;
   private readonly sessions = new Set<RawWebSocketSession>();
   private readonly connecting = new Set<AbortController>();
   private closed = false;
@@ -48,10 +52,12 @@ export class RawWebSocketTransport implements WebSocketTransport {
     random: RandomSource,
     scheduler: Scheduler,
     options: RawWebSocketOptions = {},
+    deflate?: WebSocketDeflateProvider,
   ) {
     for (const value of [
       options.maxFrameBytes,
       options.maxMessageBytes,
+      options.maxCompressedMessageBytes,
       options.outgoingFrameBytes,
       options.maxFragments,
       options.connectTimeoutMs,
@@ -65,6 +71,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
     this.random = random;
     this.scheduler = scheduler;
     this.options = options;
+    this.deflate = deflate;
   }
   async connect(handshake: WebSocketHandshake, signal: AbortSignal): Promise<WebSocketSession> {
     signal.throwIfAborted();
@@ -109,6 +116,9 @@ export class RawWebSocketTransport implements WebSocketTransport {
         "\r\n";
       if (handshake.protocols.length !== 0)
         head += "Sec-WebSocket-Protocol: " + handshake.protocols.join(", ") + "\r\n";
+      if (this.deflate !== undefined) {
+        head += "Sec-WebSocket-Extensions: " + perMessageDeflateOffer + "\r\n";
+      }
       await writeAll(connection, encodeByteString(head + "\r\n"));
       const reader = new BufferedReader(connection);
       let response = await readHead(reader);
@@ -118,17 +128,19 @@ export class RawWebSocketTransport implements WebSocketTransport {
           throw new LimitError("Too many interim upgrade responses");
         response = await readHead(reader);
       }
-      const protocol = validateHandshake(
+      const validated = validateHandshake(
         response.status,
         new Headers(response.headers),
         key,
         handshake.protocols,
+        this.deflate !== undefined,
       );
       signal.throwIfAborted();
       const session = new RawWebSocketSession(
         connection,
         reader,
-        protocol,
+        validated,
+        this.deflate,
         this.random,
         this.scheduler,
         this.options,
@@ -156,7 +168,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
 
 class RawWebSocketSession implements WebSocketSession {
   readonly protocol: string;
-  readonly extensions = "";
+  readonly extensions: string;
   private readonly connection: ByteConnection;
   private readonly reader: BufferedReader;
   private readonly random: RandomSource;
@@ -168,17 +180,20 @@ class RawWebSocketSession implements WebSocketSession {
   private ended = false;
   private closeTimer: CancelHandle | null = null;
   private messageOpcode: 0 | 1 | 2 = 0;
+  private messageCompressed = false;
   private chunks: Uint8Array[] = [];
   private messageSize = 0;
   private decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   private textChunks: string[] = [];
   private fragments = 0;
+  private readonly compression: PerMessageDeflate | null;
   private readonly onEnd: (session: RawWebSocketSession) => void;
 
   constructor(
     connection: ByteConnection,
     reader: BufferedReader,
-    protocol: string,
+    handshake: ValidatedWebSocketHandshake,
+    deflate: WebSocketDeflateProvider | undefined,
     random: RandomSource,
     scheduler: Scheduler,
     options: RawWebSocketOptions,
@@ -187,7 +202,12 @@ class RawWebSocketSession implements WebSocketSession {
     this.onEnd = onEnd;
     this.connection = connection;
     this.reader = reader;
-    this.protocol = protocol;
+    this.protocol = handshake.protocol;
+    this.extensions = handshake.extensions;
+    this.compression =
+      handshake.perMessageDeflate === null
+        ? null
+        : new PerMessageDeflate(requireDeflate(deflate), handshake.perMessageDeflate);
     this.random = random;
     this.scheduler = scheduler;
     this.options = options;
@@ -205,7 +225,18 @@ class RawWebSocketSession implements WebSocketSession {
   async send(message: SocketMessage): Promise<void> {
     if (this.sentClose || this.ended)
       throw new DOMException("WebSocket is closing", "InvalidStateError");
-    const payload = message.kind === "text" ? utf8.encode(message.data) : message.data;
+    const source = message.kind === "text" ? utf8.encode(message.data) : message.data;
+    const messageLimit = this.options.maxMessageBytes ?? 16 * 1024 * 1024;
+    if (source.length > messageLimit) {
+      throw new LimitError("WebSocket message exceeds configured limit");
+    }
+    const compressed = this.compression !== null;
+    const payload = compressed
+      ? await this.compression.compress(
+          source,
+          this.options.maxCompressedMessageBytes ?? messageLimit + 65536,
+        )
+      : source;
     const limit = this.options.outgoingFrameBytes ?? 65536;
     if (!Number.isInteger(limit) || limit < 1) throw new RangeError("Invalid outgoingFrameBytes");
     let offset = 0;
@@ -219,6 +250,7 @@ class RawWebSocketSession implements WebSocketSession {
           fin: end === payload.length,
           opcode: first ? (message.kind === "text" ? 1 : 2) : 0,
           payload: payload.subarray(offset, end),
+          compressed: compressed && first,
         },
         true,
       );
@@ -238,6 +270,7 @@ class RawWebSocketSession implements WebSocketSession {
     if (this.ended) return;
     this.ended = true;
     this.closeTimer?.cancel();
+    this.compression?.close();
     this.connection.close();
     this.onEnd(this);
   }
@@ -256,6 +289,7 @@ class RawWebSocketSession implements WebSocketSession {
           this.reader,
           false,
           this.options.maxFrameBytes ?? 16 * 1024 * 1024,
+          this.compression !== null,
         );
         if (frame.opcode === 9) {
           if (!this.sentClose)
@@ -283,6 +317,7 @@ class RawWebSocketSession implements WebSocketSession {
           if (this.messageOpcode !== 0)
             throw new ProtocolError("New data frame during a fragmented message");
           this.messageOpcode = frame.opcode;
+          this.messageCompressed = frame.compressed ?? false;
           this.chunks = [];
           this.textChunks = [];
           this.messageSize = 0;
@@ -292,18 +327,40 @@ class RawWebSocketSession implements WebSocketSession {
         if (++this.fragments > (this.options.maxFragments ?? 65536))
           throw new LimitError("Too many WebSocket fragments");
         this.messageSize += frame.payload.length;
-        if (this.messageSize > (this.options.maxMessageBytes ?? 16 * 1024 * 1024))
+        const messageLimit = this.options.maxMessageBytes ?? 16 * 1024 * 1024;
+        const wireLimit = this.messageCompressed
+          ? (this.options.maxCompressedMessageBytes ?? messageLimit + 65536)
+          : messageLimit;
+        if (this.messageSize > wireLimit)
           throw new LimitError("WebSocket message exceeds configured limit");
-        if (this.messageOpcode === 1) {
+        if (this.messageCompressed) {
+          if (frame.payload.length !== 0) this.chunks.push(frame.payload);
+        } else if (this.messageOpcode === 1) {
           const text = this.decoder.decode(frame.payload, { stream: !frame.fin });
           if (text.length !== 0) this.textChunks.push(text);
         } else if (frame.payload.length !== 0) this.chunks.push(frame.payload);
         if (frame.fin) {
-          const message: SocketMessage =
-            this.messageOpcode === 1
-              ? { kind: "text", data: this.textChunks.join("") }
-              : { kind: "binary", data: concatBytes(this.chunks, this.messageSize) };
+          let message: SocketMessage;
+          if (this.messageCompressed) {
+            const compression = this.compression;
+            if (compression === null)
+              throw new ProtocolError("Compressed message was not negotiated");
+            const inflated = await compression.decompress(
+              concatBytes(this.chunks, this.messageSize),
+              messageLimit,
+            );
+            message =
+              this.messageOpcode === 1
+                ? { kind: "text", data: decodeUTF8(inflated, true, true) }
+                : { kind: "binary", data: inflated };
+          } else {
+            message =
+              this.messageOpcode === 1
+                ? { kind: "text", data: this.textChunks.join("") }
+                : { kind: "binary", data: concatBytes(this.chunks, this.messageSize) };
+          }
           this.messageOpcode = 0;
+          this.messageCompressed = false;
           this.chunks = [];
           this.textChunks = [];
           this.messageSize = 0;
@@ -323,4 +380,11 @@ class RawWebSocketSession implements WebSocketSession {
       return { kind: "close", code: 1006, reason: "", wasClean: false, failed: true };
     }
   }
+}
+
+function requireDeflate(provider: WebSocketDeflateProvider | undefined): WebSocketDeflateProvider {
+  if (provider === undefined) {
+    throw new ProtocolError("permessage-deflate was negotiated without a provider");
+  }
+  return provider;
 }

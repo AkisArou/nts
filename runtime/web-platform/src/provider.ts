@@ -39,6 +39,8 @@ export type {
   SocketClose,
   SocketIncoming,
   SocketMessage,
+  WebSocketDeflateContext,
+  WebSocketDeflateProvider,
   WebSocketHandshake,
   WebSocketSession,
   WebSocketTransport,

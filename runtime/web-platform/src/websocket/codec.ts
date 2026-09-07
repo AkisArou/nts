@@ -9,6 +9,7 @@ export interface Frame {
   fin: boolean;
   opcode: Opcode;
   payload: Uint8Array;
+  compressed?: boolean;
 }
 
 function opcode(value: number): Opcode {
@@ -28,14 +29,19 @@ export async function readFrame(
   reader: BufferedReader,
   expectMasked = false,
   maxFrameBytes = 16 * 1024 * 1024,
+  allowCompressed = false,
 ): Promise<Frame> {
   const base = await reader.exact(2);
   const a = base[0] ?? 0;
   const b = base[1] ?? 0;
   const fin = (a & 128) !== 0;
   const code = opcode(a & 15);
+  const compressed = (a & 64) !== 0;
 
-  if ((a & 0x70) !== 0) throw new ProtocolError("RSV bit set without an extension");
+  if ((a & 0x30) !== 0) throw new ProtocolError("Unsupported WebSocket reserved bit");
+  if (compressed && (!allowCompressed || code === 0 || code >= 8)) {
+    throw new ProtocolError("Invalid permessage-deflate RSV1 bit");
+  }
 
   if (((b & 128) !== 0) !== expectMasked)
     throw new ProtocolError("Invalid WebSocket masking direction");
@@ -66,7 +72,7 @@ export async function readFrame(
 
   if (mask !== null)
     for (let i = 0; i < payload.length; i++) payload[i] = (payload[i] ?? 0) ^ (mask[i & 3] ?? 0);
-  return { fin, opcode: code, payload };
+  return { fin, opcode: code, payload, compressed };
 }
 
 /** Returned chunks may be gathered by native writev. ownPayload allows in-place masking. */
@@ -82,7 +88,10 @@ export function encodeFrame(
     throw new ProtocolError("Invalid control frame");
   const extended = size < 126 ? 0 : size < 65536 ? 2 : 8;
   const header = new Uint8Array(2 + extended + (masked ? 4 : 0));
-  header[0] = (frame.fin ? 128 : 0) | frame.opcode;
+  if (frame.compressed && (frame.opcode === 0 || frame.opcode >= 8)) {
+    throw new ProtocolError("RSV1 is valid only on a message's first data frame");
+  }
+  header[0] = (frame.fin ? 128 : 0) | (frame.compressed ? 64 : 0) | frame.opcode;
   header[1] = (masked ? 128 : 0) | (size < 126 ? size : size < 65536 ? 126 : 127);
 
   if (extended === 2) {
