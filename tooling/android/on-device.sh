@@ -82,7 +82,25 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes
 # The certificate names the *address*, because the imported suite connects to
 # `127.0.0.1` and requires `localhost` to be refused. `transport.rs` generates
 # the mirror of this for its own suite; see the note there.
+# The **legacy** PKCS12 algorithms, and this is an API-26 finding rather than a
+# preference. A modern `keytool` writes PBES2 with `HmacPBESHA256`, and API 26's
+# bundled BouncyCastle cannot read that MAC:
+#
+#   java.io.IOException: PKCS12 key store mac invalid - wrong password or
+#                        corrupted file.
+#     at com.android.org.bouncycastle...PKCS12KeyStoreSpi.engineLoad
+#
+# The device suite passed for as long as it only ran on API 36, whose Conscrypt
+# handles it. On the floor this library actually declares, every TLS case died
+# before the first handshake -- and `app_process` reports that as `Killed` with
+# the exception only in logcat, so the run looked like a hang.
+#
+# These three are what API 26 accepts. They are weak, and that is fine for a
+# certificate generated per run, valid for one day, for a loopback peer.
 keytool -genkeypair -alias nts-web -keyalg RSA -keysize 2048 -validity 1 \
+  -J-Dkeystore.pkcs12.macAlgorithm=HmacPBESHA1 \
+  -J-Dkeystore.pkcs12.keyProtectionAlgorithm=PBEWithSHA1AndDESede \
+  -J-Dkeystore.pkcs12.certProtectionAlgorithm=PBEWithSHA1AndRC2_40 \
   -dname CN=nts-web-test -ext SAN=ip:127.0.0.1 \
   -keystore "$work/store.p12" -storetype PKCS12 \
   -storepass test-only -keypass test-only > /dev/null

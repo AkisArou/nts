@@ -158,6 +158,22 @@ public final class EnvTest {
      * and every callback in them for the life of the thread.
      */
     static void closedEnvironmentLetsGo() {
+        // **The instrument first.** On API 26 under `app_process` a weak
+        // reference to a plainly dead object is never enqueued at all: ART's
+        // reference-processing daemons are started by the zygote, not by a bare
+        // `app_process`, so nothing clears anything. The queue then stays empty
+        // for a reason that has nothing to do with the subject, and this test
+        // read that as "after close, the runtime still retains its callbacks"
+        // -- a false accusation against code that had released correctly.
+        //
+        // It cost an hour and two wrong diagnoses before the control was
+        // written, and the control is four lines. A test whose instrument can
+        // be dead has to say which it is measuring.
+        if (!collectorClearsReferences()) {
+            System.out.println("SKIP retirement: this runtime never cleared a reference to a "
+                + "plainly dead object, so the queue says nothing about any subject");
+            return;
+        }
         // Held for the whole check. A `WeakReference` that is itself collected
         // is never enqueued, and the queue then stays empty for a reason that
         // has nothing to do with the referents -- which reads exactly like a
@@ -165,6 +181,37 @@ public final class EnvTest {
         held = buildCloseAndDrop();
         String missing = notEnqueued(2);
         check(missing == null, "after close, the runtime still retains " + missing);
+    }
+
+    /**
+     * Does a weak reference to an object nothing can reach get cleared here?
+     *
+     * <p>The control for the check below. It is deliberately about an object
+     * with no relationship to the runtime at all -- if this does not clear,
+     * nothing the queue reports means anything, and a failure below would be
+     * about the collector rather than about what was closed.
+     */
+    static boolean collectorClearsReferences() {
+        ReferenceQueue<Object> control = new ReferenceQueue<Object>();
+        WeakReference<Object> dead = deadReference(control);
+        for (int attempt = 0; attempt < 60; attempt++) {
+            System.gc();
+            for (int i = 0; i < 200; i++) {
+                byte[] waste = new byte[8192];
+                waste[0] = 1;
+            }
+            try { Thread.sleep(25); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            if (control.poll() != null) {
+                return true;
+            }
+        }
+        // Named so the reference itself is not what was collected.
+        return dead.get() == null;
+    }
+
+    /** In its own frame, for the reason `buildCloseAndDrop` documents. */
+    static WeakReference<Object> deadReference(ReferenceQueue<Object> queue) {
+        return new WeakReference<Object>(new Object(), queue);
     }
 
     static Named[] held;

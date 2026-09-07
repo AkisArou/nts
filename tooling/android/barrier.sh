@@ -51,11 +51,31 @@ case "$isa" in
 esac
 echo "device abi: $isa"
 
-adb shell "/apex/com.android.art/bin/dex2oat64 \
+# **Where the ART tools live depends on the API level.** They moved into an
+# APEX around API 30; on API 26 they are in `/system/bin` and there is no
+# `dex2oat64` at all. This script named the APEX path only, so on the floor this
+# library declares it compiled nothing, dumped nothing, and reported a barrier
+# count of zero for both methods -- with the failure hidden because the command
+# sends its errors to /dev/null.
+compiler=""
+dumper=""
+for candidate in /apex/com.android.art/bin/dex2oat64 /apex/com.android.art/bin/dex2oat /system/bin/dex2oat; do
+  if adb shell "test -x $candidate" 2>/dev/null; then compiler=$candidate; break; fi
+done
+for candidate in /apex/com.android.art/bin/oatdump /system/bin/oatdump; do
+  if adb shell "test -x $candidate" 2>/dev/null; then dumper=$candidate; break; fi
+done
+[ -n "$compiler" ] && [ -n "$dumper" ] || {
+  echo "FAILED: no dex2oat/oatdump on this device; looked in the APEX and /system/bin" >&2
+  exit 1
+}
+echo "compiler: $compiler"
+
+adb shell "$compiler \
   --dex-file=/data/local/tmp/barrier.dex \
   --oat-file=/data/local/tmp/barrier.oat \
   --instruction-set=$set_isa --compiler-filter=speed" > /dev/null 2>&1
-adb shell "/apex/com.android.art/bin/oatdump --oat-file=/data/local/tmp/barrier.oat \
+adb shell "$dumper --oat-file=/data/local/tmp/barrier.oat \
   > /data/local/tmp/barrier.txt 2>&1"
 adb pull /data/local/tmp/barrier.txt "$work/dump.txt" > /dev/null
 adb shell rm -f /data/local/tmp/barrier.dex /data/local/tmp/barrier.oat /data/local/tmp/barrier.txt
