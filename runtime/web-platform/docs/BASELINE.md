@@ -1693,3 +1693,38 @@ refusals and 153 dependent `NTS1003` cascades, with zero `NTS1004` module diagno
 zero JVM-backend diagnostics, and no invalid HIR. The 15-primary and two-cascade
 increase is the transport and its final request/session guards reaching existing
 language prerequisites; it is not compiled-provider or ALPN evidence.
+
+## Typed MockAgent transport
+
+At `eb014d2f`, deterministic request mocking is implemented as a shared typed
+`FetchTransport`, rather than by delegating matching or replay to host JavaScript.
+`MockAgent`, `MockPool`, and `MockClient` own interceptors with path, method, query,
+header, and bounded body matching. Interceptors provide sequential replies, stable
+error identity, abortable delay, finite or persistent use, default headers and
+trailers, and calculated content length. A direct pool dispatch searches only that
+pool even when another pool has an overlapping origin matcher.
+
+An unmatched request may be replayed to an explicit fallback transport. Request
+bodies are captured once under a configurable byte limit and reconstructed before
+fallback, so matching cannot silently consume the body the network path receives.
+Network permission is explicit and independently supports allow-all, deny-all, and
+host matchers. Call history is opt-in, immutable at its public boundary, and bounded
+by an explicit drop-oldest limit with a visible dropped-entry count. Graceful close
+rejects new work, is shared by concurrent callers, and waits for replies already in
+flight.
+
+The focused mock corpus passes 9/9 and the complete local Node-host/real-socket suite
+passes 292/292. The pinned WPT slice is unchanged at 2275/2283 applicable cases with
+14 named not-applicable cases and the same eight visible structural/common-compiler
+failures. This is host evidence for the shared behavior; the exact dynamic Undici
+package facade and compiled-provider execution remain separate obligations in the
+API ledger.
+
+A sabotage changed the body bound from strictly greater-than to greater-than-or-equal.
+The exact-boundary precondition fell from 1/1 to 0/1 with `LimitError`, while the
+over-limit case still failed as expected; restoring the predicate returned 1/1.
+The live compiled-source frontier is 1133 primary `NTS1001` refusals and 166
+dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase from the HTTP/2 checkpoint is final
+mocking source reaching existing language prerequisites; it is not compiled mock
+execution evidence.
