@@ -62,6 +62,14 @@ function expectation(source) {
   return out.join(" ");
 }
 
+/** The addon the last `emit-c` wrote, so a "publishes X" expectation can be read. */
+function readEmitted(output) {
+  const m = /wrote .* to (\S+)/.exec(output);
+  if (m === null) return "";
+  const addon = join(m[1], "addon.c");
+  return existsSync(addon) ? readFileSync(addon, "utf8") : "";
+}
+
 function run(args) {
   const result = spawnSync(compiler, args, {
     encoding: "utf8",
@@ -90,8 +98,19 @@ for (const name of names) {
     ? run(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blk-")), "--napi"])
     : run(["hir", tsconfig]);
 
-  const expectsClean = expected.startsWith("nothing refused");
-  const isClean = /nothing refused/.test(output) && !/no wrapper/.test(output);
+  // Two ways for a fixture to say "this works now". `nothing refused` is the
+  // lowering's, and `publishes X` is the wrapper's -- `emit-c` prints no such
+  // phrase when it succeeds, so a fixture about a boundary has to name what it
+  // expects to see published instead.
+  const publishes = /^publishes\s+(\S+)/.exec(
+    expected.replace(/^emit-c\b[^>]*->\s*/, ""),
+  );
+  const expectsClean = expected.startsWith("nothing refused") || publishes !== null;
+  const isClean = publishes !== null
+    ? new RegExp(`napi_set_named_property\\(env, exports, "${publishes[1]}"`).test(
+      readEmitted(output),
+    ) && !/no wrapper/.test(output)
+    : /nothing refused/.test(output) && !/no wrapper/.test(output);
 
   // The expectation minus its prose: the diagnostic text itself. The command
   // prefix has to come off *before* the prose, because ` --napi ` looks exactly

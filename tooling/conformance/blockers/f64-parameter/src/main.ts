@@ -1,4 +1,9 @@
-// expect: emit-c --napi -> no wrapper for sum: takes f64[]
+// expect: emit-c --napi -> publishes sum
+//
+// FIXED. This refused until the compiler lane taught the Node-API wrapper to
+// carry an array of numbers across the boundary; it is kept as a regression
+// guard, because `punycode.ucs2` needs it and `ucs2` is what stood between
+// this project and its first passing compiled module.
 //
 // An array of numbers cannot cross the Node-API boundary inbound. This is what
 // `punycode.ucs2.encode` needs, and node's own test-punycode.js calls it six
