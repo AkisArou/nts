@@ -43,7 +43,7 @@
 // `deep-equal.ts` are under every module here, and a sweep that covers only the
 // module being worked on would report the win and miss the cost.
 
-import { readdirSync, existsSync, statSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
@@ -120,6 +120,34 @@ const modules = requested
  * and export the wrong things. Collapsing those into "not green" throws away
  * the only part a compiler session can act on.
  */
+/**
+ * Names a module's `shape.mjs` reads off its exports that the addon does not
+ * publish.
+ *
+ * The export audit asks this of the TypeScript lane. Nothing asked it of a
+ * compiled artifact, because until now no artifact published enough for the
+ * question to arise.
+ */
+function shapeNamesMissingFrom(module, artifact) {
+  const shapePath = join(PROFILE, module, "shape.mjs");
+  if (!existsSync(shapePath)) return [];
+  const text = readFileSync(shapePath, "utf8");
+  const start = text.indexOf("export function shape(");
+  if (start < 0) return [];
+  const next = text.indexOf("\nexport function ", start + 1);
+  const body = text.slice(start, next < 0 ? text.length : next);
+  const needed = new Set(
+    [...body.matchAll(/\bexports\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]),
+  );
+  let published;
+  try {
+    published = new Set(Object.keys(createRequire(import.meta.url)(artifact)));
+  } catch {
+    return [];
+  }
+  return [...needed].filter((name) => !published.has(name)).sort();
+}
+
 function addon(module) {
   const artifact = join(ROOT, "target/node", `${module}.node`);
   try {
@@ -181,9 +209,27 @@ function addon(module) {
   // module *does*?
   const degenerate = runAddon(module, artifact, true)?.pass ?? 0;
   const real = tally.pass - degenerate;
+  const stage = applicable > 0 && real === applicable
+    ? "green"
+    : real > 0 ? "partial" : "all-passes-degenerate";
+
+  // Passing every test is not the same as being complete, and this axis is
+  // about to have a row where the difference matters. `punycode` publishes
+  // `decode`, `encode`, `toASCII`, `toUnicode` and `ucs2` but not `version`, a
+  // string constant node's own test never touches -- so it can pass every
+  // applicable test with a name missing from its surface, and "green" would
+  // read as "works" when it means "nothing asked".
+  //
+  // So a green module that does not publish everything its `shape.mjs` needs
+  // says so on the same line. Not a downgrade -- the tests really do pass -- but
+  // the first row on an axis that has only ever reported zero will be quoted,
+  // and it should carry its own caveat.
+  const missing = stage === "green" ? shapeNamesMissingFrom(module, artifact) : [];
   return {
-    stage: applicable > 0 && real === applicable ? "green" : real > 0 ? "partial" : "all-passes-degenerate",
-    detail: `${tally.pass} / ${applicable}${degenerate > 0 ? `, ${degenerate} degenerate` : ""}`,
+    stage,
+    detail: `${tally.pass} / ${applicable}` +
+      (degenerate > 0 ? `, ${degenerate} degenerate` : "") +
+      (missing.length > 0 ? `, incomplete: ${missing.join(", ")} absent` : ""),
     clang: [],
     tally,
     degenerate,
