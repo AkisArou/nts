@@ -5139,3 +5139,43 @@ WebSocket subprotocols are validated as HTTP tokens and a non-token throws a
 Cache names reach a `TextEncoder`, which encodes any string.
 
 One instance, found, fixed, and the rest checked.
+
+## The fuzz that proved a point and was thrown away
+
+Establishing that `percentDecodeBytes` was sound before blaming a backend took six
+thousand generated inputs against a hand-written oracle. They agreed on all of them, the
+question was answered, and the fuzz went in a scratchpad — so the evidence lasted exactly
+as long as the question did. The NodeJS lane made the same argument from the other side
+today and moved their differentials inside their sweep; this is that argument applied
+here.
+
+`core/utf8.ts` is the right place to start, for a reason outside this lane. It is the
+most depended-upon function here that is not part of the Web surface: `utf8Decode` is
+re-exported for `Buffer.toString("utf8")` and thirteen of the NodeJS lane's modules stop
+building without it. It was **nearly swapped** for the WHATWG decoder earlier today,
+which would have changed their behaviour on any buffer beginning `EF BB BF` with every
+test on both sides staying green, because the difference is invisible from this side.
+
+So the codec is now compared against node's `Buffer` on every run: `utf8Length` against
+`Buffer.byteLength`, `utf8Write` against `Buffer.from`, `utf8Decode` against
+`Buffer.toString`, and a ranged decode against the same over a subarray. Twenty thousand
+generated strings each — ASCII, Latin-1, the BMP, astral pairs and lone surrogates — plus
+twenty thousand arbitrary byte sequences for the decode direction, where a decoder either
+matches node's replacement behaviour or invents its own. Seventy-five thousand
+comparisons in seventy milliseconds.
+
+**The oracle is node's, not a reimplementation, and that is the point.** The
+percent-decoding fuzz's hand-written oracle was wrong on its first run — its
+lone-surrogate regex matched the trailing half of every valid pair — and reported the
+function as broken. A comparison is only as good as the side nobody is testing.
+
+`Buffer.toString("utf8")` is also the correct oracle for the decode direction where
+`TextDecoder` is not: the WHATWG decoder consumes a leading BOM and this codec must not.
+The distinction that nearly caused a silent break is the one the test is anchored on.
+
+Three sabotages, all restored. Consuming a leading BOM on decode — the exact swap that
+was nearly made — fails. Counting an astral code point as three bytes fails both the
+length and the write comparison. Ignoring the `start` of a ranged decode fails, after its
+first form was refused for not type-checking.
+
+Local corpus 721/721 with zero skipped, upstream unchanged at 2,408 of 2,418.
