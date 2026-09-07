@@ -147,17 +147,31 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
 const FULLY_CONFORMANT = [
   "AbortSignal",
   "Headers",
-  "Request",
-  "Response",
   "TextDecoder",
   "TextDecoderStream",
   "TextEncoder",
   "TextEncoderStream",
 ];
 
+/**
+ * Interfaces whose prototypes are clean and enumerable but which still deviate in shape.
+ *
+ * `Request` and `Response` include the `Body` mixin. Web IDL says an included mixin's members
+ * are **copied onto the interface prototype**; here they are inherited from a shared `Body`
+ * base class instead. Every value reads correctly, `instanceof` is unaffected, and the
+ * difference is visible only in `Object.getOwnPropertyNames(Request.prototype)` and
+ * `Request.prototype.hasOwnProperty("json")`.
+ *
+ * They were listed as fully conformant until the name-completeness check below was written,
+ * which is the assertion that found it. Recorded rather than fixed: making the mixin members
+ * own properties means the prototype chain stops inheriting from `Body`, which is a change to
+ * a hierarchy that four other interfaces sit on.
+ */
+const MIXIN_INHERITED = ["Request", "Response"];
+
 suite("members of a cleared interface are enumerable, as Web IDL requires", () => {
   const wrong = [];
-  for (const name of FULLY_CONFORMANT) {
+  for (const name of [...FULLY_CONFORMANT, ...MIXIN_INHERITED]) {
     for (const key of Object.getOwnPropertyNames(api[name].prototype)) {
       if (key === "constructor") continue;
       const descriptor = Object.getOwnPropertyDescriptor(api[name].prototype, key);
@@ -171,7 +185,7 @@ suite("making them enumerable did not expose an internal", () => {
   // The other half of the same change. `getOwnPropertyNames` skips symbol keys, so the
   // internals other modules reach are untouched by the enumerability pass -- and that is
   // exactly why the pass is safe on these classes and not on the rest.
-  for (const name of FULLY_CONFORMANT) {
+  for (const name of [...FULLY_CONFORMANT, ...MIXIN_INHERITED]) {
     const conformant = globalThis[name];
     if (typeof conformant !== "function") continue;
     const theirs = new Set(Object.getOwnPropertyNames(conformant.prototype));
@@ -179,5 +193,82 @@ suite("making them enumerable did not expose an internal", () => {
       (key) => key !== "constructor" && !theirs.has(key),
     );
     assert.deepEqual(extra, [], `${name} must expose no non-standard names`);
+  }
+});
+
+/**
+ * Members that other lanes reach **reflectively**, by name, as a duck-type brand check.
+ *
+ * Reported by the Node lane, which has five sites of the shape `!("aborted" in signal)` --
+ * in `internal/validators.ts`, `util/src/main.ts` and two files under `stream/src/iter/`.
+ * They are the argument for this suite existing in this form.
+ *
+ * The hazard is specific and it is the mirror of a defect this lane shipped and caught: a
+ * reflective check is invisible to `tsc` -- the property genuinely might not exist, which is
+ * what the check is asking -- so symbol-keying or privatising one of these names produces no
+ * compile error here, no failing conformance test here, and five silent rejections of
+ * perfectly valid `AbortSignal`s over there.
+ *
+ * These names stay named because Web IDL says so. This records that they are also
+ * load-bearing outside this lane, so the decision is made knowingly rather than discovered.
+ */
+const REFLECTIVELY_REACHED = {
+  AbortSignal: ["aborted"],
+};
+
+suite("every standard member is still reachable by its own name", () => {
+  // The direction the extras check cannot see. `getOwnPropertyNames` skipping symbols is what
+  // makes symbol-keying an internal invisible -- and it would make symbol-keying a *public*
+  // member equally invisible, while breaking every consumer that looks the name up.
+  const missing = [];
+  for (const name of FULLY_CONFORMANT) {
+    const conformant = globalThis[name];
+    if (typeof conformant !== "function") continue;
+    const mine = new Set(Object.getOwnPropertyNames(api[name].prototype));
+    for (const key of Object.getOwnPropertyNames(conformant.prototype)) {
+      if (key === "constructor") continue;
+      if (!mine.has(key)) missing.push(`${name}.${key}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});
+
+suite("members other lanes brand-check by name are named, not symbol-keyed", () => {
+  for (const [name, keys] of Object.entries(REFLECTIVELY_REACHED)) {
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(api[name].prototype, key);
+      assert.notEqual(
+        descriptor,
+        undefined,
+        `${name}.${key} is reached reflectively by another lane; see the note above`,
+      );
+      // `in` walks the prototype chain and finds accessors, so an own accessor is what the
+      // consuming check actually needs -- asserted as the shape, not merely as a truthy read.
+      assert.ok(
+        typeof descriptor.get === "function" || "value" in descriptor,
+        `${name}.${key} must be a real prototype member`,
+      );
+      assert.ok(
+        key in new api.AbortController().signal,
+        `${key} must answer an "in" check on this runtime's signal, not the host's`,
+      );
+    }
+  }
+});
+
+suite("the mixin deviation is exactly what it is claimed to be", () => {
+  // Pinned in the direction it currently holds, so that fixing it fails here and the note
+  // above has to be removed rather than quietly outliving its reason.
+  for (const name of MIXIN_INHERITED) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(api[name].prototype, "json"),
+      false,
+      `${name}.prototype owns its Body members now -- the mixin deviation is fixed`,
+    );
+    assert.equal(
+      typeof api[name].prototype.json,
+      "function",
+      `${name} must still reach the Body members by inheritance`,
+    );
   }
 });

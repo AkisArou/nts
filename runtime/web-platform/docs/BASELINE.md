@@ -6267,3 +6267,52 @@ That is the second time today a green compiler has been the wrong instrument, an
 the test that caught it was checking something the compiler is structurally unable to see.
 
 816/816 host, upstream unchanged at 2,566 of 2,574, frontier unchanged at 1,407/337.
+
+## A dependency neither corpus can see, and the overclaim it exposed
+
+The Node lane reported five sites of the shape `!("aborted" in signal)` — in
+`internal/validators.ts`, `util/src/main.ts` and two files under `stream/src/iter/` — which
+brand-check this runtime's `AbortSignal` **by name, reflectively**.
+
+That is the exact defect this lane shipped and caught an hour earlier, pointed the other way.
+A reflective check is invisible to `tsc`, because the property genuinely might not exist —
+that is what the check is asking. So symbol-keying or removing `aborted` would produce no
+compile error here, no failing conformance test here, and five silent rejections of perfectly
+valid signals over there. Their `validateAbortSignal` would begin throwing
+`ERR_INVALID_ARG_TYPE` for correct input, in three modules, and nothing on either side would
+say a word.
+
+`aborted` stays named because Web IDL says so. What is new is that this is **written down and
+asserted**, so the decision is made knowingly rather than discovered.
+
+One reassurance for that lane, found by sabotaging it: symbol-keying `aborted` **does not
+compile** — `AbortSignalOperations` declares it, so the internal operations interface already
+guards it at the type level. That guard is incidental rather than designed, so the assertion
+earns its place; but the exposure is smaller than it looked. Removing the accessor outright
+does compile, and both new assertions catch it.
+
+### The assertion found something on the way in
+
+The suite already checked that no *extra* names appear on a cleared prototype. It had never
+checked the other direction — that every standard name is **still there**, which is precisely
+what symbol-keying a public member would break while remaining invisible to
+`getOwnPropertyNames`.
+
+Adding that check immediately failed, and it was right. **`Request` and `Response` are not
+fully conformant and I had listed them as such.** They include the `Body` mixin, and Web IDL
+says an included mixin's members are *copied onto the interface prototype*; here they are
+inherited from a shared `Body` base class. `Request.prototype.hasOwnProperty("json")` is
+`false` where every other implementation says `true`. Every value reads correctly and
+`instanceof` is unaffected, which is why nothing had noticed.
+
+Recorded rather than fixed — making the mixin members own properties means the prototype
+chain stops inheriting from `Body`, and four interfaces sit on that hierarchy — and pinned in
+the direction it currently holds, so that fixing it fails the test and the note has to be
+removed rather than quietly outliving its reason.
+
+**And the first version of the new check was itself vacuous.** It asserted
+`"aborted" in new AbortController().signal` with no import — so `AbortController` resolved to
+**node's global**, and the assertion checked node's signal rather than this runtime's. It
+passed, and it would have passed forever. Caught by asking why a brand-new test was green.
+
+816/816 → 818/818 host, upstream unchanged at 2,566 of 2,574.
