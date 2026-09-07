@@ -481,34 +481,49 @@ legible:
 | 82 | a member of a class this compiler has no type for | `web-platform/streams/readable.ts` |
 | 77 | assigning to this property | `node/url/searchparams.ts`, `streams/fifo.ts` |
 
-Roughly **450 of the 2,077 are in three web-platform stream files** — but that
-is **two compiler features, not one**, and the first version of this section ran
-them together.
+**This section said the largest kind was "a nullable or optional property —
+`T | null` and `T | undefined` together are 305 sites", called it how anyone
+writes a linked list, and ranked it above `punycode`'s remaining work. That was
+wrong, and the fixture is what showed it.** A plain nullable property compiles:
 
-**305 are a nullable or optional property**: `T | null` and `T | undefined`. Not
-an exotic construct — it is how anyone writes a linked list, a pending slot or
-an options bag.
+    class Holder { slot: number | undefined = undefined; }        nothing refused
+    class Holder { slot: Plain | null = null; }                   nothing refused
+    class Holder { readonly slots: (number | undefined)[] = []; } nothing refused
 
-**164 are something else.** The web-platform lane caught this: `writable.ts:50`,
-cited here as a plain unrepresentable property, is `#capability:
-PromiseWithResolvers<void>` — not nullable at all, but an object with function
-members. So it is a second blocker sitting in the same files, and unblocking
-`fs`, `stream` and `readline` needs both.
+The `| null` is in those diagnostics because it is in the type, not because it
+is the cause:
 
-**And the nullable ones divide in a way that matters before the fix is
-designed, not after.** Some are nullable *as a domain value* — a list head with
-nothing in it, a session before connect, an option nobody set. Others are
-nullable *to release*: `Fifo`'s `#values: (T | undefined)[]` sets the slot to
-`undefined` on dequeue precisely so the dequeued value is not retained, and
-`readable.ts`'s async iterator drops `#stream`, `#reader` and its algorithms
-after use. **A representation that boxed a nullable property would satisfy the
-type and defeat the purpose if the box retained the old value**, and every
-value that ever passed through the queue would be leaked. That is worth knowing
-while the representation is being chosen.
+    cap: PromiseWithResolvers<void>          -> unrepresentable (`PromiseWithResolvers`)
+    cap: PromiseWithResolvers<void> | null   -> unrepresentable (a union of `PromiseWithResolvers` | null)
 
-One diagnostic note for whoever chases these: the NTS1001 location for a
-property-type refusal is the **use** site, not the declaration. `writable.ts:59`,
-`:63` and `:69` are all closing braces; the property is declared at `:49`.
+Same refusal wearing a union. `blockers.mjs` normalised every backticked token
+to `X`, which collapsed those two into one kind with one name and two causes,
+and this document then described the group by the wrong one. The grouping keeps
+the type now; the member name varies and is never the reason.
+
+**Corrected, `fs`'s 2,078 refusals are:**
+
+|  count | kind |
+| ---: | --- |
+| 191 | a property of unrepresentable type (`PromiseWithResolvers` \| null) |
+| 101 | a property of unrepresentable type (`PromiseWithResolvers`) |
+| 82 | a member of a class this compiler has no type for |
+| 77 | assigning to this property |
+| 66 | `null`/`undefined` where what it stands in for is not a reference |
+| 63 | a union of `closeSentinel` \| the type parameter `W` \| undefined |
+| 59 | a union of `AsyncIterableIterator` \| undefined |
+
+**`PromiseWithResolvers` alone is 292 of them** — one concrete type, an object
+with two function-valued members, 101 of them bare in `writable.ts`. That is the
+answer to what the compiler should do first for `fs`, and it is not a language
+feature.
+
+**One genuinely new blocker came out of the exercise**, and it is the one
+`Fifo<T>` actually has — eight lines, and it refuses at `Slot<Marker>` as well
+as `Slot<number>`, so it is the type parameter rather than the instantiation:
+
+    class Slot<T> { value: T | undefined = undefined; }
+    -> `null` or `undefined` where what it stands in for is not a reference
 
 This is why `fs`, `stream`, `readline` and `http` all sit where they do.
 
