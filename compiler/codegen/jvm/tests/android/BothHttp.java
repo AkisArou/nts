@@ -453,6 +453,9 @@ public final class BothHttp {
 
             // Neither adapter stores the cookie it was just handed.
             cookiesAreNotStored(lane, client, plain);
+
+            // The pool holds a connection, and shutdown empties it.
+            pooling(lane, client, plain);
         } finally {
             // The adapter's own shutdown, before the lane it delivers on. This
             // is not tidiness: without it this corpus took sixty seconds of
@@ -468,6 +471,117 @@ public final class BothHttp {
         System.out.printf("both-http: %d checks, %d failures%n", checks, failures);
         if (failures != 0) {
             System.exit(1);
+        }
+    }
+
+    /** A server that answers more than once on one socket, so a pool has something to hold. */
+    static final class KeepAlive implements Runnable {
+        final ServerSocket listener;
+        final byte[] response;
+        volatile int served;
+        volatile boolean stop;
+
+        KeepAlive(byte[] response) throws IOException {
+            this.response = response;
+            this.listener = new ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"));
+        }
+
+        int port() {
+            return listener.getLocalPort();
+        }
+
+        @Override
+        public void run() {
+            while (!stop) {
+                try {
+                    final Socket peer = listener.accept();
+                    Thread worker = new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                InputStream in = peer.getInputStream();
+                                OutputStream out = peer.getOutputStream();
+                                StringBuilder head = new StringBuilder();
+                                int b;
+                                while ((b = in.read()) != -1) {
+                                    head.append((char) b);
+                                    int n = head.length();
+                                    if (n >= 4 && head.charAt(n - 4) == '\r'
+                                        && head.charAt(n - 3) == '\n'
+                                        && head.charAt(n - 2) == '\r'
+                                        && head.charAt(n - 1) == '\n') {
+                                        served++;
+                                        out.write(response);
+                                        out.flush();
+                                        head.setLength(0);
+                                    }
+                                }
+                            } catch (IOException closing) {
+                                // the peer went away, which is the end of this connection
+                            }
+                        }
+                    }, "keep-alive-peer");
+                    worker.setDaemon(true);
+                    worker.start();
+                } catch (IOException stopping) {
+                    return;
+                }
+            }
+        }
+
+        void close() {
+            stop = true;
+            try {
+                listener.close();
+            } catch (IOException ignored) {
+                // stopping
+            }
+        }
+    }
+
+    /**
+     * The pool holds a connection between requests, and shutdown empties it.
+     *
+     * <p>Every other case here answers with `Connection: close`, so nothing is
+     * ever pooled and the eviction in `OkHttpNetworking.shutdown` would be
+     * unobserved -- present in the source, doing nothing any test could see.
+     * That is the state the sixty-second hang was in before it was measured:
+     * true of the code, invisible to the suite.
+     *
+     * <p>So this one keeps the socket open. Two requests, one connection, and
+     * then the count before and after shutdown. A pool that is empty *because
+     * nothing was pooled* proves nothing, which is why the before is asserted
+     * too.
+     */
+    static void pooling(ExecutorService lane, OkHttpClient client, byte[] plain) throws Exception {
+        byte[] canned = ("HTTP/1.1 200 OK\r\nContent-Length: " + plain.length + "\r\n\r\n")
+            .getBytes("ISO-8859-1");
+        ByteArrayOutputStream whole = new ByteArrayOutputStream();
+        whole.write(canned);
+        whole.write(plain);
+
+        KeepAlive server = new KeepAlive(whole.toByteArray());
+        Thread thread = new Thread(server, "both-http-pool");
+        thread.setDaemon(true);
+        thread.start();
+        OkHttpClient own = OkHttpNetworking.client();
+        try {
+            Answer first = viaOkHttp(own, lane, server.port(), "GET", "/one", new String[0]);
+            Answer second = viaOkHttp(own, lane, server.port(), "GET", "/two", new String[0]);
+            check(first.ok() && second.ok(),
+                "the keep-alive exchange failed: " + first + " / " + second);
+            check(server.served == 2, "the server answered " + server.served + " of two requests");
+            check(own.connectionPool().connectionCount() > 0,
+                "nothing was pooled, so evicting the pool would prove nothing");
+
+            OkHttpNetworking.shutdown(own);
+            check(own.connectionPool().connectionCount() == 0,
+                "shutdown left " + own.connectionPool().connectionCount()
+                    + " connections in the pool -- on Android those are sockets held on a "
+                    + "network the device may already have left");
+        } finally {
+            OkHttpNetworking.shutdown(own);
+            server.close();
         }
     }
 
