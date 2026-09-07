@@ -236,6 +236,15 @@ let autoSelectFamilyAttemptTimeoutDefault = nts_net_default_auto_select_family_a
 
 export interface SocketOptions {
   fd?: number | undefined;
+  /**
+   * Declared so they can be *rejected*. A socket carries bytes, so object mode
+   * is a category error rather than an unsupported extra, and node throws
+   * rather than ignoring it. Leaving them off this interface would only move
+   * the refusal to a place callers cannot see.
+   */
+  objectMode?: boolean | undefined;
+  readableObjectMode?: boolean | undefined;
+  writableObjectMode?: boolean | undefined;
   allowHalfOpen?: boolean | undefined;
   highWaterMark?: number | null | undefined;
   readableHighWaterMark?: number | null | undefined;
@@ -585,6 +594,17 @@ export class Socket extends Duplex {
   #abortCleanup: (() => void) | undefined;
 
   constructor(options: SocketOptions = {}) {
+    // Before `super`, as node does it: a socket in object mode is not a socket
+    // whose stream misbehaves, it is a request that was never coherent.
+    if (options.objectMode === true) {
+      throw new ERR_INVALID_ARG_VALUE("options.objectMode", options.objectMode, "is not supported");
+    }
+    if (options.readableObjectMode === true || options.writableObjectMode === true) {
+      const name = options.readableObjectMode === true
+        ? "readableObjectMode"
+        : "writableObjectMode";
+      throw new ERR_INVALID_ARG_VALUE(`options.${name}`, true, "is not supported");
+    }
     super({
       // A socket carries bytes. Object mode would be a category error and node
       // does not offer it.
@@ -1863,6 +1883,24 @@ export class Server extends EventEmitter {
           ? 0
           : validatePort(options.port);
     const isPipe = boundSocket?.isPipe ?? (path !== undefined && path !== "");
+
+    // An abstract-namespace socket has no filesystem entry, so there is
+    // nothing for `readableAll`/`writableAll` to chmod. Node refuses the
+    // combination rather than silently ignoring the permissions, and the
+    // message is transcribed with its upstream typo intact -- node's own test
+    // matches on it.
+    const requestedPath = options.path;
+    if (
+      requestedPath !== undefined &&
+      requestedPath.startsWith("\0") &&
+      (options.readableAll === true || options.writableAll === true)
+    ) {
+      throw new ERR_INVALID_ARG_VALUE(
+        "options",
+        options,
+        "can not set readableAll or writableAllt to true when path is abstract unix socket",
+      );
+    }
     const boundHandle = boundSocket === undefined ? -1 : consumeBoundSocket(boundSocket);
     this.#handleClosed = false;
     this.#closeEmitted = false;

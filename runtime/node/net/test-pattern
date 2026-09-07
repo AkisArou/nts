@@ -1,1 +1,1 @@
-^(test-net(-.*)?|test-blocklist(-.*)?|test-socketaddress)\.(?:js|mjs)$
+^(test-net(-.*)?|test-blocklist(-.*)?|test-socketaddress|test-socket-.*)\.(?:js|mjs)$

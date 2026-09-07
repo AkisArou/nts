@@ -14,9 +14,18 @@ import { resolve as resolvePath, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
+// The directory is named for the *test run*, not for the process, and the two
+// differ whenever a test forks. Node names it from `TEST_SERIAL_ID` /
+// `TEST_THREAD_ID`, which its runner sets and children inherit through the
+// environment; keying on `process.pid` instead gave a forked child a directory
+// its parent had never created, so a test whose child binds a socket under
+// `tmpdir` failed on the bind rather than on its subject. Self-assigned on
+// first use so no runner change is needed, and inherited from there.
+process.env.NTS_TEST_TMPDIR_ID ??= String(process.pid);
+
 let tmpPath = resolvePath(
   process.env.NODE_TEST_DIR || join(process.cwd(), "target/node-test-tmp"),
-  `.tmp.${process.pid}`,
+  `.tmp.${process.env.NTS_TEST_TMPDIR_ID}`,
 );
 
 export function refresh() {

@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,751 of node's own applicable test files pass** across twenty-two modules,
+**1,760 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -364,8 +364,8 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,751
-measured, 418 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,760
+measured, 419 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of
@@ -395,7 +395,7 @@ still.
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
-| `net` | **133 / 133** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `net` | **142 / 142** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
 | `process` | **81 / 81** | 0 | complete but for `process.binding`, `stdin` and workers |
@@ -824,6 +824,46 @@ the original's native handle*, so that adding an address to one is visible
 through the other. Node does that with its internal `kClone`/`kDeserialize`
 symbol protocol over a shared handle; this profile's `BlockList` holds ordinary
 typed state and structured clone has no route to it.
+
+## Nine more in `net`, two refusals it was not making, and a harness bug
+
+The sixth pass of the pattern audit went after families named for a *transport*
+rather than a module: `test-socket-*` and `test-pipe-*`. Nine of them
+`require('net')` and nothing else this profile lacks, and none was claimed.
+`net` goes from 133 to 142.
+
+Four passed untouched. Two were failing because `net` was not making a refusal
+node makes, and both are the kind that only a test would ever tell you about:
+
+- `new net.Socket({ objectMode: true })` has to throw `ERR_INVALID_ARG_VALUE`.
+  A socket carries bytes, so object mode is not an unsupported extra but a
+  request that was never coherent, and node rejects it in the constructor
+  rather than ignoring it. `readableObjectMode` and `writableObjectMode` the
+  same. The three are now declared in `SocketOptions` *so that they can be
+  rejected* — leaving them off the interface would only move the refusal
+  somewhere a caller cannot see it.
+- `listen({ path: "\0abstract", readableAll: true })` has to throw. An
+  abstract-namespace socket has no filesystem entry, so there is nothing for
+  the permission flags to chmod, and silently ignoring them would leave a
+  caller believing a socket is world-readable when nothing made it so. The
+  message is transcribed with node's own typo (`writableAllt`) intact, because
+  node's test matches on it.
+
+**The ninth was a bug in this harness, and it is the exact mirror of a hollow
+pass.** `test-pipe-unref.js` forks a child that binds a socket under `tmpdir`,
+and it failed with `EACCES` — before reaching anything it was written to test.
+The cause was in `tooling/conformance/tmpdir.mjs`: the directory was named
+`.tmp.${process.pid}`, so a forked child computed a directory its parent had
+never created. Node names it from `TEST_SERIAL_ID`/`TEST_THREAD_ID`, which its
+runner sets and children inherit through the environment. Ours now
+self-assigns an id on first use and inherits it from there, which needs no
+runner change.
+
+A hollow test passes without touching its subject; this one failed without
+touching its subject. Both are the instrument lying, and only one of them has
+a control that looks for it — sabotage catches the first and nothing was
+looking for the second. The lesson this document keeps relearning, in its
+sixth costume: **a red result deserves the same suspicion as a green one.**
 
 ## Comparing the export surface to node's, which nothing had done
 

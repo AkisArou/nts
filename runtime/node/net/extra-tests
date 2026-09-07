@@ -1,0 +1,5 @@
+test-pipe-address.js: upstream names these for the transport rather than the module, but the subject is net.Server and net.Socket over a Unix domain socket
+test-pipe-abstract-socket.js: as test-pipe-address.js; a Linux abstract-namespace socket is still net.Server and net.Socket
+test-pipe-writev.js: as test-pipe-address.js; exercises net.Socket's vectored write over a pipe transport
+test-pipe-stream.js: as test-pipe-address.js; a net.Server over a pipe, piped into and out of
+test-pipe-unref.js: as test-pipe-address.js; net.Server.unref over a pipe transport
