@@ -436,8 +436,31 @@ is not the option in either case. **This profile does not install the canonical
 abort globals**, so our modules receive an `AbortSignal` from the host and
 cannot pass it any option node reaches for privately — neither the resist flag
 nor a weakly-held handler. Building more options against a signal we do not own
-buys nothing; installing the globals closes both. Recorded here so the next
-person costing this work prices the globals rather than the options.
+buys nothing. Recorded here so the next person costing this work prices the
+globals rather than the options.
+
+**"Installing the globals closes both" is what this section said next, and an
+experiment says otherwise.** Installing `core/abort.ts` as
+`AbortController`/`AbortSignal` in the runner takes four lines and works —
+verified by printing the constructor's source through the substitution, which
+changes from the host's to `controllerSignal = createAbortSignal()`. With the
+globals canonical:
+
+- `test-events-add-abort-listener.mjs` fails *identically*, which confirms the
+  resist option is genuinely the remaining blocker there rather than the
+  signal's provenance.
+- `test-aborted-util.js` gets **worse**. A case that passed now fails, in
+  `listenerCount (node:events:988)`: the test asks `node:events` for the
+  listener count on the signal, `events` is the host's in this lane, and the
+  host's `listenerCount` does not understand a foreign `EventTarget`.
+
+So the prerequisite has a prerequisite. Canonical abort globals need the
+canonical `EventTarget` to be understood by whatever `events` a test is holding
+— which means substituting `events` alongside, and our `listenerCount`
+answering for a canonical target. That is a third piece nobody had costed, and
+it was cheaper to find with a four-line experiment than to discover after
+building the option it was supposed to unblock. The experiment was reverted;
+what it produced is this paragraph.
 
 The first two columns are what
 
