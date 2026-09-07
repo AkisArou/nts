@@ -362,7 +362,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,772 of node's own applicable test files pass** across twenty-two modules,
+**1,786 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -455,7 +455,7 @@ model that makes *Y* inapplicable" — which a reader should not confuse with a
 claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,772
+warns about elsewhere, so the two numbers belong next to each other: **1,786
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -479,21 +479,21 @@ still.
 | module | node's tests | hollow | note |
 | --- | :---: | :---: | --- |
 | `assert` | **10 / 10** | 0 | complete, including `CallTracker` and node's Myers diff |
-| `async_hooks` | **112 / 112** | 0 | `AsyncLocalStorage` and the hooks |
+| `async_hooks` | **114 / 114** | 0 | `AsyncLocalStorage` and the hooks |
 | `buffer` | **50 / 50** | 0 | the read/write surface, validated against node's boundary values |
 | `console` | **17 / 17** | 0 | complete |
 | `dgram` | **75 / 75** | 0 | UDP |
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
 | `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
-| `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
-| `net` | **144 / 144** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `http` | **403 / 403** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
+| `net` | **146 / 146** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
 | `process` | **86 / 86** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
-| `stream` | **244 / 244** | 0 | the core, the operators, `Readable.from` and the async iterator |
+| `stream` | **247 / 247** | 0 | the core, the operators, `Readable.from` and the async iterator |
 | `string_decoder` | **3 / 3** | 0 | complete |
 | `timers` | **54 / 54** | 0 | complete |
 | `url` | **45 / 45** | 0 | complete; exact on the Web Platform Tests corpus |
@@ -1073,6 +1073,41 @@ delivered, then shows the watcher does not overstay. **Sabotage tests whether
 the test is empty; a positive assertion tests whether the implementation is.**
 A suite made only of refusals cannot tell you whether the thing refusing
 exists.
+
+## The audits run in the sweep now, and paid on the first run
+
+Both look for the same failure and it is the one a green sweep cannot show:
+something *absent* rather than wrong. `tooling/conformance/audit.mjs` runs
+them; `sweep.mjs` runs it at the end of any profile-wide run and fails on
+anything new. Each is judged against a reviewed list in the same shape as a
+`not-applicable` — one `subject: reason` per line — so a silence has an
+argument behind it, and deleting a line reopens the question.
+
+**Fourteen applicable tests that nothing claimed, all passing.** `http` 396 to
+403, `stream` 244 to 247, `net` 144 to 146, `async_hooks` 112 to 114. Thirteen
+passed untouched; the fourteenth,
+`test-set-incoming-message-header.js`, wanted `IncomingMessage._addHeaderLines`
+— which node's own tests call directly and this profile did not have. It is
+not the same operation as our `_addHeaders`: node's replaces the raw array and
+picks its destination by `complete`, ours appends for a parser delivering a
+block in pieces, so both exist with a comment saying why.
+
+Two details of the instrument matter more than the count.
+
+**Filenames are deliberately not consulted.** Every instance of this bug was a
+file whose name did not resemble its module, so the audit asks what a file
+*imports*: ours when it imports something we implement and nothing we do not.
+That needs one judgement, in `audit-incidental` — importing `fs`, `path` or
+`util` does not make a file a test *of* them, and without that discount the
+first run reported 197 candidates rather than 85.
+
+**And the export half caught its own author.** Its docstring said each
+candidate was re-checked with `in`, because own enumerable keys miss inherited
+accessors — and the code did not do it. Four of the first thirty were
+`process.exitCode`, `stdin`, `title` and `ppid`, all reachable and all reported
+missing. The re-check is now a second pass through the same probe, and the
+count moving 30 to 26 is its control. A comment asserting a property nothing
+verifies, in the file written to catch things nothing verifies.
 
 ## Comparing the export surface to node's, which nothing had done
 

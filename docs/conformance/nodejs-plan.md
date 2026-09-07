@@ -48,6 +48,18 @@ Then `path` (85 total refusals, 17 tests, pure computation, no bindings), then
 `diagnostics_channel` / `async_hooks` / `timers`, which sit together around 90
 to 106 and are the first with real test weight behind them.
 
+**Measured since this was written, and it changes what those two mean.** The
+frontier is about *import edges* rather than about which code is hard.
+`punycode`'s single root is in `internal/process-warning.ts`, reached through
+one call. `path` has 32 roots and only 6 are in its own source — **21 are in
+`internal/errors.ts` and 5 in `internal/validators.ts`**, the layer every
+module imports. `diagnostics_channel` is the opposite: its roots are its own
+(`Map<string | symbol, WeakRef>` unrepresentable, rest parameters, an `unknown`
+narrowed to never). So the shared `internal/` layer is the bottleneck for the
+modules that are otherwise closest, and fixing it moves several at once —
+while `punycode` remains the shortest path to the axis reporting anything at
+all.
+
 **Order by destination, not by proximity.** The list above is sorted by
 cheapness, and cheapness is a tiebreak rather than a reason. `punycode` is
 first because it is a *complete traverse* of an untraversed path, not because
@@ -131,11 +143,13 @@ remembers to look. Each has already paid for itself once.
 3. **`census-inspect.mjs`.** Already checked in. Enumerates value kinds against
    a written-down set rather than sampling a distribution.
 
-**The work:** fold 1 and 2 into `sweep.mjs` as a failing check. A test file that
-matches no pattern, or an export node has that we do not, should turn a run red
-the day it appears rather than waiting for an audit. This is small, entirely in
-this lane, and it protects every number in `nodejs.md` from the one failure
-mode a green sweep cannot show.
+**Done**, in `tooling/conformance/audit.mjs`, run by `sweep.mjs` at the end of
+any profile-wide run and failing on anything new. It found fourteen unclaimed
+applicable tests on its first run, all of which pass, and one missing export
+(`IncomingMessage._addHeaderLines`) behind the only one that did not. The
+details are in `nodejs.md`; the one worth repeating here is that the export
+half's docstring claimed a re-check the code did not perform, which is the
+failure it exists to catch, in itself.
 
 ---
 
@@ -174,9 +188,11 @@ mode a green sweep cannot show.
 ## The order I would actually take
 
 1. `punycode` end to end on the compiled axis. Small, and it answers the
-   question nothing else answers.
-2. Fold the pattern audit and export diff into `sweep.mjs`. Half a day, and it
-   stops the class of bug that produced most of this session's finds.
+   question nothing else answers. **In progress**: it is blocked by exactly one
+   root refusal, isolated to five lines with the boundary mapped across four
+   variants and handed to the compiler lane. Everything else in the module is
+   cascade from it.
+2. ~~Fold the pattern audit and export diff into `sweep.mjs`.~~ **Done.**
 3. `path`, then `diagnostics_channel`, on the compiled axis — the first two
    with the traverse already understood.
 4. `tty`, then `dns`. Small, unblocked, and each closes real gaps in modules
