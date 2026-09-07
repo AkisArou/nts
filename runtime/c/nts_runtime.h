@@ -960,7 +960,15 @@ void nts_view_put(NtsView *view, double index, double value);
 NTS_READS_ONLY double nts_view_length(const NtsView *view);
 NTS_READS_ONLY double nts_view_byte_length(const NtsView *view);
 NTS_READS_ONLY double nts_view_byte_offset(const NtsView *view);
-NTS_READS_ONLY NtsBuffer *nts_view_buffer(const NtsView *view);
+/* The buffer, RETAINED. Every runtime helper that hands back a managed
+ * reference hands back an owned one -- `nts_array_at_ref` is the pattern --
+ * because the caller releases what it is given. A borrowed return frees the
+ * buffer under the view that is still pointing at it.
+ *
+ * NOT `NTS_READS_ONLY`. A retain is a side effect, and `pure` lets the
+ * compiler fold two calls with the same argument into one: one retain against
+ * two releases, which is the same premature free by a longer route. */
+NtsBuffer *nts_view_buffer(const NtsView *view);
 
 /* The bytes this view begins at, or null when the buffer is detached. Every
  * element access goes through it, so it is the one place detachment is seen. */
@@ -997,7 +1005,12 @@ NTS_ALLOCATES_OR_NULL NtsDataView *nts_dataview_over(NtsBuffer *buffer,
 NTS_ALLOCATES_OR_NULL NtsDataView *
 nts_dataview_part(NtsBuffer *buffer, double byte_offset, double byte_length);
 
-NTS_READS_ONLY NtsBuffer *nts_dataview_buffer(const NtsDataView *view);
+/* The buffer, RETAINED, and not `NTS_READS_ONLY` -- see `nts_view_buffer`
+ * for both halves of why. `examples/data-view`'s `sameBuffer` is the case:
+ * `new DataView(view.buffer)` released a buffer it had never been given
+ * ownership of, and the second view read freed memory. Only the
+ * reference-counting lane could see it. */
+NtsBuffer *nts_dataview_buffer(const NtsDataView *view);
 NTS_READS_ONLY double nts_dataview_byte_offset(const NtsDataView *view);
 /* Computed, not stored: a tracking view over a buffer that has shrunk reports
  * what is left, and a detached one reports zero. */

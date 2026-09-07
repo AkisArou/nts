@@ -4165,7 +4165,10 @@ NtsDataView *nts_dataview_part(NtsBuffer *buffer, double byte_offset,
   return nts_dataview_make(buffer, byte_offset, byte_length, false);
 }
 
-NtsBuffer *nts_dataview_buffer(const NtsDataView *view) { return view->buffer; }
+NtsBuffer *nts_dataview_buffer(const NtsDataView *view) {
+  nts_retain((NtsHeader *)view->buffer);
+  return view->buffer;
+}
 
 double nts_dataview_byte_offset(const NtsDataView *view) {
   return (double)view->offset;
@@ -4625,7 +4628,11 @@ double nts_view_byte_offset(const NtsView *view) {
 }
 
 NtsBuffer *nts_view_buffer(const NtsView *view) {
-  return view ? view->buffer : 0;
+  if (!view) {
+    return 0;
+  }
+  nts_retain((NtsHeader *)view->buffer);
+  return view->buffer;
 }
 
 unsigned char *nts_view_bytes(const NtsView *view) {
