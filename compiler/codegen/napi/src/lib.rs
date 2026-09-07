@@ -847,15 +847,46 @@ fn should_release_result(release_managed: bool, return_is_borrowed: bool) -> boo
 /// published. That is the honest answer rather than a fallback to the old
 /// rule: an addon is a module's surface, and a program with no entry has none.
 /// It reports as `built-but-dead` with an empty table, which is what it is.
-fn published<'a>(program: &'a hir::Program, func: &hir::Func) -> Option<&'a str> {
-    if !func.exported {
-        return None;
-    }
+fn published<'a>(program: &'a hir::Program, func: &hir::Func) -> Vec<&'a str> {
+    // `exported` is NOT asked. It means "the declaration carries `export`",
+    // and a module-private function published under an alias --
+    // `export const localAlias = local` -- carries none while being part of the
+    // surface. `public_api` is the authority on that question and this was a
+    // second one that disagreed. A name whose declaration was refused has no
+    // function in `funcs` for the lookup to find, which is what the flag was
+    // standing in for.
     program
         .public_api
         .iter()
-        .find(|(emitted, _)| *emitted == func.name)
+        .filter(|(emitted, _)| *emitted == func.name)
         .map(|(_, name)| name.as_str())
+        .collect()
+}
+
+/// Report every export the addon could not represent, rather than dropping it.
+///
+/// Silence here is expensive in a way a refusal is not: a missing export costs
+/// a test failure that names nothing -- `punycode.encode is not a function` --
+/// and a day finding out why, where a diagnostic costs a reader one line. Six
+/// of seven exports in one fixture were absent with no warning anywhere.
+fn report_unrepresentable_exports(
+    program: &hir::Program,
+    wrapped: &[(&str, &str)],
+    skipped: &mut Vec<Skipped>,
+) {
+    for (emitted, name) in &program.public_api {
+        if wrapped.iter().any(|(_, published)| published == name) {
+            continue;
+        }
+        skipped.push(Skipped {
+            function: name.clone(),
+            reason: if program.funcs.iter().any(|func| func.name == *emitted) {
+                "is exported and its signature does not cross".to_owned()
+            } else {
+                "is exported and is not a function this backend can name".to_owned()
+            },
+        });
+    }
 }
 
 #[must_use]
@@ -885,7 +916,7 @@ pub fn emit(program: &hir::Program) -> Addon {
     let mut needed: Vec<usize> = program
         .funcs
         .iter()
-        .filter(|f| published(program, f).is_some())
+        .filter(|f| !published(program, f).is_empty())
         .flat_map(|f| std::iter::once(&f.return_type).chain(f.params.iter().map(|p| &p.ty)))
         .filter_map(|ty| match cross(ty, &program.layouts, &classes) {
             Some(Cross::Object(at)) => Some(at),
@@ -931,9 +962,10 @@ pub fn emit(program: &hir::Program) -> Addon {
     // two modules declared one name or a re-export renamed it.
     let mut wrapped: Vec<(&str, &str)> = Vec::new();
     for func in &program.funcs {
-        let Some(publish) = published(program, func) else {
+        let names = published(program, func);
+        if names.is_empty() {
             continue;
-        };
+        }
         match wrapper(
             func,
             &program.layouts,
@@ -944,7 +976,14 @@ pub fn emit(program: &hir::Program) -> Addon {
         ) {
             Ok(text) => {
                 out.push_str(&text);
-                wrapped.push((&func.name, publish));
+                // One wrapper, one registration per name it is exported under:
+                // `export const upper = impl.upper` and
+                // `export const alias = impl.upper` are one function and two
+                // properties, and a loop that asked each function for *a* name
+                // published it once under whichever came first.
+                for publish in names {
+                    wrapped.push((func.name.as_str(), publish));
+                }
             }
             Err(why) => skipped.push(why),
         }
@@ -980,6 +1019,8 @@ pub fn emit(program: &hir::Program) -> Addon {
         );
     }
     out.push_str("    return exports;\n}\n");
+
+    report_unrepresentable_exports(program, &wrapped, &mut skipped);
 
     Addon {
         source: out,

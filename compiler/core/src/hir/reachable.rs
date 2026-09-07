@@ -200,10 +200,24 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
             .filter(|func| names.contains(&func.name))
             .map(|func| func.name.as_str())
             .collect(),
+        // `exported` *and* whatever the entry modules publish. The flag means
+        // "the declaration carries `export`", so a module-private function the
+        // entry re-exports under another name -- `export const alias = local`
+        // -- carries none and was pruned out from under its own export.
+        //
+        // Both, rather than `public_api` alone: the flag is what makes a
+        // library's whole surface a root, and `public_api` is the entry's, and
+        // a program built as a library wants the first.
         Roots::EveryExport => program
             .funcs
             .iter()
-            .filter(|func| func.exported)
+            .filter(|func| {
+                func.exported
+                    || program
+                        .public_api
+                        .iter()
+                        .any(|(emitted, _)| *emitted == func.name)
+            })
             .map(|func| func.name.as_str())
             .collect(),
     }

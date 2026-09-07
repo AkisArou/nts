@@ -2326,6 +2326,60 @@ fn lower_module_initializer(
 /// list of re-exports and almost nothing is declared in the file that publishes
 /// it. Without the hop this returns the entry's own declarations, which for
 /// `path` is none of them.
+/// The function declaration a `const` binding's initializer names, if it names
+/// one.
+///
+/// `export const alias = impl.upper` and `export const upper = impl.upper` are
+/// the same value under two names, and only the second used to reach the addon
+/// -- because the emitted name was taken from the binding rather than from what
+/// it was bound to, and one of the two happened to match.
+fn initializer_function(
+    snapshot: &SemanticSnapshot,
+    declaration: NodeId,
+) -> Option<(NodeId, String)> {
+    let probe = FuncBuilder::new(snapshot);
+    if probe.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION) {
+        return None;
+    }
+    // The last child that is neither the name nor a type annotation, which is
+    // how `collect_module_scope` finds an initializer -- by what it *is* rather
+    // than by what it is not.
+    let children = probe.children(declaration);
+    let name = children.first().copied();
+    let initializer = children.iter().rev().find(|child| {
+        Some(**child) != name
+            && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
+    })?;
+    // `impl.upper` is a property access and carries no symbol of its own -- the
+    // member does. Asking the node and then its last child covers both `= f`
+    // and `= ns.f` without asking which one this is.
+    let symbol = probe.node(*initializer).symbol.or_else(|| {
+        probe
+            .children(*initializer)
+            .last()
+            .and_then(|member| probe.node(*member).symbol)
+    })?;
+    let record = snapshot.symbols.get(symbol.0 as usize)?;
+    let record = record
+        .aliased
+        .and_then(|to| snapshot.symbols.get(to.0 as usize))
+        .unwrap_or(record);
+    // By what the symbol DECLARES rather than by its flags: an imported name
+    // carries the import's flags and the declaration is what says it is a
+    // function.
+    // The name comes from the SYMBOL and the node from its declaration. A
+    // `FUNCTION_DECLARATION` node carries no symbol of its own -- the name
+    // identifier inside it does -- so reading one off the node returned the
+    // binding's name and the whole resolution came out as a no-op.
+    let name = record.name.clone();
+    record
+        .declarations
+        .iter()
+        .copied()
+        .find(|at| probe.kind_of(*at) == Some(syntax::FUNCTION_DECLARATION))
+        .map(|at| (at, name))
+}
+
 fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, String)> {
     let mut imported = vec![false; snapshot.modules.len()];
     for module in &snapshot.modules {
@@ -2352,11 +2406,20 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, Stri
             let Some(&declaration) = record.declarations.first() else {
                 continue;
             };
-            let emitted = naming
-                .qualified
-                .get(&declaration)
-                .cloned()
-                .unwrap_or_else(|| record.name.clone());
+            // `export const alias = impl.upper` binds a *const*, not the
+            // function: the symbol is `alias` and its declaration is the
+            // variable, so the emitted name came out as `alias` and no function
+            // answered to it. `export const upper = impl.upper` published only
+            // because the two names coincide -- which is to say, it worked in
+            // exactly the cases people write first and failed silently
+            // otherwise.
+            //
+            // A declaration whose initializer names a function resolves to that
+            // function, so the *binding* decides what the addon calls it and
+            // the initializer decides what it calls.
+            let (declaration, name) = initializer_function(snapshot, declaration)
+                .unwrap_or_else(|| (declaration, record.name.clone()));
+            let emitted = naming.qualified.get(&declaration).cloned().unwrap_or(name);
             api.push((emitted, published.clone()));
         }
     }

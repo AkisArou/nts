@@ -309,8 +309,12 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     if snapshot.has_errors() {
         bail!("the program does not typecheck");
     }
-    let lowered = hir::lower::lower(&snapshot);
-    let program = &lowered.program;
+    // The prepared program, not the freshly lowered one. `settle` is where
+    // `put_bases_first` runs, so a dump taken before it reports a `BROKEN`
+    // relation that no backend ever sees -- an instrument describing a state
+    // nothing consumes, which is the failure this file exists to avoid.
+    let prepared = hir::prepare_unverified(&snapshot, &hir::Options::default());
+    let program = &prepared.program;
     for layout in &program.layouts {
         let ids: Vec<String> = layout.types.iter().map(|ty| format!("{}", ty.0)).collect();
         println!("{} [{}]", layout.name, ids.join(" "));
@@ -348,6 +352,20 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
             println!("  methods {}", filled.join(" "));
         }
     }
+    // What an addon would publish, which was invisible until now: an export the
+    // wrapper cannot represent is dropped silently, so a missing one costs a
+    // test failure naming nothing rather than a diagnostic.
+    if !program.public_api.is_empty() {
+        println!("\npublic api");
+        for (emitted, published) in &program.public_api {
+            let has = program.funcs.iter().any(|func| func.name == *emitted);
+            println!(
+                "  {published} -> {emitted}{}",
+                if has { "" } else { "   (no function of that name)" }
+            );
+        }
+    }
+
     // The same question `verify` asks, reported rather than refused.
     for layout in &program.layouts {
         let Some(at) = program.base_layout(layout) else {

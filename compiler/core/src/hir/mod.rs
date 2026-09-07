@@ -2173,10 +2173,187 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
 ///
 /// Each step's reason is local and they compound, which is why they are here
 /// together rather than scattered up the pipeline.
+/// Put every layout's base fields first, and move every field access with them.
+///
+/// The list arrives in the checker's flattened order, and that order was
+/// believed to be base-first. It is not guaranteed to be. In the one program
+/// where `net` and `fs` meet, `Readable` came back with its own
+/// `_readableState` **ahead of** the `EventEmitter` fields it inherits, while
+/// `Duplex` and `ReadStream`, which extend it, came back with the inherited
+/// ones first. Both are consistent flattenings of one hierarchy and only one is
+/// a layout; `verify` said `BrokenBase` and the module could not be emitted.
+///
+/// # Why the reorder is not the hard part
+///
+/// `OpKind::FieldGet { field: u32 }` is an **index**. Reordering fields without
+/// remapping it leaves every access in the program pointing at whatever now
+/// occupies that position — silently, because an index still in range still
+/// loads something. Record 0199 measured four attempts at this and all four
+/// cost about a thousand refusals; the first three shared a call to
+/// `layout_of` during construction, which *creates* layouts and changes the
+/// order `collect_layouts` merges in, and the fourth was this, unmapped.
+///
+/// So the two halves are one pass: compute the permutation, apply it, and
+/// rewrite every access through the layout its object's type names. An access
+/// typed against a base keeps using the base's index, which stays valid on a
+/// subclass exactly because both were reordered against the same prefix.
+///
+/// To a fixed point, because a chain settles from the top: reordering `Duplex`
+/// against a `Readable` that has not moved yet arranges it against the wrong
+/// prefix.
+fn put_bases_first(program: &mut Program) {
+    let moved = reorder_to_base_first(program);
+    if moved
+        .iter()
+        .all(|map| {
+            map.iter()
+                .enumerate()
+                .all(|(at, to)| u32::try_from(at).unwrap_or(u32::MAX) == *to)
+        })
+    {
+        return;
+    }
+    remap_field_accesses(program, &moved);
+}
+
+/// Move each layout's fields into base-first order, returning old-to-new index
+/// maps.
+///
+/// To a fixed point, because a chain settles from the top: reordering `Duplex`
+/// against a `Readable` that has not moved yet arranges it against the wrong
+/// prefix.
+fn reorder_to_base_first(program: &mut Program) -> Vec<Vec<u32>> {
+    let mut moved: Vec<Vec<u32>> = program
+        .layouts
+        .iter()
+        .map(|layout| (0..u32::try_from(layout.fields.len()).unwrap_or(0)).collect())
+        .collect();
+    for _ in 0..program.layouts.len().min(64) {
+        let mut changed = false;
+        // By index rather than by iterator: the body reads one layout, writes
+        // another, and indexes `moved` alongside, so nothing here can hold a
+        // borrow across the write.
+        #[allow(clippy::needless_range_loop)]
+        for index in 0..moved.len() {
+            let Some(at) = program.base_layout(&program.layouts[index]) else {
+                continue;
+            };
+            if at == index {
+                continue;
+            }
+            let order: Vec<String> = program.layouts[at]
+                .fields
+                .iter()
+                .map(|field| field.name.clone())
+                .collect();
+            let positions = base_first_positions(&program.layouts[index].fields, &order);
+            if positions.iter().enumerate().all(|(to, from)| to == *from) {
+                continue;
+            }
+            changed = true;
+            let fields = &mut program.layouts[index].fields;
+            let mut held: Vec<Option<Field>> = fields.drain(..).map(Some).collect();
+            for from in &positions {
+                if let Some(field) = held[*from].take() {
+                    fields.push(field);
+                }
+            }
+            // Composed with what this layout has already moved through, so a
+            // second round does not lose the first.
+            let mut round = vec![0u32; positions.len()];
+            for (to, from) in positions.iter().enumerate() {
+                round[*from] = u32::try_from(to).unwrap_or(0);
+            }
+            moved[index] = moved[index]
+                .iter()
+                .map(|old| round.get(*old as usize).copied().unwrap_or(*old))
+                .collect();
+        }
+        if !changed {
+            break;
+        }
+    }
+    moved
+}
+
+/// Where each field should come from, so that `order`'s names lead.
+///
+/// A name the base has and this layout does not is skipped rather than
+/// invented: a base with a field its subclass lacks is a different defect and
+/// not one to paper over here. Everything the base does not name keeps its
+/// relative order behind those that it does.
+fn base_first_positions(fields: &[Field], order: &[String]) -> Vec<usize> {
+    let mut taken = vec![false; fields.len()];
+    let mut positions: Vec<usize> = Vec::with_capacity(fields.len());
+    for wanted in order {
+        if let Some(found) = fields
+            .iter()
+            .enumerate()
+            .position(|(at, field)| !taken[at] && field.name == *wanted)
+        {
+            taken[found] = true;
+            positions.push(found);
+        }
+    }
+    for (at, used) in taken.iter().enumerate() {
+        if !used {
+            positions.push(at);
+        }
+    }
+    positions
+}
+
+/// Rewrite every field access through the layout its object's type names.
+///
+/// `OpKind::FieldGet { field: u32 }` is an index, so a reorder without this
+/// leaves every access pointing at whatever now occupies that position --
+/// silently, because an index still in range still loads something.
+///
+/// An access typed against a *base* keeps using the base's index, which stays
+/// valid on a subclass exactly because both were reordered against the same
+/// prefix.
+fn remap_field_accesses(program: &mut Program, moved: &[Vec<u32>]) {
+    let mut edits: Vec<(usize, usize, u32)> = Vec::new();
+    for (at, func) in program.funcs.iter().enumerate() {
+        for (index, op) in func.values.iter().enumerate() {
+            let (object, field) = match &op.kind {
+                OpKind::FieldGet { object, field } | OpKind::FieldSet { object, field, .. } => {
+                    (*object, *field)
+                }
+                _ => continue,
+            };
+            let HirType::Managed(ManagedType::Object(ty)) = func.values[object.0 as usize].ty
+            else {
+                continue;
+            };
+            let Some(layout) = program
+                .layouts
+                .iter()
+                .position(|candidate| candidate.types.contains(&ty))
+            else {
+                continue;
+            };
+            let Some(to) = moved[layout].get(field as usize).copied() else {
+                continue;
+            };
+            if to != field {
+                edits.push((at, index, to));
+            }
+        }
+    }
+    for (func, index, to) in edits {
+        match &mut program.funcs[func].values[index].kind {
+            OpKind::FieldGet { field, .. } | OpKind::FieldSet { field, .. } => *field = to,
+            _ => {}
+        }
+    }
+}
+
 fn settle(lowered: &mut lower::Lowered) {
     // First of all: everything below reads the block graph, and a block nothing
     // can reach is not part of it. See `dce::prune_unreachable`.
     dce::prune_unreachable_blocks(&mut lowered.program);
+    put_bases_first(&mut lowered.program);
     // Before anything looks at the program: a function that calls a refused one
     // has a call to nothing in it.
     drop_callers_of_refused(lowered);
