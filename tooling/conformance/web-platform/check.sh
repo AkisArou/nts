@@ -12,6 +12,7 @@ node tooling/conformance/web-platform/unrouted.mjs
 node --expose-gc --test \
   tooling/conformance/web-platform/test/agent.test.mjs \
   tooling/conformance/web-platform/test/core.test.mjs \
+  tooling/conformance/web-platform/test/authenticate.test.mjs \
   tooling/conformance/web-platform/test/cache-storage.test.mjs \
   tooling/conformance/web-platform/test/cache.test.mjs \
   tooling/conformance/web-platform/test/capability-confinement.test.mjs \

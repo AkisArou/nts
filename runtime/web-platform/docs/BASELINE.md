@@ -4630,3 +4630,76 @@ was being written.
 Local corpus 683/683 with zero skipped, upstream unchanged at 2,278 of 2,286, compiled
 axis 138 of 142 across 13 functions on all three backends. Frontier: primaries unchanged
 at 1,292, cascades 312 to 313, zero `NTS1004` and zero invalid HIR.
+
+## Origin authentication, which this lane had only for proxies
+
+The plan asks for "authentication hooks with explicit ordering and ownership". This lane
+had `ProxyAuthenticator` and nothing for the origin, so a `401` was simply returned to
+the caller with no seam to answer it.
+
+`AuthenticationInterceptor` is that seam, and it refuses `407` **in its constructor**.
+Proxy credentials are not origin credentials, the proxy layer is the only thing that
+knows which hop challenged, and an interceptor answering a `407` would send the origin's
+credentials to a proxy. That is a `RangeError` at construction rather than a comment.
+
+**Credentials are never sent before they are asked for.** The first request goes out as
+the caller wrote it and only a challenge produces a second one. A preemptive
+`Authorization` header goes to whoever answers the address, including whoever answers it
+wrongly, and that is the whole difference between an authentication hook and a
+credential leak.
+
+**A one-shot body is refused rather than answered with an empty one.** Answering a
+challenge with no body would show the server an authenticated request that is not the
+one the caller made — worse than not answering at all. A body that can replay itself is
+replayed, so the same `replayBody` seam the retry interceptor uses covers this too.
+
+### The parser is the difficulty, and the grammar is why
+
+A comma separates both challenges and auth-params, so the same character means two
+things: `Basic realm="a", Bearer` is two challenges and `Digest realm="a", qop="auth"` is
+one. Only lookahead distinguishes them — after a parameter, a comma followed by `token=`
+continues the challenge and a comma followed by a bare token starts a new one — which is
+why this is a reader with rewind rather than a split.
+
+`token68` is worse, because it is decided by what *follows* it rather than by its own
+characters: `realm` and `abc` are both valid token68 syntax, and only the `=` after
+`realm` says which one it is. It is accepted just when the run reaches a comma or the
+end. It is also kept separate from the parameters rather than folded in as a nameless
+one, so an authenticator can tell `Negotiate abc==` from a parameter it does not know.
+
+RFC 7235's own ambiguous example is a test, including the escaped quote inside a value.
+
+A malformed tail ends parsing and keeps what was already understood. Refusing the whole
+field would turn a server's sloppiness into a client that cannot authenticate at all.
+
+The parser was wrong twice on first run and both tests caught it: a challenge that ran on
+into the next one demanded a separating comma that had already been consumed, and the
+token68 branch lost to the parameter branch because it was tried second.
+
+Nine sabotages, all restored; two would not type-check in their first form and their
+retyped versions fail.
+
+### A recurring hazard, now on its third appearance
+
+The test asserting that the challenge body is read before the connection carries the
+answer was wrong the first time, in the same way as two earlier tests in this ledger: a
+`ReadableStream` prefetches on construction with the default high-water mark, so a
+counter in `pull` counts the stream's own eagerness rather than the consumer's read. It
+reported the body as drained by a code path that never touched it.
+
+The fix is `{ highWaterMark: 0 }`, so `pull` fires only when something actually reads.
+Three times now this has invalidated an assertion about *who* read a stream, and the
+pattern is worth stating plainly: **a stream's default eagerness makes "nothing has read
+it yet" untestable.** Assert on order, or turn the eagerness off.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,292 to 1,294 primary `NTS1001` and 313 to 314
+`NTS1003`, zero `NTS1004`, zero invalid HIR.
+
+One new category: **an `await` of something that is not a promise**. That is
+`await this.#authenticate(...)`, where an authenticator may answer synchronously or with
+a promise — the same shape `ProxyAuthenticator` already has. Narrowing the contract to
+promise-only would remove the refusal and would be a compiler-gap workaround; it stays.
+
+Local corpus 701/701 with zero skipped, upstream unchanged at 2,278 of 2,286.

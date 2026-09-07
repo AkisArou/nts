@@ -294,6 +294,13 @@ export type {
   HttpCacheState,
   HttpCacheType,
 } from "./cache/http-cache.ts";
+export { AuthenticationInterceptor, parseChallenges } from "./dispatch/authenticate.ts";
+export type {
+  AuthenticationChallenge,
+  AuthenticationContext,
+  AuthenticationOptions,
+  OriginAuthenticator,
+} from "./dispatch/authenticate.ts";
 export { DispatcherOperations } from "./dispatch/operations.ts";
 export type {
   BufferedOptions,
