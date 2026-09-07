@@ -74,6 +74,8 @@ const sabotage = argv.includes("--sabotage");
  * compiled lane produced a pass that survived sabotage and measured nothing.
  */
 const mutateAddon = argv.includes("--mutate-addon");
+/** The silent poison: answer `undefined` rather than throwing. See `poisonedBody`. */
+const mutateSilent = argv.includes("--mutate-silent");
 const asJson = argv.includes("--json");
 const RESULT_PREFIX = "NTS_CONFORMANCE_RESULT ";
 
@@ -292,7 +294,7 @@ for (const test of tests) {
         env: {
           ...process.env,
           NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
-          NTS_CONFORMANCE_ADDON_MUTATE: mutateAddon ? "1" : "",
+          NTS_CONFORMANCE_ADDON_MUTATE: mutateSilent ? "silent" : mutateAddon ? "1" : "",
         },
       },
     );

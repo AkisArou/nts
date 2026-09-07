@@ -283,6 +283,17 @@ function dispatchEscapedException(error) {
 const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
 /** Keep the addon's exported names and destroy their behaviour; see `poison`. */
 const mutatedAddon = process.env["NTS_CONFORMANCE_ADDON_MUTATE"] === "1";
+/**
+ * The second poison, and the one that catches what the first cannot.
+ *
+ * Poisoning by throwing makes every "this should throw" test pass for the
+ * wrong reason -- `test-net-write-arguments.js` asserts that a bad argument
+ * throws, and a thrower obliges. This poison returns `undefined` instead, so a
+ * test expecting a throw fails and a test expecting a value fails. **A file
+ * that survives both poisons did not depend on the module's behaviour at
+ * all**, which is the question neither poison answers alone.
+ */
+const mutatedSilent = process.env["NTS_CONFORMANCE_ADDON_MUTATE"] === "silent";
 
 /**
  * Warnings the module emitted while it was being loaded.
@@ -325,6 +336,15 @@ process.emitWarning = (...args) => {
  * A file that still passes did not depend on what the module *does*, which is
  * the question sabotage cannot ask.
  */
+/** What a poisoned callable does: refuse loudly, or answer wrongly and quietly. */
+function poisonedBody(what) {
+  return mutatedSilent
+    ? () => undefined
+    : () => {
+        throw new Error(`poisoned ${what} was called`);
+      };
+}
+
 function poison(exports) {
   const poisoned = {};
   for (const key of Object.keys(exports)) {
@@ -335,9 +355,7 @@ function poison(exports) {
       // failing and looks exactly like "no degenerate passes". Keep anything
       // with a populated prototype; its methods are poisoned instead.
       const isClass = value.prototype !== undefined && Object.getOwnPropertyNames(value.prototype).length > 1;
-      poisoned[key] = isClass ? poisonClass(value, key) : () => {
-        throw new Error(`poisoned export ${key} was called`);
-      };
+      poisoned[key] = isClass ? poisonClass(value, key) : poisonedBody(`export ${key}`);
     } else if (value !== null && typeof value === "object") {
       // An exported object is a facade: `querystring`'s `shape.mjs` returns
       // `exports.QueryString` and the tests call *its* methods, so leaving it
@@ -346,12 +364,7 @@ function poison(exports) {
       const copy = {};
       for (const inner of Object.keys(value)) {
         const member = value[inner];
-        copy[inner] =
-          typeof member === "function"
-            ? () => {
-                throw new Error(`poisoned ${key}.${inner} was called`);
-              }
-            : member;
+        copy[inner] = typeof member === "function" ? poisonedBody(`${key}.${inner}`) : member;
       }
       poisoned[key] = copy;
     } else {
@@ -373,9 +386,7 @@ function poisonClass(Class, name) {
     if (descriptor === undefined || typeof descriptor.value !== "function") continue;
     Object.defineProperty(Poisoned.prototype, method, {
       ...descriptor,
-      value() {
-        throw new Error(`poisoned ${name}.${method} was called`);
-      },
+      value: poisonedBody(`${name}.${method}`),
     });
   }
   // Statics too. `Buffer.alloc`, `Buffer.from` and `Buffer.concat` are static,
@@ -390,9 +401,7 @@ function poisonClass(Class, name) {
     }
     Object.defineProperty(Poisoned, stat, {
       ...descriptor,
-      value() {
-        throw new Error(`poisoned ${name}.${stat} was called`);
-      },
+      value: poisonedBody(`${name}.${stat}`),
     });
   }
   Object.defineProperty(Poisoned, "name", { value: Class.name });
@@ -404,12 +413,12 @@ try {
   let exports;
   if (addon && addon !== "-") {
     exports = createRequire(import.meta.url)(resolvePath(addon));
-    if (mutatedAddon) exports = poison(exports);
+    if (mutatedAddon || mutatedSilent) exports = poison(exports);
   } else {
     const shims = join(moduleDir, "bindings.node.mjs");
     if (existsSync(shims)) await import(shims);
     exports = await import(join(moduleDir, "src/main.ts"));
-    if (mutatedAddon) exports = poison(exports);
+    if (mutatedAddon || mutatedSilent) exports = poison(exports);
   }
   const shapePath = join(moduleDir, "shape.mjs");
   let shapeModule = null;
