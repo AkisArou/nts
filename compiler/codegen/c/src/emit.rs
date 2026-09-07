@@ -270,6 +270,59 @@ impl Emitted {
 }
 
 /// Emit a whole program as one translation unit.
+/// Drop every body that calls a function this backend refused, to a fixed point.
+///
+/// `drop_callers_of_refused` does this for a *lowering* refusal, and it runs
+/// before any backend sees the program, so it cannot see one made here. The
+/// result was a translation unit that called a symbol nothing defines: node's
+/// `punycode` refused `error(type): never` and emitted its eight call sites
+/// anyway. A refusal that leaves its callers behind is not a refusal, it is a
+/// link error with a diagnostic attached -- and the only reason it was not
+/// silent is that C wants a definition at link time.
+///
+/// A loop rather than one pass: dropping a caller can orphan its own caller,
+/// and the fixed point is what `drop_callers_of_refused` computes for the same
+/// reason.
+///
+/// Direct calls only. A dropped function that a dispatch table names is still a
+/// dangling symbol and still a clang error -- unchanged, rare, and not made
+/// worse here; `emit_object_descriptors` reads the program's layouts rather
+/// than these bodies, so the two would have to be reconciled and a null slot is
+/// worse than a link error.
+fn drop_orphaned_bodies(
+    bodies: &mut Vec<(String, CodeWriter, &Func)>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    loop {
+        let defined: rustc_hash::FxHashSet<&str> =
+            bodies.iter().map(|(_, _, func)| func.name.as_str()).collect();
+        let orphan = bodies.iter().enumerate().find_map(|(at, (_, _, func))| {
+            func.values.iter().find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } if !defined.contains(name.as_str()) => {
+                    Some((at, name.clone(), op.origin.clone()))
+                }
+                _ => None,
+            })
+        });
+        let Some((at, missing, origin)) = orphan else {
+            return;
+        };
+        let orphaned = bodies[at].2.name.clone();
+        diagnostics.push(Diagnostic::error(
+            "NTS2009",
+            format!(
+                "`{orphaned}` cannot be emitted because it calls `{missing}`, which this \
+                 backend refused above"
+            ),
+            origin.location,
+        ));
+        bodies.remove(at);
+    }
+}
+
 #[must_use]
 pub fn emit(program: &Program) -> Emitted {
     let mut writer = CodeWriter::new();
@@ -350,6 +403,8 @@ pub fn emit(program: &Program) -> Emitted {
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
     }
+
+    drop_orphaned_bodies(&mut bodies, &mut diagnostics);
 
     let descriptors = descriptors_reached(&bodies);
 
@@ -974,7 +1029,7 @@ fn virtual_signature(
     }
     Ok(format!(
         "{} (*)({})",
-        c_type_of(program, &func.return_type, origin)?,
+        return_c_type(program, &func.return_type, origin)?,
         if params.is_empty() {
             "void".to_owned()
         } else {
@@ -1488,6 +1543,28 @@ fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String,
     Ok(c_type(ty, origin)?.to_owned())
 }
 
+/// The C spelling of a function's RETURN type, which is not quite the spelling
+/// of a value's.
+///
+/// `never` is the difference and it is the whole reason this exists separately.
+/// A value of type `never` is control reaching somewhere the type system said
+/// it could not, and `c_type` refuses it in those words. A *return* type of
+/// `never` says something else entirely and is perfectly ordinary: the function
+/// does not return. `function error(type: ErrorType): never` throws on every
+/// path, node's own `punycode` has one, and every call to it was emitted with
+/// no definition anywhere because the signature could not be spelled.
+///
+/// `void`, not `_Noreturn void`. The attribute would be true and it would let
+/// clang delete the code after a call -- which is code this backend has already
+/// decided is unreachable, so the attribute buys nothing and would be a second
+/// place that has to stay right about it.
+fn return_c_type(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+    if matches!(ty, HirType::Never) {
+        return Ok("void".to_owned());
+    }
+    c_type_of(program, ty, origin)
+}
+
 /// The layout an object-typed value refers to.
 fn layout_of<'a>(
     program: &'a Program,
@@ -1918,7 +1995,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
 /// with `-flto`, where clang internalizes what nothing outside needs, so this
 /// was already happening. Measured before and after: 1.81us and 1.82us.
 fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
-    let returns = c_type_of(program, &func.return_type, &func.origin)?;
+    let returns = return_c_type(program, &func.return_type, &func.origin)?;
     let visibility = if func.exported { "" } else { "static " };
     if func.params.is_empty() {
         return Ok(format!(
@@ -3048,6 +3125,98 @@ mod tests {
                 "`{operator}` on two int32 must wrap rather than invite the optimizer",
             );
         }
+    }
+
+    /// A function this backend refuses takes its callers with it.
+    ///
+    /// The failure this guards is the one node's `punycode` had: `error(type):
+    /// never` was refused at emit time, its body was dropped, a diagnostic was
+    /// pushed -- and its eight call sites were emitted anyway, into a
+    /// translation unit that called a symbol nothing defines. `clang` was the
+    /// only thing that noticed, and only because C wants a definition at link
+    /// time.
+    ///
+    /// Transitive, which is the half a single pass would miss: `caller` goes
+    /// because it calls `refused`, and `outer` goes because it calls `caller`.
+    #[test]
+    fn a_function_this_backend_refuses_takes_its_callers_with_it() {
+        use nts_core::hir::{Block, Op, Terminator};
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::Origin;
+
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let func = |name: &str, values: Vec<Op>| Func {
+            name: name.to_owned(),
+            params: Vec::new(),
+            return_type: HirType::Void,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: (0..values.len())
+                    .map(|at| ValueId(u32::try_from(at).unwrap_or(0)))
+                    .collect(),
+                terminator: Terminator::Return(None),
+            }],
+            values,
+            origin: origin.clone(),
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        };
+        let calling = |name: &str| Op {
+            kind: OpKind::Call {
+                callee: Callee::Direct(name.to_owned()),
+                args: Vec::new(),
+                frame: None,
+            },
+            ty: HirType::Void,
+            origin: origin.clone(),
+        };
+        // A value of type `never` is what this backend refuses, and it is the
+        // shape `punycode` reached it by.
+        let never = Op {
+            kind: OpKind::ConstFloat(0.0),
+            ty: HirType::Never,
+            origin: origin.clone(),
+        };
+
+        let program = Program {
+            funcs: vec![
+                func("refused", vec![never]),
+                func("caller", vec![calling("refused")]),
+                func("outer", vec![calling("caller")]),
+                func("unrelated", vec![]),
+            ],
+            ..Program::default()
+        };
+        let emitted = emit(&program);
+        let text = emitted.writer.text();
+
+        for gone in ["refused", "caller", "outer"] {
+            assert!(
+                !text.contains(&format!("{gone}(")),
+                "`{gone}` is still called or defined in:\n{text}",
+            );
+        }
+        assert!(
+            text.contains("unrelated("),
+            "a function that calls nothing refused must survive:\n{text}",
+        );
+
+        let codes: Vec<&str> = emitted
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        assert_eq!(
+            codes,
+            ["NTS2002", "NTS2009", "NTS2009"],
+            "one refusal and one report per caller it orphaned",
+        );
     }
 
     #[test]

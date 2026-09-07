@@ -1250,6 +1250,8 @@ fn declare_a_closure_global(
         ty: ty.clone(),
         initial: 0.0,
         exported: false,
+        // A closure global always is: an arrow is code, never a constant.
+        deferred: initializer.is_some(),
         origin: probe.origin(name_node),
     });
     scope.variables.insert(symbol.0, global);
@@ -1399,6 +1401,9 @@ fn collect_module_scope(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -
             ty: ty.clone(),
             initial: value,
             exported: false,
+            // Exactly the condition `scope.deferred` is given below, stated on
+            // the global itself so a backend and a later pass can ask.
+            deferred: constant.is_none() && initializer.is_some(),
             origin: probe.origin(*name_node),
         });
         scope.variables.insert(symbol.0, global);

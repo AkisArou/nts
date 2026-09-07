@@ -1447,6 +1447,15 @@ pub struct Global {
     pub initial: f64,
     /// Visible outside the compiled set, so it keeps its name in the artifact.
     pub exported: bool,
+    /// Whether its value is written by `module#init` rather than by `initial`.
+    ///
+    /// The two are indistinguishable from `initial` alone -- a deferred global
+    /// and one declared without an initializer both sit at zero until something
+    /// runs -- and the difference is the whole of whether reading it before
+    /// `module#init` is a bug. `let x: number;` starting at zero is what the
+    /// source asked for. `const delimiter = "-"` starting at zero is a null
+    /// pointer.
+    pub deferred: bool,
     pub origin: Origin,
 }
 
@@ -2053,6 +2062,87 @@ fn drop_classes_without_layouts(program: &mut Program) {
     }
 }
 
+/// A module initializer that was refused leaves every deferred global unwritten,
+/// and every function that reads one is reading something no code assigned.
+///
+/// The lowering already says this happens, and says it as though it were
+/// survivable:
+///
+/// > module evaluation, which the refusal above loses in full and so will not
+/// > run; the program still builds, and every module-scope value it would have
+/// > computed stays at its static initializer
+///
+/// "The program still builds" is true and is the problem. `const delimiter =
+/// "-"` at its static initializer is a **null pointer**, and node's `punycode`
+/// compiled, linked, loaded, published its whole public surface, and then
+/// segfaulted inside `nts_concat` on the first call that touched a string --
+/// `encode('')` and `toUnicode('example.com')` worked, because those are the
+/// two paths that return before reading one.
+///
+/// This is record 0194 one layer up, and the same sentence applies: a refusal
+/// that leaves its readers behind is not a refusal. `drop_callers_of_refused`
+/// covers a call to a function that is not there; nothing covered a read of a
+/// value that was never written.
+///
+/// Only *deferred* globals. `let x: number;` sits at zero because that is what
+/// the source asked for, and reading it is correct.
+fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
+    let settle = |lowered: &mut lower::Lowered| drop_callers_of_refused(lowered);
+    if lowered
+        .program
+        .funcs
+        .iter()
+        .any(|func| func.name == lower::MODULE_INIT)
+    {
+        settle(lowered);
+        return;
+    }
+    let unwritten: Vec<u32> = lowered
+        .program
+        .globals
+        .iter()
+        .enumerate()
+        .filter(|(_, global)| global.deferred)
+        .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
+        .collect();
+    if unwritten.is_empty() {
+        settle(lowered);
+        return;
+    }
+
+    // One pass, not a fixed point: refusing a reader creates no new readers,
+    // because what makes a global unwritten is the module initializer being
+    // absent and that does not change here. The transitive half is a matter of
+    // *calls*, which `drop_callers_of_refused` settles below.
+    let mut refused = Vec::new();
+    for func in &lowered.program.funcs {
+        let read = func.values.iter().find_map(|op| match &op.kind {
+            OpKind::GlobalGet(at) if unwritten.contains(at) => Some((*at, op.origin.clone())),
+            _ => None,
+        });
+        if let Some((at, origin)) = read {
+            refused.push((func.name.clone(), at, origin));
+        }
+    }
+    for (name, at, origin) in refused {
+        let global = &lowered.program.globals[at as usize];
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS1003",
+            format!(
+                "`{name}` cannot be compiled because it reads `{}`, whose initializer was lost \
+                 with the module evaluation refused above",
+                global.name
+            ),
+            origin.location,
+        ));
+        lowered.program.funcs.retain(|func| func.name != name);
+    }
+    // A function dropped here may have been the only caller of another, which
+    // `drop_callers_of_refused` settles -- and it runs whether or not anything
+    // was dropped, which is why the two early returns above call it too.
+    drop_callers_of_refused(lowered);
+}
+
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
         // A function about to be split by `suspend` provides two names: its
@@ -2159,7 +2249,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     lowered
         .diagnostics
         .extend(suspend::transform(&mut lowered.program));
-    drop_callers_of_refused(&mut lowered);
+    drop_readers_of_unwritten_globals(&mut lowered);
 
     let mut program = lowered.program;
 
