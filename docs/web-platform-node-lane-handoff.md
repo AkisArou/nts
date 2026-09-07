@@ -64,19 +64,25 @@ through the HTTP dispatch stack and therefore works through a CONNECT proxy.
 **Current numbers**, all with one binary pinned from the current tree and the same
 binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 
-- 1,292 primary `NTS1001`, 314 `NTS1003`, and **zero** `NTS1004`, `NTS4xxx` and invalid
-  HIR — those zeros have not moved at any measurement;
-- local Node-host/real-socket corpus 672/672, zero skipped;
-- pinned upstream corpus unchanged at 2,278 of 2,286 applicable, the same eight;
-- compiled axis 54 cases across 5 functions, agreeing on jvm, c and llvm.
+- 1,296 primary `NTS1001`, 314 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
+  — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
+  behind a language refusal never reaches the emitter, so that zero says "nothing
+  currently emitted trips the backend", and it gets harder to keep as primaries fall;
+- local Node-host/real-socket corpus **717/717**, zero skipped;
+- pinned upstream corpus **2,433 tests, 2,418 applicable, 2,408 passing, 10 failing** —
+  the eight long-standing structural failures plus the two `Event.timeStamp` assertions;
+- compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
+  with the four declines being the out-of-range typed-array read reported to the compiler
+  lane with a minimal reproduction;
+- `unrouted.mjs` clean over 101 audited files and 719 corpus files.
 
-**Closed since that list was written:** the WebSocket **accept loop**. Both peer lanes
-answered the ABI proposal — the JVM lane measured `bind`, port 0 and `accept` on an
-API-26 device; the Node lane, which has written the adapter, corrected the `backlog`
-contract, the close semantics and the bound-address field — and `SocketBinder`,
-`SocketListener` and `serveWebSocketUpgrades` are in with a real listening server under
-test. `SocketBinder` is optional on **policy** grounds, not capability: a client SDK
-should not silently grow the ability to listen.
+**The upstream corpus grew from 2,300 by pinning fixtures already sitting in Node's
+vendored checkout** — nothing was fetched. That vein is now exhausted for in-profile
+areas: the remaining unpinned Encoding fixtures test legacy single-byte and ISO-2022
+encodings this profile does not claim, and pinning a test to watch it fail for a known
+reason is not evidence. Three conformance gaps it exposed are fixed (UTF-16 decoding,
+`Event.isTrusted` as an unforgeable own accessor, `Blob.stream()` as a byte stream) and
+one boundary is recorded as not applicable with its reason.
 
 **Still open, and why.** The **public server module or package** is a repository-layout
 decision. The **Undici API ledger** still cannot be written honestly with nothing
