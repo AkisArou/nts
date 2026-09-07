@@ -3462,3 +3462,45 @@ same gap one protocol over and is now the known next piece.
 Measured with the same pinned binary built at `43fda4d3`: 1,303 primary `NTS1001` and
 242 `NTS1003` before and after, with zero `NTS1004`, zero `NTS4xxx` and no invalid HIR.
 One message differs between the runs and it is the same message with a shifted type id.
+
+## The same gap, one protocol over
+
+`Http2ClientResponse.trailers` was fully implemented in the connection — parsed,
+resolved, rejected on failure, guarded against unobserved rejection — and
+`Http2Transport` never put it on the response it returned. Every consumer therefore saw
+HTTP/2 as a transport that could not expose trailers at all, which is the shape the
+contract reserves for a provider that genuinely cannot.
+
+Surfacing it is a mapping from HPACK fields to the transport's name/value pairs, and
+**that mapping is where it went wrong**. `.then()` makes a new promise, and the
+connection's rejection guard covers only its own. The first version populated the field
+and immediately broke two unrelated tests — a redirect case and an idle-deadline case —
+because a rejected trailers promise nobody held escaped as an unhandled rejection. Both
+pass again with a guard on the derived promise.
+
+That guard then needed a test, because nothing exercised it: with the guard removed the
+whole file passed. A promise nobody holds cannot be asserted on, so the test cancels an
+HTTP/2 body mid-flight, awaits nothing, and relies on the runner treating an unhandled
+rejection as a failure. Without the guard it fails; with it, it passes. It is the only
+shape of assertion available for this property, and writing it was the difference
+between a guard and a decoration — the same distinction recorded for the early-hints
+header copy, resolved the other way because here it could be settled.
+
+Three tests: trailers delivered after the body over a real HTTP/2 server using node's
+`waitForTrailers`, a response without trailers settling empty rather than pending, and
+the cancellation case above. Two sabotages, both restored: dropping the trailers again
+took the corpus from 13/13 to 12/13, and removing the derived-promise guard fails the
+cancellation test.
+
+The complete local Node-host/real-socket corpus passes 520/520 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Trailers are now produced by both real transports and by the mock, so the consumers
+that have handled them all along — diagnostics, deduplication, the response collector,
+retry, the snapshot recorder — are for the first time exercised against something other
+than a fixture.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,303 primary
+`NTS1001` and 242 `NTS1003`; after, 1,304 primary and 242 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR.

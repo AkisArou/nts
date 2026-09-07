@@ -545,3 +545,68 @@ suite("a request with no observer is unaffected over HTTP/2", async (t) => {
   assert.equal(response.status, 200);
   assert.equal((await consume(response.body)).toString(), "past");
 });
+
+suite("a chunk of HTTP/2 trailers is delivered after the body", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    // `waitForTrailers` is what makes node emit `wantTrailers`; without it the stream
+    // ends before there is anywhere to put them.
+    stream.respond({ ":status": 200, "content-type": "text/plain" }, { waitForTrailers: true });
+    stream.on("wantTrailers", () => {
+      stream.sendTrailers({ "x-checksum": "abc123", "x-rows": "7" });
+    });
+    stream.end("payload");
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/trailered`)),
+  );
+  assert.notEqual(response.trailers, undefined, "HTTP/2 must expose trailers too");
+  assert.equal((await consume(response.body)).toString(), "payload");
+  const trailers = await response.trailers;
+  assert.deepEqual(
+    trailers.filter(([name]) => name.startsWith("x-")),
+    [
+      ["x-checksum", "abc123"],
+      ["x-rows", "7"],
+    ],
+  );
+});
+
+suite("an HTTP/2 response without trailers settles empty", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    stream.respond({ ":status": 200 });
+    stream.end("plain");
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/plain`)),
+  );
+  assert.equal((await consume(response.body)).toString(), "plain");
+  assert.deepEqual(await response.trailers, [], "no trailers is empty, not pending");
+});
+
+suite("cancelling an HTTP/2 body does not leak an unhandled trailer rejection", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    stream.respond({ ":status": 200, "content-type": "text/plain" });
+    // Keeps writing, so a cancel lands mid-body and the stream is reset.
+    stream.write("first chunk");
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/cancelled`)),
+  );
+  // Nothing here awaits `response.trailers`. Cancelling rejects it, and an unhandled
+  // rejection is a test-runner failure -- which is the only way a missing guard on the
+  // derived promise becomes visible, since no assertion can see a promise nobody holds.
+  await response.body.cancel(new Error("caller lost interest"));
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(true, "reaching here without an unhandled rejection is the assertion");
+});

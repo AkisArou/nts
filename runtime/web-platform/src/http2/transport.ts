@@ -9,6 +9,7 @@ import { addressOf } from "../http/address.ts";
 import { certificateCovers } from "../http/certificate.ts";
 import { contentLength } from "../http/fields.ts";
 import type { Http2ResponseHeaders } from "./headers.ts";
+import type { DecodedHpackHeaderField } from "./hpack.ts";
 import type {
   CancelHandle,
   ConnectAddress,
@@ -81,6 +82,19 @@ interface Http2ConnectionRecord {
 
 function originKey(request: TransportRequest): string {
   return request.url.protocol + "//" + request.url.host;
+}
+
+/** HPACK fields carry the same name/value pair the transport contract uses. */
+function mappedTrailers(
+  source: Promise<readonly DecodedHpackHeaderField[]>,
+): Promise<readonly HeaderEntry[]> {
+  const mapped = source.then((fields) => {
+    const entries: HeaderEntry[] = [];
+    for (const field of fields) entries.push([field.name, field.value]);
+    return entries as readonly HeaderEntry[];
+  });
+  ignoreRejection(mapped);
+  return mapped;
 }
 
 function canReplayAfterRefusal(request: TransportRequest): boolean {
@@ -282,6 +296,15 @@ export class Http2Transport implements FetchTransport {
           statusText: "",
           headers: responseFields(response),
           body: bodyForbidden ? null : body,
+          // The connection has always collected these; nothing surfaced them, so every
+          // consumer of `TransportResponse.trailers` saw HTTP/2 as a transport that
+          // could not expose trailers at all.
+          //
+          // `.then` makes a *new* promise, and the connection's rejection guard covers
+          // only its own. Without a guard here a rejected trailers promise escapes as
+          // an unhandled rejection — which is how two unrelated tests started failing
+          // the moment this field was populated.
+          trailers: mappedTrailers(response.trailers),
         };
       } catch (error) {
         timer?.cancel();
