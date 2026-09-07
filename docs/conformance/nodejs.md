@@ -24,6 +24,63 @@ intended order. Writing a module to fit today's compiler would mean writing
 something that is not node's algorithm, and unwinding those distortions later
 costs more than waiting.
 
+## Which modules, and which not
+
+This file says "twenty-two modules" throughout and has never said which
+twenty-two, or why not the others. That omission flatters every number in it:
+"every module passes" is a much smaller claim than it sounds when the set of
+modules is itself the thing being chosen.
+
+**Node ships 46 public modules. This profile implements 22.**
+
+    assert  async_hooks  buffer  console  dgram  diagnostics_channel  events
+    fs  http  net  os  path  process  punycode  querystring  readline
+    stream  string_decoder  timers  url  util  zlib
+
+The other 24, with the reason and what each costs in pinned tests — the count
+is `test/parallel` files named for that module, which is the coverage this
+profile does not even attempt:
+
+| module | tests | why not |
+| --- | ---: | --- |
+| `http2` | 277 | A second protocol implementation — HPACK, stream multiplexing, settings — and h2 over TLS needs `tls`. |
+| `quic` | 245 | Needs TLS 1.3 and a UDP transport. Experimental in node itself. |
+| `tls` | 220 | Needs a TLS provider. There is no crypto in this profile. |
+| `worker_threads` | 144 | Needs a second isolate and thread. |
+| `crypto` | 128 | Needs a crypto provider: ciphers, hashes, key handling. |
+| `child_process` | 112 | Phase two in `docs/node-js.md`, not started. Needs process spawning and IPC. |
+| `repl` | 101 | A developer tool rather than a runtime API; needs `vm` and the module loader. |
+| `vm` | 97 | Needs engine-level compilation and realm control. |
+| `cluster` | 83 | Needs `child_process` plus handle sharing between processes. |
+| `test` | 81 | Node's own test runner. A tool, and this profile is measured *by* a runner rather than shipping one. |
+| `inspector` | 74 | Needs the V8 inspector protocol. |
+| `https` | 67 | `http` over `tls`. Blocked entirely on `tls`. |
+| `domain` | 50 | Deprecated since v1 and discouraged by node. |
+| `module` | 32 | The loader itself. This profile substitutes modules rather than resolving them. |
+| `dns` | 30 | Phase two, not started. Name resolution exists as a `net` binding, so the capability is present without the module. |
+| `trace_events` | 29 | Needs the V8 tracing controller. |
+| `v8` | 23 | Engine introspection: heap statistics, serialization, coverage. |
+| `sqlite` | 17 | An embedded database; needs a native library. |
+| `perf_hooks` | 15 | Needs the engine's performance timeline. |
+| `tty` | 3 | Phase two, not started. `process.stdin`/`stdout` carry `isTTY` without it. |
+| `sea` | 2 | Single-executable packaging. A build feature, not a runtime API. |
+| `constants` | 0 | Deprecated. Its values live on `os` and `fs`, which this profile has. |
+| `sys` | 0 | Deprecated three-line alias for `util`. |
+| `wasi` | 0 | WebAssembly system interface; there is no wasm here. |
+
+**So the honest denominator is this.** `test/parallel` holds 4,494 files.
+About 1,830 are named for a module in the table above and are not attempted at
+all. This profile claims 2,192 of the rest — 1,772 passing and 420 excluded by
+name — and the remainder belong to subsystems that are not modules (the ESM
+loader, snapshots, startup, the debugger).
+
+Read that way, "1,772 of 1,772, every module green" means: *of the twenty-two
+modules chosen, and of the files in each that were judged applicable, all
+pass*. Two of those three qualifiers are choices this project made, and the
+number is only as good as they are. The exclusions are individually named and
+auditable, which is what the next section is about; **the module set is the
+qualifier with no audit at all**, and this table is the beginning of one.
+
 ## How to check any of this
 
 ```sh
@@ -370,6 +427,31 @@ denominator at all, because their filenames matched no module's test pattern.
 The first four are a denominator shrinking for the right reason — the
 exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
+
+**The exclusion set was re-audited rather than re-counted, and it holds.** Three
+checks, each mechanical:
+
+*Do they admit how much of the file is inapplicable?* 104 of the 422 entries
+say the file is only *partly* out of scope — "mixes", "irreducibly", "N of M
+subtests pass". Of those, **72 already name a `local/` retention** holding the
+representable half, and all 72 of those files exist. That is the pattern
+`local/blocklist-static.js` follows: a §13 refusal touching eleven lines of a
+361-line file should cost eleven lines, not the file.
+
+*Do the other 32 leave coverage on the floor?* Mostly no, and the reasons say
+why: they are of the form "*X* is a private-engine fixture, **while** the
+public behaviour is exercised by the applicable *Y*". A retention there would
+duplicate a test that already runs. The distinction from `blocklist` is
+concrete — there, the 350 recoverable lines existed nowhere else; here they do.
+
+*Are those "covered by *Y*" claims true?* 26 entries point at another test by
+name. Every named file exists — three resolve to `test/async-hooks/` and
+`test/client-proxy/` rather than `test/parallel/`, which is why a first pass
+reported them missing. None of the genuine coverage claims names a test that is
+itself excluded. Four entries do reference an excluded file, and all four are
+analogies rather than coverage — "the same blocker as", "the same flat object
+model that makes *Y* inapplicable" — which a reader should not confuse with a
+claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
 warns about elsewhere, so the two numbers belong next to each other: **1,772
