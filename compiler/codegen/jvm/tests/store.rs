@@ -200,3 +200,179 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Each sabotage fails the cases it names, and one of them names none.
+///
+/// # Why a count of failures is not evidence
+///
+/// These were originally run by hand, and what I checked was that the suite
+/// went red. That is weaker than it looks: a sabotage that fires tells you the
+/// suite *can* fail, not that it failed for the reason named. One of these
+/// breaks the runtime badly enough to throw before reaching the case it is
+/// aimed at, which reads identically to "the case caught it" if all you look at
+/// is the exit code.
+///
+/// So each entry names the cases it must break — and the third names **none**,
+/// which is the assertion this file most needs. Deleting the directory sync
+/// leaves every check passing, because durability after a power cut is not
+/// observable to any of them. That is what
+/// `a_commit_syncs_the_file_then_renames_then_syncs_the_directory` is for, and
+/// asserting the blindness here makes the division of labour between the two
+/// testable rather than a claim in a comment.
+#[test]
+fn the_sabotages_break_what_they_name_and_nothing_else() {
+    const SABOTAGE: &[Sabotage] = &[
+        (
+            "write straight to the target instead of a temporary",
+            &[(
+                "Path partial = target.resolveSibling(target.getFileName() + \".\" + handle + PARTIAL);",
+                "Path partial = target;",
+            )],
+            &[
+                "the old value was gone while the new one was still being written",
+                "a value was visible before its commit",
+                "a discarded write changed the value",
+            ],
+        ),
+        (
+            "reopen the ranged view by path on every read",
+            &[
+                (
+                    "private final java.io.RandomAccessFile file;",
+                    "private java.io.RandomAccessFile file;\n        private java.io.File reopened;",
+                ),
+                (
+                    "            try {\n                this.file = new java.io.RandomAccessFile(on, \"r\");",
+                    "            this.reopened = on;\n            try {\n                this.file = new java.io.RandomAccessFile(on, \"r\");",
+                ),
+                (
+                    "                file.seek(at);",
+                    "                file.close();\n                file = new java.io.RandomAccessFile(reopened, \"r\");\n                file.seek(at);",
+                ),
+            ],
+            // Throws where it breaks rather than reporting a case, which is the
+            // honest description of it: a reader whose file has been unlinked
+            // does not answer wrongly, it fails to open. The assertion is that
+            // the run does not succeed.
+            &[],
+        ),
+        (
+            "drop the directory sync, which no case here can see",
+            &[(
+                "                syncDirectory(target.getParent());",
+                "                // sabotaged: no directory sync",
+            )],
+            &[],
+        ),
+    ];
+
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    for entry in SABOTAGE {
+        one_sabotage(&javac, &java, entry);
+    }
+}
+
+/// A sabotage: its name, the edits that apply it, and the cases it must break.
+///
+/// Several edits rather than one, because the faithful version of the second —
+/// the shared lane's own bug, reopening by path on every read — needs a field
+/// to stop being `final` and a path to be kept. A sabotage approximated to fit
+/// its harness is a sabotage aimed at something else.
+type Sabotage = (&'static str, &'static [(&'static str, &'static str)], &'static [&'static str]);
+
+fn one_sabotage(javac: &Path, java: &Path, entry: &Sabotage) {
+    let (name, edits, must_fail) = entry;
+    let root = repository();
+    {
+        let dir = std::env::temp_dir()
+            .join(format!("nts-sabotage-{}-{}", std::process::id(), name.len()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = dir.join("src");
+        // The copy, never the checkout. Three sessions build from this tree, and
+        // a window where it holds wrong source is a correct-looking tree that
+        // produced a wrong binary — `tooling/jvm/sabotage.sh` says the same, at
+        // more length and for the same reason.
+        copy_tree(&root.join("runtime/jvm/src"), &src);
+
+        let store = src.join("nts/rt/NtsStore.java");
+        let mut text = std::fs::read_to_string(&store).unwrap();
+        for (from, to) in *edits {
+            assert!(text.contains(from), "the sabotage `{name}` no longer matches `{from}`");
+            text = text.replace(from, to);
+        }
+        std::fs::write(&store, text).unwrap();
+
+        let classes = dir.join("classes");
+        let mut compile = Command::new(javac);
+        compile.args(["--release", "8", "-Xlint:-options", "-d"]).arg(&classes);
+        for entry in std::fs::read_dir(src.join("nts/rt")).unwrap().flatten() {
+            compile.arg(entry.path());
+        }
+        let built = compile.output().unwrap();
+        assert!(
+            built.status.success(),
+            "`{name}` did not compile:\n{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let built = Command::new(javac)
+            .args(["--release", "8", "-Xlint:-options", "-cp"])
+            .arg(&classes)
+            .arg("-d")
+            .arg(&classes)
+            .arg(root.join("compiler/codegen/jvm/tests/store/StoreTest.java"))
+            .output()
+            .unwrap();
+        assert!(built.status.success(), "the driver did not compile under `{name}`");
+
+        let ran = Command::new(java)
+            .arg("-cp")
+            .arg(&classes)
+            .arg("StoreTest")
+            .arg(dir.join("root"))
+            .output()
+            .unwrap();
+        let said = String::from_utf8_lossy(&ran.stdout);
+        let failed: Vec<&str> = said.lines().filter_map(|it| it.strip_prefix("FAIL ")).collect();
+
+        if name.starts_with("drop the directory") {
+            // Two ways to be visible and they are different sentences, which is
+            // why they are not one assertion: a case may report it, or the run
+            // may not survive it at all.
+            assert!(
+                ran.status.success(),
+                "`{name}` was expected to be invisible and the run did not survive it:\n{said}\n{}",
+                String::from_utf8_lossy(&ran.stderr)
+            );
+            assert!(
+                failed.is_empty(),
+                "`{name}` was expected to be invisible to every case, and {} noticed:\n{said}",
+                failed.len()
+            );
+            return;
+        }
+        if must_fail.is_empty() {
+            assert!(!ran.status.success(), "`{name}` changed nothing:\n{said}");
+            return;
+        }
+        for one in *must_fail {
+            assert!(
+                failed.iter().any(|it| it.contains(one)),
+                "`{name}` should have broken `{one}` and did not:\n{said}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// A recursive copy, because a sabotage edits a copy and never the checkout.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
