@@ -38,6 +38,32 @@ function bufferSourceBytes(
   throw new TypeError("TextDecoder input must be an ArrayBuffer or ArrayBufferView");
 }
 
+/** The three encodings this decoder implements, by their canonical names. */
+export type DecoderEncoding = "utf-8" | "utf-16le" | "utf-16be";
+
+/**
+ * The label sets are the Encoding standard's, verbatim.
+ *
+ * `utf-16` is a label for UTF-16**LE**, which reads as a mistake and is not one: the
+ * standard resolves the ambiguity in favour of little-endian and a decoder that guessed
+ * from a BOM instead would disagree with every other implementation.
+ */
+function utf16Label(label: string): DecoderEncoding | null {
+  if (label === "unicodefffe" || label === "utf-16be") return "utf-16be";
+  if (
+    label === "csunicode" ||
+    label === "iso-10646-ucs-2" ||
+    label === "ucs-2" ||
+    label === "unicode" ||
+    label === "unicodefeff" ||
+    label === "utf-16" ||
+    label === "utf-16le"
+  ) {
+    return "utf-16le";
+  }
+  return null;
+}
+
 function utf8Label(label: string): boolean {
   return (
     label === "unicode-1-1-utf-8" ||
@@ -107,8 +133,13 @@ function convertTextDecodeOptions(options: TextDecodeOptions | null | undefined)
 }
 
 export class TextDecoder {
+  private readonly decoderEncoding: DecoderEncoding;
   private readonly decoderFatal: boolean;
   private readonly decoderIgnoreBOM: boolean;
+  /** The odd byte of a UTF-16 code unit split across chunks, or -1. */
+  private pendingByte = -1;
+  /** A high surrogate waiting for its low half, or -1. */
+  private pendingLead = -1;
   private needed = 0;
   private seen = 0;
   private code = 0;
@@ -121,14 +152,16 @@ export class TextDecoder {
     const convertedLabel = coerceToDOMString(label);
     const convertedOptions = convertTextDecoderOptions(options);
     const normalized = trimASCIIWhitespace(convertedLabel).toLowerCase();
-    if (!utf8Label(normalized)) {
-      throw new RangeError("Only UTF-8 is implemented by this decoder");
+    const utf16 = utf16Label(normalized);
+    if (utf16 === null && !utf8Label(normalized)) {
+      throw new RangeError("This decoder implements UTF-8, UTF-16LE and UTF-16BE");
     }
+    this.decoderEncoding = utf16 ?? "utf-8";
     this.decoderFatal = convertedOptions.fatal;
     this.decoderIgnoreBOM = convertedOptions.ignoreBOM;
   }
-  get encoding(): "utf-8" {
-    return "utf-8";
+  get encoding(): DecoderEncoding {
+    return this.decoderEncoding;
   }
   get fatal(): boolean {
     return this.decoderFatal;
@@ -142,12 +175,76 @@ export class TextDecoder {
     this.code = 0;
     this.lower = 0x80;
     this.upper = 0xbf;
+    this.pendingByte = -1;
+    this.pendingLead = -1;
   }
   private replacement(): void {
     this.resetSequence();
     if (this.decoderFatal) {
       throw new TypeError("Invalid UTF-8");
     }
+  }
+
+  /**
+   * UTF-16, either endianness, with the same streaming discipline as the UTF-8 machine.
+   *
+   * Two pieces of state survive a chunk boundary and both are error cases at the end of
+   * a non-streaming decode: a single byte with no partner, and a lead surrogate with no
+   * trail. A decoder that dropped either would turn a truncated stream into a shorter
+   * valid one, which is the failure the `fatal` flag exists to make visible.
+   */
+  private decodeUTF16(
+    input: Uint8Array,
+    stream: boolean,
+    emit: (code: number) => void,
+  ): void {
+    const bigEndian = this.decoderEncoding === "utf-16be";
+    for (let index = 0; index < input.length; index++) {
+      const byte = input[index];
+      if (byte === undefined) break;
+      if (this.pendingByte === -1) {
+        this.pendingByte = byte;
+        continue;
+      }
+      const unit = bigEndian ? (this.pendingByte << 8) | byte : (byte << 8) | this.pendingByte;
+      this.pendingByte = -1;
+
+      if (this.pendingLead !== -1) {
+        const lead = this.pendingLead;
+        this.pendingLead = -1;
+        if (unit >= 0xdc00 && unit <= 0xdfff) {
+          emit(0x10000 + ((lead - 0xd800) << 10) + (unit - 0xdc00));
+          continue;
+        }
+        // The lead was unpaired. It is an error on its own, and the unit that revealed
+        // it is then processed as a fresh one rather than swallowed with it.
+        this.utf16Error();
+        emit(0xfffd);
+      }
+
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        this.pendingLead = unit;
+        continue;
+      }
+      if (unit >= 0xdc00 && unit <= 0xdfff) {
+        this.utf16Error();
+        emit(0xfffd);
+        continue;
+      }
+      emit(unit);
+    }
+
+    if (stream) return;
+    if (this.pendingLead !== -1 || this.pendingByte !== -1) {
+      this.pendingLead = -1;
+      this.pendingByte = -1;
+      this.utf16Error();
+      emit(0xfffd);
+    }
+  }
+
+  private utf16Error(): void {
+    if (this.decoderFatal) throw new TypeError("Invalid UTF-16");
   }
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
@@ -173,6 +270,12 @@ export class TextDecoder {
         ascii = "";
       }
     };
+    if (this.decoderEncoding !== "utf-8") {
+      this.decodeUTF16(input, stream, emit);
+      this.bomSeen = bomSeen;
+      pieces.push(ascii);
+      return pieces.join("");
+    }
     let i = 0;
     while (i < input.length) {
       const byte = input[i];

@@ -154,7 +154,9 @@
       "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
       "streams/resources/rs-test-templates.js": "73ef0463768d23847186867fa68e968074b5fa8f",
       "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
-      "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
+      "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8",
+      "encoding/resources/encodings.js": "80933bf9386cb629537c32ca4dc5c22a81d7e872",
+      "encoding/resources/decoding-helpers.js": "78e52da014b7c56451c00a0419c7cedfca01ab18"
     },
     "tests": {
       "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
@@ -243,7 +245,14 @@
       "streams/writable-streams/properties.any.js": "ae0549f0871b4866877dffbccf8803eeaa897d06",
       "streams/writable-streams/reentrant-strategy.any.js": "18ce9e84759a11bed4f4b31f5e82cf6948a2b739",
       "streams/writable-streams/start.any.js": "17972b568ceb24fee7a758a9d7a1147b26a030d6",
-      "streams/writable-streams/write.any.js": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c"
+      "streams/writable-streams/write.any.js": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c",
+      "encoding/api-basics.any.js": "768f8159313ece26042dbe20f8894d5c37c3aa48",
+      "encoding/textdecoder-byte-order-marks.any.js": "31350fdf689ed6e8ab277eb0bfdaa7a068d02acb",
+      "encoding/textdecoder-eof.any.js": "e41e326aace2440f9f46969bbce6d82c1e582507",
+      "encoding/textdecoder-fatal.any.js": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
+      "encoding/textdecoder-ignorebom.any.js": "e825698ba405230d90da085e6fae70c364cbec16",
+      "encoding/textdecoder-streaming.any.js": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
+      "encoding/textdecoder-utf16-surrogates.any.js": "7e8322cd19c2133ea4bf557e0502be343b5d524f"
     }
   }
 }

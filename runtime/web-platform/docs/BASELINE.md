@@ -4760,3 +4760,63 @@ third constraint just walked into.
 
 Local corpus 705/705 with zero skipped, upstream unchanged at 2,278 of 2,286, frontier
 unchanged at 1,294 primary `NTS1001` and 314 `NTS1003`.
+
+## Ninety-three more upstream tests, and the eight that were failing are now zero
+
+The pinned upstream corpus had five of the Encoding standard's twenty-two `.any.js`
+fixtures. Seventeen were sitting unpinned in Node's vendored WPT checkout, already local,
+needing nothing but a blob hash in the manifest.
+
+Seven were pinned — the ones that exercise UTF-8 and UTF-16 rather than the legacy
+single-byte and ISO-2022 encodings, which this profile does not claim and which would
+have been pinned only to watch them fail for a reason already known. The corpus is
+**2,393 tests, 2,379 applicable**, up from 2,300 and 2,286.
+
+The first run was the finding. Ninety-three new tests, **fifty-five passing and
+thirty-eight failing**, and every single failure named `utf-16le`, `utf-16be` or
+`utf-16`. Not one UTF-8 assertion failed anywhere in the seventeen new fixtures. The
+decoder threw `RangeError` on any label but UTF-8, deliberately and with a comment
+saying so.
+
+That is a decision, not a defect — but it is one worth revisiting when the bill arrives
+in the form of thirty-eight failing conformance tests, and the honest options were to
+record a limitation or to remove it. Recording it would have meant a standing
+thirty-eight-failure baseline that everyone downstream has to learn to ignore.
+
+**So UTF-16 is implemented.** `utf-16le` and `utf-16be` decode, with the same streaming
+discipline as the UTF-8 machine: a single byte with no partner and a lead surrogate with
+no trail both survive a chunk boundary, and both are errors at the end of a
+non-streaming decode. A decoder that dropped either would turn a truncated stream into a
+shorter valid one, which is exactly the failure `fatal` exists to make visible.
+
+`utf-16` is a label for UTF-16**LE**. That reads as a mistake and is not one: the
+standard resolves the ambiguity in favour of little-endian, and a decoder that guessed
+from a byte-order mark instead would disagree with every other implementation. It has
+its own sabotage.
+
+All thirty-eight now pass. The corpus is **2,371 of 2,379 applicable**, and the failures
+are back to the same eight named structural ones this ledger has carried all along —
+ninety-three tests added and the failure count unchanged.
+
+### The corpus is the control
+
+Four sabotages, and none of them needed a test of mine. The pinned upstream fixtures
+are the control, which is stronger evidence than anything written here could be, because
+they were written by people who had never seen this implementation:
+
+- ignoring endianness and decoding everything little-endian: 8 failures become **21**;
+- dropping an unpaired lead surrogate instead of reporting it: **10**;
+- ignoring a truncated tail at the end of a non-streaming decode: **12**;
+- mapping the `utf-16` label to big-endian, the intuitive-looking mistake: **9**.
+
+Each restores to 8. A sabotage measured against somebody else's conformance suite is the
+one kind that cannot be accused of testing what the author happened to think of.
+
+The BOM behaviour that mattered earlier today — `Buffer.toString("utf8")` must not
+consume a leading BOM, and the WHATWG decoder must — is now covered upstream too, by
+`textdecoder-byte-order-marks` and `textdecoder-ignorebom` rather than only by this
+lane's own reasoning.
+
+Local corpus 705/705, compiled axis 138 of 142 across 13 functions on all three
+backends, frontier unchanged at 1,294 primary `NTS1001` and 314 `NTS1003` with zero
+`NTS1004` and zero invalid HIR.
