@@ -67,6 +67,9 @@ pub fn class_name(layout: &Layout) -> String {
 
 /// A promise: a settled-or-not value and the frames waiting on it.
 pub const PROMISE: &str = "nts/rt/NtsPromise";
+
+/// The environment, which owns the platform slot and the completion lane.
+pub const ENV: &str = "nts/rt/NtsEnv";
 pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
 
 /// The interface a suspended function's frame implements, so the loop can run

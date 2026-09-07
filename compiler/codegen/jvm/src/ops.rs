@@ -287,6 +287,18 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // `instanceof ArrayBuffer` and `instanceof Uint8Array`. One class and
         // nine classes, so both are an `instanceof` rather than a descriptor
         // read followed by a field read -- see `NtsValue.isViewKind`.
+        // The environment's platform slot. Three of the eight `nts_environment_*`
+        // entry points, and the three that matter here: the other five --
+        // `create`, `destroy`, `enter`, `leave`, `current` -- are declared in no
+        // TypeScript and are the C harness's own, one of them returning a struct
+        // by value that has no analogue here.
+        //
+        // Without these, everything reaching the environment was refused on this
+        // lane: `Event`'s constructor, `File`'s, and whatever else the shared
+        // provider hangs off the slot.
+        "nts_environment_install_platform" => (types::ENV, "installPlatform", "(Ljava/lang/Object;)V"),
+        "nts_environment_platform" => (types::ENV, "platform", "()Ljava/lang/Object;"),
+        "nts_environment_has_platform" => (types::ENV, "hasPlatform", "()Z"),
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),

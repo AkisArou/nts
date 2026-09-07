@@ -109,6 +109,17 @@ public final class NtsEnv {
     /** External work launched and not yet delivered, cancelled or dropped. */
     private int outstanding;
     private boolean closed;
+    /**
+     * The Web-platform runtime this environment holds, or `null`.
+     *
+     * <p>A slot on the *environment* and not a static, which is the whole point
+     * of it: a module-level `let` in shared TypeScript would be shared by every
+     * environment in the process, and that works perfectly until the second one
+     * exists. The object is one the program declared, so nothing here can name
+     * its class -- it is held as an `Object` and the call site casts, the same
+     * arrangement `nts_promise_reference` has.
+     */
+    private Object platform;
 
     private NtsEnv(boolean monotonic, int inboxCapacity) {
         this.monotonic = monotonic;
@@ -530,5 +541,46 @@ public final class NtsEnv {
         env.byId = EMPTY_TIMERS;
         env.size = 0;
         env.idThreshold = 0;
+        // Closing releases what the environment holds, which on the C lane is a
+        // release and here is dropping the reference. It matters for the same
+        // reason: `EnvTest` asks whether a closed environment has let go of
+        // everything it held, and a platform runtime left in this slot would be
+        // retained by any lane that still had the environment.
+        env.platform = null;
+    }
+
+    // ----- the platform slot ------------------------------------------------
+
+    /**
+     * Installs the Web-platform runtime for the current environment.
+     *
+     * <p>Installing over an existing one replaces it. On the C lane that
+     * retains the new and releases the old; under a platform collector there is
+     * nothing to do beyond the assignment, which is what `Provider::NoGc` means
+     * rather than something this lane skipped.
+     */
+    public static void installPlatform(Object runtime) {
+        current().platform = runtime;
+    }
+
+    /**
+     * The installed runtime, refusing rather than answering null.
+     *
+     * <p>The pair with {@link #hasPlatform} is deliberate and is the C header's
+     * reasoning: a nullable accessor would put the absence into the declared
+     * TypeScript return, and bootstrap would then depend on how absence is
+     * represented. Ask, then read.
+     */
+    public static Object platform() {
+        Object held = current().platform;
+        if (held == null) {
+            throw new NtsRefusal("no Web-platform runtime is installed in this environment");
+        }
+        return held;
+    }
+
+    /** Whether there is one to read, without reading it. */
+    public static boolean hasPlatform() {
+        return current().platform != null;
     }
 }
