@@ -8,7 +8,7 @@ on any of them.
 ## The situation in one paragraph
 
 Two axes move independently, and right now one is finished and the other has
-never started. **TypeScript-on-node: 1,772 of 1,772 across 22 modules, 0
+never started. **TypeScript-on-node: 1,786 of 1,786 across 22 modules, 0
 hollow, nothing failing.** **Compiled artifact: 0 of 22.** Not one module
 produces a working addon. The project exists to compile TypeScript to native
 code, so the green axis is the *preparation* and the red one is the product. A
