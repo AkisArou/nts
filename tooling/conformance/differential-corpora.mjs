@@ -43,6 +43,17 @@ function unicodeWord(rnd, maxLength = 12) {
   return s;
 }
 
+// `console` was attempted and is deliberately absent. Its output *is* its
+// behaviour, so a corpus has to capture it, and node's `Console` will not write
+// to a hand-made stream: given `{ write, on, removeListener, ... }` it produces
+// nothing at all and reports no error, so every comparison came back as node
+// saying `""`. Giving both sides a real `Writable` is what it would take, and
+// under the substitution `require("stream")` is this profile's on one side and
+// node's on the other -- which would make a difference between the two streams
+// indistinguishable from a difference between the two consoles.
+//
+// Worth recording rather than leaving as an absence: the first version of that
+// corpus reported 1,839 divergences, and every one of them was the stub.
 export const CORPORA = {
   punycode: {
     fixed: [
