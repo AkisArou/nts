@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -723,6 +724,52 @@ public final class NtsSocket {
                 }
             }
         }, failed);
+    }
+
+    /**
+     * One `SecureRandom`, seeded once.
+     *
+     * <p>A field rather than a fresh instance per call: on Android the first
+     * `SecureRandom` blocks until the pool has entropy, and constructing one
+     * inside a fill would move that wait to whichever request happened to be
+     * first. It is thread-safe, so the owner lane and a worker may both reach
+     * it.
+     */
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    /**
+     * Fill a byte view with secure random bytes, in place.
+     *
+     * <p>In place because the alternative is a provider that allocates a buffer
+     * the caller then copies out of, and `getRandomValues` is specified as
+     * filling the array it was given and returning it.
+     *
+     * <p>**The view's window, not its buffer.** A `Uint8Array` may be a window
+     * onto part of a larger `ArrayBuffer`, and bytes outside it belong to
+     * whatever else is looking at that buffer. Filling the backing array would
+     * be correct on every test that constructs a view from a length and wrong
+     * on every one that does not.
+     *
+     * <p>`SecureRandom.nextBytes` fills a whole array and Java 8 has no ranged
+     * form, so a window that is not the whole buffer needs a temporary. Taking
+     * the fast path only when the view *is* the whole buffer keeps that
+     * allocation off the common case without giving the two paths different
+     * behaviour.
+     */
+    public static void randomFill(NtsViewU8 into) {
+        byte[] backing = into.buffer.bytes;
+        if (backing == null) {
+            throw new NtsRefusal("a TypeError: the ArrayBuffer is detached");
+        }
+        int at = into.offset;
+        int n = NtsView.elements(into);
+        if (at == 0 && n == backing.length) {
+            RANDOM.nextBytes(backing);
+            return;
+        }
+        byte[] block = new byte[n];
+        RANDOM.nextBytes(block);
+        System.arraycopy(block, 0, backing, at, n);
     }
 
     /** Open connections, for a close-race test to assert against. */

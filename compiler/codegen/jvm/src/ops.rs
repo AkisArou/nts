@@ -626,6 +626,17 @@ pub const WEB_INTRINSICS: &[Intrinsic] = &[
         member: "close",
         descriptor: "(D)V",
     },
+    // Ungated by `ManagedType::View` landing: a `Uint8Array` is
+    // `Lnts/rt/NtsViewU8;` now, where before there was no type to write it in.
+    // The first of the five gated entries to come off, and it came off because
+    // its whole signature is one byte view -- the other four also want an
+    // environment handle, which still has no common type.
+    Intrinsic {
+        declared: "nts_jvm_web_random_fill",
+        owner: types::SOCKET,
+        member: "randomFill",
+        descriptor: "(Lnts/rt/NtsViewU8;)V",
+    },
     Intrinsic {
         declared: "nts_jvm_web_cancel_connect",
         owner: types::SOCKET,

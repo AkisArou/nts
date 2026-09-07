@@ -8,11 +8,11 @@
 // minute in a form where every function returned zero, which would have passed
 // against a table that mapped all four names to the wrong method.
 //
-// Only the intrinsics whose whole signature is `number` and `void` are here.
-// The rest take an environment handle or a byte view, and neither has a common
-// type yet -- see `runtime/web-platform/android/intrinsics.d.ts`, where the
-// gated entries say so. Four of nine, and the four are named rather than
-// silently the ones that happened to work.
+// Five of nine. Four take only `number` and `void`; the fifth takes a byte
+// view, which `ManagedType::View` supplied. The remaining four want an
+// environment handle, which has no common type -- see
+// `runtime/web-platform/android/intrinsics.d.ts`, where the gated entries say
+// so. They are named rather than silently the ones that happened to work.
 //
 // The declarations are not here. They come from
 // `runtime/web-platform/android/intrinsics.d.ts` through this fixture's
@@ -70,3 +70,33 @@ export function cancelUnissued(request: number): number {
 export function changed(): number {
   return socket.networkChanged();
 }
+
+/**
+ * Fill thirty-two bytes and report how many are not zero.
+ *
+ * A stub that did nothing answers 0, which is what this distinguishes. It is
+ * not a test of randomness -- that is `SecureRandom`'s job and not something a
+ * corpus can assert -- it is a test that the bytes crossed the boundary at all.
+ *
+ * Thirty-two rather than one: a single byte is zero once in every 256 fills,
+ * which would be a flaky test. All thirty-two being zero has probability 2^-256,
+ * which is below the rate at which the hardware gets arithmetic wrong.
+ */
+export function randomBytes(): number {
+  const bytes = new Uint8Array(32);
+  socket.randomFill(bytes);
+  let set = 0;
+  for (let i = 0; i < 32; i = i + 1) {
+    if (bytes[i]! !== 0) {
+      set = set + 1;
+    }
+  }
+  return set;
+}
+
+// `randomStaysInsideItsWindow` was here and cannot be: `new Uint8Array(backing,
+// 8, 16)` is `NTS1001 a \`new Uint8Array\` from a value is not supported by this
+// lowering yet`, so a window cannot be constructed in TypeScript at all. The
+// property is real and is asserted in `Drive.java`, where a window can be built
+// -- named here rather than left out, because a fill that ignored the view's
+// offset would pass every case above.

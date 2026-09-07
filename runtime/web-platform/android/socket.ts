@@ -21,11 +21,14 @@
 //
 // # What is not here
 //
-// Connect, read, write, random-fill and the two completion reservations. They
-// take an environment handle or a byte view and cannot be written in TypeScript
-// yet; see the GATED markers in `intrinsics.d.ts`. Wrapping them here with
-// `unknown` in the gaps would make this module look complete and make the gap
-// invisible, which is the opposite of what a boundary is for.
+// Connect, read, write and the two completion reservations. They take an
+// environment handle, which has no common type yet; see the GATED markers in
+// `intrinsics.d.ts`. Wrapping them here with `unknown` in the gaps would make
+// this module look complete and make the gap invisible, which is the opposite
+// of what a boundary is for.
+//
+// Random-fill *was* in that list and is not any more: it wanted a byte view and
+// `ManagedType::View` supplied one.
 
 /**
  * How many connections the provider is holding.
@@ -68,4 +71,19 @@ export function cancelConnect(request: number): void {
  */
 export function networkChanged(): number {
   return nts_jvm_web_network_changed();
+}
+
+/**
+ * Fill a byte view with secure random bytes, in place.
+ *
+ * In place because `getRandomValues` is specified as filling the array it was
+ * given, and because a provider that allocated one would leave the caller
+ * copying out of it.
+ *
+ * Fills the view's **window**, not its buffer. A `Uint8Array` may be a view onto
+ * part of a larger `ArrayBuffer`, and the bytes outside it belong to whatever
+ * else is looking at that buffer.
+ */
+export function randomFill(into: Uint8Array): void {
+  nts_jvm_web_random_fill(into);
 }

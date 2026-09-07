@@ -60,6 +60,9 @@ fn tool(name: &str) -> Option<PathBuf> {
 /// toggle; and `changed` twice, because the second sweep has nothing to close
 /// and must say so rather than repeat the first answer.
 const EXPECTED: &str = "\
+random set
+outside 0
+inside set
 open 3
 after close 2
 after cancel 2
@@ -166,16 +169,21 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
 
 /// How a declared type is spelled in a descriptor.
 ///
-/// Only the kinds the wired four use, plus the two a gated declaration writes,
-/// so an unrecognised type is a `None` that fails loudly rather than a silent
-/// default. `Uint8Array` is deliberately absent: it is what `ManagedType::View`
-/// would become, and until that exists there is nothing to be right about.
+/// Only the kinds a wired declaration uses, so an unrecognised type is a `None`
+/// that fails loudly rather than a silent default -- which is what every gated
+/// entry is, seen from this side.
+///
+/// `JvmBytes` is the alias the declarations write and `Uint8Array` is what it
+/// aliases; both are here because the parser reads whichever the declaration
+/// spelled. It was deliberately absent until `ManagedType::View` landed, on the
+/// grounds that there was nothing to be right about yet.
 fn descriptor_of(ts: &str) -> Option<&'static str> {
     Some(match ts.trim() {
         "number" => "D",
         "void" => "V",
         "boolean" => "Z",
         "string" => "Ljava/lang/String;",
+        "JvmBytes" | "Uint8Array" => "Lnts/rt/NtsViewU8;",
         _ => return None,
     })
 }

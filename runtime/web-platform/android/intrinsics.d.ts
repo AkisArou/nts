@@ -44,7 +44,12 @@
 /** An environment handle. GATED: there is no common environment type yet. */
 type JvmEnv = unknown;
 
-/** A byte view. GATED: `ManagedType::View` does not exist yet; see below. */
+/**
+ * A byte view. No longer gated -- `ManagedType::View` exists and a `Uint8Array`
+ * lowers to `Lnts/rt/NtsViewU8;`. `random_fill` is wired because its whole
+ * signature is one of these; `read` and `write` still want an environment
+ * handle, which has no common type.
+ */
 type JvmBytes = Uint8Array;
 
 // ---------------------------------------------------------------------------
@@ -144,7 +149,13 @@ declare function nts_jvm_web_cancel_launch(env: JvmEnv): void;
 // caller then has to copy out of.
 // ---------------------------------------------------------------------------
 
-/** GATED on the byte-view type, for the same reason as read and write. */
+/**
+ * WIRED. Was gated on the byte-view type, which `ManagedType::View` supplied.
+ *
+ * Fills the view's **window**, not its buffer: a `Uint8Array` may be a view onto
+ * part of a larger `ArrayBuffer`, and the bytes outside it belong to whatever
+ * else is looking at that buffer.
+ */
 declare function nts_jvm_web_random_fill(into: JvmBytes): void;
 
 // ---------------------------------------------------------------------------

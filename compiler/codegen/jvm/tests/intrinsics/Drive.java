@@ -8,7 +8,10 @@ import java.util.List;
 import nts.rt.NtsEnv;
 import nts.rt.NtsInbox;
 import nts.rt.NtsNumberCallback;
+import nts.rt.NtsBuffer;
 import nts.rt.NtsSocket;
+import nts.rt.NtsView;
+import nts.rt.NtsViewU8;
 import nts.rt.NtsTextPairCallback;
 
 /**
@@ -122,6 +125,32 @@ public final class Drive {
                     return;
                 }
             }
+
+            // How many of thirty-two bytes the fill set. A stub answers 0.
+            System.out.println("random " + ((int) call("randomBytes") > 0 ? "set" : "none"));
+
+            // The window property, which TypeScript cannot express yet: `new
+            // Uint8Array(backing, 8, 16)` does not lower, so there is no way to
+            // build a view onto part of a buffer from a program. Asserted here
+            // instead, because a fill that ignored the view's offset and length
+            // would answer correctly on every case that can be written above --
+            // every one of those views starts at zero and spans the whole
+            // buffer, which is exactly the shape that hides the bug.
+            NtsBuffer backing = NtsBuffer.allocate(32);
+            NtsViewU8 window = NtsViewU8.part(backing, 8, 16);
+            NtsSocket.randomFill(window);
+            byte[] bytes = NtsBuffer.storage(backing);
+            int outside = 0;
+            int inside = 0;
+            for (int i = 0; i < 32; i++) {
+                if (i < 8 || i >= 24) {
+                    if (bytes[i] != 0) { outside++; }
+                } else if (bytes[i] != 0) {
+                    inside++;
+                }
+            }
+            System.out.println("outside " + outside);
+            System.out.println("inside " + (inside > 0 ? "set" : "none"));
 
             System.out.println("open " + (int) call("openNow"));
             System.out.println("after close " + (int) call("closeOne", opened[0].handle));
