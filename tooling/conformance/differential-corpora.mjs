@@ -131,6 +131,44 @@ export const CORPORA = {
     ],
   },
 
+  util: {
+    // `format`'s specifiers, where the input is the *template* rather than the
+    // value. The rules are fiddly and positional: a specifier consumes the next
+    // argument, an unmatched one is left alone, `%%` is a literal, and leftover
+    // arguments are appended with a space and inspected rather than stringified.
+    fixed: [
+      "", "%s", "%d", "%i", "%f", "%j", "%o", "%O", "%c", "%%", "%",
+      "%s%s", "%s %s %s %s %s", "%z", "%%s", "%s%%", "a%sb%dc",
+      "%j", "%o %O", "%d%i%f", "%s%", "%", "%%%%", "no specifiers at all",
+    ],
+    input: (rnd) => {
+      const TOK = ["%s", "%d", "%i", "%f", "%j", "%o", "%O", "%c", "%%", "%",
+        "%z", "a", " ", "ü", "日", "{}", "[]", "\n"];
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 6);
+      for (let i = 0; i < k; i++) out += choose(rnd, TOK);
+      return out;
+    },
+    calls: [
+      { label: "format(t)", call: (m, t) => m.format(t) },
+      { label: "format(t,'x')", call: (m, t) => m.format(t, "x") },
+      { label: "format(t,42)", call: (m, t) => m.format(t, 42) },
+      { label: "format(t,obj)", call: (m, t) => m.format(t, { a: 1, b: [2, 3] }) },
+      {
+        label: "format(t,many)",
+        call: (m, t) => m.format(t, "x", 42, { a: 1 }, [1, 2], null, undefined, true),
+      },
+      {
+        label: "formatWithOptions(t,many)",
+        call: (m, t) =>
+          m.formatWithOptions({ colors: false, depth: 2 }, t, "x", 42, { a: 1 }, [1, 2]),
+      },
+      { label: "inspect(t)", call: (m, t) => m.inspect(t) },
+      { label: "stripVTControlCharacters(t)", call: (m, t) => m.stripVTControlCharacters(t) },
+      { label: "toUSVString(t)", call: (m, t) => m.toUSVString(t) },
+    ],
+  },
+
   zlib: {
     // Byte-for-byte against node's output, not merely a round trip. Two
     // implementations of the same format can both be correct and disagree on
