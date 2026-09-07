@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,769 of node's own applicable test files pass** across twenty-two modules,
+**1,770 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -314,24 +314,30 @@ The whole table comes from a single `sweep.mjs` run over the tree this tranche
 commits, with sabotage on. It is one run rather than two anchored separately,
 which is the first time that has been true here.
 
-**The sweep is not quite deterministic, and that is measured rather than
-suspected.** It has now twice printed a total one lower than the truth, both
-times with `util` at 19/20 — a module neither tranche touched, nor any of its
-dependencies. Both times a re-run gave 20/20 and a total matching the
-arithmetic exactly: 1,725 = 1,719 + 6, and later 1,743 = 1,736 + 7. In between,
-`util` was run directly five times and passed 20/20 every time, so whichever
-file it is fails only under the sequential full-profile load the sweep applies,
-never in isolation.
+**The sweep is not quite deterministic, and the file is now named.** It printed
+a total one lower than the truth four times over this document's life, always
+with `util` at 19/20. The standing advice here was to re-run, which produced a
+matching number every time and taught nothing. Running `util` six times in
+isolation instead produced the failure twice, and named it:
+**`test-util-inspect-long-running.js`**, with `Maximum call stack size exceeded`
+inside `formatWithKeys`.
 
-Two consequences, and the second matters more. A single green sweep is weaker
-evidence than this document's arithmetic has been treating it as, so an
-unexplained -1 gets re-run before it is believed *or* acted on. And the flake
-deserves chasing on its own account, because an intermittently failing test is
-a hollow test's opposite number: it reports a defect that is not there, and
-"measure it again" is exactly the habit that would let a real intermittent
-regression be re-rolled away. This is recorded so the next person to see a -1
-knows both that it has happened before and that the right response is to name
-the file rather than to run the sweep until it is green.
+The test builds a thousand-deep structure and calls
+`util.inspect(obj, { depth: Infinity })`, existing precisely to check that a
+huge object does not crash. Our formatter spends more stack frames per level of
+structure than node's — `formatValue` → `formatObject` → `formatByShape` →
+`formatWithKeys` → `formatProperty` → `formatValue` — so a thousand levels
+costs several thousand frames, and whether that fits depends on how much stack
+the caller has already used. Under a sweep it usually does; under a loaded
+machine it sometimes does not. **Load-dependent, not random**, and the fix is
+fewer frames per level rather than more stack.
+
+That resolution is the point of the entry. An intermittently failing test is a
+hollow test's opposite number — it reports a defect that is not there — and
+"measure it again" is the habit that would let a real intermittent regression
+be re-rolled away. Four re-runs produced four clean numbers and no
+understanding; one deliberate attempt to reproduce produced the cause. **Re-run
+to check a number, reproduce to learn anything.**
 
 **The previous revision of this section was wrong by about a thousand files, in
 the flattering direction.** It read 766 passing of 1,462 applicable with 22
@@ -366,7 +372,7 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,769
+warns about elsewhere, so the two numbers belong next to each other: **1,770
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -406,7 +412,7 @@ still.
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
 | `stream` | **244 / 244** | 0 | the core, the operators, `Readable.from` and the async iterator |
 | `string_decoder` | **3 / 3** | 0 | complete |
-| `timers` | **53 / 53** | 0 | complete |
+| `timers` | **54 / 54** | 0 | complete |
 | `url` | **45 / 45** | 0 | complete; exact on the Web Platform Tests corpus |
 | `util` | **20 / 20** | 0 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `zlib` | **66 / 66** | 0 | the streams, the one-shots, brotli and zstd |
@@ -922,6 +928,40 @@ touching its subject. Both are the instrument lying, and only one of them has
 a control that looks for it — sabotage catches the first and nothing was
 looking for the second. The lesson this document keeps relearning, in its
 sixth costume: **a red result deserves the same suspicion as a green one.**
+
+## The one property `timers` exists for, which almost nothing measured
+
+A mutation, prompted by the web-platform lane finding the same shape in its own
+suite: **collapse every requested delay to 1ms**, so `setTimeout(f, 1500)`
+fires after 2. Verified effective before it was believed — that exact call now
+returns in 2ms.
+
+**50 of node's 53 applicable `timers` files still pass.** Only three notice.
+
+That is a fact about the oracle rather than about this implementation, and the
+distinction matters. Node's timer tests are about semantics — ordering, `ref`
+and `unref`, clearing, argument validation — because a test that asserts
+elapsed wall-clock time is flaky by construction, so upstream mostly declines
+to write one. Declining is defensible and it leaves the property timers exist
+for unmeasured. `local/delay-honoured.js` measures it: ordering across three
+different delays, and a floor on elapsed time set far below the delay it checks
+and far above the two milliseconds a collapsed delay produces. It fails under
+the mutation and is otherwise robust to a loaded machine.
+
+**Two earlier versions of this mutation proved narrower things than they
+looked like proving, and that is the more useful half.** The first changed a
+list's expiry at creation and reported 52 of 53 surviving — but a probe showed
+a 1500ms timer still waiting 1500ms, because each timer's own due-check
+recomputes from its `_idleStart`. It had corrupted *ordering*, not duration.
+The second collapsed `getTimerDuration` and restored ordering while still
+waiting 1500ms, because `setTimeout` never routes through it. Only the third,
+at `this._idleTimeout`, actually removed the delay.
+
+Three mutations, three different numbers, and two of them would have been
+reported as "the suite does not check delay" by anyone who did not probe what
+the mutation had actually done. **A mutation is a claim about the code it
+changed, and needs its own control** — the same sentence as the census
+printing its lane, one level down.
 
 ## Comparing the export surface to node's, which nothing had done
 
