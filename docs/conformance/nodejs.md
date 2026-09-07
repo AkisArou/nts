@@ -2729,10 +2729,38 @@ The prose below was written against 1,509, and before that 946; read its
 > a function that builds an error message**, and it is under the validator layer
 > that is under everything else.
 >
+> **The artefact caveat is now discharged for all ten.** None of the top ten
+> terminals is ever the subject of its own `cannot be compiled` line, so none
+> is a function whose cascade edge this parse missed — they are genuine roots.
+>
+> Attributing a *reason* to each is a weaker exercise and is labelled as such.
+> Locating a function by grep and taking the `NTS1001`s within seventy lines of
+> it gives candidates, not attributions: the same method offers
+> `determineSpecificType` a second reason at line 87 when the function ends at
+> 76. Read the right-hand column as "constructs near this root", and only
+> `determineSpecificType`'s has been checked against the function's actual
+> range.
+>
+> ```
+> determineSpecificType     an `unknown` narrowed to BigInt          (verified)
+> ERR_OUT_OF_RANGE#ctor     a `new` with arguments and no constructor
+> trackPromise              a module-scope variable of unrepresentable type
+> Readable#read             an `in` naming a name on an object
+> getValidatedBytePath      an `instanceof` against a class this compiler lacks
+> decodeIn                  `toString` on a number
+> Socket##healthCheck       a function returning the type parameter `Result`
+> EventEmitter#emit         — not located
+> asRequest                 — not located
+> destroyQueue              — not located
+> ```
+>
+> Three of ten could not be located at all, which is the honest yield of a
+> grep-and-window heuristic and the reason this is still a shape rather than a
+> work list.
+>
 > One caveat still limits the table above: names are deduplicated across
 > modules, so 1,188 is distinct functions and not the 4,267 per-module
-> citations. The other caveat — that a terminal might be a parse artefact — has
-> been discharged for the largest one and remains open for the rest.
+> citations.
 >
 > The `module#init` choke point is real and it is what empties five modules'
 > *export tables* — but it accounts for 231 of the 4,498, not the bulk. The
