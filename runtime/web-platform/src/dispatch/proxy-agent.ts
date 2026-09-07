@@ -242,10 +242,10 @@ export class EnvHttpProxyAgent implements FetchTransport {
   private readonly proxies = new Map<string, ProxyAgent | Socks5ProxyAgent>();
   private closed = false;
 
-  constructor(options: EnvHttpProxyAgentOptions) {
+  constructor(options: EnvHttpProxyAgentOptions, direct?: Http1Transport) {
     this.options = options;
     this.policy = new EnvironmentProxyPolicy(options.urls, options.environment, options);
-    this.direct = new Http1Transport(options.connector, options.scheduler, options);
+    this.direct = direct ?? new Http1Transport(options.connector, options.scheduler, options);
   }
 
   dispatch(request: TransportRequest): Promise<TransportResponse> {

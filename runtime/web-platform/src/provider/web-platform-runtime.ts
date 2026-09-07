@@ -12,8 +12,12 @@ import type {
   DispatchDiagnosticsPolicy,
 } from "../dispatch/diagnostics.ts";
 import { composeFetchTransport } from "../dispatch/interceptor.ts";
+import { EnvHttpProxyAgent, EnvironmentProxyConnector } from "../dispatch/proxy-agent.ts";
+import type { EnvironmentProxyOptions, ProxyEnvironment } from "../dispatch/proxy-policy.ts";
+import type { ProxyAuthenticator } from "../dispatch/proxy.ts";
 import { FetchClient } from "../fetch/fetch.ts";
 import type { FetchCookiePolicy } from "../fetch/fetch.ts";
+import type { HeaderEntry } from "../fetch/headers.ts";
 import type { RequestContext, RequestInit } from "../fetch/request.ts";
 import { Request } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
@@ -38,13 +42,27 @@ import {
   type WebSocketStreamContext,
   type WebSocketStreamOptions,
 } from "../websocket/websocket-stream.ts";
-import type { PlatformPrimitives } from "./primitives.ts";
+import type { PlatformPrimitives, TlsUpgrader } from "./primitives.ts";
+
+export interface WebPlatformProxyOptions extends EnvironmentProxyOptions {
+  /** TLS over an existing stream is required for CONNECT and SOCKS target security. */
+  readonly tls: TlsUpgrader;
+  /** Host-supplied environment view. Shared code never reads process.env. */
+  readonly environment?: ProxyEnvironment;
+  readonly headers?: readonly HeaderEntry[];
+  readonly authorization?: string;
+  readonly authenticate?: ProxyAuthenticator;
+  readonly maximumAuthenticationAttempts?: number;
+  readonly proxyTunnel?: boolean;
+}
 
 export interface WebPlatformOptions {
   baseURL?: string;
   origin?: string;
   bodyPolicy?: Partial<BodyPolicy>;
   http1?: Http1Options;
+  /** Environment/explicit proxy policy shared by Fetch, EventSource and WebSocket. */
+  proxy?: WebPlatformProxyOptions;
   websocket?: RawWebSocketOptions;
   maxRedirects?: number;
   maxWebSocketBufferedAmount?: number;
@@ -97,6 +115,7 @@ export class WebPlatformRuntime
   readonly transport: WebSocketTransport;
 
   private readonly ownedWebSocketTransport: RawWebSocketTransport | null;
+  private readonly ownedFetchProxy: EnvHttpProxyAgent | null;
   private readonly primitives: PlatformPrimitives;
   private readonly blobURLs: BlobURLStore;
   private readonly eventSources: EventSource[] = [];
@@ -105,6 +124,9 @@ export class WebPlatformRuntime
   private closed = false;
 
   constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
+    if (options.fetchTransport !== undefined && options.proxy !== undefined) {
+      throw new TypeError("fetchTransport and proxy cannot both select the Fetch transport");
+    }
     const bodyPolicy = readBodyPolicy(options.bodyPolicy);
     const contentCodingPolicy = readContentCodingPolicy(options.contentCodingPolicy);
     const maxRedirects = options.maxRedirects ?? 20;
@@ -131,9 +153,19 @@ export class WebPlatformRuntime
     };
     this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
 
+    const proxyConnector =
+      options.proxy === undefined
+        ? primitives.sockets
+        : new EnvironmentProxyConnector({
+            ...options.proxy,
+            connector: primitives.sockets,
+            scheduler: primitives.scheduler,
+            urls: primitives.urls,
+          });
+
     if (options.webSocketTransport === undefined) {
       const transport = new RawWebSocketTransport(
-        primitives.sockets,
+        proxyConnector,
         primitives.random,
         primitives.scheduler,
         options.websocket,
@@ -146,7 +178,20 @@ export class WebPlatformRuntime
       this.ownedWebSocketTransport = null;
     }
 
-    let fetchTransport = options.fetchTransport ?? this.http1;
+    this.ownedFetchProxy =
+      options.proxy === undefined
+        ? null
+        : new EnvHttpProxyAgent(
+            {
+              ...options.http1,
+              ...options.proxy,
+              connector: primitives.sockets,
+              scheduler: primitives.scheduler,
+              urls: primitives.urls,
+            },
+            this.http1,
+          );
+    let fetchTransport = options.fetchTransport ?? this.ownedFetchProxy ?? this.http1;
     if (options.diagnostics !== undefined) {
       fetchTransport = composeFetchTransport(fetchTransport, [
         new DiagnosticsInterceptor({
@@ -244,6 +289,7 @@ export class WebPlatformRuntime
     const webSocketStreams = this.webSocketStreams.slice();
     for (const stream of webSocketStreams) stream.closeForRuntime();
     this.blobURLs.close();
+    this.ownedFetchProxy?.close();
     this.http1.close();
     if (this.ownedWebSocketTransport !== null) {
       this.ownedWebSocketTransport.close();

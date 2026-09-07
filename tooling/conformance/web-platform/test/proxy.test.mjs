@@ -22,6 +22,7 @@ import {
   HostNodeTlsUpgrader,
   hostNodeURLs,
 } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
+import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 import { tlsFixture } from "./tls-fixture.mjs";
 
 const encoder = new TextEncoder();
@@ -777,6 +778,52 @@ test("EnvironmentProxyConnector tunnels protocol engines and preserves direct by
   assert.equal(
     proxyConnection.writtenText(),
     "CONNECT h2.example:443 HTTP/1.1\r\nHost: h2.example:443\r\n\r\n",
+  );
+});
+
+test("WebPlatformRuntime owns one proxy policy used by its Fetch client", async (t) => {
+  let request = "";
+  const sockets = new Set();
+  const proxy = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("data", (chunk) => {
+      request += decoder.decode(chunk);
+      if (!request.includes("\r\n\r\n")) return;
+      socket.end("HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nruntime");
+    });
+  });
+  proxy.listen(0, "127.0.0.1");
+  await new Promise((resolve) => proxy.once("listening", resolve));
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise((resolve) => proxy.close(resolve));
+  });
+  const address = proxy.address();
+  assert.equal(typeof address, "object");
+  assert.notEqual(address, null);
+  const runtime = createHostNodeWebPlatform({
+    proxy: {
+      tls: new HostNodeTlsUpgrader(),
+      environment: { HTTP_PROXY: `http://127.0.0.1:${address.port}` },
+    },
+  });
+  t.after(() => runtime.close());
+  assert.equal(
+    await (await runtime.fetch("http://not-resolved.invalid/path?q=1")).text(),
+    "runtime",
+  );
+  assert.match(request, /^GET http:\/\/not-resolved\.invalid\/path\?q=1 HTTP\/1\.1\r\n/);
+  assert.throws(
+    () =>
+      createHostNodeWebPlatform({
+        fetchTransport: { dispatch: () => Promise.reject(new Error("unused")) },
+        proxy: {
+          tls: new HostNodeTlsUpgrader(),
+          environment: { HTTP_PROXY: "http://proxy.invalid" },
+        },
+      }),
+    /cannot both/,
   );
 });
 
