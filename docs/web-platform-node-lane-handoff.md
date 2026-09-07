@@ -352,8 +352,12 @@ with the state after that work.
 5. Settle the canonical URL/Blob identity with the NodeJS peer. They have asked to do
    it after their current slice and to bring a *pinned failing test* rather than a
    requirements list, which is the right way round. The internal abort-listener seam is
-   built; what remains there is Node reexporting the canonical abort globals, without
-   which the seam is unreachable from their lane.
+   built, and so is `resistStopPropagation`. What remains is on the Node side and is
+   larger than it looked: their four-line experiment installing the canonical abort
+   globals showed that a canonical `AbortSignal` handed to the host's `node:events`
+   breaks `listenerCount`, because the host cannot answer for a foreign `EventTarget`.
+   So the globals pull in `node:events` substitution too. Price the globals, not the
+   listener options.
 6. Pin an Undici revision, or decide not to. The plan requires an API ledger with
    evidence per export and nothing is pinned or vendored, so the ledger cannot be
    written honestly today. This is a dependency decision for the repository owner
