@@ -3245,3 +3245,58 @@ with another promise, and a spread of a `Set`. The first two are the interface-m
 shape the compiler owner has just implemented, so this slice should be among the
 diagnostics that disappear when that lands — which makes it a useful check on their
 change rather than only a cost.
+
+## Early hints were counted and thrown away
+
+Interim (1xx) responses were read, counted against a bound, and discarded. That is safe
+and it throws away the only thing they are for: `103 Early Hints` carries `Link` fields
+a client is meant to act on while the origin is still working, and a client that never
+sees it cannot act on anything. The plan lists informational responses under HTTP
+protocols and early hints under Fetch, so this was a row with a limit rather than an
+implementation.
+
+`TransportRequest.onInformational` is called for each interim response in the order
+received, before the final one, and never for `101` — a protocol switch is not a hint.
+It sits at the dispatcher layer, where Undici's `onInfo` lives, rather than on `fetch()`,
+because Fetch itself exposes no such thing; "where exposed" is the plan's own
+qualifier. It is optional, so a provider that cannot surface interim responses simply
+does not call it and nothing else changes.
+
+An exception from the observer is reported through the scheduler and does not change the
+request, for the same reason a diagnostics failure does not: observing a request is not
+permission to fail it. Exposing hints did not raise the interim bound either — the
+`maxInformational` limit still applies, still raises `LimitError`, and the hints within
+it are still delivered before it does.
+
+Seven tests use a raw socket server, because Node's HTTP server will not emit an unusual
+interim sequence on request: two `103`s with multiple `Link` fields arriving in order
+before a `200`, a bare `200` producing no hint at all, `100 Continue` treated like any
+other interim response, a throwing observer leaving the request intact, the bound still
+firing after three of six hints, and a request with no observer behaving exactly as
+before.
+
+Three sabotages. Letting an observer's exception escape into the request was caught.
+Publishing the final response as an interim one was caught by four tests at once.
+
+**The third did not fire, and the test that was supposed to catch it was claiming too
+much.** Handing the observer the live header array instead of a copy changes nothing
+observable, because an interim head is discarded the moment it has been published —
+there is no retained structure left to contaminate. The test asserted it protected the
+transport; it does not, and it now says so. The copy stays, because a later change that
+does retain an interim head should not quietly begin handing callers something they can
+edit, but it is defensive rather than demonstrated and both the test and the code
+comment record that.
+
+The complete local Node-host/real-socket corpus passes 504/504 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: HTTP/2 interim responses, which take a different path and are not wired to
+this; nor any Fetch-level surface, which the standard does not define.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,302 primary
+`NTS1001` and 242 `NTS1003`; after, 1,303 primary and 242 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Two messages appeared and one
+disappeared; that pair is one message with a shifted type id. The single real addition
+is a `for...of` binding two names over a header sequence — destructuring `[name, value]`
+while copying — which is the iteration-protocol prerequisite.

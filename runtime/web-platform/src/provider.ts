@@ -36,6 +36,7 @@ export {
 export type {
   ContentDecoder,
   FetchTransport,
+  TransportInformationalResponse,
   TransportBodySource,
   TransportErrorCode,
   TransportRequest,

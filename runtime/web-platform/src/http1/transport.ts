@@ -250,6 +250,7 @@ export class Http1Transport implements FetchTransport {
       while (head.status < 200 && head.status !== 101) {
         if (++informational > this.limits.maxInformational)
           throw new LimitError("Too many informational HTTP responses");
+        this.publishInformational(request, head.status, head.headers);
         head = await readHead(lease.reader, this.limits);
       }
       timer.current?.cancel();
@@ -337,6 +338,32 @@ export class Http1Transport implements FetchTransport {
     } catch (error) {
       finish(false);
       throw hasFailure ? failure : error;
+    }
+  }
+
+  /**
+   * Hands an interim response to the caller without letting it affect the request.
+   *
+   * The fields are copied. That is defensive rather than demonstrable: an interim head
+   * is discarded the moment it has been published, so handing over the live array
+   * passes every test here — the copy exists so that a later change which does retain
+   * one cannot quietly hand a caller something it can edit. An exception goes to the
+   * scheduler for the same reason a diagnostics failure does: observing a request is
+   * not permission to fail it.
+   */
+  private publishInformational(
+    request: TransportRequest,
+    status: number,
+    headers: readonly HeaderEntry[],
+  ): void {
+    const observer = request.onInformational;
+    if (observer === undefined) return;
+    const copied: HeaderEntry[] = [];
+    for (const [name, value] of headers) copied.push([name, value]);
+    try {
+      observer({ status, headers: copied });
+    } catch (error) {
+      this.scheduler.reportError(error);
     }
   }
 

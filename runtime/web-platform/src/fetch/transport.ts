@@ -1,68 +1,377 @@
-import type { AbortSignal } from "../core/abort.ts";
-import type { URLRecord } from "../provider/primitives.ts";
-import type { ReadableStream } from "../streams/readable.ts";
-import type { HeaderEntry } from "./headers.ts";
+import { Headers } from "../fetch/headers.ts";
+import type { HeaderEntry } from "../fetch/headers.ts";
+import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
+import { nullBodyStatus } from "../fetch/response.ts";
+import { ReadableStream } from "../streams/readable.ts";
+import type { ReadableStreamDefaultReader } from "../streams/readable.ts";
+import { encodeByteString } from "../core/encoding.ts";
+import { ProtocolError, LimitError, DOMException } from "../core/errors.ts";
+import type {
+  ByteConnection,
+  CancelHandle,
+  ConnectAddress,
+  Scheduler,
+  SocketConnector,
+} from "../provider/primitives.ts";
+import { addressOf } from "../http/address.ts";
+import { contentLength, hasToken } from "../http/fields.ts";
+import { writeAll } from "./io.ts";
+import {
+  parseChunkSize,
+  readHead,
+  readHeaderFields,
+  responseFraming,
+  validateWireValue,
+  defaultHeadLimits,
+} from "./parser.ts";
+import type { HeadLimits } from "./parser.ts";
+import { ConnectionPool } from "./pool.ts";
+import type { PoolOptions } from "./pool.ts";
 
-/** A body that can open an independent stream for each transport attempt. */
-export interface TransportBodySource {
-  readonly length: number;
-
-  open(): ReadableStream<Uint8Array>;
+export interface Http1Options extends PoolOptions {
+  connectTimeoutMs?: number;
+  headersTimeoutMs?: number;
+  bodyReadTimeoutMs?: number;
+  maxHeaderBytes?: number;
+  maxHeaders?: number;
+  maxInformational?: number;
 }
 
-export type TransportErrorCode =
-  | "ECONNRESET"
-  | "ECONNREFUSED"
-  | "ENOTFOUND"
-  | "ENETDOWN"
-  | "ENETUNREACH"
-  | "EHOSTDOWN"
-  | "EHOSTUNREACH"
-  | "EPIPE"
-  | "UND_ERR_SOCKET";
+/** A provider-neutral HTTP/1 route selected for one dispatch. */
+export interface Http1DispatchRoute {
+  /** Physical endpoint and TLS identity passed to the socket provider. */
+  readonly address: ConnectAddress;
+  /** Origin-form for direct/tunneled requests, absolute-form for a forward proxy. */
+  readonly requestTarget: string;
+  /** Transport-owned fields that cannot be supplied through Fetch request headers. */
+  readonly headers?: readonly HeaderEntry[];
+}
 
-/** Provider errors use this typed envelope; platform facades translate native errors into it. */
-export class TransportError extends Error {
-  readonly code: TransportErrorCode;
+function isForbiddenTrailerName(name: string): boolean {
+  return name === "content-length" || name === "host" || name === "transfer-encoding";
+}
 
-  constructor(code: TransportErrorCode, message: string, cause?: unknown) {
-    super(message, cause === undefined ? undefined : { cause });
-    this.name = "TransportError";
-    this.code = code;
+function isRouteManagedHeader(name: string): boolean {
+  return (
+    name === "host" ||
+    name === "connection" ||
+    name === "content-length" ||
+    name === "transfer-encoding" ||
+    name === "upgrade" ||
+    name === "trailer" ||
+    name === "te" ||
+    name === "keep-alive" ||
+    name === "proxy-connection" ||
+    name === "expect"
+  );
+}
+
+function requestHead(
+  request: TransportRequest,
+  route: Http1DispatchRoute,
+): { bytes: Uint8Array; chunked: boolean } {
+  const headers = new Headers(request.headers);
+
+  for (const name of [
+    "host",
+    "connection",
+    "transfer-encoding",
+    "upgrade",
+    "trailer",
+    "te",
+    "keep-alive",
+    "proxy-connection",
+    "proxy-authorization",
+    "expect",
+  ]) {
+    if (headers.has(name)) throw new TypeError("Transport-managed request header: " + name);
+  }
+  const declared = contentLength(headers);
+
+  if (declared !== null && (request.bodyLength === null || declared !== request.bodyLength))
+    throw new TypeError("Content-Length does not match body length");
+
+  headers.delete("content-length");
+
+  headers.set("host", request.url.host);
+  for (const [name, value] of route.headers ?? []) {
+    if (isRouteManagedHeader(name.toLowerCase())) {
+      throw new TypeError("HTTP route cannot replace framing header: " + name.toLowerCase());
+    }
+    headers.set(name, value);
+  }
+  const chunked = request.body !== null && request.bodyLength === null;
+
+  if (chunked) headers.set("transfer-encoding", "chunked");
+  else if (
+    request.bodyLength !== null &&
+    (request.body !== null ||
+      request.method === "POST" ||
+      request.method === "PUT" ||
+      request.method === "PATCH")
+  ) {
+    headers.set("content-length", String(request.bodyLength));
+  }
+  const target = route.requestTarget;
+
+  if (/[^\x21-\x7e]/.test(target))
+    throw new TypeError("URL parser produced an invalid HTTP request target");
+  let head = request.method + " " + (target || "/") + " HTTP/1.1\r\n";
+
+  for (const [name, value] of headers.raw()) {
+    validateWireValue(value);
+    head += name + ": " + value + "\r\n";
+  }
+  return { bytes: encodeByteString(head + "\r\n"), chunked };
+}
+async function upload(
+  connection: ByteConnection,
+  reader: ReadableStreamDefaultReader<Uint8Array> | null,
+  length: number | null,
+  chunked: boolean,
+): Promise<void> {
+  if (reader === null) return;
+  let sent = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      if (result.value.length === 0) continue;
+      sent += result.value.length;
+      if (length !== null && sent > length)
+        throw new ProtocolError("Request body exceeds Content-Length");
+      if (chunked)
+        await writeAll(connection, encodeByteString(result.value.length.toString(16) + "\r\n"));
+      await writeAll(connection, result.value);
+      if (chunked) await writeAll(connection, encodeByteString("\r\n"));
+    }
+    if (length !== null && sent !== length)
+      throw new ProtocolError("Request body is shorter than Content-Length");
+    if (chunked) await writeAll(connection, encodeByteString("0\r\n\r\n"));
+  } finally {
+    reader.releaseLock();
   }
 }
 
-export interface TransportRequest {
-  readonly url: URLRecord;
-  readonly method: string;
-  readonly headers: readonly HeaderEntry[];
-  readonly body: ReadableStream<Uint8Array> | null;
-  readonly bodyLength: number | null;
-  /** Absent/null means the body is one-shot. Providers do not consume this metadata. */
-  readonly replayBody?: TransportBodySource | null;
-  readonly signal: AbortSignal;
-}
+export class Http1Transport implements FetchTransport {
+  readonly pool: ConnectionPool;
+  private readonly scheduler: Scheduler;
+  private readonly connectTimeout: number;
+  private readonly headersTimeout: number;
+  private readonly readTimeout: number;
+  private readonly limits: HeadLimits;
 
-export interface TransportResponse {
-  readonly status: number;
-  readonly statusText: string;
-  readonly headers: readonly HeaderEntry[];
-  readonly body: ReadableStream<Uint8Array> | null;
-  /** Settles after the body terminates; absent when a provider cannot expose trailers. */
-  readonly trailers?: Promise<readonly HeaderEntry[]>;
-}
+  constructor(connector: SocketConnector, scheduler: Scheduler, options: Http1Options = {}) {
+    this.pool = new ConnectionPool(connector, scheduler, options);
+    this.scheduler = scheduler;
+    this.connectTimeout = options.connectTimeoutMs ?? 30000;
+    this.headersTimeout = options.headersTimeoutMs ?? 30000;
+    this.readTimeout = options.bodyReadTimeoutMs ?? 30000;
+    this.limits = {
+      maxHeaderBytes: options.maxHeaderBytes ?? defaultHeadLimits.maxHeaderBytes,
+      maxHeaders: options.maxHeaders ?? defaultHeadLimits.maxHeaders,
+      maxInformational: options.maxInformational ?? defaultHeadLimits.maxInformational,
+    };
+    for (const value of [this.headersTimeout, this.readTimeout])
+      if (!Number.isFinite(value) || value < 0) throw new RangeError("Invalid HTTP timeout");
+    if (!Number.isFinite(this.connectTimeout) || this.connectTimeout <= 0)
+      throw new RangeError("Invalid connect timeout");
+    for (const value of [
+      this.limits.maxHeaderBytes,
+      this.limits.maxHeaders,
+      this.limits.maxInformational,
+    ]) {
+      if (!Number.isSafeInteger(value) || value < 1)
+        throw new RangeError("Invalid HTTP parser limit");
+    }
+  }
+  async dispatch(request: TransportRequest): Promise<TransportResponse> {
+    return this.dispatchRouted(request, {
+      address: addressOf(request.url, this.connectTimeout, ["http/1.1"]),
+      requestTarget: request.url.pathname + request.url.search || "/",
+    });
+  }
 
-/** No redirects, cookie jar, automatic retry or authentication in this contract. */
-export interface FetchTransport {
-  dispatch(request: TransportRequest): Promise<TransportResponse>;
-}
+  /** @internal Dispatch using a route selected by a shared proxy/connection policy. */
+  async dispatchRouted(
+    request: TransportRequest,
+    route: Http1DispatchRoute,
+  ): Promise<TransportResponse> {
+    request.signal.throwIfAborted();
+    const serialized = requestHead(request, route);
+    if (serialized.bytes.length > this.limits.maxHeaderBytes)
+      throw new LimitError("Request headers exceed configured limit");
+    const lease = await this.pool.acquire(route.address, request.signal);
+    let uploadReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let uploadDone = request.body === null;
+    let failure: unknown;
+    let hasFailure = false;
+    let finalized = false;
+    const timer: { current: CancelHandle | null } = { current: null };
+    let dispose = (): void => {};
+    const fail = (reason: unknown): void => {
+      if (hasFailure) return;
+      hasFailure = true;
+      failure = reason;
+      lease.connection.close();
+      uploadReader?.cancel(reason).catch(() => {});
+    };
+    const finish = (reuse: boolean): void => {
+      if (finalized) return;
+      finalized = true;
+      timer.current?.cancel();
+      dispose();
+      if (!uploadDone)
+        uploadReader
+          ?.cancel(new TypeError("HTTP response completed before upload"))
+          .catch(() => {});
+      lease.release(reuse && uploadDone && !hasFailure);
+    };
+    const startTimeout = (milliseconds: number): void => {
+      timer.current?.cancel();
+      timer.current =
+        milliseconds > 0
+          ? this.scheduler.delay(milliseconds, () =>
+              fail(new DOMException("HTTP I/O timed out", "TimeoutError")),
+            )
+          : null;
+    };
+    try {
+      dispose = request.signal.subscribe(() => fail(request.signal.reason));
+      request.signal.throwIfAborted();
+      startTimeout(this.headersTimeout);
+      await writeAll(lease.connection, serialized.bytes);
+      uploadReader = request.body?.getReader() ?? null;
+      upload(lease.connection, uploadReader, request.bodyLength, serialized.chunked).then(() => {
+        uploadDone = true;
+      }, fail);
+      let head = await readHead(lease.reader, this.limits);
+      let informational = 0;
+      while (head.status < 200 && head.status !== 101) {
+        if (++informational > this.limits.maxInformational)
+          throw new LimitError("Too many informational HTTP responses");
+        this.publishInformational(request, head.status, head.headers);
+        head = await readHead(lease.reader, this.limits);
+      }
+      timer.current?.cancel();
+      timer.current = null;
+      if (hasFailure) throw failure;
+      if (head.status === 101) throw new ProtocolError("Unexpected HTTP upgrade in Fetch");
+      const headers = new Headers(head.headers);
+      const reusable =
+        !hasToken(headers, "connection", "close") &&
+        (head.version === "1.1" || hasToken(headers, "connection", "keep-alive"));
+      if (request.method === "HEAD" || nullBodyStatus(head.status)) {
+        finish(reusable);
+        return {
+          status: head.status,
+          statusText: head.statusText,
+          headers: head.headers,
+          body: null,
+        };
+      }
+      const framing = responseFraming(headers);
+      let remaining = framing.length;
+      let needsChunkEnd = false;
+      const source = new ReadableStream<Uint8Array>(
+        {
+          pull: async (controller) => {
+            try {
+              if (hasFailure) throw failure;
+              startTimeout(this.readTimeout);
+              if (framing.kind === "chunked" && remaining === 0) {
+                if (needsChunkEnd && (await lease.reader.line(2)) !== "")
+                  throw new ProtocolError("Missing chunk terminator");
+                const line = await lease.reader.line(this.limits.maxHeaderBytes);
+                remaining = parseChunkSize(line);
+                if (remaining === 0) {
+                  const trailers = await readHeaderFields(lease.reader, this.limits);
+                  for (const [name] of trailers)
+                    if (isForbiddenTrailerName(name))
+                      throw new ProtocolError("Forbidden framing trailer");
+                  finish(reusable);
+                  controller.close();
+                  return;
+                }
+                needsChunkEnd = true;
+              }
+              if (framing.kind === "fixed" && remaining === 0) {
+                finish(reusable);
+                controller.close();
+                return;
+              }
+              const data = await lease.reader.some(
+                framing.kind === "eof" ? 65536 : Math.min(65536, remaining),
+              );
+              timer.current?.cancel();
+              timer.current = null;
+              if (hasFailure) throw failure;
+              if (data === null) {
+                if (framing.kind !== "eof") throw new ProtocolError("Truncated HTTP response body");
+                finish(false);
+                controller.close();
+                return;
+              }
+              if (framing.kind !== "eof") remaining -= data.length;
+              controller.enqueue(data);
+              if (framing.kind === "fixed" && remaining === 0) {
+                finish(reusable);
+                controller.close();
+              }
+            } catch (error) {
+              finish(false);
+              controller.error(hasFailure ? failure : error);
+            }
+          },
+          cancel: () => {
+            finish(false);
+          },
+        },
+        { highWaterMark: 0, size: (data) => data.length },
+      );
+      return {
+        status: head.status,
+        statusText: head.statusText,
+        headers: head.headers,
+        body: source,
+      };
+    } catch (error) {
+      finish(false);
+      throw hasFailure ? failure : error;
+    }
+  }
 
-/** Optional native decompressor; coding decisions and order belong to Fetch. */
-export interface ContentDecoder {
-  /** Exact HTTP content-coding tokens this provider is prepared to decode. */
-  readonly codings: readonly string[];
+  /**
+   * Hands an interim response to the caller without letting it affect the request.
+   *
+   * The fields are copied. That is defensive rather than demonstrable: an interim head
+   * is discarded the moment it has been published, so handing over the live array
+   * passes every test here — the copy exists so that a later change which does retain
+   * one cannot quietly hand a caller something it can edit. An exception goes to the
+   * scheduler for the same reason a diagnostics failure does: observing a request is
+   * not permission to fail it.
+   */
+  private publishInformational(
+    request: TransportRequest,
+    status: number,
+    headers: readonly HeaderEntry[],
+  ): void {
+    const observer = request.onInformational;
+    if (observer === undefined) return;
+    const copied: HeaderEntry[] = [];
+    for (const [name, value] of headers) copied.push([name, value]);
+    try {
+      observer({ status, headers: copied });
+    } catch (error) {
+      this.scheduler.reportError(error);
+    }
+  }
 
-  supports(coding: string): boolean;
+  close(): void {
+    this.pool.close();
+  }
 
-  decode(coding: string, source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array>;
+  drain(): Promise<void> {
+    return this.pool.drain();
+  }
 }
