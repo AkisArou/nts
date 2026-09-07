@@ -288,6 +288,7 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // nine classes, so both are an `instanceof` rather than a descriptor
         // read followed by a field read -- see `NtsValue.isViewKind`.
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
+        "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
         "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),
         "nts_buffer_new" => (types::BUFFER, "allocate", "(D)Lnts/rt/NtsBuffer;"),

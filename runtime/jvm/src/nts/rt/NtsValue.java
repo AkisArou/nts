@@ -79,6 +79,22 @@ public final class NtsValue {
     }
 
     /**
+     * `instanceof Promise`.
+     *
+     * <p>The C lane compares a descriptor pointer against `nts_desc_promise`
+     * after checking the tag is a reference; here the reference check and the
+     * identity check are the same instruction, because `instanceof` is false
+     * for `null` and true for exactly one class. A promise is not subclassed on
+     * this lane -- `NtsPromise` is what `nts_promise_new` returns and nothing
+     * derives from it -- so there is no gap between "is a promise" and "is
+     * exactly a promise" for this to fall into.
+     */
+    public static boolean isPromise(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        return ref instanceof NtsPromise;
+    }
+
+    /**
      * `instanceof Uint8Array`, and the eight others.
      *
      * <p>**One test here, two on the C lane, and the difference is the point.**

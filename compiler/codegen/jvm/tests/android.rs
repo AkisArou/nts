@@ -62,7 +62,15 @@ fn shipped_sources() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = sets
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| path.is_dir() && path.file_name().is_some_and(|it| it != "test"))
+        // Every set except the test ones, and matched by *suffix* rather than by
+        // the single name `test`: `src/androidTest` holds cases that must name
+        // the SDK to say anything -- registering a `ConnectivityManager`
+        // callback means subclassing `NetworkCallback`, which no amount of
+        // reflection can do -- and they are no more shipped than `src/test` is.
+        .filter(|path| {
+            path.is_dir()
+                && path.file_name().and_then(|it| it.to_str()).is_some_and(|it| !it.ends_with("test") && !it.ends_with("Test"))
+        })
         .collect();
     roots.sort();
     for root in roots {
@@ -928,6 +936,76 @@ fn the_library_compiles_against_the_api_level_it_declares() {
         "this library names an Android member that does not exist at API 26, which is the \
          floor it declares:\n{}",
         String::from_utf8_lossy(&built.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The device cases compile against the SDK they name, at the floor they claim.
+///
+/// `src/androidTest` is compiled by nothing else: `build` leaves it out because
+/// it has no `android.jar`, and `shipped_sources` leaves it out because it is
+/// not shipped. That would make the device suite the only thing that ever
+/// typechecks it, and the device suite runs only when a device is attached --
+/// so a case could rot for a week and the first sign would be a compile error
+/// in the middle of a device run.
+#[test]
+fn the_device_cases_compile_against_api_26() {
+    let Some(javac) = tool("javac") else { return };
+    let floor = PathBuf::from(
+        std::env::var("ANDROID_HOME")
+            .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+            .unwrap_or_default(),
+    )
+    .join("platforms/android-26/android.jar");
+    if !floor.exists() {
+        eprintln!("SKIP device sources: no platforms/android-26/android.jar");
+        return;
+    }
+    let sources = sources(&android().join("src/androidTest"));
+    if sources.is_empty() {
+        return;
+    }
+    let Some(jars) = dependencies() else { return };
+    let libraries = jars.iter().map(|jar| jar.display().to_string()).collect::<Vec<_>>().join(":");
+
+    let dir = std::env::temp_dir().join(format!("nts-device-src-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // The device cases call into the library, so the library is on the path --
+    // built here rather than assumed, because a stale build would typecheck
+    // against a shape that no longer exists.
+    let library = dir.join("library");
+    std::fs::create_dir_all(&library).unwrap();
+    let mut first = Command::new(&javac);
+    first
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(format!("{}:{}", floor.display(), libraries))
+        .arg("-d")
+        .arg(&library);
+    for path in shipped_sources() {
+        first.arg(path);
+    }
+    let built = first.output().unwrap();
+    assert!(
+        built.status.success(),
+        "the library did not compile against API 26:\n{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+
+    let mut compile = Command::new(&javac);
+    compile
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(format!("{}:{}:{}", floor.display(), library.display(), libraries))
+        .arg("-d")
+        .arg(dir.join("cases"));
+    for path in &sources {
+        compile.arg(path);
+    }
+    let out = compile.output().unwrap();
+    assert!(
+        out.status.success(),
+        "a device case does not compile at the API level it runs on:\n{}",
+        String::from_utf8_lossy(&out.stderr)
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

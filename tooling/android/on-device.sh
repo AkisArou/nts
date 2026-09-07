@@ -167,7 +167,8 @@ if [ -n "$r8" ]; then
     exit 1
   fi
   javac --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
-    "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java
+    "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
+    "$here"/runtime/jvm/web-platform/android/src/androidTest/java/org/nts/web/*.java
   # shellcheck disable=SC2046
   "$tools/d8" --min-api 26 --lib "$platform" --output "$work/testonly" \
     $(find "$work/testonly" -name '*.class')
