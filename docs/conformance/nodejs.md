@@ -409,18 +409,35 @@ functions throw, exported classes keep their shape with every prototype *and
 static* method throwing, exported object facades have their function members
 replaced.
 
-Measured across eighteen modules (all but `http`, `fs`, `stream` and `net`,
-which are slow rather than different): **622 passes, 22 survive mutation.**
-Nine modules drop to zero, including `dgram` 75, `zlib` 66 and `url` 44.
+Measured across **all twenty-two modules: 1,719 passes, 32 survive mutation.**
+Eleven modules drop to zero, including `dgram` 75, `zlib` 66 and `url` 44 — a
+suite where every export throws and not one file fails to notice.
+
+The four biggest are the interesting ones, because they have the most machinery
+between a test and an export and are where a survivor would be least
+explicable:
+
+| module | passes | survive |
+| --- | ---: | ---: |
+| `http` | 396 | 4 |
+| `fs` | 328 | 1 |
+| `stream` | 241 | 3 |
+| `net` | 132 | 2 |
+
+**This figure first went into the ledger covering eighteen modules and 622
+passes.** The four omitted were the slow ones, and they hold 1,097 passes —
+nearly two-thirds of the total. A resolution number that excludes two-thirds of
+what it claims to be about is the same shape as everything else on this page,
+so it was completed rather than left.
 
 **No survivor inspected was a degenerate pass, and the detector has three named
 blind spots that explain all of them:**
 
 | blind spot | example |
 | --- | --- |
-| data properties, which mutation does not touch | `test-process-execpath.js`, `test-buffer-constants.js`, `test-os-eol.js` |
-| identity and existence assertions | `test-path-posix-exists.js`, `test-util-types-exists.js` |
-| tests that assert a *throw* — which a throwing poison satisfies | `test-buffer-failed-alloc-typed-arrays.js` |
+| data properties, which mutation does not touch | `test-process-execpath.js`, `test-http-max-header-size.js`, `test-os-eol.js` |
+| identity and existence assertions | `test-path-posix-exists.js`, `test-stream-aliases-legacy.js` |
+| tests that assert a *throw* — which a throwing poison satisfies | `test-buffer-failed-alloc-typed-arrays.js`, `test-net-write-arguments.js` |
 
 The third is a design weakness rather than an accident: poisoning by throwing
 makes "this should throw" tests pass for the wrong reason, which is the same
