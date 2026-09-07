@@ -131,6 +131,42 @@ export const CORPORA = {
     ],
   },
 
+  zlib: {
+    // Byte-for-byte against node's output, not merely a round trip. Two
+    // implementations of the same format can both be correct and disagree on
+    // the bytes, so if these diverge the right question is which knob differs
+    // -- level, strategy, window bits, memLevel -- and that is worth knowing.
+    fixed: [
+      "", "a", "aa", "a".repeat(1000), "ab".repeat(500), "\u0000".repeat(64),
+      "ü", "日本語", "😀", "The quick brown fox jumps over the lazy dog",
+      "0123456789".repeat(100), "\uD800", "\uFFFD",
+    ],
+    input: (rnd) => unicodeWord(rnd, 40),
+    calls: [
+      ...["gzip", "deflate", "deflateRaw", "brotliCompress"].map((kind) => ({
+        label: `${kind}Sync`,
+        call: (m, s) => m[`${kind}Sync`](Buffer.from(s, "utf8")).toString("base64"),
+      })),
+      // The round trips, which are the property that has to hold whatever the
+      // bytes are.
+      ...[["gzip", "gunzip"], ["deflate", "inflate"], ["deflateRaw", "inflateRaw"],
+        ["brotliCompress", "brotliDecompress"]].map(([out, back]) => ({
+        label: `${out}/${back}`,
+        call: (m, s) => m[`${back}Sync`](m[`${out}Sync`](Buffer.from(s, "utf8"))).toString("utf8"),
+      })),
+      // A level that is not the default, since the default is the only one a
+      // round trip exercises.
+      {
+        label: "gzipSync(level 1)",
+        call: (m, s) => m.gzipSync(Buffer.from(s, "utf8"), { level: 1 }).toString("base64"),
+      },
+      {
+        label: "gzipSync(level 9)",
+        call: (m, s) => m.gzipSync(Buffer.from(s, "utf8"), { level: 9 }).toString("base64"),
+      },
+    ],
+  },
+
   string_decoder: {
     // A StringDecoder exists to carry a partial character across a chunk
     // boundary, so the boundary is the whole test. Each input is encoded and
