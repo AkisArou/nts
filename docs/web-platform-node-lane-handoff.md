@@ -362,10 +362,21 @@ with the state after that work.
    evidence per export and nothing is pinned or vendored, so the ledger cannot be
    written honestly today. This is a dependency decision for the repository owner
    rather than work this lane can do alone; see the ledger entry recording it.
-7. Take the next incomplete row from the plan's server/mobile feature table. `file:`
-   was the most recent such row. Read the table rather than guessing from the original
-   delivery, and check the ledger first — several rows are partly done with their
-   exact limits recorded.
+7. Take the next incomplete row from the plan's server/mobile feature table. Read the
+   table rather than guessing from the original delivery, and check the ledger first —
+   several rows are partly done with their exact limits recorded. Rows closed since
+   this list was written: `file:` as a capability-scoped provider extension;
+   subresource integrity, which had been accepted on `Request` and enforced nowhere;
+   and a portable deterministic virtual-time `Scheduler`.
+
+   The **WebSocket server** row is the largest one still open and is now partly built.
+   Its handshake exists — request validation, the accept derivation, subprotocol
+   selection and RFC 7692 `permessage-deflate` negotiation from the server side — and
+   the canonical client completes it over a real socket. What does not exist is a
+   server: no connection lifecycle, no session, no separate public module, and nothing
+   connecting the negotiated compression parameters to the shared codec, which is
+   currently wired for the client direction only. That codec reuse is the next real
+   piece, and it is a refactor of message assembly rather than new protocol work.
 
 ## Reproduction commands
 
