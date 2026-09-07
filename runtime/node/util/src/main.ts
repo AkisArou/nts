@@ -34,6 +34,11 @@ import { isNodeStream, isReadableStream, isWritableStream } from "../../internal
 import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
+// Node re-exports the Encoding globals from `node:util`, and they are the same
+// objects a program reaches as `TextEncoder` and `TextDecoder`. Re-exported
+// from web-platform rather than reimplemented, so the identity holds.
+export { TextDecoder, TextEncoder } from "../../../web-platform/src/core/encoding.ts";
+
 export { inspect, inspectDefaultOptions, format, formatWithOptions, types };
 export { deprecate };
 export { parseArgs };

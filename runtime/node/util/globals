@@ -1,0 +1,4 @@
+# `util.TextEncoder` is the global one, and test-global-encoder.js asserts
+# exactly that identity. Reusing web-platform's canonical Encoding on both
+# sides is what makes the assertion true rather than nearly true.
+encoding

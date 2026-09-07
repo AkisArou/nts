@@ -437,6 +437,10 @@ try {
         const abort = await import(join(moduleDir, "../../web-platform/src/core/abort.ts"));
         globalThis.AbortController = abort.AbortController;
         globalThis.AbortSignal = abort.AbortSignal;
+      } else if (name === "encoding") {
+        const encoding = await import(join(moduleDir, "../../web-platform/src/core/encoding.ts"));
+        globalThis.TextEncoder = encoding.TextEncoder;
+        globalThis.TextDecoder = encoding.TextDecoder;
       } else {
         throw new Error(`unknown canonical global group in ${globalsPath}: ${name}`);
       }
