@@ -4329,3 +4329,59 @@ side effect of it now being possible — the reference path is also the one with
 fewest moving parts when something goes wrong.
 
 The complete local corpus passes 672/672 with zero skipped.
+
+## The unrouted-mechanism check is a gate now, not a habit
+
+Four mechanisms nothing routed through have been found in this lane: a dead internal
+factory, HTTP/2 coalescing that read an address the pooling layer never has, an
+`onInformational` hook no caller passed, and `Request.integrity` accepted and enforced
+nowhere. **None was found by looking.** Each surfaced by accident, usually as a sabotage
+that stayed green — which means the habit of looking has a perfect record of failure.
+
+`tooling/conformance/web-platform/unrouted.mjs` runs in `check.sh` and fails on any
+exported name that is declared and then never mentioned again, anywhere: not by shared
+source, not by the public barrels, not by any test. The allowlist carries a reason per
+entry, and an allowed name that becomes referenced is *also* a failure, so the list
+cannot quietly become where findings go to be forgotten.
+
+The first version had the bug the JVM lane had described an hour earlier: **a check whose
+corpus contains its own answer.** The allowlist names the very things being searched for,
+and the tool scanned its own directory, so every allowed name was trivially "referenced".
+It reported its own allowlist as stale, which is the only reason it was noticed. Its file
+is excluded from its own corpus now, and planting a dead export fails the gate.
+
+Eight names were declared and never mentioned again. Three were removed and five kept
+with reasons.
+
+**A second UTF-8 decoder.** `core/utf8.ts` says in its header that the codec's
+"observable fallback semantics live here once", and then encoding lived there once while
+decoding lived there *and* in `core/encoding.ts` — with only the latter called. Before
+removing it, the two were run against each other on sixteen inputs, fifteen of them
+malformed: truncated sequences, lone continuations, overlong forms, surrogates encoded
+as three bytes, code points past the last one, and bytes that never appear in UTF-8.
+They agreed on every one. The single difference was the BOM, which the used decoder
+consumes and the codec does not — and that is exactly the WHATWG policy that should not
+be at codec level. So the codec's decoder went, the header now says encoding only, and
+the sixteen cases are a test of the decoder that survived, differentially against the
+host. There is a `fatal` counterpart, because a fatal decoder that silently replaced
+would be the worse of the two failures.
+
+`bodyFromBytes` and `normalizeMethod` were superseded and went with it. Removing
+`bodyFromBytes` exposed an import nothing else used, which is the usual shape of this:
+dead code holds other dead code alive.
+
+The five kept are the complete RFC 9113 error-code set — a partial enumeration invites a
+magic number at the site that needs the missing one — and the named Streams operation
+`writableStreamDefaultWriterClose`, whose sibling is what `pipeTo` uses; keeping both
+named makes the difference legible rather than folklore.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: primaries unchanged at 1,292, cascades **down** from
+314 to 312, zero `NTS1004`, zero `NTS4xxx`, zero invalid HIR. The dead code was itself
+only ever cascading, which is the tidiest possible confirmation that nothing was using
+it.
+
+The complete local corpus passes 674/674 with zero skipped, the compiled axis holds at
+54 cases across 5 functions on jvm, c and llvm, and the pinned upstream corpus is
+unchanged at 2,278 of 2,286 applicable.

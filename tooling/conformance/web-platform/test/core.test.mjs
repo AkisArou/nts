@@ -3407,3 +3407,55 @@ test("Response.clone retains an immutable redirect header guard", () => {
   assert.throws(() => clone.headers.set("x", "y"));
   assert.equal(clone.headers.get("location"), "https://example.test/");
 });
+
+// A second UTF-8 decoder lived in `core/utf8.ts`, written and never called. It agreed
+// with this one on every malformed sequence tried and differed only on the BOM, so it
+// was removed rather than wired up -- BOM handling is WHATWG policy and does not belong
+// in the codec. These cases are what proved the agreement, kept as coverage of the
+// decoder that survived, differentially against the host.
+test("malformed UTF-8 decodes exactly as the host decodes it", () => {
+  const cases = [
+    ["empty", []],
+    ["ascii", [104, 105]],
+    ["two-byte", [0xc3, 0xa9]],
+    ["three-byte", [0xe4, 0xb8, 0xad]],
+    ["four-byte", [0xf0, 0x9f, 0x98, 0x80]],
+    ["a leading BOM is consumed", [0xef, 0xbb, 0xbf, 97]],
+    ["truncated two-byte", [0xc3]],
+    ["truncated three-byte", [0xe4, 0xb8]],
+    ["lone continuation", [0x80]],
+    ["overlong ascii", [0xc0, 0xaf]],
+    ["overlong nul", [0xc0, 0x80]],
+    ["surrogate encoded as three bytes", [0xed, 0xa0, 0x80]],
+    ["beyond the last code point", [0xf5, 0x80, 0x80, 0x80]],
+    ["invalid continuation mid-sequence", [0xe4, 0x28, 0xad]],
+    ["a byte that never appears in UTF-8", [0xff]],
+    ["valid, invalid, valid", [97, 0xc3, 98]],
+  ];
+  for (const [name, bytes] of cases) {
+    const input = Uint8Array.from(bytes);
+    assert.equal(
+      new TextDecoder().decode(input),
+      new globalThis.TextDecoder().decode(input),
+      name,
+    );
+  }
+});
+
+test("a fatal decoder refuses what a replacing one repairs", () => {
+  const malformed = [
+    [0xc3],
+    [0x80],
+    [0xc0, 0xaf],
+    [0xed, 0xa0, 0x80],
+    [0xf5, 0x80, 0x80, 0x80],
+    [0xff],
+  ];
+  for (const bytes of malformed) {
+    const input = Uint8Array.from(bytes);
+    // The replacing decoder is the one every body mixin uses, so both behaviours have
+    // to be right; a fatal decoder that silently replaced would be the worse failure.
+    assert.ok(new TextDecoder().decode(input).includes("\uFFFD"), String(bytes));
+    assert.throws(() => new TextDecoder("utf-8", { fatal: true }).decode(input), TypeError);
+  }
+});

@@ -5,6 +5,10 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 cd "$root"
 
 pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty false
+
+# Exports nothing mentions. Four mechanisms nothing routed through were found by hand in
+# this lane, none of them by looking, so the discipline is a gate rather than a habit.
+node tooling/conformance/web-platform/unrouted.mjs
 node --expose-gc --test \
   tooling/conformance/web-platform/test/agent.test.mjs \
   tooling/conformance/web-platform/test/core.test.mjs \

@@ -306,10 +306,6 @@ function convertRequestInit(init: RequestInit | null | undefined): ConvertedRequ
   };
 }
 
-export function normalizeMethod(method: string): string {
-  return normalizeConvertedMethod(coerceToByteString(method));
-}
-
 function normalizeConvertedMethod(method: string): string {
   if (!isToken(method)) throw new TypeError("Invalid HTTP method");
   const upper = method.toUpperCase();

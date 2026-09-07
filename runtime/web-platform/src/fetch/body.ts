@@ -8,7 +8,7 @@ import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import type { RandomSource } from "../provider/primitives.ts";
-import { bytesStream, ReadableStream, tee, transfer } from "../streams/readable.ts";
+import { ReadableStream, tee, transfer } from "../streams/readable.ts";
 import type { TransportBodySource } from "./transport.ts";
 
 export type BodyInit =
@@ -254,12 +254,4 @@ export abstract class Body {
   /** @internal */ getState(): BodyState {
     return this.bodyState;
   }
-}
-
-export function bodyFromBytes(
-  bytes: Uint8Array,
-  policy: BodyPolicy = standardBodyPolicy,
-): BodyState {
-  const copy = bytes.slice();
-  return new BodyState(bytesStream(copy), null, copy.length, new Blob([copy]), policy);
 }
