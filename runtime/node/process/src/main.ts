@@ -463,8 +463,12 @@ class Process extends EventEmitter {
    * that is wrong whenever a module forgets to register.
    */
   getActiveResourcesInfo = nts_process_active_resources;
-  _getActiveHandles = nts_process_active_handles;
-  _getActiveRequests = nts_process_active_requests;
+  // Arrow initializers rather than bare aliases: a class field takes its name
+  // from an *anonymous* function expression, and an alias of an already-built
+  // function keeps that function's name, which for a host binding stand-in is
+  // the empty string.
+  _getActiveHandles = (): unknown[] => nts_process_active_handles();
+  _getActiveRequests = (): unknown[] => nts_process_active_requests();
 
   /**
    * Divert uncaught exceptions to `fn` instead of ending the process.

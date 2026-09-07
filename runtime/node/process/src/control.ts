@@ -58,7 +58,16 @@ declare function nts_process_initgroups(
   groupName: string,
 ): number;
 
-export const cwd = nts_process_cwd;
+// Written as a function rather than `export const cwd = nts_process_cwd`.
+// Aliasing the binding costs nothing at the call site and puts the native
+// layer on the public surface: node names every function it publishes, and
+// through an alias these arrive with `name === ""`, because the host stand-in
+// is a property assignment and a property assignment infers no name. `os` had
+// the louder version of the same bug, where the alias published the binding's
+// own name. See `test/binding-name-leak-static.js`.
+export function cwd(): string {
+  return nts_process_cwd();
+}
 
 export function chdir(directory: string): void {
   validateString(directory, "directory");
@@ -122,15 +131,31 @@ export const rawKill = nts_process_kill;
  * that calls this has decided its state is not worth preserving and that
  * someone should look at why.
  */
-export const abort = nts_process_abort;
+export function abort(): never {
+  return nts_process_abort();
+}
 
 export const reallyExit = nts_process_really_exit;
 
-export const getuid = nts_process_getuid;
-export const getgid = nts_process_getgid;
-export const geteuid = nts_process_geteuid;
-export const getegid = nts_process_getegid;
-export const getgroups = nts_process_getgroups;
+export function getuid(): number {
+  return nts_process_getuid();
+}
+
+export function getgid(): number {
+  return nts_process_getgid();
+}
+
+export function geteuid(): number {
+  return nts_process_geteuid();
+}
+
+export function getegid(): number {
+  return nts_process_getegid();
+}
+
+export function getgroups(): number[] {
+  return nts_process_getgroups();
+}
 
 /**
  * A user or group, given either as a number or as a name to look up.

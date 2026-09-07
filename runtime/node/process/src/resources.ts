@@ -227,13 +227,19 @@ export function memoryUsageRss(): number {
   return rssValues[0];
 }
 
-export const uptime = nts_process_uptime;
+export function uptime(): number {
+  return nts_process_uptime();
+}
 
 /** Memory the process could still allocate, or 0 where the host cannot say. */
-export const availableMemory = nts_process_available_memory;
+export function availableMemory(): number {
+  return nts_process_available_memory();
+}
 
 /** The cgroup or container limit, or 0 when the process is not constrained. */
-export const constrainedMemory = nts_process_constrained_memory;
+export function constrainedMemory(): number {
+  return nts_process_constrained_memory();
+}
 
 export interface ResourceUsage {
   userCPUTime: number;
