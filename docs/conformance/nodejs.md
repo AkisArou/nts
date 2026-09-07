@@ -1852,6 +1852,57 @@ still-refused `ucs2decode`, which made the dangling-call defect an attractive
 explanation; it does not explain `querystring.escape`, which calls nothing
 refused.
 
+**Diagnosed, and it was neither of the two candidates below.** The compiler's
+next binary answered it in its own diagnostic text:
+
+```
+querystring/src/main.ts:118  NTS1003 `escape` cannot be compiled because it reads
+                             `noEscape`, whose initializer was lost with the module
+                             evaluation refused above
+punycode/src/codec.ts:236    NTS1003 `encode` ... reads `delimiter`, whose
+                             initializer was lost ...
+```
+
+**It was reading a module-level constant whose initializer never ran.**
+`module#init` is refused, so the module's top-level bindings have no
+initializer, and the previous binary emitted the read anyway — of uninitialized
+memory. The empty-string paths were not avoiding per-character work; they were
+avoiding *module state*. `escape` returns on `len === 0` before touching
+`noEscape`; `encode` returns before reading `delimiter`.
+
+**So the export tables collapsing in that binary is correct behaviour, not a
+regression.** `punycode` 4 names to 0, `querystring` 1 to 0, `os` 11 to 4,
+`url` 1 to 0 — because the compiler now refuses a function that reads a lost
+initializer instead of emitting a read of uninitialized memory. Zero exports
+beats four that segfault. `built-but-crashes` went 2 to 0 in the same run, and
+`c-did-not-compile` 15 to 14.
+
+**This is the memory-unsafe form of a failure this document already records.**
+*Conventions* notes that module-level statements were once dropped silently,
+costing twenty-three statements across this profile including all of IDNA in
+`url`, and that they run now as a `module#init` an embedder calls first. What
+had not been established is what happens when that init is *refused* rather
+than absent: the reads still emitted, and the failure stopped being a wrong
+answer and became a crash.
+
+How far it reaches, counting `initializer was lost` per module:
+
+```
+process 30    os 12    url 12    querystring 6    punycode 2
+```
+
+`module#init` is upstream of the export table for at least five modules. For
+`punycode` it is now the *entire* remaining distance to publishing — the
+`emitWarning` roots in `internal/process-warning.ts` are what block it, since
+`ucs2decode` costs only `ucs2` itself.
+
+**The narrowing below is kept because it was wrong.** It reasoned from
+behaviour alone, intersected the crash paths against the working ones
+correctly, and produced two candidates that were both false. What it could not
+see is that the two working paths had something in common that was not visible
+in what they *did* — they both returned before touching module state, and
+nothing in the call traces says so.
+
 **Narrowed to two candidates by intersecting the crash paths against the
 working ones.** Both working paths return before any per-character work —
 `encodeStr` at `internal/querystring.ts:52` on `len === 0`, `ucs2decode` by
