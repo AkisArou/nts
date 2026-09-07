@@ -1852,6 +1852,29 @@ still-refused `ucs2decode`, which made the dangling-call defect an attractive
 explanation; it does not explain `querystring.escape`, which calls nothing
 refused.
 
+**Narrowed to two candidates by intersecting the crash paths against the
+working ones.** Both working paths return before any per-character work —
+`encodeStr` at `internal/querystring.ts:52` on `len === 0`, `ucs2decode` by
+never entering its loop. What both crash paths do and neither working path
+does:
+
+| candidate | `encodeStr` | `ucs2decode` |
+| --- | --- | --- |
+| `str.charCodeAt(i)` on a non-empty string | `let c = str.charCodeAt(i)` | `str.charCodeAt(counter++)` |
+| indexing a `number[]` | reads `noEscapeTable[c]` | writes `output[outputIndex++]` |
+
+They cannot be separated from behaviour alone. `ucs2decode` calls
+`new Array<number>(str.length)` before its loop, so pre-sized allocation runs
+for the empty string too — at `n = 0`, which would work under a bug that only
+bites at `n ≥ 1`. `encodeStr` allocates nothing, which is why `charCodeAt` is
+the stronger candidate, but it indexes a module-level constant array
+immediately afterwards.
+
+Separating them needs an artifact exporting a function that calls `charCodeAt`
+and nothing else. That cannot be built from here without adding a function to
+node's source purely to probe the compiler, which is the thing this document
+forbids for better reasons than this test is worth.
+
 **This document's own instrument was hiding both, which is why the stage list
 now has a `built-but-crashes`.** The sweep reported `punycode` as
 `built-exports-partial 0 / 1, 4 names published` and `querystring` as
