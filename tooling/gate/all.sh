@@ -282,7 +282,7 @@ profile() {
   printf '  %s modules emitted, %s refusal(s)\n' \
     "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
   # The ceiling. Lower it when a feature earns it.
-  ceiling=7266
+  ceiling=6951
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1
@@ -436,7 +436,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 116 "through the LLVM backend, counting" ); }
+  backend_examples 117 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -447,7 +447,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 116 "through the LLVM backend" ); }
+  backend_examples 117 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -508,6 +508,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # javac's 25. Materialising the same three booleans in the reference, one
   # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
   #
+  # 116 rather than the LLVM lane's 117, which is what a per-lane floor is for.
+  # `examples/open-typed-values` needs `instanceof` against a typed array, and
+  # on a lane with no descriptors that is a different mechanism -- named to that
+  # session before this landed, and theirs to raise when it does.
   backend_examples 116 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1

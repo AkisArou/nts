@@ -1268,6 +1268,15 @@ bool nts_is_class(NtsValue value, const NtsDescriptor *klass) {
   return object && object->descriptor == klass;
 }
 
+bool nts_is_buffer(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor &&
+         object->descriptor->kind == NTS_KIND_BUFFER;
+}
+
 bool nts_is_array(NtsValue value) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
     return false;
@@ -4447,6 +4456,20 @@ static const NtsDescriptor nts_desc_view = {
     0u,
     0,
 };
+
+/* Beside the descriptor it compares against, rather than with the other
+ * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
+ * here, so the test has to sit below the thing it tests for. */
+bool nts_is_view_kind(NtsValue value, double kind) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  if (!object || object->descriptor != &nts_desc_view) {
+    return false;
+  }
+  return ((const NtsView *)object)->kind == (uint8_t)kind;
+}
 
 /* Bytes per element, from the kind. One place, so a width and a kind cannot
  * disagree about the same view. */

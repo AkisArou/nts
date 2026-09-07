@@ -2829,13 +2829,41 @@ enum Absence {
 /// [`FuncBuilder::present_of`] reads back what a `?.` test established. The two
 /// have different licences and the same question about the destination.
 fn readable_back(ty: &HirType) -> bool {
+    // Everything that can be erased, except `Void`. The two directions are one
+    // fact and they had drifted: `View` and `Buffer` could be erased and not
+    // read back, so `typeof v === "object"` on an `unknown` holding a
+    // `Uint8Array` refused where the value was sitting right there.
+    //
+    // `Void` is the deliberate asymmetry and the reason this is not simply
+    // `erasable`. `undefined` has no payload -- the tag *is* the whole value --
+    // so there is something to erase and nothing to load.
+    ty != &HirType::Void && erasable(ty)
+}
+
+/// Whether a value of this type can be erased into an `unknown`.
+///
+/// A whitelist, and it is the third list of this family in one file: this one,
+/// [`readable_back`], and the C backend's `erased_tag`. Two of them went stale
+/// on the same day for the same reason -- a typed array was covered by accident
+/// while it was `ManagedType::Array`, and left every list the moment it got a
+/// variant of its own, with nothing noticing until a feature needed the one
+/// conversion it no longer had.
+///
+/// Stated once here so the two in this file cannot disagree again;
+/// `erasure_and_read_back_are_one_fact` is what holds them together.
+fn erasable(ty: &HirType) -> bool {
     matches!(
         ty,
         HirType::Float { .. }
             | HirType::Int { .. }
             | HirType::Bool
+            | HirType::Void
             | HirType::Managed(
-                ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
+                ManagedType::String
+                    | ManagedType::Object(_)
+                    | ManagedType::Array(_)
+                    | ManagedType::View(_)
+                    | ManagedType::Buffer
             )
     )
 }
@@ -5968,29 +5996,7 @@ impl<'a> FuncBuilder<'a> {
             }
             return Ok(value);
         }
-        if !matches!(
-            have,
-            HirType::Float { .. }
-                | HirType::Int { .. }
-                | HirType::Bool
-                | HirType::Void
-                // A view and a buffer are ordinary managed objects: an
-                // `NtsHeader` first, a descriptor, a reference table where they
-                // hold references. Erasing one is the same operation erasing an
-                // array is, and they are here because the list is a whitelist
-                // and a new `ManagedType` does not join it by being added.
-                //
-                // Found by asking `Array.isArray` about a `Uint8Array` in an
-                // `unknown` -- which is the one question this whole change
-                // exists to answer, and it could not be written.
-                | HirType::Managed(
-                    ManagedType::String
-                        | ManagedType::Object(_)
-                        | ManagedType::Array(_)
-                        | ManagedType::View(_)
-                        | ManagedType::Buffer
-                )
-        ) {
+        if !erasable(&have) {
             return Err(self.unsupported(
                 id,
                 &format!("a value of type {have:?} where `unknown` is expected"),
@@ -11128,6 +11134,60 @@ impl<'a> FuncBuilder<'a> {
             }
             self.type_named(&text)
         });
+        // A typed array is not a class here and never will be: all nine share
+        // one struct and one descriptor, differing only in how their bytes are
+        // read, so there is no per-class layout for the search above to find.
+        // The runtime answers it instead, by descriptor *and* kind -- the
+        // descriptor says "some typed array" and the kind says which, and a
+        // test of the descriptor alone would call a `Float32Array` a
+        // `Uint8Array`.
+        //
+        // Before the refusal rather than after the class search, because the
+        // search cannot succeed and the message it produces -- "something this
+        // compiler has no class for" -- is true and useless: it describes the
+        // representation rather than the question.
+        // `ArrayBuffer` is the same argument with nothing below the kind: one
+        // class rather than nine, so the descriptor's kind is the whole answer.
+        if self.node(rhs).text.as_deref() == Some("ArrayBuffer") {
+            let value = self.lower_expression(lhs)?;
+            let origin = self.origin(id);
+            let erased = match self.values[value.0 as usize].ty {
+                HirType::Erased => value,
+                _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
+            };
+            return Ok(self.call_runtime(
+                "nts_is_buffer",
+                vec![erased],
+                HirType::Bool,
+                &origin,
+            ));
+        }
+        if let Some(name) = self.node(rhs).text.clone()
+            && let Some(element) = super::builtin::typed_array_element(&name)
+            && let Some(kind) = super::builtin::element_kind(&element)
+        {
+            let value = self.lower_expression(lhs)?;
+            let origin = self.origin(id);
+            let erased = match self.values[value.0 as usize].ty {
+                HirType::Erased => value,
+                _ => self.push(
+                    OpKind::Erase { value },
+                    HirType::Erased,
+                    origin.clone(),
+                ),
+            };
+            let kind = self.push(
+                OpKind::ConstFloat(f64::from(kind)),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            return Ok(self.call_runtime(
+                "nts_is_view_kind",
+                vec![erased, kind],
+                HirType::Bool,
+                &origin,
+            ));
+        }
         let Some(class) = class else {
             return Err(self.unsupported(
                 rhs,

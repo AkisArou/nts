@@ -1577,6 +1577,27 @@ NTS_READS_ONLY bool nts_is_class(NtsValue value, const NtsDescriptor *klass);
  */
 NTS_READS_ONLY bool nts_is_array(NtsValue value);
 
+/* `value instanceof Uint8Array`, and the eight others.
+ *
+ * By descriptor *and* kind, which is what makes it two tests rather than one:
+ * all nine typed arrays share `nts_desc_view`, because they share a struct and
+ * differ only in how their bytes are read. So the descriptor says "some typed
+ * array" and the `kind` field says which -- and a version that compared only
+ * the descriptor would answer `true` for `float32 instanceof Uint8Array`.
+ *
+ * The kind arrives as a `double` for the same reason every other numeric
+ * argument in this header does: the lowering has one numeric representation to
+ * hand and converting at the boundary is one place rather than every call. */
+NTS_READS_ONLY bool nts_is_view_kind(NtsValue value, double kind);
+
+/* `value instanceof ArrayBuffer`.
+ *
+ * By descriptor KIND rather than by descriptor identity, because a resizable
+ * buffer and a fixed one are the same kind and there is one descriptor for
+ * both -- and unlike a typed array there is nothing below the kind to
+ * distinguish, since `ArrayBuffer` is one class rather than nine. */
+NTS_READS_ONLY bool nts_is_buffer(NtsValue value);
+
 NtsArray *nts_array_fill(NtsArray *a, double value);
 /* The same for an array of booleans, which is a byte per element rather than
  * eight. A separate entry point rather than a generic one taking a width: the
