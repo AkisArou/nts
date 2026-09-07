@@ -207,10 +207,11 @@ fn a_commit_syncs_the_file_then_renames_then_syncs_the_directory() {
 ///
 /// These were originally run by hand, and what I checked was that the suite
 /// went red. That is weaker than it looks: a sabotage that fires tells you the
-/// suite *can* fail, not that it failed for the reason named. One of these
-/// breaks the runtime badly enough to throw before reaching the case it is
-/// aimed at, which reads identically to "the case caught it" if all you look at
-/// is the exit code.
+/// suite *can* fail, not that it failed for the reason named. The second of
+/// these throws as well as reporting, and asserting the throw would have been a
+/// different failure mode wearing a control's clothes: *something* still throws
+/// long after the property it protects has gone. It names the wrong answer
+/// instead.
 ///
 /// So each entry names the cases it must break — and the third names **none**,
 /// which is the assertion this file most needs. Deleting the directory sync
@@ -250,11 +251,13 @@ fn the_sabotages_break_what_they_name_and_nothing_else() {
                     "                file.close();\n                file = new java.io.RandomAccessFile(reopened, \"r\");\n                file.seek(at);",
                 ),
             ],
-            // Throws where it breaks rather than reporting a case, which is the
-            // honest description of it: a reader whose file has been unlinked
-            // does not answer wrongly, it fails to open. The assertion is that
-            // the run does not succeed.
-            &[],
+            // **A case, not a crash.** This sabotage does both -- it reads the
+            // replacement first and then fails to open a deleted file -- and
+            // asserting only the crash would have been a different failure mode
+            // wearing a control's clothes: it would keep passing as evidence
+            // after the property it protects had gone, because *something*
+            // still throws. The case names the wrong answer instead.
+            &["an open ranged view saw a value committed after it opened"],
         ),
         (
             "drop the directory sync, which no case here can see",

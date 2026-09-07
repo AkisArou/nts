@@ -354,6 +354,39 @@ fn the_declarations_the_table_and_the_jar_agree() {
         );
     }
 
+    // Every declaration has a wrapper in some module beside it.
+    //
+    // `socket.ts` used to say "every declaration in `intrinsics.d.ts` has a
+    // wrapper below", and that stopped being true the moment a second family
+    // arrived -- silently, because a sentence in a comment has nothing checking
+    // it. The rule is one module per family, which is only a rule if something
+    // notices a declaration that landed in none of them.
+    let modules = std::fs::read_dir(repository().join("runtime/jvm/web-platform"))
+        .expect("the wrapper modules are checked in")
+        .flatten()
+        // **Not `intrinsics.d.ts`.** Its extension is also `ts`, so including it
+        // made every declared name trivially present and the assertion below
+        // vacuous -- it passed with a wrapper deliberately misspelled, which is
+        // how it was caught. A check whose corpus contains the thing it is
+        // checking against is not a check.
+        .filter(|it| {
+            let path = it.path();
+            path.extension().is_some_and(|it| it == "ts")
+                && !path.to_string_lossy().ends_with(".d.ts")
+        })
+        .map(|it| std::fs::read_to_string(it.path()).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (name, _, wired) in &declared {
+        if !wired {
+            continue;
+        }
+        assert!(
+            modules.contains(name.as_str()),
+            "`{name}` is declared and wired and no wrapper module names it"
+        );
+    }
+
     let Some(javap) = tool("javap") else {
         eprintln!("SKIP the jar half: no JDK");
         return;

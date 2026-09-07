@@ -1,4 +1,4 @@
-// The intrinsics, as a module.
+// The networking intrinsics, as a module.
 //
 // `nts_jvm_web_open_count()` is what the compiler needs: a free function that
 // lowers to `Callee::External` and becomes one `invokestatic`. It is not what a
@@ -21,7 +21,13 @@
 //
 // # What is not here
 //
-// Nothing, now. Every declaration in `intrinsics.d.ts` has a wrapper below.
+// The durable store, which is `store.ts` -- one module per family rather than
+// one module for the table, so that adding a family does not make this file the
+// place everything lands. `the_declarations_the_table_and_the_jar_agree` asserts
+// that every declaration has a wrapper in *some* module here, which is what
+// keeps that split honest rather than a convention.
+//
+// Of the networking family, nothing. Every one of them has a wrapper below.
 // Connect, read and write were gated on an environment handle that turned out
 // to be redundant -- the environment is ambient in both runtimes -- and
 // random-fill was gated on a byte view, which `ManagedType::View` supplied.
