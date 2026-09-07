@@ -2821,6 +2821,44 @@ functions, and the annotated-const write. Nothing in this sweep is ahead of them
 which exports published, which wait on a lowering and which on the backend
 naming a kind of export, ranked by how many exports each chain root gates.
 
+### Where node's tests stop being a sufficient oracle
+
+Node's pinned tests are the oracle for this profile, and for behaviour they are
+a very good one. For a *compiled* artifact they have a systematic blind spot,
+and it is worth stating because it will not announce itself.
+
+The compiler lane came within one fixture of shipping a build where
+`e instanceof Error` is false for every widened error in this profile — the
+object laid out as the declared type, carrying the right `message`, the right
+`name`, the right string form, and the wrong class. Their own fixture caught it.
+**This corpus would not have.** Measured across the 22 modules:
+
+    52 of 1,890 pattern-claimed upstream files assert a constructor or
+    `instanceof` at all
+
+and six modules have **none**: `punycode`, `path`, `string_decoder`,
+`async_hooks`, `timers`, `readline`. Three of those six are the closest in the
+profile to compiling.
+
+That is not a flaw in node's tests. `parallel/test-punycode.js` asserts its
+three throws with `/^RangeError: Invalid input$/`, matching the error's *string
+form*, which is built from `name` and `message`. On node, `throw new
+RangeError(...)` cannot produce something that fails `instanceof RangeError`, so
+there is nothing there to test. **It is what an oracle looks like when the
+invariant it would be testing cannot fail in the implementation it was written
+against.** A compiled artifact is a different implementation, and it can fail.
+
+The same shape covers every invariant that is free on node and not free when
+compiled: object identity, prototype chains, error subclassing,
+`Symbol.toStringTag`. `local/*-static.js` is where those belong, because upstream
+will never assert them.
+
+`punycode/test/error-identity-static.js` is the first. It was proved by mutation
+rather than assumed: replacing `throw new RangeError(m)` with a plain `Error`
+carrying `name = "RangeError"` leaves `test-punycode.js` **passing** and fails
+the new file with *"decode(" ") threw RangeError that is not a RangeError"*.
+Upstream cannot see the defect; this can.
+
 `check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
 tests against it. That is the artifact that ships, and the `--ts` lane is the
 interim gate for a module whose prerequisites have not landed.
