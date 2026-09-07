@@ -5333,3 +5333,45 @@ stands on its own — a message that names a declaration in this source while de
 property of the compiler's traversal has sent me hunting for a missing call site twice —
 but the claim that no reading survived was wrong, and it was wrong in the direction of
 making somebody else's diagnostic look more broken than it is.
+
+## Prototyping the ask, and being corrected twice by it
+
+The NodeJS lane reported a blocker as the compiler lane's, followed the symbol rather
+than assuming, found it was theirs, hand-patched the one line and compiled it — and could
+then say the ask was **sufficient** rather than merely necessary. The `Event.timeStamp`
+ask had necessity and nothing more, so it was worth building rather than repeating.
+
+It corrected the reasoning twice, in opposite directions.
+
+**First: the `try`/`catch` objection was mine and was not the constraint.** The entry two
+above says a guard around the environment read would put a thrown exception in the
+constructor of the most-constructed object in the platform. There is an established
+convention here that says otherwise — `File`'s constructor already calls
+`currentWebPlatformRuntime().wallTimeMilliseconds()` **unguarded**, so
+`new File([], "x")` with no runtime installed throws, and that is accepted. `Event` doing
+the same would have been consistent, not a workaround.
+
+**Second: implementing it that way broke 41 host tests.** `File` gets away with requiring
+a runtime and `Event` does not, because `AbortController`, `AbortSignal` and
+`EventTarget` are usable with no runtime installed and this lane's own suites rely on that
+throughout. So the ask is necessary after all — for a reason that is a measurement rather
+than the argument originally offered for it.
+
+**Sufficiency got most of the way.** With a probe and
+`this.eventTimeStamp = hasWebPlatformRuntime() ? …monotonicMilliseconds() : 0`, **both
+`Event.timeStamp` WPT assertions pass** and the upstream corpus reads 2,410 of 2,418 with
+the remaining eight being the long-standing structural failures. Host failures fall from
+41 to 33, and 32 of those are `nts_environment_has_platform is not defined` — the
+prototype's host shim is installed lazily, so a test constructing an `Event` before
+importing the shim module never sees it. That is scaffolding rather than design, and it
+was not closed, so this is recorded as incomplete rather than as a sufficiency claim.
+
+One design question answered for free: **a separate clock interface is the wrong shape.**
+`PlatformPrimitives` already carries `wallTimeMilliseconds()`, so the monotonic clock
+belongs beside it as `monotonicMilliseconds()`. Two clocks on one interface, and the
+mistake available is letting the monotonic one satisfy something that wanted the epoch —
+a cache's "now" must be in the same frame as the `Date` headers it compares against.
+
+Everything reverted; the two assertions stay visible. What the exercise bought is that
+the next attempt starts from a working shape and a known scaffolding gap rather than from
+an argument, and that the argument it would otherwise have started from was wrong.
