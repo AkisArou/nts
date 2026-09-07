@@ -1486,3 +1486,43 @@ and 144 dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, ze
 JVM-backend diagnostics, and no invalid HIR. These counts expose the complete
 final-form stream state machine to existing compiler dependencies; they are not
 compiled-provider execution evidence.
+
+## RFC 7692 `permessage-deflate`
+
+At `5063fea5`, the portable raw WebSocket transport implements the RFC 7692
+extension above provider-owned raw-DEFLATE contexts. The shared layer owns the
+opening offer, strict response parsing, duplicate/unknown/unsolicited parameter
+rejection, RSV1 placement, compress-before-fragment and gather-before-inflate
+ordering, the four-byte synchronous-flush tail transformation, context takeover,
+negotiated no-context resets, server window limits, text validation after inflation,
+and wire/decompressed message limits. The fixed unconstrained client offer does not
+offer `client_max_window_bits`, so a response containing it is correctly rejected;
+the remaining legal response parameters for that offer are supported. A server may
+also decline compression without changing the connection.
+
+The ordinary-Node conformance provider supplies stateful zlib raw-DEFLATE contexts,
+not WebSocket policy. It caps retained output incrementally, while the shared layer
+independently checks the returned size. Compression contexts close with their
+session. The integration corpus proves context reuse across two messages,
+no-context reset in both directions, compressed fragmentation with interleaved ping/
+pong, empty messages, a negotiated ten-bit server window, inflation-bomb closure
+with code 1009, malformed DEFLATE closure with 1002, invalid post-inflate UTF-8 with
+1007, and an uncompressed fallback. It also corrects the pre-existing handshake rule
+so a server may decline every offered subprotocol and still open with an empty
+`protocol`.
+
+All five focused negotiation/compression tests pass, the complete local Node-host and
+real-socket suite passes 235/235, the repository TypeScript solution builds, and the
+full pinned WPT slice remains 2275/2283 applicable cases with 14 named
+not-applicable cases and the same eight visible structural/common-compiler failures.
+Removing the outgoing no-context reset makes its focused precondition fail 0/1 at
+the independent peer decoder with `invalid distance too far back`; restoring it
+returns 1/1. Disabling both the provider's incremental expansion cap and the shared
+postcondition makes the bomb case time out 0/1 instead of producing its 1009 close;
+restoring both returns 1/1.
+
+The live compiled-source frontier is 1015 primary `NTS1001` refusals and 147
+dependent `NTS1003` cascades, with zero module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. Relative to the WebSocketStream checkpoint,
+the eight-primary and three-cascade increase is final RFC 7692/provider-contract
+source reaching existing lowering dependencies, not compiled execution evidence.
