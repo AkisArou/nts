@@ -1650,3 +1650,46 @@ diagnostics, and no invalid HIR. The increase from the frame checkpoint is the f
 shared session and validation source reaching already-visible language prerequisites;
 it is not evidence that the provider transport, ALPN selection or connection pool is
 complete.
+
+## HTTP/2 prior-knowledge Fetch transport
+
+At `43643ce1`, the shared HTTP/2 connection is integrated as a provider-neutral
+`FetchTransport`. Requests are grouped by origin and multiplexed over one active
+connection, concurrent opens for the same origin are coalesced, the total connection
+count is bounded, and idle connections are the only connections eligible for
+capacity eviction. The transport maps Fetch request fields to HTTP/2 pseudo-headers,
+preserves duplicate response fields such as `set-cookie`, validates declared body
+length before opening a socket, and enforces the produced request-body length while
+streaming.
+
+Response headers and every response-body pull have separate deadlines. Header
+timeout and body-idle timeout both preserve the exact `TimeoutError` class and cancel
+the affected stream rather than the connection. A response body that Fetch semantics
+hide is still consumed so its flow-control credit and stream lifetime are returned.
+A bodyless request refused by GOAWAY or `REFUSED_STREAM` is retried once on a new
+connection; a streaming request is never guessed to be replayable. Graceful drain
+rejects new work, waits for active streams, and reaches an empty pool. Abrupt close
+also interrupts a drain and outstanding connection attempts rather than leaving a
+promise waiting on a connection that cannot complete.
+
+This class is deliberately a prior-knowledge transport, not the final protocol
+dispatcher. Its connector must already yield an HTTP/2 byte connection, selected by
+TLS ALPN or explicit h2c configuration. It does not infer HTTP/2 from a URL, silently
+send the cleartext preface to an HTTP/1.1 peer, or pretend that origin grouping is
+certificate- and DNS-aware connection coalescing. Those require the negotiated
+provider boundary and dispatcher named in the integration plan.
+
+The focused connection, header and transport suites pass 27/27, including real h2c
+multiplexing, shared Fetch redirect and gzip decoding over HTTP/2, GOAWAY replay,
+independent header and body-idle timeouts, request-length validation, and graceful
+drain. The complete local Node-host/real-socket suite passes 283/283. The pinned WPT
+slice remains 2275/2283 applicable cases with 14 named not-applicable cases and the
+same eight visible structural/common-compiler failures.
+
+A sabotage inverted the bodyless replay predicate. The GOAWAY retry precondition
+fell from 1/1 to 0/1 with `Peer GOAWAY did not process this stream`, then returned to
+1/1 after restoration. The live compiled-source frontier is 1096 primary `NTS1001`
+refusals and 153 dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics,
+zero JVM-backend diagnostics, and no invalid HIR. The 15-primary and two-cascade
+increase is the transport and its final request/session guards reaching existing
+language prerequisites; it is not compiled-provider or ALPN evidence.
