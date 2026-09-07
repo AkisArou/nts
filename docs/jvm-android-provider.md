@@ -225,6 +225,14 @@ Three things, and only one of them is code.
   hazard is still unobtainable there too -- and an ARM system image under full
   emulation is a model of a weak memory system rather than one, which is worth
   no more than the x86 run.
+- **The command-line SDK tools, before API 26 can be tested at all.** There is
+  no `cmdline-tools` in this SDK and therefore no `sdkmanager` or `avdmanager`,
+  so an API-26 system image cannot be installed and an AVD at that level cannot
+  be created. Getting them means fetching an unpinned SDK component, which is
+  the one thing this lane's dependency rules are written against -- OkHttp,
+  Okio and Kotlin are pinned, hash-verified and SBOM-recorded, and an
+  unverified toolchain download to satisfy a test would be worse than the gap.
+  Checked with `ls` rather than assumed, which is the lesson of record 0190.
 - **A device at API 26 specifically, and one that is not an emulator.** What
   runs today is API 36 on `x86_64`, which is real ART -- concurrent copying
   collector with read barriers, Conscrypt over BoringSSL, framework natives
@@ -234,7 +242,13 @@ Three things, and only one of them is code.
   the library actually declares, Wi-Fi/cellular transitions, background
   restrictions and DNS races, which need a device with a radio.
 - **HTTP/2 against a real controlled peer**, which is deferred rather than
-  missing. `OkHttpNetworking.client()` pins the protocol list to HTTP/1.1 alone
+  missing -- and the deferral is now checked rather than declared. Every case in
+  the two-adapter corpus asserts the **request line the server received**, not
+  only the protocol list the client was built with: those are two claims, and
+  only the second was tested before. An h2 client with prior knowledge opens
+  with `PRI * HTTP/2.0`, which the server records like any other request line,
+  so the corpus can tell a provider that was configured not to speak h2 from one
+  that does not. `OkHttpNetworking.client()` pins the protocol list to HTTP/1.1 alone
   and asserts it, because the deterministic reference speaks HTTP/1.1 and the
   two-adapter corpus compares what the two expose -- two adapters on different
   protocols do not disagree about policy, they disagree about framing, and the
