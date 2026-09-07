@@ -69,8 +69,13 @@ const log = savedLog !== undefined
 
 /** `file:line:col: NTS1001 <what>` -- a construct this lowering cannot do. */
 const roots = [];
-for (const m of log.matchAll(/([^\s:]+):(\d+):(\d+): NTS1001 (.+?)(?: is not supported by this lowering yet)?$/gm)) {
-  roots.push({ file: m[1].replace(`${ROOT}/`, ""), line: Number(m[2]), what: m[4] });
+for (const m of log.matchAll(/([^\s:]+):(\d+):(\d+): NTS1001 (.+)$/gm)) {
+  // Strip the shared tail unconditionally rather than in the pattern. Leaving
+  // it optional there matched it on some lines and not others, which split one
+  // refusal kind into two entries with two counts -- a ranking bug, in the one
+  // number this tool exists to get right.
+  const what = m[4].replace(/ is not supported by this lowering yet\s*$/, "").trim();
+  roots.push({ file: m[1].replace(`${ROOT}/`, ""), line: Number(m[2]), what });
 }
 
 /**
