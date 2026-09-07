@@ -124,13 +124,21 @@ export function byteLengthIn(str: string, encoding: Encoding): number {
     case "hex":
       return str.length >>> 1;
     case "base64": case "base64url": {
-      // Padding and any character outside the alphabet contribute nothing.
-      let n = 0;
-      for (let i = 0; i < str.length; i++) {
-        const value = BASE64_VALUES[str.charCodeAt(i)];
-        if (value !== undefined && value >= 0) n++;
-      }
-      return (n * 3) >>> 2;
+      // Node's answer is an *upper bound* from the length, not the decoded
+      // size: it strips at most two trailing `=` and multiplies what is left.
+      // Characters outside the alphabet are counted, which is why
+      // `byteLength("üüü…", "base64")` is 30 rather than 0 -- the decoder will
+      // skip them, and this is the allocation `Buffer.from` sizes against.
+      //
+      // Counting only alphabet characters, as this did, made
+      // `byteLength("A===", "base64")` 0 where node gives 1, and made
+      // `Buffer.from(s, "base64")` allocate nothing for a string with no valid
+      // characters in it. A differential against node found it as 1,406
+      // divergences per encoding.
+      let bytes = str.length;
+      if (bytes > 0 && str.charCodeAt(bytes - 1) === 0x3d) bytes--;
+      if (bytes > 1 && str.charCodeAt(bytes - 1) === 0x3d) bytes--;
+      return (bytes * 3) >>> 2;
     }
   }
 }
@@ -175,8 +183,11 @@ export function writeIn(
     case "hex": {
       let written = 0;
       for (let i = 0; i + 1 < str.length && written < max; i += 2) {
-        const hi = HEX_VALUES[str.charCodeAt(i)];
-        const lo = HEX_VALUES[str.charCodeAt(i + 1)];
+        // The same low-byte rule as base64 below: node decodes the bytes V8
+        // writes, one per UTF-16 code unit, so a surrogate whose low byte is
+        // an ASCII hex digit counts as that digit.
+        const hi = HEX_VALUES[str.charCodeAt(i) & 0xff];
+        const lo = HEX_VALUES[str.charCodeAt(i + 1) & 0xff];
         // A non-hex character ends the write; node stops rather than skipping.
         if (hi === undefined || lo === undefined || hi < 0 || lo < 0) break;
         out[offset + written] = (hi << 4) | lo;
@@ -190,7 +201,14 @@ export function writeIn(
       let acc = 0;
       let bits = 0;
       for (let i = 0; i < str.length; i++) {
-        const code = str.charCodeAt(i);
+        // Node decodes the string's *bytes*, which V8 produces by writing each
+        // UTF-16 code unit's low byte. So `U+0452` is indistinguishable from
+        // `"R"` (0x52) here, and `U+013D` terminates the payload exactly as
+        // `"="` does -- both verified against node rather than reasoned from
+        // the source. Indexing the table by the whole code unit instead made
+        // every non-Latin-1 character a skip, which a differential found as
+        // 659 divergences per base64 flavour.
+        const code = str.charCodeAt(i) & 0xff;
         // Padding terminates the encoded payload. Other non-alphabet bytes,
         // including ASCII whitespace, are ignored by Node's forgiving path.
         if (code === 0x3d) break;
