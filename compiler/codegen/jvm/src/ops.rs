@@ -299,6 +299,9 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_environment_install_platform" => (types::ENV, "installPlatform", "(Ljava/lang/Object;)V"),
         "nts_environment_platform" => (types::ENV, "platform", "()Ljava/lang/Object;"),
         "nts_environment_has_platform" => (types::ENV, "hasPlatform", "()Z"),
+        "nts_value_to_string" => {
+            (types::VALUE, "valueToString", "(Lnts/rt/NtsValue;)Ljava/lang/String;")
+        }
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
@@ -630,6 +633,12 @@ pub struct Intrinsic {
 /// GATED where they are declared, and `every_wired_intrinsic_is_declared`
 /// asserts the two lists are complements rather than merely both present.
 pub const WEB_INTRINSICS: &[Intrinsic] = &[
+    Intrinsic {
+        declared: "nts_jvm_web_system_proxy_for",
+        owner: types::WEB,
+        member: "systemProxyFor",
+        descriptor: "(Ljava/lang/String;)Ljava/lang/String;",
+    },
     // ----- the durable byte store ------------------------------------------
     //
     // Views both ways, matching the three networking entries below that already

@@ -86,6 +86,9 @@ round-trip wrote 5
 round-trip read 5
 round-trip checksum 492
 store before -1 size 5 sum 150 first 2 firstSum 50 second 1 secondByte 40 end -1 total 5 absent -1 recordSize 5 keyLength 1 keyByte 107 after 5 removed 1 gone -1
+proxy DIRECT
+proxy PROXY proxy.test:3128
+proxy DIRECT
 ";
 
 #[test]

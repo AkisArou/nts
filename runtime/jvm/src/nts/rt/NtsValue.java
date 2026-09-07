@@ -72,6 +72,41 @@ public final class NtsValue {
             || ref instanceof NtsArrayZ;
     }
 
+    /**
+     * `String(v)` on a value carrying its own tag.
+     *
+     * <p>Exact for `undefined`, `null`, a boolean, a number and a string. Every
+     * other tag **aborts rather than guessing**, which is the C lane's rule and
+     * is worth keeping rather than falling back to `toString`: a value tagged
+     * `OBJECT` reaching here is a lowering that should have refused, and
+     * answering `[object Object]` would turn a compiler bug into a plausible
+     * string that some test then bakes in.
+     *
+     * <p>The number goes through {@link NtsRuntime#numberText}, not
+     * `Double.toString`, because the two disagree -- `1e21` against `1.0E21`
+     * among others -- and node's spelling is the one this has to match.
+     */
+    public static String valueToString(NtsValue value) {
+        if (value == null) {
+            throw new NtsRefusal("String() on a value that is not there");
+        }
+        switch (value.tag) {
+            case UNDEFINED:
+                return "undefined";
+            case NULL:
+                return "null";
+            case BOOLEAN:
+                return value.num != 0.0 ? "true" : "false";
+            case NUMBER:
+                return NtsRuntime.numberText(value.num);
+            case STRING:
+                return (String) value.ref;
+            default:
+                throw new NtsRefusal("String() on tag " + value.tag
+                    + ", which the lowering should have refused rather than reaching here");
+        }
+    }
+
     /** `instanceof ArrayBuffer`, which is one class here and one descriptor there. */
     public static boolean isBuffer(NtsValue value) {
         Object ref = value == null ? null : value.ref;

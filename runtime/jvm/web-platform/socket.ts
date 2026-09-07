@@ -147,3 +147,18 @@ export function write(
 ): void {
   nts_jvm_web_write(handle, from, onWrote, onError);
 }
+
+/**
+ * The proxy result string for a URL, or `"DIRECT"` when the platform has none.
+ *
+ * The classic auto-configuration grammar -- `PROXY host:port`, `SOCKS5
+ * host:port`, `SOCKS host:port`, `DIRECT`, joined with `"; "` -- which the
+ * shared lane parses. This side only formats; the parser lives there, with its
+ * own tests, and a second one here would be a second answer.
+ *
+ * Never `null` on this provider: Android answers exactly one `DIRECT` when
+ * nothing is configured rather than an empty list, so there is always a string.
+ */
+export function systemProxyFor(url: string): string {
+  return nts_jvm_web_system_proxy_for(url);
+}

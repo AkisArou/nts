@@ -168,6 +168,32 @@ declare function nts_jvm_web_open_count(): number;
  */
 declare function nts_jvm_web_random_fill(into: JvmBytes): void;
 
+/**
+ * The proxy result string for a URL, in the classic auto-configuration grammar.
+ *
+ * `PROXY host:port`, `SOCKS5 host:port`, `SOCKS host:port` or `DIRECT`, joined
+ * with `"; "`. Formatting only -- the grammar is parsed above this seam, where
+ * it has its own tests, and a second parser here would be a second answer.
+ *
+ * Measured on API 26 rather than assumed, because three properties of the
+ * platform decide the shape:
+ *
+ * - It is **synchronous with no I/O**: 46-87 microseconds on the first call of
+ *   a cold process and 2-11 after. No network, no file, no PAC fetch.
+ * - It is **per-URL on both axes**, scheme and host, so the argument is not
+ *   decoration.
+ * - It **never answers empty and never throws**: with nothing configured every
+ *   URL gets exactly one `DIRECT`, so `null` is unreachable here and the shared
+ *   side's nullable return stays for platforms that have no proxy story.
+ *
+ * The SOCKS version is *established* and not assumed: `Proxy.Type.SOCKS` covers
+ * both versions and the selector will not say which, so the version comes from
+ * `socksProxyVersion`. Answering `SOCKS5` for a SOCKS4 proxy would type-check,
+ * look like support, and fail inside a handshake the peer never agreed to
+ * speak. WIRED.
+ */
+declare function nts_jvm_web_system_proxy_for(url: string): string;
+
 // ---------------------------------------------------------------------------
 // What is NOT here, and why
 // ---------------------------------------------------------------------------

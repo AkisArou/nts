@@ -304,3 +304,13 @@ export function storeRoundTrip(): string {
     + " recordSize " + recordSize + " keyLength " + keyLength + " keyByte " + keyByte
     + " after " + after + " removed " + removed + " gone " + gone;
 }
+
+/** The proxy result string the platform gives for a URL. */
+export function proxyFor(): string {
+  return socket.systemProxyFor("http://example.com/a");
+}
+
+/** And for a host the bypass list covers, which must come back direct. */
+export function proxyForBypassed(): string {
+  return socket.systemProxyFor("http://localhost/a");
+}

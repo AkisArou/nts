@@ -331,6 +331,21 @@ public final class Drive {
         System.out.println("store " + text("storeRoundTrip"));
         nts.rt.NtsWeb.storeClose();
         clear(root);
+
+        // The proxy formatting, with nothing configured and then with a proxy
+        // and a bypass list. The properties are set here rather than in the
+        // compiled program because they are the *platform's* configuration --
+        // what a framework-started app has done to it, not something a program
+        // decides -- and this is the nearest a desktop JVM gets to that.
+        System.out.println("proxy " + text("proxyFor"));
+        System.setProperty("http.proxyHost", "proxy.test");
+        System.setProperty("http.proxyPort", "3128");
+        System.setProperty("http.nonProxyHosts", "localhost|127.0.0.1");
+        System.out.println("proxy " + text("proxyFor"));
+        System.out.println("proxy " + text("proxyForBypassed"));
+        System.clearProperty("http.proxyHost");
+        System.clearProperty("http.proxyPort");
+        System.clearProperty("http.nonProxyHosts");
     }
 
     /** Recursively, so a rerun does not read the last run's values. */

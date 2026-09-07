@@ -1,5 +1,12 @@
 package nts.rt;
 
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.List;
+
 /**
  * The fixed networking intrinsics: the one class a compiled program reaches.
  *
@@ -146,6 +153,94 @@ public final class NtsWeb {
      * throw past a reservation leaks it, and a leaked credit is invisible until
      * an environment is closed.
      */
+    /**
+     * The proxy result string for a URL, in the classic auto-configuration
+     * grammar the shared lane parses.
+     *
+     * <p>`PROXY host:port`, `SOCKS5 host:port`, `SOCKS host:port` or `DIRECT`,
+     * joined with `"; "`. Formatting only: the parsing lives above this seam
+     * where it has its own tests and sabotages, and a second parser here would
+     * be a second answer.
+     *
+     * <h2>The SOCKS version is established, not assumed</h2>
+     *
+     * <p>`Proxy.Type.SOCKS` covers **both** versions and the selector will not
+     * say which -- measured on API 26, where setting `socksProxyVersion` to `4`
+     * leaves the answer `SOCKS socks.test:1080`, identical to version 5. So the
+     * version comes from the property, which reads `null` when unset and means
+     * 5 by Java's own default.
+     *
+     * <p>Answering `SOCKS5` for a SOCKS4 proxy would type-check, look like
+     * support, and fail inside a handshake the peer never agreed to speak. `4`
+     * is reported as bare `SOCKS`, which the shared side names as unusable
+     * rather than upgrading -- a visible refusal beating a wrong protocol.
+     *
+     * <h2>Brackets are ours to add</h2>
+     *
+     * <p>`InetSocketAddress.getHostString()` answers `::1` for an IPv6 literal,
+     * unbracketed, and unbracketed is genuinely ambiguous against `host:port`.
+     * Measured, not assumed.
+     */
+    public static String systemProxyFor(String url) {
+        ProxySelector selector = ProxySelector.getDefault();
+        if (selector == null) {
+            return "DIRECT";
+        }
+        List<Proxy> found;
+        try {
+            found = selector.select(new URI(url));
+        } catch (URISyntaxException | RuntimeException e) {
+            // **`DIRECT` rather than a throw.** A proxy lookup is advisory, and
+            // failing the request a direct connection would have served is the
+            // worse of the two outcomes -- the same reasoning the shared side
+            // gives for treating an unparseable result as `DIRECT`. The URL
+            // arrives from a parsed record, so this is a shared-side bug rather
+            // than user input, and it is not one this seam can act on.
+            return "DIRECT";
+        }
+        if (found == null || found.isEmpty()) {
+            return "DIRECT";
+        }
+        StringBuilder out = new StringBuilder();
+        for (Proxy one : found) {
+            String directive = directiveFor(one);
+            if (directive == null) {
+                continue;
+            }
+            if (out.length() != 0) {
+                out.append("; ");
+            }
+            out.append(directive);
+        }
+        return out.length() == 0 ? "DIRECT" : out.toString();
+    }
+
+    /** One `Proxy` as one directive, or `null` for one with no address to name. */
+    private static String directiveFor(Proxy one) {
+        if (one.type() == Proxy.Type.DIRECT) {
+            return "DIRECT";
+        }
+        if (!(one.address() instanceof InetSocketAddress)) {
+            return null;
+        }
+        InetSocketAddress at = (InetSocketAddress) one.address();
+        String host = at.getHostString();
+        if (host == null) {
+            return null;
+        }
+        if (host.indexOf(':') >= 0 && host.charAt(0) != '[') {
+            host = "[" + host + "]";
+        }
+        String keyword;
+        if (one.type() == Proxy.Type.SOCKS) {
+            String version = System.getProperty("socksProxyVersion");
+            keyword = version == null || "5".equals(version) ? "SOCKS5" : "SOCKS";
+        } else {
+            keyword = "PROXY";
+        }
+        return keyword + " " + host + ":" + at.getPort();
+    }
+
     // ----- the durable store ------------------------------------------------
     //
     // **Views both ways, because the table already decided that.** Three
