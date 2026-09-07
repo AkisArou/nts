@@ -876,6 +876,122 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Every Android SDK member this library names, and the API level that added
+/// it.
+///
+/// The plan requires an API-26-compatible artifact. `--min-api 26` through D8
+/// and R8 proves the *bytecode* is acceptable at that level; it does not prove
+/// the library avoids SDK members added after it, because a call to a method
+/// introduced in API 31 dexes perfectly well and throws `NoSuchMethodError` on
+/// a device that predates it.
+///
+/// There is no API-26 `android.jar` on this machine and no `sdkmanager` to
+/// fetch one, so the level cannot be derived. It is written down instead, which
+/// makes this the same kind of instrument as `dependencies.tsv`: a claim that
+/// must be updated deliberately. What it catches is the case that actually
+/// happens -- a new SDK reference appearing without anyone deciding it was
+/// allowed. `watchDefaultNetwork` added three of these in one commit.
+const SDK_MEMBERS: &[(&str, u32)] = &[
+    ("android/content/Context", 1),
+    ("android/content/Context.getSystemService", 1),
+    ("android/net/ConnectivityManager", 1),
+    ("android/net/ConnectivityManager$NetworkCallback", 21),
+    ("android/net/ConnectivityManager.registerDefaultNetworkCallback", 24),
+    ("android/net/ConnectivityManager.unregisterNetworkCallback", 21),
+    ("android/net/Network", 21),
+    ("android/security/NetworkSecurityPolicy", 23),
+    ("android/security/NetworkSecurityPolicy.getInstance", 23),
+    ("android/security/NetworkSecurityPolicy.isCleartextTrafficPermitted", 24),
+];
+
+/// The library names no SDK member added after its own floor.
+#[test]
+fn every_sdk_member_this_library_names_predates_api_26() {
+    let (Some(javac), Some(disassembler), Some((_, platform)), Some(jars)) =
+        (tool("javac"), tool("javap"), sdk(), dependencies())
+    else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-sdk-api-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // Every shipped source set, which now includes `src/okhttp` -- so the
+    // pinned jars are on the classpath, and a `android.*` reference appearing
+    // in the production adapter is caught by the same list.
+    let classpath = std::iter::once(platform.display().to_string())
+        .chain(jars.iter().map(|jar| jar.display().to_string()))
+        .collect::<Vec<_>>()
+        .join(":");
+    let mut compile = Command::new(&javac);
+    compile.args(["--release", "8", "-Xlint:-options", "-cp"]).arg(&classpath).arg("-d").arg(&dir);
+    for path in shipped_sources() {
+        compile.arg(path);
+    }
+    let built = compile.output().unwrap();
+    assert!(built.status.success(), "javac: {}", String::from_utf8_lossy(&built.stderr));
+
+    let classes: Vec<String> = sources_of(&dir)
+        .iter()
+        .filter_map(|path| path.strip_prefix(&dir).ok().map(std::path::Path::to_path_buf))
+        .map(|path| path.with_extension("").to_string_lossy().replace('/', "."))
+        .collect();
+    let listed = Command::new(&disassembler)
+        .args(["-c", "-p", "-v", "-cp"])
+        .arg(format!("{}:{}", dir.display(), classpath))
+        .args(&classes)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&listed.stdout);
+
+    // Every `android/...` token the constant pool and the code mention.
+    let mut found: Vec<String> = Vec::new();
+    let mut rest = text.as_ref();
+    while let Some(at) = rest.find("android/") {
+        rest = &rest[at..];
+        let end = rest
+            .find(|c: char| !(c.is_alphanumeric() || "/_$.<>".contains(c)))
+            .unwrap_or(rest.len());
+        let (token, tail) = rest.split_at(end);
+        rest = tail;
+        // `android/net/Network;` and `android/net/Network.` are the same class;
+        // a trailing dot is the separator, not part of a member name.
+        let token = token.trim_end_matches('.').to_owned();
+        if !token.is_empty() && !found.contains(&token) {
+            found.push(token);
+        }
+    }
+    found.sort();
+
+    for token in &found {
+        let level = SDK_MEMBERS
+            .iter()
+            .find(|(name, _)| name == token)
+            .map_or_else(
+                || {
+                panic!(
+                    "`{token}` is an Android SDK member this library names and `SDK_MEMBERS` \
+                     does not. Add it with the API level that introduced it -- a member added \
+                     after 26 dexes perfectly well and throws `NoSuchMethodError` on the floor \
+                     this library declares."
+                    )
+                },
+                |(_, level)| *level,
+            );
+        assert!(level <= 26, "`{token}` was added in API {level}, above this library's floor of 26");
+    }
+
+    // The other direction, so the list cannot keep an entry for something that
+    // is gone and go on looking like it is checking it.
+    for (name, _) in SDK_MEMBERS {
+        assert!(
+            found.iter().any(|it| it == name),
+            "`{name}` is in `SDK_MEMBERS` and this library no longer names it"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The artifact rules, checked against the bytes rather than the build file.
 ///
 /// `build.gradle.kts` says `VERSION_1_8` and `minSdk = 26`, and a build file is

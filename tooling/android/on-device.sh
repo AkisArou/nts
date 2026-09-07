@@ -193,6 +193,20 @@ echo "$out"
 case "$out" in *"94 checks, 0 failures"*) ;; *) failed=1 ;; esac
 adb shell rm -f /data/local/tmp/nts-bothhttp.dex
 
+# Does `volatile` reach ART's compiler and produce a barrier?
+#
+# The half of `docs/records/0181` that is checkable without ARM. It does not
+# show the race -- x86-TSO does not reorder stores with stores, so the keyword
+# is unfalsifiable by execution here -- it shows that the compiler on the
+# platform we ship to discharges the obligation the JMM gives it, rather than
+# taking the specification's word for it.
+#
+# It has its own dex and its own device round trip, so it runs as a script
+# rather than as another `run` line. It was written before there was a device
+# to run it on and had never been executed until today.
+echo "--- volatile barrier, through ART's own compiler"
+if sh "$here/tooling/android/barrier.sh"; then :; else failed=1; fi
+
 adb shell rm -f /data/local/tmp/nts-device.dex /data/local/tmp/store.p12
 [ "$failed" -eq 0 ] || { echo "device run failed"; exit 1; }
 echo "device: every suite green on ART"
