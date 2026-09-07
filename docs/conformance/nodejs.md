@@ -2682,6 +2682,31 @@ The prose below was written against 1,509, and before that 946; read its
 >    12   module#init itself
 > ```
 >
+> **Walked to their terminals, the cascades converge on 340 places, not on a
+> handful and not on four thousand.** Deduplicating function names across
+> modules gives 1,188 distinct cascaded functions reaching 340 distinct
+> terminals, and the ten largest cover 443 of them — 37%:
+>
+> ```
+> 114  determineSpecificType            23  getValidatedBytePath
+> 114  ERR_OUT_OF_RANGE#constructor     21  asRequest
+>  64  trackPromise                     16  decodeIn
+>  35  EventEmitter#emit                16  Socket##healthCheck
+>  25  Readable#read                    15  destroyQueue
+> ```
+>
+> Two of the top three are `internal/errors.ts` again —
+> `ERR_OUT_OF_RANGE#constructor` and the `determineSpecificType` that builds its
+> message — which is the same layer `ERR_INVALID_ARG_TYPE` sits in and the same
+> finding from a different direction: **node validates its arguments
+> everywhere, so its error constructors are under everything.**
+>
+> Two caveats that limit this table. Names are deduplicated across modules, so
+> 1,188 is distinct functions and not the 4,267 per-module citations. And a
+> "terminal" is only a function nothing says is cascading — it may be a genuine
+> `NTS1001` root or a refusal this parse did not capture as an edge. It is a
+> shape, not a work list.
+>
 > The `module#init` choke point is real and it is what empties five modules'
 > *export tables* — but it accounts for 231 of the 4,498, not the bulk. The
 > mass is ordinary cascade from root refusals: a function refused because
