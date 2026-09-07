@@ -1,0 +1,5 @@
+# node:events registers its abort listener so that it survives another
+# listener calling stopImmediatePropagation, which only the canonical
+# AbortSignal can be asked for. test-events-add-abort-listener.mjs is the
+# reason and the check.
+abort

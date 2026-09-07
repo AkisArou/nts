@@ -304,9 +304,11 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,768 of node's own applicable test files pass** across twenty-two modules,
-**of which 0 are hollow**. Every module is green but one, and that one failure
-names a provider dependency rather than a defect.
+**1,769 of node's own applicable test files pass** across twenty-two modules,
+**of which 0 are hollow, and none fail.** Every module is green. That last
+sentence has not been true before, and the paragraph below records what the
+final one cost, because "all green" is the claim most worth distrusting in this
+document.
 
 The whole table comes from a single `sweep.mjs` run over the tree this tranche
 commits, with sabotage on. It is one run rather than two anchored separately,
@@ -364,7 +366,7 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,768
+warns about elsewhere, so the two numbers belong next to each other: **1,769
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -408,22 +410,39 @@ still.
 | `url` | **45 / 45** | 0 | complete; exact on the Web Platform Tests corpus |
 | `util` | **20 / 20** | 0 | `inspect`, `format`, `types`, the comparisons and the helpers |
 | `zlib` | **66 / 66** | 0 | the streams, the one-shots, brotli and zstd |
-| `events` | 27 / 28 | 0 | complete but for one provider dependency, below |
+| `events` | **28 / 28** | 0 | complete, including `addAbortListener` resisting `stopImmediatePropagation` |
 
-**The one remaining failure, and why it is not ours to fix.**
+**How the last failure closed, and what it needed from three places.**
 `test-events-add-abort-listener.mjs` requires an abort listener to run even
 after an earlier listener has called `stopImmediatePropagation()`. Node does
 that by registering with `kResistStopPropagation`, a private symbol from
-`internal/event_target` (`lib/internal/events/abort_listener.js`). The test
-builds its `AbortController` from the host global and this runner deliberately
-withholds `--expose-internals`, so node's symbol is unreachable from here by
-design. Closing it needs two things from `runtime/web-platform`, which is
-another session's lane: an internal, non-web-observable resist option on
-`core/events.ts`'s listener options, and `core/abort.ts` being installed as the
-Node profile's `AbortController`/`AbortSignal` for tests. Recorded as a
-provider dependency and reported to that lane rather than worked around.
+`internal/event_target`; the test builds its `AbortController` from a global,
+and this runner deliberately withholds `--expose-internals`, so node's symbol
+was unreachable here by design.
 
-**The second of those two is now the binding one, and it is shared.** The
+It took three pieces, and none of them alone would have done it. The
+web-platform lane added a resist option that script cannot reach — not an
+`addEventListener` option and nothing named for it on `EventTarget`, so
+resisting stays opt-in rather than becoming what "internal" means. `events`'s
+`addAbortListener` asks for it when the signal is canonical. And the runner
+grew a way to *be* canonical: a module may declare web-platform globals its
+tests need, one name per line in a `globals` file, and `events` declares
+`abort` with the test named as the reason.
+
+The declaration is per module rather than global, and that is the part worth
+keeping. The experiment recorded below showed the swap is not free — a
+canonical `AbortSignal` handed to a host function expecting the host's own is
+not understood — so a module gets it only where its own tests are the reason,
+and the file says which test.
+
+**One of those two is closed and the other is not, which is the useful
+outcome.** The resist option landed, `events` uses it, the runner learned to
+install canonical globals per module, and `test-events-add-abort-listener.mjs`
+passes. `test-aborted-util.js` did not come with it: the same globals that
+close the first break a case of the second, for the reason the experiment
+below found. So the shared root was real and the shared fix was not.
+
+**The rest of this entry is kept because it is still true of `util.aborted`.** The
 web-platform lane has since built the weak-listener half that `util.aborted`
 needed, and it did not close `test-aborted-util.js` either — because the seam
 reaches the canonical `EventTarget`'s own private state, and a pinned test's

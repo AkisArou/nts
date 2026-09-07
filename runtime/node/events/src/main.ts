@@ -39,6 +39,10 @@ import {
 } from "../../async_hooks/src/resource.ts";
 import { emitProcessWarning } from "../../internal/process-warning.ts";
 import { inspect } from "../../util/src/inspect.ts";
+import {
+  EventTarget as WebEventTarget,
+  addInternalEventListener,
+} from "../../../web-platform/src/core/events.ts";
 
 declare function nts_enqueue_microtask(callback: () => void): void;
 
@@ -1207,7 +1211,25 @@ export function addAbortListener(signal: unknown, listener: unknown): Disposable
     return new AbortListenerDisposable();
   }
 
-  signal.addEventListener("abort", listener, { once: true });
+  // Node registers this one so that it runs even after another listener has
+  // called `stopImmediatePropagation()`. That is not a courtesy: a caller who
+  // asked to be told the signal aborted has not agreed to be silenced by an
+  // unrelated listener that happened to be registered first. Node spells it
+  // with a private symbol; the canonical `EventTarget` offers the same thing
+  // as an option that script cannot reach.
+  //
+  // A signal from elsewhere takes the ordinary registration, which is the
+  // weaker behaviour rather than a different one -- it differs only when
+  // something else stops propagation, which is exactly the case the ordinary
+  // registration cannot serve.
+  if (signal instanceof WebEventTarget) {
+    addInternalEventListener(signal, "abort", listener, {
+      once: true,
+      resistStopPropagation: true,
+    });
+  } else {
+    signal.addEventListener("abort", listener, { once: true });
+  }
   return new AbortListenerDisposable(() => {
     signal.removeEventListener("abort", listener);
   });

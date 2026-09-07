@@ -420,6 +420,29 @@ try {
     exports = await import(join(moduleDir, "src/main.ts"));
     if (mutatedAddon || mutatedSilent) exports = poison(exports);
   }
+  // A module may declare canonical web-platform globals its tests need, one
+  // name per line in a `globals` file. Declared rather than installed for
+  // everyone, because the swap is not free: a canonical `AbortSignal` handed
+  // to a *host* function that expects the host's own -- `node:events`'s
+  // `listenerCount`, for one -- is not understood, so a module gets this only
+  // when its own tests are the reason.
+  const globalsPath = join(moduleDir, "globals");
+  if (existsSync(globalsPath)) {
+    const wanted = readFileSync(globalsPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("#"));
+    for (const name of wanted) {
+      if (name === "abort") {
+        const abort = await import(join(moduleDir, "../../web-platform/src/core/abort.ts"));
+        globalThis.AbortController = abort.AbortController;
+        globalThis.AbortSignal = abort.AbortSignal;
+      } else {
+        throw new Error(`unknown canonical global group in ${globalsPath}: ${name}`);
+      }
+    }
+  }
+
   const shapePath = join(moduleDir, "shape.mjs");
   let shapeModule = null;
   if (existsSync(shapePath)) {
