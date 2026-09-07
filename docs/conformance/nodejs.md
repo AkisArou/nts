@@ -387,7 +387,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,787 of node's own applicable test files pass** across twenty-two modules,
+**1,789 applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -517,7 +517,7 @@ model that makes *Y* inapplicable" — which a reader should not confuse with a
 claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,787
+warns about elsewhere, so the two numbers belong next to each other: **1,789
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
