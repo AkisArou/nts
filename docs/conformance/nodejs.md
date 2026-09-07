@@ -2845,6 +2845,32 @@ differential saw it. The fix is one line — spread first, computed key last —
 `querystring/test/proto-order-static.js` holds it: reverting the fix leaves
 `test-querystring.js` green and fails only that file.
 
+**And then a second, larger one in `url`.** `domainToASCII` and
+`domainToUnicode` look like the IDNA mapping and are not: node parses the
+argument as the *host* of a special-scheme URL and serialises the result, so
+they inherit IPv4 shorthand, IPv6 canonicalisation, delimiter handling and the
+forbidden domain code points. This profile applied the mapping to the whole
+argument and returned it unchanged when it could not convert it:
+
+    domainToASCII("http://a")          ours "http://a"   node ""
+    domainToASCII("1.2.3.4//x#f")      ours ""           node "1.2.3.4"
+    domainToASCII("0x7f.1")            ours "0x7f.1"     node "127.0.0.1"
+    domainToASCII("[::FFFF:1.2.3.4]")  ours ""           node "[::ffff:102:304]"
+
+**8,046 divergences over 4,000 generated URLs.** None of it is reachable by any
+of the 45 pinned `url` files, and the 891-case WPT corpus this profile passes
+does not reach it either — both test *URLs*, and this is a pair of functions
+beside them. Fixed in three measured steps: the forbidden set took it from
+8,046 to 178, delimiter truncation to 36, and routing through the parser's own
+`parseHost` to 0.
+
+The care went into what *not* to share. `http://a%2Fb/` percent-decodes to the
+host `a/b`, which the URL Standard makes a parse failure; the public function
+truncates at a `/` instead. One function served both, so the parser now keeps
+`hostToASCII` — a host somebody already extracted — and `domainToASCII` works
+out which part of its argument is a domain. **They were one function, and every
+call site got whichever behaviour it happened to have.**
+
 Current state, all lanes:
 
 | corpus | comparisons | divergences |
@@ -2853,6 +2879,7 @@ Current state, all lanes:
 | `punycode`, compiled addon | 80,128 | 0 |
 | `path`, TypeScript | 36,234 | 0 |
 | `querystring`, TypeScript | 16,076 | 0 |
+| `url`, TypeScript | 20,120 | 0 |
 
 Two processes are needed on the TypeScript lane, because inside the
 substitution `require("node:path")` and `require("path")` are the same object
