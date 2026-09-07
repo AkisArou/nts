@@ -82,11 +82,26 @@ function utf8Label(label: string): boolean {
 
 /** UTF-8 algorithms; no host TextEncoder/TextDecoder or Buffer. */
 export class TextEncoder {
+  readonly #encoding = "utf-8" as const;
+
   get encoding(): "utf-8" {
-    return "utf-8";
+    // Read through a private field on purpose. Web IDL requires an attribute getter to
+    // throw when its receiver is not an instance -- reading `TextEncoder.prototype.encoding`
+    // must be a TypeError -- and a literal return answers for any receiver at all.
+    return this.#encoding;
   }
 
+  /**
+   * The Web IDL brand check, as a private member read.
+   *
+   * Reading any private member throws `TypeError` on a receiver that is not an instance,
+   * which is what Web IDL requires of every operation. `encode` otherwise never touches
+   * `this`, so without this it answers happily for `null`.
+   */
+  #brand(): void {}
+
   encode(input = ""): Uint8Array<ArrayBuffer> {
+    this.#brand();
     const text = coerceToUSVString(input);
     const output = new Uint8Array(utf8Length(text));
     utf8Write(output, text, 0, output.length);
@@ -106,6 +121,28 @@ export class TextEncoder {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+    // are non-enumerable, so every one of these was wrong. Safe to do here and not
+    // everywhere, because this class has no non-standard members left on its prototype --
+    // its internals are private identifiers. Doing it on a class that still exposes
+    // internals would enumerate those too, making one deviation worse to fix the other.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
+    // Web IDL: an operation's `length` is its required-argument count. The `...args` tuple
+    // that keeps an omitted argument distinguishable from an explicit `undefined` reports
+    // zero, so the two required arguments are declared.
+    Object.defineProperty(this.prototype.encodeInto, "length", {
+      value: 2,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "TextEncoder",
       writable: false,
@@ -149,9 +186,9 @@ function convertTextDecodeOptions(options: TextDecodeOptions | null | undefined)
 }
 
 export class TextDecoder {
-  private readonly decoderEncoding: DecoderEncoding;
-  private readonly decoderFatal: boolean;
-  private readonly decoderIgnoreBOM: boolean;
+  #decoderEncoding: DecoderEncoding;
+  #decoderFatal: boolean;
+  #decoderIgnoreBOM: boolean;
   /** The odd byte of a UTF-16 code unit split across chunks, or -1. */
   private pendingByte = -1;
   /** A high surrogate waiting for its low half, or -1. */
@@ -172,18 +209,18 @@ export class TextDecoder {
     if (utf16 === null && !utf8Label(normalized)) {
       throw new RangeError("This decoder implements UTF-8, UTF-16LE and UTF-16BE");
     }
-    this.decoderEncoding = utf16 ?? "utf-8";
-    this.decoderFatal = convertedOptions.fatal;
-    this.decoderIgnoreBOM = convertedOptions.ignoreBOM;
+    this.#decoderEncoding = utf16 ?? "utf-8";
+    this.#decoderFatal = convertedOptions.fatal;
+    this.#decoderIgnoreBOM = convertedOptions.ignoreBOM;
   }
   get encoding(): DecoderEncoding {
-    return this.decoderEncoding;
+    return this.#decoderEncoding;
   }
   get fatal(): boolean {
-    return this.decoderFatal;
+    return this.#decoderFatal;
   }
   get ignoreBOM(): boolean {
-    return this.decoderIgnoreBOM;
+    return this.#decoderIgnoreBOM;
   }
   #resetSequence(): void {
     this.needed = 0;
@@ -196,7 +233,7 @@ export class TextDecoder {
   }
   #replacement(): void {
     this.#resetSequence();
-    if (this.decoderFatal) {
+    if (this.#decoderFatal) {
       throw new TypeError("Invalid UTF-8");
     }
   }
@@ -214,7 +251,7 @@ export class TextDecoder {
     stream: boolean,
     emit: (code: number) => void,
   ): void {
-    const bigEndian = this.decoderEncoding === "utf-16be";
+    const bigEndian = this.#decoderEncoding === "utf-16be";
     for (let index = 0; index < input.length; index++) {
       const byte = input[index];
       if (byte === undefined) break;
@@ -260,7 +297,7 @@ export class TextDecoder {
   }
 
   #utf16Error(): void {
-    if (this.decoderFatal) throw new TypeError("Invalid UTF-16");
+    if (this.#decoderFatal) throw new TypeError("Invalid UTF-16");
   }
 
   decode(...args: [input?: AllowSharedBufferSource, options?: TextDecodeOptions]): string {
@@ -278,7 +315,7 @@ export class TextDecoder {
     const emit = (code: number): void => {
       if (!bomSeen) {
         bomSeen = true;
-        if (code === 0xfeff && !this.decoderIgnoreBOM) return;
+        if (code === 0xfeff && !this.#decoderIgnoreBOM) return;
       }
       ascii += String.fromCodePoint(code);
       if (ascii.length >= 4096) {
@@ -286,7 +323,7 @@ export class TextDecoder {
         ascii = "";
       }
     };
-    if (this.decoderEncoding !== "utf-8") {
+    if (this.#decoderEncoding !== "utf-8") {
       this.#decodeUTF16(input, stream, emit);
       this.bomSeen = bomSeen;
       pieces.push(ascii);
@@ -353,6 +390,19 @@ export class TextDecoder {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+    // are non-enumerable, so every one of these was wrong. Safe to do here and not
+    // everywhere, because this class has no non-standard members left on its prototype --
+    // its internals are private identifiers. Doing it on a class that still exposes
+    // internals would enumerate those too, making one deviation worse to fix the other.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "TextDecoder",
       writable: false,

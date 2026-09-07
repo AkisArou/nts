@@ -286,10 +286,20 @@ function createWptContext(
   excludedTests,
   seenExcludedTests,
   runtime,
+  ownObjectIntrinsic,
 ) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
+  // The harness runs in a `vm` context and the implementation lives in the host realm, so
+  // `Object.prototype` is two different objects and every identity check has to pick one.
+  // Most fixtures compare against host-realm implementation objects and need the host's.
+  // idlharness is the exception: webidl2 walks its *own* objects' prototype chains until it
+  // reaches `Object.prototype`, and with the host's injected that loop runs off the end into
+  // `null`. The real fix is for the harness and the implementation to share a realm; until
+  // then the choice is per fixture and stated rather than global and silent.
+  const objectIntrinsic = ownObjectIntrinsic ? {} : { Object };
   const context = createContext({
+    ...objectIntrinsic,
     AbortController,
     AbortSignal,
     ArrayBuffer,
@@ -327,7 +337,6 @@ function createWptContext(
     Response,
     // The APIs under test are host-realm modules, so the ordinary objects they
     // return must be compared with that same realm's intrinsic prototype.
-    Object,
     Promise,
     RangeError,
     ReadableByteStreamController,
@@ -386,6 +395,22 @@ function createWptContext(
     },
     assert_own_property(object, property, message) {
       assert.equal(Object.prototype.hasOwnProperty.call(object, property), true, message);
+    },
+    assert_inherits(object, property, message) {
+      // The property must exist on the prototype chain and *not* be an own property.
+      // That distinction is the whole assertion: an accessor moved onto the instance
+      // still reads correctly and is no longer the interface's.
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(object, property),
+        false,
+        message ?? `${String(property)} must not be an own property`,
+      );
+      let proto = Object.getPrototypeOf(object);
+      while (proto !== null) {
+        if (Object.prototype.hasOwnProperty.call(proto, property)) return;
+        proto = Object.getPrototypeOf(proto);
+      }
+      assert.fail(message ?? `${String(property)} was not found on the prototype chain`);
     },
     assert_not_equals(actual, expected, message) {
       assert.notStrictEqual(actual, expected, message);
@@ -651,6 +676,32 @@ function createWptContext(
   );
   context.globalThis = context;
   context.self = context;
+  // idlharness classifies its environment by the global's prototype: a `Window`, one of the
+  // worker scopes, or -- failing those -- a plain realm global, for which it tests only
+  // `[Exposed=*]` interfaces. A `vm` context's global has its own prototype and matches
+  // none of them, so idlharness throws "Unexpected global object" rather than choosing.
+  //
+  // This makes the plain-realm answer true rather than overriding the harness's decision,
+  // and it is the accurate description: this runtime has no `Window` and no worker scope,
+  // and exposes exactly the universally-exposed interfaces.
+  runInContext("Object.setPrototypeOf(globalThis, Object.prototype);", context);
+  // Web IDL puts interface objects on the global as
+  // `{ writable: true, enumerable: false, configurable: true }`. A `vm` sandbox copies them
+  // in as ordinary enumerable properties, so every interface fails idlharness's very first
+  // check for a reason that belongs to the harness rather than the implementation.
+  for (const name of Object.getOwnPropertyNames(context)) {
+    if (!/^[A-Z]/.test(name)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(context, name);
+    if (descriptor === undefined || !descriptor.enumerable || typeof descriptor.value !== "function") {
+      continue;
+    }
+    Object.defineProperty(context, name, {
+      value: descriptor.value,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+  }
   return context;
 }
 
@@ -669,6 +720,8 @@ async function runFixture(root, path, data, verifiedSupport) {
   const pending = [];
   const excludedTests = manifest.notApplicable?.[path] ?? {};
   const seenExcludedTests = new Set();
+  const source = data.toString();
+  const usesIdlharness = source.includes("META: script=/resources/idlharness.js");
   const context = createWptContext(
     path,
     root,
@@ -677,8 +730,8 @@ async function runFixture(root, path, data, verifiedSupport) {
     excludedTests,
     seenExcludedTests,
     fixtureRuntime ?? hostRuntime,
+    usesIdlharness,
   );
-  const source = data.toString();
   const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
   for (const match of scripts) {
     const scriptPath = match[1];
@@ -686,9 +739,27 @@ async function runFixture(root, path, data, verifiedSupport) {
       ? new URL(scriptPath.slice(1), root)
       : new URL(scriptPath, new URL(path, root));
     const supportPath = relativePath.pathname.slice(root.pathname.length);
-    const support = verifiedSupport.get(supportPath);
-    assert.notEqual(support, undefined, `Unpinned WPT support script: ${supportPath}`);
-    runInContext(support.toString(), context, { filename: supportPath, timeout: 5000 });
+    // In WPT proper `/resources/WebIDLParser.js` is a redirect to the vendored parser.
+    // Node's checkout has the target and not the redirect, so the alias lives here rather
+    // than as a copied file nobody could hash-verify against upstream.
+    const resolved =
+      supportPath === "resources/WebIDLParser.js"
+        ? "resources/webidl2/lib/webidl2.js"
+        : supportPath;
+    const support = verifiedSupport.get(resolved);
+    assert.notEqual(support, undefined, `Unpinned WPT support script: ${resolved}`);
+    runInContext(support.toString(), context, { filename: resolved, timeout: 5000 });
+  }
+  if (typeof context.idl_test === "function") {
+    // `idl_test` reaches for the `.idl` files over `fetch`. They are pinned support here,
+    // so the hook is replaced rather than a network stack being pointed at the filesystem.
+    // Installed after the scripts run because idlharness declares `fetch_spec` itself and a
+    // function declaration would overwrite anything set beforehand.
+    context.fetch_spec = (spec) => {
+      const idl = verifiedSupport.get(`interfaces/${spec}.idl`);
+      assert.notEqual(idl, undefined, `Unpinned WPT IDL: interfaces/${spec}.idl`);
+      return Promise.resolve({ spec, idl: idl.toString() });
+    };
   }
   runInContext(source, context, { filename: path, timeout: 5000 });
   let observed = 0;

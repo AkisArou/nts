@@ -6043,3 +6043,80 @@ already instantiated would buy the number back and lose the type safety, which i
 workaround this lane does not make.
 
 814/814 host, upstream 2,515 of 2,523 applicable, compiled axis unchanged at 138 of 142.
+
+## idlharness runs, and it found seven things nothing else could
+
+The handoff said `idlharness` was not pinned because it needs the IDL definitions and a
+harness that parses them — a much larger dependency than a fixture file. That was true and
+it was not a reason, because all of it is already sitting in Node's vendored checkout:
+`resources/idlharness.js`, the `webidl2` parser, and `interfaces/*.idl`. The Web IDL
+conformance suite was one harness change away the whole time.
+
+It runs now: **51 of 55 for `encoding`**, with the four remaining marked not applicable for
+a verified reason.
+
+### Seven real defects, all invisible to every behavioural test
+
+**Five brand checks.** Web IDL requires an attribute getter to throw `TypeError` when its
+receiver is not an instance — reading `TextDecoder.prototype.encoding` must fail.
+`TextEncoder.encoding` and `TextEncoderStream.encoding` returned a string literal and
+answered for *any* receiver including `null`; `TextDecoder`'s three read TypeScript-private
+fields, which compile to ordinary properties and check nothing. All five now read a **private
+identifier**, which throws on a foreign receiver as a language guarantee rather than as a
+hand-written check.
+
+**One operation brand check.** `TextEncoder.encode` never touched `this` at all, so it
+worked when called with `this = null`. It now begins with a private-member read that exists
+solely to be that check, and says so.
+
+**One wrong arity.** `encodeInto`'s IDL says two required arguments; the `...args` tuple that
+keeps an omitted argument distinguishable from an explicit `undefined` reports zero.
+
+**And the enumerability deviation is closed for four classes.** The previous entry recorded
+that it could not be fixed before the internals were private, because a blanket pass would
+enumerate those too. `TextDecoder`, `TextEncoder`, `TextDecoderStream` and `TextEncoderStream`
+now have nothing non-standard left on their prototypes, so the fix is safe *there* and is
+applied there only. That ordering was written down before it was possible and then followed.
+
+### What it took, and the mismatch it exposed
+
+`WebIDLParser.js` is a redirect in WPT proper and absent from Node's copy, so the alias to
+the vendored parser lives in the runner. `idl_test` fetches the `.idl` files, so `fetch_spec`
+is replaced with a read from pinned support rather than pointing a network stack at the
+filesystem. `assert_inherits` was missing from this lane's deliberately-small harness — and
+it is the assertion that distinguishes a property on the prototype from one moved onto the
+instance, which is exactly the kind of difference this whole area is about.
+
+Interface objects were injected into the sandbox as **enumerable** globals, so every
+interface failed idlharness's first check for a reason belonging to the harness. Web IDL puts
+them on the global non-enumerable; they are defined that way now.
+
+**The real obstacle is a realm split, and it cannot be papered over in one direction.** The
+harness runs in a `vm` context and the implementation lives in the host realm, so
+`Object.prototype` is two different objects. Most fixtures compare against host-realm
+implementation objects and need the host's injected. webidl2 walks its *own* objects'
+prototype chains until it reaches `Object.prototype`, and with the host's injected that loop
+runs off the end into `null`.
+
+Removing the injection made idlharness work and **broke seventeen tests in five other
+fixtures** — traded one realm problem for its mirror image. The choice is per fixture now and
+stated in a comment, because a global answer is wrong for one side whichever way it goes. The
+actual fix is for the harness and the implementation to share a realm, which is an
+architectural change to this runner and not a line of code.
+
+The four remaining failures are that mismatch and nothing else, and the claim was **checked
+rather than assumed**: in the host realm `Object.getPrototypeOf(X.prototype) === Object.prototype`
+is true for all four, and false only across the sandbox boundary. Marked not applicable with
+that control written into the reason.
+
+### Where this goes next
+
+`streams/idlharness.any.js` and `FileAPI/idlharness.any.js` are pinnable the same way and
+are deliberately **not** pinned yet. `ReadableStream` still carries seventeen internal
+methods on its prototype, so they would produce a large red surface for a deviation already
+measured and recorded. The order is the same one that worked here: privatise the internals,
+then the enumerability fix becomes safe, then pin the harness that checks it.
+
+Upstream is **2,602 tests, 2,566 passing, 8 failing** — the corpus grew by 169 today and the
+failure count is the same eight structural ones it started at. 814/814 host, frontier
+unchanged at 1,407/337.

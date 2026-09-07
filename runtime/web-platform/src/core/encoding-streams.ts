@@ -92,6 +92,19 @@ export class TextDecoderStream {
   }
 
   static {
+    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+    // are non-enumerable, so every one of these was wrong. Safe to do here and not
+    // everywhere, because this class has no non-standard members left on its prototype --
+    // its internals are private identifiers. Doing it on a class that still exposes
+    // internals would enumerate those too, making one deviation worse to fix the other.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "TextDecoderStream",
       writable: false,
@@ -108,6 +121,7 @@ export class TextDecoderStream {
  * `TextEncoder.encode` cannot be used per chunk.
  */
 export class TextEncoderStream {
+  readonly #encoding = "utf-8" as const;
   readonly #encoder = new TextEncoder();
   #pendingHighSurrogate: number = -1;
   readonly #transform: TransformStream<string, Uint8Array>;
@@ -167,7 +181,9 @@ export class TextEncoderStream {
   }
 
   get encoding(): "utf-8" {
-    return "utf-8";
+    // Through a private field, so the getter throws on a foreign receiver as Web IDL
+    // requires; see the note on `TextEncoder.encoding`.
+    return this.#encoding;
   }
 
   get readable(): ReadableStream<Uint8Array> {
@@ -179,6 +195,19 @@ export class TextEncoderStream {
   }
 
   static {
+    // Web IDL gives operations `{ writable: true, enumerable: true, configurable: true }`
+    // and attribute accessors `{ enumerable: true, configurable: true }`; ES class members
+    // are non-enumerable, so every one of these was wrong. Safe to do here and not
+    // everywhere, because this class has no non-standard members left on its prototype --
+    // its internals are private identifiers. Doing it on a class that still exposes
+    // internals would enumerate those too, making one deviation worse to fix the other.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "TextEncoderStream",
       writable: false,

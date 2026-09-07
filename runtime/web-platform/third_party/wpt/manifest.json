@@ -109,6 +109,12 @@
     "dom/events/EventTarget-removeEventListener.any.js": {
       "removing a null event listener should succeed": "The assertion calls globalThis.removeEventListener, which requires the global object itself to be an EventTarget. That is true of Window and Worker and deliberately false here: this profile installs no ambient globals, so there is no global event target to remove a listener from. The rest of the fixture runs against a constructed EventTarget and passes."
     },
+    "encoding/idlharness.any.js": {
+      "TextDecoder interface: existence and properties of interface prototype object": "Cross-realm artifact of the sandbox, not a deviation: the interfaces live in the host realm and idlharness compares against the vm context's `Object.prototype`, which is a different object. Verified directly -- in the host realm `Object.getPrototypeOf(X.prototype) === Object.prototype` is true for all four, and false only when the comparison crosses the sandbox boundary.",
+      "TextDecoderStream interface: existence and properties of interface prototype object": "Cross-realm artifact of the sandbox, not a deviation: the interfaces live in the host realm and idlharness compares against the vm context's `Object.prototype`, which is a different object. Verified directly -- in the host realm `Object.getPrototypeOf(X.prototype) === Object.prototype` is true for all four, and false only when the comparison crosses the sandbox boundary.",
+      "TextEncoder interface: existence and properties of interface prototype object": "Cross-realm artifact of the sandbox, not a deviation: the interfaces live in the host realm and idlharness compares against the vm context's `Object.prototype`, which is a different object. Verified directly -- in the host realm `Object.getPrototypeOf(X.prototype) === Object.prototype` is true for all four, and false only when the comparison crosses the sandbox boundary.",
+      "TextEncoderStream interface: existence and properties of interface prototype object": "Cross-realm artifact of the sandbox, not a deviation: the interfaces live in the host realm and idlharness compares against the vm context's `Object.prototype`, which is a different object. Verified directly -- in the host realm `Object.getPrototypeOf(X.prototype) === Object.prototype` is true for all four, and false only when the comparison crosses the sandbox boundary."
+    },
     "encoding/streams/decode-attributes.any.js": {
       "encoding attribute should have correct value for 'ascii'": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
       "encoding attribute should have correct value for 'iso-8859-2'": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly."
@@ -157,10 +163,12 @@
     "root": "third_party/node/test/fixtures/wpt",
     "versionsFile": "third_party/node/test/fixtures/wpt/versions.json",
     "subsets": {
+      "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
       "dom/abort": "dc928169ee38969433af668319a73ed9196ffbee",
       "dom/events": "0a811c51619b14f78fec60ba7dd1603795ca6a21",
       "encoding": "1ac8deee082ecfb5d3b6f9c56cf9d1688a2fc218",
-      "FileAPI": "7f5130188818b6c12c636491186b459ec2bf131f",
+      "interfaces": "a8392bd0210378dda13278eeccf2c2602278e214",
+      "resources": "6a2f32237615d7ea9c1eb1e30453066b5555c603",
       "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
     },
     "support": {
@@ -172,6 +180,12 @@
       "encoding/resources/encodings.js": "80933bf9386cb629537c32ca4dc5c22a81d7e872",
       "encoding/streams/resources/readable-stream-from-array.js": "5c12ba8c8bba60ef52a689abae17d1f1e0bfc458",
       "encoding/streams/resources/readable-stream-to-array.js": "fda03e2264492296d9b26986d15211384a6a8b16",
+      "interfaces/dom.idl": "1ddc084b949df64f36041f3a0c533468765dceb0",
+      "interfaces/encoding.idl": "a9499f62378dd92202b62d1963d239c4f69b6f1a",
+      "interfaces/html.idl": "567e5a79a36ab87e9ae0a09214a526647fbaecc7",
+      "interfaces/streams.idl": "8abc8f5cfda9fed8d7981cb967e5e83756ec686e",
+      "resources/idlharness.js": "57cefedc22a182704076f3d3bde7eb2592a733d5",
+      "resources/webidl2/lib/webidl2.js": "bae0b2047595d0742f58384f01a6af5f69c3519e",
       "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
       "streams/resources/rs-test-templates.js": "73ef0463768d23847186867fa68e968074b5fa8f",
       "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
@@ -203,6 +217,7 @@
       "encoding/api-basics.any.js": "768f8159313ece26042dbe20f8894d5c37c3aa48",
       "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",
       "encoding/encodeInto.any.js": "9ea36d23d08cca0d1c380015d415de2abec95f2a",
+      "encoding/idlharness.any.js": "acd100c43b461c85399407087d20a51a57ce8352",
       "encoding/streams/backpressure.any.js": "0f67e3358414d344132fdf7f8efe072511a7a80e",
       "encoding/streams/decode-attributes.any.js": "f64f45b56acba90f27689e1c4e2934648bf9fec3",
       "encoding/streams/decode-bad-chunks.any.js": "21d61427a2bca357af37df1767bac9a538f233b6",
