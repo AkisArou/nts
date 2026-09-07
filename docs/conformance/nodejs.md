@@ -2137,9 +2137,23 @@ what one fix will show for free.
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 
-**12,181 functions lower across twenty-two modules.** The prose below was
-written against 1,509, and before that 946; read its *reasoning* and not its
-arithmetic until each claim is re-derived.
+**12,226 functions lower across twenty-two modules, against 6,839 refused.**
+The prose below was written against 1,509, and before that 946; read its
+*reasoning* and not its arithmetic until each claim is re-derived.
+
+Anchored to compiler `9c77ad85`, binary SHA-256 `81d82619`. The previous row
+here was 12,181 / 6,878 at `982ffe1f`: **+45 lowered and −39 refused** across
+the two, which is the layout-merge and export-table work plus a reads-only fix
+landing. The per-module table below still carries the `982ffe1f` figures and is
+re-derived when a change is large enough to be worth a per-module read; the
+totals are the anchored pair.
+
+The compiled-artifact axis did **not** move across the same pair — 17
+`c-did-not-compile`, 2 `built-exports-nothing`, 2 `built-exports-partial`, 1
+`all-passes-degenerate`, 0 green, identical to the previous run. Worth stating
+because the two axes came from one binary and one afternoon: a compiler change
+can move what lowers without moving what ships, and this is what that looks
+like.
 
 | module | lowered / refused | | module | lowered / refused |
 | --- | :---: | --- | --- | :---: |
