@@ -4074,6 +4074,47 @@ OVERWRITTEN. A lane that cannot tell a counted build from an uncounted one
 cannot report anything, and this one could not, twice, before it printed a
 number anybody would have believed.
 
+## Four identities node's own tests never assert
+
+52 of node's 1,890 pinned files check a constructor or an `instanceof` at all.
+That is not an oversight: node's tests spend their assertions on behaviour, and
+they under-test whatever cannot fail on node. A structural identity written as a
+plain assignment in `lib/` is exactly that — there is no way for the assignment
+to produce a different object, so there was never an invariant there to test.
+
+A compiled profile has no such guarantee. Every one of these is a *sameness*
+rather than an equality, and every one of them is lost by a repair that looks
+correct and passes every upstream test:
+
+| what | where node writes it | what the plausible repair does |
+| --- | --- | --- |
+| `querystring.decode === querystring.parse` | `lib/querystring.js:54,57` | publishes a wrapper function, both names work, identity gone |
+| `path.posix.posix === path.posix`, and all four slots | the tail of `lib/path.js` | builds a namespace per access, graph becomes infinite |
+| `require('events') === require('events').EventEmitter` | `module.exports = EventEmitter` then a self-assignment | publishes a namespace with `EventEmitter` on it; the bare spelling breaks |
+| `Transform -> Duplex -> Readable -> Stream` | `ObjectSetPrototypeOf` in `lib/internal/streams/*` | gives each class a flat prototype; a `Duplex` that is not a `Readable` still reads |
+
+None of the four is asserted anywhere in `parallel/`. All four are asserted here
+now, and **each was controlled by breaking it** — the repair applied at the
+boundary where it would really land, confirming the file fails, then restored.
+A test written for a failure that has never been demonstrated is a claim.
+
+**The `querystring` and `os` cases are the pair worth remembering, because they
+are indistinguishable in the compiler's output and opposite in the source.**
+`emit-c` says "refused by nothing" for both `export const totalmem =
+nts_os_totalmem` and `export const decode = parse`. The first is a bug — the
+alias was putting the *binding's* name on the public surface, so `os.freemem
+.name` was `"nts_os_freemem"` where node has `"freemem"` — and rewriting it as a
+function fixed the surface and doubled what `os` publishes. The second is
+correct as written, and the same rewrite would destroy it. The compiler cannot
+tell them apart; only the source can.
+
+**The stream file names one trap explicitly.** In this lane a test for `stream`
+receives the *host's* `node:events`, not this profile's, so asserting that
+`Readable.prototype` chains up to that object compares two unrelated classes. An
+earlier probe did exactly that and reported that `Readable` is not an
+`EventEmitter`. The file asserts that the base of the chain *behaves* as an
+emitter instead, which is the property the link exists to provide.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
