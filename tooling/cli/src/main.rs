@@ -314,6 +314,20 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     for layout in &program.layouts {
         let ids: Vec<String> = layout.types.iter().map(|ty| format!("{}", ty.0)).collect();
         println!("{} [{}]", layout.name, ids.join(" "));
+        if !layout.interfaces.is_empty() {
+            let faces: Vec<String> = layout
+                .interfaces
+                .iter()
+                .map(|face| {
+                    program
+                        .layouts
+                        .iter()
+                        .find(|other| other.types.contains(face))
+                        .map_or_else(|| format!("{}", face.0), |other| other.name.clone())
+                })
+                .collect();
+            println!("  implements {}", faces.join(" "));
+        }
         if let Some(base) = layout.base {
             let named = program
                 .layouts

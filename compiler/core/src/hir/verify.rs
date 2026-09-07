@@ -1076,6 +1076,7 @@ mod tests {
         let laid_out = |base: Option<TypeId>, id: u32, name: &str, fields: Vec<Field>| Layout {
             types: vec![TypeId(id)],
             name: name.to_owned(),
+            interfaces: Vec::new(),
             fields,
             methods: Vec::new(),
             base,

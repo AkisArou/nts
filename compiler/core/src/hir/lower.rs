@@ -108,6 +108,20 @@ struct ModuleScope {
 struct Hierarchy {
     /// A class's superclass, by instance type.
     base: rustc_hash::FxHashMap<TypeId, TypeId>,
+    /// The interfaces a class `implements`, and the interfaces an interface
+    /// `extends`.
+    ///
+    /// Separate from [`Self::base`] because it is not one edge: a class
+    /// implements as many interfaces as it likes, and none of them contributes
+    /// storage. What they contribute is a *dispatch root* -- a method declared
+    /// on an interface is a method every implementer must be reachable through,
+    /// which is exactly what a slot is.
+    ///
+    /// An interface has no fields here, so an upcast to one stays the no-op
+    /// pointer cast base-first layout already makes it: there is no prefix to
+    /// disagree about, only a table index that has to mean the same thing in
+    /// every implementer.
+    implements: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// The methods a class declares itself, as opposed to inherits.
     declares: rustc_hash::FxHashMap<TypeId, Vec<String>>,
     /// A class's name, which is half of the function name a call emits.
@@ -147,15 +161,16 @@ impl Hierarchy {
         // walking it would not stop.
         for _ in 0..64 {
             let here = at?;
-            if self
-                .declares
-                .get(&here)
-                .is_some_and(|names| names.iter().any(|name| name == member))
-            {
+            if self.declares_itself(here, member) {
                 return Some(here);
             }
             at = self.base.get(&here).copied();
         }
+        // Nothing on the base chain declares it, so the only remaining source
+        // is an interface -- which is the case where `ty` IS the interface, and
+        // `declares_itself` above has already answered it, or where a class
+        // inherits the obligation without implementing it, which is not a
+        // program TypeScript accepts.
         None
     }
 
@@ -163,21 +178,37 @@ impl Hierarchy {
     ///
     /// The slot belongs to this one. `declaring` finds the *implementation* to
     /// call; this finds the class the slot is numbered against.
+    /// An interface needs no special case here, which was measured rather than
+    /// assumed. A version of this walked the implemented interfaces looking for
+    /// the highest one declaring `member`, and sabotaging that walk to return
+    /// nothing left every case in `examples/interface-dispatch` agreeing --
+    /// including a class that both extends a class and implements an interface
+    /// that extends another, written specifically to reach it.
+    ///
+    /// It is unnecessary because the slot loop below iterates `declares`, and
+    /// interfaces are in `declares`: the interface is asked about *itself*, so
+    /// `root_declaring(Sink, "write")` answers `Sink` without anything walking
+    /// up to it. The extra walk was a second route to an answer one route
+    /// already gives, and a second route that agrees is not free -- it is a
+    /// thing to keep agreeing.
     fn root_declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let mut found = None;
         let mut at = Some(ty);
         for _ in 0..64 {
             let Some(here) = at else { break };
-            if self
-                .declares
-                .get(&here)
-                .is_some_and(|names| names.iter().any(|name| name == member))
-            {
+            if self.declares_itself(here, member) {
                 found = Some(here);
             }
             at = self.base.get(&here).copied();
         }
         found
+    }
+
+    /// Whether this type declares `member` itself.
+    fn declares_itself(&self, ty: TypeId, member: &str) -> bool {
+        self.declares
+            .get(&ty)
+            .is_some_and(|names| names.iter().any(|name| name == member))
     }
 
     /// How many slots a dispatch table has.
@@ -212,9 +243,63 @@ impl Hierarchy {
             if here == ancestor {
                 return true;
             }
+            // An interface reached from this class, or from one above it.
+            // Checked at every step of the base chain rather than only at the
+            // bottom, because a subclass inherits what its parent implements.
+            if self.implements_transitively(here, ancestor, 0) {
+                return true;
+            }
             at = self.base.get(&here).copied();
         }
         false
+    }
+
+    /// Every interface `ty` implements, transitively and in a stable order.
+    ///
+    /// The list a class file needs. `implements` holds the written edges; this
+    /// is their closure, because `interface Reporting extends Closable` makes
+    /// an implementer of `Reporting` an implementer of `Closable` too and no
+    /// backend should have to walk that at a call site.
+    fn interfaces_of(&self, ty: TypeId) -> Vec<TypeId> {
+        let mut found: Vec<TypeId> = Vec::new();
+        let mut wave: Vec<TypeId> = vec![ty];
+        // Bounded rather than cycle-detected: an interface graph with a cycle
+        // is not one, and the bound keeps a malformed snapshot from hanging the
+        // compiler rather than refusing a program.
+        for _ in 0..16 {
+            let mut next: Vec<TypeId> = Vec::new();
+            for at in wave.drain(..) {
+                for face in self.implements.get(&at).into_iter().flatten() {
+                    if !found.contains(face) {
+                        found.push(*face);
+                        next.push(*face);
+                    }
+                }
+            }
+            if next.is_empty() {
+                break;
+            }
+            wave = next;
+        }
+        found.sort_unstable_by_key(|face| face.0);
+        found
+    }
+
+    /// Whether `ty` implements `wanted`, directly or through an interface that
+    /// extends it.
+    ///
+    /// Depth-bounded rather than cycle-detected: an interface graph with a
+    /// cycle is not one, and the bound is what keeps a malformed snapshot from
+    /// hanging the compiler rather than refusing a program.
+    fn implements_transitively(&self, ty: TypeId, wanted: TypeId, depth: u32) -> bool {
+        if depth > 16 {
+            return false;
+        }
+        self.implements.get(&ty).is_some_and(|faces| {
+            faces.iter().any(|face| {
+                *face == wanted || self.implements_transitively(*face, wanted, depth + 1)
+            })
+        })
     }
 
     /// Whether a call on a receiver of type `ty` could reach more than one
@@ -260,6 +345,102 @@ fn generic_classes(
             Some((id, by_symbol.get(&symbol)?.clone()))
         })
         .collect()
+}
+
+/// Interfaces, which declare methods and implement none of them.
+///
+/// A method on an interface is a dispatch root: every implementer must be
+/// reachable through it, which is exactly what a slot is for. Until this
+/// existed, `sink.write(v)` on a `Sink`-typed receiver found no declaration in
+/// the hierarchy and was refused -- 739 occurrences across the corpus and the
+/// most frequent single shape in two other lanes' inventories.
+fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::INTERFACE_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(ty) = snapshot.node_types.get(&id).copied() else {
+            continue;
+        };
+        if let Some(name) = probe
+            .children(id)
+            .into_iter()
+            .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| probe.node(child).text.clone())
+        {
+            hierarchy.name.entry(ty).or_insert(name);
+        }
+        let declared: Vec<String> = probe
+            .children(id)
+            .into_iter()
+            .filter_map(|child| {
+                // A `PROPERTY_SIGNATURE` whose type is a function is a field
+                // holding a closure rather than a method, and is not a dispatch
+                // root: it is read and called, which the closure path handles.
+                if probe.kind_of(child) != Some(syntax::METHOD_SIGNATURE) {
+                    return None;
+                }
+                probe
+                    .member_name(child)
+                    .or_else(|| probe.symbol_member_name(id, child, Some(ty)))
+            })
+            .collect();
+        if !declared.is_empty() {
+            hierarchy.declares.entry(ty).or_insert(declared);
+        }
+        // An interface that extends others: the same edge, so a slot can be
+        // numbered against the highest one.
+        if let Some(bases) = snapshot.base_types.get(&ty) {
+            hierarchy.implements.insert(ty, bases.clone());
+        }
+    }
+    // Every class's `implements` list, read from the heritage clause.
+    //
+    // NOT from `base_types`, whose documentation says "`extends` first, then
+    // `implements`" and which in fact carries neither for a class that only
+    // implements: `class Counting implements Sink` has no entry at all. That
+    // was measured rather than assumed, after the slot it should have produced
+    // did not appear.
+    //
+    // The keyword is not read either. A heritage target that is a known
+    // interface is an `implements` edge and one that is a class is an
+    // `extends`, and which it is has already been decided by the pass above --
+    // so this asks the question the compiler can answer rather than the one the
+    // token spells.
+    let interfaces: rustc_hash::FxHashSet<TypeId> = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.kind == NodeKind::Syntax(syntax::INTERFACE_DECLARATION))
+        .filter_map(|(index, _)| {
+            snapshot
+                .node_types
+                .get(&NodeId(u32::try_from(index).unwrap_or(u32::MAX)))
+                .copied()
+        })
+        .collect();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::CLASS_DECLARATION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(ty) = snapshot.node_types.get(&id).copied() else {
+            continue;
+        };
+        let faces: Vec<TypeId> = probe
+            .children(id)
+            .into_iter()
+            .filter(|child| probe.kind_of(*child) == Some(syntax::HERITAGE_CLAUSE))
+            .flat_map(|clause| probe.children(clause))
+            .filter_map(|target| snapshot.node_types.get(&target).copied())
+            .filter(|target| interfaces.contains(target))
+            .collect();
+        if !faces.is_empty() {
+            hierarchy.implements.insert(ty, faces);
+        }
+    }
+
 }
 
 /// Read every class declaration's name, base and own methods.
@@ -361,6 +542,8 @@ fn collect_hierarchy(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> H
             hierarchy.declares.insert(ty, declared_methods.clone());
         }
     }
+
+    collect_interfaces(snapshot, &probe, &mut hierarchy);
 
     // A slot for every method something overrides, numbered against the class
     // that first declares it. A method nothing overrides gets none, which is why
@@ -2320,6 +2503,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     }
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
+    declare_interface_methods(&hierarchy, &mut lowered.program);
 
     lowered.program.public_api = public_api(snapshot, &shared.naming);
 
@@ -2582,6 +2766,80 @@ fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>
 /// bases for the same signature. A type with no symbol is left alone, which
 /// leaves those programs exactly as they are today rather than differently
 /// wrong.
+/// Give every interface method a declaration to dispatch through.
+///
+/// A call on an interface-typed receiver is virtual: the slot is numbered
+/// against the interface, and each implementer fills it. But the *callee* named
+/// at the call site is `Sink#write`, and nothing declares one -- an interface
+/// has no bodies. Without this the call reached a name the program does not
+/// define, which `drop_callers_of_refused` then read as calling something
+/// refused and dropped every caller.
+///
+/// [`Func::abstract_declaration`] is exactly what this is, which is the same
+/// observation `relate_closures_to_signatures` makes about a function type: a
+/// signature the program declares, that nothing calls directly, and that every
+/// reachable receiver overrides.
+///
+/// # The signature comes from an implementer
+///
+/// Rather than from the checker, for the reason the closure case gives: every
+/// implementer must agree with the others about the descriptor or dispatch
+/// through the interface is meaningless, and taking the signature from one of
+/// them makes that agreement *checkable* -- a backend comparing an override
+/// against what it overrides sees a real disagreement, where a signature
+/// synthesized here would be a third opinion none of them held.
+fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
+    let mut declare: Vec<Func> = Vec::new();
+    for (root, member) in hierarchy.slots.keys() {
+        let Some(owner) = hierarchy.name.get(root) else {
+            continue;
+        };
+        let declared = format!("{owner}#{member}");
+        if program.funcs.iter().any(|func| func.name == declared) {
+            continue;
+        }
+        // An implementer's own, whichever the walk reaches first -- they agree
+        // or the program does not typecheck.
+        let Some(body) = program.funcs.iter().find(|func| {
+            func.name.ends_with(&format!("#{member}"))
+                && !func.abstract_declaration
+                && func
+                    .params
+                    .first()
+                    .is_some_and(|receiver| match receiver.ty {
+                        HirType::Managed(ManagedType::Object(ty)) => {
+                            hierarchy.descends_from(ty, *root)
+                        }
+                        _ => false,
+                    })
+        }) else {
+            continue;
+        };
+        let mut shell = body.clone();
+        shell.name.clone_from(&declared);
+        if let Some(receiver) = shell.params.first_mut() {
+            receiver.ty = HirType::Managed(ManagedType::Object(*root));
+        }
+        // A declaration is its signature. The parameters keep their value ops
+        // because those *are* the signature in this IR; everything the body
+        // computed goes, and the single block says so.
+        shell.values.truncate(shell.params.len());
+        shell.blocks = vec![Block {
+            params: Vec::new(),
+            ops: Vec::new(),
+            terminator: Terminator::Unreachable,
+        }];
+        shell.exported = false;
+        shell.initializes_receiver = false;
+        shell.async_result = None;
+        shell.abstract_declaration = true;
+        declare.push(shell);
+    }
+    // Sorted, so one compiler on one input emits them in one order.
+    declare.sort_by(|a, b| a.name.cmp(&b.name));
+    program.funcs.extend(declare);
+}
+
 fn relate_closures_to_signatures(
     snapshot: &SemanticSnapshot,
     closures: &[ClosureInfo],
@@ -6824,6 +7082,7 @@ impl<'a> FuncBuilder<'a> {
         Layout {
             types: vec![cell_type(index)],
             name: cell_name(index),
+            interfaces: Vec::new(),
             fields,
             methods: vec![None; self.hierarchy.table_size()],
             // A cell is storage a closure shares, not a class.
@@ -6982,6 +7241,7 @@ impl<'a> FuncBuilder<'a> {
         Layout {
             types: vec![closure_type(index)],
             name: class,
+            interfaces: Vec::new(),
             fields,
             methods,
             // Every closure is its own class and extends nothing.
@@ -13525,6 +13785,7 @@ impl<'a> FuncBuilder<'a> {
                 let layout = Layout {
                     types: vec![ty],
                     name: class.to_owned(),
+                    interfaces: Vec::new(),
                     fields: super::builtin::error_fields(),
                     methods: vec![None; self.hierarchy.table_size()],
                     // No base. `TypeError extends Error` is spelled where
@@ -13596,6 +13857,7 @@ impl<'a> FuncBuilder<'a> {
         let layout = Layout {
             types: vec![ty],
             name,
+            interfaces: Vec::new(),
             fields: super::builtin::error_fields(),
             methods: vec![None; self.hierarchy.table_size()],
             base,
@@ -14092,6 +14354,7 @@ impl<'a> FuncBuilder<'a> {
         let layout = Layout {
             types: vec![ty],
             name: format!("Tuple{}", ty.0),
+            interfaces: Vec::new(),
             fields,
             methods: Vec::new(),
             // A tuple has no declaration to extend.
@@ -14127,6 +14390,7 @@ impl<'a> FuncBuilder<'a> {
             let layout = Layout {
                 types: vec![ty],
                 name: signature_name(self.snapshot, ty),
+                interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
                 // A function type is a signature, not a class.
@@ -14265,9 +14529,21 @@ impl<'a> FuncBuilder<'a> {
             return Ok(existing.clone());
         }
 
+        // Transitively closed and sorted -- see `Layout::interfaces`. Each one
+        // is laid out here, because a backend handed a type id needs a layout
+        // to get a name from and an interface reached only as a local's
+        // declared type had none.
+        let interfaces = self.hierarchy.interfaces_of(ty);
+        for face in &interfaces {
+            let _ = self.layout_of(id, *face);
+        }
         let layout = Layout {
             types: vec![ty],
             name,
+            // Transitively closed and sorted -- see `Layout::interfaces`. The
+            // JVM does not walk `interface A extends B` at a call site, and a
+            // hash-ordered list would make one input emit two byte sequences.
+            interfaces: interfaces.clone(),
             fields,
             methods,
             base,
@@ -20673,6 +20949,7 @@ impl<'a> FuncBuilder<'a> {
             self.layouts.push(Layout {
                 types: vec![ty],
                 name: super::builtin::constructor_name(&record.name),
+                interfaces: Vec::new(),
                 fields: Vec::new(),
                 methods: Vec::new(),
                 base: None,

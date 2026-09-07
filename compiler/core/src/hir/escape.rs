@@ -968,6 +968,7 @@ mod tests {
             layouts: vec![Layout {
                 types: vec![TypeId(1)],
                 name: "Point".to_owned(),
+                interfaces: Vec::new(),
                 fields: vec![Field {
                     name: "f".to_owned(),
                     ty: HirType::NUMBER,
@@ -1081,6 +1082,7 @@ mod tests {
             layouts: vec![Layout {
                 types: vec![TypeId(1)],
                 name: "Point".to_owned(),
+                interfaces: Vec::new(),
                 fields: vec![Field {
                     name: "f".to_owned(),
                     ty: HirType::NUMBER,
@@ -1170,6 +1172,7 @@ mod tests {
             layouts: vec![Layout {
                 types: vec![TypeId(1)],
                 name: "Point".to_owned(),
+                interfaces: Vec::new(),
                 fields: vec![Field {
                     name: "f".to_owned(),
                     ty: HirType::NUMBER,

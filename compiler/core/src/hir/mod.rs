@@ -1137,6 +1137,31 @@ pub struct Layout {
     /// Empty for a class in a hierarchy where nothing is overridden, which is
     /// most of them — and an empty table is no table at all in the emitted code.
     pub methods: Vec<Option<String>>,
+    /// The interfaces this class implements, transitively closed and sorted.
+    ///
+    /// Separate from [`Self::base`] for a structural reason rather than a
+    /// stylistic one: a class extends **one** thing and implements **many**,
+    /// and folding an interface into `base` leaves `class C extends B
+    /// implements Sink` nowhere to put the second edge. The JVM has the same
+    /// split in the class file -- `super_class` is one and `interfaces[]` is a
+    /// list -- and needs it downstream too, because `invokevirtual` and
+    /// `invokeinterface` are different instructions chosen by which kind of
+    /// edge the declared type came from.
+    ///
+    /// **Transitively closed**, so `interface A extends B` makes an implementer
+    /// of `A` declare `B` as well: the JVM does not walk that at the call site.
+    /// **Sorted**, so one compiler on one input emits one byte sequence -- a
+    /// set iterated in hash order would make the emitted class files differ
+    /// between builds and the jar-drift test would report it as a failure.
+    ///
+    /// Recorded here rather than derived in a backend. The derivation available
+    /// there is "a class fills every slot this root numbered", and slots are
+    /// numbered per method across the program, so two unrelated roots sharing a
+    /// method name would share a slot and the derived edge would be a guess
+    /// that is usually right. That is the same shape as recovering `base` by
+    /// matching field prefixes, and it is rejected here for the reason it is
+    /// rejected there.
+    pub interfaces: Vec<TypeId>,
     /// What this class extends, where the program declares it.
     ///
     /// `None` for an anonymous type, a closure, a tuple, and for a class with
@@ -2630,6 +2655,7 @@ mod tests {
         Layout {
             types: vec![TypeId(id)],
             name: name.to_owned(),
+            interfaces: Vec::new(),
             fields,
             methods: Vec::new(),
             base: None,
@@ -2651,6 +2677,7 @@ mod tests {
         let shape = Layout {
             types: vec![TypeId(1)],
             name: "Shape".to_owned(),
+            interfaces: Vec::new(),
             fields: vec![field("size", HirType::NUMBER)],
             methods: Vec::new(),
             base: None,
