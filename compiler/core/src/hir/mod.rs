@@ -1351,6 +1351,24 @@ pub fn constructor_token(index: usize) -> TypeId {
     TypeId(id)
 }
 
+/// Whether a layout is a tuple's, from its generated name.
+///
+/// By prefix rather than by a field on [`Layout`], which is the convention
+/// `is_signature_name` states and for its reason: `Layout` is what three
+/// backends read, and a field that exists to tell two of its own names apart is
+/// a field they would all have to ignore. The name is generated here -- see the
+/// tuple arm of `layout_of` -- so it is a compiler-owned identity rather than
+/// anything a program can spell.
+///
+/// The backends need it because a heterogeneous tuple is laid out as a struct
+/// and the language calls it an Array, so its descriptor carries
+/// `NTS_KIND_TUPLE` and `Array.isArray` answers `true` for it at run time.
+#[must_use]
+pub fn is_tuple_layout_name(name: &str) -> bool {
+    name.strip_prefix("Tuple")
+        .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()))
+}
+
 /// Whether a type id names a constructor token rather than a closure.
 #[must_use]
 pub const fn is_constructor_token(ty: TypeId) -> bool {

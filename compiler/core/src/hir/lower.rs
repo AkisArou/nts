@@ -2455,8 +2455,24 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // signature and separates two signatures.
             let named_apart = known.name != layout.name
                 && (nominal_name(&known.name) || nominal_name(&layout.name));
+            // A tuple is the one family that is nominal in one direction only,
+            // so it is not in `nominal_name`. Two tuples with the same fields
+            // MUST merge -- the checker hands out more than one id for one
+            // written tuple type, which is the whole reason `Layout::types` is
+            // a list -- and blocking that would emit two identical structs and
+            // then refuse to pass one where the other is wanted.
+            //
+            // But a tuple must not merge with anything else, because since
+            // `NTS_KIND_TUPLE` its name decides a descriptor kind and that kind
+            // decides what `Array.isArray` answers. The merge would have to be
+            // with a layout whose fields are literally `_0`, `_1`, which only a
+            // tuple normally produces -- and a program may write one, and the
+            // wrong answer would be silent.
+            let tuple_apart = super::is_tuple_layout_name(&known.name)
+                != super::is_tuple_layout_name(&layout.name);
             known.types.iter().any(|ty| layout.types.contains(ty))
                 || (!named_apart
+                    && !tuple_apart
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {
@@ -5922,8 +5938,21 @@ impl<'a> FuncBuilder<'a> {
                 | HirType::Int { .. }
                 | HirType::Bool
                 | HirType::Void
+                // A view and a buffer are ordinary managed objects: an
+                // `NtsHeader` first, a descriptor, a reference table where they
+                // hold references. Erasing one is the same operation erasing an
+                // array is, and they are here because the list is a whitelist
+                // and a new `ManagedType` does not join it by being added.
+                //
+                // Found by asking `Array.isArray` about a `Uint8Array` in an
+                // `unknown` -- which is the one question this whole change
+                // exists to answer, and it could not be written.
                 | HirType::Managed(
-                    ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
+                    ManagedType::String
+                        | ManagedType::Object(_)
+                        | ManagedType::Array(_)
+                        | ManagedType::View(_)
+                        | ManagedType::Buffer
                 )
         ) {
             return Err(self.unsupported(
@@ -9021,7 +9050,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// `Array.isArray(x)`, from the checker's type rather than the machine one.
     fn decide_is_array(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
-        let _ = self.lower_expression(argument)?;
+        let subject = self.lower_expression(argument)?;
         let ty = self
             .snapshot
             .node_types
@@ -9038,38 +9067,48 @@ impl<'a> FuncBuilder<'a> {
             // this compiler chooses to lay it out -- a heterogeneous one is a
             // struct here and still an Array in the language.
             TypeKind::Array(_) | TypeKind::Tuple(_) => true,
-            // Anything the checker has left open cannot be decided here, and a
-            // guess would be a wrong answer rather than a missing one.
+            // Open, and decided at runtime. An erased value carries a
+            // reference tag, a header carries a descriptor, and the
+            // descriptor's KIND is the fact: an ordinary array is
+            // `NTS_KIND_ARRAY` and a typed array is an `NTS_KIND_OBJECT` named
+            // "TypedArray", which is exactly the line node draws.
             //
-            // **Not for want of a runtime test**, which is what this said for
-            // as long as it has existed. The test is available and was built:
-            // an erased value carries a reference tag, a header carries a
-            // descriptor, and `NtsDescriptor::kind` already separates an array
-            // from an object. It was written, and then measured against the
-            // thing it would have to answer.
+            // This was refused for as long as it has existed, and the refusal
+            // named its cause correctly: `number[]` and `Float64Array` were one
+            // representation -- one `Managed(Array(Float { bits: 64 }))`, one
+            // `nts_desc_double`, one address -- and node answers `true` for the
+            // first and `false` for the second. It ended by saying that closing
+            // it "means carrying the distinction into the HIR type, which is
+            // what `ManagedType::Array` deliberately does not do".
             //
-            // What blocks it is that `number[]` and `Float64Array` are **one
-            // representation here** -- `Managed(Array(Float { bits: 64 }))`,
-            // one `nts_desc_double`, one address -- and node answers `true` for
-            // the first and `false` for the second. Nor does the element type
-            // separate them: `elements` narrows an integer-only `number[]` to
-            // `i32`, which is also `Int32Array`.
-            //
-            // So this is a *precision* loss rather than a missing capability,
-            // and it is recorded as one in `typescript.md` section 16. Closing
-            // it means carrying the distinction into the HIR type, which is
-            // what `ManagedType::Array` deliberately does not do.
+            // `ManagedType::View` does. The refusal became false the hour that
+            // landed and stayed on the site for the rest of the day, which is
+            // the fourth time a comment has outlived the condition it describes
+            // and been found by something other than reading it -- here, a
+            // build log from another session listing it as one of five roots
+            // under `ERR_INVALID_ARG_TYPE`. A refusal is a claim and it ages.
             TypeKind::Any | TypeKind::Unknown | TypeKind::Union(_) => {
-                return Err(self.unsupported(
-                    id,
-                    "`Array.isArray` of a value whose type is open -- a runtime test can see \
-                     that it is an array and cannot see whether it is a *typed* one, because \
-                     `number[]` and `Float64Array` are one representation here and node \
-                     answers differently for them",
+                let origin = self.origin(id);
+                let erased = match self.values[subject.0 as usize].ty {
+                    HirType::Erased => subject,
+                    _ => self.push(
+                        OpKind::Erase { value: subject },
+                        HirType::Erased,
+                        origin.clone(),
+                    ),
+                };
+                return Ok(self.call_runtime(
+                    "nts_is_array",
+                    vec![erased],
+                    HirType::Bool,
+                    &origin,
                 ));
             }
-            // Everything else is not an Array -- including a `Uint8Array`,
-            // which this compiler represents as one and node does not call one.
+            // Everything else is not an Array, `Uint8Array` included -- which
+            // the runtime test above now agrees with rather than contradicts.
+            // While a typed array was represented as an array, this arm and
+            // that one would have disagreed about the same value, and that
+            // disagreement is what the refusal was protecting.
             _ => false,
         };
         let origin = self.origin(id);

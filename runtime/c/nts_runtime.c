@@ -1268,6 +1268,18 @@ bool nts_is_class(NtsValue value, const NtsDescriptor *klass) {
   return object && object->descriptor == klass;
 }
 
+bool nts_is_array(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  if (!object || !object->descriptor) {
+    return false;
+  }
+  return object->descriptor->kind == NTS_KIND_ARRAY ||
+         object->descriptor->kind == NTS_KIND_TUPLE;
+}
+
 /* A `const` read through a closure before its declaration ran.
  *
  *     const read = () => later;   // the cell exists, holding nothing

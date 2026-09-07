@@ -1373,11 +1373,19 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
         // collector reads it to stay away from the programs that have none,
         // which is nearly all of them.
         let cyclic = u32::from(cyclic_layouts.get(index).copied().unwrap_or(true));
+        // A tuple gets its own kind, and only so that `Array.isArray` can
+        // answer for one that reached an `unknown`. It manages no storage and
+        // behaves as an object at every site that switches on a kind.
+        let kind = if nts_core::hir::is_tuple_layout_name(&layout.name) {
+            "NTS_KIND_TUPLE"
+        } else {
+            "NTS_KIND_OBJECT"
+        };
         writer.line(
             origin,
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
-                 {{ NTS_KIND_OBJECT, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\", \
+                 {{ {kind}, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\", \
                  {}u, {erased_offsets} }};",
                 references.len(),
                 layout.name,
@@ -1792,9 +1800,17 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
         // A date and an array buffer answer `"object"` too, and carry the same
         // header, so they join the arm rather than repeat it. Below the
         // closure guard because that one is narrower.
+        //
+        // A typed array is here for the same reason and arrived late: it was
+        // `ManagedType::Array` when this arm was written, so it was covered by
+        // accident, and became uncovered the moment it got a variant of its
+        // own. `Array.isArray` of a `Uint8Array` in an `unknown` is what found
+        // it -- which is to say, nothing found it until a feature needed the
+        // one conversion it no longer had.
         HirType::Managed(
             ManagedType::Object(_)
             | ManagedType::Array(_)
+            | ManagedType::View(_)
             | ManagedType::Date
             | ManagedType::Buffer
             | ManagedType::DataView,

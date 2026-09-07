@@ -6,11 +6,18 @@
 // `Object.keys(o)` is the same fact one step further — the field names of a
 // layout, which is a list the compiler is already holding.
 //
-// The subtlety is *which* type answers. A `Uint8Array` is a `Managed(Array(u8))`
-// in this compiler, and `Array.isArray(new Uint8Array(4))` is **false** in
-// node: a typed array is not an Array. Reading the representation would have
-// answered `true` and been wrong in a way nothing else here would catch, so the
-// question goes to the checker's type instead.
+// The subtlety is *which* type answers. `Array.isArray(new Uint8Array(4))` is
+// **false** in node -- a typed array is not an Array -- and a `Uint8Array` was
+// a `Managed(Array(u8))` here, so reading the representation would have
+// answered `true`. That is why the question goes to the checker's type.
+//
+// It is also why the OPEN case was refused for as long as this file has
+// existed, and why it no longer is. Where the checker leaves the type open the
+// answer cannot come from a type, and the refusal said the runtime could not
+// supply one either, because `number[]` and `Float64Array` were one
+// representation and node answers differently for them. `ManagedType::View`
+// separated them, and a descriptor kind now answers exactly the question node
+// answers. The second half of this file is that case.
 
 class Point {
   x: number;
@@ -86,4 +93,82 @@ export function widthEdges(n: number): number {
     (BigInt.asUintN(1, 3n) === 1n ? 100 : 0) +
     (BigInt.asIntN(4, 9n) === -7n ? 1000 : 0) +
     n * 0;
+}
+
+// ---------------------------------------------------------------------------
+// The same question where no type answers it.
+//
+// Everything below puts a value in an `unknown` first, so the call site sees a
+// type that decides nothing and the answer has to come from the value. It is
+// one runtime test -- the descriptor's kind -- and these are the cases that
+// separate it from every wrong version of itself.
+
+export function openArray(n: number): number {
+  const open: unknown = [n, n + 1];
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// The case the refusal existed for. A typed array is a window onto a buffer and
+// carries an object's kind, so this is `false` -- and it was unanswerable while
+// a `Uint8Array` and a `number[]` were one representation with one descriptor.
+export function openTypedArray(n: number): number {
+  const bytes = new Uint8Array(n > 0 ? 2 : 1);
+  const open: unknown = bytes;
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// And the buffer underneath it, which is not an Array either.
+export function openBuffer(n: number): number {
+  const open: unknown = new ArrayBuffer(n > 0 ? 2 : 1);
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// A HETEROGENEOUS TUPLE, which is the case that made this more than a
+// one-line runtime test. The language calls a tuple an Array; this compiler
+// lays `[number, string]` out as a struct, because its elements have different
+// types. So the descriptor kind said "object" and node said `true`, and the
+// first version of this change was wrong on exactly this input -- twenty-nine
+// disagreements, against a comment of mine asserting a tuple could not reach
+// here because the checker knows one statically. It reaches here through an
+// `unknown`.
+//
+// `NTS_KIND_TUPLE` is what the fix is: a kind that manages no storage and
+// exists only so this line can be answered.
+export function openHeterogeneousTuple(n: number): number {
+  const pair: [number, string] = [n, "a"];
+  const open: unknown = pair;
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// And the homogeneous one, which is laid out as an array and was never in
+// doubt -- kept because it is what makes the case above a *tuple* case rather
+// than a struct case, and because a fix that gave every tuple the struct
+// treatment would still pass without it.
+export function openHomogeneousTuple(n: number): number {
+  const pair: [number, number] = [n, n];
+  const open: unknown = pair;
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// The three that are not references at all, or are the wrong kind of one.
+export function openScalar(n: number): number {
+  const open: unknown = n;
+  return Array.isArray(open) ? 1 : 0;
+}
+
+export function openString(n: number): number {
+  const open: unknown = n > 0 ? "abc" : "d";
+  return Array.isArray(open) ? 1 : 0;
+}
+
+export function openObject(n: number): number {
+  const open: unknown = new Point(n, n);
+  return Array.isArray(open) ? 1 : 0;
+}
+
+// A union rather than `unknown`, so the checker has two candidates and still
+// cannot fold: one arm is an Array and the other is not.
+export function openUnion(n: number): number {
+  const either: number[] | string = n > 0 ? [n] : "no";
+  return Array.isArray(either) ? 1 : 0;
 }

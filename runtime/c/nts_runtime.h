@@ -82,6 +82,18 @@
  * block that is not part of its struct and `nts_free_storage` recognises what
  * to give back by kind -- the same reason an array and a map have one. */
 #define NTS_KIND_BUFFER 5u
+/* A tuple: `[number, string]`, which is laid out as a struct because its
+ * elements have different types, and which the LANGUAGE calls an Array.
+ *
+ * It exists so that `Array.isArray` can answer for a tuple that reached an
+ * `unknown`. Every other kind here marks storage the runtime has to manage;
+ * this one marks nothing, and behaves exactly as `NTS_KIND_OBJECT` does at all
+ * three sites that switch on a kind -- each tests for MAP, BUFFER or ARRAY and
+ * falls through to the object path otherwise.
+ *
+ * A homogeneous tuple is not this: `[number, number]` is laid out as an array
+ * and carries `NTS_KIND_ARRAY`, which already answers `true`. */
+#define NTS_KIND_TUPLE 6u
 
 typedef struct NtsDescriptor {
   uint32_t kind;
@@ -1539,6 +1551,31 @@ _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
  * descriptor, which is never a class's, so `"x" instanceof C` is false by the
  * same comparison rather than by a case of its own. */
 NTS_READS_ONLY bool nts_is_class(NtsValue value, const NtsDescriptor *klass);
+
+/* `Array.isArray` for a value whose static type is open.
+ *
+ * By descriptor KIND rather than by descriptor identity, which is the whole
+ * difference from `nts_is_class` above: every ordinary array shares
+ * `NTS_KIND_ARRAY` whatever its elements are, and there is no single descriptor
+ * to compare against.
+ *
+ * `NTS_KIND_TUPLE` is accepted alongside `NTS_KIND_ARRAY` because the language
+ * calls a tuple an Array and this compiler lays a heterogeneous one out as a
+ * struct. That case was measured rather than reasoned about: a first version
+ * tested `NTS_KIND_ARRAY` alone, and the comment above it asserted a tuple
+ * "does not come here" because the checker knows one statically. It does come
+ * here, through an `unknown`, and node said `true` twenty-nine times where the
+ * assertion said `false`.
+ *
+ * The refusal this replaces said the test was unavailable because `number[]`
+ * and `Float64Array` were one representation and node answers differently for
+ * them. They stopped being one representation when a typed array became a
+ * `ManagedType::View`: a view is an `NTS_KIND_OBJECT` named "TypedArray", and
+ * an ordinary array is an `NTS_KIND_ARRAY`. So the kind separates exactly the
+ * two cases node separates, and this is a comparison rather than a guess.
+ *
+ */
+NTS_READS_ONLY bool nts_is_array(NtsValue value);
 
 NtsArray *nts_array_fill(NtsArray *a, double value);
 /* The same for an array of booleans, which is a byte per element rather than

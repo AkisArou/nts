@@ -472,6 +472,35 @@ const DESCRIPTOR_TYPE: &str =
 /// `NTS_KIND_OBJECT`. The other kinds belong to the runtime's own types.
 const KIND_OBJECT: u32 = 2;
 
+/// `NTS_KIND_TUPLE`, which is not one of those: a tuple is laid out here and
+/// the runtime never allocates one. It exists so `Array.isArray` can answer for
+/// a heterogeneous tuple, which the language calls an Array and which this
+/// compiler lays out as a struct.
+const KIND_TUPLE: u32 = 6;
+
+/// A layout's name as a C string constant, terminator and all: the runtime
+/// prints it, so the NUL is part of the data rather than an artefact.
+fn name_constant(out: &mut String, tag: &str, name: &str) {
+    let bytes = name.len() + 1;
+    let _ = writeln!(
+        out,
+        "@nts_name_{tag} = internal constant [{bytes} x i8] c\"{name}\\00\""
+    );
+}
+
+/// Which of the two an emitted layout carries.
+///
+/// A function rather than four lines inside `descriptors`, which is already at
+/// its length limit -- and the better shape anyway: the question is about a
+/// layout and not about the loop that happens to be walking them.
+fn descriptor_kind(name: &str) -> u32 {
+    if nts_core::hir::is_tuple_layout_name(name) {
+        KIND_TUPLE
+    } else {
+        KIND_OBJECT
+    }
+}
+
 /// Every descriptor the program needs, with the tables they point at.
 ///
 /// What goes *in* one is already shared: `cyclic_layouts` and
@@ -539,19 +568,14 @@ fn descriptors(program: &Program) -> String {
                 nts_codegen_common::layout::IMMORTAL
             );
         }
-        // The name is a C string, terminator and all: the runtime prints it.
-        let bytes = layout.name.len() + 1;
-        let _ = writeln!(
-            out,
-            "@nts_name_{tag} = internal constant [{bytes} x i8] c\"{}\\00\"",
-            layout.name
-        );
+        name_constant(&mut out, &tag, &layout.name);
         let is_cyclic = u32::from(cyclic.get(index).copied().unwrap_or(true));
         let _ = writeln!(
             out,
-            "@nts_desc_{tag} = internal constant %NtsDescriptor {{ i32 {KIND_OBJECT}, \
+            "@nts_desc_{tag} = internal constant %NtsDescriptor {{ i32 {}, \
              i32 {}, i32 {}, i32 {is_cyclic}, {reference_table}, {methods}, \
              ptr @nts_name_{tag}, i32 {}, {erased_table} }}",
+            descriptor_kind(&layout.name),
             placed.size,
             references.len(),
             erased.len()
