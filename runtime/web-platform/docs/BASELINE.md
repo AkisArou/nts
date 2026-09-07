@@ -5250,3 +5250,54 @@ says whose.** What settled it was a property neither implementation gets to vote
 Three encodings, twelve combinations, seven thousand inputs each: 26 assertions across
 84,000 comparisons. Local corpus 747/747 with zero skipped, upstream unchanged at 2,408
 of 2,418.
+
+## A retraction, verified the same way a claim would be
+
+The NodeJS lane reported that the largest compiler blocker in this lane's streams was
+nullable and optional properties — 305 sites — and asked whether any were nullable
+*incidentally*. An afternoon went into answering that: all 166 nullable class fields
+inspected by hand, split into nullable-to-release and nullable-as-a-domain-value, and a
+design constraint handed back about what a boxing representation would cost.
+
+They then built the fixture and retracted it. **A plain nullable property compiles.**
+
+Verified here rather than accepted, because a retraction earns no more trust than a
+claim:
+
+    class Holder { slot: number | undefined = undefined; }         no refusal
+    class Holder { slot: Marker | null = null; }                   no refusal
+    class Holder { readonly slots: (number | undefined)[] = []; }  no refusal
+
+Those three compile and agree with node on 34 generated cases. The `| null` in the
+diagnostics is there because it is in the *type*: `PromiseWithResolvers<void>` and
+`PromiseWithResolvers<void> | null` are one refusal, one of them wearing a union.
+
+**One narrower claim survives, and it is the one that touches this code.** A
+`T | undefined` where `T` is a type parameter genuinely refuses, and `Fifo<T>` has that
+shape. Isolated: the three non-generic shapes alone produce nothing, the generic one
+alone produces exactly `` `null` or `undefined` where what it stands in for is not a
+reference ``.
+
+### The instrument again, and the sharpest version of it yet
+
+Their tool grouped diagnostics by message text with backticked types normalised away.
+That merged two distinct causes under one name, and the group was then described by the
+wrong one. Nothing about the numbers was wrong — 305 sites really do carry a `| null` in
+their message — and the conclusion drawn from them was still false.
+
+This is the fifth instrument in one day that reported confidently about the wrong object,
+and it is the purest of them: no bug in the tool, no missing data, no stale cache. Only a
+grouping key that discarded the distinction that mattered, and a name attached to the
+group by the first thing that looked like an explanation.
+
+**And it cost an afternoon of mine on the strength of a name.** That is worth recording
+without blame attached — the same lane checked two of my findings today and made both
+sharper, and I checked two of theirs and did the same. What separates this one is that
+nobody built the fixture, on the single claim that was loudest. The rule their own
+instructions carry, and mine should too: **a hundred-line fixture beats naming a
+module**, and it beats it most when the naming feels obvious.
+
+The engineering the afternoon produced is not wasted — `Fifo` clearing a dequeued slot
+so the value is not retained is right whatever the compiler does with it, and the
+distinction between nullable-to-release and nullable-as-a-domain-value is worth having.
+It is simply not a compiler constraint, and the handoff no longer says it is.

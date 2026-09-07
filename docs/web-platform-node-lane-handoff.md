@@ -173,6 +173,65 @@ in an agreement; ask before moving or re-wrapping a shared class, and do not exp
 gate to ask for you.
 
 **This lane's streams are on the compiled critical path for `node:fs`, `node:stream`
+and `node:readline`.** The NodeJS lane measured `fs` at 2,077 refused constructs, roughly
+450 of them in `streams/fifo.ts`, `streams/writable.ts`, `streams/readable.ts` and
+`provider/web-platform-runtime.ts`.
+
+**An earlier version of this section said the largest blocker was nullable and optional
+properties. That was wrong, it was retracted by the lane that reported it, and the
+retraction was verified here rather than accepted.** A plain nullable property compiles:
+
+    class Holder { slot: number | undefined = undefined; }        no refusal
+    class Holder { slot: Marker | null = null; }                  no refusal
+    class Holder { readonly slots: (number | undefined)[] = []; } no refusal
+
+All three compile and agree with node on 34 generated cases. The `| null` appearing in
+those diagnostics is in the message because it is in the *type*, not because it is the
+cause — `PromiseWithResolvers<void>` and `PromiseWithResolvers<void> | null` are the same
+refusal, one of them wearing a union.
+
+**One narrower claim survives and is real.** A `T | undefined` where `T` is a *type
+parameter* refuses, and `Fifo<T>` has that shape:
+
+    class Slot<T> { value: T | undefined = undefined; }
+    -> `null` or `undefined` where what it stands in for is not a reference
+
+Verified in isolation: the three non-generic shapes alone produce no refusal, and the
+generic one alone produces exactly that.
+
+**So the real blockers in these files are property types that are objects with function
+members** — `PromiseWithResolvers` and its kind — along with async iterators,
+promise-likes and weak references. Nothing here should be bent around any of them.
+
+The boxing constraint recorded earlier — that a representation which boxed a nullable
+property would satisfy the type and defeat the purpose of `Fifo` clearing a dequeued slot
+— **is still sound engineering and is no longer a live design input**, because the fix it
+constrained is not one anybody is scoped to make. It is kept as advice rather than
+deleted, and marked as advice.
+
+**Two standing commitments, not just facts.** The NodeJS lane has said explicitly that
+it relies on `tooling/conformance/web-platform/test/utf8-differential.test.mjs` and will
+not duplicate it: their own buffer corpus exercises this codec end to end but could not
+name *this* half as the source of a divergence, and this one runs first and names the
+file. So it stays, including the ranged-decode case, and they hear before it changes or
+narrows. The same terms apply to the Encoding classes' identity below. Both are here
+rather than only in a conversation, because that is the difference between an agreement
+and a thing two people remember.
+
+**`util` re-exports this lane's `TextEncoder` and `TextDecoder` by identity.** Node's
+`test-global-encoder.js` asserts `TextDecoder === util.TextDecoder`, so the *identity and
+module location* of the Encoding classes are load-bearing outside this directory. Two
+separately correct implementations fail that test.
+
+That second one is the more dangerous shape and worth stating as a rule rather than an
+item: `tooling/conformance/web-platform/unrouted.mjs` now scans the whole repository, so
+breaking a *reference* from another lane is caught. **An identity requirement is not a
+reference.** `TextDecoder` stays referenced whether or not `===` still holds, so nothing
+mechanical here will notice. Identity constraints live only in the other lane's test and
+in an agreement; ask before moving or re-wrapping a shared class, and do not expect a
+gate to ask for you.
+
+**This lane's streams are on the compiled critical path for `node:fs`, `node:stream`
 and `node:readline`.** The NodeJS lane measured `fs` at 2,077 refused constructs and
 roughly 450 of them are in `streams/fifo.ts`, `streams/writable.ts`, `streams/readable.ts`
 and `provider/web-platform-runtime.ts`. Two distinct compiler blockers, not one: nullable
