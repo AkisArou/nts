@@ -217,12 +217,35 @@ export function uptime(): number {
   return value;
 }
 
-export const totalmem = nts_os_totalmem;
-export const freemem = nts_os_freemem;
-export const availableParallelism = nts_os_available_parallelism;
+// These four were `export const totalmem = nts_os_totalmem`, aliasing the
+// binding straight out of the module. That reads fine and costs an indirection
+// nothing, but it exports something the Node-API backend has no way to name: an
+// alias resolves to an `extern` declaration rather than to a compiled function,
+// so `emit-c` reported "refused by nothing" and the addon published four of
+// `os`'s twenty-three names. Written as functions -- the shape `uptime` above
+// already has -- there is a body to publish.
+//
+// It is also the more faithful spelling on the interpreted lane, which is the
+// part that decided it. `os.freemem.name` is `"freemem"` on node; through an
+// alias it was `"nts_os_freemem"`, so the binding's name was observable on the
+// public surface.
+
+export function totalmem(): number {
+  return nts_os_totalmem();
+}
+
+export function freemem(): number {
+  return nts_os_freemem();
+}
+
+export function availableParallelism(): number {
+  return nts_os_available_parallelism();
+}
 
 /** Upstream `lib/os.js:121`. One-, five- and fifteen-minute averages. */
-export const loadavg = nts_os_loadavg;
+export function loadavg(): [number, number, number] {
+  return nts_os_loadavg();
+}
 
 /** Upstream `lib/os.js:141`. */
 export function cpus(): CpuInfo[] {
