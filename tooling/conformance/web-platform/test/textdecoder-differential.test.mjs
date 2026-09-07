@@ -117,23 +117,54 @@ for (const encoding of ENCODINGS) {
   }
 }
 
-suite("node's own streamed and whole-buffer results disagree, and this one does not", () => {
-  // The case that made node unusable as a streaming oracle, pinned so the claim above is
-  // checked rather than asserted. A `EF BB BF` that is not at the start of the stream is
-  // U+FEFF and not a byte-order mark.
-  const bytes = Uint8Array.from([0xea, 0xef, 0xbb, 0xbf, 0x41]);
-  const chunks = [bytes.subarray(0, 1), bytes.subarray(1, 4), bytes.subarray(4)];
+suite("node's answer depends on where the chunk boundary falls; this one does not", () => {
+  // The case that cost node its role as a streaming oracle, pinned so the claim is
+  // checked rather than asserted -- and pinned in the sharper form the NodeJS lane
+  // established when they verified it, because the weaker form has a charitable reading
+  // this one removes.
+  //
+  // A `EF BB BF` that is not at the start of the stream is U+FEFF and is data. Node
+  // agrees when the bytes arrive whole, one at a time, or straddling a boundary. It
+  // drops the code point only when a *complete* `EF BB BF` begins at the head of a
+  // decode call that follows a call which emitted nothing.
+  //
+  // That rules out "streaming is allowed to differ": there is no rule under which
+  // 1/1/1/1/1 and 4/1 are right and 1/3/1 is wrong. The answer depends on where the
+  // boundary falls, which no reading of the standard makes defensible.
+  const bytes = [0xea, 0xef, 0xbb, 0xbf, 0x41];
+  const chunksOf = (sizes) => {
+    const out = [];
+    let offset = 0;
+    for (const size of sizes) {
+      out.push(Uint8Array.from(bytes.slice(offset, offset + size)));
+      offset += size;
+    }
+    return out;
+  };
+  const splits = [[5], [1, 3, 1], [1, 1, 1, 1, 1], [4, 1], [2, 3], [1, 4], [3, 2], [1, 2, 2]];
+  const correct = "\uFFFD\uFEFF\u0041";
 
-  const nodeWhole = outcome(new NativeTextDecoder("utf-8"), [bytes]);
-  const nodeSplit = outcome(new NativeTextDecoder("utf-8"), chunks);
-  assert.notDeepEqual(nodeSplit, nodeWhole, "if node ever agrees with itself here, drop this");
+  const nodeAnswers = new Set();
+  for (const sizes of splits) {
+    const mine = outcome(new TextDecoder("utf-8"), chunksOf(sizes));
+    assert.deepEqual(mine, { text: correct }, `this decoder, split ${sizes.join("/")}`);
+    nodeAnswers.add(outcome(new NativeTextDecoder("utf-8"), chunksOf(sizes)).text);
+  }
 
-  const mineWhole = outcome(new TextDecoder("utf-8"), [bytes]);
-  const mineSplit = outcome(new TextDecoder("utf-8"), chunks);
-  assert.deepEqual(mineSplit, mineWhole);
-  // And the whole-buffer answer, which node agrees with, keeps the U+FEFF.
-  assert.deepEqual(mineWhole, nodeWhole);
-  assert.equal(mineWhole.text, "\uFFFD\uFEFF\u0041");
+  // If node ever becomes self-consistent here, this fails and the workaround above --
+  // comparing streamed output against this decoder's own whole-buffer output rather than
+  // against node's -- can be reconsidered. A workaround whose reason has quietly expired
+  // is worse than the bug it was for.
+  assert.equal(
+    nodeAnswers.size,
+    2,
+    `node gave ${nodeAnswers.size} distinct answers for one byte sequence: ${[...nodeAnswers]
+      .map((text) => JSON.stringify(text))
+      .join(" and ")}`,
+  );
+  // The two node answers it does give: the standard's, and the one missing U+FEFF.
+  assert.ok(nodeAnswers.has(correct));
+  assert.ok(nodeAnswers.has("\uFFFD\u0041"));
 });
 
 suite("the encoding name reported is the one the standard names", () => {

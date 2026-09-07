@@ -5211,6 +5211,34 @@ borrowing anybody's opinion about the BOM, and the whole-buffer path still faces
 The disagreement itself is a test now, written so it fails if node ever agrees with
 itself, because a workaround whose reason has silently expired is worse than the bug.
 
+### And it is worse than whole-versus-streamed
+
+The NodeJS lane verified the finding and sharpened it, and the sharper form is what the
+test pins, because the weaker one has a charitable reading that this removes.
+
+    bytes: EA EF BB BF 41              node                    this
+    whole                              U+FFFD U+FEFF U+0041    same
+    split 1 / 1 / 1 / 1 / 1            U+FFFD U+FEFF U+0041    same
+    split 4 / 1                        U+FFFD U+FEFF U+0041    same
+    split 2 / 3                        U+FFFD U+FEFF U+0041    same
+    split 1 / 2 / 2                    U+FFFD U+FEFF U+0041    same
+    split 1 / 3 / 1                    U+FFFD U+0041           differs
+    split 1 / 4                        U+FFFD U+0041           differs
+
+**Node disagrees split-versus-split.** Two distinct answers for one byte sequence across
+eight splits; this decoder gives one. The `1/4` row was not in the report and turned up
+on verifying it, which is the argument for checking a peer's finding rather than
+accepting it — the same argument that has now been made in three directions today.
+
+The trigger is precise: node drops the code point only when a **complete** `EF BB BF`
+begins at the head of a decode call following a call that emitted nothing. Byte-at-a-time
+is right because each chunk is incomplete and held; `2/3` and `1/2/2` are right because
+the sequence straddles a boundary. There is no rule under which `1/1/1/1/1` and `4/1` are
+correct and `1/3/1` is not, which is what closes off "streaming is allowed to differ".
+
+`ignoreBOM: true` on the whole buffer gives the same answer as the default, which
+confirms the whole-buffer path never classified those bytes as a byte-order mark at all.
+
 This is the lesson from the percent-decoding fuzz arriving from the other direction. There
 the oracle was a reimplementation and it was wrong on its first run. Here the oracle is a
 mature independent implementation and it is *still* wrong, on one case, in a way visible
