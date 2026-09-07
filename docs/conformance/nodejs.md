@@ -1768,7 +1768,13 @@ than worked around — a refusal that gets quietly avoided stops measuring
 anything, and rewriting these modules to emit compilable C would destroy the
 one thing this corpus is for.
 
-**The clang error classes, whole corpus:**
+**The clang error classes, whole corpus, counted against one binary.** The
+counts below were taken with the `nts` whose SHA-256 begins `38a8de6d` —
+approximately the compiler session's `b6a4a83` plus its then-uncommitted
+`ManagedType::View` work, which they committed afterwards as `b5e732ef`.
+Anchoring them matters more than usual here: a class going from 57 to 6 has to
+be readable as a fix landing rather than as a second count of a moved target,
+so when a class is closed the new figure gets a new binary next to it.
 
 | count | error |
 | ---: | --- |
@@ -1789,6 +1795,39 @@ layout decision disagreeing with itself rather than seven omissions. And
 `call to undeclared function 'PriorityQueue_4047___percolate…'` in `net`,
 `readline` and `timers` is a generic instantiation referenced but never
 emitted.
+
+**`path` is diagnosed, and it is a layout merge.** The compiler session took
+the reproducer below and found the cause; recorded here because the error text
+points somewhere else entirely. Node's `path` has
+
+```js
+function normalizeString(path, allowAboveRoot, separator, isPathSeparator)
+```
+
+whose fourth parameter is a *function*. It is emitted as
+
+```c
+NtsString *normalizeString(NtsString *, bool, NtsString *, NtsObj_Ctor_Error *);
+```
+
+— the `Error` **constructor**. `nts_vtable_NtsObj_Ctor_Error` is the only
+vtable in the whole program, and the call slot it names is a closure's,
+attached to the wrong layout. `Ctor_Error` is a class-used-as-a-value, so its
+layout is deliberately empty; a function-type layout is deliberately empty too.
+Layout merging asks whether two shapes are the same, and cannot tell two empty
+things apart. Guards exist for error classes, for signature layouts and for
+constructor tokens, and each requires the *same* family on both sides — so the
+three same-family pairs are guarded and the three cross-family pairs are not.
+`path` is token × signature.
+
+The invariant, stated by that session and worth keeping here because this
+document is where its consequences are counted: **a layout whose name is its
+identity must not merge with any differently-named layout, whatever family the
+other is in.** The missing-member class above is what the same mistake looks
+like from the other side — code emitted against one layout, a struct emitted
+for another, and the size assertion catching the disagreement it exists for —
+so some of that 57 may fall out with it. Recorded as a prediction, not a
+result.
 
 **Two modules fail on a single clang error each, which makes them the cheapest
 things on this list to look at.**
@@ -1866,6 +1905,13 @@ Reproduce any of it with one line:
 ```sh
 NTS_COMPILER=<pinned> tooling/conformance/build.sh path
 ```
+
+The generated C for the six informative modules is kept outside the tree at
+`~/.cache/nts-node-addon-evidence/`, because a rebuild clobbers
+`target/node/<module>.build`. It carries the emitting binary's SHA-256 beside
+it. Nothing in it has been reduced or bisected by hand, deliberately: three of
+these classes may be one bug, and hand-reduction would cost a day to establish
+what one fix will show for free.
 
 ## What stops all of it compiling
 
