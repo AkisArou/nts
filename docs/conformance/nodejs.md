@@ -332,9 +332,12 @@ row read `26 / 38` when it was written by hand and the applicable count is 36,
 and the whole table sat a thousand files out of date until a run contradicted
 it.
 
-**Sabotage is the floor of this check, not the whole of it.** Blanking a module
-catches a suite that never touched the implementation; it says nothing about a
-suite that touches it and would accept a wrong answer. The other half is
+**Sabotage is a control, not a test.** Replacing `node:http` with an empty
+object and watching 0 of 396 files pass establishes that the suite is connected
+to its subject at all — and a control that extreme can only fail if the wiring
+is broken, so its passing says nothing about *resolution*. It catches a suite
+that never touched the implementation; it says nothing about a suite that
+touches it and would accept a wrong answer. The other half is
 mutating code the suite already passes and watching it go red. Two, run against
 the tree that produced the table above: deleting the whitespace-before-colon
 refusal from `http/src/parser.ts` — the request-smuggling one — takes
@@ -1742,6 +1745,93 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The compiled artifact, which is the gate and is entirely red
+
+`check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
+tests against it. That is the artifact that ships, and the `--ts` lane is the
+interim gate for a module whose prerequisites have not landed. Measured across
+all twenty-two modules with one pinned binary
+(SHA-256 `38a8de6d…`, addressed through `NTS_COMPILER`):
+
+**0 of 22 green. Not one module's compiled artifact passes a single test.**
+
+| stage reached | modules |
+| --- | ---: |
+| the generated C does not compile | 18 |
+| C compiles, addon links, module fails to load | 4 |
+| addon runs and passes anything | 0 |
+
+None of it is a defect in this profile: every one of those modules is 100% green
+on the TypeScript-on-node lane. The split is entirely between `emit-c` output
+and clang, so it is recorded here and reported to the compiler session rather
+than worked around — a refusal that gets quietly avoided stops measuring
+anything, and rewriting these modules to emit compilable C would destroy the
+one thing this corpus is for.
+
+**The clang error classes, whole corpus:**
+
+| count | error |
+| ---: | --- |
+| 57 | `no member named 'X' in 'NtsObj_Y'` |
+| 23 | `field has incomplete type 'void'` |
+| 22 | `call to undeclared function 'X'` |
+| 16 | `redefinition of 'X'` |
+| 16 | `operand of type 'NtsValue' where arithmetic or pointer type is required` |
+| 11 | `passing 'NtsObj_ClosureNN *' to incompatible type 'NtsTask'` |
+| 6 | `static assertion expression is not an integral constant expression` |
+
+Two of those are worth separating from the rest. The missing-member class is
+not scattered: `NtsObj_Context` is emitted without `loose`, `pairs`,
+`breakLength` or `budget`, and `NtsObj_DuplexOptions` without `a`,
+`backpressure` or `signal`, while code in the same file reads them — and the
+layout `static_assert`s in those same files are failing. That reads as one
+layout decision disagreeing with itself rather than seven omissions. And
+`call to undeclared function 'PriorityQueue_4047___percolate…'` in `net`,
+`readline` and `timers` is a generic instantiation referenced but never
+emitted.
+
+**Two modules fail on a single clang error each, which makes them the cheapest
+things on this list to look at.**
+
+```
+path:   program.c:1464:78: use of undeclared identifier 'Ctor_Error__call'
+        static void *const nts_vtable_NtsObj_Ctor_Error[] =
+            { 0, 0, 0, 0, 0, (void *)Ctor_Error__call };
+
+events: program.c:6109:27: passing 'NtsObj_Closure27 *' to parameter of
+            incompatible type 'NtsTask'
+            nts_enqueue_microtask(v17);
+```
+
+And a tuple whose second element lowered to nothing, which is the
+`incomplete type 'void'` class in one picture:
+
+```c
+struct NtsObj_Tuple2206 {
+    NtsHeader header;
+    NtsValue _0_;
+    void _1_;
+};
+```
+
+**The four that link fail the same way, and it is the failure this document
+already has a name for.** `buffer` 0/51, `os` 0/6, `querystring` 0/4,
+`string_decoder` 0/3 — every one at load: *Cannot convert undefined or null to
+object*, *Cannot read properties of undefined*, *SD is not a constructor*.
+Those are the symptoms of a module whose top-level statements never ran. Ten of
+the twenty-two builds print `no wrapper for module#init: a class member`. See
+*A compiled module was missing its initialization entirely* under
+**Conventions**: that failure cost twenty-three statements across this profile
+once, including the whole of IDNA in `url`. It announces itself now, with a
+named cause, which is an improvement over silence — but the artifact still
+initializes nothing.
+
+Reproduce any of it with one line:
+
+```sh
+NTS_COMPILER=<pinned> tooling/conformance/build.sh path
+```
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
@@ -1791,24 +1881,38 @@ call that progress. One pinned binary over two corpora separates them:
 | `runtime/node` at `0cd8645f`, **today's** compiler | **6,576** | 3,969 |
 | `runtime/node` today, today's compiler | **12,181** | 6,878 |
 
-**The compiler is 4.4× on identical source.** Holding the corpus fixed at the
-commit that introduced the 1,509 and changing only the binary accounts for
-5,067 of the 10,672 — the compiler learned to lower things it previously
-refused, on source that did not move. Corpus growth accounts for the other
-5,605. Neither half is the story on its own, which is the reason for splitting
-them: the total would have read the same if the compiler had stood still and
-this profile had simply doubled in size.
+**Read it as a rate, because the raw counts move for two reasons.** Today's
+compiler enumerates about 10% more functions from the same source than the one
+that produced the 1,509 — the functions-seen ratio is 1.05–1.13 for twenty of
+the twenty-two modules, with only `os` at 1.20 and `punycode` at 1.25, and
+`punycode`'s is four functions. A uniform ratio across every module is what a
+change in the compiler's own accounting looks like; corpus drift would hit some
+modules hard and leave others alone. So part of any raw gain is simply more
+functions being counted, and the fraction is the figure that survives it:
 
-Both rows below the first were taken with one `nts` copied out of
-`target/release` and addressed through `NTS_BIN`, so the two corpora are
-compared against the same compiler by construction rather than by two runs
-happening not to straddle a rebuild.
+| | functions seen | lowered | **rate** |
+| --- | ---: | ---: | ---: |
+| `0cd8645f`, compiler of that day | 9,583 | 1,509 | **15.7%** |
+| `0cd8645f`, today's compiler | 10,545 | 6,576 | **62.4%** |
+| today's corpus, today's compiler | 19,059 | 12,181 | **63.9%** |
 
-**One number here is inherited rather than re-measured, and it is the one the
-attribution rests on.** The 1,509 comes from this document at `0cd8645f`,
-taken by another session at compiler `9bb54c1`. If it was measured over a
-corpus state other than the one that commit records, the split moves. Both
-6,576 and 12,181 are mine and were taken minutes apart with the same binary.
+**The compiler went from lowering a sixth of this corpus to lowering
+five-eighths of it** — 15.7% to 62.4% on source that did not move, which is
+4.0× in rate and is not an artifact of the counting change. Separately, the
+corpus grew 1.81× (10,545 functions to 19,059) at almost exactly the same
+lowering rate, 62.4% to 63.9%. That second fact is worth as much as the first:
+the modules written since are neither harder nor easier to lower than the ones
+that were there, so the corpus grew without changing what it is a test of.
+
+**Which half rests on what.** The 1,509 is inherited — it comes from this
+document at `0cd8645f`, taken by another session at compiler `9bb54c1e`, and
+the two commits are the same day. Its own per-module column sums to exactly
+1,509 across the same twenty-two modules, and the uniform functions-seen ratio
+says it describes this corpus rather than a different one; that is the evidence
+for trusting it, and it is circumstantial. **Everything about the compiler's
+improvement depends on it.** Everything about the corpus's growth does not:
+those two rows are both mine, taken minutes apart with one pinned binary
+(SHA-256 `38a8de6d…`), and comparing them needs no inherited number at all.
 
 The tranche that produced the current test numbers does not disturb these. It
 changed `runtime/node/http` and `runtime/node/net`, and neither module has a
