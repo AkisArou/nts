@@ -104,7 +104,17 @@ const api = [];
 {
   const lines = layouts.split("\n");
   const start = lines.findIndex((l) => l.trim() === "public api");
-  for (let i = start + 1; start >= 0 && i < lines.length; i++) {
+  if (start < 0) {
+    // Without this the tool printed "querystring: 0 of 0 exports published",
+    // which reads like a measurement and is the absence of one. `layouts`
+    // had failed -- "the program does not typecheck" -- and every count
+    // downstream was computed over an empty list. A tool that cannot tell
+    // "nothing published" from "nothing read" is worse than no tool.
+    console.error(`${module}: could not read a public API from \`nts layouts\`.`);
+    console.error(`${layouts.trim().split("\n").slice(-3).join("\n")}`);
+    process.exit(1);
+  }
+  for (let i = start + 1; i < lines.length; i++) {
     const m = /^\s{2}(\S+) -> (\S+)(\s+\(no function of that name\))?\s*$/.exec(lines[i]);
     if (m === null) break;
     api.push({ name: m[1], target: m[2], published: m[3] === undefined });
