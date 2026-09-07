@@ -31,11 +31,21 @@ export type {
 } from "./core/encoding.ts";
 
 export {
+  ReadableByteStreamController,
   ReadableStream,
+  ReadableStreamBYOBReader,
+  ReadableStreamBYOBRequest,
   ReadableStreamDefaultController,
   ReadableStreamDefaultReader,
 } from "./streams/readable.ts";
-export type { ReadResult, UnderlyingSource } from "./streams/readable.ts";
+export type {
+  ReadableStreamBYOBReaderReadOptions,
+  ReadableStreamBYOBReadResult,
+  ReadableStreamBYOBView,
+  ReadResult,
+  UnderlyingByteSource,
+  UnderlyingSource,
+} from "./streams/readable.ts";
 export { ByteLengthQueuingStrategy } from "./streams/byte-length-queuing-strategy.ts";
 export { CountQueuingStrategy } from "./streams/count-queuing-strategy.ts";
 export type {

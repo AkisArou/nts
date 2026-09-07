@@ -22,7 +22,7 @@
 //!
 //! # Four of nine
 //!
-//! `runtime/web-platform/android/intrinsics.d.ts` declares nine. Five take an
+//! `runtime/jvm/web-platform/intrinsics.d.ts` declares nine. Five take an
 //! environment handle or a byte view; there is no common environment type and
 //! `ManagedType::View` does not exist, so those five cannot be written in
 //! TypeScript yet. They are named as gated there and absent here, rather than
@@ -245,7 +245,7 @@ fn descriptor_of(ts: &str) -> Option<String> {
 /// `(name, descriptor_or_none, wired)`.
 fn declarations() -> Vec<(String, Option<String>, bool)> {
     let text = std::fs::read_to_string(
-        repository().join("runtime/web-platform/android/intrinsics.d.ts"),
+        repository().join("runtime/jvm/web-platform/intrinsics.d.ts"),
     )
     .expect("the declarations are checked in");
 

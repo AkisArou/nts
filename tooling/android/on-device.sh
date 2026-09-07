@@ -41,9 +41,9 @@ jar="$here/runtime/jvm/nts-runtime.jar"
 #
 # One of the three rules was guarding a class that was never there.
 javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
-  "$here"/runtime/web-platform/android/src/main/java/org/nts/web/*.java \
-  "$here"/runtime/web-platform/android/src/android/java/org/nts/web/*.java \
-  "$here"/runtime/web-platform/android/src/test/java/org/nts/web/*.java \
+  "$here"/runtime/jvm/web-platform/android/src/main/java/org/nts/web/*.java \
+  "$here"/runtime/jvm/web-platform/android/src/android/java/org/nts/web/*.java \
+  "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
   "$here"/compiler/codegen/jvm/tests/inbox/Stress.java
@@ -101,7 +101,7 @@ if [ -n "$r8" ]; then
   # the check pass for a rule naming a class that does not exist -- a check
   # that could not fail, guarding against checks that cannot fail.
   java -cp "$r8" com.android.tools.r8.R8 --release --min-api 26 --lib "$platform" \
-    --pg-conf "$here/runtime/web-platform/android/consumer-rules.pro" \
+    --pg-conf "$here/runtime/jvm/web-platform/android/consumer-rules.pro" \
     --output "$work/shrunk" \
     $(find "$work/classes" -path '*org/nts/web/*' -name '*.class') > "$work/r8.log" 2>&1 || {
       cat "$work/r8.log" >&2; exit 1; }
@@ -111,7 +111,7 @@ if [ -n "$r8" ]; then
     exit 1
   fi
   javac --release 8 -Xlint:-options -cp "$platform:$work/classes" -d "$work/testonly" \
-    "$here"/runtime/web-platform/android/src/test/java/org/nts/web/*.java
+    "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java
   # shellcheck disable=SC2046
   "$tools/d8" --min-api 26 --lib "$platform" --output "$work/testonly" \
     $(find "$work/testonly" -name '*.class')

@@ -11,11 +11,11 @@
 // Five of nine. Four take only `number` and `void`; the fifth takes a byte
 // view, which `ManagedType::View` supplied. The remaining four want an
 // environment handle, which has no common type -- see
-// `runtime/web-platform/android/intrinsics.d.ts`, where the gated entries say
+// `runtime/jvm/web-platform/intrinsics.d.ts`, where the gated entries say
 // so. They are named rather than silently the ones that happened to work.
 //
 // The declarations are not here. They come from
-// `runtime/web-platform/android/intrinsics.d.ts` through this fixture's
+// `runtime/jvm/web-platform/intrinsics.d.ts` through this fixture's
 // tsconfig, so calling one with the wrong arity or the wrong type stops
 // compiling. Restating them here compiled just as well and asserted nothing --
 // which is what four hand-written copies of one ABI buys.
@@ -26,7 +26,7 @@
 // the path this test already walks, so the wrapper is compiled by the JVM
 // backend rather than merely typechecked.
 
-import * as socket from "../../../../../../runtime/web-platform/android/socket.ts";
+import * as socket from "../../../../../../runtime/jvm/web-platform/socket.ts";
 
 /**
  * How many connections the provider is holding.

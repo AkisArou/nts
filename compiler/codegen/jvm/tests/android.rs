@@ -48,7 +48,7 @@ fn tool(name: &str) -> Option<PathBuf> {
 }
 
 fn android() -> PathBuf {
-    repository().join("runtime/web-platform/android")
+    repository().join("runtime/jvm/web-platform/android")
 }
 
 /// Every `.java` under a directory, since the suite is small enough that

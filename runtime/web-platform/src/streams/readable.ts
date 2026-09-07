@@ -51,6 +51,36 @@ export interface UnderlyingSource<T> {
   type?: undefined;
 }
 
+export type UnderlyingByteSourceStartCallback = (
+  this: UnderlyingByteSource,
+  controller: ReadableByteStreamController,
+) => void | PromiseLike<void>;
+export type UnderlyingByteSourcePullCallback = (
+  this: UnderlyingByteSource,
+  controller: ReadableByteStreamController,
+) => void | PromiseLike<void>;
+export type UnderlyingByteSourceCancelCallback = (
+  this: UnderlyingByteSource,
+  reason: unknown,
+) => void | PromiseLike<void>;
+
+export interface UnderlyingByteSource {
+  autoAllocateChunkSize?: number;
+  start?: UnderlyingByteSourceStartCallback;
+  pull?: UnderlyingByteSourcePullCallback;
+  cancel?: UnderlyingByteSourceCancelCallback;
+  type: "bytes";
+}
+
+export interface ReadableStreamBYOBReaderReadOptions {
+  min?: number;
+}
+
+export type ReadableStreamBYOBView = ArrayBufferView<ArrayBuffer>;
+export type ReadableStreamBYOBReadResult<TView extends ReadableStreamBYOBView> =
+  | { done: false; value: TView }
+  | { done: true; value: TView | undefined };
+
 export interface ReadableStreamGetReaderOptions {
   mode?: unknown;
 }
@@ -102,6 +132,23 @@ type StreamState = "readable" | "closed" | "errored";
 const readableStreamBrand: unique symbol = Symbol("ReadableStream brand");
 const readableStreamStateName: unique symbol = Symbol("ReadableStream state name");
 const readableStreamStoredErrorValue: unique symbol = Symbol("ReadableStream stored error");
+
+interface ReadableByteStreamHost {
+  readonly [readableStreamStateName]: StreamState;
+  fail(error: unknown): void;
+  finishByteStream(settleReads?: boolean): void;
+}
+
+interface ReadableStreamBYOBHost extends ReadableByteStreamHost {
+  attachBYOB(reader: ReadableStreamBYOBReader): void;
+  cancelInternal(reason: unknown): Promise<void>;
+  readInto(
+    reader: ReadableStreamBYOBReader,
+    view: ReadableStreamBYOBView,
+    minimumElements: number,
+  ): Promise<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>>;
+  releaseBYOB(reader: ReadableStreamBYOBReader): void;
+}
 const defaultReadableSource = {
   cancel: undefined,
   pull: undefined,
@@ -113,6 +160,7 @@ const defaultReadableStrategy = {
   size: undefined,
 };
 const defaultReaderOptions = { mode: undefined };
+const defaultBYOBReadOptions = { min: undefined };
 const defaultPipeOptions = {
   preventAbort: undefined,
   preventCancel: undefined,
@@ -127,6 +175,17 @@ function countChunk<T>(_value: T): number {
 
 function identity<T>(value: T): T {
   return value;
+}
+
+function isUnderlyingByteSource<T>(
+  source: UnderlyingSource<T> | UnderlyingByteSource,
+): source is UnderlyingByteSource {
+  const type: unknown = source.type;
+  if (type === undefined) return false;
+  if (coerceToDOMString(type) !== "bytes") {
+    throw new TypeError("ReadableStream source type is not supported");
+  }
+  return true;
 }
 
 function convertPipeOptions(options: StreamPipeOptions | null): ConvertedPipeOptions {
@@ -165,15 +224,16 @@ function isReadableStream<T>(value: unknown): value is ReadableStream<T> {
  */
 export class ReadableStream<T> {
   readonly [readableStreamBrand] = true;
-  #source: UnderlyingSource<T> | null;
-  readonly #controller: ReadableStreamDefaultController<T>;
-  readonly #highWaterMark: number;
+  #source: UnderlyingSource<T> | null = null;
+  #controller: ReadableStreamDefaultController<T> | null = null;
+  #byteState: ReadableByteStreamState | null = null;
+  #highWaterMark = 0;
   #sizeOf: QueuingStrategySize<T> | undefined;
   #pullAlgorithm: UnderlyingSourcePullCallback<T> | undefined;
   #cancelAlgorithm: UnderlyingSourceCancelCallback<T> | undefined;
   readonly #queue = new QueueWithSizes<T>();
   readonly #pending = new Fifo<PromiseWithResolvers<ReadResult<T>>>();
-  #currentReader: ReadableStreamDefaultReader<T> | null = null;
+  #currentReader: ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader | null = null;
   #state: StreamState = "readable";
   #storedError: unknown;
   #closeRequested = false;
@@ -183,21 +243,40 @@ export class ReadableStream<T> {
   #isDisturbed = false;
 
   constructor(
-    source: UnderlyingSource<T> | null = defaultReadableSource,
+    source: UnderlyingByteSource,
+    strategy?: QueuingStrategy<Uint8Array> | null,
+  );
+  constructor(
+    source?: UnderlyingSource<T> | null,
+    strategy?: QueuingStrategy<T> | null,
+  );
+  constructor(
+    source: UnderlyingSource<T> | UnderlyingByteSource | null = defaultReadableSource,
     strategy: QueuingStrategy<T> | null = defaultReadableStrategy,
   ) {
-    this.#sizeOf = extractSizeAlgorithm(strategy);
-    this.#highWaterMark = extractHighWaterMark(strategy, 1);
     requireDictionary(source, "Underlying source");
     if (source === null) {
       throw new TypeError("Underlying source must be an object");
     }
 
-    const type: unknown = source.type;
-    if (type !== undefined) {
-      coerceToDOMString(type);
-      throw new TypeError("ReadableStream source type is not supported");
+    requireDictionary(strategy, "Queuing strategy");
+    const size = strategy === null ? undefined : strategy.size;
+    const highWaterMark = strategy === null ? undefined : strategy.highWaterMark;
+    if (isUnderlyingByteSource(source)) {
+      if (size !== undefined) {
+        throw new RangeError("Byte stream strategy must not provide size");
+      }
+      this.#highWaterMark = extractHighWaterMark(
+        highWaterMark === undefined ? null : { highWaterMark },
+        0,
+      );
+      const byteState = new ReadableByteStreamState(this, source, this.#highWaterMark);
+      this.#byteState = byteState;
+      return;
     }
+
+    this.#sizeOf = extractSizeAlgorithm(strategy);
+    this.#highWaterMark = extractHighWaterMark(strategy, 1);
     const startAlgorithm = source.start;
     if (startAlgorithm !== undefined && typeof startAlgorithm !== "function") {
       throw new TypeError("Underlying source start must be callable");
@@ -257,6 +336,10 @@ export class ReadableStream<T> {
     return this.#currentReader !== null;
   }
 
+  /** @internal */ get byteStream(): boolean {
+    return this.#byteState !== null;
+  }
+
   /** @internal */ get disturbed(): boolean {
     return this.#isDisturbed;
   }
@@ -270,25 +353,39 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ get queuedSize(): number {
-    return this.#queue.totalSize;
+    const byteState = this.#byteState;
+    return byteState === null ? this.#queue.totalSize : byteState.queuedSize;
   }
 
   /** @internal */ get canCloseOrEnqueue(): boolean {
-    return this.#state === "readable" && !this.#closeRequested;
+    const byteState = this.#byteState;
+    return byteState === null
+      ? this.#state === "readable" && !this.#closeRequested
+      : byteState.canCloseOrEnqueue;
   }
 
   /** @internal */ markDisturbed(): void {
     this.#isDisturbed = true;
   }
 
+  getReader(options: { mode: "byob" }): ReadableStreamBYOBReader;
+  getReader(options?: { mode?: undefined } | null): ReadableStreamDefaultReader<T>;
   getReader(
     options: ReadableStreamGetReaderOptions | null = defaultReaderOptions,
-  ): ReadableStreamDefaultReader<T> {
+  ): ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader {
     requireDictionary(options, "ReadableStream reader options");
     const mode = options?.mode;
     if (mode !== undefined) {
-      coerceToDOMString(mode);
-      throw new TypeError("ReadableStream does not support a BYOB reader yet");
+      if (coerceToDOMString(mode) !== "byob") {
+        throw new TypeError("ReadableStream reader mode is invalid");
+      }
+      if (this.#byteState === null) {
+        throw new TypeError("A BYOB reader requires a byte stream");
+      }
+      if (this.locked) {
+        throw new TypeError("Stream is locked");
+      }
+      return new ReadableStreamBYOBReader(this);
     }
     if (this.locked) {
       throw new TypeError("Stream is locked");
@@ -299,6 +396,22 @@ export class ReadableStream<T> {
   /** @internal */ attach(reader: ReadableStreamDefaultReader<T>): void {
     if (this.locked) {
       throw new TypeError("Stream is locked");
+    }
+    this.#currentReader = reader;
+    if (this.#state === "closed") {
+      reader.finish();
+    }
+    if (this.#state === "errored") {
+      reader.fail(this.#storedError);
+    }
+  }
+
+  /** @internal */ attachBYOB(reader: ReadableStreamBYOBReader): void {
+    if (this.locked) {
+      throw new TypeError("Stream is locked");
+    }
+    if (this.#byteState === null) {
+      throw new TypeError("A BYOB reader requires a byte stream");
     }
     this.#currentReader = reader;
     if (this.#state === "closed") {
@@ -378,6 +491,14 @@ export class ReadableStream<T> {
     if (this.#state === "errored") {
       throw this.#storedError;
     }
+    const byteState = this.#byteState;
+    if (byteState !== null) {
+      const cancellation = byteState.cancel(reason);
+      this.#finish(true);
+      await cancellation;
+      return;
+    }
+
     const source = this.#source;
     const cancelAlgorithm = this.#cancelAlgorithm;
     this.#queue.reset();
@@ -387,7 +508,8 @@ export class ReadableStream<T> {
     }
   }
 
-  /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>> {
+  /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>>;
+  /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<unknown>> {
     if (reader !== this.#currentReader) {
       return Promise.reject(new TypeError("Reader has been released"));
     }
@@ -397,6 +519,10 @@ export class ReadableStream<T> {
     }
     if (this.#state === "errored") {
       return Promise.reject(this.#storedError);
+    }
+    const byteState = this.#byteState;
+    if (byteState !== null) {
+      return byteState.readDefault();
     }
     const entry = this.#queue.dequeue();
     if (entry !== undefined) {
@@ -419,11 +545,48 @@ export class ReadableStream<T> {
     }
     this.#currentReader = null;
     const error = new TypeError("Reader has been released");
-    this.#rejectPending(error);
+    const byteState = this.#byteState;
+    if (byteState === null) {
+      this.#rejectPending(error);
+    } else {
+      byteState.releaseDefault(error);
+    }
+    reader.released(error);
+  }
+
+  /** @internal */ readInto(
+    reader: ReadableStreamBYOBReader,
+    view: ReadableStreamBYOBView,
+    minimumElements: number,
+  ): Promise<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> {
+    if (reader !== this.#currentReader) {
+      return Promise.reject(new TypeError("Reader has been released"));
+    }
+    this.#isDisturbed = true;
+    if (this.#state === "errored") {
+      return Promise.reject(this.#storedError);
+    }
+    const byteState = this.#byteState;
+    if (byteState === null) {
+      return Promise.reject(new TypeError("A BYOB reader requires a byte stream"));
+    }
+    return byteState.readInto(view, minimumElements, this.#state === "closed");
+  }
+
+  /** @internal */ releaseBYOB(reader: ReadableStreamBYOBReader): void {
+    if (reader !== this.#currentReader) {
+      return;
+    }
+    this.#currentReader = null;
+    const error = new TypeError("Reader has been released");
+    this.#byteState?.releaseBYOB(error);
     reader.released(error);
   }
 
   /** @internal */ enqueue(value: T): void {
+    if (this.#byteState !== null) {
+      throw new TypeError("A byte stream can only be enqueued through its byte controller");
+    }
     if (this.#state !== "readable" || this.#closeRequested) {
       throw new TypeError("Stream is not writable");
     }
@@ -443,6 +606,11 @@ export class ReadableStream<T> {
   }
 
   /** @internal */ requestClose(): void {
+    const byteState = this.#byteState;
+    if (byteState !== null) {
+      byteState.requestClose();
+      return;
+    }
     if (this.#state !== "readable" || this.#closeRequested) {
       throw new TypeError("Stream cannot be closed twice");
     }
@@ -452,11 +620,23 @@ export class ReadableStream<T> {
     }
   }
 
-  #finish(): void {
+  #finish(settleByteReads = false): void {
+    if (this.#state !== "readable") {
+      return;
+    }
     this.#state = "closed";
-    this.#clearAlgorithms();
+    const byteState = this.#byteState;
+    if (byteState === null) {
+      this.#clearAlgorithms();
+    } else {
+      byteState.finish(settleByteReads);
+    }
     this.#currentReader?.finish();
     this.#resolvePendingAsClosed();
+  }
+
+  /** @internal */ finishByteStream(settleReads = false): void {
+    this.#finish(settleReads);
   }
 
   /** @internal */ fail(error: unknown): void {
@@ -465,8 +645,13 @@ export class ReadableStream<T> {
     }
     this.#state = "errored";
     this.#storedError = error;
-    this.#queue.reset();
-    this.#clearAlgorithms();
+    const byteState = this.#byteState;
+    if (byteState === null) {
+      this.#queue.reset();
+      this.#clearAlgorithms();
+    } else {
+      byteState.fail(error);
+    }
     this.#currentReader?.fail(error);
     this.#rejectPending(error);
   }
@@ -478,7 +663,10 @@ export class ReadableStream<T> {
     if (this.#state === "closed") {
       return 0;
     }
-    return this.#highWaterMark - this.#queue.totalSize;
+    const byteState = this.#byteState;
+    return byteState === null
+      ? this.#highWaterMark - this.#queue.totalSize
+      : byteState.desiredSize;
   }
 
   async #observeStart(startResult: void | PromiseLike<void>): Promise<void> {
@@ -504,13 +692,14 @@ export class ReadableStream<T> {
     }
     const source = this.#source;
     const pullAlgorithm = this.#pullAlgorithm;
-    if (source === null || pullAlgorithm === undefined) {
+    const controller = this.#controller;
+    if (source === null || pullAlgorithm === undefined || controller === null) {
       return;
     }
     this.#pulling = true;
     let pullResult: void | PromiseLike<void>;
     try {
-      pullResult = pullAlgorithm.call(source, this.#controller);
+      pullResult = pullAlgorithm.call(source, controller);
     } catch (error) {
       this.#pulling = false;
       this.fail(error);
@@ -791,6 +980,938 @@ export class ReadableStreamDefaultController<T> {
 
   get [Symbol.toStringTag](): "ReadableStreamDefaultController" {
     return "ReadableStreamDefaultController";
+  }
+}
+
+type ByteViewKind =
+  | "data"
+  | "int8"
+  | "uint8"
+  | "uint8-clamped"
+  | "int16"
+  | "uint16"
+  | "float16"
+  | "int32"
+  | "uint32"
+  | "float32"
+  | "float64"
+  | "bigint64"
+  | "biguint64";
+
+type PullIntoReaderKind = "default" | "byob" | "none";
+
+class ByteQueueEntry {
+  buffer: ArrayBuffer;
+  byteOffset: number;
+  byteLength: number;
+
+  constructor(buffer: ArrayBuffer, byteOffset: number, byteLength: number) {
+    this.buffer = buffer;
+    this.byteOffset = byteOffset;
+    this.byteLength = byteLength;
+  }
+}
+
+class PullIntoDescriptor {
+  buffer: ArrayBuffer;
+  readonly bufferByteLength: number;
+  readonly byteOffset: number;
+  readonly byteLength: number;
+  bytesFilled = 0;
+  readonly minimumFillBytes: number;
+  readonly elementSize: number;
+  readonly viewKind: ByteViewKind;
+  readerKind: PullIntoReaderKind;
+  defaultResult: PromiseWithResolvers<ReadResult<unknown>> | null;
+  byobResult: PromiseWithResolvers<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> | null;
+
+  constructor(
+    buffer: ArrayBuffer,
+    bufferByteLength: number,
+    byteOffset: number,
+    byteLength: number,
+    minimumFillBytes: number,
+    elementSize: number,
+    viewKind: ByteViewKind,
+    readerKind: PullIntoReaderKind,
+    defaultResult: PromiseWithResolvers<ReadResult<unknown>> | null,
+    byobResult: PromiseWithResolvers<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> | null,
+  ) {
+    this.buffer = buffer;
+    this.bufferByteLength = bufferByteLength;
+    this.byteOffset = byteOffset;
+    this.byteLength = byteLength;
+    this.minimumFillBytes = minimumFillBytes;
+    this.elementSize = elementSize;
+    this.viewKind = viewKind;
+    this.readerKind = readerKind;
+    this.defaultResult = defaultResult;
+    this.byobResult = byobResult;
+  }
+}
+
+function isTransferableView(value: unknown): value is ReadableStreamBYOBView {
+  return ArrayBuffer.isView(value) && value.buffer instanceof ArrayBuffer;
+}
+
+function byteViewKind(view: ReadableStreamBYOBView): ByteViewKind {
+  if (view instanceof DataView) return "data";
+  if (view instanceof Int8Array) return "int8";
+  if (view instanceof Uint8ClampedArray) return "uint8-clamped";
+  if (view instanceof Uint8Array) return "uint8";
+  if (view instanceof Int16Array) return "int16";
+  if (view instanceof Uint16Array) return "uint16";
+  if (view instanceof Float16Array) return "float16";
+  if (view instanceof Int32Array) return "int32";
+  if (view instanceof Uint32Array) return "uint32";
+  if (view instanceof Float32Array) return "float32";
+  if (view instanceof Float64Array) return "float64";
+  if (view instanceof BigInt64Array) return "bigint64";
+  if (view instanceof BigUint64Array) return "biguint64";
+  throw new TypeError("Unsupported ArrayBuffer view");
+}
+
+function byteViewElementSize(kind: ByteViewKind): number {
+  switch (kind) {
+    case "data":
+    case "int8":
+    case "uint8":
+    case "uint8-clamped":
+      return 1;
+    case "int16":
+    case "uint16":
+    case "float16":
+      return 2;
+    case "int32":
+    case "uint32":
+    case "float32":
+      return 4;
+    case "float64":
+    case "bigint64":
+    case "biguint64":
+      return 8;
+  }
+}
+
+function createByteView(
+  kind: ByteViewKind,
+  buffer: ArrayBuffer,
+  byteOffset: number,
+  byteLength: number,
+): ReadableStreamBYOBView {
+  switch (kind) {
+    case "data":
+      return new DataView(buffer, byteOffset, byteLength);
+    case "int8":
+      return new Int8Array(buffer, byteOffset, byteLength);
+    case "uint8":
+      return new Uint8Array(buffer, byteOffset, byteLength);
+    case "uint8-clamped":
+      return new Uint8ClampedArray(buffer, byteOffset, byteLength);
+    case "int16":
+      return new Int16Array(buffer, byteOffset, byteLength / 2);
+    case "uint16":
+      return new Uint16Array(buffer, byteOffset, byteLength / 2);
+    case "float16":
+      return new Float16Array(buffer, byteOffset, byteLength / 2);
+    case "int32":
+      return new Int32Array(buffer, byteOffset, byteLength / 4);
+    case "uint32":
+      return new Uint32Array(buffer, byteOffset, byteLength / 4);
+    case "float32":
+      return new Float32Array(buffer, byteOffset, byteLength / 4);
+    case "float64":
+      return new Float64Array(buffer, byteOffset, byteLength / 8);
+    case "bigint64":
+      return new BigInt64Array(buffer, byteOffset, byteLength / 8);
+    case "biguint64":
+      return new BigUint64Array(buffer, byteOffset, byteLength / 8);
+  }
+}
+
+function enforceRangeUnsignedLongLong(value: number, name: string): number {
+  const number = +value;
+  if (!Number.isFinite(number)) {
+    throw new TypeError(name + " must be a finite number");
+  }
+  const integer = Math.trunc(number);
+  if (integer < 0 || integer > Number.MAX_SAFE_INTEGER) {
+    throw new TypeError(name + " is outside the unsigned long long range");
+  }
+  return integer;
+}
+
+const byteControllerKey: unique symbol = Symbol("construct ReadableByteStreamController");
+const byobRequestKey: unique symbol = Symbol("construct ReadableStreamBYOBRequest");
+
+export class ReadableStreamBYOBRequest {
+  #state: ReadableByteStreamState | null;
+  #view: ReadableStreamBYOBView | null;
+
+  constructor(...args: [typeof byobRequestKey, ReadableByteStreamState, ReadableStreamBYOBView]) {
+    if (args[0] !== byobRequestKey || args[1] === undefined || args[2] === undefined) {
+      throw new TypeError("Illegal constructor");
+    }
+    this.#state = args[1];
+    this.#view = args[2];
+  }
+
+  get view(): ReadableStreamBYOBView | null {
+    return this.#view;
+  }
+
+  respond(bytesWritten: number): void {
+    const state = this.#state;
+    const view = this.#view;
+    if (state === null || view === null) {
+      throw new TypeError("This BYOB request has been invalidated");
+    }
+    if (view.buffer.detached) {
+      throw new TypeError("Viewed ArrayBuffer is detached");
+    }
+    state.respond(enforceRangeUnsignedLongLong(bytesWritten, "bytesWritten"));
+  }
+
+  respondWithNewView(view: ReadableStreamBYOBView): void {
+    const state = this.#state;
+    if (state === null || this.#view === null) {
+      throw new TypeError("This BYOB request has been invalidated");
+    }
+    if (!isTransferableView(view) || view.buffer.detached) {
+      throw new TypeError("View must have a transferable ArrayBuffer");
+    }
+    state.respondWithNewView(view);
+  }
+
+  /** @internal */ invalidate(): void {
+    this.#state = null;
+    this.#view = null;
+  }
+
+  get [Symbol.toStringTag](): "ReadableStreamBYOBRequest" {
+    return "ReadableStreamBYOBRequest";
+  }
+}
+
+export class ReadableByteStreamController {
+  readonly #state: ReadableByteStreamState;
+
+  constructor(...args: [typeof byteControllerKey, ReadableByteStreamState]) {
+    if (args[0] !== byteControllerKey || args[1] === undefined) {
+      throw new TypeError("Illegal constructor");
+    }
+    this.#state = args[1];
+  }
+
+  get byobRequest(): ReadableStreamBYOBRequest | null {
+    return this.#state.byobRequest;
+  }
+
+  get desiredSize(): number | null {
+    return this.#state.desiredSize;
+  }
+
+  close(): void {
+    this.#state.requestClose();
+  }
+
+  enqueue(chunk: ReadableStreamBYOBView): void {
+    if (!isTransferableView(chunk)) {
+      throw new TypeError("Byte stream chunks must be ArrayBuffer views");
+    }
+    if (chunk.byteLength === 0 || chunk.buffer.byteLength === 0 || chunk.buffer.detached) {
+      throw new TypeError("Byte stream chunk must have a non-empty attached buffer");
+    }
+    this.#state.enqueue(chunk);
+  }
+
+  error(reason: unknown = undefined): void {
+    this.#state.stream.fail(reason);
+  }
+
+  get [Symbol.toStringTag](): "ReadableByteStreamController" {
+    return "ReadableByteStreamController";
+  }
+}
+
+export class ReadableStreamBYOBReader {
+  #stream: ReadableStreamBYOBHost | null;
+  #closedCapability = Promise.withResolvers<void>();
+  #closedState: "pending" | "fulfilled" | "rejected" = "pending";
+
+  constructor(stream: ReadableStreamBYOBHost) {
+    if (!(stream instanceof ReadableStream)) {
+      throw new TypeError("stream must be a ReadableStream");
+    }
+    this.#stream = stream;
+    ignoreRejection(this.closed);
+    stream.attachBYOB(this);
+  }
+
+  get closed(): Promise<void> {
+    return this.#closedCapability.promise;
+  }
+
+  async read<TView extends ReadableStreamBYOBView>(
+    view: TView,
+    options?: ReadableStreamBYOBReaderReadOptions | null,
+  ): Promise<ReadableStreamBYOBReadResult<TView>>;
+  async read(
+    view: ReadableStreamBYOBView,
+    options: ReadableStreamBYOBReaderReadOptions | null = defaultBYOBReadOptions,
+  ): Promise<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> {
+    if (!isTransferableView(view)) {
+      throw new TypeError("BYOB read requires an ArrayBuffer view");
+    }
+    requireDictionary(options, "BYOB read options");
+    if (view.byteLength === 0 || view.buffer.byteLength === 0 || view.buffer.detached) {
+      throw new TypeError("BYOB read requires a non-empty attached buffer");
+    }
+    const kind = byteViewKind(view);
+    const elementSize = byteViewElementSize(kind);
+    const minimumElements = enforceRangeUnsignedLongLong(options?.min ?? 1, "options.min");
+    if (minimumElements === 0) {
+      throw new TypeError("options.min must be greater than zero");
+    }
+    const maximumElements = kind === "data" ? view.byteLength : view.byteLength / elementSize;
+    if (minimumElements > maximumElements) {
+      throw new RangeError("options.min exceeds the view length");
+    }
+    const stream = this.#stream;
+    if (stream === null) {
+      throw new TypeError("Reader has been released");
+    }
+    return await stream.readInto(this, view, minimumElements);
+  }
+
+  cancel(reason: unknown = undefined): Promise<void> {
+    const stream = this.#stream;
+    return stream === null
+      ? Promise.reject(new TypeError("Reader has been released"))
+      : stream.cancelInternal(reason);
+  }
+
+  releaseLock(): void {
+    this.#stream?.releaseBYOB(this);
+    this.#stream = null;
+  }
+
+  /** @internal */ released(error: unknown): void {
+    if (this.#closedState !== "pending") {
+      this.#closedCapability = Promise.withResolvers<void>();
+      this.#closedState = "pending";
+      ignoreRejection(this.closed);
+    }
+    this.#closedState = "rejected";
+    this.#closedCapability.reject(error);
+  }
+
+  /** @internal */ finish(): void {
+    if (this.#closedState !== "pending") return;
+    this.#closedState = "fulfilled";
+    this.#closedCapability.resolve();
+  }
+
+  /** @internal */ fail(error: unknown): void {
+    if (this.#closedState !== "pending") return;
+    this.#closedState = "rejected";
+    this.#closedCapability.reject(error);
+  }
+
+  get [Symbol.toStringTag](): "ReadableStreamBYOBReader" {
+    return "ReadableStreamBYOBReader";
+  }
+}
+
+class ReadableByteStreamState {
+  readonly stream: ReadableByteStreamHost;
+  readonly #controller: ReadableByteStreamController;
+  #source: UnderlyingByteSource | null;
+  #pullAlgorithm: UnderlyingByteSourcePullCallback | undefined;
+  #cancelAlgorithm: UnderlyingByteSourceCancelCallback | undefined;
+  readonly #highWaterMark: number;
+  readonly #autoAllocateChunkSize: number | undefined;
+  readonly #queue = new Fifo<ByteQueueEntry>();
+  #queueTotalSize = 0;
+  readonly #defaultReads = new Fifo<PromiseWithResolvers<ReadResult<unknown>>>();
+  readonly #pullIntos = new Fifo<PullIntoDescriptor>();
+  #currentBYOBRequest: ReadableStreamBYOBRequest | null = null;
+  #closeRequested = false;
+  #started = false;
+  #pulling = false;
+  #pullAgain = false;
+
+  constructor(
+    stream: ReadableByteStreamHost,
+    source: UnderlyingByteSource,
+    highWaterMark: number,
+  ) {
+    const start = source.start;
+    const pull = source.pull;
+    const cancel = source.cancel;
+    if (start !== undefined && typeof start !== "function") {
+      throw new TypeError("Underlying byte source start must be callable");
+    }
+    if (pull !== undefined && typeof pull !== "function") {
+      throw new TypeError("Underlying byte source pull must be callable");
+    }
+    if (cancel !== undefined && typeof cancel !== "function") {
+      throw new TypeError("Underlying byte source cancel must be callable");
+    }
+    const rawAutoAllocateChunkSize = source.autoAllocateChunkSize;
+    const autoAllocateChunkSize =
+      rawAutoAllocateChunkSize === undefined
+        ? undefined
+        : enforceRangeUnsignedLongLong(rawAutoAllocateChunkSize, "autoAllocateChunkSize");
+    if (autoAllocateChunkSize === 0) {
+      throw new TypeError("autoAllocateChunkSize must be greater than zero");
+    }
+
+    this.stream = stream;
+    this.#source = source;
+    this.#pullAlgorithm = pull;
+    this.#cancelAlgorithm = cancel;
+    this.#highWaterMark = highWaterMark;
+    this.#autoAllocateChunkSize = autoAllocateChunkSize;
+    this.#controller = new ReadableByteStreamController(byteControllerKey, this);
+
+    let startResult: void | PromiseLike<void>;
+    try {
+      startResult = start?.call(source, this.#controller);
+    } catch (error) {
+      this.#clearAlgorithms();
+      throw error;
+    }
+    this.#observeStart(startResult);
+  }
+
+  get queuedSize(): number {
+    return this.#queueTotalSize;
+  }
+
+  get canCloseOrEnqueue(): boolean {
+    return this.stream[readableStreamStateName] === "readable" && !this.#closeRequested;
+  }
+
+  get desiredSize(): number | null {
+    const state = this.stream[readableStreamStateName];
+    if (state === "errored") return null;
+    if (state === "closed") return 0;
+    return this.#highWaterMark - this.#queueTotalSize;
+  }
+
+  get byobRequest(): ReadableStreamBYOBRequest | null {
+    if (this.#currentBYOBRequest === null) {
+      const descriptor = this.#pullIntos.peek();
+      if (descriptor !== undefined) {
+        const remaining = createByteView(
+          "uint8",
+          descriptor.buffer,
+          descriptor.byteOffset + descriptor.bytesFilled,
+          descriptor.byteLength - descriptor.bytesFilled,
+        );
+        this.#currentBYOBRequest = new ReadableStreamBYOBRequest(
+          byobRequestKey,
+          this,
+          remaining,
+        );
+      }
+    }
+    return this.#currentBYOBRequest;
+  }
+
+  readDefault(): Promise<ReadResult<unknown>> {
+    if (this.#queueTotalSize > 0) {
+      return Promise.resolve({ done: false, value: this.#dequeueChunk() });
+    }
+    const result = Promise.withResolvers<ReadResult<unknown>>();
+    const autoAllocateChunkSize = this.#autoAllocateChunkSize;
+    if (autoAllocateChunkSize === undefined) {
+      this.#defaultReads.enqueue(result);
+    } else {
+      this.#pullIntos.enqueue(
+        new PullIntoDescriptor(
+          new ArrayBuffer(autoAllocateChunkSize),
+          autoAllocateChunkSize,
+          0,
+          autoAllocateChunkSize,
+          1,
+          1,
+          "uint8",
+          "default",
+          result,
+          null,
+        ),
+      );
+    }
+    this.#maybePull();
+    return result.promise;
+  }
+
+  readInto(
+    view: ReadableStreamBYOBView,
+    minimumElements: number,
+    closed: boolean,
+  ): Promise<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> {
+    const kind = byteViewKind(view);
+    const elementSize = byteViewElementSize(kind);
+    const bufferByteLength = view.buffer.byteLength;
+    const byteOffset = view.byteOffset;
+    const byteLength = view.byteLength;
+    const transferred = view.buffer.transfer();
+    const result = Promise.withResolvers<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>>();
+    const descriptor = new PullIntoDescriptor(
+      transferred,
+      bufferByteLength,
+      byteOffset,
+      byteLength,
+      minimumElements * elementSize,
+      elementSize,
+      kind,
+      "byob",
+      null,
+      result,
+    );
+    if (closed) {
+      this.#commitDescriptor(descriptor, true);
+      return result.promise;
+    }
+    if (this.#queueTotalSize > 0 && this.#fillFromQueue(descriptor)) {
+      this.#commitDescriptor(descriptor, false);
+      this.#handleQueueDrain();
+      return result.promise;
+    }
+    if (
+      this.#closeRequested &&
+      this.#queueTotalSize === 0 &&
+      descriptor.bytesFilled % descriptor.elementSize !== 0
+    ) {
+      const error = new TypeError("Byte stream closed with an incomplete typed-array element");
+      result.reject(error);
+      this.stream.fail(error);
+      return result.promise;
+    }
+    this.#pullIntos.enqueue(descriptor);
+    this.#maybePull();
+    return result.promise;
+  }
+
+  enqueue(chunk: ReadableStreamBYOBView): void {
+    if (!this.canCloseOrEnqueue) {
+      throw new TypeError("Byte stream is not writable");
+    }
+    const byteOffset = chunk.byteOffset;
+    const byteLength = chunk.byteLength;
+    const transferred = chunk.buffer.transfer();
+
+    const pendingPullInto = this.#pullIntos.peek();
+    if (pendingPullInto !== undefined) {
+      this.#invalidateBYOBRequest();
+      pendingPullInto.buffer = pendingPullInto.buffer.transfer();
+      if (pendingPullInto.readerKind === "none") {
+        this.#pullIntos.dequeue();
+        if (pendingPullInto.bytesFilled > 0) {
+          const detachedBytes = pendingPullInto.buffer.slice(
+            pendingPullInto.byteOffset,
+            pendingPullInto.byteOffset + pendingPullInto.bytesFilled,
+          );
+          this.#enqueueChunk(detachedBytes, 0, detachedBytes.byteLength);
+          this.#processDefaultReads();
+        }
+        const currentPullInto = this.#pullIntos.peek();
+        if (
+          this.#queueTotalSize === 0 &&
+          currentPullInto?.readerKind === "default" &&
+          currentPullInto.bytesFilled === 0
+        ) {
+          this.#pullIntos.dequeue();
+          const result = currentPullInto.defaultResult;
+          currentPullInto.defaultResult = null;
+          result?.resolve({
+            done: false,
+            value: new Uint8Array(transferred, byteOffset, byteLength),
+          });
+          this.#maybePull();
+          return;
+        }
+      } else if (
+        pendingPullInto.readerKind === "default" &&
+        pendingPullInto.bytesFilled === 0
+      ) {
+        this.#pullIntos.dequeue();
+        const result = pendingPullInto.defaultResult;
+        pendingPullInto.defaultResult = null;
+        result?.resolve({
+          done: false,
+          value: new Uint8Array(transferred, byteOffset, byteLength),
+        });
+        this.#maybePull();
+        return;
+      }
+    }
+
+    const defaultRead = this.#defaultReads.dequeue();
+    if (defaultRead !== undefined && this.#pullIntos.empty) {
+      defaultRead.resolve({
+        done: false,
+        value: new Uint8Array(transferred, byteOffset, byteLength),
+      });
+    } else {
+      if (defaultRead !== undefined) this.#defaultReads.enqueue(defaultRead);
+      this.#enqueueChunk(transferred, byteOffset, byteLength);
+      this.#processPullIntos();
+      this.#processDefaultReads();
+    }
+    this.#maybePull();
+  }
+
+  requestClose(): void {
+    if (!this.canCloseOrEnqueue) {
+      throw new TypeError("Byte stream cannot be closed twice");
+    }
+    this.#closeRequested = true;
+    if (this.#queueTotalSize !== 0) return;
+    const descriptor = this.#pullIntos.peek();
+    if (descriptor !== undefined && descriptor.bytesFilled % descriptor.elementSize !== 0) {
+      const error = new TypeError("Byte stream closed with an incomplete typed-array element");
+      this.stream.fail(error);
+      throw error;
+    }
+    this.#clearAlgorithms();
+    this.stream.finishByteStream(false);
+  }
+
+  respond(bytesWritten: number): void {
+    const descriptor = this.#pullIntos.peek();
+    if (descriptor === undefined) {
+      throw new TypeError("There is no pending BYOB request");
+    }
+    const state = this.stream[readableStreamStateName];
+    if (state === "closed") {
+      if (bytesWritten !== 0) {
+        throw new TypeError("A closed byte stream only accepts a zero-byte response");
+      }
+    } else {
+      if (state !== "readable" || bytesWritten === 0) {
+        throw new TypeError("A readable byte stream requires a non-zero response");
+      }
+      if (descriptor.bytesFilled + bytesWritten > descriptor.byteLength) {
+        throw new RangeError("bytesWritten exceeds the pending view");
+      }
+    }
+    descriptor.buffer = descriptor.buffer.transfer();
+    this.#invalidateBYOBRequest();
+    this.#respondAfterTransfer(descriptor, bytesWritten, state === "closed");
+  }
+
+  respondWithNewView(view: ReadableStreamBYOBView): void {
+    const descriptor = this.#pullIntos.peek();
+    if (descriptor === undefined) {
+      throw new TypeError("There is no pending BYOB request");
+    }
+    const closed = this.stream[readableStreamStateName] === "closed";
+    if (closed ? view.byteLength !== 0 : view.byteLength === 0) {
+      throw new TypeError("The replacement view has the wrong length for the stream state");
+    }
+    if (descriptor.byteOffset + descriptor.bytesFilled !== view.byteOffset) {
+      throw new RangeError("The replacement view has the wrong byteOffset");
+    }
+    if (descriptor.bytesFilled + view.byteLength > descriptor.byteLength) {
+      throw new RangeError("The replacement view exceeds the pending view");
+    }
+    if (view.buffer.byteLength !== descriptor.bufferByteLength) {
+      throw new RangeError("The replacement view has a different backing length");
+    }
+    const byteLength = view.byteLength;
+    descriptor.buffer = view.buffer.transfer();
+    this.#invalidateBYOBRequest();
+    this.#respondAfterTransfer(descriptor, byteLength, closed);
+  }
+
+  async cancel(reason: unknown): Promise<void> {
+    const source = this.#source;
+    const cancel = this.#cancelAlgorithm;
+    this.#queue.reset();
+    this.#queueTotalSize = 0;
+    this.#invalidateBYOBRequest();
+    this.#clearAlgorithms();
+    if (source !== null && cancel !== undefined) {
+      await cancel.call(source, reason);
+    }
+  }
+
+  releaseDefault(error: unknown): void {
+    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.reject(error);
+    this.#releasePullIntos("default", error);
+  }
+
+  releaseBYOB(error: unknown): void {
+    this.#releasePullIntos("byob", error);
+  }
+
+  finish(settleReads: boolean): void {
+    this.#clearAlgorithms();
+    while (!this.#defaultReads.empty) {
+      this.#defaultReads.dequeue()?.resolve({ done: true, value: undefined });
+    }
+
+    const retained = new Fifo<PullIntoDescriptor>();
+    while (!this.#pullIntos.empty) {
+      const descriptor = this.#pullIntos.dequeue();
+      if (descriptor === undefined) break;
+      if (descriptor.readerKind === "default") {
+        descriptor.defaultResult?.resolve({ done: true, value: undefined });
+        descriptor.defaultResult = null;
+        if (!settleReads) retained.enqueue(descriptor);
+      } else if (settleReads && descriptor.readerKind === "byob") {
+        descriptor.byobResult?.resolve({ done: true, value: undefined });
+        descriptor.byobResult = null;
+      } else {
+        retained.enqueue(descriptor);
+      }
+    }
+    while (!retained.empty) {
+      const descriptor = retained.dequeue();
+      if (descriptor !== undefined) this.#pullIntos.enqueue(descriptor);
+    }
+  }
+
+  fail(error: unknown): void {
+    this.#clearAlgorithms();
+    this.#queue.reset();
+    this.#queueTotalSize = 0;
+    this.#invalidateBYOBRequest();
+    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.reject(error);
+    while (!this.#pullIntos.empty) {
+      const descriptor = this.#pullIntos.dequeue();
+      descriptor?.defaultResult?.reject(error);
+      descriptor?.byobResult?.reject(error);
+    }
+  }
+
+  #respondAfterTransfer(
+    descriptor: PullIntoDescriptor,
+    bytesWritten: number,
+    closed: boolean,
+  ): void {
+    if (closed) {
+      while (!this.#pullIntos.empty) {
+        const pending = this.#pullIntos.dequeue();
+        if (pending !== undefined) this.#commitDescriptor(pending, true);
+      }
+      return;
+    }
+
+    descriptor.bytesFilled += bytesWritten;
+    if (descriptor.readerKind === "none") {
+      this.#pullIntos.dequeue();
+      if (descriptor.bytesFilled > 0) {
+        const copy = descriptor.buffer.slice(
+          descriptor.byteOffset,
+          descriptor.byteOffset + descriptor.bytesFilled,
+        );
+        this.#enqueueChunk(copy, 0, copy.byteLength);
+      }
+      this.#processPullIntos();
+      this.#processDefaultReads();
+      this.#maybePull();
+      return;
+    }
+    if (descriptor.bytesFilled < descriptor.minimumFillBytes) {
+      this.#maybePull();
+      return;
+    }
+
+    this.#pullIntos.dequeue();
+    const remainderSize = descriptor.bytesFilled % descriptor.elementSize;
+    if (remainderSize !== 0) {
+      const end = descriptor.byteOffset + descriptor.bytesFilled;
+      const remainder = descriptor.buffer.slice(end - remainderSize, end);
+      this.#enqueueChunk(remainder, 0, remainderSize);
+      descriptor.bytesFilled -= remainderSize;
+    }
+    this.#commitDescriptor(descriptor, false);
+    this.#processPullIntos();
+    this.#processDefaultReads();
+    this.#maybePull();
+  }
+
+  #fillFromQueue(descriptor: PullIntoDescriptor): boolean {
+    const maximum = Math.min(this.#queueTotalSize, descriptor.byteLength - descriptor.bytesFilled);
+    const maximumFilled = descriptor.bytesFilled + maximum;
+    const alignedFilled = maximumFilled - (maximumFilled % descriptor.elementSize);
+    let remaining = maximum;
+    let ready = false;
+    if (alignedFilled >= descriptor.minimumFillBytes) {
+      remaining = alignedFilled - descriptor.bytesFilled;
+      ready = true;
+    }
+    while (remaining > 0) {
+      const entry = this.#queue.peek();
+      if (entry === undefined) break;
+      const count = Math.min(remaining, entry.byteLength);
+      new Uint8Array(descriptor.buffer, descriptor.byteOffset + descriptor.bytesFilled, count).set(
+        new Uint8Array(entry.buffer, entry.byteOffset, count),
+      );
+      descriptor.bytesFilled += count;
+      this.#queueTotalSize -= count;
+      remaining -= count;
+      if (count === entry.byteLength) {
+        this.#queue.dequeue();
+      } else {
+        entry.byteOffset += count;
+        entry.byteLength -= count;
+      }
+    }
+    return ready;
+  }
+
+  #processPullIntos(): void {
+    const ready = new Fifo<PullIntoDescriptor>();
+    while (this.#queueTotalSize > 0) {
+      const descriptor = this.#pullIntos.peek();
+      if (descriptor === undefined || !this.#fillFromQueue(descriptor)) break;
+      this.#pullIntos.dequeue();
+      this.#invalidateBYOBRequest();
+      ready.enqueue(descriptor);
+    }
+    this.#handleQueueDrain();
+    const done = this.stream[readableStreamStateName] === "closed";
+    while (!ready.empty) {
+      const descriptor = ready.dequeue();
+      if (descriptor !== undefined) this.#commitDescriptor(descriptor, done);
+    }
+  }
+
+  #processDefaultReads(): void {
+    while (this.#queueTotalSize > 0 && !this.#defaultReads.empty) {
+      this.#defaultReads.dequeue()?.resolve({ done: false, value: this.#dequeueChunk() });
+    }
+  }
+
+  #commitDescriptor(descriptor: PullIntoDescriptor, done: boolean): void {
+    const transferred = descriptor.buffer.transfer();
+    const byteLength = descriptor.bytesFilled;
+    const view = createByteView(
+      descriptor.viewKind,
+      transferred,
+      descriptor.byteOffset,
+      byteLength,
+    );
+    descriptor.defaultResult?.resolve(
+      done && byteLength === 0
+        ? { done: true, value: undefined }
+        : { done: false, value: new Uint8Array(transferred, descriptor.byteOffset, byteLength) },
+    );
+    descriptor.byobResult?.resolve({ done, value: view });
+    descriptor.defaultResult = null;
+    descriptor.byobResult = null;
+  }
+
+  #dequeueChunk(): Uint8Array {
+    const entry = this.#queue.dequeue();
+    if (entry === undefined) throw new TypeError("Byte stream queue is empty");
+    this.#queueTotalSize -= entry.byteLength;
+    const chunk = new Uint8Array(entry.buffer, entry.byteOffset, entry.byteLength);
+    this.#handleQueueDrain();
+    return chunk;
+  }
+
+  #enqueueChunk(buffer: ArrayBuffer, byteOffset: number, byteLength: number): void {
+    this.#queue.enqueue(new ByteQueueEntry(buffer, byteOffset, byteLength));
+    this.#queueTotalSize += byteLength;
+  }
+
+  #handleQueueDrain(): void {
+    if (this.#queueTotalSize !== 0) return;
+    if (this.#closeRequested) {
+      this.#clearAlgorithms();
+      this.stream.finishByteStream(false);
+    } else {
+      this.#maybePull();
+    }
+  }
+
+  #releasePullIntos(readerKind: PullIntoReaderKind, error: unknown): void {
+    let first: PullIntoDescriptor | null = null;
+    while (!this.#pullIntos.empty) {
+      const descriptor = this.#pullIntos.dequeue();
+      if (descriptor === undefined) break;
+      if (descriptor.readerKind === readerKind) {
+        descriptor.defaultResult?.reject(error);
+        descriptor.byobResult?.reject(error);
+        descriptor.defaultResult = null;
+        descriptor.byobResult = null;
+      }
+      if (first === null) first = descriptor;
+    }
+    if (first !== null) {
+      first.readerKind = "none";
+      this.#pullIntos.enqueue(first);
+    }
+  }
+
+  #invalidateBYOBRequest(): void {
+    this.#currentBYOBRequest?.invalidate();
+    this.#currentBYOBRequest = null;
+  }
+
+  async #observeStart(result: void | PromiseLike<void>): Promise<void> {
+    try {
+      await result;
+      this.#started = true;
+      this.#maybePull();
+    } catch (error) {
+      this.stream.fail(error);
+    }
+  }
+
+  #maybePull(): void {
+    if (!this.#started || !this.canCloseOrEnqueue) return;
+    if (
+      this.#defaultReads.empty &&
+      this.#pullIntos.empty &&
+      this.#highWaterMark <= this.#queueTotalSize
+    ) {
+      return;
+    }
+    if (this.#pulling) {
+      this.#pullAgain = true;
+      return;
+    }
+    const source = this.#source;
+    const pull = this.#pullAlgorithm;
+    if (source === null || pull === undefined) return;
+    this.#pulling = true;
+    let result: void | PromiseLike<void>;
+    try {
+      result = pull.call(source, this.#controller);
+    } catch (error) {
+      this.#pulling = false;
+      this.stream.fail(error);
+      return;
+    }
+    this.#observePull(result);
+  }
+
+  async #observePull(result: void | PromiseLike<void>): Promise<void> {
+    try {
+      await result;
+      this.#pulling = false;
+      if (this.#pullAgain) {
+        this.#pullAgain = false;
+        this.#maybePull();
+      }
+    } catch (error) {
+      this.#pulling = false;
+      this.stream.fail(error);
+    }
+  }
+
+  #clearAlgorithms(): void {
+    this.#source = null;
+    this.#pullAlgorithm = undefined;
+    this.#cancelAlgorithm = undefined;
   }
 }
 
@@ -1160,6 +2281,290 @@ const defaultTeeOptions = {
   size: undefined,
 };
 
+class ByteTeeBranch<T> {
+  controller: ReadableByteStreamController | undefined;
+  canceled = false;
+  reason: unknown;
+  readonly stream: ReadableStream<T>;
+
+  constructor(owner: ByteTeeState<T>, index: number) {
+    this.stream = new ReadableStream<T>({
+      type: "bytes",
+      start: (controller) => {
+        this.controller = controller;
+      },
+      pull: () => owner.pull(index),
+      cancel: (reason) => owner.cancel(index, reason),
+    });
+  }
+
+  get request(): ReadableStreamBYOBRequest | null {
+    return this.controller?.byobRequest ?? null;
+  }
+
+  close(view?: ReadableStreamBYOBView): void {
+    if (this.canceled) return;
+    const controller = this.controller;
+    controller?.close();
+    const request = controller?.byobRequest;
+    if (request === null || request === undefined) return;
+    if (view === undefined) request.respond(0);
+    else request.respondWithNewView(view);
+  }
+
+  fail(error: unknown): void {
+    if (!this.canceled) this.controller?.error(error);
+  }
+
+  enqueue(bytes: Uint8Array<ArrayBuffer>): void {
+    if (!this.canceled) this.controller?.enqueue(bytes);
+  }
+}
+
+class ByteTeeState<T> {
+  readonly branches: [ByteTeeBranch<T>, ByteTeeBranch<T>];
+  readonly #source: ReadableStream<T>;
+  readonly #clone: ((chunk: T) => T) | undefined;
+  readonly #size: ((chunk: T) => number) | undefined;
+  readonly #limit: number;
+  readonly #canceled = Promise.withResolvers<void>();
+  #reader: ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader;
+  #reading = false;
+  #readAgainFirst = false;
+  #readAgainSecond = false;
+  #done = false;
+
+  constructor(stream: ReadableStream<T>, options: TeeOptions<T>) {
+    this.#source = stream;
+    this.#clone = options.clone;
+    this.#size = options.size;
+    this.#limit = options.maxBufferedSize ?? Infinity;
+    if (Number.isNaN(this.#limit) || this.#limit < 0) {
+      throw new RangeError("Invalid clone buffer limit");
+    }
+    this.#reader = new ReadableStreamDefaultReader(stream);
+    this.branches = [new ByteTeeBranch(this, 0), new ByteTeeBranch(this, 1)];
+    ignoreRejection(this.#canceled.promise);
+    this.#observeReader(this.#reader);
+  }
+
+  pull(index: number): Promise<void> {
+    if (this.#done) return Promise.resolve();
+    if (this.#reading) {
+      if (index === 0) this.#readAgainFirst = true;
+      else this.#readAgainSecond = true;
+      return Promise.resolve();
+    }
+    this.#reading = true;
+    const request = this.branches[index]?.request;
+    const view = request?.view;
+    if (request === null || request === undefined || view === null || view === undefined) {
+      this.#readDefault();
+    } else {
+      this.#readInto(view, index);
+    }
+    return Promise.resolve();
+  }
+
+  cancel(index: number, reason: unknown): Promise<void> {
+    const branch = this.branches[index];
+    if (branch !== undefined) {
+      branch.canceled = true;
+      branch.reason = reason;
+    }
+    if (this.branches[0].canceled && this.branches[1].canceled && !this.#done) {
+      this.#done = true;
+      const cancellation = this.#reader.cancel([
+        this.branches[0].reason,
+        this.branches[1].reason,
+      ]);
+      this.#finishCancellation(cancellation);
+    }
+    return this.#canceled.promise;
+  }
+
+  async #readDefault(): Promise<void> {
+    const reader = this.#defaultReader();
+    let result: ReadResult<T>;
+    try {
+      result = await reader.read();
+    } catch (error) {
+      if (reader === this.#reader) this.#sourceErrored(error);
+      return;
+    }
+    if (reader !== this.#reader || this.#done) return;
+    if (result.done) {
+      this.#sourceClosed();
+      return;
+    }
+    if (!(result.value instanceof Uint8Array) || !(result.value.buffer instanceof ArrayBuffer)) {
+      this.#failTee(new TypeError("A byte stream produced a non-byte chunk"));
+      return;
+    }
+    const bytes = new Uint8Array(
+      result.value.buffer,
+      result.value.byteOffset,
+      result.value.byteLength,
+    );
+    this.#forwardDefault(result.value, bytes);
+  }
+
+  async #readInto(view: ReadableStreamBYOBView, index: number): Promise<void> {
+    const reader = this.#byobReader();
+    let result: ReadableStreamBYOBReadResult<ReadableStreamBYOBView>;
+    try {
+      result = await reader.read(view);
+    } catch (error) {
+      if (reader === this.#reader) this.#sourceErrored(error);
+      return;
+    }
+    if (reader !== this.#reader || this.#done) return;
+    if (result.done) {
+      this.#sourceClosed(index, result.value);
+      return;
+    }
+    this.#forwardBYOB(result.value, index);
+  }
+
+  #defaultReader(): ReadableStreamDefaultReader<T> {
+    const reader = this.#reader;
+    if (reader instanceof ReadableStreamDefaultReader) return reader;
+    reader.releaseLock();
+    const replacement = new ReadableStreamDefaultReader(this.#source);
+    this.#reader = replacement;
+    this.#observeReader(replacement);
+    return replacement;
+  }
+
+  #byobReader(): ReadableStreamBYOBReader {
+    const reader = this.#reader;
+    if (reader instanceof ReadableStreamBYOBReader) return reader;
+    reader.releaseLock();
+    const replacement = new ReadableStreamBYOBReader(this.#source);
+    this.#reader = replacement;
+    this.#observeReader(replacement);
+    return replacement;
+  }
+
+  async #observeReader(
+    reader: ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader,
+  ): Promise<void> {
+    try {
+      await reader.closed;
+    } catch (error) {
+      if (reader === this.#reader) this.#sourceErrored(error);
+    }
+  }
+
+  #forwardDefault(value: T, bytes: Uint8Array<ArrayBuffer>): void {
+    this.#resetReadAgain();
+    try {
+      const size = this.#size === undefined ? bytes.byteLength : this.#size(value);
+      this.#checkSize(size);
+      let second = bytes;
+      if (!this.branches[0].canceled && !this.branches[1].canceled) {
+        const clone = this.#clone;
+        if (clone === undefined) {
+          second = bytes.slice();
+        } else {
+          const cloned = clone(value);
+          if (!(cloned instanceof Uint8Array) || !(cloned.buffer instanceof ArrayBuffer)) {
+            throw new TypeError("A byte-stream tee clone must be a Uint8Array");
+          }
+          second = new Uint8Array(cloned.buffer, cloned.byteOffset, cloned.byteLength);
+        }
+      }
+      this.branches[0].enqueue(bytes);
+      this.branches[1].enqueue(second);
+      this.#finishRead();
+    } catch (error) {
+      this.#failTee(error);
+    }
+  }
+
+  #forwardBYOB(view: ReadableStreamBYOBView, index: number): void {
+    this.#resetReadAgain();
+    try {
+      this.#checkSize(view.byteLength);
+      const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+      const clone = bytes.slice();
+      const byobBranch = this.branches[index];
+      const otherBranch = this.branches[index === 0 ? 1 : 0];
+      if (byobBranch !== undefined && !byobBranch.canceled) {
+        byobBranch.request?.respondWithNewView(view);
+      }
+      otherBranch?.enqueue(clone);
+      this.#finishRead();
+    } catch (error) {
+      this.#failTee(error);
+    }
+  }
+
+  #checkSize(size: number): void {
+    if (!Number.isFinite(size) || size < 0) {
+      throw new RangeError("Invalid chunk size");
+    }
+    for (const branch of this.branches) {
+      if (!branch.canceled && branch.stream.queuedSize + size > this.#limit) {
+        throw new LimitError("Clone backlog exceeded configured limit");
+      }
+    }
+  }
+
+  #sourceClosed(index?: number, view?: ReadableStreamBYOBView): void {
+    if (this.#done) return;
+    this.#done = true;
+    this.#reading = false;
+    if (index === undefined) {
+      this.branches[0].close();
+      this.branches[1].close();
+    } else {
+      this.branches[index]?.close(view);
+      this.branches[index === 0 ? 1 : 0]?.close();
+    }
+    this.#canceled.resolve();
+  }
+
+  #sourceErrored(error: unknown): void {
+    if (this.#done) return;
+    this.#done = true;
+    this.#reading = false;
+    this.branches[0].fail(error);
+    this.branches[1].fail(error);
+    this.#canceled.resolve();
+  }
+
+  #failTee(error: unknown): void {
+    if (this.#done) return;
+    this.#done = true;
+    this.#reading = false;
+    this.branches[0].fail(error);
+    this.branches[1].fail(error);
+    this.#finishCancellation(this.#reader.cancel(error));
+  }
+
+  async #finishCancellation(cancellation: Promise<void>): Promise<void> {
+    try {
+      await cancellation;
+      this.#canceled.resolve();
+    } catch (error) {
+      this.#canceled.reject(error);
+    }
+  }
+
+  #resetReadAgain(): void {
+    this.#readAgainFirst = false;
+    this.#readAgainSecond = false;
+  }
+
+  #finishRead(): void {
+    this.#reading = false;
+    if (this.#done) return;
+    if (this.#readAgainFirst) this.pull(0);
+    else if (this.#readAgainSecond) this.pull(1);
+  }
+}
+
 class TeeBranch<T> {
   controller: ReadableStreamDefaultController<T> | undefined;
   canceled = false;
@@ -1428,6 +2833,10 @@ export function tee<T>(
   stream: ReadableStream<T>,
   options: TeeOptions<T> = defaultTeeOptions,
 ): [ReadableStream<T>, ReadableStream<T>] {
+  if (stream.byteStream) {
+    const state = new ByteTeeState(stream, options);
+    return [state.branches[0].stream, state.branches[1].stream];
+  }
   const state = new TeeState(stream, options);
   return [state.branches[0].stream, state.branches[1].stream];
 }
@@ -1439,17 +2848,29 @@ export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStrea
   let position = 0;
   return new ReadableStream<Uint8Array>(
     {
+      type: "bytes",
       pull(controller) {
         if (position === bytes.length) {
           controller.close();
           return;
         }
+        const request = controller.byobRequest;
+        const view = request?.view;
+        if (request !== null && request !== undefined && view !== null && view !== undefined) {
+          const count = Math.min(view.byteLength, chunkSize, bytes.length - position);
+          new Uint8Array(view.buffer, view.byteOffset, count).set(
+            bytes.subarray(position, position + count),
+          );
+          position += count;
+          request.respond(count);
+          return;
+        }
         const end = Math.min(position + chunkSize, bytes.length);
-        controller.enqueue(bytes.subarray(position, end));
+        controller.enqueue(bytes.slice(position, end));
         position = end;
       },
     },
-    { highWaterMark: 0, size: (chunk) => chunk.length },
+    { highWaterMark: 0 },
   );
 }
 

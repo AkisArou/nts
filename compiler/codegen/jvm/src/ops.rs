@@ -567,7 +567,7 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
 ///
 /// `declared` is what TypeScript writes; the rest is what the call becomes.
 /// Both halves are here because they are the thing that can disagree -- the
-/// declarations live in `runtime/web-platform/android/intrinsics.d.ts` and the
+/// declarations live in `runtime/jvm/web-platform/intrinsics.d.ts` and the
 /// Java lives in `runtime/jvm`, and this table is the only place the two are
 /// named together.
 #[derive(Debug)]

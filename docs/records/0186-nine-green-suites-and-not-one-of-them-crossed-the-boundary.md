@@ -64,7 +64,7 @@ Sabotaged two ways, both of which bite:
 
 ## Four of nine
 
-`runtime/web-platform/android/intrinsics.d.ts` declares nine. Five take an
+`runtime/jvm/web-platform/intrinsics.d.ts` -- at `runtime/web-platform/android/` when this was written -- declares nine. Five take an
 environment handle or a byte view, and neither a common environment type nor
 `ManagedType::View` exists, so those five cannot be written in TypeScript at
 all -- they are marked GATED there and absent here.
