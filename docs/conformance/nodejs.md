@@ -2821,6 +2821,51 @@ functions, and the annotated-const write. Nothing in this sweep is ahead of them
 which exports published, which wait on a lowering and which on the backend
 naming a kind of export, ranked by how many exports each chain root gates.
 
+### The same oracle, asked more questions
+
+Node's tests are a fixed set of inputs a human chose. Node itself is not: it can
+be asked anything. `differential-ts.mjs` compares a module against
+`node:<module>` on generated inputs, and `differential-addon.mjs` asks the same
+of a compiled addon.
+
+**It found a real bug in `querystring` on its first serious run** — 20
+divergences over 4,000 generated queries, in a module whose four pinned files
+all passed:
+
+    parse("a&__proto__")   ours {"__proto__": "", "a": ""}
+                           node {"a": "", "__proto__": ""}
+
+`parse` has to give `__proto__` special treatment, because assigning it on an
+ordinary object hits the legacy setter instead of creating an own property. The
+special case built a fresh object with `__proto__` first and copied everything
+already parsed in behind it, so **the key order depended on whether `__proto__`
+appeared at all**. It is observable beyond enumeration:
+`stringify(parse(s))` came back with the pairs reordered, which is how the
+differential saw it. The fix is one line — spread first, computed key last — and
+`querystring/test/proto-order-static.js` holds it: reverting the fix leaves
+`test-querystring.js` green and fails only that file.
+
+Current state, all lanes:
+
+| corpus | comparisons | divergences |
+| --- | ---: | ---: |
+| `punycode`, TypeScript | 16,128 | 0 |
+| `punycode`, compiled addon | 80,128 | 0 |
+| `path`, TypeScript | 36,234 | 0 |
+| `querystring`, TypeScript | 16,076 | 0 |
+
+Two processes are needed on the TypeScript lane, because inside the
+substitution `require("node:path")` and `require("path")` are the same object
+and node's real module is unreachable from there. Inputs are generated once in
+the host and handed to the probe as a file rather than regenerated from a shared
+seed, so both sides answer identically the same questions instead of two
+sequences that are supposed to agree.
+
+Both tools have a recorded negative control. The addon one crashed rather than
+reported the first time it had a real defect to find; the TypeScript one yields
+11 divergences when `querystring`'s original ordering is restored. **A check with
+no demonstrated failure is a claim, not a measurement.**
+
 ### Where node's tests stop being a sufficient oracle
 
 Node's pinned tests are the oracle for this profile, and for behaviour they are
