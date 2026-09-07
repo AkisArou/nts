@@ -1214,3 +1214,36 @@ At `ee0e8daf`, the live compiled-source frontier is 716 primary `NTS1001` refusa
 diagnostics, and no invalid HIR. The increase is the complete final byte-stream and
 BYOB source reaching existing compiler dependencies; it is not compiled-provider
 progress.
+
+## EventSource
+
+The canonical environment-owned `EventSource` now runs over the shared Fetch and
+Streams implementations. It implements the HTML event-stream state machine,
+incremental UTF-8 and CR/LF/CRLF parsing, BOM handling, named events, comments,
+`data`/`event`/`id`/`retry` fields, incomplete-EOF discard, trusted `open`/`message`/
+`error` events, reconnect timing, `Last-Event-ID`, fatal status and MIME handling,
+abort, close, environment teardown, and independent line/event buffer limits. A
+reconnect inherits the previous last-event-ID buffer when a later response has no
+`id` field. Non-ASCII IDs are UTF-8 encoded into Fetch's internal ByteString header
+representation, preserving the required wire bytes without weakening the public
+`Headers` conversion boundary.
+
+Thirty-one complete, unchanged EventSource WPT fixtures and their four server
+resources are pinned by exact Git blob hash at WPT commit
+`b89af32bc8f42d678f444eb0703bca015ddcf240`. All 31 cases pass. The deterministic
+suite additionally covers fragmented input, buffer limits, cancellation and runtime
+shutdown, while the real HTTP test covers split UTF-8, reconnect and header delivery.
+
+At `9f6016c4`, the complete local Node-host and real-socket suite passes 165/165.
+Across the full pinned upstream slice, 2143 of 2151 applicable cases pass, with eight
+named not-applicable cases. The same eight pre-existing failures remain visible:
+three Headers iterator-shape cases, two promise-fulfillment observability cases, two
+explicit-receiver callback cases, and the Web-IDL async-iterator prototype/object
+shape case. EventSource introduces no upstream failure or exclusion.
+
+The live compiled-source frontier is 724 primary `NTS1001` refusals and 106 dependent
+`NTS1003` cascades, with zero JVM-backend diagnostics, zero `NTS1004` module
+diagnostics, and no invalid HIR. Relative to the readable-byte-stream checkpoint, the
+additional final EventSource source exposes eight primary dependencies and fourteen
+dependent call-site cascades; this is a source frontier, not compiled-provider
+progress.
