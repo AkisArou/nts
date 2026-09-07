@@ -145,6 +145,7 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
  * would enumerate those too, which is the ordering that makes this list the interesting part.
  */
 const FULLY_CONFORMANT = [
+  "AbortSignal",
   "Headers",
   "Request",
   "Response",

@@ -11,6 +11,7 @@ import {
   type UnderlyingSource,
 } from "../streams/readable.ts";
 import type { FetchInterceptor } from "./interceptor.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 const safeMethods = ["GET", "HEAD", "OPTIONS", "TRACE"] as const;
 
@@ -119,7 +120,7 @@ function copyTrailers(
 ): Promise<readonly HeaderEntry[]> {
   signal.throwIfAborted();
   const result = Promise.withResolvers<readonly HeaderEntry[]>();
-  const unsubscribe = signal.subscribe(() => result.reject(signal.reason));
+  const unsubscribe = signal[abortSignalSubscribe](() => result.reject(signal.reason));
   pending.then((entries) => {
     const copy = copyHeaders(entries);
     if (signal.aborted) return;
@@ -174,7 +175,7 @@ class DeduplicationSubscriber {
     this.owner = owner;
     this.budget = budget;
     this.maximumBufferedBytes = maximumBufferedBytes;
-    this.unsubscribeRequest = requestSignal.subscribe(() => this.abort(requestSignal.reason));
+    this.unsubscribeRequest = requestSignal[abortSignalSubscribe](() => this.abort(requestSignal.reason));
   }
 
   get isActive(): boolean {

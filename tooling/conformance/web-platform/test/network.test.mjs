@@ -33,6 +33,11 @@ import { ConnectionPool } from "../node_modules/.tsbuild/host/runtime/web-platfo
 import { decodeContentCodings } from "../node_modules/.tsbuild/host/runtime/web-platform/src/fetch/content-coding.js";
 import { createHostNodePrimitives } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
 import { tlsFixture } from "./tls-fixture.mjs";
+// Symbol-keyed internals: not on the interface prototype and not on the public barrel,
+// so a test reaches them the same way the runtime does.
+import {
+  abortSignalSubscribe,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
 
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
@@ -600,7 +605,7 @@ suite("ConnectionPool.close interrupts an outstanding connector", async () => {
       connect(_address, signal) {
         entered();
         return new Promise((_r, reject) =>
-          signal.subscribe(() => {
+          signal[abortSignalSubscribe](() => {
             aborted = true;
             reject(signal.reason);
           }),
@@ -1187,7 +1192,7 @@ suite("WebSocketStream failure identity, handshake abort, and runtime ownership"
   runtime(t, {
     webSocketTransport: {
       connect(_handshake, signal) {
-        signal.subscribe(() => connection.reject(signal.reason));
+        signal[abortSignalSubscribe](() => connection.reject(signal.reason));
         return connection.promise;
       },
     },

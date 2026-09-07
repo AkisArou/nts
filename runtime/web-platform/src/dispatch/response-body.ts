@@ -5,6 +5,7 @@ import { Headers } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import type { TransportResponse } from "../fetch/transport.ts";
 import type { ReadResult, ReadableStreamDefaultReader } from "../streams/readable.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 export class ResponseExceededMaxSizeError extends Error {
   readonly code = "UND_ERR_RES_EXCEEDED_MAX_SIZE";
@@ -49,7 +50,7 @@ async function readWithAbort(
 ): Promise<ReadResult<Uint8Array>> {
   signal.throwIfAborted();
   const result = Promise.withResolvers<ReadResult<Uint8Array>>();
-  const unsubscribe = signal.subscribe(() => result.reject(signal.reason));
+  const unsubscribe = signal[abortSignalSubscribe](() => result.reject(signal.reason));
   reader.read().then(result.resolve, result.reject);
   try {
     return await result.promise;
@@ -113,7 +114,7 @@ export async function settleResponseTrailers(
   if (pending === undefined) return undefined;
   signal.throwIfAborted();
   const result = Promise.withResolvers<readonly HeaderEntry[]>();
-  const unsubscribe = signal.subscribe(() => result.reject(signal.reason));
+  const unsubscribe = signal[abortSignalSubscribe](() => result.reject(signal.reason));
   pending.then(result.resolve, result.reject);
   try {
     const entries = await result.promise;

@@ -20,6 +20,7 @@ import type {
   URLRecord,
 } from "../provider/primitives.ts";
 import { isNegotiatingTlsUpgrader, upgradeNegotiated } from "../provider/primitives.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const DEFAULT_MAXIMUM_AUTHENTICATION_ATTEMPTS = 2;
@@ -298,7 +299,7 @@ function withConnectDeadline<T>(
   }
   if (signal.aborted) return Promise.reject(signal.reason);
   const controller = new AbortController();
-  const unsubscribe = signal.subscribe(() => controller.abort(signal.reason));
+  const unsubscribe = signal[abortSignalSubscribe](() => controller.abort(signal.reason));
   let timer: CancelHandle;
   try {
     timer = scheduler.delay(target.connectTimeoutMs, () =>
@@ -372,7 +373,7 @@ export class HttpConnectProxyConnector implements NegotiatingSocketConnector {
     let attempt = 1;
     while (true) {
       const connection = await this.connector.connect(proxyAddress(this.proxy, target), signal);
-      const unsubscribe = signal.subscribe(() => connection.close());
+      const unsubscribe = signal[abortSignalSubscribe](() => connection.close());
       try {
         signal.throwIfAborted();
         const targetAuthority = authority(target);
@@ -596,7 +597,7 @@ export class Socks5ProxyConnector implements NegotiatingSocketConnector {
 
   private async open(target: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     const connection = await this.connector.connect(proxyAddress(this.proxy, target), signal);
-    const unsubscribe = signal.subscribe(() => connection.close());
+    const unsubscribe = signal[abortSignalSubscribe](() => connection.close());
     try {
       const username = utf8.encode(this.proxy.username);
       const password = utf8.encode(this.proxy.password);

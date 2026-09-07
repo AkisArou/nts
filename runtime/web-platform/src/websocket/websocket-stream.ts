@@ -21,6 +21,7 @@ import type {
   WebSocketSession,
   WebSocketTransport,
 } from "./transport.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 export type { WebSocketCloseInfo } from "./semantics.ts";
 
@@ -161,7 +162,7 @@ export class WebSocketStream {
       return;
     }
     if (signal !== undefined) {
-      this.#removeAbortAlgorithm = signal.subscribe(() => {
+      this.#removeAbortAlgorithm = signal[abortSignalSubscribe](() => {
         if (this.#state !== "connecting") return;
         this.#connectionController.abort(signal.reason);
         this.#failBeforeOpen(signal.reason);

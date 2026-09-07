@@ -68,6 +68,7 @@ import {
   validateHttp2RequestHeaders,
 } from "./headers.ts";
 import type { Http2ResponseHeaders } from "./headers.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 const CLIENT_PREFACE = encodeByteString("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
 
@@ -296,7 +297,7 @@ class Http2ClientStream {
   }
 
   attachSignal(signal: AbortSignal): void {
-    this.disposeAbort = signal.subscribe(() => this.connection.cancelStream(this, signal.reason));
+    this.disposeAbort = signal[abortSignalSubscribe](() => this.connection.cancelStream(this, signal.reason));
   }
 
   setUploadReader(reader: ReadableStreamDefaultReader<Uint8Array> | null): void {
@@ -1300,7 +1301,7 @@ export class Http2ClientConnection {
       active: true,
       dispose: doNothing,
     };
-    waiter.dispose = signal.subscribe(() => {
+    waiter.dispose = signal[abortSignalSubscribe](() => {
       if (!waiter.active) return;
       waiter.active = false;
       waiter.dispose();
@@ -1320,7 +1321,7 @@ export class Http2ClientConnection {
     if (this.receivedSettings) return;
     signal.throwIfAborted();
     const result = Promise.withResolvers<void>();
-    const dispose = signal.subscribe(() => result.reject(signal.reason));
+    const dispose = signal[abortSignalSubscribe](() => result.reject(signal.reason));
     this.ready.then(result.resolve, result.reject);
     try {
       await result.promise;

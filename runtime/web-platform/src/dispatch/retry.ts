@@ -15,6 +15,7 @@ import { TransportError } from "../fetch/transport.ts";
 import type { CancelHandle, Scheduler } from "../provider/primitives.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import type { FetchInterceptor } from "./interceptor.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 const defaultMethods = ["GET", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE"] as const;
 const defaultStatusCodes = [500, 502, 503, 504, 429] as const;
@@ -164,7 +165,7 @@ async function waitForRetry(
   signal.throwIfAborted();
   const result = Promise.withResolvers<void>();
   let timer: CancelHandle | null = null;
-  const unsubscribe = signal.subscribe(() => {
+  const unsubscribe = signal[abortSignalSubscribe](() => {
     timer?.cancel();
     result.reject(signal.reason);
   });

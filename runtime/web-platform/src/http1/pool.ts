@@ -9,6 +9,7 @@ import type {
   SocketConnector,
 } from "../provider/primitives.ts";
 import { BufferedReader } from "./io.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 export interface PoolOptions {
   maxConnections?: number;
@@ -135,7 +136,7 @@ export class ConnectionPool {
       queued: false,
       settled: false,
     };
-    waiter.unsubscribe = signal.subscribe(() => {
+    waiter.unsubscribe = signal[abortSignalSubscribe](() => {
       rejectWaiter(waiter, signal.reason);
       this.connecting.get(waiter)?.abort(signal.reason);
       if (waiter.queued) {

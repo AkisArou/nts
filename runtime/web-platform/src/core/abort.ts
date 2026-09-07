@@ -1,5 +1,7 @@
 import { abortSignalBrand } from "./abort-brand.ts";
 import type { AbortSignalOperations } from "./abort-brand.ts";
+import { abortSignalSubscribe, abortSignalTrigger } from "./abort-brand.ts";
+export { abortSignalSubscribe, abortSignalTrigger } from "./abort-brand.ts";
 import type { EventHandlerSlot } from "./events.ts";
 import { Event, EventTarget } from "./events.ts";
 import { abortError, DOMException } from "./errors.ts";
@@ -68,7 +70,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   /** Internal cancellation algorithms cannot be blocked by stopImmediatePropagation. */
-  subscribe(callback: () => void): () => void {
+  [abortSignalSubscribe](callback: () => void): () => void {
     if (this.isAborted) {
       try {
         callback();
@@ -91,7 +93,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     return () => this.#removeAlgorithm(algorithm);
   }
 
-  /** @internal */ trigger(reason: unknown): void {
+  [abortSignalTrigger](reason: unknown): void {
     if (!this.#markAborted(reason)) return;
 
     const dependents = this.#markDependentsAborted();
@@ -104,7 +106,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
 
   static abort(reason?: unknown): AbortSignal {
     const signal = new AbortSignal(abortSignalConstructorKey);
-    signal.trigger(reason);
+    signal[abortSignalTrigger](reason);
     return signal;
   }
 
@@ -119,7 +121,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     const result = new AbortSignal(abortSignalConstructorKey);
     for (const signal of converted) {
       if (signal.aborted) {
-        result.trigger(signal.reason);
+        result[abortSignalTrigger](signal.reason);
         return result;
       }
     }
@@ -145,7 +147,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       scheduler.reportError(error),
     );
     scheduler.delay(delay, () =>
-      signal.trigger(new DOMException("The operation timed out", "TimeoutError")),
+      signal[abortSignalTrigger](new DOMException("The operation timed out", "TimeoutError")),
     );
     return signal;
   }
@@ -306,6 +308,17 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes. Safe here now: the two members other modules need are
+    // symbol-keyed and `getOwnPropertyNames` does not report symbols. This walks
+    // `AbortSignal.prototype` only -- `EventTarget`'s inherited members still carry its own
+    // internals and are not touched.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "AbortSignal",
       writable: false,
@@ -323,7 +336,7 @@ export class AbortController {
   }
 
   abort(reason?: unknown): void {
-    this.controllerSignal.trigger(reason);
+    this.controllerSignal[abortSignalTrigger](reason);
   }
 
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is

@@ -28,6 +28,7 @@ import {
   writableStreamStoredError,
   type WritableStreamDefaultWriter,
 } from "./writable.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 export type ReadResult<T> = { done: false; value: T } | { done: true; value: undefined };
 
@@ -2105,7 +2106,7 @@ class PipeState<T> {
       return;
     }
     if (signal !== undefined) {
-      this.#unsubscribe = signal.subscribe(() => this.#abort(signal.reason));
+      this.#unsubscribe = signal[abortSignalSubscribe](() => this.#abort(signal.reason));
     }
 
     this.#pump();

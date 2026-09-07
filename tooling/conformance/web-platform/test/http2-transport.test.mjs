@@ -25,6 +25,11 @@ import {
   encodeHttp2Frame,
   encodeHttp2GoAway,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http2/frame.js";
+// Symbol-keyed internals: not on the interface prototype and not on the public barrel,
+// so a test reaches them the same way the runtime does.
+import {
+  abortSignalSubscribe,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
 
 const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
 
@@ -409,7 +414,7 @@ suite("graceful drain waits for provider work from an open it cancelled", async 
   });
   const connector = {
     connect(_address, signal) {
-      signal.subscribe(() => {
+      signal[abortSignalSubscribe](() => {
         observedAbort = true;
       });
       return connectReleased.then(() => {

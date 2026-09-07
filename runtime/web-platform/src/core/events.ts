@@ -14,6 +14,7 @@ import {
   toUnsignedLong,
   toUnsignedShort,
 } from "./webidl.ts";
+import { abortSignalSubscribe } from "./abort-brand.ts";
 
 export interface EventInit {
   bubbles?: boolean;
@@ -464,8 +465,8 @@ function isEventListenerSignal(signal: unknown): signal is AbortSignalOperations
     signal[abortSignalBrand] === true &&
     "aborted" in signal &&
     typeof signal.aborted === "boolean" &&
-    "subscribe" in signal &&
-    typeof signal.subscribe === "function"
+    abortSignalSubscribe in signal &&
+    typeof signal[abortSignalSubscribe] === "function"
   );
 }
 
@@ -582,7 +583,7 @@ export class EventTarget {
     this.listeners.push(listener);
     this.listenerObserver?.(convertedType, true);
     if (signal !== undefined) {
-      listener.unsubscribeAbort = signal.subscribe(() => this.removeRecord(listener));
+      listener.unsubscribeAbort = signal[abortSignalSubscribe](() => this.removeRecord(listener));
     }
   }
 

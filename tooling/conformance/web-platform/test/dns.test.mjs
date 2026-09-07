@@ -10,6 +10,11 @@ import {
   DnsNoAddressError,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { HostNodeSocketConnector } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
+// Symbol-keyed internals: not on the interface prototype and not on the public barrel,
+// so a test reaches them the same way the runtime does.
+import {
+  abortSignalSubscribe,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
 
 function v4(address, ttlMilliseconds = 1000) {
   return { address, family: 4, ttlMilliseconds };
@@ -160,7 +165,7 @@ test("DnsCache cancels a miss when its final consumer leaves", async () => {
       resolve(_hostname, _options, signal) {
         resolverSignal = signal;
         return new Promise((_resolve, reject) => {
-          signal.subscribe(() => reject(signal.reason));
+          signal[abortSignalSubscribe](() => reject(signal.reason));
         });
       },
     },
@@ -326,7 +331,7 @@ test("DnsConnector preserves exact external cancellation and bypasses literal ad
       connect(_target, signal) {
         attemptedSignal = signal;
         return new Promise((_resolve, reject) => {
-          signal.subscribe(() => reject(signal.reason));
+          signal[abortSignalSubscribe](() => reject(signal.reason));
         });
       },
     },

@@ -30,6 +30,7 @@ import type { HeadLimits } from "./parser.ts";
 import { ConnectionPool } from "./pool.ts";
 import type { PoolOptions } from "./pool.ts";
 import { headersRawEntries } from "../fetch/headers.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 export interface Http1Options extends PoolOptions {
   connectTimeoutMs?: number;
@@ -282,7 +283,7 @@ export class Http1Transport implements FetchTransport {
           : null;
     };
     try {
-      dispose = request.signal.subscribe(() => fail(request.signal.reason));
+      dispose = request.signal[abortSignalSubscribe](() => fail(request.signal.reason));
       request.signal.throwIfAborted();
       startTimeout(this.headersTimeout);
       await writeAll(lease.connection, serialized.bytes);

@@ -9,6 +9,7 @@ import {
   type QueuingStrategy,
   type QueuingStrategySize,
 } from "./queuing-strategy.ts";
+import { abortSignalTrigger } from "../core/abort.ts";
 
 export type UnderlyingSinkStartCallback<W> = (
   this: UnderlyingSink<W>,
@@ -315,7 +316,7 @@ class WritableStreamState<W> {
       return Promise.resolve();
     }
 
-    this.#abortSignal.trigger(reason);
+    this.#abortSignal[abortSignalTrigger](reason);
     if (this.#isTerminal()) {
       return Promise.resolve();
     }

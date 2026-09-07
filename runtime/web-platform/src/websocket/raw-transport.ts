@@ -26,6 +26,7 @@ import type {
   WebSocketSession,
   WebSocketTransport,
 } from "./transport.ts";
+import { abortSignalSubscribe } from "../core/abort.ts";
 
 export interface RawWebSocketOptions {
   connectTimeoutMs?: number;
@@ -82,7 +83,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
     if (this.closed) throw new TypeError("WebSocket transport is closed");
     const controller = new AbortController();
     this.connecting.add(controller);
-    const detach = signal.subscribe(() => controller.abort(signal.reason));
+    const detach = signal[abortSignalSubscribe](() => controller.abort(signal.reason));
     try {
       return await this.open(handshake, controller.signal);
     } finally {
@@ -98,7 +99,7 @@ export class RawWebSocketTransport implements WebSocketTransport {
       addressOf(handshake.url, this.options.connectTimeoutMs ?? 30000, ["http/1.1"]),
       signal,
     );
-    const dispose = signal.subscribe(() => connection.close());
+    const dispose = signal[abortSignalSubscribe](() => connection.close());
     const timer = this.scheduler.delay(this.options.handshakeTimeoutMs ?? 30000, () =>
       connection.close(),
     );

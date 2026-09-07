@@ -13,6 +13,7 @@ import type { URLRecord } from "../provider/primitives.ts";
 import type { CancelHandle, Scheduler } from "../provider/primitives.ts";
 import { bytesStream, type ReadableStream } from "../streams/readable.ts";
 import { headersRawEntries } from "../fetch/headers.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 export type MockStringMatcher = string | RegExp | ((value: string) => boolean);
 export type MockBodyMatcher =
@@ -243,7 +244,7 @@ async function waitForDelay(
   signal.throwIfAborted();
   const result = Promise.withResolvers<void>();
   let timer: CancelHandle | null = null;
-  const dispose = signal.subscribe(() => {
+  const dispose = signal[abortSignalSubscribe](() => {
     timer?.cancel();
     result.reject(signal.reason);
   });

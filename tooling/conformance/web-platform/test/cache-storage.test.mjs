@@ -10,6 +10,11 @@ import {
   Response,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
+// Symbol-keyed internals: not on the interface prototype and not on the public barrel,
+// so a test reaches them the same way the runtime does.
+import {
+  abortSignalSubscribe,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
 
 function stream(text) {
   const bytes = new globalThis.TextEncoder().encode(text);
@@ -336,7 +341,7 @@ test("addAll aborts remaining fetches after one response is invalid", async () =
   const runtime = runtimeWithTransport(async (request) => {
     if (request.url.pathname === "/bad") return transportResponse(404, "missing");
     return new Promise((resolve, reject) => {
-      const unsubscribe = request.signal.subscribe(() => {
+      const unsubscribe = request.signal[abortSignalSubscribe](() => {
         aborted = true;
         unsubscribe();
         reject(request.signal.reason);

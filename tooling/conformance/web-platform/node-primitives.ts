@@ -34,6 +34,7 @@ import type {
   URLParser,
   URLRecord,
 } from "../../../runtime/web-platform/src/provider.ts";
+import { abortSignalSubscribe } from "../../../runtime/web-platform/src/core/abort-brand.ts";
 
 const MAX_IO_BYTES = 64 * 1024;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -364,7 +365,7 @@ class HostNodeSocketListener implements SocketListener {
     const asker = Promise.withResolvers<ByteConnection | null>();
     this.askers.push(asker);
     // Aborting one accept removes that caller and leaves the listener open.
-    const detach = signal.subscribe(() => {
+    const detach = signal[abortSignalSubscribe](() => {
       const index = this.askers.indexOf(asker);
       if (index >= 0) this.askers.splice(index, 1);
       asker.reject(signal.reason);
@@ -488,7 +489,7 @@ export class HostNodeSocketConnector implements NegotiatingSocketConnector {
         finishError(new TypeError("Connection closed before it was established"));
       socket.once("error", finishError);
       socket.once("close", closed);
-      dispose = signal.subscribe(() => finishError(signal.reason));
+      dispose = signal[abortSignalSubscribe](() => finishError(signal.reason));
       socket.once(address.secure ? "secureConnect" : "connect", () => {
         if (settled) return;
         if (signal.aborted) {
@@ -610,7 +611,7 @@ export class HostNodeTlsUpgrader implements NegotiatingTlsUpgrader {
       socket.once("error", fail);
       socket.once("close", closed);
       socket.once("secureConnect", connected);
-      unsubscribe = signal.subscribe(() => fail(signal.reason));
+      unsubscribe = signal[abortSignalSubscribe](() => fail(signal.reason));
     });
   }
 }
@@ -634,7 +635,7 @@ export class HostNodeDnsResolver implements DnsResolver {
     if (signal.aborted) return Promise.reject(signal.reason);
     return new Promise<readonly DnsAddress[]>((resolve, reject) => {
       let settled = false;
-      const unsubscribe = signal.subscribe(() => {
+      const unsubscribe = signal[abortSignalSubscribe](() => {
         if (settled) return;
         settled = true;
         reject(signal.reason);

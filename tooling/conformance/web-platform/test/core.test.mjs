@@ -73,6 +73,11 @@ import {
   currentWebPlatformRuntime,
   installWebPlatformRuntime,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/provider.js";
+// Symbol-keyed internals: not on the interface prototype and not on the public barrel,
+// so a test reaches them the same way the runtime does.
+import {
+  abortSignalSubscribe,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
@@ -738,7 +743,7 @@ test("Abort reason identity and independent internal cancellation", () => {
   const reason = { kind: "test" };
   let calls = 0;
   controller.signal.addEventListener("abort", (event) => event.stopImmediatePropagation());
-  controller.signal.subscribe(() => calls++);
+  controller.signal[abortSignalSubscribe](() => calls++);
   controller.abort(reason);
   controller.abort("later");
   assert.equal(controller.signal.reason, reason);
@@ -812,7 +817,7 @@ test("Public EventTarget and abort constructors do not expose provider hooks", (
   assert.equal(target.dispatchEvent(new Event("error")), true);
 
   const controller = new AbortController(() => reported++);
-  controller.signal.subscribe(() => {
+  controller.signal[abortSignalSubscribe](() => {
     throw new Error("abort failure");
   });
   controller.abort();
@@ -3227,7 +3232,7 @@ test("onabort can be stopped by an earlier listener without stopping internal ab
     internal = false;
   c.signal.addEventListener("abort", (e) => e.stopImmediatePropagation());
   c.signal.onabort = () => (property = true);
-  c.signal.subscribe(() => (internal = true));
+  c.signal[abortSignalSubscribe](() => (internal = true));
   c.abort();
   assert.equal(property, false);
   assert.equal(internal, true);

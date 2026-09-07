@@ -24,6 +24,7 @@ import { Http2ClientConnection } from "./connection.ts";
 import type { Http2ClientResponse, Http2ConnectionOptions } from "./connection.ts";
 import type { HpackHeaderField } from "./hpack.ts";
 import { headersRawEntries } from "../fetch/headers.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 export interface Http2TransportOptions {
   connectTimeoutMs?: number;
@@ -550,7 +551,7 @@ export class Http2Transport implements FetchTransport {
   ): Promise<Http2ClientConnection> {
     signal.throwIfAborted();
     const result = Promise.withResolvers<Http2ClientConnection>();
-    const dispose = signal.subscribe(() => result.reject(signal.reason));
+    const dispose = signal[abortSignalSubscribe](() => result.reject(signal.reason));
     promise.then(result.resolve, result.reject);
     try {
       return await result.promise;

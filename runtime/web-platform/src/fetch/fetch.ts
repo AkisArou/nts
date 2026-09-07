@@ -31,6 +31,7 @@ import {
   type ContentCodingPolicy,
 } from "./content-coding.ts";
 import { headersRawEntries } from "./headers.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 /** Automatic cookie state is opt-in and its site context is supplied per redirect hop. */
 export interface FetchCookiePolicy {
@@ -122,7 +123,7 @@ function abortableDispatch(
 ): Promise<TransportResponse> {
   return new Promise<TransportResponse>((resolve, reject) => {
     let complete = false;
-    const unsubscribe = request.signal.subscribe(() => {
+    const unsubscribe = request.signal[abortSignalSubscribe](() => {
       if (!complete) {
         complete = true;
         reject(request.signal.reason);
@@ -172,7 +173,7 @@ function abortableBody(
   return new ReadableStream<Uint8Array>(
     {
       start(controller) {
-        dispose = signal.subscribe(() => {
+        dispose = signal[abortSignalSubscribe](() => {
           controller.error(signal.reason);
           cleanup();
           reader.cancel(signal.reason).catch(() => {});

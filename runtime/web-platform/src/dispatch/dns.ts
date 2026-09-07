@@ -11,6 +11,7 @@ import type {
   Scheduler,
   SocketConnector,
 } from "../provider/primitives.ts";
+import { abortSignalSubscribe } from "../core/abort-brand.ts";
 
 const DEFAULT_MAXIMUM_ITEMS = 256;
 const DEFAULT_MAXIMUM_PENDING = 64;
@@ -414,7 +415,7 @@ export class DnsCache {
         lookup.controller.abort(new TypeError("DNS lookup has no remaining consumer"));
       }
     };
-    const unsubscribe = signal.subscribe(() => {
+    const unsubscribe = signal[abortSignalSubscribe](() => {
       if (finished) return;
       result.reject(signal.reason);
       release();
@@ -696,7 +697,7 @@ export class DnsConnector implements SocketConnector {
       armNext();
     };
 
-    unsubscribe = signal.subscribe(() => rejectAll(signal.reason));
+    unsubscribe = signal[abortSignalSubscribe](() => rejectAll(signal.reason));
     launchNext();
     return result.promise;
   }

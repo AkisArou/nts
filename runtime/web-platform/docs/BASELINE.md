@@ -6229,3 +6229,41 @@ Frontier unchanged, upstream unchanged, 816/816 host.
 The rest is `ReadableStream`'s seventeen, `EventTarget`'s seven, `Event`'s seven, `WebSocket`'s
 six and `AbortSignal`'s two. The mechanism is settled and demonstrated three times; what is
 left is the type-aware pass over the streams module that a name-based scan cannot do safely.
+
+## `AbortSignal`, and the rename a regular expression cannot finish
+
+The two remaining `AbortSignal` internals are symbol-keyed now, across fifteen modules and
+five test files. `AbortSignal` carries nothing non-standard and its own members are
+enumerable. **Eight fully conformant interfaces**, and the surface is 63 → **37**.
+
+The keys live in `core/abort-brand.ts` rather than `core/abort.ts`, which is what that module
+already exists for: naming this identity without an import cycle. `abort.ts` re-exports them
+so consumers keep one import path.
+
+### `tsc` found fourteen call sites and could not find the fifteenth
+
+Converting `subscribe` to a symbol broke compilation in nine modules I had not touched, which
+is the mechanism working exactly as intended — a rename that misses a call site is a type
+error, not a silent behaviour change. Iterating on the compiler's output until it was quiet
+took three passes and needed no judgement at all.
+
+**Then a host test failed, and the reason is the limit of the whole approach.**
+
+    "subscribe" in signal && typeof signal.subscribe === "function"
+
+The `AbortSignal` duck-type check in `events.ts` names the member as a **string**. No
+parenthesis, so the call-site pattern never matched it; and it is a *reflective* use, so the
+type checker had nothing to complain about — the property genuinely might not exist, which is
+what the check is asking. It compiled cleanly and answered `false` for every real
+`AbortSignal` in the runtime, which made `addEventListener(..., { signal })` reject its own
+signals.
+
+So the rule for the rest of this work: **`tsc` finds every syntactic use and none of the
+reflective ones.** `in`, `typeof x.name`, `hasOwnProperty`, a string in a table — all
+invisible, all silent, and the only thing that caught this one was a test asserting behaviour
+that a passing type check said was fine.
+
+That is the second time today a green compiler has been the wrong instrument, and both times
+the test that caught it was checking something the compiler is structurally unable to see.
+
+816/816 host, upstream unchanged at 2,566 of 2,574, frontier unchanged at 1,407/337.
