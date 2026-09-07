@@ -34,8 +34,6 @@ url.URLPattern: a WHATWG global owned by runtime/web-platform; node re-exports i
 events.init: node's legacy EventEmitter.init, kept for subclasses that call it before construction; nothing in this profile's corpus reaches it
 
 # --- ordinary work, not scheduled --------------------------------------------
-util.TextDecoder: node re-exports the Encoding globals from node:util; runtime/web-platform has both, so this is a re-export once the canonical globals are installed
-util.TextEncoder: as util.TextDecoder
 util.MIMEType: a real implementation of node's MIME parser; nothing in the corpus has asked for it
 util.MIMEParams: as util.MIMEType
 process.ref: node 24's explicit resource ref; the seam exists per handle and nothing in the corpus calls the process-level form
