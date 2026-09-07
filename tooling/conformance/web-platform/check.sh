@@ -9,7 +9,12 @@ pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty 
 # Exports nothing mentions. Four mechanisms nothing routed through were found by hand in
 # this lane, none of them by looking, so the discipline is a gate rather than a habit.
 node tooling/conformance/web-platform/unrouted.mjs
-node --expose-gc --test \
+# The environment intrinsics are preloaded, which is what a real environment does with
+# them: they exist before the first module runs. Defining them on first import instead
+# made them arrive after any suite that reached the platform barrel first.
+node --expose-gc \
+  --import ./tooling/conformance/web-platform/node_modules/.tsbuild/host/tooling/conformance/web-platform/environment-shim.js \
+  --test \
   tooling/conformance/web-platform/test/accept-loop.test.mjs \
   tooling/conformance/web-platform/test/agent.test.mjs \
   tooling/conformance/web-platform/test/core.test.mjs \

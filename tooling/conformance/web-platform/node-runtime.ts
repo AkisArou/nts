@@ -8,22 +8,10 @@ import { HostNodeWebSocketDeflate } from "./node-websocket-deflate.ts";
 import { createHostNodePrimitives } from "./node-primitives.ts";
 import type { HostNodeSocketOptions } from "./node-primitives.ts";
 
-declare global {
-  var nts_environment_install_platform: (runtime: WebPlatformRuntime) => void;
-  var nts_environment_platform: () => WebPlatformRuntime;
-}
-
-let installedPlatform: WebPlatformRuntime | null = null;
-
-globalThis.nts_environment_install_platform = (runtime): void => {
-  installedPlatform = runtime;
-};
-globalThis.nts_environment_platform = (): WebPlatformRuntime => {
-  if (installedPlatform === null) {
-    throw new TypeError("the Web-platform runtime was read before it was installed");
-  }
-  return installedPlatform;
-};
+// The environment intrinsics live in their own module and are preloaded, because
+// defining them here made them arrive after any test that imported the platform barrel
+// first. Imported rather than duplicated so there is one definition.
+import "./environment-shim.ts";
 
 export * from "./node-content-decoder.ts";
 export * from "./node-durable-store.ts";

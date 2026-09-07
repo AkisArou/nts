@@ -5375,3 +5375,55 @@ a cache's "now" must be in the same frame as the `Date` headers it compares agai
 Everything reverted; the two assertions stay visible. What the exercise bought is that
 the next attempt starts from a working shape and a known scaffolding gap rather than from
 an argument, and that the argument it would otherwise have started from was wrong.
+
+## Sufficiency, demonstrated and then held back
+
+The compiler lane landed `nts_environment_has_platform()` in `runtime/c/nts_runtime.{h,c}`
+and the LLVM signatures, choosing `has` over `_or_null` for a reason worth repeating: the
+existing read aborts before installation *so that* its declared return stays non-nullable
+and bootstrap does not depend on how absence is represented. A nullable form would put
+that dependency back.
+
+With it, the prototype completes. `Event.timeStamp` reads the clock through the
+environment when there is one and answers `0` when there is not:
+
+- **local corpus 747/747**, zero failures;
+- **upstream 2,410 of 2,418** — the two `Event.timeStamp` assertions pass and the eight
+  remaining are the long-standing structural failures;
+- **JVM frontier cost: one cascade.** 1,296 primaries unchanged, 314 to 315, no new
+  refusal category, and `hasWebPlatformRuntime` is not itself refused — the constructor
+  was already refused there for its own reasons, so one more call changes almost nothing.
+
+### It is not landed, and the reason is the tree
+
+`nts_environment_has_platform` is **uncommitted** — three modified files in the shared
+worktree, still going through the compiler lane's gate. Committing shared source that
+declares it would leave `HEAD` referencing an intrinsic that C and LLVM do not have if
+that gate goes red or the change is reworked. So the shared half is reverted and waits
+for the commit, and the exact shape is recorded above so applying it later is mechanical
+rather than a rediscovery.
+
+### What did land is the reason the demonstration could finish at all
+
+The earlier attempt stopped at 33 host failures, 32 of them
+`nts_environment_has_platform is not defined`, and that was scaffolding rather than
+design: the environment intrinsics were defined inside `node-runtime.ts`, which is
+evaluated when something imports it. That is late. A suite that imports the platform
+barrel, builds an `AbortController`, and only then reaches for the host runtime was
+constructing objects before the intrinsics existed.
+
+They now live in `environment-shim.ts` and are **preloaded**, which is what the thing
+being emulated actually does — an intrinsic exists before the first module runs.
+`node-runtime.ts` imports the same module, so a direct importer that skips the preload
+still gets them and there is one definition rather than two that drift.
+
+The failure looked like a design problem for an afternoon. It was a load-order problem,
+and the emulation not matching the shape of the thing it emulated is what hid it.
+
+### One cost of the change, worth knowing before it lands
+
+Adding a member to `WebPlatformRuntime` broke a hand-built stub runtime in
+`core.test.mjs` — `{ scheduler: { … } }` with no clock — and broke it **at run time**,
+because the test is `.mjs` and TypeScript never checked the stub against the interface it
+is standing in for. One fixture here; an embedder would have their own. Interface growth
+is not free in a suite whose fakes are untyped.
