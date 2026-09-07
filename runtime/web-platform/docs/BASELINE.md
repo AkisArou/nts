@@ -4553,3 +4553,32 @@ conditional assignment into one of two arrays, and a post-increment inside the i
 an assignment target (`output[outputIndex++] = current`), which is the distinctive line
 in both functions. Both compile and agree. Reported to the compiler lane with the file,
 the two function names, and what has been eliminated, rather than a guess.
+
+## A correction: the `NTS4xxx` zero is conditional on the `NTS1001` count
+
+Every measurement in this ledger reports "zero `NTS4xxx`, zero invalid HIR", and this
+session has quoted that as the number that has never moved. It is true, and it means
+less than it reads.
+
+Compiling `http2/hpack-huffman.ts` on its own produces two `NTS4001` refusals on the
+JVM backend — the emitter disagreeing with its own operand-stack accounting, in
+`buildTree` and `encodeHpackHuffman`. The whole-project run **reaches that module**:
+`decodeHpackHuffman` appears in it, refused, with `readString` cascading off it. But it
+is refused at the `NTS1001` level, and a function refused there never reaches the
+emitter — so the backend defect behind it is invisible.
+
+So the two counts are not independent measurements of two things. **A backend defect
+sitting behind a language refusal cannot be seen until the language refusal is fixed.**
+`NTS4xxx = 0` says "nothing that is currently emitted trips the backend", which is a
+much weaker claim than "the backend is clean", and it will get harder to keep as the
+primaries fall rather than easier.
+
+This is the shape of thing the standing instruction to distrust lowering-only numbers is
+about, and it applies to a number this ledger has been reporting all day. Every prior
+"zero `NTS4xxx`" entry should be read with this attached; none of them is wrong, and all
+of them are narrower than their wording.
+
+The honest way to state the frontier from here is: *of the functions that reach the
+backend*, none is refused by it. Which also means the compiled axis — where modules are
+named directly and therefore do reach emission — is the only place these will surface
+early. That is a second reason to grow it, beyond the one it was built for.
