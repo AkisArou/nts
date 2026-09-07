@@ -20,6 +20,7 @@ import type { FetchCookiePolicy } from "../fetch/fetch.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
 import type { RequestContext, RequestInit } from "../fetch/request.ts";
 import type { FileURLProvider } from "../fetch/file-url.ts";
+import type { DigestProvider } from "../fetch/integrity.ts";
 import { Request } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import type { ContentDecoder, FetchTransport } from "../fetch/transport.ts";
@@ -71,6 +72,8 @@ export interface WebPlatformOptions {
    * fails exactly like any other unsupported scheme.
    */
   fileURLs?: FileURLProvider;
+  /** Digest primitive for subresource integrity. Without it, integrity requests fail. */
+  digest?: DigestProvider;
   http1?: Http1Options;
   /** Environment/explicit proxy policy shared by Fetch, EventSource and WebSocket. */
   proxy?: WebPlatformProxyOptions;
@@ -162,6 +165,7 @@ export class WebPlatformRuntime
       origin: options.origin,
       blobURLs: this.blobURLs,
       fileURLs: options.fileURLs,
+      digest: options.digest,
     };
     this.http1 = new Http1Transport(primitives.sockets, primitives.scheduler, options.http1);
 

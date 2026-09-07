@@ -6,7 +6,7 @@ import type { Socket } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
 import { checkServerIdentity, connect as tlsConnect } from "node:tls";
 import type { TLSSocket } from "node:tls";
-import { randomFillSync } from "node:crypto";
+import { createHash, randomFillSync } from "node:crypto";
 import { EOL } from "node:os";
 import { URL } from "node:url";
 import { setImmediate, setTimeout, clearTimeout } from "node:timers";
@@ -19,6 +19,7 @@ import type {
   ConnectAddress,
   DnsAddress,
   DnsResolveOptions,
+  DigestProvider,
   DnsResolver,
   NegotiatedConnection,
   NegotiatingSocketConnector,
@@ -567,3 +568,17 @@ export function createHostNodePrimitives(
     wallTimeMilliseconds: Date.now,
   };
 }
+
+/** Host digest primitive for subresource integrity in conformance tests. */
+export const hostNodeDigest: DigestProvider = {
+  algorithms: ["sha256", "sha384", "sha512"],
+  digest(algorithm, bytes) {
+    if (!this.algorithms.includes(algorithm)) {
+      return Promise.reject(new TypeError("Unsupported digest algorithm: " + algorithm));
+    }
+    const hash = createHash(algorithm.replace("sha", "sha"));
+    hash.update(bytes);
+    const result = hash.digest();
+    return Promise.resolve(new Uint8Array(result.buffer, result.byteOffset, result.byteLength));
+  },
+};

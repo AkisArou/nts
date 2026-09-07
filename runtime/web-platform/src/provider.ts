@@ -124,6 +124,13 @@ export type {
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
 export type { FileURLEntry, FileURLProvider } from "./fetch/file-url.ts";
+export type { DigestProvider, IntegrityEntry } from "./fetch/integrity.ts";
+export {
+  digestMatches,
+  integrityAlgorithm,
+  integrityApplies,
+  parseIntegrity,
+} from "./fetch/integrity.ts";
 export { certificateCovers, dnsNameCovers } from "./http/certificate.ts";
 export {
   defaultProtocolPreference,

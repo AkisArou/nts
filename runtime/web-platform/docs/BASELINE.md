@@ -2701,3 +2701,65 @@ Measured with the same pinned binary built at `43fda4d3`: 1,290 primary `NTS1001
 233 `NTS1003` before and after, with zero `NTS1004`, zero `NTS4xxx` and no invalid HIR.
 One message differs between the two runs and it is the same message with a shifted type
 id, so this slice moved the frontier not at all.
+
+## Integrity was accepted and never checked
+
+`Request.integrity` was stored, threaded through Cache, and read by nothing. A caller
+who wrote `sha256-…` got no verification and no error. That is worse than not
+supporting integrity: the one failure mode a caller cannot detect is the check that
+silently did not happen, and the API's shape said it had.
+
+Verification now runs against the decoded body, after content codings, which is where
+the standard places it and which forces the response to be materialized — a digest
+cannot be computed from a stream nobody has read. Materialization uses the
+environment's existing consumption bound, so asking for integrity cannot quietly raise
+a memory limit the environment set. The bytes handed back are the bytes that were
+checked, republished from the verified buffer rather than from a second read of a
+source that could answer differently.
+
+The digest itself is a provider capability: cryptographic primitives belong to the
+platform. **Its absence does not make the requirement optional.** A request carrying
+metadata this environment cannot check is refused before it is sent, as is one naming
+an algorithm the provider does not offer. Metadata consisting entirely of algorithms
+this profile does not know places no requirement at all, which the standard specifies
+and which is a different thing from an unmet one.
+
+Only the strongest algorithm present applies, and a match against any entry of that
+algorithm is a match — so a correct `sha256` alongside a wrong `sha512` fails, in
+either written order. Comparison decodes the expected value and compares bytes, so
+padding and the choice of base64 alphabet cannot make two spellings of one digest
+disagree, and it does not exit at the first differing byte: a loop that stops early
+reports through timing how much of a digest was right.
+
+Parsing uses the runtime's shared ASCII-whitespace predicate rather than a pattern.
+That is the set the grammar names and what the rest of this runtime uses; the two
+regular-expression literals an earlier revision carried were removed for that reason
+rather than to move a count, and the count moved anyway.
+
+Nine tests cover the grammar, the alphabet and padding cases, every supported
+algorithm end to end, a mismatch, strongest-wins in both orders, unknown-algorithm
+metadata, and each fail-closed path. One of them initially passed for the wrong
+reason: `runtimeWith(t, undefined)` triggers a default parameter, so the runtime that
+was supposed to have no digest provider had one. It is now a separate helper that
+asserts the provider really is absent before the test relies on it.
+
+Two sabotages, both restored. Never rejecting a mismatch — the defect exactly as it
+shipped — took the corpus from 9/9 to 7/9. Selecting the weakest algorithm instead of
+the strongest took it to 7/9 on different cases.
+
+The complete local Node-host/real-socket corpus passes 453/453 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: integrity on `data:`, `blob:` or `file:` responses, which the standard
+does not require and which this does not attempt; and any provider other than the
+ordinary-Node conformance host, whose digest is `node:crypto`.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,290 primary
+`NTS1001` and 233 `NTS1003`; after, 1,293 primary and 233 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Five messages appeared and two
+disappeared; that pair is two messages with shifted type ids. The three real additions
+are one `digest` called through an interface the lowering cannot resolve in the
+hierarchy, one further `this` outside a method, and one further `WeakRef` array
+observation. The revision that used regular-expression literals measured 1,295 and 235
+instead.

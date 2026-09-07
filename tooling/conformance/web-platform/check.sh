@@ -23,6 +23,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/http2-frame.test.mjs \
   tooling/conformance/web-platform/test/http2-headers.test.mjs \
   tooling/conformance/web-platform/test/http2-transport.test.mjs \
+  tooling/conformance/web-platform/test/integrity.test.mjs \
   tooling/conformance/web-platform/test/mock-agent.test.mjs \
   tooling/conformance/web-platform/test/negotiated-connect.test.mjs \
   tooling/conformance/web-platform/test/network.test.mjs \

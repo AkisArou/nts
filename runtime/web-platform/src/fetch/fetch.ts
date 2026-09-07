@@ -2,6 +2,7 @@ import { AbortSignal } from "../core/abort.ts";
 import type { HttpCache, HttpCacheDispatchResult } from "../cache/http-cache.ts";
 import type { CookieAccessContext, CookieJar } from "../cookies/jar.ts";
 import { trimHTTPTabOrSpace } from "../core/ascii.ts";
+import { concatBytes } from "../core/encoding.ts";
 import { networkError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import type { URLRecord } from "../provider/primitives.ts";
@@ -21,6 +22,8 @@ import type {
 import { processDataURL } from "./data-url.ts";
 import { fetchBlob } from "./blob-url.ts";
 import { fileURLMethodAllowed, validateFileURL } from "./file-url.ts";
+import { digestMatches, integrityAlgorithm, parseIntegrity } from "./integrity.ts";
+import type { IntegrityEntry } from "./integrity.ts";
 import { _createBlobFromExternalSource as createBlobFromExternalSource } from "../file/blob.ts";
 import {
   decodeContentCodings,
@@ -63,6 +66,49 @@ function checkURL(url: URLRecord): void {
   validateRequestURL(url);
 
   checkNetworkPort(url.port);
+}
+
+/**
+ * Reads a body into memory under the environment's consumption bound.
+ *
+ * Integrity forces materialization: a digest cannot be computed from a stream nobody
+ * has read. The bound is the same one the body policy applies everywhere else, so
+ * asking for integrity cannot quietly raise a memory limit the environment set.
+ */
+async function collectBody(
+  body: ReadableStream<Uint8Array> | null,
+  maximumBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (body === null) return new Uint8Array(new ArrayBuffer(0));
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const item = await reader.read();
+      if (item.done) return concatBytes(chunks, received);
+      const value = item.value;
+      if (!(value instanceof Uint8Array)) {
+        throw new TypeError("Response body chunks must be Uint8Array values");
+      }
+      received += value.length;
+      if (received > maximumBytes) {
+        throw new TypeError("The response exceeded this environment's consumption limit");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    try {
+      await reader.cancel(error);
+    } catch {
+      // The original failure stays observable.
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function cancelBody(body: ReadableStream<Uint8Array> | null, reason?: unknown): void {
@@ -191,6 +237,50 @@ export class FetchClient {
     this.acceptEncoding = readAcceptEncoding(decoder);
   }
 
+  /**
+   * The integrity entries this request must satisfy, or null when it requires nothing.
+   *
+   * Metadata naming only algorithms this profile does not know places no requirement,
+   * which the standard specifies and which is not the same as an unmet one. Anything
+   * that does place a requirement and cannot be checked throws here, before a request
+   * is sent: silently returning a body that was never verified is the one outcome a
+   * caller who wrote integrity metadata cannot detect.
+   */
+  private resolveIntegrity(metadata: string): readonly IntegrityEntry[] | null {
+    if (metadata === "") return null;
+    const entries = parseIntegrity(metadata);
+    if (entries.length === 0) return null;
+    const provider = this.context.digest;
+    if (provider === undefined) {
+      throw new TypeError("Integrity was requested and this environment cannot verify it");
+    }
+    const algorithm = integrityAlgorithm(entries);
+    if (!provider.algorithms.includes(algorithm)) {
+      throw new TypeError("Integrity algorithm is not available: " + algorithm);
+    }
+    return entries;
+  }
+
+  /** Materializes the body, verifies it, and republishes the exact bytes checked. */
+  private async verifyIntegrity(
+    body: ReadableStream<Uint8Array> | null,
+    entries: readonly IntegrityEntry[],
+    request: Request,
+  ): Promise<ReadableStream<Uint8Array>> {
+    const provider = this.context.digest;
+    if (provider === undefined) {
+      throw new TypeError("Integrity was requested and this environment cannot verify it");
+    }
+    const bytes = await collectBody(body, this.context.bodyPolicy.maxConsumeBytes, request.signal);
+    const digest = await provider.digest(integrityAlgorithm(entries), bytes);
+    if (!digestMatches(digest, entries)) {
+      throw new TypeError("The response did not match the requested integrity");
+    }
+    // The verified bytes are what the caller receives, not a second read of a source
+    // that could answer differently.
+    return bytesStream(bytes);
+  }
+
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
     // Construction errors reject this async API; the constructor still throws synchronously.
     const request = createInternalRequest(input, init, this.context);
@@ -207,6 +297,9 @@ export class FetchClient {
     if (!headers.has("accept")) headers.set("accept", "*/*");
     if (!headers.has("accept-encoding")) headers.set("accept-encoding", this.acceptEncoding);
     let count = 0;
+    // Resolved before any request is made: a check that cannot be performed must stop
+    // the request rather than let it complete unverified.
+    const integrityEntries = this.resolveIntegrity(request.integrity);
     try {
       while (true) {
         if (url.protocol === "data:") {
@@ -381,6 +474,12 @@ export class FetchClient {
               }
             }
             responseBody = abortableBody(responseBody, request.signal);
+          }
+          if (integrityEntries !== null) {
+            // The standard checks integrity against the decoded body, so this runs
+            // after content codings and forces the response to be materialized: a
+            // digest cannot be computed from a stream nobody has read.
+            responseBody = await this.verifyIntegrity(responseBody, integrityEntries, request);
           }
           const fragment = url.href.indexOf("#");
           const result = Response.fromTransport(
