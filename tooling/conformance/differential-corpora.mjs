@@ -65,26 +65,38 @@ export const CORPORA = {
       "", "/", "//", "///", ".", "..", "./", "../", "a", "/a", "a/", "/a/",
       "a//b", "a/./b", "a/../b", "/a/../..", "c.txt", ".hidden", "a.b.c",
       "  ", "a b", "ü/日", "/a/b/../../c", "....", "a/", "//server/share",
+      "C:", "C:/", "C:\\\\", "C:a", "C:/a", "c:/A", "\\\\", "\\\\\\\\",
+      "\\\\\\\\server\\\\share", "\\\\\\\\server\\\\share\\\\a", "\\\\\\\\?\\\\C:\\\\a",
+      "\\\\\\\\.\\\\pipe\\\\x", "a\\\\b", "a\\\\\\\\b", "C:\\\\a\\\\..\\\\b", "//?/C:/a",
     ],
     input: (rnd) => {
-      const PARTS = ["a", "bb", ".", "..", "", "c.txt", "d.", ".e", "f g", "ü", "日", "...", "x.y.z"];
-      const SEPS = ["/", "//", "///", "/./", "/../"];
+      const PARTS = ["a", "bb", ".", "..", "", "c.txt", "d.", ".e", "f g", "ü", "日", "...", "x.y.z",
+        "C:", "C:/", "c:", "\\\\server", "\\\\?\\C:", "$", "con", "nul"];
+      const SEPS = ["/", "//", "///", "/./", "/../", "\\\\", "\\\\\\\\", "\\\\.\\\\", "/\\\\"];
       let s = rnd() < 0.4 ? "/" : "";
       const k = 1 + Math.floor(rnd() * 5);
       for (let j = 0; j < k; j++) s += (j ? choose(rnd, SEPS) : "") + choose(rnd, PARTS);
       if (rnd() < 0.2) s += choose(rnd, SEPS);
       return s;
     },
+    // Both namespaces. `win32` is a second implementation over shared helpers,
+    // with drive letters, UNC shares and backslash separators, and testing only
+    // the default namespace left half of `node:path` uncompared -- on the host
+    // this runs on, the default *is* posix.
     calls: [
-      { name: "normalize", args: (s) => [s] },
-      { name: "dirname", args: (s) => [s] },
-      { name: "basename", args: (s) => [s] },
-      { name: "extname", args: (s) => [s] },
-      { name: "isAbsolute", args: (s) => [s] },
-      { name: "parse", args: (s) => [s] },
-      { name: "join", args: (s) => [s, "z"] },
+      ...["posix", "win32"].flatMap((ns) => [
+        { label: `${ns}.normalize`, call: (m, s) => m[ns].normalize(s) },
+        { label: `${ns}.dirname`, call: (m, s) => m[ns].dirname(s) },
+        { label: `${ns}.basename`, call: (m, s) => m[ns].basename(s) },
+        { label: `${ns}.extname`, call: (m, s) => m[ns].extname(s) },
+        { label: `${ns}.isAbsolute`, call: (m, s) => m[ns].isAbsolute(s) },
+        { label: `${ns}.parse`, call: (m, s) => m[ns].parse(s) },
+        { label: `${ns}.format`, call: (m, s) => m[ns].format(m[ns].parse(s)) },
+        { label: `${ns}.join`, call: (m, s) => m[ns].join(s, "z") },
+        { label: `${ns}.relative`, call: (m, s) => m[ns].relative(s, "/tmp") },
+        { label: `${ns}.toNamespacedPath`, call: (m, s) => m[ns].toNamespacedPath(s) },
+      ]),
       { name: "resolve", args: (s) => [s] },
-      { name: "relative", args: (s) => [s, "/tmp"] },
     ],
   },
 
