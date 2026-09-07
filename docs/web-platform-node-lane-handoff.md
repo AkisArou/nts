@@ -53,7 +53,11 @@ not the record.
 Newer than every section that follows. Those describe an earlier checkpoint and are kept
 for their reasoning rather than their status.
 
-**Closed since:** the storage row — a provider-backed durable byte store with a portable
+**Closed since:** the proxies row — the proxy auto-configuration result grammar, a
+`SystemProxyPolicy`, and the `systemProxyFor` provider primitive behind it; the Web IDL
+surface shape — `@@toStringTag` on thirty-five interface prototypes and eleven corrected
+constructor arities; a persistent cookie jar; object-identity assertions for the surfaces
+where the standard requires the same object rather than an equal one; the storage row — a provider-backed durable byte store with a portable
 flat adapter, spill-to-disk, and a replay body for retry that is released when the
 dispatch settles; the caching row — a persistent `HttpCacheStore` and a durable
 `CacheStorageStore` serving the real `Cache`/`CacheStorage` API; Undici-shaped `request`,
@@ -66,18 +70,18 @@ of system proxy resolution.
 **Current numbers**, all with one binary pinned from the current tree and the same
 binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 
-- 1,302 primary `NTS1001`, 317 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
+- 1,297 primary `NTS1001`, 321 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
   — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
-- local Node-host/real-socket corpus **777/777**, zero skipped;
+- local Node-host/real-socket corpus **814/814**, zero skipped;
 - pinned upstream corpus **2,433 tests, 2,418 applicable, 2,410 passing, 8 failing** —
   the eight long-standing structural failures, with the two `Event.timeStamp` assertions
   now passing;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
   with the four declines being the out-of-range typed-array read reported to the compiler
   lane with a minimal reproduction;
-- `unrouted.mjs` clean over 102 audited files and 752 corpus files.
+- `unrouted.mjs` clean over 104 audited files and 758 corpus files.
 
 **Measure the frontier with `NTS_TSGO="$PWD/target/tsgo"` set.** Without it the check
 fails at the frontend transport and every diagnostic count reads **zero** — which looks
@@ -109,14 +113,30 @@ branch never ran. It presents as a listener called zero times with no error, bec
 throw happens inside `abort()` and whatever awaited the event simply never hears it. That
 signature is what an environment-slot problem looks like from outside.
 
-**One ABI proposal is outstanding: a system proxy lookup.** `systemProxyFor(url)`
-returning the classic result string, proposed to the JVM lane with four questions that
-have to be answered by measurement rather than by design — whether `ProxySelector` can be
-called synchronously on the request path, whether the answer is per-URL or global,
-whether it already has the bypass rules applied, and what it returns for an unconfigured
-host. The portable half is landed and does not depend on the answer. **If Android's proxy
-story is too thin to be worth an ABI slot, the row stays open with a named reason rather
-than closed with a primitive nobody implements.**
+**The system-proxy ABI is closed.** `systemProxyFor(url): string | null` is declared,
+forwarded, host-implemented and routed through `systemProxyPolicy()`. Four questions went to
+the JVM lane and all four came back measured on an API-26 device: the lookup is 46–87 µs
+cold and 2–11 µs warm with no I/O behind it, it is scheme- *and* host-sensitive so the URL
+argument is load-bearing, Android applies its own bypass rules, and it never returns nothing.
+That lane is implementing the provider side.
+
+**Two limits are recorded with the boundary attached**, both volunteered by the lane that
+measured them: a bare `app_process` never receives the framework's copy of the global proxy
+into system properties, so the measurement is `DefaultProxySelector`'s own behaviour and not
+evidence that a device setting reaches a real app; and the account of Android resolving PAC
+inside a framework service is documented behaviour rather than device evidence.
+
+**There is deliberately no PAC interpreter and there should not be one.** A PAC file is a
+JavaScript program; every target platform already evaluates it inside its own proxy stack,
+and a second evaluation would answer differently from every other application on the device.
+
+**A cross-lane ping protocol is now in force with the NodeJS lane.** Any commit here
+touching `runtime/web-platform/src/core/**` or `runtime/web-platform/src/provider/**` gets a
+**pre-ping naming the parent commit**, so they can run their sweep against the parent, and a
+**post-ping naming the child**. It caught something in both directions on its first firing:
+nothing here broke anything there, and `bfb7d97d` fixed a live `[object Object]` on
+`node:util`'s public surface that neither corpus could see alone. Their sweep is 1,803 of
+1,803 across 22 modules with 0 divergences over 11 differential corpora.
 
 **Still open, and why.** The **public server module or package** is a repository-layout
 decision. The **Undici API ledger** still cannot be written honestly with nothing pinned.
