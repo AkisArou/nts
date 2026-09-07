@@ -121,6 +121,12 @@ export {
   Socks5ProxyConnector,
   Socks5ProxyError,
 } from "./dispatch/proxy.ts";
+export { EnvironmentProxyPolicy, NoProxyMatcher } from "./dispatch/proxy-policy.ts";
+export type {
+  EnvironmentProxyOptions,
+  NoProxyEntry,
+  ProxyEnvironment,
+} from "./dispatch/proxy-policy.ts";
 export type {
   HttpConnectProxyOptions,
   ProxyAuthenticationContext,

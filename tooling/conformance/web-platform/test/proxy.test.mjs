@@ -4,7 +4,9 @@ import { connect as tcpConnect, createServer } from "node:net";
 import { createServer as createTlsServer } from "node:tls";
 import {
   AbortController,
+  EnvironmentProxyPolicy,
   HttpConnectProxyConnector,
+  NoProxyMatcher,
   ProxyConfigurationError,
   ProxyResponseError,
   Socks5ProxyConnector,
@@ -376,6 +378,83 @@ test("proxy configuration rejects unsafe headers, schemes, ports and credential 
         uri: "socks5://proxy.example",
         password: "password-without-username",
       }),
+    ProxyConfigurationError,
+  );
+});
+
+test("NO_PROXY matches exact hosts and subdomains only at DNS label boundaries", () => {
+  const matcher = new NoProxyMatcher("example.com, *.internal.test, .service.test");
+  for (const hostname of [
+    "example.com",
+    "api.example.com",
+    "internal.test",
+    "deep.internal.test",
+    "service.test.",
+  ]) {
+    assert.equal(matcher.bypasses(hostNodeURLs.parse(`https://${hostname}/`)), true, hostname);
+  }
+  for (const hostname of ["notexample.com", "example.com.invalid", "internal.testing"]) {
+    assert.equal(matcher.bypasses(hostNodeURLs.parse(`https://${hostname}/`)), false, hostname);
+  }
+});
+
+test("NO_PROXY ports use effective URL ports and parse bracketed or bare IPv6", () => {
+  const matcher = new NoProxyMatcher("example.test:443 [::1]:8443 ::2");
+  assert.equal(matcher.bypasses(hostNodeURLs.parse("https://example.test/path")), true);
+  assert.equal(matcher.bypasses(hostNodeURLs.parse("http://example.test/path")), false);
+  assert.equal(matcher.bypasses(hostNodeURLs.parse("http://[::1]:8443/path")), true);
+  assert.equal(matcher.bypasses(hostNodeURLs.parse("http://[::1]:8080/path")), false);
+  assert.equal(matcher.bypasses(hostNodeURLs.parse("http://[::2]/path")), true);
+});
+
+test("environment proxy policy follows lowercase, explicit and HTTPS fallback precedence", () => {
+  const policy = new EnvironmentProxyPolicy(
+    hostNodeURLs,
+    {
+      http_proxy: "http://lower-http.test",
+      HTTP_PROXY: "http://upper-ignored.test",
+      HTTPS_PROXY: "http://secure.test",
+      no_proxy: "bypass.test",
+    },
+    { httpsProxy: "socks5://explicit-secure.test" },
+  );
+  assert.equal(
+    policy.proxyFor(hostNodeURLs.parse("http://origin.test/")),
+    "http://lower-http.test",
+  );
+  assert.equal(
+    policy.proxyFor(hostNodeURLs.parse("https://origin.test/")),
+    "socks5://explicit-secure.test",
+  );
+  assert.equal(policy.proxyFor(hostNodeURLs.parse("https://bypass.test/")), null);
+
+  const fallback = new EnvironmentProxyPolicy(hostNodeURLs, {
+    HTTP_PROXY: "http://fallback.test",
+  });
+  assert.equal(
+    fallback.proxyFor(hostNodeURLs.parse("https://origin.test/")),
+    "http://fallback.test",
+  );
+});
+
+test("empty lowercase proxy disables uppercase and wildcard NO_PROXY bypasses all", () => {
+  const policy = new EnvironmentProxyPolicy(hostNodeURLs, {
+    http_proxy: "",
+    HTTP_PROXY: "http://must-not-win.test",
+    HTTPS_PROXY: "http://secure.test",
+    NO_PROXY: "*",
+  });
+  assert.equal(policy.httpProxy, null);
+  assert.equal(policy.proxyFor(hostNodeURLs.parse("https://anywhere.test/")), null);
+});
+
+test("environment proxy policy rejects line breaks and unsupported schemes", () => {
+  assert.throws(
+    () => new EnvironmentProxyPolicy(hostNodeURLs, { HTTP_PROXY: "http://safe\r\nInjected: x" }),
+    ProxyConfigurationError,
+  );
+  assert.throws(
+    () => new EnvironmentProxyPolicy(hostNodeURLs, { HTTP_PROXY: "ftp://proxy.example" }),
     ProxyConfigurationError,
   );
 });
