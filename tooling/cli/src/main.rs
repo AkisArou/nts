@@ -210,6 +210,20 @@ fn main() -> Result<()> {
             let tsconfig = project(&rest)?;
             dump_facts(&tsconfig)
         }
+        // Every layout, with its fields in order, its base, and the type ids
+        // that share it.
+        //
+        // The instrument that was missing. `same_shape` merges layouts, and a
+        // wrong merge is invisible in every answer a program computes until it
+        // is a wrong field offset or a base that is not a prefix -- two of
+        // those in one day, and both were diagnosed by reading generated C for
+        // want of a way to ask the compiler directly. `types` prints what the
+        // checker said and this prints what was made of it, which is the half
+        // the merge decides.
+        Some("layouts") => {
+            let rest: Vec<String> = args.collect();
+            dump_layouts(&project(&rest)?)
+        }
         // The module graph, and the order it implies. The instrument comes
         // before anything depends on the order: evaluation order is one of the
         // few places where a wrong answer looks exactly like a right one, so it
@@ -282,6 +296,82 @@ fn report_graph_health(stats: &nts_frontend_ts::FrontendStats) {
 /// than against a guess about what real code looks like. The interesting column
 /// is the last one: what fraction of a function's numbers are provably integers,
 /// and which ones are not.
+/// Every layout, and whether each one's base really is its prefix.
+///
+/// The check at the end is `verify::check_layouts` restated as a report rather
+/// than a refusal: a base named here has to be laid out as the prefix every
+/// backend already treats it as, and when it is not, seeing both field lists
+/// side by side is the whole diagnosis.
+fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
+    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let mut source = TsgoApi::for_compilation(tsgo_binary);
+    let snapshot = source.snapshot(tsconfig)?;
+    if snapshot.has_errors() {
+        bail!("the program does not typecheck");
+    }
+    let lowered = hir::lower::lower(&snapshot);
+    let program = &lowered.program;
+    for layout in &program.layouts {
+        let ids: Vec<String> = layout.types.iter().map(|ty| format!("{}", ty.0)).collect();
+        println!("{} [{}]", layout.name, ids.join(" "));
+        if let Some(base) = layout.base {
+            let named = program
+                .layouts
+                .iter()
+                .find(|other| other.types.contains(&base))
+                .map_or("<no layout>", |other| other.name.as_str());
+            println!("  base {} -> {named}", base.0);
+        }
+        for field in &layout.fields {
+            println!("  {} : {:?}", field.name, field.ty);
+        }
+        let filled: Vec<&str> = layout
+            .methods
+            .iter()
+            .filter_map(|slot| slot.as_deref())
+            .collect();
+        if !filled.is_empty() {
+            println!("  methods {}", filled.join(" "));
+        }
+    }
+    // The same question `verify` asks, reported rather than refused.
+    for layout in &program.layouts {
+        let Some(at) = program.base_layout(layout) else {
+            continue;
+        };
+        let Some(base) = program.layouts.get(at) else {
+            continue;
+        };
+        let prefix = base.fields.len() <= layout.fields.len()
+            && base
+                .fields
+                .iter()
+                .zip(&layout.fields)
+                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty);
+        if !prefix {
+            println!("\nBROKEN {} over {}", layout.name, base.name);
+            println!(
+                "  base   {}",
+                base.fields
+                    .iter()
+                    .map(|f| f.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            println!(
+                "  layout {}",
+                layout
+                    .fields
+                    .iter()
+                    .map(|f| f.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+    }
+    Ok(())
+}
+
 fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
