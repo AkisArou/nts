@@ -303,6 +303,15 @@ public final class StoreTest {
         check(NtsStore.sourceRead(tailView, 100) == null, "the tail range did not end");
         NtsStore.sourceClose(tailView);
 
+        // An empty window is refused rather than answered. `null` means the end
+        // of the range, so answering it here would tell a caller the stream had
+        // ended when it had not -- the one way this could produce a zero-length
+        // chunk, which the shared contract says cannot happen.
+        long empty = NtsStore.sourceOpen("cache", "big", 0, 10);
+        refuses("a source read with an empty window", () -> NtsStore.sourceRead(empty, 0));
+        check(NtsStore.sourceRead(empty, 4) != null, "the refusal consumed the range");
+        NtsStore.sourceClose(empty);
+
         // And a view already open is unaffected by a later commit, because the
         // descriptor pins what it was opened over rather than the path.
         long pinned = NtsStore.sourceOpen("cache", "big", 0, 10);

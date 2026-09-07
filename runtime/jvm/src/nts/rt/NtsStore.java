@@ -472,7 +472,16 @@ public final class NtsStore {
         }
 
         synchronized byte[] read(int maxBytes) {
-            if (left <= 0 || maxBytes <= 0) {
+            // **An empty window is refused, not answered.** `null` here means
+            // the end of the range, and a caller that passed nowhere to put
+            // bytes would be told the stream had ended when it had not -- the
+            // one way this seam could produce a chunk of zero length, which the
+            // shared side's contract says can never happen.
+            if (maxBytes <= 0) {
+                throw new NtsRefusal("a durable source read was given an empty window, and an "
+                    + "empty window is not the end of the range");
+            }
+            if (left <= 0) {
                 return null;
             }
             int want = (int) Math.min((long) maxBytes, left);

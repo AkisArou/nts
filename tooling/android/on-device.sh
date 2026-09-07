@@ -112,7 +112,12 @@ adb push "$work/store.p12" /data/local/tmp/store.p12 > /dev/null
 failed=0
 run() {
   echo "--- $1"
-  out=$(adb shell "CLASSPATH=/data/local/tmp/nts-device.dex app_process /data/local/tmp $1 $2" 2>&1)
+  # `|| true`, because `set -e` is on and a command substitution that exits
+  # non-zero kills the script. A case that *crashes* on the device -- which is
+  # what a `NoSuchMethodError` does -- would otherwise stop the suite where it
+  # stood, printing nothing about why and leaving every later case unrun. That
+  # happened, and the exit code was 137 with no failing case named.
+  out=$(adb shell "CLASSPATH=/data/local/tmp/nts-device.dex app_process /data/local/tmp $1 $2" 2>&1) || true
   echo "$out"
   case "$out" in
     *"0 failures"*|*"PASS:"*) ;;
