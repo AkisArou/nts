@@ -10,7 +10,7 @@ import type {
   Scheduler,
   SocketConnector,
 } from "../provider/primitives.ts";
-import { addressOf } from "../http1/transport.ts";
+import { addressOf } from "../http/address.ts";
 import { BufferedReader, writeAll } from "../http1/io.ts";
 import { defaultHeadLimits, readHead, validateWireValue } from "../http1/parser.ts";
 import { createKey, validateHandshake, type ValidatedWebSocketHandshake } from "./handshake.ts";

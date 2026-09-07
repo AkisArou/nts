@@ -10,12 +10,11 @@ import type {
   CancelHandle,
   Scheduler,
   SocketConnector,
-  URLRecord,
 } from "../provider/primitives.ts";
+import { addressOf } from "../http/address.ts";
+import { contentLength, hasToken } from "../http/fields.ts";
 import { writeAll } from "./io.ts";
 import {
-  contentLength,
-  hasToken,
   parseChunkSize,
   readHead,
   readHeaderFields,
@@ -38,23 +37,6 @@ export interface Http1Options extends PoolOptions {
 
 function isForbiddenTrailerName(name: string): boolean {
   return name === "content-length" || name === "host" || name === "transfer-encoding";
-}
-
-export function addressOf(
-  url: URLRecord,
-  connectTimeoutMs: number,
-): { hostname: string; port: number; secure: boolean; connectTimeoutMs: number } {
-  const secure = url.protocol === "https:" || url.protocol === "wss:";
-  const hostname =
-    url.hostname.startsWith("[") && url.hostname.endsWith("]")
-      ? url.hostname.slice(1, -1)
-      : url.hostname;
-  return {
-    hostname,
-    port: url.port === "" ? (secure ? 443 : 80) : Number(url.port),
-    secure,
-    connectTimeoutMs,
-  };
 }
 
 function requestHead(request: TransportRequest): { bytes: Uint8Array; chunked: boolean } {

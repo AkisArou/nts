@@ -23,6 +23,9 @@ export type {
   TransportResponse,
 } from "./fetch/transport.ts";
 
+export { Http2Transport } from "./http2/transport.ts";
+export type { Http2TransportOptions } from "./http2/transport.ts";
+
 export { readContentCodingPolicy, standardContentCodingPolicy } from "./fetch/content-coding.ts";
 export type { ContentCodingPolicy } from "./fetch/content-coding.ts";
 

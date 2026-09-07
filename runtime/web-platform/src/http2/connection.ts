@@ -1,6 +1,6 @@
 import type { AbortSignal } from "../core/abort.ts";
 import { encodeByteString, concatBytes } from "../core/encoding.ts";
-import { LimitError } from "../core/errors.ts";
+import { LimitError, ProtocolError } from "../core/errors.ts";
 import { ignoreRejection } from "../core/promise.ts";
 import { BufferedReader, writeAll } from "../http1/io.ts";
 import { ReadableStream } from "../streams/readable.ts";
@@ -81,6 +81,7 @@ export interface Http2ConnectionOptions {
   readonly maximumCompressedHeaderBlockBytes?: number;
   readonly maximumHeaderBlockFragments?: number;
   readonly maximumConcurrentStreams?: number;
+  readonly maximumPendingRequests?: number;
   readonly enableConnectProtocol?: boolean;
 }
 
@@ -108,6 +109,7 @@ interface NormalizedOptions {
   readonly maximumCompressedHeaderBlockBytes: number;
   readonly maximumHeaderBlockFragments: number;
   readonly maximumConcurrentStreams: number;
+  readonly maximumPendingRequests: number;
   readonly enableConnectProtocol: boolean;
 }
 
@@ -158,6 +160,7 @@ function normalizeOptions(options: Http2ConnectionOptions): NormalizedOptions {
     maximumCompressedHeaderBlockBytes: options.maximumCompressedHeaderBlockBytes ?? 64 * 1024,
     maximumHeaderBlockFragments: options.maximumHeaderBlockFragments ?? 1024,
     maximumConcurrentStreams: options.maximumConcurrentStreams ?? 100,
+    maximumPendingRequests: options.maximumPendingRequests ?? 1024,
     enableConnectProtocol: options.enableConnectProtocol ?? true,
   };
   requireInteger(normalized.headerTableSize, 0, 0xffffffff, "HTTP/2 header table size");
@@ -209,6 +212,12 @@ function normalizeOptions(options: Http2ConnectionOptions): NormalizedOptions {
     0xffffffff,
     "HTTP/2 maximum concurrent streams",
   );
+  requireInteger(
+    normalized.maximumPendingRequests,
+    0,
+    HTTP2_MAX_WINDOW_SIZE,
+    "HTTP/2 pending request limit",
+  );
   if (typeof normalized.enableConnectProtocol !== "boolean") {
     throw new TypeError("HTTP/2 extended CONNECT option must be boolean");
   }
@@ -248,6 +257,8 @@ class Http2ClientStream {
   private trailersSettled = false;
   private uploadReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private disposeAbort: () => void = doNothing;
+  private readonly expectedSendLength: number | null;
+  private sentBodyBytes = 0;
 
   readonly body: ReadableStream<Uint8Array>;
 
@@ -258,6 +269,7 @@ class Http2ClientStream {
     initialReceiveWindow: number,
     method: string,
     hasBody: boolean,
+    expectedSendLength: number | null,
     onInformational: ((headers: Http2ResponseHeaders) => void) | undefined,
   ) {
     this.connection = connection;
@@ -265,6 +277,7 @@ class Http2ClientStream {
     this.sendWindow = initialSendWindow;
     this.receiveWindow = initialReceiveWindow;
     this.localEnded = !hasBody;
+    this.expectedSendLength = expectedSendLength;
     this.bodyForbidden = method === "HEAD";
     this.onInformational = onInformational;
     ignoreRejection(this.responseResult.promise);
@@ -288,6 +301,22 @@ class Http2ClientStream {
 
   setUploadReader(reader: ReadableStreamDefaultReader<Uint8Array> | null): void {
     this.uploadReader = reader;
+  }
+
+  acceptSendBytes(length: number): void {
+    this.sentBodyBytes += length;
+    if (
+      !Number.isSafeInteger(this.sentBodyBytes) ||
+      (this.expectedSendLength !== null && this.sentBodyBytes > this.expectedSendLength)
+    ) {
+      throw new ProtocolError("HTTP/2 request body exceeds Content-Length");
+    }
+  }
+
+  verifySendComplete(): void {
+    if (this.expectedSendLength !== null && this.sentBodyBytes !== this.expectedSendLength) {
+      throw new ProtocolError("HTTP/2 request body is shorter than Content-Length");
+    }
   }
 
   handleHeaders(parsed: Http2ResponseHeaders, endStream: boolean): void {
@@ -643,11 +672,14 @@ export class Http2ClientConnection {
       }
       const streamId = this.nextStreamId;
       this.nextStreamId += 2;
-      validateHttp2RequestHeaders(
+      const expectedSendLength = validateHttp2RequestHeaders(
         request.headers,
         streamId,
         this.options.enableConnectProtocol && this.remoteExtendedConnect,
       );
+      if (request.body === null && expectedSendLength !== null && expectedSendLength !== 0) {
+        throw new TypeError("HTTP/2 Content-Length requires a request body");
+      }
       if (http2HeaderListSize(request.headers) > this.remoteMaximumHeaderListSize) {
         throw new LimitError("HTTP/2 request header list exceeds the peer setting");
       }
@@ -659,6 +691,7 @@ export class Http2ClientConnection {
         this.options.initialStreamWindowSize,
         requestMethod(request.headers),
         request.body !== null,
+        expectedSendLength,
         request.onInformational,
       );
       this.reservedSlots--;
@@ -1086,6 +1119,7 @@ export class Http2ClientConnection {
       while (!stream.localEnded) {
         const result = await reader.read();
         if (result.done) break;
+        stream.acceptSendBytes(result.value.length);
         let offset = 0;
         while (offset < result.value.length && !stream.localEnded) {
           let length = this.reserveSendCapacity(stream, result.value.length - offset);
@@ -1104,6 +1138,7 @@ export class Http2ClientConnection {
         }
       }
       if (!stream.localEnded) {
+        stream.verifySendComplete();
         await this.sendFrame({
           type: HTTP2_FRAME_DATA,
           flags: HTTP2_FLAG_END_STREAM,
@@ -1256,6 +1291,9 @@ export class Http2ClientConnection {
     if (this.streams.size + this.reservedSlots < this.remoteMaximumConcurrentStreams) {
       this.reservedSlots++;
       return;
+    }
+    if (this.slotWaiters.length - this.slotOffset >= this.options.maximumPendingRequests) {
+      throw new LimitError("HTTP/2 pending request queue is full");
     }
     const waiter: SlotWaiter = {
       result: Promise.withResolvers<void>(),

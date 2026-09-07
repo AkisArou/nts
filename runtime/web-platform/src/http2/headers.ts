@@ -135,7 +135,7 @@ export function validateHttp2RequestHeaders(
   fields: readonly HpackHeaderField[],
   streamId: number,
   extendedConnectEnabled: boolean,
-): void {
+): number | null {
   let regular = false;
   let method: string | null = null;
   let scheme: string | null = null;
@@ -174,7 +174,7 @@ export function validateHttp2RequestHeaders(
         if (pseudo) streamProtocolError("Unknown HTTP/2 request pseudo-header", streamId);
     }
   }
-  parseContentLength(fields, streamId);
+  const contentLength = parseContentLength(fields, streamId);
 
   if (method === null || method === "")
     streamProtocolError("HTTP/2 request omitted :method", streamId);
@@ -185,13 +185,13 @@ export function validateHttp2RequestHeaders(
     if (protocol === "" || scheme === null || authority === null || path === null || path === "") {
       streamProtocolError("HTTP/2 extended CONNECT omitted a required pseudo-header", streamId);
     }
-    return;
+    return contentLength;
   }
   if (method === "CONNECT") {
     if (authority === null || authority === "" || scheme !== null || path !== null) {
       streamProtocolError("HTTP/2 CONNECT has invalid pseudo-headers", streamId);
     }
-    return;
+    return contentLength;
   }
   if (
     scheme === null ||
@@ -203,6 +203,7 @@ export function validateHttp2RequestHeaders(
   ) {
     streamProtocolError("HTTP/2 request omitted a required pseudo-header", streamId);
   }
+  return contentLength;
 }
 
 export function parseHttp2ResponseHeaders(

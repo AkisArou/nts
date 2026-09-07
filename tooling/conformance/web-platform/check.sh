@@ -15,5 +15,6 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/http2-connection.test.mjs \
   tooling/conformance/web-platform/test/http2-frame.test.mjs \
   tooling/conformance/web-platform/test/http2-headers.test.mjs \
+  tooling/conformance/web-platform/test/http2-transport.test.mjs \
   tooling/conformance/web-platform/test/network.test.mjs
 NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs

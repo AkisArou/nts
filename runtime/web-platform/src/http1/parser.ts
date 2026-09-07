@@ -2,7 +2,10 @@ import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { LimitError, ProtocolError } from "../core/errors.ts";
 import { Headers, isToken } from "../fetch/headers.ts";
 import type { HeaderEntry } from "../fetch/headers.ts";
+import { contentLength } from "../http/fields.ts";
 import type { BufferedReader } from "./io.ts";
+
+export { contentLength, hasToken } from "../http/fields.ts";
 
 export interface HeadLimits {
   maxHeaderBytes: number;
@@ -102,85 +105,6 @@ export async function readHead(
     statusText,
     headers: await readHeaderFields(reader, limits, line.length + 2),
   };
-}
-
-export function contentLength(headers: Headers): number | null {
-  const raw = headers.get("content-length");
-
-  if (raw === null) {
-    return null;
-  }
-  let result: number | null = null;
-  let index = 0;
-
-  while (true) {
-    while (index < raw.length) {
-      const code = raw.charCodeAt(index);
-      if (code !== 9 && code !== 32) {
-        break;
-      }
-      index++;
-    }
-
-    const digitsStart = index;
-    let length = 0;
-    while (index < raw.length) {
-      const digit = raw.charCodeAt(index) - 48;
-      if (digit < 0 || digit > 9) {
-        break;
-      }
-      length = length * 10 + digit;
-      index++;
-    }
-    if (index === digitsStart) {
-      throw new ProtocolError("Invalid Content-Length");
-    }
-    if (!Number.isSafeInteger(length)) {
-      throw new ProtocolError("Content-Length is too large");
-    }
-
-    while (index < raw.length) {
-      const code = raw.charCodeAt(index);
-      if (code !== 9 && code !== 32) {
-        break;
-      }
-      index++;
-    }
-    if (result !== null && result !== length) {
-      throw new ProtocolError("Conflicting Content-Length fields");
-    }
-    result = length;
-
-    if (index === raw.length) {
-      return result;
-    }
-    if (raw.charCodeAt(index) !== 44) {
-      throw new ProtocolError("Invalid Content-Length");
-    }
-    index++;
-  }
-}
-
-export function hasToken(headers: Headers, name: string, token: string): boolean {
-  const raw = headers.get(name);
-  if (raw === null) {
-    return false;
-  }
-  const expected = token.toLowerCase();
-  let start = 0;
-
-  while (start <= raw.length) {
-    const comma = raw.indexOf(",", start);
-    const end = comma < 0 ? raw.length : comma;
-    if (trimHTTPTabOrSpace(raw.slice(start, end)).toLowerCase() === expected) {
-      return true;
-    }
-    if (comma < 0) {
-      return false;
-    }
-    start = comma + 1;
-  }
-  return false;
 }
 
 export function responseFraming(headers: Headers): {

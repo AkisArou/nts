@@ -23,6 +23,7 @@ import {
   HTTP2_FRAME_PING,
   HTTP2_FRAME_RST_STREAM,
   HTTP2_FRAME_SETTINGS,
+  HTTP2_INTERNAL_ERROR,
   HTTP2_NO_ERROR,
   HTTP2_PROTOCOL_ERROR,
   HTTP2_REFUSED_STREAM,
@@ -310,53 +311,89 @@ suite("HPACK compression failure terminates the connection with COMPRESSION_ERRO
   assert.equal(goAway.payload[7], HTTP2_COMPRESSION_ERROR);
 });
 
-suite("aborting a concurrency waiter removes it without consuming the next slot", async () => {
-  const pair = await memoryPair([{ identifier: HTTP2_SETTING_MAX_CONCURRENT_STREAMS, value: 1 }]);
-  const signal = new AbortController().signal;
-  const firstPromise = pair.connection.request({
-    headers: requestHeaders(80, "/first"),
-    body: null,
-    signal,
-  });
-  await tick();
-  const cancelled = new AbortController();
-  const reason = { marker: "queued cancellation" };
-  const secondPromise = pair.connection.request({
-    headers: requestHeaders(80, "/cancelled"),
-    body: null,
-    signal: cancelled.signal,
-  });
-  cancelled.abort(reason);
-  await assert.rejects(secondPromise, (error) => error === reason);
+suite(
+  "aborting a bounded concurrency waiter removes it without consuming the next slot",
+  async () => {
+    const pair = await memoryPair(
+      [{ identifier: HTTP2_SETTING_MAX_CONCURRENT_STREAMS, value: 1 }],
+      { maximumPendingRequests: 1 },
+    );
+    const signal = new AbortController().signal;
+    const firstPromise = pair.connection.request({
+      headers: requestHeaders(80, "/first"),
+      body: null,
+      signal,
+    });
+    await tick();
+    const cancelled = new AbortController();
+    const reason = { marker: "queued cancellation" };
+    const secondPromise = pair.connection.request({
+      headers: requestHeaders(80, "/cancelled"),
+      body: null,
+      signal: cancelled.signal,
+    });
+    await tick();
+    await assert.rejects(
+      pair.connection.request({
+        headers: requestHeaders(80, "/overflow"),
+        body: null,
+        signal,
+      }),
+      /pending request queue is full/,
+    );
+    cancelled.abort(reason);
+    await assert.rejects(secondPromise, (error) => error === reason);
 
-  const encoder = new HpackEncoder();
-  pair.bytes.feed(
-    encodeHttp2Frame({
-      type: HTTP2_FRAME_HEADERS,
-      flags: HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM,
-      streamId: 1,
-      payload: encoder.encode([{ name: ":status", value: "204" }]),
-    }),
-  );
-  const first = await firstPromise;
-  await consume(first.body);
-  const thirdPromise = pair.connection.request({
-    headers: requestHeaders(80, "/third"),
-    body: null,
-    signal,
+    const encoder = new HpackEncoder();
+    pair.bytes.feed(
+      encodeHttp2Frame({
+        type: HTTP2_FRAME_HEADERS,
+        flags: HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM,
+        streamId: 1,
+        payload: encoder.encode([{ name: ":status", value: "204" }]),
+      }),
+    );
+    const first = await firstPromise;
+    await consume(first.body);
+    const thirdPromise = pair.connection.request({
+      headers: requestHeaders(80, "/third"),
+      body: null,
+      signal,
+    });
+    await tick();
+    assert.equal(pair.connection.activeStreamCount, 1);
+    pair.bytes.feed(
+      encodeHttp2Frame({
+        type: HTTP2_FRAME_HEADERS,
+        flags: HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM,
+        streamId: 3,
+        payload: encoder.encode([{ name: ":status", value: "204" }]),
+      }),
+    );
+    const third = await thirdPromise;
+    await consume(third.body);
+    pair.connection.close();
+    await pair.connection.closed;
+  },
+);
+
+suite("request Content-Length is enforced against the bytes produced by the body", async () => {
+  const pair = await memoryPair();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(Uint8Array.of(1));
+      controller.close();
+    },
   });
-  await tick();
-  assert.equal(pair.connection.activeStreamCount, 1);
-  pair.bytes.feed(
-    encodeHttp2Frame({
-      type: HTTP2_FRAME_HEADERS,
-      flags: HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM,
-      streamId: 3,
-      payload: encoder.encode([{ name: ":status", value: "204" }]),
-    }),
+  const request = pair.connection.request({
+    headers: [...requestHeaders(80, "/short", "POST"), { name: "content-length", value: "2" }],
+    body,
+    signal: new AbortController().signal,
+  });
+  await assert.rejects(
+    request,
+    (error) => error.errorCode === HTTP2_INTERNAL_ERROR && error.streamId === 1,
   );
-  const third = await thirdPromise;
-  await consume(third.body);
   pair.connection.close();
   await pair.connection.closed;
 });

@@ -1,0 +1,394 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http2 from "node:http2";
+import { once } from "node:events";
+import { gzipSync } from "node:zlib";
+import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
+import {
+  HostNodeSocketConnector,
+  createHostNodePrimitives,
+} from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
+import {
+  AbortController,
+  ReadableStream,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import { Http2Transport } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http2/transport.js";
+import { HpackEncoder } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http2/hpack.js";
+import {
+  HTTP2_FLAG_END_HEADERS,
+  HTTP2_FLAG_END_STREAM,
+  HTTP2_FRAME_GOAWAY,
+  HTTP2_FRAME_HEADERS,
+  HTTP2_FRAME_SETTINGS,
+  HTTP2_NO_ERROR,
+  decodeHttp2Frame,
+  encodeHttp2Frame,
+  encodeHttp2GoAway,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/http2/frame.js";
+
+const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+
+async function consume(stream) {
+  if (stream === null) return Buffer.alloc(0);
+  const reader = stream.getReader();
+  const chunks = [];
+  let length = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      chunks.push(Buffer.from(result.value));
+      length += result.value.length;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, length);
+}
+
+function transportRequest(url, overrides = {}) {
+  return {
+    url,
+    method: "GET",
+    headers: [],
+    body: null,
+    bodyLength: null,
+    signal: new AbortController().signal,
+    ...overrides,
+  };
+}
+
+async function h2Server(t, handler) {
+  const server = http2.createServer();
+  const sessions = new Set();
+  server.on("session", (session) => {
+    sessions.add(session);
+    session.on("error", () => {});
+    session.on("close", () => sessions.delete(session));
+  });
+  server.on("sessionError", () => {});
+  server.on("stream", handler);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  t.after(async () => {
+    for (const session of sessions) session.destroy();
+    await new Promise((resolve) => server.close(resolve));
+  });
+  return server.address().port;
+}
+
+suite(
+  "HTTP/2 Fetch transport multiplexes one origin and preserves request and response fields",
+  async (t) => {
+    const seen = [];
+    const port = await h2Server(t, (stream, headers) => {
+      const chunks = [];
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("end", () => {
+        seen.push({ headers, body: Buffer.concat(chunks).toString() });
+        stream.respond({
+          ":status": 200,
+          "x-path": headers[":path"],
+          "set-cookie": ["a=1", "b=2"],
+        });
+        stream.end(headers[":path"]);
+      });
+    });
+    const primitives = createHostNodePrimitives();
+    const hostConnector = new HostNodeSocketConnector();
+    let connectCalls = 0;
+    const connector = {
+      connect(address, signal) {
+        connectCalls++;
+        return hostConnector.connect(address, signal);
+      },
+    };
+    const transport = new Http2Transport(connector, primitives.scheduler);
+    t.after(() => transport.close());
+    const firstURL = primitives.urls.parse(`http://127.0.0.1:${port}/first?x=1`);
+    const secondURL = primitives.urls.parse(`http://127.0.0.1:${port}/second`);
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(Uint8Array.of(116, 101, 115, 116));
+        controller.close();
+      },
+    });
+    const firstPromise = transport.dispatch(
+      transportRequest(firstURL, { headers: [["x-test", "one"]] }),
+    );
+    const secondPromise = transport.dispatch(
+      transportRequest(secondURL, {
+        method: "POST",
+        headers: [["x-test", "two"]],
+        body,
+        bodyLength: 4,
+      }),
+    );
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    assert.equal(first.statusText, "");
+    assert.equal((await consume(first.body)).toString(), "/first?x=1");
+    assert.equal((await consume(second.body)).toString(), "/second");
+    assert.deepEqual(
+      first.headers.filter(([name]) => name === "set-cookie"),
+      [
+        ["set-cookie", "a=1"],
+        ["set-cookie", "b=2"],
+      ],
+    );
+    assert.equal(transport.stats.connections, 1);
+    assert.equal(transport.stats.origins, 1);
+    assert.deepEqual(
+      seen.map((entry) => [entry.headers[":path"], entry.headers["x-test"], entry.body]).sort(),
+      [
+        ["/first?x=1", "one", ""],
+        ["/second", "two", "test"],
+      ],
+    );
+    assert.equal(connectCalls, 1);
+  },
+);
+
+suite("shared Fetch redirects and decodes content over the HTTP/2 transport", async (t) => {
+  const paths = [];
+  const compressed = gzipSync("decoded over h2");
+  const port = await h2Server(t, (stream, headers) => {
+    paths.push(headers[":path"]);
+    if (headers[":path"] === "/start") {
+      stream.respond({ ":status": 302, location: "/final" });
+      stream.end();
+      return;
+    }
+    assert.match(headers["accept-encoding"], /gzip/);
+    stream.respond({
+      ":status": 200,
+      "content-encoding": "gzip",
+      "content-length": String(compressed.length),
+    });
+    stream.end(compressed);
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  const runtime = createHostNodeWebPlatform({ fetchTransport: transport });
+  t.after(() => {
+    runtime.close();
+    transport.close();
+  });
+  const response = await runtime.fetch(`http://127.0.0.1:${port}/start`);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), "decoded over h2");
+  assert.equal(response.headers.get("content-encoding"), "gzip");
+  assert.equal(response.headers.get("content-length"), String(compressed.length));
+  assert.deepEqual(paths, ["/start", "/final"]);
+  assert.equal(transport.stats.connections, 1);
+});
+
+class ScriptedConnection {
+  closed = false;
+  incoming = [];
+  pending = null;
+  started = false;
+  encoder = new HpackEncoder();
+
+  constructor(refuse) {
+    this.refuse = refuse;
+  }
+
+  read(maxBytes) {
+    if (this.incoming.length !== 0) return Promise.resolve(this.take(maxBytes));
+    if (this.closed) return Promise.resolve(null);
+    const result = Promise.withResolvers();
+    this.pending = { maxBytes, result };
+    return result.promise;
+  }
+
+  write(data) {
+    if (this.closed) return Promise.reject(new TypeError("closed"));
+    if (!this.started) {
+      this.started = true;
+      queueMicrotask(() =>
+        this.feed(
+          encodeHttp2Frame({
+            type: HTTP2_FRAME_SETTINGS,
+            flags: 0,
+            streamId: 0,
+            payload: new Uint8Array(0),
+          }),
+        ),
+      );
+      return Promise.resolve(data.length);
+    }
+    let frame = null;
+    try {
+      frame = decodeHttp2Frame(data);
+    } catch {
+      return Promise.resolve(data.length);
+    }
+    if (frame.type === HTTP2_FRAME_HEADERS) {
+      queueMicrotask(() => {
+        if (this.refuse) {
+          this.feed(
+            encodeHttp2Frame({
+              type: HTTP2_FRAME_GOAWAY,
+              flags: 0,
+              streamId: 0,
+              payload: encodeHttp2GoAway(0, HTTP2_NO_ERROR),
+            }),
+          );
+        } else {
+          this.feed(
+            encodeHttp2Frame({
+              type: HTTP2_FRAME_HEADERS,
+              flags: HTTP2_FLAG_END_HEADERS | HTTP2_FLAG_END_STREAM,
+              streamId: frame.streamId,
+              payload: this.encoder.encode([{ name: ":status", value: "204" }]),
+            }),
+          );
+        }
+      });
+    }
+    return Promise.resolve(data.length);
+  }
+
+  close() {
+    if (this.closed) return;
+    this.closed = true;
+    this.pending?.result.reject(new TypeError("closed"));
+    this.pending = null;
+  }
+
+  feed(data) {
+    if (this.closed) return;
+    this.incoming.push(data);
+    const pending = this.pending;
+    if (pending === null) return;
+    this.pending = null;
+    pending.result.resolve(this.take(pending.maxBytes));
+  }
+
+  take(maxBytes) {
+    const first = this.incoming[0];
+    if (first.length <= maxBytes) {
+      this.incoming.shift();
+      return first;
+    }
+    const result = first.slice(0, maxBytes);
+    this.incoming[0] = first.slice(maxBytes);
+    return result;
+  }
+}
+
+suite(
+  "HTTP/2 Fetch transport retries a replayable GOAWAY-refused request on a new connection",
+  async () => {
+    const connections = [new ScriptedConnection(true), new ScriptedConnection(false)];
+    let calls = 0;
+    const connector = {
+      connect() {
+        return Promise.resolve(connections[calls++]);
+      },
+    };
+    const primitives = createHostNodePrimitives();
+    const transport = new Http2Transport(connector, primitives.scheduler);
+    const url = primitives.urls.parse("http://example.test/retry");
+    const response = await transport.dispatch(transportRequest(url));
+    assert.equal(response.status, 204);
+    assert.equal(response.body, null);
+    assert.equal(calls, 2);
+    transport.close();
+  },
+);
+
+suite(
+  "HTTP/2 Fetch transport applies a response-header deadline and exact timeout class",
+  async (t) => {
+    let peerStream = null;
+    const port = await h2Server(t, (stream) => {
+      peerStream = stream;
+      stream.on("error", () => {});
+    });
+    const primitives = createHostNodePrimitives();
+    const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler, {
+      headersTimeoutMs: 30,
+    });
+    t.after(() => transport.close());
+    const url = primitives.urls.parse(`http://127.0.0.1:${port}/timeout`);
+    await assert.rejects(
+      transport.dispatch(transportRequest(url)),
+      (error) => error?.name === "TimeoutError",
+    );
+    if (peerStream !== null && !peerStream.closed) await once(peerStream, "close");
+    assert.equal(peerStream.rstCode, 8);
+  },
+);
+
+suite("HTTP/2 Fetch transport applies an idle deadline to each response-body read", async (t) => {
+  let peerStream = null;
+  const port = await h2Server(t, (stream) => {
+    peerStream = stream;
+    stream.on("error", () => {});
+    stream.respond({ ":status": 200 });
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler, {
+    bodyReadTimeoutMs: 30,
+  });
+  t.after(() => transport.close());
+  const url = primitives.urls.parse(`http://127.0.0.1:${port}/body-timeout`);
+  const response = await transport.dispatch(transportRequest(url));
+  await assert.rejects(consume(response.body), (error) => error?.name === "TimeoutError");
+  if (peerStream !== null && !peerStream.closed) await once(peerStream, "close");
+  assert.equal(peerStream.rstCode, 8);
+});
+
+suite("HTTP/2 Fetch transport drains active streams and rejects new work", async (t) => {
+  const peer = Promise.withResolvers();
+  const port = await h2Server(t, (stream) => {
+    stream.on("error", () => {});
+    stream.respond({ ":status": 200 });
+    stream.write("before ");
+    peer.resolve(stream);
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+  const url = primitives.urls.parse(`http://127.0.0.1:${port}/drain`);
+  const response = await transport.dispatch(transportRequest(url));
+  const stream = await peer.promise;
+  const drained = transport.drain();
+  await assert.rejects(transport.dispatch(transportRequest(url)), /closed/);
+  assert.equal(transport.stats.streams, 1);
+  stream.end("after");
+  assert.equal((await consume(response.body)).toString(), "before after");
+  await drained;
+  assert.deepEqual(transport.stats, {
+    connections: 0,
+    connecting: 0,
+    origins: 0,
+    streams: 0,
+  });
+});
+
+test("HTTP/2 Fetch transport validates declared body length before opening a socket", async () => {
+  let calls = 0;
+  const connector = {
+    connect() {
+      calls++;
+      return Promise.reject(new Error("must not connect"));
+    },
+  };
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(connector, primitives.scheduler);
+  const url = primitives.urls.parse("https://example.test/");
+  await assert.rejects(
+    transport.dispatch(
+      transportRequest(url, {
+        headers: [["content-length", "2"]],
+        body: new ReadableStream(),
+        bodyLength: 1,
+      }),
+    ),
+    /does not match/,
+  );
+  assert.equal(calls, 0);
+  transport.close();
+});
