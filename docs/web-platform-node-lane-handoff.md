@@ -124,8 +124,9 @@ features. The known dependency shapes are:
   realm identity for `Headers` iteration;
 - internal Promise observation that cannot be intercepted through a user-visible
   `.then` property;
-- typed explicit-receiver invocation (`CallWithThis` or an equivalent primitive),
-  instead of shared source calling user-replaceable `.call` or `.apply`;
+- compiler-synthesized bound-method values that capture the method and its receiver
+  once, then invoke through the existing closure calling convention, instead of
+  shared source calling user-replaceable `.call` or `.apply`;
 - the Web-IDL async-iterator object/prototype shape: its immediate prototype extends
   `%AsyncIteratorPrototype%`, owns enumerable/writable/configurable `next` and
   `return`, and has no `throw`.
@@ -134,6 +135,12 @@ The async-iterator WPT runs in a VM realm while the API is imported from the hos
 realm. Do not falsify the comparison by substituting the test realm's intrinsic.
 Either execute API code in the test realm or assert against the API realm's canonical
 intrinsic, coordinated with the compiler/common-runtime owner.
+
+An arrow such as `(chunk) => sink.write(chunk)` avoids hostile `.call`/`.apply`
+properties and passes the currently pinned receiver test, but it re-reads
+`sink.write` at invocation time. Web IDL requires capturing the method once with its
+original receiver. Keep the failure visible until the real bound-method primitive
+lands; do not trade the visible failure for that untested semantic deviation.
 
 ## What is already implemented in shared TypeScript
 
