@@ -2864,6 +2864,11 @@ fn erasable(ty: &HirType) -> bool {
                     | ManagedType::Array(_)
                     | ManagedType::View(_)
                     | ManagedType::Buffer
+                    // A promise is an ordinary managed object too, and it is
+                    // here for the reason the two above are: `util.inspect`
+                    // asks `x instanceof Promise` of an `unknown`, and a test
+                    // is worth nothing if the value cannot get into one.
+                    | ManagedType::Promise(_)
             )
     )
 }
@@ -11089,6 +11094,61 @@ impl<'a> FuncBuilder<'a> {
     /// The right side is resolved through the **symbol** the class declares
     /// rather than through its name. Two modules may each declare a `Point`,
     /// and a name would pick whichever the map happened to hold.
+    /// `instanceof` against a type this compiler represents natively rather than
+    /// as a class.
+    ///
+    /// None of these has a per-class layout for the search above to find, so
+    /// that search cannot succeed and the message it would produce -- "something
+    /// this compiler has no class for" -- is true and useless: it describes the
+    /// representation rather than the question. The runtime answers instead.
+    ///
+    /// Three shapes, and the differences are the point:
+    ///
+    ///   - a **typed array** is two tests. All nine share one struct and one
+    ///     descriptor, differing only in how their bytes are read, so the
+    ///     descriptor says *some typed array* and the `kind` field says *which*.
+    ///     A test of the descriptor alone calls a `Float32Array` a `Uint8Array`.
+    ///   - an **`ArrayBuffer`** is one class rather than nine, so its descriptor's
+    ///     KIND is the whole answer and there is nothing below it.
+    ///   - a **promise** is an `NTS_KIND_OBJECT` like a date or a view, so the
+    ///     kind says nothing and descriptor IDENTITY is the answer.
+    ///
+    /// `Ok(None)` for everything else, which is the ordinary class path.
+    fn instanceof_native(
+        &mut self,
+        id: NodeId,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(name) = self.node(rhs).text.clone() else {
+            return Ok(None);
+        };
+        let kind = super::builtin::typed_array_element(&name)
+            .as_ref()
+            .and_then(super::builtin::element_kind);
+        let helper = match (name.as_str(), kind) {
+            (_, Some(_)) => "nts_is_view_kind",
+            ("ArrayBuffer", _) => "nts_is_buffer",
+            ("Promise", _) => "nts_is_promise",
+            _ => return Ok(None),
+        };
+        let value = self.lower_expression(lhs)?;
+        let origin = self.origin(id);
+        let erased = match self.values[value.0 as usize].ty {
+            HirType::Erased => value,
+            _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
+        };
+        let mut args = vec![erased];
+        if let Some(kind) = kind {
+            args.push(self.push(
+                OpKind::ConstFloat(f64::from(kind)),
+                HirType::NUMBER,
+                origin.clone(),
+            ));
+        }
+        Ok(Some(self.call_runtime(helper, args, HirType::Bool, &origin)))
+    }
+
     fn lower_instanceof(
         &mut self,
         id: NodeId,
@@ -11146,47 +11206,8 @@ impl<'a> FuncBuilder<'a> {
         // search cannot succeed and the message it produces -- "something this
         // compiler has no class for" -- is true and useless: it describes the
         // representation rather than the question.
-        // `ArrayBuffer` is the same argument with nothing below the kind: one
-        // class rather than nine, so the descriptor's kind is the whole answer.
-        if self.node(rhs).text.as_deref() == Some("ArrayBuffer") {
-            let value = self.lower_expression(lhs)?;
-            let origin = self.origin(id);
-            let erased = match self.values[value.0 as usize].ty {
-                HirType::Erased => value,
-                _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
-            };
-            return Ok(self.call_runtime(
-                "nts_is_buffer",
-                vec![erased],
-                HirType::Bool,
-                &origin,
-            ));
-        }
-        if let Some(name) = self.node(rhs).text.clone()
-            && let Some(element) = super::builtin::typed_array_element(&name)
-            && let Some(kind) = super::builtin::element_kind(&element)
-        {
-            let value = self.lower_expression(lhs)?;
-            let origin = self.origin(id);
-            let erased = match self.values[value.0 as usize].ty {
-                HirType::Erased => value,
-                _ => self.push(
-                    OpKind::Erase { value },
-                    HirType::Erased,
-                    origin.clone(),
-                ),
-            };
-            let kind = self.push(
-                OpKind::ConstFloat(f64::from(kind)),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            return Ok(self.call_runtime(
-                "nts_is_view_kind",
-                vec![erased, kind],
-                HirType::Bool,
-                &origin,
-            ));
+        if let Some(answer) = self.instanceof_native(id, lhs, rhs)? {
+            return Ok(answer);
         }
         let Some(class) = class else {
             return Err(self.unsupported(

@@ -126,3 +126,34 @@ export function aWindowKeepsItsKind(offset: number): number {
     return -2;
   }
 }
+
+// A promise that arrived as `unknown`. Answered by descriptor identity rather
+// than by kind -- a promise is an `NTS_KIND_OBJECT` like a date or a view, and
+// what makes it one is which descriptor it carries.
+//
+// `util.inspect` is what wants this: node prints `Promise { <pending> }` where
+// we print `{}`, and the first half of telling those apart is knowing you are
+// looking at one. The state itself is `nts_promise_state`, which is a reader
+// over a field of this runtime's own struct rather than a binding -- there is
+// no V8 here to ask.
+export function aPromiseIsAPromise(n: number): number {
+  const open: unknown = Promise.resolve(n);
+  return (open instanceof Promise ? 1 : 0) +
+    (open instanceof Uint8Array ? 10 : 0) +
+    (open instanceof ArrayBuffer ? 100 : 0);
+}
+
+export function anArrayIsNotAPromise(n: number): number {
+  const open: unknown = [n, n + 1];
+  return open instanceof Promise ? 1 : 0;
+}
+
+export function aStringIsNotAPromise(n: number): number {
+  const open: unknown = n > 0 ? "ab" : "c";
+  return open instanceof Promise ? 1 : 0;
+}
+
+export function anObjectIsNotAPromise(n: number): number {
+  const open: unknown = new Point(n);
+  return open instanceof Promise ? 1 : 0;
+}

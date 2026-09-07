@@ -1268,6 +1268,10 @@ bool nts_is_class(NtsValue value, const NtsDescriptor *klass) {
   return object && object->descriptor == klass;
 }
 
+double nts_promise_state(const NtsPromise *promise) {
+  return promise ? (double)promise->state : (double)NTS_PROMISE_PENDING;
+}
+
 bool nts_is_buffer(NtsValue value) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
     return false;
@@ -5628,6 +5632,14 @@ static const NtsDescriptor nts_desc_promise = {
     1u,
     nts_promise_erased,
 };
+
+bool nts_is_promise(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor == &nts_desc_promise;
+}
 
 NtsPromise *nts_promise_new(void) {
   return (NtsPromise *)nts_object_new(&nts_desc_promise);

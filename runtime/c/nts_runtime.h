@@ -1598,6 +1598,13 @@ NTS_READS_ONLY bool nts_is_view_kind(NtsValue value, double kind);
  * distinguish, since `ArrayBuffer` is one class rather than nine. */
 NTS_READS_ONLY bool nts_is_buffer(NtsValue value);
 
+/* `value instanceof Promise`.
+ *
+ * By descriptor identity rather than by kind: a promise is an ordinary object
+ * as far as the collector is concerned -- `NTS_KIND_OBJECT`, like a date and a
+ * view -- and what makes it a promise is which descriptor it carries. */
+NTS_READS_ONLY bool nts_is_promise(NtsValue value);
+
 NtsArray *nts_array_fill(NtsArray *a, double value);
 /* The same for an array of booleans, which is a byte per element rather than
  * eight. A separate entry point rather than a generic one taking a width: the
@@ -2267,6 +2274,17 @@ void nts_promise_reject_with(NtsPromise *result, const NtsPromise *source);
  * `state` says rejected only after the pointer is stored -- and a null answers
  * `undefined`, which is what a `catch` of one would see. */
 NTS_READS_ONLY NtsValue nts_promise_reason(const NtsPromise *promise);
+/* Which of `NTS_PROMISE_PENDING`, `_FULFILLED` and `_REJECTED` a promise is in.
+ *
+ * A promise's state is not reachable from JavaScript: node reads it through
+ * V8's `Promise::State`, and `util.inspect` is what wants it, so that it can
+ * print `Promise { <pending> }` rather than `{}`. There is no V8 here and the
+ * state is a field of a struct this runtime allocates, so the seam is a reader
+ * rather than a binding.
+ *
+ * A `double` because that is the one numeric representation the lowering has to
+ * hand, and converting at the boundary is one place rather than every call. */
+NTS_READS_ONLY double nts_promise_state(const NtsPromise *promise);
 /* Reject with a reason that arrives erased.
  *
  * `nts_promise_reject` takes an `NtsHeader *` because a reason is always a

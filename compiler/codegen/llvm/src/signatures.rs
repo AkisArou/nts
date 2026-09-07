@@ -165,6 +165,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_is_finite", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_integer", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_owner_thread", returns: "zeroext i1", params: &[], attributes: &[] },
+    Signature { name: "nts_is_promise", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_safe_integer", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_view_kind", returns: "zeroext i1", params: &["i32", "i64", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_leave", returns: "void", params: &[], attributes: &[] },

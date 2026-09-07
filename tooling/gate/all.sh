@@ -294,7 +294,12 @@ profile() {
   # month of work, and the session growing the corpus should expect to raise
   # this in the same commit. Two binaries over one corpus is the measurement
   # that tells the two causes apart, and it costs one loop.
-  ceiling=7861
+  # 7461 -> 10405 in one afternoon, and the compiler took 13 OFF that number
+  # over the same span: measured by running the binary from the start of it over
+  # the corpus at the end, which gives 10418 against the current 10405. The
+  # Node lane is committing continuously and a refusal count tracks corpus size
+  # before anything else.
+  ceiling=10805
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1

@@ -1890,7 +1890,13 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             | ManagedType::View(_)
             | ManagedType::Date
             | ManagedType::Buffer
-            | ManagedType::DataView,
+            | ManagedType::DataView
+            // A promise too. Its settled value lives in the descriptor's
+            // *erased* table, which is what lets the collector follow it only
+            // when the tag says there is something to follow -- and none of
+            // that is disturbed by a reference to the promise itself being
+            // erased, which is an ordinary pointer like the rest of this arm.
+            | ManagedType::Promise(_),
         ) => Some(("NTS_TAG_OBJECT", "reference")),
         _ => None,
     }
