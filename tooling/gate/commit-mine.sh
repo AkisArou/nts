@@ -32,8 +32,15 @@ while [ $# -gt 0 ]; do
 done
 [ $# -gt 0 ] || { echo "commit-mine: no paths given" >&2; exit 2; }
 
+# A path that is gone from the tree is either a typo or a deletion, and the
+# difference is whether git is tracking it. Refusing both made a rename
+# impossible to commit in one piece: `git mv` leaves the old name deleted, and
+# naming it here failed, so record 0191's rename landed as an add with the
+# removal left behind -- HEAD carried two copies while the tree carried one, and
+# the `records` check reads the tree and passed.
 for path in "$@"; do
-  [ -e "$path" ] || { echo "commit-mine: $path does not exist" >&2; exit 2; }
+  [ -e "$path" ] && continue
+  git ls-files --error-unmatch -- "$path" >/dev/null 2>&1     || { echo "commit-mine: $path does not exist and git does not know it" >&2; exit 2; }
 done
 
 # A partial commit can only name paths git already knows, so a new file needs
