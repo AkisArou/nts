@@ -3598,3 +3598,52 @@ pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 pass
 failing and 14 named not-applicable. The root TypeScript solution build is green. The NTS
 frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003`: the ABI is
 types-only and the implementation is host tooling outside the compiled project.
+
+## The compiled axis, off zero
+
+Every entry above this one is host evidence: TypeScript running on node, which says the
+algorithms are right and nothing at all about whether they compile. This lane's
+compiled axis was zero, and the whole-project frontier of 1,304 refusals made it easy
+to treat that as a single blocked thing rather than a question with an answer.
+
+It is not one thing. Three shared modules compile and execute today, on all three
+backends, agreeing with the oracle on every generated case:
+
+| Module | What it is |
+|---|---|
+| `http/certificate.ts` | dNSName matching, including the wildcard rules HTTP/2 coalescing depends on |
+| `core/ascii.ts` | the whitespace predicate the integrity and header parsers tokenize with |
+| `core/base64.ts` | Infra's forgiving base64, which integrity compares digests through |
+
+`tooling/conformance/web-platform/compiled/` is a fixture over exactly those, and
+`nts check` reports **54 cases across 5 functions, agreed on every case**, separately
+for `jvm`, `c` and `llvm`. That is compiled-provider evidence for those functions on
+those backends — the first in this lane.
+
+The frontier is a measurement rather than a judgement about what matters. `fetch/headers`
+declines at the backend after twelve refusals; `websocket/handshake` pulls the whole
+runtime through its import graph and reaches 1,023. What compiles is what has no import
+edge into the unlowered parts, which is why the list is short and why it should grow as
+prerequisites land rather than by being rewritten to fit.
+
+**A source mutation is not a valid control here**, and noticing that mattered more than
+any sabotage would have. The differential runs the same TypeScript compiled and on the
+oracle, so a change to the source changes both sides identically and they agree
+regardless — the instrument detects *compiler* disagreement, not source defects. The
+control that does work is removing an export: the count moves 54 across 5 functions to
+49 across 4 and back, which is what proves the checker is exercising this fixture rather
+than reporting a constant.
+
+The step is separate from the host gate because it needs a compiler and the host gate
+needs only node. `check.sh` runs it when one is present and **says so loudly when it is
+not** — a step that disappears quietly is how an axis stays at zero without anyone
+noticing, which is approximately what happened here.
+
+`NTS_BIN` selects the compiler, and pinning a private copy is the point: three sessions
+share this checkout and `target/release/nts` moves several times an hour, so a result
+taken across it names no compiler at all.
+
+The complete local Node-host/real-socket corpus passes 530/530 with zero skipped, the
+pinned upstream corpus is unchanged at 2,278 of 2,286 applicable, and the whole-project
+frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003` — this slice adds a
+fixture and changes no shared source.

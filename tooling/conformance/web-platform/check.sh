@@ -46,3 +46,15 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/websocket-server-lifetime.test.mjs \
   tooling/conformance/web-platform/test/weak-listener.test.mjs
 NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs
+
+# The compiled axis. Everything above is host evidence -- TypeScript on node, which
+# says the algorithms are right and nothing about whether they compile.
+#
+# Skipped loudly rather than silently when no compiler is present: a step that
+# disappears without saying so is how an axis stays at zero without anyone noticing.
+if [ -x "${NTS_BIN:-$root/target/release/nts}" ]; then
+  tooling/conformance/web-platform/compiled/check.sh
+else
+  echo "check.sh: SKIPPING the compiled axis -- no compiler at ${NTS_BIN:-$root/target/release/nts}." >&2
+  echo "  Host evidence alone does not show that any of this compiles." >&2
+fi
