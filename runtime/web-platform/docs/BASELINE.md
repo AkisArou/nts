@@ -4891,3 +4891,24 @@ The corpus is **2,433 tests, 2,418 applicable, 2,407 passing, 11 failing** — t
 long-standing structural failures plus the three named above. Local corpus 705/705,
 compiled axis 138 of 142 across 13 functions, frontier unchanged at 1,294 primary
 `NTS1001` and 314 `NTS1003`.
+
+### And `Blob.stream()` is a byte stream now
+
+The gap named in the previous entry is closed. Both blob stream sources are
+`UnderlyingByteSource` with `type: "bytes"`, and the queuing strategy loses its `size`
+function — a byte stream measures its queue in bytes, and the Streams standard makes
+supplying one a `TypeError` rather than a redundancy.
+
+Everything those sources enqueue was already a `Uint8Array`, so the change is almost
+entirely in the types: what actually differs is that `getReader({ mode: "byob" })` is now
+answered instead of refused, and BYOB reads are served from the queue by the byte-stream
+machinery that the sixty-five pinned streams fixtures already exercise.
+
+The sabotage is the whole claim in one line — hand the stream constructor a default
+source again — and the BYOB assertion comes straight back: 2,408 passing becomes 2,407,
+10 failures become 11.
+
+The corpus is **2,433 tests, 2,418 applicable, 2,408 passing, 10 failing**: the eight
+long-standing structural failures and the two `Event.timeStamp` assertions, which stay
+open pending a clock primitive. Local corpus 705/705 with zero skipped, compiled axis
+138 of 142 across 13 functions on all three backends.

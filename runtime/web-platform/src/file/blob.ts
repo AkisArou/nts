@@ -11,8 +11,8 @@ import {
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import {
   ReadableStream,
-  type ReadableStreamDefaultController,
-  type UnderlyingSource,
+  type ReadableByteStreamController,
+  type UnderlyingByteSource,
 } from "../streams/readable.ts";
 
 const BLOB_MAX_LENGTH = Number.MAX_SAFE_INTEGER;
@@ -255,7 +255,17 @@ async function copyExternalPart(
   await closeExternalReader(reader);
 }
 
-class MemoryBlobStreamSource implements UnderlyingSource<Uint8Array> {
+/**
+ * A byte source, because `Blob.stream()` returns a byte stream.
+ *
+ * The difference is invisible until somebody asks for a BYOB reader, and then it is the
+ * whole difference: a default stream refuses one outright. Everything enqueued here was
+ * already a `Uint8Array`, so what changes is the controller's type and the strategy --
+ * a byte stream sizes its queue in bytes and rejects a `size` function outright.
+ */
+class MemoryBlobStreamSource implements UnderlyingByteSource {
+  readonly type = "bytes" as const;
+
   readonly #parts: readonly StoredBlobPart[];
   #partIndex = 0;
   #partOffset = 0;
@@ -264,7 +274,7 @@ class MemoryBlobStreamSource implements UnderlyingSource<Uint8Array> {
     this.#parts = parts;
   }
 
-  pull(controller: ReadableStreamDefaultController<Uint8Array>): void {
+  pull(controller: ReadableByteStreamController): void {
     while (this.#partIndex < this.#parts.length) {
       const part = this.#parts[this.#partIndex];
       if (part === undefined) {
@@ -295,7 +305,9 @@ class MemoryBlobStreamSource implements UnderlyingSource<Uint8Array> {
   }
 }
 
-class ExternalBlobStreamSource implements UnderlyingSource<Uint8Array> {
+class ExternalBlobStreamSource implements UnderlyingByteSource {
+  readonly type = "bytes" as const;
+
   readonly #parts: readonly StoredBlobPart[];
   #partIndex = 0;
   #partOffset = 0;
@@ -316,7 +328,7 @@ class ExternalBlobStreamSource implements UnderlyingSource<Uint8Array> {
     }
   }
 
-  async pull(controller: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
+  async pull(controller: ReadableByteStreamController): Promise<void> {
     if (this.#cancelled) {
       return;
     }
@@ -583,13 +595,12 @@ export class Blob {
   }
 
   stream(): ReadableStream<Uint8Array> {
-    const source: UnderlyingSource<Uint8Array> = this.#hasExternal
+    const source: UnderlyingByteSource = this.#hasExternal
       ? new ExternalBlobStreamSource(this.#parts)
       : new MemoryBlobStreamSource(this.#parts);
-    return new ReadableStream(source, {
-      highWaterMark: 0,
-      size: (value) => value.length,
-    });
+    // No `size`: a byte stream measures its queue in bytes, and the Streams standard
+    // makes supplying one a TypeError rather than a redundancy.
+    return new ReadableStream(source, { highWaterMark: 0 });
   }
 
   get [Symbol.toStringTag](): "Blob" | "File" {
