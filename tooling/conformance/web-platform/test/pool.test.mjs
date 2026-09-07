@@ -12,6 +12,7 @@ import {
 import { createHostNodePrimitives } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
 
 const primitives = createHostNodePrimitives();
+const publicOrigin = primitives.urls.parse("https://public.test");
 
 function request(path = "/resource?value=1") {
   return {
@@ -65,7 +66,7 @@ test("RoundRobinPool rotates fixed members and aggregates live stats", async () 
   const two = new FakeDispatcher("two");
   two.stats = { connections: 2, pending: 3, running: 4 };
   two.idle = false;
-  const pool = new RoundRobinPool([one, two]);
+  const pool = new RoundRobinPool(publicOrigin, [one, two]);
   const answers = [];
   for (let index = 0; index < 5; index++) {
     answers.push((await pool.dispatch(request())).statusText);
@@ -80,13 +81,16 @@ test("RoundRobinPool rotates fixed members and aggregates live stats", async () 
     dispatched: 5,
   });
   assert.equal(pool.idle, false);
-  assert.throws(() => new Pool([]), RangeError);
+  assert.throws(() => new Pool(publicOrigin, []), RangeError);
+  const wrongOrigin = request();
+  wrongOrigin.url = primitives.urls.parse("https://other.test/path");
+  await assert.rejects(pool.dispatch(wrongOrigin), TypeError);
 });
 
 test("Pool close is idempotent and destroy forwards exact reasons", async () => {
   const one = new FakeDispatcher("one");
   const two = new FakeDispatcher("two");
-  const pool = new Pool([one, two]);
+  const pool = new Pool(publicOrigin, [one, two]);
   const closing = pool.close();
   assert.equal(closing, pool.close());
   await closing;
@@ -97,7 +101,7 @@ test("Pool close is idempotent and destroy forwards exact reasons", async () => 
 
   const three = new FakeDispatcher("three");
   const four = new FakeDispatcher("four");
-  const destroyed = new Pool([three, four]);
+  const destroyed = new Pool(publicOrigin, [three, four]);
   const reason = new Error("stop");
   await destroyed.destroy(reason);
   assert.deepEqual(three.destroyReasons, [reason]);

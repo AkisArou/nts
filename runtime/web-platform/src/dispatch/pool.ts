@@ -1,5 +1,5 @@
 import { TransportError } from "../fetch/transport.ts";
-import type { TransportRequest, TransportResponse } from "../fetch/transport.ts";
+import type { FetchTransport, TransportRequest, TransportResponse } from "../fetch/transport.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import type { OriginDispatcher, OriginDispatcherStats } from "./agent.ts";
 
@@ -30,6 +30,7 @@ function dispatchWith(
 
 /** A fixed-size, same-origin dispatcher pool with deterministic round-robin selection. */
 export class RoundRobinPool implements OriginDispatcher {
+  private readonly origin: string;
   private readonly dispatchers: readonly OriginDispatcher[];
   private nextIndex = 0;
   private dispatchedCount = 0;
@@ -38,10 +39,11 @@ export class RoundRobinPool implements OriginDispatcher {
   private closeResult: Promise<void> | null = null;
   private destroyResult: Promise<void> | null = null;
 
-  constructor(dispatchers: readonly OriginDispatcher[]) {
+  constructor(origin: URLRecord, dispatchers: readonly OriginDispatcher[]) {
     if (dispatchers.length === 0) {
       throw new RangeError("A round-robin pool requires at least one dispatcher");
     }
+    this.origin = upstreamOrigin(origin);
     this.dispatchers = dispatchers.slice();
   }
 
@@ -83,6 +85,9 @@ export class RoundRobinPool implements OriginDispatcher {
   dispatch(request: TransportRequest): Promise<TransportResponse> {
     if (!this.accepting) return Promise.reject(new TypeError("Pool is closed"));
     if (request.signal.aborted) return Promise.reject(request.signal.reason);
+    if (request.url.origin !== this.origin) {
+      return Promise.reject(new TypeError("Pool request origin does not match its upstream"));
+    }
     const dispatcher = this.dispatchers[this.nextIndex];
     if (dispatcher === undefined) {
       return Promise.reject(new TypeError("Pool has no dispatcher at its selected index"));
@@ -226,7 +231,7 @@ function routedRequest(request: TransportRequest, upstream: BalancedRecord): Tra
 }
 
 /** Smooth weighted round-robin over mutable, provider-owned upstream dispatchers. */
-export class BalancedPool implements OriginDispatcher {
+export class BalancedPool implements FetchTransport {
   private readonly records = new Map<string, BalancedRecord>();
   /** Includes records removed from selection while their graceful close is pending. */
   private readonly owned = new Set<OriginDispatcher>();
