@@ -201,10 +201,17 @@ on; it is covered on the direct, HTTP CONNECT and SOCKS5 routes against real ser
 See "The engine is chosen on the connection the decision was made on" and "The contract
 survives a proxy" in the ledger.
 
-Still open: HTTP/2 connection coalescing, which must use `certificateNames` rather than
-hostname alone and is deliberately not implemented yet. Only the ordinary-Node
-conformance host implements the new members, and host execution is not evidence that a
-real provider can report a selection.
+HTTP/2 connection coalescing is built too, using `certificateNames` plus a matching
+endpoint and port, off by default. See "Coalescing, and the endpoint question it
+forced" in the ledger, including the architectural finding it surfaced: the reuse
+decision happens before connecting, while the endpoint an origin resolves to is chosen
+by the DNS policy *below* the transport, so the transport is given a synchronous
+`knownEndpoint` probe of what is already resolved rather than being allowed to resolve
+at the pool.
+
+Still open in this area: wiring `knownEndpoint` to the shared DNS cache, which is its
+natural consumer. Only the ordinary-Node conformance host implements the new members,
+and host execution is not evidence that a real provider can report a selection.
 
 The original statement of the problem follows.
 
@@ -327,8 +334,9 @@ was found to be what actually drains ART's reference queue.
    bootstrap order.
 3. Done. The negotiated-ALPN result is landed, its contract is enforced centrally, and
    automatic HTTP/1.1 versus HTTP/2 selection runs over one connected stream on the
-   direct, HTTP-proxy tunnel and SOCKS routes. HTTP/2 connection coalescing remains
-   unbuilt and must use `certificateNames` rather than hostname alone.
+   direct, HTTP-proxy tunnel and SOCKS routes. HTTP/2 connection coalescing is built on
+   `certificateNames` plus endpoint and port, off by default; connecting its
+   `knownEndpoint` probe to the shared DNS cache remains open.
 4. Done. A SOCKS pooling regression proves two logical target origins never reuse one
    target-bound tunnel merely because the proxy endpoint is the same; see "One proxy
    endpoint is not one connection pool" in `runtime/web-platform/docs/BASELINE.md`.
