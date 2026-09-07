@@ -1938,3 +1938,39 @@ compiled-source frontier is 1219 primary `NTS1001` refusals and 205 dependent
 `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. The increase is new shared dispatcher source reaching
 existing language prerequisites; it is not compiled Agent evidence.
+
+## Bounded same-origin and balanced dispatcher pools
+
+At `20696298`, the shared dispatcher layer has a fixed-member `RoundRobinPool`
+and `Pool` for one canonical HTTP(S) origin, plus a mutable multi-upstream
+`BalancedPool`. A same-origin pool rejects a request for another origin before
+selecting a provider dispatcher. Balanced routing constructs a new URL record with
+only the origin replaced; the caller's request and its body, signal, headers, and
+replay metadata keep their identity.
+
+Balanced selection uses deterministic smooth weighted round robin. Configured
+weights, health penalties, and retained upstream count are explicitly bounded.
+Only typed transport failures reduce health; policy and user-code errors do not.
+Successful dispatch restores one health step, while providers can report a typed
+failure or success discovered later in the response-body or connection lifecycle
+through the same rule. Credential-bearing and non-HTTP(S) upstream URLs are refused.
+
+Removal first stops new selection, then waits for graceful provider close. A failed
+close restores the upstream while the pool is accepting, so the dispatcher cannot
+become an unowned live resource. Close and exact-reason destroy cover every remaining
+owned dispatcher, including one already removed from selection while its close is
+pending. Aggregate and per-upstream snapshots expose configured and health weights,
+connections, pending/running work, idle state, dispatches, and typed failures.
+
+The focused pool corpus passes 10/10 and the complete local Node-host/real-socket
+suite passes 364/364. The pinned WPT slice remains 2275/2283 applicable cases with
+14 named not-applicable cases and the same eight visible structural/common-compiler
+failures.
+
+A sabotage inverted the typed-transport-error health guard. The focused corpus fell
+from 10/10 to 9/10 because the selected upstream incorrectly retained full health,
+then returned to 10/10 after restoration. The live compiled-source frontier is 1233
+primary `NTS1001` refusals and 205 dependent `NTS1003` cascades, with zero `NTS1004`
+module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. The increase
+is new shared dispatcher source reaching existing language prerequisites; it is not
+compiled pool evidence.
