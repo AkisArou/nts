@@ -284,7 +284,42 @@ interface ListenerRecord {
   passive: boolean;
   removed: boolean;
   unsubscribeAbort: (() => void) | null;
+  /**
+   * Internal, never Web-observable: when set, this listener lives only as long as
+   * the referenced resource does. It is not an `addEventListener` option and no
+   * dictionary member reaches it.
+   */
+  weakResource: WeakRef<object> | null;
 }
+
+interface WeaklyHeldRetirement {
+  readonly target: WeakRef<EventTarget>;
+  readonly listener: ListenerRecord;
+}
+
+/**
+ * Captured by EventTarget's static initializer. The weakly held seam therefore
+ * reaches ECMAScript-private state without becoming a property of EventTarget, so
+ * script can neither call it nor observe that it exists.
+ */
+let registerWeaklyHeld!: (
+  target: EventTarget,
+  type: string,
+  callback: ConvertedEventListener,
+  resource: object,
+  once: boolean,
+) => void;
+let retireWeaklyHeld!: (target: EventTarget, listener: ListenerRecord) => void;
+
+/**
+ * Retires a weakly held listener once its resource is collected. The held value
+ * references the target weakly so that registering a listener never becomes a new
+ * reason for the target to stay alive.
+ */
+const weaklyHeldListeners = new FinalizationRegistry<WeaklyHeldRetirement>((retirement) => {
+  const target = retirement.target.deref();
+  if (target !== undefined) retireWeaklyHeld(target, retirement.listener);
+});
 
 type ListenerObserver = (type: string, added: boolean) => void;
 
@@ -364,6 +399,53 @@ export class EventTarget {
   private dispatchDepth = 0;
   private errorReporter: (error: unknown) => void = () => {};
 
+  static {
+    registerWeaklyHeld = (target, type, callback, resource, once): void => {
+      target.#addWeaklyHeld(type, callback, resource, once);
+    };
+    retireWeaklyHeld = (target, listener): void => {
+      target.#retireWeaklyHeld(listener);
+    };
+  }
+
+  /**
+   * Registers a listener whose lifetime is bounded by `resource`. Duplicate
+   * registration follows the same (type, callback, capture) rule as
+   * `addEventListener`, so this seam cannot install a second copy of a listener the
+   * public API would have rejected.
+   */
+  #addWeaklyHeld(
+    type: string,
+    callback: ConvertedEventListener,
+    resource: object,
+    once: boolean,
+  ): void {
+    if (
+      this.listeners.some(
+        (item) =>
+          !item.removed && item.type === type && item.callback === callback && !item.capture,
+      )
+    )
+      return;
+    const listener: ListenerRecord = {
+      type,
+      callback,
+      capture: false,
+      once,
+      passive: false,
+      removed: false,
+      unsubscribeAbort: null,
+      weakResource: new WeakRef(resource),
+    };
+    this.listeners.push(listener);
+    this.listenerObserver?.(type, true);
+    weaklyHeldListeners.register(resource, { target: new WeakRef(this), listener }, listener);
+  }
+
+  #retireWeaklyHeld(listener: ListenerRecord): void {
+    this.removeRecord(listener);
+  }
+
   addEventListener(
     ...args: [
       type: string,
@@ -413,6 +495,7 @@ export class EventTarget {
       passive,
       removed: false,
       unsubscribeAbort: null,
+      weakResource: null,
     };
     this.listeners.push(listener);
     this.listenerObserver?.(convertedType, true);
@@ -473,6 +556,13 @@ export class EventTarget {
           if (item === undefined) continue;
           if (event.stopped) break;
           if (item.removed || item.type !== event.type) continue;
+          // A finalization callback is not synchronous with collection, so the
+          // liveness of the resource is decided here rather than trusting that the
+          // registry has already run.
+          if (item.weakResource !== null && item.weakResource.deref() === undefined) {
+            this.removeRecord(item);
+            continue;
+          }
           if (item.once) this.removeRecord(item);
           event.setPassiveListener(item.passive);
           try {
@@ -538,6 +628,10 @@ export class EventTarget {
   private removeRecord(listener: ListenerRecord): void {
     if (listener.removed) return;
     listener.removed = true;
+    if (listener.weakResource !== null) {
+      listener.weakResource = null;
+      weaklyHeldListeners.unregister(listener);
+    }
     const unsubscribe = listener.unsubscribeAbort;
     listener.unsubscribeAbort = null;
     unsubscribe?.();
@@ -553,6 +647,30 @@ export class EventTarget {
     }
     this.listeners.length = write;
   }
+}
+
+/**
+ * @internal Register an `EventTarget` listener whose lifetime is bounded by a
+ * caller-supplied resource.
+ *
+ * The listener holds the resource weakly. Once the resource is collected the
+ * listener is retired and a later dispatch does not call it, so a caller waiting on
+ * that event waits forever rather than being answered on behalf of something that no
+ * longer exists. Node's `util.aborted(signal, resource)` needs exactly this.
+ *
+ * This is deliberately not an `addEventListener` option and adds no property to
+ * `EventTarget`: the seam is reached through a module-scope function that the class's
+ * static initializer wired to ECMAScript-private state. Nothing script can pass to
+ * the public API reaches it, and the host's private symbol is not copied.
+ */
+export function addWeaklyHeldEventListener(
+  target: EventTarget,
+  type: string,
+  callback: EventListener,
+  resource: object,
+  options: { readonly once?: boolean } = {},
+): void {
+  registerWeaklyHeld(target, type, callback, resource, options.once ?? false);
 }
 
 export interface MessageEventInit<T> extends EventInit {

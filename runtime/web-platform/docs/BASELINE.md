@@ -2082,3 +2082,98 @@ accounting is a set difference over diagnostic text.
 
 The counts are a dependency frontier, not completed compiler work and not a
 regression.
+
+## A listener whose lifetime is bounded by a caller-supplied resource
+
+The shared `EventTarget` gained the internal seam the Node lane reported as its
+remaining `node:events`/`node:util` dependency. `util.aborted(signal, resource)`
+registers an abort listener held weakly against a caller-supplied resource: if the
+resource is collected the listener detaches, and a later `abort()` must leave the
+returned promise pending rather than resolving on behalf of something that no longer
+exists. The Node lane's pinned case is `test-aborted-util.js`, whose fifth case
+("Aborted with gc cleanup") is the one that fails without this; its exclusion lives in
+`runtime/node/util/not-applicable`.
+
+`addWeaklyHeldEventListener(target, type, callback, resource, options)` is exported
+from `runtime/web-platform/src/core/events.ts`. It is deliberately not an
+`addEventListener` option: no dictionary member reaches it, so nothing script can pass
+to the public API requests weak retention, and the host's private symbol is not
+copied. It also adds no property to `EventTarget` or its prototype. The module
+function reaches ECMAScript-private state through a pair of module-scope function
+slots that the class's static initializer assigns once. Those slots hold wiring, not
+semantic state: they are the same value for every environment and carry no
+per-environment data, so this is not the process-global state the integration
+contract excludes. The considered alternative — a key-gated method in the style of the
+construction keys above — was rejected because it would put a visible, throwing
+property on `EventTarget.prototype`, which is the exposure the handoff forbids.
+
+Retirement has two mechanisms and they are not redundant across providers. A
+`FinalizationRegistry` retires the listener once the resource is collected, and the
+resource's liveness is also checked at dispatch immediately before the listener would
+run. The dispatch check exists because finalization timing is unspecified: a provider
+whose reference queue drains at a later safe point — the JVM lane in particular —
+would otherwise call a listener whose resource is already gone, which is exactly the
+kind of provider-visible divergence the integration plan forbids. The registry
+registration is released when a listener is retired for any other reason, so an
+ordinary `removeEventListener` does not leave an entry behind. The listener holds only
+a `WeakRef` to the resource, and the registry's held value references the target
+weakly so that registering a listener never becomes a new reason for the target to
+stay alive. Duplicate registration follows the public `(type, callback, capture)`
+rule, so this seam cannot install a copy the public API would have rejected.
+
+`resistStopPropagation` is deliberately not included. The Node lane confirmed no
+pinned test it has claimed depends on it and asked for the weak handler separately if
+that lands sooner; the two behaviors have different owners and different evidence.
+
+Five focused tests pass: delivery and `once` retirement while the resource is alive,
+a collected resource leaving the wait pending, an ordinary listener on the same signal
+surviving that collection, the seam's absence from the public API and prototype, and
+the duplicate/removal rules. The complete local Node-host/real-socket corpus passes
+409/409 with zero skipped, and the new file is registered in
+`tooling/conformance/web-platform/check.sh`. The pinned upstream corpus is unchanged
+at 2,300 total, 2,286 applicable, 2,278 passing, 8 failing and 14 named
+not-applicable. The root TypeScript solution build is green.
+
+Two sabotages were run with verified preconditions. Removing both retirement
+mechanisms took the focused suite from 5/5 to 3/5 with "a wait keyed to a collected
+resource must stay pending" and "only the weakly held listener is retired". Holding
+the resource strongly instead of through a `WeakRef` took it from 5/5 to 3/5 with "a
+weakly held listener must not keep its resource alive". Both were restored to green.
+
+One branch is deliberately recorded as untested rather than claimed. Removing only the
+dispatch-time liveness check does **not** turn this suite red, because on this host the
+finalization callback has always already run by the time the abort is dispatched. An
+attempt to force the window — repeated synchronous `gc()` with the abort in the same
+turn and nothing awaited between them — could not collect the resource at all, because
+conservative stack scanning keeps it reachable from the frame that created it. That
+test was removed rather than kept as an assertion that examined nothing. The two
+mechanisms therefore mask each other here: the host exercises the registry, and the
+dispatch check is asserted by construction and still needs provider-level evidence on
+a lane whose collector retires references later. A third observation, unrelated to
+this seam and not fixed here: TypeScript `private` and `protected` are erased, so
+`removeRecord`, `compactListeners`, `reportError`, `setHandler`, `setListenerObserver`,
+`setErrorReporter` and `dispatchTrustedEvent` are already own properties of
+`EventTarget.prototype`. The prototype assertion therefore checks that nothing named
+for this seam appears, rather than comparing the whole list.
+
+The NTS frontier was measured with a compiler built from the current tree at HEAD
+`43fda4d3` and then pinned to a private copy, so the number names the binary it came
+from and is not disturbed by the other lanes rebuilding. That build includes the
+compiler lane's dead-loop-latch fix. Same pinned binary both sides: before, 1,266
+primary `NTS1001` and 228 `NTS1003`; after, 1,270 primary and 228 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR in both. The net four-primary increase is
+nine new messages against five that disappeared. The new dependencies this seam
+reaches are named exactly: one module-scope `let` holding a function that the lowering
+will not accept because it may be reassigned with a closure of another layout, five
+observations of a `WeakRef | null` property representation, and one enclosing-scope
+name in the finalization callback. The `WeakRef` representation is the dependency
+already recorded for `AbortSignal.any`'s composite state. Two of the nine new and two
+of the five gone are the same pair of `Managed(Object(TypeId(...))) where Float{64} is
+wanted` messages with shifted type ids, so they are renumbering rather than movement;
+the remaining three that disappeared are reachability changes. These per-site
+attributions rest on a set difference over diagnostic text, because this `check`
+output carries no source locations.
+
+Note for the earlier entries in this ledger: every frontier recorded above this point
+was measured with a different, unpinned binary. Those numbers remain the honest record
+of what was measured at the time and are not restated here.

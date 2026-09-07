@@ -262,15 +262,19 @@ abort listener resists an earlier listener's `stopImmediatePropagation()`. Share
 `EventTarget` needs a private, non-Web-observable listener option for that behavior,
 and the canonical `AbortController`/`AbortSignal` must be installable as the Node test
 globals. Coordinate the internal hook; do not expose it in the public Web API or copy
-the host's private symbol.
+the host's private symbol. `resistStopPropagation` itself is still open: the current
+NodeJS session confirmed that no pinned test it has claimed depends on it, and asked
+for the weak-handler half separately.
 
-The current NodeJS session separately confirmed a checkable `node:util` dependency:
-`util.aborted` registers an abort listener weakly against a caller-supplied resource.
-If the resource is collected, the listener detaches and a later abort must leave the
-promise pending. The pinned case and its exclusion live in
-`runtime/node/util/not-applicable` under `test-aborted-util.js`. This weak-resource
-ownership is distinct from the resist-stop-propagation behavior and needs its own
-positive and collection-bounded tests.
+The `node:util` half of that dependency is now implemented on the shared side.
+`addWeaklyHeldEventListener` in `runtime/web-platform/src/core/events.ts` registers a
+listener whose lifetime is bounded by a caller-supplied resource, with no
+`addEventListener` option and no new property on `EventTarget` or its prototype. See
+"A listener whose lifetime is bounded by a caller-supplied resource" in
+`runtime/web-platform/docs/BASELINE.md` for the tests, the two verified sabotages, and
+the one branch recorded as untested because this host cannot force the window before
+finalization runs. The Node facade side of `test-aborted-util.js` and its exclusion in
+`runtime/node/util/not-applicable` remain the NodeJS lane's to retire.
 
 ## Recommended next work
 

@@ -27,5 +27,6 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/pool.test.mjs \
   tooling/conformance/web-platform/test/proxy.test.mjs \
   tooling/conformance/web-platform/test/retry.test.mjs \
-  tooling/conformance/web-platform/test/snapshot-agent.test.mjs
+  tooling/conformance/web-platform/test/snapshot-agent.test.mjs \
+  tooling/conformance/web-platform/test/weak-listener.test.mjs
 NTS_WEB_PLATFORM_COMPILED=1 node tooling/conformance/web-platform/test-upstream.mjs
