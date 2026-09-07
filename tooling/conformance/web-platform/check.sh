@@ -26,6 +26,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/network.test.mjs \
   tooling/conformance/web-platform/test/policy-interceptors.test.mjs \
   tooling/conformance/web-platform/test/pool.test.mjs \
+  tooling/conformance/web-platform/test/protocol-select.test.mjs \
   tooling/conformance/web-platform/test/proxy.test.mjs \
   tooling/conformance/web-platform/test/retry.test.mjs \
   tooling/conformance/web-platform/test/snapshot-agent.test.mjs \

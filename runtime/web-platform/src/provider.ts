@@ -123,6 +123,12 @@ export type {
 } from "./dispatch/diagnostics.ts";
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
+export {
+  defaultProtocolPreference,
+  ProtocolMismatchError,
+  ProtocolSelectingTransport,
+} from "./dispatch/protocol-select.ts";
+export type { ProtocolSelectingTransportOptions } from "./dispatch/protocol-select.ts";
 export { DumpInterceptor } from "./dispatch/dump.ts";
 export type { DumpOptions } from "./dispatch/dump.ts";
 export { ResponseExceededMaxSizeError } from "./dispatch/response-body.ts";

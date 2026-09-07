@@ -2388,3 +2388,68 @@ reaching the iteration protocol, which is prerequisite five in the integration p
 writing the snapshot as a `for...of` push loop instead moved the message rather than
 removing it, at the identical total, so the concise form that states "snapshot before
 mutating" was kept.
+
+## The engine is chosen on the connection the decision was made on
+
+`ProtocolSelectingTransport` picks HTTP/1.1 or HTTP/2 from what TLS actually
+negotiated, once per canonical origin. This is the second half of the ALPN work: the
+first landed the result and its contract, and this consumes them.
+
+The selection costs no extra connection. One negotiated connect is made for the
+origin, and the stream it produced is handed to the engine that speaks the selected
+protocol through an adopting connector whose first `connect()` returns that stream.
+Nothing reconnects to change engines, and nothing infers a protocol from request
+intent. Later connections for the same origin negotiate again and must agree; a peer
+that answers differently produces a typed `ProtocolMismatchError` naming both
+protocols rather than an engine speaking into a stream that is not what it thinks it
+is. An unreported selection is not a mismatch, because the contract means such a
+connector was offered exactly one protocol and had nothing else to choose.
+
+Cleartext origins negotiate nothing, so HTTP/2 there is prior knowledge rather than a
+discovery. It is opt-in per transport and is never inferred from a URL scheme, because
+sending the connection preface to an HTTP/1.1 peer is not a recoverable mistake. A
+non-HTTP(S) scheme is refused rather than negotiated. Concurrent first requests to one
+origin share a single in-flight selection instead of racing several. Retiring an
+engine releases an adopted stream that engine never took, on both the drain and close
+paths, so a decision that is discarded does not leak the connection it was made on.
+Graceful drain awaits selections still in flight before draining engines, for the same
+reason the HTTP/2 drain now awaits cancelled opens: a selection owns a connection no
+engine holds yet.
+
+Six focused tests pass against real TLS servers. A server offering `["h2","http/1.1"]`
+yields the HTTP/2 engine and a real h2 response; a server offering only `["http/1.1"]`
+yields the HTTP/1.1 engine over the same single connection; three concurrent first
+requests produce one connection and one negotiation, multiplexed. Connections are
+counted on the client rather than in the server's accept handler, because the server
+observes its side of a handshake after the client observes its own and a count read
+there would pass while a second connection was still in flight — the first version of
+this test made exactly that mistake and reported success under a sabotage.
+
+Two sabotages, both restored. Closing the negotiated connection and letting the engine
+reconnect took the focused corpus from 6/6 to 3/6 with `actual: 2, expected: 1`
+connections. Ignoring the negotiated protocol and always selecting HTTP/1.1 took it to
+4/6, and the failure is the defect itself rather than a bookkeeping assertion:
+`ProtocolError: EOF inside an HTTP line`, an HTTP/1.1 parser reading an HTTP/2
+connection.
+
+The complete local Node-host/real-socket corpus passes 424/424 with zero skipped, and
+the new file is registered in `tooling/conformance/web-platform/check.sh`. The pinned
+upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8 failing
+and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed here: HTTP/2 connection coalescing, which must use the `certificateNames`
+carried by the connect result rather than hostname alone and is not implemented;
+selection over SOCKS and HTTP-proxy tunnel routes, which needs the tunnel connectors to
+carry the negotiated result outward the way the direct path now does; and any provider
+other than the ordinary-Node conformance host. Host execution is not compiled-provider
+evidence.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,275 primary
+`NTS1001` and 229 `NTS1003`; after, 1,284 primary and 229 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. Nine new primaries, none disappearing.
+Two are `close` and one is `dispatch` called through an interface the lowering cannot
+resolve in the hierarchy; the rest are one `Map#values` iteration, one optional-chained
+method call, one promise settled with another promise, one `unknown` narrowed to a
+promise, one erased value, and one further `WeakRef` array observation reached through
+`AbortSignal`. These are instances of the plan's existing class/interface, iteration,
+absence and async prerequisites.

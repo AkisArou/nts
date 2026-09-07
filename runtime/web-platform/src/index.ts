@@ -147,6 +147,12 @@ export type {
   ProxyAgentOptions,
   Socks5ProxyAgentOptions,
 } from "./dispatch/proxy-agent.ts";
+export {
+  defaultProtocolPreference,
+  ProtocolMismatchError,
+  ProtocolSelectingTransport,
+} from "./dispatch/protocol-select.ts";
+export type { ProtocolSelectingTransportOptions } from "./dispatch/protocol-select.ts";
 export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
 export type {
   AgentOptions,
