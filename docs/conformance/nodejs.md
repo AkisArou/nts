@@ -2738,6 +2738,48 @@ refusal locally; the workaround was reverted and is not in the tree, so the
 figure is the compiled axis *with one gap bypassed* and is labelled as such
 wherever it appears. The full traverse is in `nodejs-plan.md`.
 
+### All 22 modules, measured in one sweep
+
+`sweep.mjs --addons --no-tests`, on a pinned binary. This is the compiled axis
+entire, and the shape of the zero matters more than the zero:
+
+| where it stops | modules |
+| --- | :---: |
+| `c-did-not-compile` | 15 |
+| `built-exports-nothing` | 5 |
+| `built-exports-partial` | 1 (`os`, 4 of 6) |
+| `all-passes-degenerate` | 1 (`path`, 2 of 17, both degenerate) |
+
+244 clang errors, of which **228 are one bug**: the struct emitter writes fields
+of type `void`.
+
+    struct NtsObj_Type1769 {
+        NtsHeader header;
+        void abort;  void close;  void start;  void type;  void write;
+    };
+
+That is a WHATWG `UnderlyingSink`; the neighbouring one is a `QueuingStrategy`.
+Object types whose members are functions or optional lower their field type to
+`void`. With clang's error limit at 20 per module, 228 is a floor and not a
+count.
+
+Three modules — `async_hooks`, `diagnostics_channel`, `timers` — have one clang
+error each (two for `timers`), and it is the same one: a closure pointer passed
+where `nts_enqueue_microtask(NtsTask task)` declares a three-field struct.
+
+**Neither fix produces a passing module, and the distinction is the useful part
+of this measurement.** Seven modules already compile — `buffer`, `os`, `path`,
+`punycode`, `querystring`, `string_decoder`, `url` — and every one of them stops
+at the export table rather than at clang. Fixing the microtask struct makes three
+more modules compile and publish nothing; fixing the void fields makes twelve
+more compile and publish nothing. **The first module that can actually pass is
+still `punycode`, on the same two items**: an exported object literal of
+functions, and the annotated-const write. Nothing in this sweep is ahead of them.
+
+`tooling/conformance/blockers.mjs` prints the per-module version of this:
+which exports published, which wait on a lowering and which on the backend
+naming a kind of export, ranked by how many exports each chain root gates.
+
 `check.sh <module>` without `--ts` builds a Node-API addon and runs node's own
 tests against it. That is the artifact that ships, and the `--ts` lane is the
 interim gate for a module whose prerequisites have not landed.
