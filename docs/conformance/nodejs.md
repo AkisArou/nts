@@ -1809,8 +1809,41 @@ which is the objection this document already makes to a hand-copied table.
 Measured across all twenty-two modules with one pinned binary
 (SHA-256 `38a8de6d…`):
 
-**The axis is still at zero, and the two passes that said otherwise are the
-reason this document keeps a hollow column.** `path` reports 2 of its 17
+**The axis moved for the first time, and what it moved to is a segfault.**
+The compiler session fixed the defect where a function refused at emit time had
+its body dropped and every call to it left standing. Across that one binary:
+
+```
+c-did-not-compile   17 -> 15
+punycode   c-did-not-compile -> compiles, publishes decode/encode/toUnicode/toASCII
+url        c-did-not-compile -> compiles, publishes 1 name
+```
+
+`punycode` is the first module in this profile to produce a loadable compiled
+artifact. **It dumps core on its first real call.**
+
+```
+require('target/node/punycode.node').encode('')              -> ""
+require('target/node/punycode.node').toUnicode('example.com')-> "example.com"
+require('target/node/punycode.node').encode('a')             -> SIGSEGV
+require('target/node/punycode.node').decode('abc')           -> SIGSEGV
+```
+
+The two that work are the two that return before touching the string's
+contents. Everything that iterates it dies.
+
+**This document's own instrument was hiding it, which is why the stage list
+now has a `built-but-crashes`.** The sweep reported `built-exports-partial
+0 / 1, 4 names published` — which reads as *the test failed for want of
+exports* and is indistinguishable from `os`, whose surface genuinely is
+incomplete. A crash and a coverage gap want completely different work, and it
+was found only by running the test by hand to check a prediction about why it
+had failed. The sweep loads each artifact in a child process and calls every
+export once before it judges anything now; a segfault reported as a missing
+export is worse than no report at all.
+
+**The axis is still at zero on passes, and the two that once said otherwise are
+the reason this document keeps a hollow column.** `path` reports 2 of its 17
 against the compiled artifact, and both are degenerate. They are:
 
 ```js

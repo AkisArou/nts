@@ -137,6 +137,16 @@ function addon(module) {
       : { stage: "emit-refused", detail: (log.split("\n").filter(Boolean).pop() ?? "").slice(0, 70), clang: [] };
   }
 
+  // Does the artifact survive being used at all? A module that loads and then
+  // dies on its first real call reports the same way as one whose surface is
+  // incomplete -- `0 / N, k names published` -- and they want completely
+  // different work. `punycode` was the first module here to compile and it
+  // segfaulted on `encode('a')`; the sweep called that a coverage gap, and it
+  // was found only by running the test by hand. A crash reported as a missing
+  // export is worse than no report.
+  const crash = crashesOnUse(module, artifact);
+  if (crash !== null) return { stage: "built-but-crashes", detail: crash, clang: [] };
+
   const tally = runAddon(module, artifact);
   if (tally === null) return { stage: "runner-produced-nothing", detail: "", clang: [] };
   const applicable = tally.pass + tally.fail;
@@ -178,6 +188,31 @@ function addon(module) {
     tally,
     degenerate,
   };
+}
+
+/**
+ * Load the artifact in a child and call each exported function once.
+ *
+ * Deliberately in its own process: a segfault takes the whole runtime with it,
+ * so this cannot be asked from inside the sweep. The arguments are a single
+ * empty-ish value -- the point is not to test behaviour but to find out whether
+ * the module survives being entered, which is a question no test result can
+ * answer once the process is gone.
+ */
+function crashesOnUse(module, artifact) {
+  const probe =
+    `const m = require(${JSON.stringify(artifact)});` +
+    `for (const k of Object.keys(m)) { if (typeof m[k] === "function") { try { m[k]("a"); } catch {} } }`;
+  try {
+    execFileSync(process.execPath, ["-e", probe], {
+      encoding: "utf8", timeout: 30_000, stdio: ["ignore", "pipe", "pipe"],
+    });
+    return null;
+  } catch (e) {
+    if (e.signal) return `died on ${e.signal} calling an export`;
+    if (e.killed) return "hung calling an export";
+    return null; // an ordinary throw is not a crash; the suite will judge it
+  }
 }
 
 /** One module against its compiled artifact, optionally with its behaviour destroyed. */
