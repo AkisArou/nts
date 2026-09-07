@@ -65,14 +65,26 @@ public final class StoreTest {
         }
     }
 
-    /** The keys out of a `list` snapshot, which is `size NUL modified NUL key`. */
+    /** `size NUL modified NUL keyByteLength NUL key`, split into its four fields. */
+    static String[] fields(String record) {
+        int first = record.indexOf('\0');
+        int second = record.indexOf('\0', first + 1);
+        int third = record.indexOf('\0', second + 1);
+        return new String[] {
+            record.substring(0, first),
+            record.substring(first + 1, second),
+            record.substring(second + 1, third),
+            // The key is last and taken as the whole remainder, so a key that
+            // contains a separator survives.
+            record.substring(third + 1),
+        };
+    }
+
     static String[] keysOf(String namespace) {
         String[] records = NtsStore.list(namespace);
         String[] keys = new String[records.length];
         for (int i = 0; i < records.length; i++) {
-            int first = records[i].indexOf('\0');
-            int second = records[i].indexOf('\0', first + 1);
-            keys[i] = records[i].substring(second + 1);
+            keys[i] = fields(records[i])[3];
         }
         Arrays.sort(keys);
         return keys;
@@ -80,12 +92,9 @@ public final class StoreTest {
 
     static long fieldOf(String namespace, String key, int which) {
         for (String record : NtsStore.list(namespace)) {
-            int first = record.indexOf('\0');
-            int second = record.indexOf('\0', first + 1);
-            if (record.substring(second + 1).equals(key)) {
-                return Long.parseLong(which == 0
-                    ? record.substring(0, first)
-                    : record.substring(first + 1, second));
+            String[] parts = fields(record);
+            if (parts[3].equals(key)) {
+                return Long.parseLong(parts[which]);
             }
         }
         return -1L;
@@ -204,6 +213,8 @@ public final class StoreTest {
         check("n".equals(read("names", "with\0nul")), "a key containing NUL did not round trip");
         check(Arrays.asList(keysOf("names")).contains("with\0nul"),
             "a key containing NUL did not survive the record encoding");
+        check(fieldOf("names", "with\0nul", 2) == 8,
+            "the declared key length did not match the key");
         NtsStore.delete("names", "with\0nul");
 
         // ----- what this refuses ---------------------------------------------
@@ -276,13 +287,30 @@ public final class StoreTest {
         NtsStore.sourceClose(left);
         NtsStore.sourceClose(right);
 
-        // A range past the end is clamped, because the size a caller was told
-        // may have been replaced since.
-        long clamped = NtsStore.sourceOpen("cache", "big", 8, 100);
-        byte[] tail = NtsStore.sourceRead(clamped, 100);
-        check(tail != null && new String(tail, "UTF-8").equals("89"), "a long range was not clamped");
-        check(NtsStore.sourceRead(clamped, 100) == null, "the clamped range did not end");
-        NtsStore.sourceClose(clamped);
+        // A range past the end is **refused, not clamped**. The caller asked for
+        // a range of *that* value; if the key was replaced between being sized
+        // and being opened, a prefix of the new one is not a shorter answer to
+        // that question but an answer to a different one, returned without
+        // saying so -- and the Blob layer above composes on the promise that a
+        // range is immutable.
+        refuses("a range past the end of the value",
+            () -> NtsStore.sourceOpen("cache", "big", 8, 100));
+        refuses("a negative start", () -> NtsStore.sourceOpen("cache", "big", -1, 2));
+        // The exact tail is fine, because it fits.
+        long tailView = NtsStore.sourceOpen("cache", "big", 8, 2);
+        byte[] tail = NtsStore.sourceRead(tailView, 100);
+        check(tail != null && new String(tail, "UTF-8").equals("89"), "the tail range was wrong");
+        check(NtsStore.sourceRead(tailView, 100) == null, "the tail range did not end");
+        NtsStore.sourceClose(tailView);
+
+        // And a view already open is unaffected by a later commit, because the
+        // descriptor pins what it was opened over rather than the path.
+        long pinned = NtsStore.sourceOpen("cache", "big", 0, 10);
+        write("cache", "big", "REPLACEDXX");
+        byte[] original = NtsStore.sourceRead(pinned, 100);
+        check(original != null && new String(original, "UTF-8").equals("0123456789"),
+            "an open ranged view saw a value committed after it opened");
+        NtsStore.sourceClose(pinned);
         NtsStore.delete("cache", "big");
 
         // ----- a committed value outlives the handle that wrote it ----------

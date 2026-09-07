@@ -59,6 +59,17 @@ fn tool(name: &str) -> Option<PathBuf> {
 /// would not tell a count from a boolean and two would not tell a count from a
 /// toggle; and `changed` twice, because the second sweep has nothing to close
 /// and must say so rather than repeat the first answer.
+///
+/// The `store` line is every durable-store intrinsic a program can reach
+/// synchronously, and each number on it answers a different question. `before
+/// -1` is the value being invisible until its commit; `first 2 / second 1 /
+/// end -1` is a two-byte window over a three-byte range, ending with `-1`
+/// rather than an empty chunk; `firstSum 50` and `secondByte 40` are which
+/// bytes, so a range that started in the wrong place would not pass on the
+/// counts alone; `recordSize 5 keyLength 1 keyByte 107` is the list encoding
+/// parsed rather than measured, since its total length depends on how many
+/// digits the current millisecond takes; and `after 5` is a discarded write
+/// leaving the value it did not replace.
 const EXPECTED: &str = "\
 random set
 outside 0
@@ -74,6 +85,7 @@ round-trip open 1 live 1
 round-trip wrote 5
 round-trip read 5
 round-trip checksum 492
+store before -1 size 5 sum 150 first 2 firstSum 50 second 1 secondByte 40 end -1 total 5 absent -1 recordSize 5 keyLength 1 keyByte 107 after 5 removed 1 gone -1
 ";
 
 #[test]
@@ -252,7 +264,10 @@ fn declarations() -> Vec<(String, Option<String>, bool)> {
 
     let mut found = Vec::new();
     let mut rest = text.as_str();
-    while let Some(at) = rest.find("declare function nts_jvm_web_") {
+    // `nts_jvm_` and not `nts_jvm_web_`: the table grew a second family when the
+    // durable store landed, and a prefix naming one of them would have let the
+    // other be declared, wired and never checked against anything.
+    while let Some(at) = rest.find("declare function nts_jvm_") {
         // The doc comment immediately before this declaration: between the last
         // `/**` and its `*/`, and only when nothing but whitespace separates
         // that `*/` from the `declare`. The version without that last condition

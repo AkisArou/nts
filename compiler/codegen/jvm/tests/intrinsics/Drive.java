@@ -145,7 +145,7 @@ public final class Drive {
         NtsEnv env = NtsEnv.create(NtsEnv.MONOTONIC, 8);
         NtsEnv previous = NtsEnv.enterEnv(env);
         try {
-            run("open", echo.port());
+            run("dial", echo.port());
             NtsEnv.drain(env);
             System.out.println("round-trip open " + (int) call("status")
                 + " live " + (int) NtsSocket.openCount());
@@ -317,5 +317,30 @@ public final class Drive {
         // provider holding nothing else.
         roundTrip();
         NtsSocket.shutdown();
+
+        // The durable store, through the same compiled program. Configured from
+        // here because the root is a path this process owns and there is no way
+        // to hand a string to a reflected entry point; everything after it is
+        // the program's own calls through the intrinsic table.
+        // `Files.createTempDirectory` and not `ProcessHandle.current().pid()`:
+        // this file compiles at `--release 8` like everything else in the lane,
+        // and `ProcessHandle` arrived in 9.
+        java.io.File root =
+            java.nio.file.Files.createTempDirectory("nts-intrinsic-store").toFile();
+        nts.rt.NtsWeb.storeConfigure(root.getPath());
+        System.out.println("store " + text("storeRoundTrip"));
+        nts.rt.NtsWeb.storeClose();
+        clear(root);
+    }
+
+    /** Recursively, so a rerun does not read the last run's values. */
+    static void clear(java.io.File at) {
+        java.io.File[] inside = at.listFiles();
+        if (inside != null) {
+            for (java.io.File one : inside) {
+                clear(one);
+            }
+        }
+        at.delete();
     }
 }

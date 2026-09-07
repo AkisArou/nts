@@ -127,7 +127,15 @@ export function status(): number {
   return state;
 }
 
-export function open(port: number): void {
+/**
+ * Named `dial` rather than `open` for the reason `openNow` is not `openCount`:
+ * `store.ts` exports an `open` too, and two modules exporting one name is a
+ * collision the backend resolves by qualifying both -- `open@main` and
+ * `open@store`. Correct, and invisible to a driver that reflects for `open`,
+ * which then fails with `NoSuchMethodException` naming a method that plainly
+ * exists in the source.
+ */
+export function dial(port: number): void {
   socket.connect(
     "127.0.0.1", port, false, 4000, null, 0, socket.DIRECT,
     (h: number): void => {
@@ -205,4 +213,94 @@ export function written(): number {
 
 export function shut(): void {
   socket.close(handle);
+}
+
+// ---------------------------------------------------------------------------
+// The durable store, reached the same way: through a wrapper module rather than
+// by naming the flat intrinsics.
+//
+// The point of driving it from here rather than only from `StoreTest` is the
+// same point the file opens with. `StoreTest` proves the runtime works; this
+// proves a *compiled program* can reach it, and between the two sits the extern
+// table, where a missing name is a refusal no Java test can see.
+//
+// It answers one string rather than a number per fact, because a driver that
+// reflects for nine doubles would need nine names and nine assertions, and the
+// interesting failure -- one of them wrong -- reads the same either way.
+
+import * as store from "../../../../../../runtime/jvm/web-platform/store.ts";
+
+/** Exercises every store intrinsic that a program can reach synchronously. */
+export function storeRoundTrip(): string {
+  const payload = new Uint8Array(5);
+  payload[0] = 10;
+  payload[1] = 20;
+  payload[2] = 30;
+  payload[3] = 40;
+  payload[4] = 50;
+
+  const write = store.open("ns", "k");
+  store.append(write, payload);
+  // Nothing is visible under the key until the commit, and this is where a
+  // compiled program can see that rather than taking it on trust.
+  const before = store.sourceSize("ns", "k");
+  store.commit(write);
+
+  const back = new Uint8Array(8);
+  const size = store.read("ns", "k", back);
+  let sum = 0;
+  for (let i = 0; i < size; i = i + 1) {
+    sum = sum + back[i]!;
+  }
+
+  // A two-byte window over a three-byte range: two chunks and then the end,
+  // which is `-1` rather than an empty chunk.
+  const source = store.sourceOpen("ns", "k", 1, 3);
+  const chunk = new Uint8Array(2);
+  const first = store.sourceRead(source, chunk);
+  const firstSum = chunk[0]! + chunk[1]!;
+  const second = store.sourceRead(source, chunk);
+  const secondByte = chunk[0]!;
+  const end = store.sourceRead(source, chunk);
+  store.sourceClose(source);
+
+  const total = store.size("ns");
+  const absent = store.sourceSize("ns", "nothing");
+
+  // One record: `5 NUL <time> NUL 1 NUL k`. Parsed rather than measured -- the
+  // total length depends on how many digits the current millisecond takes, and
+  // a test that asserted 19 would be asserting the year.
+  const listed = new Uint8Array(64);
+  const needed = store.list("ns", listed);
+  let field = 0;
+  let recordSize = 0;
+  let keyLength = 0;
+  let keyByte = 0;
+  for (let i = 0; i < needed; i = i + 1) {
+    const byte = listed[i]!;
+    if (byte === 0) {
+      field = field + 1;
+    } else if (field === 0) {
+      recordSize = recordSize * 10 + (byte - 48);
+    } else if (field === 2) {
+      keyLength = keyLength * 10 + (byte - 48);
+    } else if (field === 3) {
+      keyByte = byte;
+    }
+  }
+
+  // A write that is abandoned leaves the key alone and releases it.
+  const abandoned = store.open("ns", "k");
+  store.discard(abandoned);
+  const after = store.sourceSize("ns", "k");
+
+  const removed = store.remove("ns", "k") ? 1 : 0;
+  const gone = store.sourceSize("ns", "k");
+
+  return "before " + before + " size " + size + " sum " + sum
+    + " first " + first + " firstSum " + firstSum
+    + " second " + second + " secondByte " + secondByte + " end " + end
+    + " total " + total + " absent " + absent
+    + " recordSize " + recordSize + " keyLength " + keyLength + " keyByte " + keyByte
+    + " after " + after + " removed " + removed + " gone " + gone;
 }

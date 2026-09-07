@@ -116,6 +116,14 @@ public final class NtsStore {
         }
     }
 
+    private static byte[] utf8(String text) {
+        try {
+            return text.getBytes("UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            throw new NtsRefusal("UTF-8 is not available: " + e);
+        }
+    }
+
     private static Path rooted() {
         Path at = root;
         if (at == null) {
@@ -135,13 +143,7 @@ public final class NtsStore {
      */
     private static String encode(String name) {
         StringBuilder out = new StringBuilder(name.length() + 8);
-        byte[] bytes;
-        try {
-            bytes = name.getBytes("UTF-8");
-        } catch (java.io.UnsupportedEncodingException e) {
-            throw new NtsRefusal("UTF-8 is not available: " + e);
-        }
-        for (byte b : bytes) {
+        for (byte b : utf8(name)) {
             int c = b & 0xff;
             boolean safe = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
                 || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_';
@@ -248,9 +250,12 @@ public final class NtsStore {
      * disagree with the names, and the caller has no way to tell which half is
      * stale.
      *
-     * <p>The key is **last** and the reader splits on the first two separators
-     * only, so a key containing a NUL still round-trips. A write in progress is
-     * not a record.
+     * <p>Each record is `size NUL modified NUL keyByteLength NUL key`. The
+     * explicit length is what lets the records be *concatenated* into one
+     * buffer and still parsed when a key contains a separator; the key stays
+     * last even though the length now makes that unnecessary, so the two
+     * encodings this ABI has never differ in field order. A write in progress
+     * is not a record.
      */
     public static String[] list(String namespace) {
         File[] files = namespaceDir(namespace, false).toFile().listFiles();
@@ -260,8 +265,9 @@ public final class NtsStore {
         List<String> found = new ArrayList<>(files.length);
         for (File file : files) {
             if (file.isFile() && !file.getName().endsWith(PARTIAL)) {
+                String key = decode(file.getName());
                 found.add(file.length() + "\0" + file.lastModified() + "\0"
-                    + decode(file.getName()));
+                    + utf8(key).length + "\0" + key);
             }
         }
         String[] out = found.toArray(new String[0]);
@@ -443,11 +449,26 @@ public final class NtsStore {
                 throw new NtsRefusal("a durable source could not be opened: " + e);
             }
             long size = on.length();
-            this.at = Math.max(0L, Math.min(start, size));
-            // Clamped rather than refused: the size a caller was told may have
-            // been replaced between being told and being used, and a range
-            // running past the end of a shorter value is that, not a mistake.
-            this.left = Math.max(0L, Math.min(length, size - this.at));
+            // **Refused rather than clamped, and the difference is not
+            // pedantry.** A caller asked for a range of *that* value. If the
+            // key was replaced between being sized and being opened, a prefix
+            // of the new value is not a shorter answer to that question -- it
+            // is an answer to a different one, returned without saying so. The
+            // Blob layer above composes and slices on the promise that a range
+            // is immutable, and silently substituting bytes is exactly what
+            // breaks it.
+            //
+            // The descriptor above pins what was opened, so a rename *after*
+            // this point cannot change what this view sees. This check closes
+            // the window before it.
+            if (start < 0 || length < 0 || start + length > size) {
+                close();
+                throw new NtsRefusal("a durable source of [" + start + ", " + (start + length)
+                    + ") does not fit a value of " + size + " bytes -- it was replaced between"
+                    + " being sized and being opened");
+            }
+            this.at = start;
+            this.left = length;
         }
 
         synchronized byte[] read(int maxBytes) {

@@ -146,6 +146,140 @@ public final class NtsWeb {
      * throw past a reservation leaks it, and a leaked credit is invisible until
      * an environment is closed.
      */
+    // ----- the durable store ------------------------------------------------
+    //
+    // **Views both ways, because the table already decided that.** Three
+    // entries here take a caller's window -- `randomFill` fills one, `read` and
+    // `write` borrow one -- and a byte store that allocated at this seam
+    // instead would be the only one that does, copying every value twice: once
+    // out of the file and once into the view the caller wanted anyway.
+    //
+    // The two fill-buffer reads answer **the full size** and write as much of
+    // it as fits, so a caller that guessed too small learns the right number
+    // from the same call rather than from a second one. Both behave that way;
+    // two fill-buffer calls with different short-buffer rules would be a trap
+    // discovered once, painfully.
+
+    /** Points the store at a directory and sweeps whatever the last run left. */
+    public static void storeConfigure(String root) {
+        NtsStore.configure(root);
+    }
+
+    /** Abandons every write and ranged view, and forgets the root. */
+    public static void storeClose() {
+        NtsStore.close();
+    }
+
+    /** Begins replacing a key. Refuses when that key already has a live write. */
+    public static double storeOpen(String namespace, String key) {
+        return (double) NtsStore.open(namespace, key);
+    }
+
+    /**
+     * Appends a caller's window to a write in progress.
+     *
+     * <p>No offset or length beside the view: it carries both, and passing
+     * them again is a second answer that can disagree with the first.
+     */
+    public static void storeAppend(double handle, NtsViewU8 from) {
+        byte[] bytes = storage(from);
+        NtsStore.append((long) handle, bytes, from.offset, NtsView.elements(from));
+    }
+
+    /** Makes everything appended visible under the key, atomically and durably. */
+    public static void storeCommit(double handle) {
+        NtsStore.commit((long) handle);
+    }
+
+    /** Abandons a write. Idempotent, and a no-op once committed. */
+    public static void storeDiscard(double handle) {
+        NtsStore.discard((long) handle);
+    }
+
+    /** The value's full size, or `-1` when absent; writes as much as fits. */
+    public static double storeRead(String namespace, String key, NtsViewU8 into) {
+        byte[] value = NtsStore.read(namespace, key);
+        if (value == null) {
+            return -1.0;
+        }
+        return (double) fill(into, value);
+    }
+
+    /** Removes a key. Absent is not an error; the answer says whether anything went. */
+    public static boolean storeDelete(String namespace, String key) {
+        return NtsStore.delete(namespace, key);
+    }
+
+    /**
+     * One snapshot of a namespace's records, concatenated into a caller's
+     * window; answers the total byte length needed.
+     *
+     * <p>`size NUL modified NUL keyByteLength NUL key` per record. The explicit
+     * length is what lets records be concatenated and still parsed when a key
+     * contains a separator -- which a key may, because a key is an arbitrary
+     * string.
+     */
+    public static double storeList(String namespace, NtsViewU8 into) {
+        String[] records = NtsStore.list(namespace);
+        java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
+        for (String record : records) {
+            byte[] bytes;
+            try {
+                bytes = record.getBytes("UTF-8");
+            } catch (java.io.UnsupportedEncodingException e) {
+                throw new NtsRefusal("UTF-8 is not available: " + e);
+            }
+            all.write(bytes, 0, bytes.length);
+        }
+        return (double) fill(into, all.toByteArray());
+    }
+
+    /** Total committed bytes in a namespace. */
+    public static double storeSize(String namespace) {
+        return (double) NtsStore.size(namespace);
+    }
+
+    /** An independent ranged view, or `-1` when the key is absent. */
+    public static double storeSourceOpen(String namespace, String key, double start, double length) {
+        return (double) NtsStore.sourceOpen(namespace, key, (long) start, (long) length);
+    }
+
+    /**
+     * The next chunk into a caller's window; answers how many bytes, or `-1` at
+     * the end of the range.
+     *
+     * <p>`-1` and not `0`: an empty chunk and the end of a stream are different
+     * answers, and making zero unreachable is what keeps a consumer from having
+     * to know that.
+     */
+    public static double storeSourceRead(double handle, NtsViewU8 into) {
+        byte[] bytes = storage(into);
+        byte[] chunk = NtsStore.sourceRead((long) handle, NtsView.elements(into));
+        if (chunk == null) {
+            return -1.0;
+        }
+        System.arraycopy(chunk, 0, bytes, into.offset, chunk.length);
+        return (double) chunk.length;
+    }
+
+    /** Closes a ranged view. Safe on success, after a failed read, and twice. */
+    public static void storeSourceClose(double handle) {
+        NtsStore.sourceClose((long) handle);
+    }
+
+    /** The value's byte length, or `-1` when the key is absent. */
+    public static double storeSourceSize(String namespace, String key) {
+        return (double) NtsStore.sourceSize(namespace, key);
+    }
+
+    /** Writes what fits and answers what there was, which are different numbers. */
+    private static int fill(NtsViewU8 into, byte[] value) {
+        byte[] bytes = storage(into);
+        int room = NtsView.elements(into);
+        System.arraycopy(value, 0, bytes, into.offset, Math.min(room, value.length));
+        return value.length;
+    }
+
     private static byte[] storage(NtsViewU8 view) {
         byte[] bytes = view.buffer.bytes;
         if (bytes == null) {

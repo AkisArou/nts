@@ -186,3 +186,126 @@ declare function nts_jvm_web_random_fill(into: JvmBytes): void;
 // explicitly sets `Accept-Encoding` so OkHttp does not decompress and strip the
 // headers describing what it decompressed. Which side inflates is the shared
 // code's decision, and an intrinsic here would take it away.
+
+// ---------------------------------------------------------------------------
+// The durable byte store
+//
+// The provider half of `runtime/web-platform/src/storage/durable.ts`: bytes,
+// atomicity, durability and enumeration, and nothing above them. RFC 9111
+// freshness, `Vary`, invalidation, eviction, quota policy and CacheStorage
+// matching are shared TypeScript, and none of these is a primitive for any of
+// them.
+//
+// # Views both ways, and why that is the table's decision rather than a taste
+//
+// Three entries above take a caller's window -- `random_fill` fills one,
+// `read` and `write` borrow one for the duration of an operation. A byte store
+// that allocated at this seam would be the only entry that does, and every
+// value would be copied twice: once out of the file, once into the view the
+// caller wanted anyway. So `append` takes a view and the two reads fill one.
+//
+// `append` takes no offset or length beside the view because a view carries
+// both. Passing them again is a second answer to one question, and the two can
+// disagree.
+//
+// # The two short-buffer rules are the same rule
+//
+// `read` and `list` both answer **what there was** and write **what fits**, so
+// a caller that guessed too small learns the right size from the same call. Two
+// fill-buffer calls with different short-buffer semantics would be a trap
+// discovered once, painfully.
+//
+// # `-1` at the end of a range, never `0`
+//
+// An empty chunk and the end of a stream are different answers. Making zero
+// unreachable is what stops every consumer having to know that.
+
+/** Points the store at a directory, and sweeps whatever a crashed run left. WIRED. */
+declare function nts_jvm_store_configure(root: string): void;
+
+/** Abandons every write and ranged view. Committed values stay; they are on disk. WIRED. */
+declare function nts_jvm_store_close(): void;
+
+/**
+ * Begins replacing a key, and answers the handle the next three take.
+ *
+ * Refuses when the key already has a live write. The store is sequential per
+ * key, and making that true by *waiting* would turn a caller's mistake into a
+ * pause, with the pause as the only evidence it made one. A caller that wants
+ * the later value serializes above this seam, where it can also decide which
+ * value should win -- which the store cannot know.
+ *
+ * WIRED.
+ */
+declare function nts_jvm_store_open(namespace: string, key: string): number;
+
+/** Appends a caller's window. Nothing is visible until the commit. WIRED. */
+declare function nts_jvm_store_append(handle: number, from: JvmBytes): void;
+
+/**
+ * Makes everything appended visible under the key, atomically and durably.
+ *
+ * Durably is two syncs and not one: the file's, so the bytes are on the disk,
+ * and the containing directory's, so the rename that published them is too.
+ *
+ * WIRED.
+ */
+declare function nts_jvm_store_commit(handle: number): void;
+
+/** Abandons a write and releases the key. Idempotent, and a no-op once committed. WIRED. */
+declare function nts_jvm_store_discard(handle: number): void;
+
+/** The value's full size, or `-1` when absent. Writes as much of it as fits. WIRED. */
+declare function nts_jvm_store_read(namespace: string, key: string, into: JvmBytes): number;
+
+/** Removes a key. Absent is not an error; the answer says whether anything went. WIRED. */
+declare function nts_jvm_store_delete(namespace: string, key: string): boolean;
+
+/**
+ * One snapshot of a namespace's records; answers the total byte length needed.
+ *
+ * `size NUL modified NUL keyByteLength NUL key` per record, concatenated. The
+ * explicit key length is what lets them be concatenated and still parsed when a
+ * key contains a separator, which a key may -- a key is an arbitrary string.
+ *
+ * One call rather than a count and a lookup per key: two calls cannot be
+ * atomic, so a key created or removed between them makes the metadata disagree
+ * with the names and the caller cannot tell which half is stale.
+ *
+ * WIRED.
+ */
+declare function nts_jvm_store_list(namespace: string, into: JvmBytes): number;
+
+/** Total committed bytes in a namespace. WIRED. */
+declare function nts_jvm_store_size(namespace: string): number;
+
+/**
+ * An independent ranged view, or `-1` when the key is absent.
+ *
+ * Independent is load-bearing: every consumer gets its own position, so two
+ * readers of one value cannot move each other.
+ *
+ * A range that does not fit the value is **refused, not clamped**. A caller
+ * asked for a range of *that* value; if the key was replaced between being
+ * sized and being opened, a prefix of the new one is not a shorter answer to
+ * that question but an answer to a different one, returned without saying so.
+ * Once open, the descriptor pins what it was opened over, so a later commit
+ * cannot change what this view sees.
+ *
+ * WIRED.
+ */
+declare function nts_jvm_store_source_open(
+  namespace: string,
+  key: string,
+  start: number,
+  length: number,
+): number;
+
+/** The next chunk into a caller's window; how many bytes, or `-1` at the end. WIRED. */
+declare function nts_jvm_store_source_read(handle: number, into: JvmBytes): number;
+
+/** Closes a ranged view. Safe on success, after a failed read, and twice. WIRED. */
+declare function nts_jvm_store_source_close(handle: number): void;
+
+/** The value's byte length, or `-1` when the key is absent. WIRED. */
+declare function nts_jvm_store_source_size(namespace: string, key: string): number;

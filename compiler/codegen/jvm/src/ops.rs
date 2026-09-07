@@ -618,6 +618,27 @@ pub struct Intrinsic {
 /// GATED where they are declared, and `every_wired_intrinsic_is_declared`
 /// asserts the two lists are complements rather than merely both present.
 pub const WEB_INTRINSICS: &[Intrinsic] = &[
+    // ----- the durable byte store ------------------------------------------
+    //
+    // Views both ways, matching the three networking entries below that already
+    // take a caller's window: a store that allocated here would be the only
+    // entry that does, and would copy every value twice. `append` takes no
+    // offset or length beside the view because a view carries both.
+    Intrinsic { declared: "nts_jvm_store_configure", owner: types::WEB, member: "storeConfigure", descriptor: "(Ljava/lang/String;)V" },
+    Intrinsic { declared: "nts_jvm_store_close", owner: types::WEB, member: "storeClose", descriptor: "()V" },
+    Intrinsic { declared: "nts_jvm_store_open", owner: types::WEB, member: "storeOpen", descriptor: "(Ljava/lang/String;Ljava/lang/String;)D" },
+    Intrinsic { declared: "nts_jvm_store_append", owner: types::WEB, member: "storeAppend", descriptor: "(DLnts/rt/NtsViewU8;)V" },
+    Intrinsic { declared: "nts_jvm_store_commit", owner: types::WEB, member: "storeCommit", descriptor: "(D)V" },
+    Intrinsic { declared: "nts_jvm_store_discard", owner: types::WEB, member: "storeDiscard", descriptor: "(D)V" },
+    Intrinsic { declared: "nts_jvm_store_read", owner: types::WEB, member: "storeRead", descriptor: "(Ljava/lang/String;Ljava/lang/String;Lnts/rt/NtsViewU8;)D" },
+    Intrinsic { declared: "nts_jvm_store_delete", owner: types::WEB, member: "storeDelete", descriptor: "(Ljava/lang/String;Ljava/lang/String;)Z" },
+    Intrinsic { declared: "nts_jvm_store_list", owner: types::WEB, member: "storeList", descriptor: "(Ljava/lang/String;Lnts/rt/NtsViewU8;)D" },
+    Intrinsic { declared: "nts_jvm_store_size", owner: types::WEB, member: "storeSize", descriptor: "(Ljava/lang/String;)D" },
+    Intrinsic { declared: "nts_jvm_store_source_open", owner: types::WEB, member: "storeSourceOpen", descriptor: "(Ljava/lang/String;Ljava/lang/String;DD)D" },
+    Intrinsic { declared: "nts_jvm_store_source_read", owner: types::WEB, member: "storeSourceRead", descriptor: "(DLnts/rt/NtsViewU8;)D" },
+    Intrinsic { declared: "nts_jvm_store_source_close", owner: types::WEB, member: "storeSourceClose", descriptor: "(D)V" },
+    Intrinsic { declared: "nts_jvm_store_source_size", owner: types::WEB, member: "storeSourceSize", descriptor: "(Ljava/lang/String;Ljava/lang/String;)D" },
+
     Intrinsic {
         declared: "nts_jvm_web_connect",
         owner: types::WEB,
