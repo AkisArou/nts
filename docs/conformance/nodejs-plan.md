@@ -117,9 +117,34 @@ axis. That would be the first non-zero this axis has ever reported.
 | 4 | a compiled `throw` did not cross the boundary | **fixed**, and sufficient |
 | 5a | the addon named exports after the function, not the binding | **fixed**, verified here |
 | 5b | an export the backend cannot represent was dropped in silence | **fixed**, verified here |
-| 5c | no exported object literal of functions — `ucs2` as a namespace | **open**, compiler lane |
+| 5c | no exported object literal of functions — `ucs2` as a namespace | **fixed**, verified here |
+| 5d | `number[]` cannot cross the Node-API boundary in either direction | **open**, compiler lane |
 
-**Blocker 1 is fixed, and only 5c remains.** Verified on a pinned binary with a
+**The last mile is now one marshalling gap.** Namespace registration landed, so
+`ucs2` is no longer unnameable; the two functions that would hang off it have no
+wrapper because `number[]` cannot cross the boundary:
+
+    no wrapper for ucs2decode: returns f64[]
+    no wrapper for ucs2encode: takes f64[]
+    no wrapper for ucs2.decode: is a namespace member whose function has no wrapper
+
+Those are node's own signatures — `ucs2.decode` returns code points and
+`ucs2.encode` consumes them — so there is nothing to restructure here without
+changing what the module is. The addon publishes `decode`, `encode`, `toASCII`
+and `toUnicode` and builds the namespace object; only its members are missing.
+
+**The chain of diagnostics is worth keeping, because each layer was invisible
+until the one above it moved:**
+
+    punycode.encode is not a function        everything refused
+    -> Cannot read properties of undefined   ucs2 unnameable
+    -> ucs2.encode has no wrapper            namespace works, members do not
+
+Same test, three sentences, each true when it was printed. This is what a last
+mile actually looks like: not one obstacle behind another in a queue somebody
+could have listed, but a depth nobody could measure until each layer was gone.
+
+**Blocker 1 is fixed, and 5c with it.** Verified on a pinned binary with a
 clean tree: `nts hir runtime/node/punycode/tsconfig.json` reports **20
 functions, nothing refused**, the source that refused this morning compiles as
 written, and the addon computes `decode`, `encode`, `toASCII` and `toUnicode`
