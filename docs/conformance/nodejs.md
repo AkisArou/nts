@@ -2779,6 +2779,32 @@ refusal locally; the workaround was reverted and is not in the tree, so the
 figure is the compiled axis *with one gap bypassed* and is labelled as such
 wherever it appears. The full traverse is in `nodejs-plan.md`.
 
+### Measured with node's tests actually running
+
+Every earlier figure on this axis came from `--addons --no-tests`, which reports
+*where a module stops building*. That is a proxy. A module whose tests only
+touch the exports that already publish would pass without anyone noticing, and
+this document had been ranking by how much of a shape publishes rather than by
+whether the tests pass.
+
+Run properly, with node's own tests against each compiled addon:
+
+    15  c-did-not-compile
+     4  built-exports-nothing     buffer, querystring, string_decoder, url
+     2  built-exports-partial     os (4 of 23), punycode (4 of 6)
+     1  all-passes-degenerate     path (2 of 17)
+
+**Nothing slipped through.** The proxy and the measurement agree, which is worth
+knowing rather than assuming — and `punycode` has moved from
+`built-exports-nothing` to `built-exports-partial`, the only cell on this axis
+that changed today.
+
+**Every blocker is a fixture now**, in `tooling/conformance/blockers/`, with
+`blockers-check.mjs` re-measuring them against whatever compiler is current and
+reporting `FIXED` loudly rather than as a pass. Two of the five are invisible to
+`nts hir` — `f64[]` lowers cleanly and fails at the wrapper — so the runner
+takes its command from the expectation rather than assuming one.
+
 ### All 22 modules, measured in one sweep
 
 `sweep.mjs --addons --no-tests`, on a pinned binary. This is the compiled axis
