@@ -1569,3 +1569,33 @@ primary `NTS1001` refusals and 149 dependent `NTS1003` cascades, with zero `NTS1
 module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. The four new
 primaries and two cascades are the final HPACK table/codec source reaching existing
 lowering dependencies, not compiled-provider or HTTP/2-session evidence.
+
+## RFC 9113 frame and header-block codec
+
+At `082d6be6`, the shared HTTP/2 layer parses and serializes the nine-byte frame
+envelope under both the negotiated and absolute frame-size limits. Every standard
+frame kind has its stream-zero/nonzero, fixed-length, padding, priority-dependency,
+setting-value, window-progress, and reserved-bit rules checked before a connection
+state machine consumes it. Unknown frame kinds remain extensible and are preserved
+rather than rejected. Unsigned setting and error-code values survive the TypeScript
+number representation without signed bitwise truncation.
+
+The header-block assembler enforces the connection-wide CONTINUATION invariant: once
+a HEADERS or PUSH_PROMISE block is open, no other frame type or stream may intervene
+before END_HEADERS. Compressed bytes have an independent limit before HPACK decoding,
+and padding bytes never enter the header block. Stream-scoped wire failures retain
+their stream identifier while connection failures do not, so the next layer can
+choose RST_STREAM or GOAWAY without guessing from an error message.
+
+All eight focused frame tests and all 256 local Node-host/real-socket tests pass. The
+full pinned WPT slice remains 2275/2283 applicable cases with 14 named
+not-applicable cases and the same eight visible structural/common-compiler failures.
+A sabotage weakened the continuation guard from “wrong type **or** wrong stream” to
+“wrong type **and** wrong stream”; the wrong-stream CONTINUATION precondition fell
+from 1/1 to 0/1, then returned to 1/1 after restoration.
+
+The live compiled-source frontier is 1020 primary `NTS1001` refusals and 150
+dependent `NTS1003` cascades, with zero module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The one-primary and one-cascade increase is final
+frame/reader source reaching existing lowering dependencies; it is not evidence that
+an HTTP/2 connection, multiplexed stream, or provider transport executes yet.
