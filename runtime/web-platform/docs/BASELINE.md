@@ -2818,3 +2818,69 @@ Measured with the same pinned binary built at `43fda4d3`: before, 1,293 primary
 disappeared; that pair is one message with a shifted type id. The single real addition
 is one more module-scope `let` holding a function — the same static-initializer capture
 this seam already used, now naming two functions instead of one.
+
+## The server half of the handshake
+
+The plan requires a WebSocket server as a Node/server extension reusing the shared
+frame and extension engine. This is its handshake and only its handshake:
+`acceptWebSocketUpgrade` validates an upgrade request and produces the response, with
+no I/O of its own. Reading the request, writing the response and taking over the
+connection belong to whatever HTTP server this is embedded in, and inventing a server
+object here would have decided that embedding for everyone.
+
+Validation is the RFC's: `GET`, an `Upgrade` naming websocket, a `Connection`
+containing the upgrade token, version 13, and a `Sec-WebSocket-Key` that is really
+sixteen base64 bytes. Both header checks go through the shared token-list helper, so
+`Connection: keep-alive, Upgrade` and `Upgrade: WebSocket` are accepted as real clients
+and proxies send them, rather than being compared whole.
+
+The key check earns its place. The accept value is derived from the literal string, so
+a malformed key still produces a handshake both sides agree on — the check exists
+precisely because the handshake would otherwise work by accident and the field would
+stop meaning what it says. Leading and trailing whitespace is header framing rather
+than part of the key, and is trimmed before both validation and derivation.
+
+Every refusal is a real HTTP response carrying `Connection: close`, never a dropped
+connection, so a client learns why. A wrong version is the one refusal the RFC gives a
+shape: it advertises `Sec-WebSocket-Version: 13`, without which a client cannot know
+what to retry with. Subprotocol selection takes the server's preference order rather
+than the client's, and no common subprotocol is a successful handshake with no
+subprotocol rather than a failure.
+
+Extensions are declined. A server may always decline, and negotiating
+permessage-deflate from the server side needs an offer parser this does not have; the
+existing negotiator is the client-side one that validates a server's *response*.
+Answering an offer it could not fully honour would be worse than declining.
+
+Seven tests. Six are direct, including the accept value checked against an independent
+SHA-1 rather than against our own derivation. The seventh runs the canonical client
+against a server built on this handshake over a real socket, completing the upgrade,
+agreeing a subprotocol and round-tripping a message — the only way to show the
+handshake is one a real client accepts rather than one that merely looks right.
+
+Two sabotages, both restored. Deriving the accept value from a different key took the
+corpus from 7/7 to 5/7, and the second failure is the client refusing the handshake,
+which is what makes the end-to-end case load-bearing rather than decorative. Selecting
+a subprotocol the client never offered took it to 6/7.
+
+An earlier attempt at the first sabotage replaced the accept value's final character
+with `=`, which it already was, and the suite stayed green against a mutation that
+changed nothing. It is recorded because the lesson is the session's recurring one: a
+sabotage that does not move the value proves nothing, and a green result under it is
+not evidence.
+
+The complete local Node-host/real-socket corpus passes 464/464 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: a WebSocket server. There is no server object, no connection lifecycle, no
+session, no extension negotiation, and no separate public module — the plan asks for
+all of those and this is the first piece. The test's echo loop frames by hand and is a
+test fixture, not an implementation.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,294 primary
+`NTS1001` and 233 `NTS1003`; after, 1,295 primary and 234 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. The single new primary is exact and worth
+naming: reading `status` from a discriminated union whose members lay their fields out
+differently. That is an ordinary TypeScript result type rather than an exotic shape, so
+it is reported rather than flattened into a single interface with optional members.
