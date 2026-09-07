@@ -4080,6 +4080,63 @@ Both counts were reproduced independently from the other session's tree at
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 
+### Measured end to end: seventeen exports, two published, one chain
+
+`path` builds — `target/node/path.node`, 236968 bytes — and publishes
+`toNamespacedPath` and `_makeLong`. Nothing else. All eleven public functions
+refuse through a single chain, and `nts layouts` prints it directly:
+
+    basename dirname extname format isAbsolute join matchesGlob
+    normalize parse relative resolve                      (11 of 11)
+      <- validateString                    internal/validators.ts:21
+      <- ERR_INVALID_ARG_TYPE#constructor  internal/errors.ts:347
+      <- determineSpecificType             internal/errors.ts:24
+
+**`toNamespacedPath` publishes only because it is the one function in
+`posix.ts` that does not validate its argument.** That is the entire difference
+between the two names that survive and the eleven that do not — not the star
+re-export, not the name, not the signature. A hypothesis about each of those
+was tested and discarded before the chain was found.
+
+`determineSpecificType` is a `switch (typeof value)` over an `unknown` whose
+arms read the value back at the narrowed type. Three roots, not one:
+
+| site | construct |
+| --- | --- |
+| `errors.ts:34` | `case "bigint"` — an `unknown` narrowed to BigInt, read back |
+| `errors.ts:53` | `case "symbol"` — the same, for Symbol |
+| `errors.ts:89` | `staticObjectName` — `instanceof` with no class for the right side |
+
+The narrowing is the refusal, not the conversion: `String(v)` refuses exactly
+where `` `${v}n` `` does, an `if` behaves as a `switch` arm does, and a
+parameter *declared* `bigint` compiles. `instanceof` was tested per class —
+`Uint8Array`, `ArrayBuffer` and `Promise` work; `DataView`, `Map`, `Set` and
+`Date` have no class.
+
+**Only the first refusal in a function is reported, and that is worth knowing
+before estimating from a refusal count.** Stubbing the bigint arm and
+rebuilding left the count at exactly 32: line 34 disappeared and line 53
+appeared, having been there all along. Each of the three roots cost a separate
+build to discover. So **a refusal count is a count of refused functions, not of
+work** — `path` reads as 32 and is really 32 functions with an unknown number
+of constructs behind them. Every estimate made from such a count in this
+document is a lower bound.
+
+The remaining exports are the same value-and-namespace gap `punycode` hit:
+`sep` and `delimiter` are string constants, `posix` and `win32` are
+`export * as` namespaces. For `path` the namespaces are the larger half, since
+node's tests use `path.posix.*` and `path.win32.*` throughout.
+
+Two entries in the *not published* list are a false positive rather than work:
+`FormatInputPathObject` and `ParsedPath` come from `export type { ... }`, are
+erased at compile time, and have nothing to publish. Reported to the compiler
+lane.
+
+**The shape of this is worth stating plainly.** The largest gate on the
+compiled axis is the error-message formatter, and it is the code least
+exercised by the happy path. `determineSpecificType` exists to spell the tail
+of an `ERR_INVALID_ARG_TYPE` message, and it costs the whole of `node:path`.
+
 **Three causes account for most of it, measured across the two largest
 modules.** In `process` (219 refusals) and `stream` (498):
 
