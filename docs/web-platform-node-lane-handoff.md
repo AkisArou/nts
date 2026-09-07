@@ -150,6 +150,15 @@ consume a leading BOM — which is the one behaviour where it differs from
 *swapping* it for the WHATWG decoder would have been worse, because every test on both
 sides stays green and the difference only appears on a buffer beginning `EF BB BF`.
 
+**Two standing commitments, not just facts.** The NodeJS lane has said explicitly that
+it relies on `tooling/conformance/web-platform/test/utf8-differential.test.mjs` and will
+not duplicate it: their own buffer corpus exercises this codec end to end but could not
+name *this* half as the source of a divergence, and this one runs first and names the
+file. So it stays, including the ranged-decode case, and they hear before it changes or
+narrows. The same terms apply to the Encoding classes' identity below. Both are here
+rather than only in a conversation, because that is the difference between an agreement
+and a thing two people remember.
+
 **`util` re-exports this lane's `TextEncoder` and `TextDecoder` by identity.** Node's
 `test-global-encoder.js` asserts `TextDecoder === util.TextDecoder`, so the *identity and
 module location* of the Encoding classes are load-bearing outside this directory. Two
