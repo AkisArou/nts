@@ -100,6 +100,18 @@ export type { TransportBodySource, TransportErrorCode } from "./fetch/transport.
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export { DiagnosticsInterceptor, DispatchDiagnosticContext } from "./dispatch/diagnostics.ts";
+export type {
+  DiagnosticsInterceptorOptions,
+  DispatchDiagnosticEvent,
+  DispatchDiagnosticObserver,
+  DispatchDiagnosticRequest,
+  DispatchDiagnosticsPolicy,
+  DispatchRequestCreatedEvent,
+  DispatchRequestErrorEvent,
+  DispatchResponseHeadersEvent,
+  DispatchResponseTrailersEvent,
+} from "./dispatch/diagnostics.ts";
 export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
 export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
 export { DumpInterceptor } from "./dispatch/dump.ts";

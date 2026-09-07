@@ -6,6 +6,12 @@ import {
 } from "../cache/cache-storage.ts";
 import type { CacheStorageStore } from "../cache/cache-storage.ts";
 import type { HttpCache } from "../cache/http-cache.ts";
+import { DiagnosticsInterceptor } from "../dispatch/diagnostics.ts";
+import type {
+  DispatchDiagnosticObserver,
+  DispatchDiagnosticsPolicy,
+} from "../dispatch/diagnostics.ts";
+import { composeFetchTransport } from "../dispatch/interceptor.ts";
 import { FetchClient } from "../fetch/fetch.ts";
 import type { FetchCookiePolicy } from "../fetch/fetch.ts";
 import type { RequestContext, RequestInit } from "../fetch/request.ts";
@@ -43,6 +49,9 @@ export interface WebPlatformOptions {
   maxRedirects?: number;
   maxWebSocketBufferedAmount?: number;
   fetchTransport?: FetchTransport;
+  /** Typed diagnostics are scoped to this Web-platform runtime/environment. */
+  diagnostics?: DispatchDiagnosticObserver;
+  diagnosticsPolicy?: DispatchDiagnosticsPolicy;
   webSocketTransport?: WebSocketTransport;
   /** Raw DEFLATE contexts. RFC 7692 negotiation and framing remain shared. */
   webSocketDeflate?: WebSocketDeflateProvider | null;
@@ -137,8 +146,19 @@ export class WebPlatformRuntime
       this.ownedWebSocketTransport = null;
     }
 
+    let fetchTransport = options.fetchTransport ?? this.http1;
+    if (options.diagnostics !== undefined) {
+      fetchTransport = composeFetchTransport(fetchTransport, [
+        new DiagnosticsInterceptor({
+          ...options.diagnosticsPolicy,
+          observer: options.diagnostics,
+          scheduler: primitives.scheduler,
+        }),
+      ]);
+    }
+
     const client = new FetchClient(
-      options.fetchTransport ?? this.http1,
+      fetchTransport,
       this.requestContext,
       options.contentDecoder,
       maxRedirects,
