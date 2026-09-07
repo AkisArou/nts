@@ -190,7 +190,7 @@ out=$(adb shell "CLASSPATH=/data/local/tmp/nts-bothhttp.dex app_process /data/lo
 echo "$out"
 # The count, not only the zero: a corpus that stopped running half its cases
 # reports no failures perfectly well.
-case "$out" in *"78 checks, 0 failures"*) ;; *) failed=1 ;; esac
+case "$out" in *"94 checks, 0 failures"*) ;; *) failed=1 ;; esac
 adb shell rm -f /data/local/tmp/nts-bothhttp.dex
 
 adb shell rm -f /data/local/tmp/nts-device.dex /data/local/tmp/store.p12

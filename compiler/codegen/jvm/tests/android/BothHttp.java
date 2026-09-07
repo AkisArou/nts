@@ -174,6 +174,12 @@ public final class BothHttp {
         }
     }
 
+    /** The request line alone, for a message that is not the whole head. */
+    static String firstLine(String request) {
+        int end = request.indexOf('\r');
+        return end < 0 ? request : request.substring(0, end);
+    }
+
     /** A response, assembled so a case reads as the bytes on the wire. */
     static byte[] response(String status, String[] headers, byte[] body) throws IOException {
         StringBuilder head = new StringBuilder("HTTP/1.1 ").append(status).append("\r\n");
@@ -353,6 +359,23 @@ public final class BothHttp {
             check(server.served == 2,
                 what + ": the server was asked " + server.served + " times for two requests -- "
                     + "a redirect followed or a request retried is an extra one");
+            // **The protocol the provider actually spoke**, not the one it was
+            // configured with. `OkHttpNetworking.client()` pins the list to
+            // HTTP/1.1 and `OkHttpHeadersTest` asserts that configuration; this
+            // asserts the wire. They are different claims, and the plan's rule
+            // is about the second one: platform facilities are exposed only
+            // through capabilities the provider actually negotiates.
+            //
+            // An h2 client with prior knowledge opens with the connection
+            // preface `PRI * HTTP/2.0`, which is a request line this server
+            // records like any other -- so no ALPN inspection is needed, and
+            // none is available under `--release 8` anyway.
+            String spoke = server.lastRequest;
+            check(spoke.contains("HTTP/1.1"),
+                what + ": the request line was not HTTP/1.1 -- " + firstLine(spoke));
+            check(!spoke.startsWith("PRI *"),
+                what + ": the provider opened with the HTTP/2 connection preface, which is a "
+                    + "protocol it was not configured to offer and the reference cannot match");
         } finally {
             server.close();
         }

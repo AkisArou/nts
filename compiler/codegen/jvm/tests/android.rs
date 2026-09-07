@@ -611,7 +611,7 @@ fn both_adapters_answer_the_same_over_one_server() {
         .unwrap();
     let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
     assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(said.ends_with("78 checks, 0 failures"), "{said}");
+    assert!(said.ends_with("94 checks, 0 failures"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
