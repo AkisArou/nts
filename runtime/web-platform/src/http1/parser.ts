@@ -26,6 +26,14 @@ export interface ResponseHead {
   headers: HeaderEntry[];
 }
 
+export interface RequestHead {
+  method: string;
+  /** The request target exactly as it arrived, unparsed and unnormalised. */
+  target: string;
+  version: "1.0" | "1.1";
+  headers: HeaderEntry[];
+}
+
 export function validateWireValue(value: string): void {
   for (let i = 0; i < value.length; ++i) {
     const c = value.charCodeAt(i);
@@ -103,6 +111,63 @@ export async function readHead(
     version,
     status,
     statusText,
+    headers: await readHeaderFields(reader, limits, line.length + 2),
+  };
+}
+
+/**
+ * Reads an inbound request head: the request line and its header fields.
+ *
+ * The mirror of {@link readHead}, which reads a response. A server needs this before it
+ * can decide anything -- whether to upgrade, which host was asked for, whether the
+ * framing is one it can accept -- and until now the only implementation of it in this
+ * repository was in a test harness, which is the wrong place for the thing under test.
+ *
+ * The target is returned exactly as it arrived. Normalising it here would put a URL
+ * policy inside a framing parser, and a server that routes on a normalised target while
+ * logging the original is how the two disagree.
+ */
+export async function readRequestHead(
+  reader: BufferedReader,
+  limits: HeadLimits = defaultHeadLimits,
+): Promise<RequestHead> {
+  const line = await reader.line(limits.maxHeaderBytes);
+  const firstSpace = line.indexOf(" ");
+  const lastSpace = line.lastIndexOf(" ");
+  // Three parts, and the target may not be empty.
+  //
+  // `lastIndexOf` and "the second space" accept exactly the same request lines here,
+  // because a target may not contain a space and the byte check below refuses one that
+  // does. Sabotaging one into the other changes no test, and that is a fact about the
+  // code rather than a gap in the tests. `lastIndexOf` is kept because it anchors the
+  // version at the end, which is the property RFC 9112 states; the difference is which
+  // of the two errors a malformed line reports, not whether it is refused.
+  if (firstSpace <= 0 || lastSpace <= firstSpace + 1) {
+    throw new ProtocolError("Malformed HTTP request line");
+  }
+
+  const method = line.slice(0, firstSpace);
+  if (!isToken(method)) throw new ProtocolError("Invalid HTTP method");
+
+  const target = line.slice(firstSpace + 1, lastSpace);
+  for (let index = 0; index < target.length; index++) {
+    const code = target.charCodeAt(index);
+    if (code < 0x21 || code > 0x7e) throw new ProtocolError("Invalid HTTP request target");
+  }
+
+  const versionField = line.slice(lastSpace + 1);
+  if (versionField.length !== 8 || versionField.slice(0, 5) !== "HTTP/") {
+    throw new ProtocolError("Malformed HTTP request line");
+  }
+  const version = versionField.slice(5);
+  if (version !== "1.0" && version !== "1.1") {
+    throw new ProtocolError("Unsupported HTTP version");
+  }
+
+  return {
+    method,
+    target,
+    version,
     headers: await readHeaderFields(reader, limits, line.length + 2),
   };
 }

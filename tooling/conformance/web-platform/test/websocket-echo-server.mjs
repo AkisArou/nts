@@ -9,6 +9,7 @@ import {
   acceptWebSocketUpgrade,
   adoptServerWebSocketSession,
   BufferedReader,
+  readRequestHead,
   serializeUpgradeResponse,
   writeAll,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/provider.js";
@@ -69,20 +70,6 @@ export function byteConnection(socket) {
       socket.destroy();
     },
   };
-}
-
-/** Reads the request head through the shared reader, so no byte is lost to the session. */
-export async function readRequestHead(reader) {
-  // `BufferedReader.line` already returns a decoded line.
-  const requestLine = await reader.line(8192);
-  const headers = [];
-  while (true) {
-    const line = await reader.line(8192);
-    if (line === "") break;
-    const colon = line.indexOf(":");
-    headers.push([line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()]);
-  }
-  return { method: requestLine.split(" ")[0], headers };
 }
 
 export async function websocketServer(t, upgradeOptions, deflate) {

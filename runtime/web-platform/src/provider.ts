@@ -138,6 +138,11 @@ export { acceptWebSocketUpgrade, serializeUpgradeResponse } from "./websocket/se
 // reader it takes, and an embedding server needs `writeAll` to put its response on the
 // wire, so both are part of this boundary rather than internal layout.
 export { BufferedReader, writeAll } from "./http1/io.ts";
+// And the request head, for the same reason: an embedding server has to read one before
+// it can decide whether to upgrade, and the only implementation of that used to be in a
+// test harness.
+export { defaultHeadLimits, readRequestHead } from "./http1/parser.ts";
+export type { HeadLimits, RequestHead } from "./http1/parser.ts";
 export { adoptServerWebSocketSession } from "./websocket/raw-transport.ts";
 export { WebSocketServer } from "./websocket/server.ts";
 export type { WebSocketServerOptions, WebSocketUpgradeResult } from "./websocket/server.ts";

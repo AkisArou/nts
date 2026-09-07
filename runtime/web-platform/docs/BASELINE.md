@@ -4582,3 +4582,51 @@ The honest way to state the frontier from here is: *of the functions that reach 
 backend*, none is refused by it. Which also means the compiled axis — where modules are
 named directly and therefore do reach emission — is the only place these will surface
 early. That is a second reason to grow it, beyond the one it was built for.
+
+## The server's request reader was living in the test harness
+
+`WebSocketServer.upgrade` takes a method and headers that somebody else has already
+read, and shared source had no way to read them: `http1/parser.ts` had `readHead` for a
+*response* and no mirror for a request. The only implementation of that in this
+repository was ninety lines inside `test/websocket-echo-server.mjs` — the harness
+standing in for the product, which means the tests were passing against a parser that no
+embedder would get.
+
+`readRequestHead` is that mirror. The harness now calls it, so the WebSocket server
+suites exercise the shared parser against a real client rather than a private one.
+
+**The target is returned exactly as it arrived.** Normalising it here would put a URL
+policy inside a framing parser, and a server that routes on a normalised target while
+logging the original is how the two come to disagree. Six shapes are asserted verbatim,
+including `//a/../b`, `/%2e%2e/`, an absolute-form target and `*`.
+
+Sabotage found three things, only one of which was a defect in the tests.
+
+**Three fired as intended**: not checking the method is a token, not checking the
+target's byte range, and an off-by-one in the target slice.
+
+**One was unobservable, and that is a fact about the code.** Replacing `lastIndexOf(" ")`
+with the second `indexOf(" ")` changes no test — and cannot, because a target may not
+contain a space and the byte check refuses one that does, so the two accept exactly the
+same request lines and differ only in which error a malformed one reports. The comment
+had claimed `lastIndexOf` was load-bearing "because only the version is anchored at the
+end", which is an assertion the tests do not support. The comment now says what is true.
+A surviving sabotage is not always a weak test; sometimes it is a strong claim.
+
+**One could not be written at all, and the refusal is the evidence.** `RequestHead.version`
+is typed `"1.0" | "1.1"`, so the runtime check that narrows to it cannot be removed
+without a type error at the return. Three attempts to weaken it were refused by `tsc`
+before they ever ran. That is a better guarantee than a test, and worth noticing rather
+than working around to manufacture a red run.
+
+The test cases carry another small lesson. Two lists of malformed methods and targets
+were written with the offending bytes typed literally, and they were **invisible in the
+source**: one entry read as a perfectly ordinary `GET` that the parser appeared to be
+rejecting wrongly, when in fact it carried a trailing byte outside the token set. They
+are explicit ``-style escapes now, and the file is pure ASCII. A case nobody can
+read is a case nobody can check — and the same trap caught this ledger entry while it
+was being written.
+
+Local corpus 683/683 with zero skipped, upstream unchanged at 2,278 of 2,286, compiled
+axis 138 of 142 across 13 functions on all three backends. Frontier: primaries unchanged
+at 1,292, cascades 312 to 313, zero `NTS1004` and zero invalid HIR.
