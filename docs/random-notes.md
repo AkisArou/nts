@@ -4,3 +4,4 @@
 - an mcp that has access to HIR that leverages it for optimizations?
 - Documentation on hover for everything. for example android, posix etc...
 - For well-known arguments that might throw a RangeError, like for example some Temporal objects etc, we might not compile (literal discoverable values)
+- for npm packages, will a exports {nts: "..."} apply to us so we can reference typescript source code?
