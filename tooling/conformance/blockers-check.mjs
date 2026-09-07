@@ -63,11 +63,11 @@ function expectation(source) {
 }
 
 /** The addon the last `emit-c` wrote, so a "publishes X" expectation can be read. */
-function readEmitted(output) {
+function readEmitted(output, file = "addon.c") {
   const m = /wrote .* to (\S+)/.exec(output);
   if (m === null) return "";
-  const addon = join(m[1], "addon.c");
-  return existsSync(addon) ? readFileSync(addon, "utf8") : "";
+  const emitted = join(m[1], file);
+  return existsSync(emitted) ? readFileSync(emitted, "utf8") : "";
 }
 
 function run(args) {
@@ -120,14 +120,27 @@ for (const name of names) {
     .replace(/^emit-c\b[^>]*->\s*/, "")
     .replace(/\s+--\s.*$/, "")
     .trim();
-  const holds = expectsClean ? isClean : output.includes(wanted);
+  // A third kind of blocker: one that emits *bad C* rather than refusing.
+  // Nothing appears on stdout, `emit-c` reports success, and the defect is a
+  // line in program.c that clang later rejects. Checking stdout for these is
+  // worse than useless -- `includes("")` is true, so a fixture that asserted
+  // nothing would report "reproduces" -- so they are asserted against the
+  // emitted file instead.
+  const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
+  const holds = emitsC !== null
+    ? readEmitted(output, "program.c").includes(emitsC[1])
+    : expectsClean
+    ? isClean
+    : output.includes(wanted);
 
   if (holds) {
     console.log(`  ${expectsClean ? "guard ok  " : "reproduces"}  ${name}`);
     continue;
   }
   unexpected++;
-  if (expectsClean) {
+  if (emitsC !== null) {
+    console.log(`  FIXED       ${name}: no longer emits it. Expected:`);
+  } else if (expectsClean) {
     console.log(`  REGRESSED   ${name}: expected no refusal, got:`);
   } else if (isClean) {
     console.log(`  FIXED       ${name}: no longer refuses. Expected:`);
@@ -137,7 +150,7 @@ for (const name of names) {
   console.log(`                ${wanted}`);
   const shown = output
     .split("\n")
-    .filter((l) => /NTS1001|NTS1003|no wrapper|nothing refused/.test(l))
+    .filter((l) => /NTS1001|NTS1003|no wrapper|nothing refused|^ {4}void [A-Za-z_]/.test(l))
     .slice(0, 3);
   for (const line of shown) console.log(`                got: ${line.trim().replace(/^-- \S+ /, "")}`);
 }
