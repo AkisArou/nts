@@ -31,7 +31,7 @@
 // be argued for in writing before the audit goes quiet about it, and the file
 // is a record of what was considered and declined rather than a mute allowlist.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -51,6 +51,21 @@ function profileModules() {
     .filter((e) => e.isDirectory() && existsSync(join(PROFILE, e.name, "tsconfig.json")))
     .map((e) => e.name)
     .sort();
+}
+
+/**
+ * Every module specifier a file names: `require(x)`, `from x`, and `import(x)`.
+ *
+ * The dynamic form matters as much as the other two here. `common/quic.mjs`
+ * reaches its whole subject through `await import('node:quic')`, so a scan
+ * without it reports that file as importing nothing but `fixtures`.
+ */
+function specifiers(text) {
+  const found = new Set();
+  for (const m of text.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) found.add(m[1]);
+  for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) found.add(m[1]);
+  for (const m of text.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) found.add(m[1]);
+  return found;
 }
 
 /** `subject: reason` lines, as `not-applicable` uses. */
@@ -106,25 +121,85 @@ function unclaimed(modules) {
   }
 
   const owned = new Set(modules);
+  // Never a subject, whatever else a file imports.
+  const HARNESS = new Set(["assert", "common", "test"]);
+  // Of the discounted modules, the ones that can still be the subject when a
+  // file imports nothing else. The split is between reaching a subject and
+  // being one: `fs`, `path`, `os` and `buffer` are how a test gets at something
+  // -- opens a fixture, joins a path, makes bytes -- and the 112 files this
+  // promoted without the split were almost all `test-compile-cache-*`,
+  // `test-debugger-*` and `test-cli-*`, which use `fs` to test something that
+  // is not a module at all. A genuine `fs` test is named `test-fs-*` and its
+  // pattern already claims it.
   // Discounted on our side: importing one of these does not make a file a test
   // *of* it. The list and its reasons are in `audit-incidental`, kept short and
   // argued per entry, because a wrong entry here hides a find silently.
   const neutral = new Set(readReviewed(join(HERE, "audit-incidental")).keys());
+  const PROMOTABLE = new Set([...neutral].filter(
+    (m) => !HARNESS.has(m) && !["fs", "path", "os", "buffer"].includes(m),
+  ));
 
   const found = [];
   for (const file of readdirSync(PARALLEL).filter((f) => /\.(js|mjs)$/.test(f))) {
     if (patterns.some((p) => p.test(file)) || claimed.has(file)) continue;
-    const text = readFileSync(join(PARALLEL, file), "utf8");
-    const imported = new Set();
-    for (const m of text.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) imported.add(m[1]);
-    for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) imported.add(m[1]);
-    const bare = [...imported]
-      .filter((r) => !r.startsWith(".") && !r.startsWith("/"))
-      .map((r) => r.replace(/^node:/, "").split("/")[0]);
+    const own = specifiers(readFileSync(join(PARALLEL, file), "utf8"));
+
+    // A test can reach its subject through one of node's own harness helpers,
+    // and then the subject is invisible here. Every `test-quic-*` file imports
+    // nothing but `assert` and `node:timers/promises` by specifier, and loads
+    // `../common/quic.mjs`, which is where `await import('node:quic')` lives.
+    // Twenty files read as `timers` tests on their specifiers alone. Following
+    // the helper one level -- not recursively; one level is what the harness
+    // actually uses -- puts `quic` back in view, and they drop out as they
+    // should.
+    //
+    // What the helper reveals may only ever *disqualify*, never promote. The
+    // first version of this added the helper's imports to the file's own set,
+    // and the candidate list went from 19 to 42: `common/index.js` requires
+    // `url` and `fs` as its own infrastructure, so every file that uses the
+    // harness started reading as a `url` test. So the two sets are kept apart
+    // -- the subject is decided by what the file itself names, and foreign
+    // modules are collected from the file and its helpers together.
+    const imported = new Set(own);
+    for (const spec of [...own]) {
+      if (!spec.startsWith("../common/") && !spec.startsWith("./common/")) continue;
+      const base = join(PARALLEL, "..", spec.replace(/^\.\.\//, "").replace(/^\.\//, ""));
+      // CommonJS omits the extension, so `require('../common/crypto')` names no
+      // file on disk. Resolving only the exact spelling left every
+      // `test-tls-*` file looking like a `util` test, because `tls` is reached
+      // through `../common/crypto`. `require('../common')` names the directory,
+      // whose index is already reached by its explicit spelling elsewhere; ask
+      // rather than assume, since reading a directory throws EISDIR.
+      const helper = [base, `${base}.js`, `${base}.mjs`, `${base}.cjs`].find(
+        (c) => existsSync(c) && statSync(c).isFile(),
+      );
+      if (helper === undefined) continue;
+      for (const s of specifiers(readFileSync(helper, "utf8"))) imported.add(s);
+    }
+
+    const bareOf = (specs) =>
+      [...specs]
+        .filter((r) => !r.startsWith(".") && !r.startsWith("/"))
+        .map((r) => r.replace(/^node:/, "").split("/")[0]);
+
+    const bare = bareOf(own);
     const ours = bare.filter((r) => owned.has(r) && !neutral.has(r));
-    const theirs = bare.filter((r) => !owned.has(r) && !neutral.has(r));
-    if (ours.length > 0 && theirs.length === 0) {
-      found.push({ file, modules: [...new Set(ours)].sort() });
+    const theirs = bareOf(imported).filter((r) => !owned.has(r) && !neutral.has(r));
+
+    // Neutrality is about *co-occurrence*, not about the module. `util`
+    // alongside `net` means the file is a `net` test that formats a message.
+    // `util` alone means the file is a `util` test. Discounting unconditionally
+    // made `test-global-encoder.js` invisible -- it imports `assert` and `util`
+    // and asserts `util.TextDecoder === TextDecoder`, which is a `util` test by
+    // any reading, and no pattern claims it either.
+    //
+    // So when every owned import was discounted, the discounted ones are the
+    // subject after all. The harness three are never a subject: `assert` is in
+    // almost every file in node's suite, and `common` and `test` are the runner.
+    const sole = ours.length > 0 ? [] : bare.filter((r) => owned.has(r) && PROMOTABLE.has(r));
+
+    if (theirs.length === 0 && (ours.length > 0 || sole.length > 0)) {
+      found.push({ file, modules: [...new Set(ours.length > 0 ? ours : sole)].sort() });
     }
   }
   return found;

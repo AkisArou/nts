@@ -79,3 +79,21 @@ test-whatwg-readablestream.mjs: the subject is the WHATWG streams surface, which
 test-whatwg-transformstream-cancel-write-race.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-whatwg-webstreams-compression.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
 test-whatwg-webstreams-encoding.js: the subject is the WHATWG streams surface, which belongs to runtime/web-platform rather than node:stream
+
+# --- surfaced once the audit stopped discounting a module that was the subject
+#
+# `util` and `timers` are on the incidental list because `inspect` and a settle
+# `setTimeout` appear in tests about other things. That discount used to apply
+# even when the file imported nothing else, which hid `test-global-encoder.js`
+# -- now claimed by `util` and passing. These are the rest of that batch.
+test-abortcontroller.js: AbortController and AbortSignal are web-platform globals; the file reaches its subject through the global and names `util` only to format
+test-abortsignal-cloneable.js: as above, plus structuredClone and MessageChannel, which are worker_threads transfer and outside this profile
+test-common-must-not-call.js: a test of node's own harness -- `common.mustNotCall` -- rather than of any node module
+test-dotenv-edge-cases.js: the subject is the `--env-file` CLI flag, which is the host's; `util` appears only in a message
+test-eventtarget-custom-inspect-does-not-throw.js: reads `EventTarget.prototype[util.inspect.custom]` and asserts only that the result is a string. This profile does not dispatch arbitrary symbol-keyed inspect hooks (a section 13 non-goal), so our inspect would satisfy the assertion by ignoring the hook -- a pass that does not mean what the test means
+test-mime-api.js: genuinely a `util` test, and blocked on `util.MIMEType`, which is recorded in `missing-exports` as ordinary work nothing has needed yet. Claim it when that lands
+test-mime-whatwg.js: as test-mime-api.js
+test-promises-unhandled-rejections.js: the subject is the `--unhandled-rejections` policy, a host CLI behaviour rather than a module here
+test-runner-mock-timers-scheduler.js: a test of `node:test`'s mock timers; the runner is not in this profile
+test-runner-typechecking.js: a test of `node:test`'s assertions; as above
+test-webcrypto-cryptokey-brand-check.js: reaches WebCrypto through the global `crypto`; it names `util` for `types.isCryptoKey`, but the subject is WebCrypto and is not in this profile
