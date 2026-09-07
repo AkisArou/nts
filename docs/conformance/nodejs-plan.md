@@ -105,6 +105,43 @@ lane's to fix. What is ours:
 **Done looks like:** `tooling/conformance/check.sh punycode` green on the addon
 axis. That would be the first non-zero this axis has ever reported.
 
+### punycode passes node's own test as a compiled addon
+
+**It has been done, and the distance left is 21 characters in a generated
+file.** Blocker 7's remaining piece is one line only `NAPI_MODULE_INIT` can
+write, so it was written *by hand* into the generated `addon.c` and compiled
+with `build.sh`'s own flags:
+
+    NAPI_MODULE_INIT() {
+        nts_napi_set_env(env);     <- this, and nothing else
+        module__init();
+
+    node:punycode against node's own tests — punycode-envpatched.node
+      pass  test-punycode.js
+      pass  local/error-identity-static.js
+      2 file(s): 2 passed, 0 failed, 0 skipped, 0 not applicable
+
+**Not degenerate.** Keep the names and destroy the behaviour and both files
+fail — `test-punycode.js` on *"poisoned export encode was called"*, the identity
+file on the error class. **Not diverging either**: 80,128 comparisons against
+node's own punycode, 0 divergences, 0 round-trip failures.
+
+The warning arrives as a real event rather than as text:
+
+    process 'warning' events seen: 1
+      [ 'DeprecationWarning|DEP0040|The `punycode` module is deprecated…' ]
+
+**What this is and is not.** It is proof that everything in the tree works and
+that the one line asked of the compiler lane is *sufficient*, which could not be
+said this morning — the only difference between the addon that fails and the
+addon that passes is those 21 characters. It is **not** a green row: the patch
+lives in generated output, the generator belongs to the compiler lane, and it is
+not committed. The axis reads 0 until the emitter writes that line itself.
+
+Two things will still be true when it does. `version` does not publish, so the
+row will carry `incomplete: version absent`. And the pass is node's own test
+plus one local file; both are real and neither is the whole module.
+
 ### The blockers are fixtures, not sentences
 
 `tooling/conformance/blockers/` holds a minimal reproduction of every
