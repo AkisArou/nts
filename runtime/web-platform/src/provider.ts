@@ -28,6 +28,11 @@ export { TransportError } from "./fetch/transport.ts";
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export { DumpInterceptor } from "./dispatch/dump.ts";
+export type { DumpOptions } from "./dispatch/dump.ts";
+export { ResponseExceededMaxSizeError } from "./dispatch/response-body.ts";
+export { ResponseError, ResponseErrorInterceptor } from "./dispatch/response-error.ts";
+export type { ResponseErrorBody, ResponseErrorOptions } from "./dispatch/response-error.ts";
 export {
   RetryAgent,
   RetryExhaustedError,

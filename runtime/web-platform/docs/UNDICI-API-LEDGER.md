@@ -76,8 +76,8 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 | memory cache store                                | shared     | `MemoryHttpCacheStore` and the separate `MemoryCacheStorageStore` exist with explicit bounds.                                                                                |
 | SQLite/persistent cache store                     | dependency | Durable byte/blob provider primitive and production stores remain; cache policy stays shared.                                                                                |
 | retry interceptor / `RetryAgent` / `RetryHandler` | provider   | Typed pre-response/status retry, explicit body replay, backoff, `Retry-After`, abort and observation exist; partial-body Range/ETag resume and exact package facades remain. |
-| response-error interceptor                        | missing    | Status/body policy and stable error taxonomy remain.                                                                                                                         |
-| bounded dump interceptor                          | missing    | Must consume/cancel under an explicit byte limit without hiding network errors.                                                                                              |
+| response-error interceptor                        | provider   | Status-to-error conversion has bounded text/binary capture and stable metadata; canonical JSON object decoding and the exact package facade remain.                          |
+| bounded dump interceptor                          | shared     | The shared layer preflights known length, enforces the streaming boundary, waits for cancellation/trailers and preserves network-error identity.                             |
 | DNS interceptor                                   | missing    | Depends on the resolver/cache capability above.                                                                                                                              |
 | deduplication interceptor                         | missing    | Needs exact keying, compatible bodies, per-subscriber cancellation and bounded fan-out.                                                                                      |
 | tracing/diagnostics hooks                         | missing    | Opt-in typed events must not alter scheduling, ownership or public semantics.                                                                                                |
@@ -106,29 +106,29 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 
 ## Web APIs and helpers exported by Undici
 
-| Undici surface                             | Status   | NTS mapping or remaining obligation                                                                                            |
-| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `fetch`                                    | shared   | Canonical Fetch state machine exists for HTTP(S), data and blob; integrity, negotiated dispatcher and file capability remain.  |
-| `Headers`                                  | shared   | Guards, validation, ordered duplicates, iterators and `getSetCookie()` exist. Dynamic record facade is a typed-API difference. |
-| `Request`                                  | shared   | Applicable metadata, body/duplex, clone and Web IDL ordering exist.                                                            |
-| `Response`                                 | shared   | Constructors, statics, body mixin, clone and transport identity exist.                                                         |
-| `FormData`                                 | shared   | Ordered entries, multipart encoding/decoding, files and Web IDL conversion exist. HTML-form construction is browser-only.      |
-| `caches` / `CacheStorage`                  | shared   | Environment-owned public Cache API and typed injectable store exist.                                                           |
-| cookie helpers                             | shared   | Parser/serializer and typed pair helpers exist; the Node dynamic-record facade remains.                                        |
-| MIME parse/serialize helpers               | facade   | Shared MIME parser/serializer exists internally; exact Undici exports remain.                                                  |
-| `WebSocket`                                | shared   | Client handshake, framing, limits, close races, proxy/TLS path and `permessage-deflate` exist.                                 |
-| WebSocket ping extension                   | facade   | Internal ping/pong exists; public Node helper remains.                                                                         |
-| `WebSocketStream` / `WebSocketError`       | shared   | Canonical shared implementation exists.                                                                                        |
-| `EventSource`                              | shared   | Reconnect, `Last-Event-ID`, timing, limits and real transport path exist.                                                      |
-| Fetch `Cache`                              | shared   | Public Cache/CacheStorage are implemented independently from the HTTP cache.                                                   |
-| `setGlobalOrigin` / `getGlobalOrigin`      | missing  | If exposed, state must be environment-owned and reconciled with the runtime base/origin configuration.                         |
-| `install`                                  | facade   | Provider bootstrap installs canonical identities; compiled TypeScript does not model mutable `globalThis`.                     |
-| global constructor identity                | provider | Shared constructors are canonical; compiled per-environment module/global identity evidence remains.                           |
-| documented Undici error classes            | missing  | Stable typed hierarchy and Node names/codes remain.                                                                            |
-| diagnostics channels                       | missing  | Node facade must map typed shared diagnostics without putting `diagnostics_channel` in shared code.                            |
-| debug logging                              | missing  | Opt-in redacted provider/shared tracing remains.                                                                               |
-| `util.parseHeaders` / `headerNameToString` | facade   | Strict shared parsing exists internally; exact Node utility shape remains.                                                     |
-| content-type utilities                     | facade   | Shared MIME algorithms exist; exact package facade remains.                                                                    |
+| Undici surface                             | Status   | NTS mapping or remaining obligation                                                                                                    |
+| ------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `fetch`                                    | shared   | Canonical Fetch state machine exists for HTTP(S), data and blob; integrity, negotiated dispatcher and file capability remain.          |
+| `Headers`                                  | shared   | Guards, validation, ordered duplicates, iterators and `getSetCookie()` exist. Dynamic record facade is a typed-API difference.         |
+| `Request`                                  | shared   | Applicable metadata, body/duplex, clone and Web IDL ordering exist.                                                                    |
+| `Response`                                 | shared   | Constructors, statics, body mixin, clone and transport identity exist.                                                                 |
+| `FormData`                                 | shared   | Ordered entries, multipart encoding/decoding, files and Web IDL conversion exist. HTML-form construction is browser-only.              |
+| `caches` / `CacheStorage`                  | shared   | Environment-owned public Cache API and typed injectable store exist.                                                                   |
+| cookie helpers                             | shared   | Parser/serializer and typed pair helpers exist; the Node dynamic-record facade remains.                                                |
+| MIME parse/serialize helpers               | facade   | Shared MIME parser/serializer exists internally; exact Undici exports remain.                                                          |
+| `WebSocket`                                | shared   | Client handshake, framing, limits, close races, proxy/TLS path and `permessage-deflate` exist.                                         |
+| WebSocket ping extension                   | facade   | Internal ping/pong exists; public Node helper remains.                                                                                 |
+| `WebSocketStream` / `WebSocketError`       | shared   | Canonical shared implementation exists.                                                                                                |
+| `EventSource`                              | shared   | Reconnect, `Last-Event-ID`, timing, limits and real transport path exist.                                                              |
+| Fetch `Cache`                              | shared   | Public Cache/CacheStorage are implemented independently from the HTTP cache.                                                           |
+| `setGlobalOrigin` / `getGlobalOrigin`      | missing  | If exposed, state must be environment-owned and reconciled with the runtime base/origin configuration.                                 |
+| `install`                                  | facade   | Provider bootstrap installs canonical identities; compiled TypeScript does not model mutable `globalThis`.                             |
+| global constructor identity                | provider | Shared constructors are canonical; compiled per-environment module/global identity evidence remains.                                   |
+| documented Undici error classes            | provider | Retry, response, response-size and mock errors have stable names/codes; the rest of the typed hierarchy and exact Node exports remain. |
+| diagnostics channels                       | missing  | Node facade must map typed shared diagnostics without putting `diagnostics_channel` in shared code.                                    |
+| debug logging                              | missing  | Opt-in redacted provider/shared tracing remains.                                                                                       |
+| `util.parseHeaders` / `headerNameToString` | facade   | Strict shared parsing exists internally; exact Node utility shape remains.                                                             |
+| content-type utilities                     | facade   | Shared MIME algorithms exist; exact package facade remains.                                                                            |
 
 ## Required server/mobile extensions beyond Undici's package entry point
 
