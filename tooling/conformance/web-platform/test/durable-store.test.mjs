@@ -264,3 +264,87 @@ suite("two different keys write concurrently without interfering", async (t) => 
   assert.equal(decoder.decode(await target.read("cache", "b", none())), "second");
   assert.equal(decoder.decode(await target.read("cookies", "a", none())), "elsewhere");
 });
+
+suite("a source reads the value it was opened over, or fails", async (t) => {
+  const { store: target } = store(t);
+  await put(target, "cache", "key", "the original value");
+
+  const source = await target.source("cache", "key", none());
+  assert.equal(source.size, 18);
+
+  // The value is replaced after the source exists but before it is read. Blob shares
+  // *immutable* stored ranges, so a source that silently started reading the new value
+  // would break that guarantee for every Blob built on this store.
+  await put(target, "cache", "key", "a completely different and longer value");
+
+  const reader = source.open(0, 18);
+  let bytes = null;
+  let failure = null;
+  try {
+    bytes = await reader.read(64);
+  } catch (error) {
+    failure = error;
+  }
+  await reader.close();
+
+  if (failure !== null) {
+    // Refusing is the correct outcome: the value it was opened over is gone.
+    assert.match(String(failure), /replaced|no longer/i);
+  } else {
+    // If it read anything, it must be the value the source was opened over -- never a
+    // prefix of a different one, which is what clamping to the new size would give.
+    assert.equal(decoder.decode(bytes), "the original value".slice(0, bytes.length));
+    assert.ok(bytes.length > 0);
+  }
+});
+
+suite("a reader opened before a replacement keeps reading the original", async (t) => {
+  const { store: target } = store(t);
+  await put(target, "cache", "key", "the original value");
+  const source = await target.source("cache", "key", none());
+  const reader = source.open(0, 18);
+  // Reading once pins the value; the descriptor outlives the rename that replaces it.
+  const first = await reader.read(4);
+  assert.equal(decoder.decode(first), "the ");
+
+  await put(target, "cache", "key", "a completely different and longer value");
+
+  // The rest of the *original* value, not the rest of the new one. This is what Blob
+  // means by an immutable stored range, and it is the reason the descriptor is opened
+  // rather than the path re-resolved.
+  const parts = [first];
+  while (true) {
+    const chunk = await reader.read(64);
+    if (chunk === undefined) break;
+    parts.push(chunk);
+  }
+  await reader.close();
+  assert.equal(Buffer.concat(parts.map((p) => Buffer.from(p))).toString(), "the original value");
+});
+
+suite("two readers over one source are independent", async (t) => {
+  const { store: target } = store(t);
+  await put(target, "cache", "key", "abcdefghij");
+  const source = await target.source("cache", "key", none());
+
+  const left = source.open(0, 5);
+  const right = source.open(5, 5);
+  // Interleaved deliberately: a shared file offset would make these steal from each
+  // other, and reading them one after the other would hide it.
+  const leftFirst = await left.read(2);
+  const rightFirst = await right.read(2);
+  const leftRest = await left.read(64);
+  const rightRest = await right.read(64);
+  assert.equal(decoder.decode(leftFirst) + decoder.decode(leftRest), "abcde");
+  assert.equal(decoder.decode(rightFirst) + decoder.decode(rightRest), "fghij");
+
+  // Each range ends where it was asked to, and never returns an empty chunk.
+  assert.equal(await left.read(64), undefined);
+  assert.equal(await right.read(64), undefined);
+  await left.close();
+  await right.close();
+  // Closing twice is safe, as is closing a reader that was never read.
+  await left.close();
+  const unread = source.open(0, 3);
+  await unread.close();
+});

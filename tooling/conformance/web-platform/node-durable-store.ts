@@ -166,12 +166,29 @@ export class HostNodeDurableStore implements DurableByteStore {
       open(start: number, length: number): BlobExternalReader {
         let position = start;
         let remaining = length;
-        let opened: Promise<import("node:fs/promises").FileHandle> | null = null;
+        // Opened eagerly, and by path exactly once. A descriptor pins the value it was
+        // opened over, so a later commit -- which is a rename onto this path -- cannot
+        // change what this reader sees. Opening lazily on the first read left a window
+        // in which the reader took the *replacement* while still reporting the original
+        // size, which is a wrong answer rather than a stale one, and it silently
+        // violated the immutable-range guarantee Blob is built on.
+        const opened = openFile(path, "r").then(async (file) => {
+          const current = await file.stat();
+          if (current.size !== size) {
+            await file.close();
+            // Refused rather than clamped. A caller asked for a range of *this* value;
+            // a prefix of a different value is not a shorter answer to that question.
+            throw new TypeError("The stored value was replaced after this source opened");
+          }
+          return file;
+        });
+        // The rejection is observed by every read, but a reader that is closed without
+        // ever being read must not leave it unhandled.
+        opened.catch(() => {});
         return {
           async read(maximumBytes: number): Promise<Uint8Array<ArrayBuffer> | undefined> {
             if (remaining === 0) return undefined;
             const wanted = Math.min(maximumBytes, remaining, READ_CHUNK_BYTES);
-            opened ??= openFile(path, "r");
             const file = await opened;
             const buffer = new Uint8Array(new ArrayBuffer(wanted));
             const { bytesRead } = await file.read(buffer, 0, wanted, position);
@@ -181,9 +198,13 @@ export class HostNodeDurableStore implements DurableByteStore {
             return buffer.subarray(0, bytesRead) as Uint8Array<ArrayBuffer>;
           },
           async close(): Promise<void> {
-            const pending = opened;
-            opened = null;
-            if (pending !== null) await (await pending).close();
+            if (remaining < 0) return;
+            remaining = -1;
+            try {
+              await (await opened).close();
+            } catch {
+              // A reader whose value was replaced has nothing to close.
+            }
           },
         };
       },

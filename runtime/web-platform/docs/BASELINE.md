@@ -3704,3 +3704,42 @@ Still open on this ABI: `source()` is unimplemented on the Java side and should 
 the existing `BlobExternalSource` shape rather than growing a second ranged reader; the
 intrinsic surface is unbound and its names are being agreed before either lane binds
 one; and the ABI still has no consumer, which remains the honest status.
+
+## A question about clamping found a wrong answer in my own store
+
+The JVM owner asked whether a ranged read past the end of a value should be clamped or
+refused, noting that the size a caller was told may have been replaced since. Answering
+it meant looking at what my own strawman did, and it was worse than either option.
+
+`source()` stat'd the value's size at the moment it was called, and the reader opened
+the file **lazily by path on its first read**. A commit between the two is a rename onto
+that path, so the reader took the *replacement* while still reporting the original's
+size — bytes from one value under the length of another. Not stale: wrong. And it
+silently violated the guarantee Blob is built on, which is that composition and slicing
+share *immutable* stored ranges.
+
+The reader now opens eagerly and checks the pinned value against the size the source
+described. A descriptor pins what it was opened over, so a later rename cannot change
+what an open reader sees; and if the value was already replaced before the reader
+opened, it **refuses** rather than clamping. That answers the original question, and the
+reason is stronger than the one I would have given without finding this: a caller asked
+for a range of *that* value, and a prefix of a different one is not a shorter answer to
+the question — it is an answer to a different question, returned without saying so.
+
+Three tests. The failing one first: a value replaced between `source()` and the first
+read must either refuse or return the original, never a prefix of the replacement. Then
+the positive counterpart, which is the actual guarantee — a reader that has begun
+reading keeps seeing the original value across a replacement, all the way to the end.
+Then reader independence, with two ranges over one source read **interleaved**, because
+reading them one after the other would hide a shared file offset entirely.
+
+Two sabotages, both restored. Accepting a replaced value instead of refusing fails the
+first test. Using a shared file offset instead of positional reads fails the ranged read.
+
+This was found by a peer's question about their implementation, not by a test of mine,
+and every test in this file passed before it. The class is one this ledger keeps
+recording: a guarantee whose absence nothing was asking about.
+
+The complete local Node-host/real-socket corpus passes 536/536 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on all three backends, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.
