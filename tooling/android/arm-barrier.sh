@@ -54,7 +54,12 @@ set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 image=$sdk/system-images/android-26/google_apis/arm64-v8a/system.img
-root=${NTS_ARM64_SYSROOT:-/tmp/nts-arm64-sysroot}
+# **Not `$TMPDIR`.** Extracting this needs a 2.5 GB intermediate and leaves 331
+# MB behind, and `/tmp` here is `tmpfs` -- so the default would spend that in
+# RAM and hit a quota rather than a disk. A cache directory is also the honest
+# description of it: it is derived from an SDK image, reused across runs, and
+# safe to delete.
+root=${NTS_ARM64_SYSROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/nts/arm64-sysroot}
 
 # Announced, every one of them: a skip that prints nothing reads as a pass, and
 # this is the only ARM evidence this lane has.
@@ -80,6 +85,8 @@ if [ ! -x "$root/system/bin/oatdump" ]; then
   mkdir -p "$root/system"
   # The image is GPT with one ext4 partition at sector 2048. `debugfs` reads
   # ext4 without mounting, which is what keeps this from needing root.
+  # The intermediate lives beside the sysroot rather than in `$TMPDIR`, for the
+  # same reason, and goes away as soon as `debugfs` has read it.
   dd if="$image" of="$root/system.raw" bs=512 skip=2048 status=none
   for dir in bin lib64 framework; do
     debugfs -R "rdump /$dir $root/system" "$root/system.raw" > /dev/null 2>&1
