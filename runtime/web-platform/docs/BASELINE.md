@@ -1728,3 +1728,44 @@ dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-b
 diagnostics, and no invalid HIR. The increase from the HTTP/2 checkpoint is final
 mocking source reaching existing language prerequisites; it is not compiled mock
 execution evidence.
+
+## Deterministic SnapshotAgent
+
+At `71484249`, the shared transport implements bounded snapshot record, playback,
+and update modes. Matching has a collision-free canonical key over method, normalized
+URL/query, selected headers, and optionally normalized request bytes. Header
+exclusion is applied before persistent storage and matching, so configured credential
+fields do not leak into either the recorded request or response. URL exclusions pass
+the original stream directly to the real transport without loading or mutating the
+snapshot store.
+
+The recorder preserves sequential responses and repeats the final one after the
+sequence is exhausted. Request bodies, response bodies, response counts, snapshot
+counts, and estimated total stored bytes have independent limits. Recording captures
+the complete response before exposing its replayable body; exceeding the body limit
+cancels the live reader rather than retaining a prefix as a valid snapshot. Old
+snapshots are evicted deterministically when the configured count or total-byte
+budget needs room, but an individual response sequence is never partially evicted to
+hide its own overflow.
+
+Persistence crosses one typed `SnapshotStore` boundary whose `replaceAll` operation
+is atomic by contract. Saves are serialized, so a slow older write cannot overwrite a
+newer collection; auto-flush uses the injected environment scheduler. Loaded and
+replaced collections are copied and checked for duplicate or forged keys, invalid
+statuses and call counts, and every configured resource bound before becoming
+observable. `MemorySnapshotStore` is the bounded reference implementation; the exact
+Node path/JSON/base64 facade and a production durable provider remain separate ledger
+obligations.
+
+The focused SnapshotAgent corpus passes 8/8, the combined mock corpus passes 17/17,
+and the complete local Node-host/real-socket suite passes 300/300. The pinned WPT
+slice remains 2275/2283 applicable cases with 14 named not-applicable cases and the
+same eight visible structural/common-compiler failures.
+
+A sabotage changed the response-body bound from strictly greater-than to
+greater-than-or-equal. The exact-boundary precondition fell from 1/1 to 0/1 with
+`LimitError`; restoring the predicate returned 1/1. The live compiled-source frontier
+is 1164 primary `NTS1001` refusals and 188 dependent `NTS1003` cascades, with zero
+`NTS1004` module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. These
+counts describe new shared source reaching existing language prerequisites, not
+compiled SnapshotAgent execution.
