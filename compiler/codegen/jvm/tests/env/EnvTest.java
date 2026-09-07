@@ -159,12 +159,22 @@ public final class EnvTest {
      */
     static void closedEnvironmentLetsGo() {
         // **The instrument first.** On API 26 under `app_process` a weak
-        // reference to a plainly dead object is never enqueued at all: ART's
-        // reference-processing daemons are started by the zygote, not by a bare
-        // `app_process`, so nothing clears anything. The queue then stays empty
-        // for a reason that has nothing to do with the subject, and this test
-        // read that as "after close, the runtime still retains its callbacks"
-        // -- a false accusation against code that had released correctly.
+        // reference to a plainly dead object is neither cleared nor enqueued --
+        // measured directly, with a reference that has no relationship to this
+        // runtime at all. The queue then stays empty for a reason that has
+        // nothing to do with any subject, and this test read that as "after
+        // close, the runtime still retains its callbacks": a false accusation
+        // against code that had released correctly.
+        //
+        // **Why it does not clear is not established.** The first explanation
+        // written here was that ART's reference-processing daemons are started
+        // by the zygote and not by a bare `app_process`. That is wrong:
+        // `java.lang.Daemons.start()` reflectively answers `IllegalStateException:
+        // already running`, so they are up. A plain `WeakReference` with no
+        // queue is not cleared either, so it is not a queueing problem. The
+        // cause is left unnamed rather than guessed a second time -- the
+        // control detects the condition whatever it is, which is all the test
+        // needs from it.
         //
         // It cost an hour and two wrong diagnoses before the control was
         // written, and the control is four lines. A test whose instrument can

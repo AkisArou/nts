@@ -251,8 +251,9 @@ The whole device suite runs on the floor this library declares, not on the API
 36 that had been standing in for it. Getting there found three defects API 36
 could not show -- a PKCS12 MAC its BouncyCastle cannot read, the ART tools
 living in `/system/bin` rather than an APEX, and a retirement check that was
-**accusing the code under test** because ART's reference-processing daemons are
-not started under a bare `app_process`. See `docs/records/0197`.
+**accusing the code under test**, because on that configuration a weak reference
+to a plainly dead object is neither cleared nor enqueued. See
+`docs/records/0197`, including the explanation I got wrong on the way.
 
 One check skips there and says so: weak-reference retirement, because the queue
 on that configuration would stay empty whatever the subject did.

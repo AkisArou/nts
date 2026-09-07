@@ -49,11 +49,25 @@ A weak reference to an object with no relationship to this runtime at all.
     NEVER enqueued -- a weak reference to a dead object was not cleared,
     so this instrument says nothing about any subject
 
-ART's reference-processing daemons are started by the zygote. A bare
-`app_process` never starts them, so nothing on that configuration clears
-anything, and the queue stays empty whatever the subject does. The test was not
-measuring my runtime. It was measuring an absent daemon, and reporting the
-result as a property of my runtime.
+Nothing on that configuration clears anything, and the queue stays empty
+whatever the subject does. The test was not measuring my runtime; it was
+reporting a property of the collector as a property of my code.
+
+**And then I got the explanation wrong, which is the second half of this
+record.** I wrote — in the code, in a commit message, and to the repository
+owner — that ART's reference-processing daemons are started by the zygote and
+not by a bare `app_process`. It reads well and it is false:
+
+    java.lang.Daemons.start()  ->  IllegalStateException: already running
+
+They are running. A plain `WeakReference` with no queue at all is not cleared
+either, so it is not a queueing problem. Whatever prevents collection there, it
+is not the thing I said, and I had already shipped the sentence.
+
+The control does not care. It detects the condition without naming a cause,
+which is the whole reason it is a control and not a diagnosis — and is why the
+fix survived the explanation being wrong. The cause is now left unnamed in the
+code, which is the honest state.
 
 ## Why this one is worse than the others
 
