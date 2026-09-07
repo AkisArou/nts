@@ -231,6 +231,37 @@ not start. Each of those is listed with a reason in the module's
 `not-applicable` file rather than inferred by a rule, so the number can be
 audited.
 
+**An exclusion reason is a claim with no test on it, so the temporary ones were
+re-run.** Thirty-seven entries name a gap they expect to close — a worker
+runtime, resizable `ArrayBuffer`s, `SharedArrayBuffer`, kind tags, a normalized
+startup option. Every one of those is a prediction about a future that may
+already have arrived, and the compiler lane found a *refusal* message this
+morning whose stated cause had gone false weeks earlier. The same disease has
+the same cure: run them.
+
+Re-measured: `test-buffer-resizable.js`, `test-buffer-sharedarraybuffer.js`,
+`test-buffer-pool-untransferable.js` and `test-net-transfer-guards.js` still
+fail, and `test-util-types.js` still skips, each for the reason its entry
+gives. The eight harness-attributed exclusions were checked the same way
+earlier and also still hold. **No exclusion in this profile has gone stale**,
+which is worth stating as a measured result rather than left as an assumption —
+it is the claim that keeps the denominators honest, and until now nothing had
+tested it.
+
+**One surface in this profile is hollow by construction and is not excluded,
+because the honest fix is not available yet.** `http/src/main.ts` exports
+`WebSocket`, `CloseEvent` and `MessageEvent` by reading them off `globalThis`.
+Node exposes all three from `node:http`, so exporting them is right; reading
+them from the host is not. They are neither ours nor the canonical
+implementation, so a test reaching `http.WebSocket` measures node against
+node. The canonical versions live in `runtime/web-platform`, and the seam to
+import them already works — `url/src/parser.ts` imports the percent decoder
+across it. What is unresolved is whether the canonical `WebSocket` can be
+constructed without an environment, since it obtains its transport from one and
+`node:http` has none. Re-exporting a class that throws on construction would be
+worse than the global, so this stays recorded and wrong rather than quietly
+changed.
+
 A test that *skips* is one that asked for something we do not have — an
 internal module, a helper, a platform feature — and said so. The runner prints
 the reason for every skip, so they can be read rather than assumed. Neither is
