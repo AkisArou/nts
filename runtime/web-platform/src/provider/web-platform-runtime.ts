@@ -289,7 +289,7 @@ export class WebPlatformRuntime
     const webSocketStreams = this.webSocketStreams.slice();
     for (const stream of webSocketStreams) stream.closeForRuntime();
     this.blobURLs.close();
-    this.ownedFetchProxy?.close();
+    this.ownedFetchProxy?.destroy();
     this.http1.close();
     if (this.ownedWebSocketTransport !== null) {
       this.ownedWebSocketTransport.close();

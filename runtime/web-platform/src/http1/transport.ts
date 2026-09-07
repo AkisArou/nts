@@ -343,4 +343,8 @@ export class Http1Transport implements FetchTransport {
   close(): void {
     this.pool.close();
   }
+
+  drain(): Promise<void> {
+    return this.pool.drain();
+  }
 }

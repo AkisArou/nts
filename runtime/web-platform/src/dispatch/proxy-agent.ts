@@ -97,6 +97,7 @@ export class ProxyAgent implements FetchTransport {
   private readonly initialAuthorization: string | null;
   private readonly connectTimeout: number;
   private readonly proxyTunnel: boolean;
+  private closeResult: Promise<void> | null = null;
 
   constructor(options: ProxyAgentOptions) {
     this.proxy = parseHttpEndpoint(options.urls, options.uri);
@@ -176,15 +177,23 @@ export class ProxyAgent implements FetchTransport {
     }
   }
 
-  close(): void {
+  close(): Promise<void> {
+    if (this.closeResult !== null) return this.closeResult;
+    this.closeResult = Promise.all([this.forward.drain(), this.tunnel.drain()]).then(() => {});
+    return this.closeResult;
+  }
+
+  destroy(): Promise<void> {
     this.forward.close();
     this.tunnel.close();
+    return Promise.resolve();
   }
 }
 
 /** SOCKS5 dispatcher with proxy-side DNS and end-to-end target TLS. */
 export class Socks5ProxyAgent implements FetchTransport {
   private readonly transport: Http1Transport;
+  private closeResult: Promise<void> | null = null;
 
   constructor(options: Socks5ProxyAgentOptions) {
     this.transport = new Http1Transport(
@@ -198,8 +207,15 @@ export class Socks5ProxyAgent implements FetchTransport {
     return this.transport.dispatch(request);
   }
 
-  close(): void {
+  close(): Promise<void> {
+    if (this.closeResult !== null) return this.closeResult;
+    this.closeResult = this.transport.drain();
+    return this.closeResult;
+  }
+
+  destroy(): Promise<void> {
     this.transport.close();
+    return Promise.resolve();
   }
 }
 
@@ -241,6 +257,7 @@ export class EnvHttpProxyAgent implements FetchTransport {
   private readonly direct: Http1Transport;
   private readonly proxies = new Map<string, ProxyAgent | Socks5ProxyAgent>();
   private closed = false;
+  private closeResult: Promise<void> | null = null;
 
   constructor(options: EnvHttpProxyAgentOptions, direct?: Http1Transport) {
     this.options = options;
@@ -264,11 +281,22 @@ export class EnvHttpProxyAgent implements FetchTransport {
     return dispatcher.dispatch(request);
   }
 
-  close(): void {
-    if (this.closed) return;
+  close(): Promise<void> {
+    if (this.closeResult !== null) return this.closeResult;
+    this.closed = true;
+    const closing: Promise<void>[] = [this.direct.drain()];
+    for (const dispatcher of this.proxies.values()) closing.push(dispatcher.close());
+    this.closeResult = Promise.all(closing).then(() => {
+      this.proxies.clear();
+    });
+    return this.closeResult;
+  }
+
+  destroy(): Promise<void> {
     this.closed = true;
     this.direct.close();
-    for (const dispatcher of this.proxies.values()) dispatcher.close();
+    for (const dispatcher of this.proxies.values()) dispatcher.destroy();
     this.proxies.clear();
+    return Promise.resolve();
   }
 }

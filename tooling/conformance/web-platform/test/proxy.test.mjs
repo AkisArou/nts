@@ -689,6 +689,46 @@ test("request headers cannot inject proxy credentials into routed dispatch", asy
   agent.close();
 });
 
+test("ProxyAgent close drains accepted bodies while destroy remains forceful", async () => {
+  const gracefulConnection = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbody",
+  ]);
+  const graceful = new ProxyAgent({
+    connector: new QueueConnector([gracefulConnection]),
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+  });
+  const response = await graceful.dispatch(transportRequest("http://origin.example/"));
+  let settled = false;
+  const closing = graceful.close();
+  closing.then(() => {
+    settled = true;
+  });
+  assert.equal(graceful.close(), closing);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(await responseText(response), "body");
+  await closing;
+  assert.equal(gracefulConnection.closed, true);
+  await assert.rejects(graceful.dispatch(transportRequest("http://origin.example/")), /closed/);
+
+  const forcedConnection = new ScriptedConnection([
+    "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nbody",
+  ]);
+  const forced = new ProxyAgent({
+    connector: new QueueConnector([forcedConnection]),
+    tls: new RecordingTls(),
+    scheduler,
+    urls: hostNodeURLs,
+    uri: "http://proxy.example",
+  });
+  await forced.dispatch(transportRequest("http://origin.example/"));
+  await forced.destroy();
+  assert.equal(forcedConnection.closed, true);
+});
+
 test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel", async () => {
   const connection = new ScriptedConnection([
     new Uint8Array([5, 0]),

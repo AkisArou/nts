@@ -84,7 +84,10 @@ export class ConnectionPool {
   private pendingCount = 0;
   private readonly connecting = new Map<Waiter, AbortController>();
   private total = 0;
-  private closed = false;
+  private accepting = true;
+  private destroyed = false;
+  private drainResult: Promise<void> | null = null;
+  private drainResolve: (() => void) | null = null;
 
   constructor(connector: SocketConnector, scheduler: Scheduler, options: PoolOptions = {}) {
     this.connector = connector;
@@ -101,7 +104,7 @@ export class ConnectionPool {
   }
 
   acquire(address: ConnectAddress, signal: AbortSignal): Promise<ConnectionLease> {
-    if (this.closed) return Promise.reject(new TypeError("Connection pool is closed"));
+    if (!this.accepting) return Promise.reject(new TypeError("Connection pool is closed"));
     if (signal.aborted) return Promise.reject(signal.reason);
     if (this.pendingCount >= this.maxPending)
       return Promise.reject(new LimitError("Connection pool queue is full"));
@@ -166,7 +169,7 @@ export class ConnectionPool {
     this.changeCount(record.key, -1);
   }
   private pump(): void {
-    if (this.closed) return;
+    if (this.destroyed) return;
     for (const record of this.records)
       if (!record.busy && record.connection.closed) this.drop(record);
     let waiter = this.firstPending;
@@ -220,7 +223,7 @@ export class ConnectionPool {
           (connection) => {
             this.connecting.delete(current);
             current.unsubscribe();
-            if (this.closed || current.settled || current.signal.aborted) {
+            if (this.destroyed || current.settled || current.signal.aborted) {
               connection.close();
               this.changeCount(current.key, -1);
               rejectWaiter(
@@ -252,13 +255,14 @@ export class ConnectionPool {
         );
       waiter = next;
     }
+    this.checkDrained();
   }
 
   /** @internal */ release(record: RecordEntry, reusable: boolean): void {
     if (!this.records.has(record)) return;
     if (
       !reusable ||
-      this.closed ||
+      !this.accepting ||
       record.connection.closed ||
       record.reader.bufferedBytes !== 0 ||
       this.idleTimeoutMs === 0
@@ -275,8 +279,9 @@ export class ConnectionPool {
   }
 
   close(): void {
-    if (this.closed) return;
-    this.closed = true;
+    if (this.destroyed) return;
+    this.accepting = false;
+    this.destroyed = true;
     for (const [waiter, controller] of this.connecting) {
       const error = new TypeError("Connection pool is closed");
       rejectWaiter(waiter, error);
@@ -291,6 +296,38 @@ export class ConnectionPool {
       rejectWaiter(waiter, new TypeError("Connection pool is closed"));
       waiter = next;
     }
+    const resolve = this.drainResolve;
+    this.drainResolve = null;
+    resolve?.();
+  }
+
+  drain(): Promise<void> {
+    if (this.destroyed) return Promise.resolve();
+    if (this.drainResult !== null) return this.drainResult;
+    this.accepting = false;
+    const result = Promise.withResolvers<void>();
+    this.drainResult = result.promise;
+    this.drainResolve = result.resolve;
+    for (const record of this.records) if (!record.busy) this.drop(record);
+    this.pump();
+    this.checkDrained();
+    return this.drainResult;
+  }
+
+  private checkDrained(): void {
+    if (
+      this.accepting ||
+      this.destroyed ||
+      this.drainResolve === null ||
+      this.pendingCount !== 0 ||
+      this.connecting.size !== 0 ||
+      this.records.size !== 0
+    ) {
+      return;
+    }
+    const resolve = this.drainResolve;
+    this.drainResolve = null;
+    resolve();
   }
 
   get stats(): { connections: number; pending: number; idle: number } {
