@@ -8,7 +8,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:net";
 
-import { AbortController } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import {
+  AbortController,
+  DiagnosticsInterceptor,
+} from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { Http1Transport } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/transport.js";
 import {
   HostNodeSocketConnector,
@@ -190,4 +193,45 @@ suite("cancelling the body rejects the trailers", async (t) => {
   const response = await transport.dispatch(transportRequest(`http://127.0.0.1:${port}/`));
   await response.body.cancel(new Error("caller lost interest"));
   await assert.rejects(response.trailers);
+});
+
+suite("trailer consumers see real trailers, not only fixtures", async (t) => {
+  // Until trailers were produced, every consumer of `TransportResponse.trailers` was
+  // exercised only against `MockAgent`. This runs the diagnostics interceptor over a
+  // real transport and a real server, which is the claim that change was worth making.
+  const port = await rawServer(
+    t,
+    chunked("payload", ["x-checksum: abc123", "authorization: Bearer secret"]),
+  );
+  const events = [];
+  const interceptor = new DiagnosticsInterceptor({
+    observer: { publish: (event) => events.push(event) },
+    scheduler: {
+      enqueue() {},
+      delay() {
+        return { cancel() {} };
+      },
+      reportError() {},
+    },
+  });
+  const transport = makeTransport(t);
+  const response = await interceptor.dispatch(
+    transportRequest(`http://127.0.0.1:${port}/`),
+    transport,
+  );
+  assert.equal(await consume(response.body), "payload");
+  // The observation settles after the body, so give it its turn.
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+
+  const trailerEvents = events.filter((event) => event.type === "response:trailers");
+  assert.equal(trailerEvents.length, 1, "a real response must publish its trailers once");
+  assert.deepEqual(
+    trailerEvents[0].headers.find(([name]) => name === "x-checksum"),
+    ["x-checksum", "abc123"],
+  );
+  // Redaction applies to trailers exactly as it does to headers. A credential does not
+  // become publishable by arriving after the body.
+  const authorization = trailerEvents[0].headers.find(([name]) => name === "authorization");
+  assert.notEqual(authorization, undefined, "the field is reported");
+  assert.notEqual(authorization[1], "Bearer secret", "but never its value");
 });

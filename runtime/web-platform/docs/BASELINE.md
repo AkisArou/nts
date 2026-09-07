@@ -3504,3 +3504,27 @@ than a fixture.
 Measured with the same pinned binary built at `43fda4d3`: before, 1,303 primary
 `NTS1001` and 242 `NTS1003`; after, 1,304 primary and 242 cascades, with zero
 `NTS1004`, zero `NTS4xxx` and no invalid HIR.
+
+## Demonstrating the claim the previous two entries made
+
+Those entries said trailer consumers had only ever been exercised against `MockAgent`,
+and that producing trailers from the real transports changed that. That was an
+assertion about a consequence, not a measurement of one, and this session has spent
+enough effort on exactly that distinction to not leave it standing.
+
+The diagnostics interceptor now runs over a real HTTP/1 transport against a real server
+sending a chunked body with a trailer section. It publishes one `response:trailers`
+event carrying the real field, after the body, and it **redacts a credential that
+arrives in a trailer**: a value does not become publishable by turning up after the
+body rather than before it. The whole diagnostics suite had until now used inline fake
+transports, so this path — parse, produce, observe, redact — had no end-to-end coverage
+at any point along it.
+
+The sabotage publishes trailers without redaction, and the test fails on the leaked
+authorization value.
+
+The complete local Node-host/real-socket corpus passes 521/521 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green, and
+the NTS frontier is unchanged at 1,304 primary `NTS1001` and 242 `NTS1003`, as expected
+for a slice that adds a test and changes no shared source.
