@@ -106,6 +106,55 @@ fn an_environment_is_isolated_clocked_bounded_and_lets_go() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A rejection keeps the tag it arrived with.
+///
+/// `nts_promise_reject_value` is in the C header, in `hir::lower`, in this
+/// backend's extern table and in the shipped jar -- and nothing tested it. It
+/// is emitted only when an `async` function throws a value that is already
+/// erased, which nothing in the corpus does, so the helper was wired end to end
+/// and never executed by anything.
+///
+/// The bug it exists to avoid is one line wide: `ofObject` tags every reference
+/// `OBJECT`, so re-tagging a reason would turn a rejected **string** into a
+/// rejected object and make `typeof` answer "object" for a value the program
+/// threw as a string.
+#[test]
+fn a_rejection_keeps_the_tag_it_arrived_with() {
+    let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };
+    let root = repository();
+    let jar = runtime_jar();
+    let dir = std::env::temp_dir().join(format!("nts-reject-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let compiled = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&jar)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("compiler/codegen/jvm/tests/env/RejectTest.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "the reject driver did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("RejectTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the reject test failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    assert!(said.ends_with("9 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// One default environment, and one lane owns it.
 ///
 /// `NtsEnv.current()` answers for a thread that entered none, which

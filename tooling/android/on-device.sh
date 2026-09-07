@@ -69,6 +69,7 @@ sets=$(find "$here"/runtime/jvm/web-platform/android/src -name '*.java' | sort)
 # shellcheck disable=SC2086
 javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes" \
   $sets \
+  "$here"/compiler/codegen/jvm/tests/env/RejectTest.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
   "$here"/compiler/codegen/jvm/tests/inbox/Stress.java
@@ -105,6 +106,7 @@ run org.nts.web.NetworkPrimitivesTest /data/local/tmp/store.p12
 # on a desktop too; what a device adds is that it runs on ART, in the same dex
 # as the callback that will drive it.
 run org.nts.web.DefaultNetworkWatchTest
+run RejectTest
 run EnvTest
 run CloseRaceTest
 run Stress
