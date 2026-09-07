@@ -6,7 +6,10 @@ import {
   Headers,
   Request,
   Response,
+  ReadableByteStreamController,
   ReadableStream,
+  ReadableStreamBYOBReader,
+  ReadableStreamBYOBRequest,
   ByteLengthQueuingStrategy,
   CountQueuingStrategy,
   AbortController,
@@ -35,6 +38,7 @@ import { _createBlobFromExternalSource } from "../node_modules/.tsbuild/host/run
 import {
   bytesStream,
   tee,
+  transfer,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 import { BufferedReader } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/io.js";
 import {
@@ -1217,6 +1221,73 @@ test("Pull streams honor locking and do not prefetch at zero HWM", async () => {
   assert.equal(stream.locked, false);
   assert.equal(pulls, 1);
 });
+test("Readable byte streams expose their controller and both reader modes", async () => {
+  let controller;
+  const stream = new ReadableStream({
+    type: "bytes",
+    start(value) {
+      controller = value;
+    },
+  });
+  assert.ok(controller instanceof ReadableByteStreamController);
+  assert.throws(() => new ReadableByteStreamController(), TypeError);
+  assert.throws(() => new ReadableStreamBYOBRequest(), TypeError);
+
+  const defaultReader = stream.getReader();
+  defaultReader.releaseLock();
+  const byobReader = stream.getReader({ mode: "byob" });
+  assert.ok(byobReader instanceof ReadableStreamBYOBReader);
+  assert.throws(() => stream.getReader(), TypeError);
+  byobReader.releaseLock();
+  assert.equal(stream.locked, false);
+  await assert.rejects(byobReader.closed, TypeError);
+});
+test("Readable byte stream enqueue transfers its input and preserves exact slice bytes", async () => {
+  let controller;
+  const stream = new ReadableStream({
+    type: "bytes",
+    start(value) {
+      controller = value;
+    },
+  });
+  const backing = Uint8Array.of(9, 1, 2, 3, 8);
+  controller.enqueue(backing.subarray(1, 4));
+  assert.equal(backing.buffer.byteLength, 0);
+  controller.close();
+
+  const reader = stream.getReader();
+  const first = await reader.read();
+  assert.equal(first.done, false);
+  assert.deepEqual(first.value, Uint8Array.of(1, 2, 3));
+  assert.deepEqual(await reader.read(), { done: true, value: undefined });
+});
+test("BYOB reads transfer the caller view, honor min, and preserve its typed-array kind", async () => {
+  let pull = 0;
+  const stream = new ReadableStream({
+    type: "bytes",
+    pull(controller) {
+      const request = controller.byobRequest;
+      assert.ok(request instanceof ReadableStreamBYOBRequest);
+      const view = request.view;
+      assert.ok(view);
+      const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+      bytes[0] = pull + 1;
+      bytes[1] = pull + 2;
+      pull += 2;
+      request.respond(2);
+      if (pull === 4) controller.close();
+    },
+  });
+  const reader = stream.getReader({ mode: "byob" });
+  const destination = new Uint16Array(2);
+  const read = reader.read(destination, { min: 2 });
+  assert.equal(destination.buffer.byteLength, 0);
+  const result = await read;
+  assert.equal(result.done, false);
+  assert.ok(result.value instanceof Uint16Array);
+  assert.equal(result.value.byteLength, 4);
+  assert.deepEqual(new Uint8Array(result.value.buffer), Uint8Array.of(1, 2, 3, 4));
+});
 test("Built-in queuing strategies preserve Web IDL conversion and function identity", () => {
   for (const [Actual, Expected] of [
     [CountQueuingStrategy, globalThis.CountQueuingStrategy],
@@ -1565,6 +1636,24 @@ test("Body use, locking, transfer, clone and canonical identity", async () => {
   assert.equal(request.body.locked, true);
   assert.equal(await transferred.text(), "x");
   assert.equal(await requestClone.text(), "x");
+});
+test("Transferred byte streams preserve BYOB reads and source ownership", async () => {
+  const source = bytesStream(Uint8Array.of(1, 2, 3, 4), 2);
+  const moved = transfer(source);
+  assert.equal(source.locked, true);
+  assert.equal(source.disturbed, true);
+  const reader = moved.getReader({ mode: "byob" });
+  const firstInput = new Uint8Array(3);
+  const first = await reader.read(firstInput, { min: 2 });
+  assert.equal(firstInput.buffer.byteLength, 0);
+  assert.equal(first.done, false);
+  assert.deepEqual(first.value, Uint8Array.of(1, 2));
+  const second = await reader.read(new Uint8Array(2), { min: 2 });
+  assert.equal(second.done, false);
+  assert.deepEqual(second.value, Uint8Array.of(3, 4));
+  const end = await reader.read(new Uint8Array(1));
+  assert.equal(end.done, true);
+  assert.equal(end.value.byteLength, 0);
 });
 test("A null body stays unused after repeated consumption", async () => {
   const response = makeResponse();

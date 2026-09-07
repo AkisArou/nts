@@ -242,14 +242,8 @@ export class ReadableStream<T> {
   #pullAgain = false;
   #isDisturbed = false;
 
-  constructor(
-    source: UnderlyingByteSource,
-    strategy?: QueuingStrategy<Uint8Array> | null,
-  );
-  constructor(
-    source?: UnderlyingSource<T> | null,
-    strategy?: QueuingStrategy<T> | null,
-  );
+  constructor(source: UnderlyingByteSource, strategy?: QueuingStrategy<Uint8Array> | null);
+  constructor(source?: UnderlyingSource<T> | null, strategy?: QueuingStrategy<T> | null);
   constructor(
     source: UnderlyingSource<T> | UnderlyingByteSource | null = defaultReadableSource,
     strategy: QueuingStrategy<T> | null = defaultReadableStrategy,
@@ -664,9 +658,7 @@ export class ReadableStream<T> {
       return 0;
     }
     const byteState = this.#byteState;
-    return byteState === null
-      ? this.#highWaterMark - this.#queue.totalSize
-      : byteState.desiredSize;
+    return byteState === null ? this.#highWaterMark - this.#queue.totalSize : byteState.desiredSize;
   }
 
   async #observeStart(startResult: void | PromiseLike<void>): Promise<void> {
@@ -1341,11 +1333,7 @@ class ReadableByteStreamState {
   #pulling = false;
   #pullAgain = false;
 
-  constructor(
-    stream: ReadableByteStreamHost,
-    source: UnderlyingByteSource,
-    highWaterMark: number,
-  ) {
+  constructor(stream: ReadableByteStreamHost, source: UnderlyingByteSource, highWaterMark: number) {
     const start = source.start;
     const pull = source.pull;
     const cancel = source.cancel;
@@ -1410,11 +1398,7 @@ class ReadableByteStreamState {
           descriptor.byteOffset + descriptor.bytesFilled,
           descriptor.byteLength - descriptor.bytesFilled,
         );
-        this.#currentBYOBRequest = new ReadableStreamBYOBRequest(
-          byobRequestKey,
-          this,
-          remaining,
-        );
+        this.#currentBYOBRequest = new ReadableStreamBYOBRequest(byobRequestKey, this, remaining);
       }
     }
     return this.#currentBYOBRequest;
@@ -1534,10 +1518,7 @@ class ReadableByteStreamState {
           this.#maybePull();
           return;
         }
-      } else if (
-        pendingPullInto.readerKind === "default" &&
-        pendingPullInto.bytesFilled === 0
-      ) {
+      } else if (pendingPullInto.readerKind === "default" && pendingPullInto.bytesFilled === 0) {
         this.#pullIntos.dequeue();
         const result = pendingPullInto.defaultResult;
         pendingPullInto.defaultResult = null;
@@ -2374,10 +2355,7 @@ class ByteTeeState<T> {
     }
     if (this.branches[0].canceled && this.branches[1].canceled && !this.#done) {
       this.#done = true;
-      const cancellation = this.#reader.cancel([
-        this.branches[0].reason,
-        this.branches[1].reason,
-      ]);
+      const cancellation = this.#reader.cancel([this.branches[0].reason, this.branches[1].reason]);
       this.#finishCancellation(cancellation);
     }
     return this.#canceled.promise;
@@ -2851,7 +2829,9 @@ export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStrea
       type: "bytes",
       pull(controller) {
         if (position === bytes.length) {
+          const request = controller.byobRequest;
           controller.close();
+          request?.respond(0);
           return;
         }
         const request = controller.byobRequest;
@@ -2874,11 +2854,77 @@ export function bytesStream(bytes: Uint8Array, chunkSize = 65536): ReadableStrea
   );
 }
 
+class ByteTransferSource<T> implements UnderlyingByteSource {
+  readonly type = "bytes";
+  readonly #source: ReadableStream<T>;
+  #reader: ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader;
+
+  constructor(source: ReadableStream<T>) {
+    this.#source = source;
+    this.#reader = new ReadableStreamDefaultReader(source);
+  }
+
+  async pull(controller: ReadableByteStreamController): Promise<void> {
+    const request = controller.byobRequest;
+    const view = request?.view;
+    if (request === null || request === undefined || view === null || view === undefined) {
+      const result = await this.#defaultReader().read();
+      if (result.done) {
+        controller.close();
+        return;
+      }
+      if (!(result.value instanceof Uint8Array) || !(result.value.buffer instanceof ArrayBuffer)) {
+        throw new TypeError("A byte stream produced a non-byte chunk");
+      }
+      controller.enqueue(
+        new Uint8Array(result.value.buffer, result.value.byteOffset, result.value.byteLength),
+      );
+      return;
+    }
+
+    const result = await this.#byobReader().read(view);
+    if (result.done) {
+      controller.close();
+      if (result.value === undefined) request.respond(0);
+      else request.respondWithNewView(result.value);
+      return;
+    }
+    request.respondWithNewView(result.value);
+  }
+
+  async cancel(reason: unknown): Promise<void> {
+    await this.#reader.cancel(reason);
+  }
+
+  #defaultReader(): ReadableStreamDefaultReader<T> {
+    const reader = this.#reader;
+    if (reader instanceof ReadableStreamDefaultReader) return reader;
+    reader.releaseLock();
+    const replacement = new ReadableStreamDefaultReader(this.#source);
+    this.#reader = replacement;
+    return replacement;
+  }
+
+  #byobReader(): ReadableStreamBYOBReader {
+    const reader = this.#reader;
+    if (reader instanceof ReadableStreamBYOBReader) return reader;
+    reader.releaseLock();
+    const replacement = new ReadableStreamBYOBReader(this.#source);
+    this.#reader = replacement;
+    return replacement;
+  }
+}
+
 /**
  * The source becomes disturbed immediately and stays locked, matching Fetch body
  * transfer. The proxy stream owns its reader even after a terminal transition.
  */
 export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
+  if (stream.byteStream) {
+    const source = new ByteTransferSource(stream);
+    stream.markDisturbed();
+    return new ReadableStream<T>(source, { highWaterMark: 0 });
+  }
   const reader = stream.getReader();
 
   stream.markDisturbed();

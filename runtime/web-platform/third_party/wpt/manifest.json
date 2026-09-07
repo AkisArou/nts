@@ -69,6 +69,9 @@
       "Cancelling a closed Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
       "Cancelling a loading Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
       "Cancelling a starting Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle."
+    },
+    "streams/readable-byte-streams/templated.any.js": {
+      "ReadableStream with byte source (empty) BYOB reader: canceling via the reader should cause the reader to act closed": "The shared default-reader template expects value: undefined, but the current Streams algorithm and the pinned Node reference return a new zero-length transferred view for a BYOB read issued after cancellation. The dedicated byte-stream cancellation cases cover pending-read cancellation separately."
     }
   },
   "nodeWpt": {
