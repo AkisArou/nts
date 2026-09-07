@@ -141,6 +141,46 @@ public final class OkHttpNetworking {
         return call;
     }
 
+    /**
+     * Stop new work, cancel what is in flight, and close the pools.
+     *
+     * <p>The plan requires shutdown to "stop new work, then cancel and settle
+     * platform operations, drain their reserved completions, close pools and
+     * sessions, and only then release the completion executor". There was no
+     * shutdown here at all, and the way that surfaced is worth writing down: a
+     * corpus of eight HTTP cases took **sixty seconds of wall time on half a
+     * second of CPU**. OkHttp's dispatcher threads are not daemons and idle out
+     * after a minute, so the JVM sat waiting for them with nothing left to do.
+     *
+     * <p>In a test that is slow. On Android it is a process that will not
+     * finish, holding sockets a network transition has already invalidated.
+     *
+     * <p>The order is the plan's and is not arbitrary. `cancelAll` first, so
+     * nothing new is admitted and everything in flight fails fast through
+     * `onFailure` -- which is what returns the caller's reserved completion
+     * rather than stranding it. Then the executor, which cannot be shut down
+     * first because the cancellations are delivered on it. Then the pool, whose
+     * idle connections no longer have anything to serve. The caller's own lane
+     * is released after this returns, which is why this does not touch it: a
+     * lane closed before the cancellations are delivered turns every one of
+     * them into the `RejectedExecutionException` path below.
+     */
+    public static void shutdown(OkHttpClient client) {
+        client.dispatcher().cancelAll();
+        client.dispatcher().executorService().shutdown();
+        client.connectionPool().evictAll();
+        okhttp3.Cache cache = client.cache();
+        if (cache != null) {
+            try {
+                cache.close();
+            } catch (IOException closing) {
+                // Nothing to report it to, and a cache this client never
+                // installs. Present because `client()` returning one later
+                // should not silently leak it.
+            }
+        }
+    }
+
     private static boolean requiresBody(String method) {
         return "POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method);
     }

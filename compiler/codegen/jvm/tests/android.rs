@@ -486,6 +486,78 @@ fn okhttp_does_not_rewrite_what_the_server_sent() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The two adapters, over one server, answering the same.
+///
+/// The plan's central two-adapter requirement, and the one thing the suites
+/// around it could not check. `OkHttpHeadersTest` drives OkHttp alone and
+/// asserts what it does; `HttpGzipTest` drives the reference alone and asserts
+/// what it does, closing with "this is the observable the production adapter has
+/// to match". Nothing checked that it matched. Two suites agreeing with their
+/// own expectations is not two adapters agreeing with each other.
+///
+/// The count is the ratchet the plan asks for -- "capture the applicable-case
+/// count when the corpus lands, and it may only rise". Pinned exactly rather
+/// than as a lower bound, so adding a case is a deliberate edit here and
+/// removing one cannot pass quietly.
+#[test]
+fn both_adapters_answer_the_same_over_one_server() {
+    let (Some(javac), Some(java), Some(jars)) = (tool("javac"), tool("java"), dependencies())
+    else {
+        return;
+    };
+    let root = repository();
+    let dir = std::env::temp_dir().join(format!("nts-both-http-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // The runtime jar as well as the pinned dependencies: this corpus drives
+    // `nts.rt.NtsSocket` on one side and OkHttp on the other, which is the
+    // whole point of it.
+    let runtime = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let mine = dir.join("nts-runtime.jar");
+    std::fs::copy(&runtime, &mine).unwrap();
+
+    let classpath = jars
+        .iter()
+        .map(|jar| jar.display().to_string())
+        .chain(std::iter::once(mine.display().to_string()))
+        .chain(std::iter::once(dir.display().to_string()))
+        .collect::<Vec<_>>()
+        .join(":");
+
+    for source in [
+        android().join("src/okhttp/java/org/nts/web/OkHttpNetworking.java"),
+        root.join("compiler/codegen/jvm/tests/android/BothHttp.java"),
+    ] {
+        let compiled = Command::new(&javac)
+            .args(["--release", "8", "-Xlint:-options", "-cp"])
+            .arg(&classpath)
+            .arg("-d")
+            .arg(&dir)
+            .arg(&source)
+            .output()
+            .unwrap();
+        assert!(
+            compiled.status.success(),
+            "{} did not compile:\n{}",
+            source.display(),
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("BothHttp")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(said.ends_with("74 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The third-party jars dex at the same API floor, and are **not** held to the
 /// NTS-only rule.
 ///
