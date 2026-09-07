@@ -188,3 +188,41 @@ suite("a request without integrity is unaffected by the absence of a provider", 
   const api = runtimeWithoutDigest(t);
   assert.equal(await (await api.fetch(url)).text(), BODY);
 });
+
+// A digest is a base64 value, and until this was checked at parse time a digest holding
+// any code unit above U+00FF reached `encodeByteString` at *match* time and threw
+// `TypeError: Expected an HTTP ByteString`. `integrity` is a DOMString a script sets, so
+// `new Request(url, { integrity: "sha256-\u0100" })` turned an integrity check into an
+// exception thrown from a layer below the one the caller was addressing.
+//
+// Found by the NodeJS lane reporting three bugs of exactly this shape in their own
+// base64 and hex -- decoding a string's characters where node decodes its bytes. This
+// codebase does not have their bug, because `encodeByteString` refuses rather than
+// masking; it had the other half of it, where the refusal escaped as the wrong error.
+test("a digest that is not a base64 value is discarded, not thrown over", () => {
+  for (const metadata of [
+    "sha256-\u0100",
+    "sha256-\u{1F600}",
+    "sha256-!!!!",
+    "sha384-\u00ff\u0100",
+  ]) {
+    assert.deepEqual(parseIntegrity(metadata), [], metadata);
+  }
+});
+
+test("the base64url alphabet and padding are digests, not junk", () => {
+  // `-` and `_` are the URL alphabet's substitutes for `+` and `/`, and the match path
+  // converts them; rejecting them here would break every caller using that spelling.
+  const entries = parseIntegrity("sha256-YWJj-ZGVm_Z2hp=");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].digest, "YWJj-ZGVm_Z2hp=");
+});
+
+test("metadata that parses to nothing means no check, not a check that fails", () => {
+  // Worth asserting rather than assuming, because it is the security-relevant half of
+  // discarding invalid entries: this is the Subresource Integrity behaviour, and a
+  // caller wanting "invalid metadata must fail" has to validate before setting it.
+  assert.deepEqual(parseIntegrity("sha256-!!!!"), []);
+  assert.deepEqual(parseIntegrity("md5-abcd"), [], "an unsupported algorithm, the same way");
+  assert.deepEqual(parseIntegrity("nonsense"), []);
+});

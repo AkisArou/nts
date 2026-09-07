@@ -29,6 +29,45 @@ function isSupportedAlgorithm(name: string): boolean {
  * strongest algorithm present is returned, and a match against any of its entries is a
  * match.
  */
+/**
+ * Whether a digest is a base64 value, in either the standard or URL alphabet.
+ *
+ * Checked at parse time because the grammar says so, and because the alternative was
+ * worse than untidy: a digest containing any code unit above U+00FF reached
+ * `encodeByteString` at match time and **threw** `TypeError: Expected an HTTP
+ * ByteString`. A script can set `integrity` to any string, so
+ * `new Request(url, { integrity: "sha256-\u0100" })` turned an integrity check into an
+ * exception from a layer below the one the caller was talking to.
+ *
+ * Discarding it instead is what the Subresource Integrity grammar asks for, and it is
+ * what this parser already did for an unsupported algorithm. **The consequence is worth
+ * being explicit about:** metadata that parses to nothing means no integrity check at
+ * all, not a check that always fails. That is the standard's behaviour and browsers do
+ * it too, and a caller who wants "invalid metadata must fail" has to validate before
+ * setting it rather than rely on this to fail closed.
+ */
+function isBase64Value(digest: string): boolean {
+  for (let index = 0; index < digest.length; index++) {
+    const code = digest.charCodeAt(index);
+    const alphanumeric =
+      (code >= 0x41 && code <= 0x5a) ||
+      (code >= 0x61 && code <= 0x7a) ||
+      (code >= 0x30 && code <= 0x39);
+    // `+` and `/`, their URL-alphabet substitutes `-` and `_`, and `=` padding.
+    if (
+      !alphanumeric &&
+      code !== 0x2b &&
+      code !== 0x2f &&
+      code !== 0x2d &&
+      code !== 0x5f &&
+      code !== 0x3d
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function parseIntegrity(metadata: string): readonly IntegrityEntry[] {
   const entries: IntegrityEntry[] = [];
   // Tokenized with the shared ASCII-whitespace predicate rather than a pattern: it is
@@ -47,7 +86,7 @@ export function parseIntegrity(metadata: string): readonly IntegrityEntry[] {
     let digest = token.slice(separator + 1);
     const option = digest.indexOf("?");
     if (option >= 0) digest = digest.slice(0, option);
-    if (digest === "") continue;
+    if (digest === "" || !isBase64Value(digest)) continue;
     entries.push({ algorithm, digest });
   }
   if (entries.length === 0) return entries;

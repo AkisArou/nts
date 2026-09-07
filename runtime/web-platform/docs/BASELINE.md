@@ -5064,3 +5064,47 @@ the day building a gate against.
 
 The two `Event.timeStamp` assertions stay visible. The contract above is recorded so the
 next attempt starts from two device measurements rather than from an argument.
+
+## A peer's bug in their code found the other half of it in this one
+
+The NodeJS lane reported three bugs in their own base64 and hex: they were decoding a
+string's *characters* where node decodes its *bytes*, so every code unit above U+00FF was
+silently skipped. Their `atob`/`btoa` came out identical to node across 44,225
+comparisons; the three defects were on their side of the same confusion.
+
+This codebase does not have their bug. `encodeByteString` **throws** on a code unit above
+255 rather than masking it, which is the right half of the choice. It had the other half:
+**the refusal escaped as the wrong error, from the wrong layer.**
+
+`parseIntegrity` never validated the digest's character set. A digest is a base64 value
+by grammar, but any non-whitespace run after `sha256-` was accepted, so a digest holding
+a character above U+00FF reached `encodeByteString` at *match* time:
+
+    new Request(url, { integrity: "sha256-Ā" })
+    → TypeError: Expected an HTTP ByteString
+
+`integrity` is a `DOMString` a script sets, so that is reachable from ordinary use. An
+integrity check that should have reported a mismatch instead threw an exception naming an
+HTTP byte-string requirement, from a layer below the one the caller was addressing.
+
+The digest is validated at parse time now, which is where the Subresource Integrity
+grammar puts it and what this parser already did for an unsupported algorithm. The
+base64url alphabet and padding are accepted, because the match path already converts
+`-` and `_`, and rejecting them would break every caller using that spelling.
+
+**The consequence is security-relevant and is asserted rather than assumed.** Metadata
+that parses to nothing means *no integrity check*, not a check that always fails —
+`resolveIntegrity` returns null for an empty entry list and no verification runs. That is
+the standard's behaviour and what browsers do, and it changes `"sha256-!!!!"` from
+"always fails" to "not checked". A caller who wants invalid metadata to fail closed has
+to validate before setting it. It has its own test, because a quiet loosening recorded
+only in a commit message is how a security property gets lost.
+
+Two sabotages: removing the character check restores the throw, and both new tests fail.
+
+One test of mine was wrong before the code was. `"sha256-abc def"` was written as an
+invalid digest and is not one — the grammar is whitespace-separated, so that is a valid
+entry followed by a token with no dash. The parser was right and the case was removed.
+
+Local corpus 717/717 with zero skipped, upstream unchanged at 2,408 of 2,418, frontier
+unchanged at 1,296 primary `NTS1001` and 314 `NTS1003`.
