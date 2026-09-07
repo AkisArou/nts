@@ -10,6 +10,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/cache-storage.test.mjs \
   tooling/conformance/web-platform/test/cache.test.mjs \
   tooling/conformance/web-platform/test/cookies.test.mjs \
+  tooling/conformance/web-platform/test/deduplicate.test.mjs \
   tooling/conformance/web-platform/test/eventsource.test.mjs \
   tooling/conformance/web-platform/test/hpack.test.mjs \
   tooling/conformance/web-platform/test/http2-connection.test.mjs \

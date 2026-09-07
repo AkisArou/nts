@@ -28,6 +28,8 @@ export { TransportError } from "./fetch/transport.ts";
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export { DeduplicationBufferError, DeduplicationInterceptor } from "./dispatch/deduplicate.ts";
+export type { DeduplicationOptions } from "./dispatch/deduplicate.ts";
 export { DumpInterceptor } from "./dispatch/dump.ts";
 export type { DumpOptions } from "./dispatch/dump.ts";
 export { ResponseExceededMaxSizeError } from "./dispatch/response-body.ts";
