@@ -229,10 +229,14 @@ provider context must remain environment-owned.
 
 ### Node URL and event reconciliation is coordinated follow-on work
 
-The NodeJS lane has reserved `runtime/node/url/src/url.ts` and
-`runtime/node/buffer/src/blob.ts` from its current tranche so the successor can first
-design the canonical shared URL/Blob surface. Before freezing that surface, coordinate
-these observable Node requirements with that peer:
+Earlier messages routed under the `claude:NodeJS` address reported a reservation of
+`runtime/node/url/src/url.ts` and `runtime/node/buffer/src/blob.ts` while the successor
+designs the canonical shared URL/Blob surface. The current NodeJS session later
+disputed authoring those messages. Treat the attribution and reservation as
+unverified: inspect the current tree, list the live peers, and obtain a fresh path
+agreement before editing either file. The technical constraints below are review
+items that must be verified against pinned Node tests rather than accepted on peer
+attribution alone:
 
 - `URL.createObjectURL` and `URL.revokeObjectURL` must attach without subclassing or
   changing constructor identity;
@@ -257,6 +261,14 @@ abort listener resists an earlier listener's `stopImmediatePropagation()`. Share
 and the canonical `AbortController`/`AbortSignal` must be installable as the Node test
 globals. Coordinate the internal hook; do not expose it in the public Web API or copy
 the host's private symbol.
+
+The current NodeJS session separately confirmed a checkable `node:util` dependency:
+`util.aborted` registers an abort listener weakly against a caller-supplied resource.
+If the resource is collected, the listener detaches and a later abort must leave the
+promise pending. The pinned case and its exclusion live in
+`runtime/node/util/not-applicable` under `test-aborted-util.js`. This weak-resource
+ownership is distinct from the resist-stop-propagation behavior and needs its own
+positive and collection-bounded tests.
 
 ## Recommended next work
 
