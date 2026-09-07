@@ -2701,11 +2701,38 @@ The prose below was written against 1,509, and before that 946; read its
 > finding from a different direction: **node validates its arguments
 > everywhere, so its error constructors are under everything.**
 >
-> Two caveats that limit this table. Names are deduplicated across modules, so
-> 1,188 is distinct functions and not the 4,267 per-module citations. And a
-> "terminal" is only a function nothing says is cascading — it may be a genuine
-> `NTS1001` root or a refusal this parse did not capture as an edge. It is a
-> shape, not a work list.
+> **The largest terminal was checked and it is a genuine root, one construct at
+> one line.** `determineSpecificType` spans `internal/errors.ts:24–76` and is
+> never the subject of its own refusal message — its reason is reported as a
+> construct instead, at line 34:
+>
+> ```
+> internal/errors.ts:34  NTS1001 an `unknown` narrowed to BigInt,
+>                        which it cannot be read back as
+>
+>   case "bigint":
+>     return `type bigint (${value}n)`;
+> ```
+>
+> That gives a chain worth reading end to end:
+>
+> ```
+> errors.ts:34   an `unknown` narrowed to BigInt        one construct
+>   -> determineSpecificType                            114 cascades
+>   -> ERR_INVALID_ARG_TYPE#constructor
+>   -> validateString / validateObject / validateNumber / validateBoolean / …
+>   -> most of the profile's public surface
+> ```
+>
+> This morning's walk stopped at `ERR_INVALID_ARG_TYPE` and called it the root.
+> It is not the root; it is one link. **The root is a single `case "bigint"` in
+> a function that builds an error message**, and it is under the validator layer
+> that is under everything else.
+>
+> One caveat still limits the table above: names are deduplicated across
+> modules, so 1,188 is distinct functions and not the 4,267 per-module
+> citations. The other caveat — that a terminal might be a parse artefact — has
+> been discharged for the largest one and remains open for the rest.
 >
 > The `module#init` choke point is real and it is what empties five modules'
 > *export tables* — but it accounts for 231 of the 4,498, not the bulk. The
