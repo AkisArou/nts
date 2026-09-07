@@ -1,7 +1,7 @@
 // Every module, both modes, as the table the conformance doc carries.
 //
 //   node tooling/conformance/sweep.mjs [--modules a,b,c] [--no-sabotage]
-//                                     [--compiles] [--no-tests]
+//                                     [--compiles] [--addons] [--no-tests]
 //
 // Two reasons this exists rather than thirteen invocations typed by hand.
 //
@@ -19,6 +19,16 @@
 // evaluation order of a second module's top-level statements. This profile is
 // thirteen real multi-module programs sharing an `internal/`, so pointing the
 // compiler at it is a standing test of a dimension the corpus does not have.
+//
+// `--addons --no-tests` is the third axis and the one that is actually the
+// gate: build each module's Node-API addon and run node's tests against the
+// artifact rather than against TypeScript on node. It reports where each
+// module *stops* -- emit refused, the emitted C did not compile, the addon
+// built and loaded but exports the wrong things, or it passes -- because a
+// count of "not green" tells a compiler session nothing and the stage tells it
+// which pass to look at. It exists because that axis was measured for the
+// first time by a shell loop typed by hand, and a hand-typed loop is not
+// something a later reader can re-run to check the claim.
 //
 // `--compiles` adds the other axis: `nts hir` per module, lowered and refused.
 // It is off by default because it is slow, and it exists because a change to
@@ -49,6 +59,7 @@ const arg = (name) => {
 };
 const withSabotage = !argv.includes("--no-sabotage");
 const withCompiles = argv.includes("--compiles");
+const withAddons = argv.includes("--addons");
 const withTests = !argv.includes("--no-tests");
 /**
  * Which `nts` to measure, and why it is not simply `target/release/nts`.
@@ -62,8 +73,9 @@ const withTests = !argv.includes("--no-tests");
  * honoured so that neither existing habit silently does nothing.
  */
 const compiler = process.env.NTS_BIN || process.env.NTS_COMPILER || join(ROOT, "target/release/nts");
+const usesCompilerEarly = withCompiles || withAddons;
 
-if (withCompiles && !existsSync(compiler)) {
+if (usesCompilerEarly && !existsSync(compiler)) {
   console.error(`no compiler at ${compiler}; the compiler session must build it`);
   process.exit(2);
 }
@@ -80,8 +92,9 @@ if (withCompiles && !existsSync(compiler)) {
  *
  * Pinning with `NTS_BIN` makes this check pass trivially, which is the point.
  */
-const compilerStamp = () => (withCompiles ? statSync(compiler).mtimeMs : 0);
-const compilerBefore = withCompiles ? compilerStamp() : 0;
+const usesCompiler = withCompiles || withAddons;
+const compilerStamp = () => (usesCompiler ? statSync(compiler).mtimeMs : 0);
+const compilerBefore = usesCompiler ? compilerStamp() : 0;
 
 const requested = arg("--modules");
 const modules = requested
@@ -90,6 +103,63 @@ const modules = requested
       .filter((e) => e.isDirectory() && existsSync(join(PROFILE, e.name, "src/main.ts")))
       .map((e) => e.name)
       .sort();
+
+/**
+ * The compiled artifact, which is the gate: build the Node-API addon and run
+ * node's own tests against it.
+ *
+ * This axis had no instrument until it had a result, which is backwards. It
+ * was first measured by a shell loop typed by hand, and a shell loop is not
+ * something a later reader can re-run to check a claim -- the same objection
+ * this file already makes to a hand-copied table.
+ *
+ * The classification matters as much as the count. A module can stop at three
+ * different places and only one of them is about the module: `emit-c` can
+ * refuse, the C it emits can fail to compile, or the addon can build and load
+ * and export the wrong things. Collapsing those into "not green" throws away
+ * the only part a compiler session can act on.
+ */
+function addon(module) {
+  const artifact = join(ROOT, "target/node", `${module}.node`);
+  try {
+    execFileSync(join(HERE, "build.sh"), [module], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, NTS_COMPILER: compiler },
+    });
+  } catch (e) {
+    const log = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+    const clang = [...log.matchAll(/error: (.+)/g)].map((m) => m[1]);
+    return clang.length > 0
+      ? { stage: "c-did-not-compile", detail: `${clang.length} clang error(s)`, clang }
+      : { stage: "emit-refused", detail: (log.split("\n").filter(Boolean).pop() ?? "").slice(0, 70), clang: [] };
+  }
+
+  const tally = runAddon(module, artifact);
+  if (tally === null) return { stage: "runner-produced-nothing", detail: "", clang: [] };
+  const applicable = tally.pass + tally.fail;
+  if (tally.pass === 0 && applicable > 0) {
+    return { stage: "built-but-dead", detail: `0 / ${applicable}`, clang: [], tally };
+  }
+  return { stage: applicable > 0 && tally.pass === applicable ? "green" : "partial", detail: `${tally.pass} / ${applicable}`, clang: [], tally };
+}
+
+/** One module against its compiled artifact. */
+function runAddon(module, artifact) {
+  const args = [join(HERE, "run.mjs"), "--module", module, "--addon", artifact, "--json"];
+  try {
+    return JSON.parse(execFileSync(process.execPath, args, {
+      encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"],
+    })).tally;
+  } catch (e) {
+    try {
+      return JSON.parse(e.stdout ?? "").tally;
+    } catch {
+      return null;
+    }
+  }
+}
 
 /**
  * `nts hir` for one module: how many functions lowered, how many constructs
@@ -148,16 +218,21 @@ for (const module of modules) {
   }
   const hollow = withTests && withSabotage ? run(module, true)?.pass ?? null : null;
   const lowering = withCompiles ? compiles(module) : null;
+  const compiled = withAddons ? addon(module) : null;
   const applicable = real.pass + real.fail;
   totalPass += real.pass;
   if (hollow !== null) totalHollow += hollow;
-  rows.push({ module, pass: real.pass, applicable, hollow, lowering });
+  rows.push({ module, pass: real.pass, applicable, hollow, lowering, compiled });
   process.stderr.write(
-    withTests
-      ? `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
-        `${hollow === null ? "" : ` hollow ${hollow}`}` +
+    withAddons && !withTests
+      ? `  ${module.padEnd(22)} ${compiled.stage.padEnd(20)} ${compiled.detail}` +
         `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`
-      : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused` : "no compiler"}\n`,
+      : withTests
+        ? `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
+          `${hollow === null ? "" : ` hollow ${hollow}`}` +
+          `${compiled === null ? "" : ` addon ${compiled.stage}`}` +
+          `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`
+        : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused` : "no compiler"}\n`,
   );
 }
 
@@ -168,7 +243,38 @@ rows.sort((a, b) =>
     ? (b.pass / (b.applicable || 1)) - (a.pass / (a.applicable || 1))
     : (b.lowering?.lowered ?? 0) - (a.lowering?.lowered ?? 0));
 
-if (withTests) {
+if (withAddons && !withTests) {
+  console.log(`\n| module | compiled artifact | |`);
+  console.log(`| --- | :---: | :---: |`);
+  for (const { module, compiled } of rows) {
+    console.log(`| \`${module}\` | ${compiled.stage} | ${compiled.detail} |`);
+  }
+  const green = rows.filter((r) => r.compiled.stage === "green").length;
+  console.log(`\n${green} of ${rows.length} modules' compiled artifacts pass every applicable test.`);
+
+  // The classification is the actionable half. A count of "not green" tells a
+  // compiler session nothing; the error text tells it which pass to look at.
+  const byStage = new Map();
+  for (const { compiled } of rows) byStage.set(compiled.stage, (byStage.get(compiled.stage) ?? 0) + 1);
+  console.log("\nwhere they stop:");
+  for (const [stage, n] of [...byStage].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(n).padStart(3)}  ${stage}`);
+  }
+
+  const classes = new Map();
+  for (const { compiled } of rows) {
+    for (const raw of compiled.clang) {
+      const key = raw.replace(/'[^']*'/g, "'X'").slice(0, 72);
+      classes.set(key, (classes.get(key) ?? 0) + 1);
+    }
+  }
+  if (classes.size > 0) {
+    console.log("\nclang error classes:");
+    for (const [k, n] of [...classes].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+      console.log(`  ${String(n).padStart(3)}  ${k}`);
+    }
+  }
+} else if (withTests) {
   console.log(`\n| module | node's tests | hollow |${withCompiles ? " compiles |" : ""}`);
   console.log(`| --- | :---: | :---: |${withCompiles ? " :---: |" : ""}`);
 } else {
@@ -176,7 +282,7 @@ if (withTests) {
   console.log(`| --- | :---: |`);
 }
 let totalLowered = 0;
-for (const { module, pass, applicable, hollow, lowering } of rows) {
+for (const { module, pass, applicable, hollow, lowering } of withAddons && !withTests ? [] : rows) {
   const complete = applicable > 0 && pass === applicable;
   const count = complete ? `**${pass} / ${applicable}**` : `${pass} / ${applicable}`;
   const compiled = lowering ? `${lowering.lowered} / ${lowering.refused}` : "—";
@@ -193,7 +299,7 @@ if (withTests) {
       (withSabotage ? `, of which ${totalHollow} are hollow.` : "."),
   );
 }
-if (withCompiles) {
+if (usesCompiler) {
   const compilerAfter = compilerStamp();
   if (compilerAfter !== compilerBefore) {
     console.log(
@@ -204,7 +310,9 @@ if (withCompiles) {
         `Pin a copy and re-run with NTS_BIN=<path>.`,
     );
     process.exitCode = 3;
-  } else {
+  } else if (withCompiles) {
     console.log(`${totalLowered} functions lower, measured with ${compiler}.`);
+  } else {
+    console.log(`measured with ${compiler}.`);
   }
 }
