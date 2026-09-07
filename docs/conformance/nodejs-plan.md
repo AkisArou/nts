@@ -335,6 +335,54 @@ concrete.
 
 ---
 
+## A2. Every module's shape, and what gates it
+
+`blockers.mjs` over all 22, on a pinned binary. The count that matters is
+**what `shape.mjs` needs**, not what the addon publishes: `async_hooks` publishes
+17 of 31 exports and misses 4 of the 7 names node exposes, because the 17 are
+internal helpers `net` and `http` import across module boundaries.
+
+| module | shape needs | published | largest chain root |
+| --- | :---: | :---: | --- |
+| `punycode` | 6 | **4** | — (only `ucs2`, `version` unpublished) |
+| `os` | 23 | 4 | `ERR_OUT_OF_RANGE#constructor` (2) |
+| `async_hooks` | 7 | 3 | `determineSpecificType` (2) |
+| `path` | 14 | 2 | `determineSpecificType` (11) |
+| `http` | 9 | 1 | `methods` (2) |
+| `timers` | 7 | 1 | `insert` (3) |
+| `querystring` | 1 | 0 | `noEscape` (1) |
+| `string_decoder` | 1 | 0 | `decodeIn` (1) |
+| `console`, `dgram`, `events`, `net`, `zlib` | 2 | 0 | `ERR_OUT_OF_RANGE#constructor` (net, 5) |
+| `util` | 3 | 0 | — |
+| `process` | 4 | 0 | `stdinStream` (1) |
+| `diagnostics_channel` | 6 | 0 | `channel` (3) |
+| `assert`, `readline` | 8 | 0 | `innerOk` (1), `defer` (4) |
+| `stream` | 13 | 0 | `writeToWritable` (2) |
+| `url` | 13 | 0 | `Url#resolveObject` (2) |
+| `buffer` | 14 | 0 | `decodeIn` (3) |
+
+**`punycode` is not merely first, it is first by a distance.** Four of its six
+shape names publish and compute; the fifth is `ucs2` and the sixth is `version`,
+which no test touches.
+
+**`determineSpecificType` is the largest single lowering root in the profile** —
+11 exports in `path` and 2 in `async_hooks`, from one `switch (typeof value)`
+that spells the tail of an `ERR_INVALID_ARG_TYPE` message.
+`ERR_OUT_OF_RANGE#constructor` is next, gating 5 exports in `net` and 2 in `os`.
+Both are in `internal/errors.ts`, which is the answer to "where is the compiled
+axis actually stuck": in the code that formats messages for arguments that
+failed validation.
+
+**Two single-name modules are worth knowing about**, because a module whose
+shape needs one name is a short path once its blocker moves. `querystring` needs
+`QueryString`, an object of functions — the same shape as `punycode`'s `ucs2`,
+so 5c buys it too. `string_decoder` needs the `StringDecoder` class, and needs
+`Buffer#toString` lowered as well, since every method cascades from it.
+
+`fs` is absent from the table because `nts layouts` prints no public API section
+for it — 5098 lines of layouts, exit 0, and no `api` anywhere in the output,
+where every other module has one. Reported to the compiler lane.
+
 ## B. Breadth — the 24 modules that do not exist
 
 Node ships 46 public modules; this profile implements 22. The table in
