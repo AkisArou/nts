@@ -2904,6 +2904,8 @@ Current state, all lanes:
 | `querystring`, TypeScript | 16,076 | 0 |
 | `url`, TypeScript | 20,120 | 0 |
 | `buffer`, TypeScript | 44,225 | 0 |
+| `path` with `win32`, TypeScript | 42,882 | 0 |
+| `string_decoder`, TypeScript | 14,688 | 0 |
 
 Two processes are needed on the TypeScript lane, because inside the
 substitution `require("node:path")` and `require("path")` are the same object
@@ -2911,6 +2913,13 @@ and node's real module is unreachable from there. Inputs are generated once in
 the host and handed to the probe as a file rather than regenerated from a shared
 seed, so both sides answer identically the same questions instead of two
 sequences that are supposed to agree.
+
+**The differential runs inside the sweep now**, at 200 iterations, alongside the
+three audits and for the same argument that put them there. All three bugs it
+has found showed up in the first few hundred inputs — systematic divergences are
+dense, and the long runs are for confidence rather than discovery. The full pass
+over every corpus is `differential-ts.mjs --all`, worth running when a corpus
+changes or an encoding is touched.
 
 Both tools have a recorded negative control. The addon one crashed rather than
 reported the first time it had a real defect to find; the TypeScript one yields
