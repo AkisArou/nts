@@ -3,6 +3,7 @@ import { trimHTTPTabOrSpace } from "../core/ascii.ts";
 import { networkError } from "../core/errors.ts";
 import { checkNetworkPort } from "../core/network-port.ts";
 import type { URLRecord } from "../provider/primitives.ts";
+import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import { ReadableStream } from "../streams/readable.ts";
 import { BodyState } from "./body.ts";
 import { Headers } from "./headers.ts";
@@ -15,6 +16,16 @@ import type {
   TransportRequest,
   TransportResponse,
 } from "./transport.ts";
+
+declare function nts_environment_platform(): WebPlatformRuntime;
+
+/** Canonical environment-scoped Fetch entry point. */
+export function fetch(
+  input: string | Request,
+  init: RequestInit | undefined = undefined,
+): Promise<Response> {
+  return nts_environment_platform().fetch(input, init);
+}
 
 function checkURL(url: URLRecord): void {
   validateNetworkURL(url);
@@ -227,7 +238,7 @@ export class FetchClient {
             responseBody,
             fragment < 0 ? url.href : url.href.slice(0, fragment),
             count > 0,
-            this.context.bodyPolicy,
+            this.context,
           );
           retained = true;
           return result;

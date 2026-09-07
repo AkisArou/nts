@@ -1,7 +1,8 @@
 import { coerceToByteString, requireDictionary, toUnsignedShort } from "../core/webidl.ts";
-import type { RandomSource, URLParser } from "../provider/primitives.ts";
+import type { RandomSource } from "../provider/primitives.ts";
+import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import type { ReadableStream } from "../streams/readable.ts";
-import { Body, BodyState, convertBodyInit, standardBodyPolicy } from "./body.ts";
+import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
 import type { HeaderEntry, HeadersInit } from "./headers.ts";
@@ -17,13 +18,7 @@ export interface ResponseContext {
   bodyPolicy: BodyPolicy;
 }
 
-const noRandom: RandomSource = {
-  fill() {
-    throw new TypeError("FormData needs an environment-owned RandomSource");
-  },
-};
-
-const defaultContext: ResponseContext = { random: noRandom, bodyPolicy: standardBodyPolicy };
+declare function nts_environment_platform(): WebPlatformRuntime;
 
 interface ConvertedResponseInit {
   readonly headers: Headers | undefined;
@@ -74,7 +69,7 @@ export class Response extends Body {
   constructor(
     body: BodyInit | null = null,
     init: ResponseInit | null = {},
-    context: ResponseContext = defaultContext,
+    context: ResponseContext = nts_environment_platform().requestContext,
   ) {
     // Web IDL converts arguments left to right before the constructor algorithm.
     const convertedBody = convertBodyInit(body);
@@ -151,9 +146,10 @@ export class Response extends Body {
     return result;
   }
 
-  static redirect(url: string, status: number, urls: URLParser): Response {
+  static redirect(url: string, status = 302): Response {
     if (!isRedirectStatus(status)) throw new RangeError("Invalid redirect status");
-    const absolute = urls.parse(url).href;
+    const runtime = nts_environment_platform();
+    const absolute = runtime.requestContext.urls.parse(url).href;
     const result = new Response(null, { status, headers: [["location", absolute]] });
     result.headers.makeImmutable();
     return result;
@@ -174,15 +170,15 @@ export class Response extends Body {
     stream: ReadableStream<Uint8Array> | null,
     url: string,
     redirected: boolean,
-    policy: BodyPolicy,
+    context: ResponseContext,
   ): Response {
-    const result = new Response(null, { status, statusText, headers });
+    const result = new Response(null, { status, statusText, headers }, context);
     result.bodyState = new BodyState(
       stream,
       result.headers.get("content-type"),
       null,
       null,
-      policy,
+      context.bodyPolicy,
     );
     result.responseURL = url;
     result.wasRedirected = redirected;

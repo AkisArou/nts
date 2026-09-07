@@ -46,6 +46,8 @@ const {
   FormData,
   Headers,
   DOMException,
+  Request,
+  Response,
   ReadableStream,
   ReadableStreamDefaultController,
   ReadableStreamDefaultReader,
@@ -61,6 +63,7 @@ const hostRuntime = createHostNodeWebPlatform();
 
 let passed = 0;
 let failed = 0;
+let notApplicable = 0;
 
 function gitBlobHash(data) {
   return createHash("sha1").update(`blob ${data.length}\0`).update(data).digest("hex");
@@ -86,6 +89,11 @@ function reportFailure(path, name, error) {
   console.error(`FAIL ${path} :: ${name}\n  ${detail}`);
 }
 
+function reportNotApplicable(path, name, reason) {
+  notApplicable++;
+  console.log(`NOT-APPLICABLE ${path} :: ${name}\n  ${reason}`);
+}
+
 async function settleWithCleanups(outcome, cleanups) {
   let failed = false;
   let failure;
@@ -108,7 +116,7 @@ async function settleWithCleanups(outcome, cleanups) {
   if (failed) throw failure;
 }
 
-function createWptContext(path, pending) {
+function createWptContext(path, pending, excludedTests, seenExcludedTests) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
   const context = createContext({
@@ -137,6 +145,8 @@ function createWptContext(path, pending) {
     Int16Array,
     Int32Array,
     MessageChannel,
+    Request,
+    Response,
     // The APIs under test are host-realm modules, so the ordinary objects they
     // return must be compared with that same realm's intrinsic prototype.
     Object,
@@ -364,6 +374,13 @@ function createWptContext(path, pending) {
       return assert.rejects(promise, constructor, message);
     },
     test(fn, name) {
+      const reason = excludedTests[name];
+      if (reason !== undefined) {
+        assert.equal(seenExcludedTests.has(name), false, `Duplicate excluded WPT name: ${name}`);
+        seenExcludedTests.add(name);
+        reportNotApplicable(path, name, reason);
+        return;
+      }
       const cleanups = [];
       const test = {
         add_cleanup(cleanup) {
@@ -407,7 +424,9 @@ function createWptContext(path, pending) {
 
 async function runFixture(root, path, data, verifiedSupport) {
   const pending = [];
-  const context = createWptContext(path, pending);
+  const excludedTests = manifest.notApplicable?.[path] ?? {};
+  const seenExcludedTests = new Set();
+  const context = createWptContext(path, pending, excludedTests, seenExcludedTests);
   const source = data.toString();
   const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
   for (const match of scripts) {
@@ -422,6 +441,11 @@ async function runFixture(root, path, data, verifiedSupport) {
   }
   runInContext(source, context, { filename: path, timeout: 5000 });
   await Promise.all(pending);
+  assert.deepEqual(
+    [...seenExcludedTests].sort(),
+    Object.keys(excludedTests).sort(),
+    `Stale or unobserved WPT exclusions: ${path}`,
+  );
 }
 
 const localSupport = new Map();
@@ -450,6 +474,14 @@ for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.tests)) {
   await runFixture(nodeWptRoot, path, readVerified(nodeWptRoot, path, expectedHash), nodeSupport);
 }
 
-console.log(JSON.stringify({ upstreamTests: passed + failed, passed, failed }));
+console.log(
+  JSON.stringify({
+    upstreamTests: passed + failed + notApplicable,
+    applicableTests: passed + failed,
+    passed,
+    failed,
+    notApplicable,
+  }),
+);
 hostRuntime.close();
 process.exit(failed === 0 ? 0 : 1);

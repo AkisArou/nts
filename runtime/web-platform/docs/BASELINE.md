@@ -1017,3 +1017,39 @@ currently measured with one localized assertion at that exact line; the slice is
 final until the compiler/common-runtime lane supplies the checked erased-value shape
 and the assertion is removed. The passing state-machine evidence does not waive the
 source audit.
+
+The exported Fetch entry points now obtain their hidden policy and provider state
+from the owning `NtsEnvironment`. `new Request(input, init)`, `new Response(body,
+init)`, `Response.redirect(url, status)`, and the canonical exported `fetch(input,
+init)` have their public signatures; internal transport construction may still pass
+the same typed context explicitly. There is no module-global runtime, generated realm
+subclass, or host-only constructor wrapper. A local live-network test constructs a
+public `Request` and dispatches it through the exported `fetch`, proving that both
+look up the runtime installed for the active environment rather than relying on the
+old test helper arguments.
+
+Five additional complete, unchanged current WPT fixtures for pure `Headers`
+behavior are pinned by Git blob hash. They add 77 source cases for construction,
+ByteString validation, casing, combination, `Set-Cookie`, mutation during iteration,
+and API structure. One case is explicitly not applicable to the standalone
+server/mobile profile: a browser response guard hides `Set-Cookie`, whereas modern
+Node/standalone Undici intentionally exposes it through `getSetCookie()`. The
+applicability entry names the exact upstream test and its reason, and the runner
+fails if the name disappears or is not observed, so this cannot silently become a
+stale exclusion.
+
+Of the 76 applicable new cases, 73 pass. The three failures inspect the immediate
+prototype and enumerable method descriptors of `Headers` iterators and are the same
+canonical Web-IDL iterator-object compiler prerequisite already exposed by readable
+stream async iteration; shared source does not manufacture that shape with prototype
+or descriptor operations. Across the complete pinned slice, 1502 of 1511 applicable
+cases pass, with one separately reported not-applicable case. The other six failures
+remain the byte/BYOB tee case, two direct-promise-fulfillment cases, two typed
+explicit-receiver callback cases, and the async-iterator structural case. The local
+Node-host suite remains 148/148 and the root TypeScript solution is green.
+
+The live NTS check at this checkpoint reports 616 primary `NTS1001` refusals, 78
+dependent `NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module
+diagnostics, and no invalid HIR. The previously visible type-only-import cycle is no
+longer present. These counts are the current final-source dependency frontier, not
+compiled-provider completion.

@@ -6,6 +6,7 @@ import {
   requireDictionary,
 } from "../core/webidl.ts";
 import type { RandomSource, URLParser, URLRecord } from "../provider/primitives.ts";
+import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers, isToken } from "./headers.ts";
@@ -32,6 +33,8 @@ export interface RequestContext {
   bodyPolicy: BodyPolicy;
   baseURL?: string;
 }
+
+declare function nts_environment_platform(): WebPlatformRuntime;
 
 interface ConvertedRequestInit {
   readonly body: BodyInit | null | undefined;
@@ -150,7 +153,17 @@ export class Request extends Body {
   readonly parsedURL: URLRecord;
   private readonly context: RequestContext;
 
-  constructor(input: string | Request, init: RequestInit | null, context: RequestContext) {
+  constructor(input: string | Request, init?: RequestInit);
+  /** @internal */ constructor(
+    input: string | Request,
+    init: RequestInit | null | undefined,
+    context: RequestContext,
+  );
+  constructor(
+    input: string | Request,
+    init: RequestInit | null | undefined = undefined,
+    context: RequestContext = nts_environment_platform().requestContext,
+  ) {
     const source = input instanceof Request ? input : null;
     const inputURL = source === null ? coerceToUSVString(input) : source.url;
     const convertedInit = convertRequestInit(init);

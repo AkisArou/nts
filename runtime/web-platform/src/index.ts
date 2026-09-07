@@ -73,6 +73,8 @@ export type { RequestCredentials, RequestInit, RequestRedirect } from "./fetch/r
 export { Response } from "./fetch/response.ts";
 export type { ResponseInit } from "./fetch/response.ts";
 
+export { fetch } from "./fetch/fetch.ts";
+
 export { Blob, File } from "./file/blob.ts";
 export type { BlobEndings, BlobOptions, BlobPart, FileOptions } from "./file/blob.ts";
 

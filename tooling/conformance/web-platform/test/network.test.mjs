@@ -11,6 +11,8 @@ import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling
 import {
   ReadableStream,
   AbortController,
+  fetch as webFetch,
+  Request,
   TextEncoder,
   Response,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
@@ -77,7 +79,8 @@ suite("HTTP POST, duplicate Set-Cookie, real response identity and connection re
     res.end(req.method + ":" + body);
   });
   const api = runtime(t);
-  const response = await api.fetch(s.url, { method: "POST", body: "Καλημέρα" });
+  const request = new Request(s.url, { method: "POST", body: "Καλημέρα" });
+  const response = await webFetch(request);
   assert.ok(response instanceof Response);
   assert.deepEqual(response.headers.getSetCookie(), ["a=1", "b=2"]);
   assert.equal(await response.text(), "POST:Καλημέρα");

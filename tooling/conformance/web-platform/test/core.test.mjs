@@ -78,10 +78,9 @@ globalThis.WebSocket = class {
 const api = createHostNodeWebPlatform({}, {}, (error) => {
   throw error;
 });
-const makeRequest = (input, init = {}) => new Request(input, init, api.requestContext);
-const makeResponse = (body = null, init = {}) => new Response(body, init, api.requestContext);
-const makeRedirectResponse = (url, status = 302) =>
-  Response.redirect(url, status, api.requestContext.urls);
+const makeRequest = (input, init = {}) => new Request(input, init);
+const makeResponse = (body = null, init = {}) => new Response(body, init);
+const makeRedirectResponse = (url, status = 302) => Response.redirect(url, status);
 const utf8 = new TextEncoder();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 

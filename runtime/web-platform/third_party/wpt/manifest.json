@@ -3,8 +3,13 @@
   "retrieved": "2026-09-07",
   "pinType": "Git blob SHA-1 (content addressed)",
   "files": {
+    "fetch/api/headers/header-setcookie.any.js": "cafb780c2c75a9ae6a84fb842f0d0fa075aeffd8",
+    "fetch/api/headers/headers-basic.any.js": "ead1047645a15fa63fdbb665eaf8fc685b3bde7b",
+    "fetch/api/headers/headers-casing.any.js": "20b8a9d375aaa0550f44df27cd3cbaec3bb1c772",
     "fetch/api/headers/headers-combine.any.js": "4f3b6d11df97481c4593ec69ae3432692d4749f4",
+    "fetch/api/headers/headers-errors.any.js": "82dadd823403898ea5cf9ae30b45751643d31d75",
     "fetch/api/headers/headers-normalize.any.js": "68cf5b85f3acb7fcfe6275ffa0c4d37843ac2935",
+    "fetch/api/headers/headers-structure.any.js": "d826bcab2a01f232f2f5bed89fb7d023bf038386",
     "xhr/formdata/append.any.js": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
     "xhr/formdata/constructor.any.js": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
     "xhr/formdata/delete.any.js": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
@@ -15,6 +20,11 @@
     "xhr/formdata/set-blob.any.js": "6a8b5c717050598058d44ac6772ed04722924be3",
     "xhr/formdata/set.any.js": "734e55bb759cad5df13bb4e374a30eac28e85f2a",
     "LICENSE.md": "39c46d03ac2988226f949ee7ab3c7347d5481bd8"
+  },
+  "notApplicable": {
+    "fetch/api/headers/header-setcookie.any.js": {
+      "Set-Cookie is a forbidden response header": "Browser response filtering is outside the standalone server/mobile profile; modern Node and standalone Undici expose Set-Cookie through getSetCookie()."
+    }
   },
   "nodeWpt": {
     "root": "third_party/node/test/fixtures/wpt",
