@@ -69,11 +69,22 @@ function reach(start) {
       const target = resolve(dirname(file), spec);
       if (!existsSync(target)) continue;
       const rel = relative(ROOT, target);
-      if (rel.startsWith("runtime/web-platform")) {
-        if (!found.has(rel)) found.set(rel, path.map((p) => relative(ROOT, p)));
-        continue;
-      }
-      if (!rel.startsWith("runtime/node") || seen.has(target)) continue;
+      const isWeb = rel.startsWith("runtime/web-platform");
+      if (isWeb && !found.has(rel)) found.set(rel, path.map((p) => relative(ROOT, p)));
+      // Keep walking *through* web-platform rather than stopping at the first
+      // file of theirs. Stopping there under-reports badly: it said only `fs`
+      // reached `streams/readable.ts`, when `util` reaches the stream
+      // dictionaries through
+      //
+      //   core/events.ts -> provider/environment.ts
+      //                  -> provider/web-platform-runtime.ts -> fetch/body.ts
+      //
+      // -- four hops inside their lane, none of them visible from mine. That
+      // under-report went to the web-platform lane as a scope answer, which is
+      // the fourth one of mine to be short and the first from the tool built to
+      // stop me being short.
+      if (!isWeb && !rel.startsWith("runtime/node")) continue;
+      if (seen.has(target)) continue;
       seen.add(target);
       queue.push([target, [...path, target]]);
     }

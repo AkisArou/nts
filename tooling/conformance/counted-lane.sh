@@ -28,7 +28,29 @@
 set -u
 cd "$(dirname "$0")/../.."
 
-modules="${*:-buffer os path punycode querystring string_decoder url}"
+# Every module, not a remembered list of the seven that built once.
+#
+# This read `buffer os path punycode querystring string_decoder url`, which was
+# the set that compiled on the night the lane was written. The goal it serves
+# says "every module that builds", and a hardcoded list cannot answer that: the
+# day an eighth module starts compiling, the lane keeps reporting seven and
+# nothing says a row is missing. That is the quiet kind of wrong -- a green sheet
+# that is silently incomplete -- and it is the kind this lane exists to catch in
+# the allocator.
+#
+# So the default is every directory under `runtime/node`, and the modules that do
+# not compile report `did not build` rather than being absent. A longer output is
+# the price of the set being derived rather than recalled.
+if [ "$#" -gt 0 ]; then
+  modules="$*"
+else
+  modules=$(for d in runtime/node/*/; do
+    name=$(basename "$d")
+    [ -d "$d/src" ] || continue
+    case "$name" in node_modules|internal) continue ;; esac
+    printf '%s ' "$name"
+  done)
+fi
 failures=0
 
 for module in $modules; do
