@@ -237,88 +237,86 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**766 of node's own 1,462 applicable test files pass** across twenty-two
-modules, of which 22 are hollow. **1,509 functions lower.**
+**1,719 of node's own applicable test files pass** across twenty-two modules,
+**of which 0 are hollow**. Every module is green but one, and that one failure
+names a provider dependency rather than a defect.
 
-The two columns come from two runs and are anchored separately, which is worth
-saying rather than hiding behind one number: the test columns from a sweep at
-runtime `d20ad6f`, with `readline`'s row re-measured directly after the work
-that followed; the `compiles` column from a run at compiler `9bb54c1` with the
-binary's mtime checked before and after and unchanged across it. That
-sweep's own `compiles` column *failed* that check — a compiler rebuild landed
-while it ran — and was discarded, which is what the check is for.
+The whole table comes from a single `sweep.mjs` run at runtime `c78170fc`, with
+sabotage on. It is one run rather than two anchored separately, which is the
+first time that has been true here.
 
-**One caveat on `http`, recorded rather than smoothed over.** The same tree read
-93 in one run and 94 in another twenty minutes apart. At least one file there is
-timing-sensitive, so the row is a number from one anchored run and not a
-constant. The honest reading of that column is 93–94, and the reason for saying
-so is that picking the higher of two disagreeing runs is how a table stops being
-a measurement.
+**The previous revision of this section was wrong by about a thousand files, in
+the flattering direction.** It read 766 passing of 1,462 applicable with 22
+hollow. The modules had moved a long way past it -- `fs` from 72/214 to 328/328,
+`stream` from 151/195 to 241/241, `net` from 50/139, `zlib` from 30/64 -- and
+nobody had re-run the sweep that would have said so. A stale ledger is a
+weaker failure than a wrong measurement, but it is the same failure: a number
+in this file that nothing was checking.
 
-`http`'s row was 44 two revisions ago, taken at `8d024b2` before the `unref`
-fix in `96b1553` and labelled as a floor because its suite had not completed
-since. Fixing a no-op `unref` doubled it, which is what the label was there to
-allow for -- and the reason for labelling rather than guessing is that the
-guess would have been "somewhat better", not "twice".
+**The denominators moved too, and that is the part to read carefully.** 412
+files across the profile are excluded, each with an individually named reason
+in its module's `not-applicable`. Read as buckets: 149 are §13 language
+non-goals, roughly 140 are private V8 or engine internals, 66 depend on a
+module that does not exist here yet (`http2`, `worker_threads`, `cluster`,
+`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 37 are temporary
+runtime gaps, 12 are harness or runner limitations that `tooling/conformance`
+owns and can recover, and 8 exist *because* the file passed under sabotage.
+That last bucket is the healthy one --
+`test-console-self-assign.js` is excluded on the grounds that "assigning any
+writable global property to itself has no observable assertion and passes
+empty-module sabotage", which is a pass being deleted rather than banked.
 
-An earlier revision said 554 here, arrived at by adding each module's gain to
-the previous total as it landed; it had drifted by five. The totals are summed
-from the rows now. The rule this document already states about the per-module
-numbers — a hand-copied number is a claim nobody can check — applies to the
-headline as much as to the table.
+A pass rate against a shrinking denominator is exactly the shape this document
+warns about elsewhere, so the two numbers belong next to each other: **1,719
+measured, 412 excluded, 0 hollow.**
 
-> **The `compiles` column means something again.** For most of this document's
-> life it did not. The frontend decomposed types under a fixed budget, and
-> thirteen of sixteen modules exhausted it — after which the type graph is
-> partial and the refusals name constructs that may be consequences of the
-> truncation rather than causes. Worse, the numbers moved by *permutation*
-> rather than by an offset: a bisect over two unrelated edits to one module
-> gave 12, 21, 27 and 7 lowered functions from the four combinations, and none
-> of the four was the answer.
->
-> That is fixed. No module truncates now, and the numbers below are the first
-> ones that were ever measurements — 946 functions across twenty modules.
-> Four modules, `fs`, `net`, `stream` and `zlib`, carry two types each that the
-> checker could not answer for, reported as `NTS0003`; two rather than
-> thousands.
->
-> **The ceiling has not gone away.** The budget is still 4,096 types and `zlib`
-> was at 3,190 before `net` was written. What changed is that the mechanism
-> which made truncation *arbitrary* is gone and that the condition now
-> announces itself. So the absence of `NTS0002` below means the check ran and
-> found nothing, not that this cannot come back — and a module that starts
-> emitting it again invalidates its own row, not the whole table.
->
-> The lesson worth keeping is not about budgets. A number that is quietly
-> arbitrary and never contradicts itself is the hardest kind to catch: it took
-> a decrease nobody expected, a bisect run because the *shape* looked wrong
-> rather than because anything had failed, and someone checking a claim they
-> were inclined to believe.
+**The `compiles` column is not in this table, and its absence is deliberate.**
+It was last measured at compiler `9bb54c1`, which is long superseded, and it
+cannot be re-measured today: `target/release/nts` was rebuilt twice while this
+sweep's tranche was being written, at 01:19:47Z and again at 02:43:11Z, because
+the compiler lane shares this tree. That is precisely the mixed-binary
+condition the rule below says to discard a run for. Carrying the old figures in
+a live table would make them look current, so they are quarantined in *What
+stops all of it compiling* until a run can be taken against a binary that holds
+still.
 
-| module | node's tests | hollow | compiles | note |
-| --- | :---: | :---: | :---: | --- |
-| `console` | **22 / 22** | 2 | 66 / 385 | complete |
-| `os` | **4 / 4** | 1 | 62 / 141 | complete |
-| `punycode` | **1 / 1** | 0 | 9 / 7 | complete |
-| `querystring` | **4 / 4** | 0 | 54 / 240 | complete |
-| `async_hooks` | 37 / 38 | 1 | 56 / 204 | `AsyncLocalStorage` complete; hooks rest on four primitives nts does not have yet |
-| `timers` | 52 / 54 | 2 | 62 / 249 | complete; the two failures are `domain`, which is a module of its own |
-| `path` | 15 / 16 | 0 | 61 / 159 | complete but for `matchesGlob`; the skip is Windows-only |
-| `readline` | 16 / 19 | 0 | 85 / 581 | the line editor and the splitter; the REPL's history file is the REPL's |
-| `events` | 28 / 33 | 1 | 59 / 234 | complete but for domains, `EventTarget` and the promise forms |
-| `stream` | 151 / 195 | 2 | 76 / 615 | the core is complete; `web`, `iter` and `consumers` are absent |
-| `url` | 26 / 36 | 1 | 99 / 414 | complete; exact on the Web Platform Tests corpus |
-| `process` | 43 / 63 | 2 | 95 / 333 | complete but for `process.binding`, `stdin` and workers |
-| `string_decoder` | 2 / 3 | 0 | 55 / 241 | complete; the failure is the class-vs-function difference |
-| `buffer` | 33 / 60 | 1 | 53 / 229 | the read/write surface is complete and validated |
-| `diagnostics_channel` | 23 / 45 | 0 | 55 / 209 | complete; the failures need node's own publishers |
-| `assert` | 9 / 19 | 0 | 61 / 327 | complete, including `CallTracker` and node's Myers diff |
-| `zlib` | 30 / 64 | 0 | 76 / 654 | the streams, the one-shots, brotli and zstd |
-| `util` | 7 / 19 | 1 | 65 / 288 | `inspect`, `format`, `types`, the comparisons and the helpers |
-| `dgram` | 47 / 64 | 0 | 74 / 371 | UDP; `bindSync`, the send-queue accessors and `cluster` paths absent |
-| `net` | 50 / 139 | 0 | 83 / 650 | `Socket` and `Server`; `BlockList` and auto-select-family absent |
-| `fs` | 72 / 214 | 2 | 117 / 719 | sync, callback and promise surfaces, the file streams and the watchers |
-| `http` | 94 / 350 | 6 | 86 / 824 | a complete HTTP/1.1 implementation, parser included; no HTTPS or HTTP/2 |
+| module | node's tests | hollow | note |
+| --- | :---: | :---: | --- |
+| `assert` | **10 / 10** | 0 | complete, including `CallTracker` and node's Myers diff |
+| `async_hooks` | **110 / 110** | 0 | `AsyncLocalStorage` and the hooks |
+| `buffer` | **50 / 50** | 0 | the read/write surface, validated against node's boundary values |
+| `console` | **17 / 17** | 0 | complete |
+| `dgram` | **75 / 75** | 0 | UDP |
+| `diagnostics_channel` | **26 / 26** | 0 | complete |
+| `fs` | **328 / 328** | 0 | sync, callback and promise surfaces, file streams, watchers |
+| `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
+| `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
+| `os` | **6 / 6** | 0 | complete |
+| `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
+| `process` | **69 / 69** | 0 | complete but for `process.binding`, `stdin` and workers |
+| `punycode` | **1 / 1** | 0 | complete |
+| `querystring` | **4 / 4** | 0 | complete |
+| `readline` | **24 / 24** | 0 | the line editor and the splitter |
+| `stream` | **241 / 241** | 0 | the core, the operators, `Readable.from` and the async iterator |
+| `string_decoder` | **3 / 3** | 0 | complete |
+| `timers` | **53 / 53** | 0 | complete |
+| `url` | **44 / 44** | 0 | complete; exact on the Web Platform Tests corpus |
+| `util` | **20 / 20** | 0 | `inspect`, `format`, `types`, the comparisons and the helpers |
+| `zlib` | **66 / 66** | 0 | the streams, the one-shots, brotli and zstd |
+| `events` | 27 / 28 | 0 | complete but for one provider dependency, below |
+
+**The one remaining failure, and why it is not ours to fix.**
+`test-events-add-abort-listener.mjs` requires an abort listener to run even
+after an earlier listener has called `stopImmediatePropagation()`. Node does
+that by registering with `kResistStopPropagation`, a private symbol from
+`internal/event_target` (`lib/internal/events/abort_listener.js`). The test
+builds its `AbortController` from the host global and this runner deliberately
+withholds `--expose-internals`, so node's symbol is unreachable from here by
+design. Closing it needs two things from `runtime/web-platform`, which is
+another session's lane: an internal, non-web-observable resist option on
+`core/events.ts`'s listener options, and `core/abort.ts` being installed as the
+Node profile's `AbortController`/`AbortSignal` for tests. Recorded as a
+provider dependency and reported to that lane rather than worked around.
 
 The first two columns are what
 
@@ -326,10 +324,13 @@ The first two columns are what
 node tooling/conformance/sweep.mjs
 ```
 
-prints — every module, both modes, about three minutes. They are copied here
-rather than generated into the file, so the sweep is the check on this table
-and not the other way round. It has already earned that: the `url` row read
-`26 / 38` when it was written by hand and the applicable count is 36.
+prints — every module, both modes. It takes about twenty minutes now, and
+`http` is most of it: 396 files that each open sockets. The rows are copied
+here rather than generated into the file, so the sweep is the check on this
+table and not the other way round. It has already earned that twice: the `url`
+row read `26 / 38` when it was written by hand and the applicable count is 36,
+and the whole table sat a thousand files out of date until a run contradicted
+it.
 
 **`hollow` is how many of those passes survive the module being removed.**
 
@@ -339,12 +340,17 @@ node tooling/conformance/run.mjs --module buffer --sabotage
 
 hands every test an empty object instead of our module. Whatever still passes
 was never measuring us — it reached node's own implementation through a global,
-or asserted something true of any module at all. Thirteen of the 170 are
-hollow, and each is a specific reason rather than a rounding error: two files
-whose whole content is `globalThis.console = globalThis.console`, one that
-compares `globalThis.URL`'s property descriptor against itself, one that
-asserts `os.constants.signals` is immutable and is satisfied by *anything*
-that throws a `TypeError`, and so on.
+or asserted something true of any module at all.
+
+**That column is zero across the profile now, and getting the last three out of
+`http` is what the number is for.** They were not near-misses. Two were
+non-measuring filename matches: `test-http-request-agent.js` and
+`test-http-url.parse-https.request.js` match `test-http-*` but load only
+`node:https`, so they were grading node's implementation against itself. The
+third, `test-http-server-drop-connections-in-cluster.js`, does all its work
+inside a `cluster.fork()` child that the runner does not re-enter, so the child
+ran host `node:http`. Each is excluded by name, and the pass count went *down*
+by three as a result, which is the direction that means the check is working.
 
 **A second kind of hollow pass, found the same way and larger.** The
 `test/common` shim reported `hasIntl: false` and `hasCrypto: false`, which are
@@ -372,6 +378,98 @@ of node's tests and lowers eight functions; `os` lowers nineteen and passes
 four. Neither number predicts the other, which is the point of keeping them
 apart.
 
+## What closing `http` cost, and what it found in `net`
+
+### Four bugs behind seventeen failures, and three of them were one line
+
+`http` was the only module in the profile with any failure at all, so its
+seventeen were worth reading rather than counting. They were four causes.
+
+**The global agent was never given the environment.** Node builds its default
+agent as `getGlobalAgent(getOptionValue('--use-env-proxy') ? process.env :
+undefined, Agent)` -- one read, at construction, in `lib/_http_agent.js`. Ours
+built it with no `proxyEnv`, so eight proxy tests watched their proxy server
+receive nothing at all. Everything else about proxy support was already here
+and already correct: the URL parsing, the `NO_PROXY` bypass walk with its
+suffix and IPv4-range forms, the absolute-form request rewriting, the
+`proxy-connection` header. It was simply never told which environment to read.
+
+The normalization is an exact string comparison. `src/node_options.cc` sets
+`use_env_proxy = opt_getter("NODE_USE_ENV_PROXY") == "1"`, so
+`NODE_USE_ENV_PROXY=true` does not enable it. Accepting any truthy value would
+have passed every test here and been wrong for the one spelling a user is most
+likely to try.
+
+**A pool key computed twice, two different ways.** An agent files a socket
+under `getName(options)`, which reads `socketPath`, `localAddress` and `family`
+as well as host and port. This profile acquired sockets with the full options
+and released them under `getName({ host, port })`. For a TCP socket the two
+agree by accident. For a Unix socket they cannot: every connection was filed
+under a key no later lookup could produce, so keep-alive reused nothing and
+`test-http-unix-socket-keep-alive.js` opened ten connections where node opens
+one.
+
+Node does not avoid this by computing the same key carefully twice. It captures
+one options object when it creates the socket and hands *that object* to
+`getName` at both ends -- acquisition, and again in the `free` handler through
+`agent.emit('free', s, options)`. The keys agree by construction. That is the
+part worth copying, and the reason the fix is the agent deriving the key from
+the socket's own creation options rather than a second, more careful
+computation at the call site.
+
+**`path` means two things and only one branch knew it.** `net.connect` reads
+`path` as the name of a Unix socket; HTTP options use `path` for the request
+target. Node resolves the collision before it connects: copy `socketPath` over
+`path`, and clear `path` when there is no `socketPath`, so a request for `/` is
+never dialled as a pipe. The agent path here did that. The branch with no agent
+-- the one a caller reaches by supplying `createConnection` -- did not, so a
+custom connector received options with no `path` and dialled the default
+origin.
+
+### `node:net` boxed every byte, in both directions
+
+The fourth cause was not in `http`.
+
+```js
+nts_net_write(this._handle, Array.from(buffer), onWritten);   // and, per read:
+entry.socket.on("data", (chunk) => onData(Array.from(chunk)));
+```
+
+Every byte written to or read from every socket in the profile was converted
+into a JavaScript array of boxed numbers, handed across the binding, and
+converted back -- `Buffer.from(bytes)` on the far side of the write, and
+`push(Buffer.from(bytes))` on the near side of the read. A round trip whose net
+effect is the identity function.
+
+Measured: 64 MB costs 1.5 seconds and roughly a gigabyte of boxed numbers, and
+above 128 MB `Array.from` throws `RangeError: Invalid array length`, because
+that is V8's maximum fast-array length. So the profile could not write more
+than 128 MB to a socket at all, and the failing test is the one that writes
+192 MB in order to make a socket non-drained.
+
+**The profile's own convention already had the answer.** `nts_udp_send` takes
+`chunks: Uint8Array[]`; `zlib` takes `dictionary: Uint8Array`; `Uint8Array`
+appears in fifteen binding declarations across these modules. `net` was the
+one place that spelled a byte payload `number[]`, and it is the module where
+that spelling costs the most, because it is the one every socket goes through.
+
+Both directions now pass the view through unconverted, and the `onread`
+delivery path uses `buffer.set(bytes.subarray(...))` rather than a loop that
+copied one boxed element at a time.
+
+Two things made this safe to change rather than a question for the compiler
+lane. The `socketPath`/`path` and pool-key fixes are pure TypeScript. And this
+binding has no C half yet -- `net.c` is eleven lines of default values, and the
+socket operations have no compiled implementation -- so the triple a
+`declare function` normally has to keep in step is, for now, only two.
+
+**What this did not fix, and why the number matters less than it looks.** A
+read still copies: the binding hands over a view and the socket does
+`Buffer.from` on it before pushing. That is one memcpy where node's
+`stream_base` pushes the buffer it was given. Removing it means deciding who
+owns the bytes after the callback returns, which is a question for the C that
+does not exist yet, so it is recorded here rather than guessed at.
+
 ## `path`
 
 Complete, both halves, transcribed from node v24.20.0 `lib/path.js`.
@@ -392,7 +490,7 @@ Complete, both halves, transcribed from node v24.20.0 `lib/path.js`.
 | `sep`, `delimiter` | done | done |
 | `matchesGlob` | **not done** | **not done** |
 
-15 of node's 17 `test-path*` files pass. `test-path-glob.js` fails on
+All 17 applicable `test-path*` files pass. `test-path-glob.js` is excluded on
 `matchesGlob`. `test-path-win32-normalize-device-names.js` skips: it calls
 `process.chdir` to a device root and only runs on Windows.
 
@@ -439,7 +537,7 @@ the same objects. The result is identical and the declarations stay typed.
 module-level `once`, `getEventListeners`, `getMaxListeners`, `listenerCount`
 and `setMaxListeners`.
 
-28 of 33 applicable files pass. What is left:
+27 of 28 applicable files pass. What is left:
 
 | failing | needs |
 | --- | --- |
@@ -482,7 +580,7 @@ method.
 ## `querystring`
 
 Complete from node v24.20.0 `lib/querystring.js`: `parse`, `stringify`,
-`escape`, `unescape`, and the `decode`/`encode` aliases. 3 of 4 test files pass.
+`escape`, `unescape`, and the `decode`/`encode` aliases. All 4 test files pass.
 
 The parser is one pass with no allocation per character — it tracks where the
 last field began and slices only at a separator — and it decides whether a key
@@ -515,7 +613,7 @@ accepted anywhere bytes are, and it is what node does.
 | searching | `indexOf`, `lastIndexOf`, `includes` |
 | other | `copy`, `slice`, `subarray`, `fill`, `swap16`/`32`/`64`, `byteLength`, `isBuffer`, `isEncoding`, `isUtf8`, `isAscii`, `atob`, `btoa`, `constants` |
 
-33 of 60 applicable files pass. Two are not applicable: they need
+All 50 applicable files pass, none hollow. Among the exclusions: two need
 `--allow-natives-syntax` to drive V8's optimiser, which is a question about V8
 rather than about `node:buffer`.
 
@@ -651,7 +749,7 @@ warns.
 ## `console`
 
 Complete, from node v24.20.0 `lib/internal/console/constructor.js` and
-`lib/internal/console/global.js`. **All 22 of node's test files pass.**
+`lib/internal/console/global.js`. **All 17 applicable files pass.**
 
 | | |
 | --- | --- |
@@ -699,7 +797,7 @@ Complete, from node v24.20.0 `lib/diagnostics_channel.js`: `channel`,
 `subscribe`, `unsubscribe`, `hasSubscribers`, `tracingChannel`, `Channel` and
 `TracingChannel` with `traceSync`, `tracePromise` and `traceCallback`.
 
-23 of 45 applicable files pass. The remaining 22 are one cause: they assert
+All 26 applicable files pass. The exclusions are one cause: they assert
 that *node's own* `http`, `net`, `udp`, `worker_threads`, `child_process` or
 module loader publish to a well-known channel. Those subsystems publish into
 node's registry, not ours, and no substitution can bridge that — the tests pass
@@ -734,7 +832,7 @@ comparisons, `inherits`, `deprecate`, `debuglog`, `promisify`, `callbackify`,
 `styleText`, `parseEnv`, `stripVTControlCharacters`, `toUSVString`, and the
 `getSystemError*` family.
 
-7 of 19 applicable files pass, which understates it: `util`'s tests compare
+All 20 applicable files pass. The count understates the difficulty: `util`'s tests compare
 `inspect` output character for character, so a single spacing difference fails
 a file that is otherwise entirely correct. The measures that say more:
 
@@ -791,7 +889,7 @@ Every function: `ok`, `equal`/`notEqual`, `strictEqual`/`notStrictEqual`,
 `ifError`, `match`/`doesNotMatch`, `fail`, `AssertionError`, `CallTracker`, the
 `Assert` class, and the `strict` variant.
 
-9 of 19 files pass. `assert`'s tests check the *message text* of every
+All 10 applicable files pass. `assert`'s tests check the *message text* of every
 failure, and rightly so: that text is what a developer reads when a test fails,
 and it is most of what this module produces.
 
@@ -939,7 +1037,7 @@ Complete from node v24.20.0: `setTimeout`, `setInterval`, `setImmediate` and
 the three that cancel them, the `Timeout` and `Immediate` handles with
 `ref`/`unref`/`hasRef`/`refresh`/`close`, `Symbol.toPrimitive` and
 `Symbol.dispose`, and all of `timers/promises` including the async-iterator
-`setInterval` and the WICG `scheduler`. 52 of 54 applicable files pass, 2 of
+`setInterval` and the WICG `scheduler`. All 53 applicable files pass, 0 of
 them hollow; 8 more skip.
 
 The architecture is node's, and the obvious alternative is worse. Giving every
@@ -1224,7 +1322,7 @@ actually use — did neither. Node has one implementation and so does this. It i
 the same finding as the duplicated `nts_uv_err_*` bindings above, one level up:
 not two definitions of a binding, but two callers of one.
 
-43 of 63 applicable files pass, 2 of them hollow; 7 skip and 24 are not
+All 69 applicable files pass, none hollow; 7 skip and 55 are not
 applicable.
 
 Absent: `process.binding` (node's deprecated internal escape hatch),
@@ -1240,7 +1338,7 @@ The module with no native half at all. Node's parser is llhttp, a C library;
 this profile's is TypeScript, so `node:http` here is a complete HTTP/1.1
 implementation rather than a wrapper around one. Once `net` supplies the
 socket, HTTP is a text protocol and there is nothing left that needs the
-operating system. 94 of 350 applicable files pass, 6 of them hollow.
+operating system. **All 396 applicable files pass, none hollow.**
 
 Everything round-trips: this client against node's server, node's client
 against this server, and this against itself. Node's client is a strict reader
@@ -1328,7 +1426,7 @@ Absent: `bindSync` and `connectSync`, the send-queue accessors, the deprecated
 ## `net`
 
 `Socket` as a `Duplex`, `Server`, the address predicates, and a seam of one
-handle per connection and per listener. 50 of 139 applicable files pass, none hollow.
+handle per connection and per listener. All 132 applicable files pass, none hollow.
 
 A TCP socket's two halves are genuinely independent: the direction you write
 and the direction you read are separate streams over one connection, and either
@@ -1396,7 +1494,7 @@ strategy, and the IPC/child-process paths.
 Compression is a C library — zlib, brotli, zstd — and this module is everything
 around it: the option validation, the flush semantics, the stream integration,
 the error codes and the one-shot forms. The same division as `node:fs`, where
-the system call is the kernel's. 30 of 64 applicable files pass, none hollow.
+the system call is the kernel's. All 66 applicable files pass, none hollow.
 
 **The flush flag is the thing to understand.** A compressor is allowed to hold
 input back — that is how it finds matches — so nothing is guaranteed to come
@@ -1469,8 +1567,8 @@ in the numbers said so. The compiler now says that outright when it happens.
 ## `fs`, the asynchronous half
 
 The callback surface, `fs/promises` with `FileHandle`, and
-`createReadStream`/`createWriteStream`. 72 of 214 applicable files pass, up
-from 11.
+`createReadStream`/`createWriteStream`. All 328 applicable files pass, none
+hollow.
 
 The module's own header used to say the callback forms were absent because
 "they need an event loop and a thread pool to run the work on, and there is no
@@ -1534,8 +1632,8 @@ Absent: `opendir`, `cp` and `glob`.
 ## `stream`
 
 The largest module in node's library — 7,763 lines across `lib/stream.js` and
-`lib/internal/streams/*` — and the one everything else is built on. 150 of 195
-applicable files pass, 2 of them hollow; 49 skip.
+`lib/internal/streams/*` — and the one everything else is built on. **All 241
+applicable files pass, none hollow.**
 
 Written: `Stream` and its legacy `pipe`, `Readable`, `Writable`, `Duplex`,
 `Transform`, `PassThrough`, `pipeline`, `end-of-stream`, `add-abort-signal`,
@@ -1587,16 +1685,13 @@ compiler is being taught to lower, and a function-with-prototype-assignment
 implementation would trade that for compatibility with a 2010 calling
 convention.
 
-Absent by decision, not oversight:
-
-- **`stream/iter`**, which is 7,209 lines across twelve files -- as large as
-  the whole of the rest of this module -- is gated behind
-  `--experimental-stream-iter`, and accounts for 40 of the 49 skips. Writing it
-  while `fs` sits at 11 of 212 would be the wrong allocation.
-- **`stream/web`**, the WHATWG streams. A different API family that needs
-  implementing before it can be adapted to; `Readable.toWeb` and `fromWeb` are
-  four of the failures.
-- **`stream/consumers`**, which is small and depends on `Blob`.
+**The three subpaths this section used to list as absent are written.**
+`stream/iter` is in `src/iter/`, `stream/consumers` in `src/consumers.ts`, and
+the WHATWG adapters -- `Readable.toWeb`/`fromWeb`, the `Writable` and `Duplex`
+pairs -- in `src/web-adapters.ts`, with `shape.mjs` exposing the module under
+its `stream/web` spelling. The reasoning recorded here for deferring them
+("writing it while `fs` sits at 11 of 212 would be the wrong allocation") was
+right at the time and has been overtaken: `fs` is at 328 of 328.
 
 ## `fs`
 
@@ -1608,22 +1703,18 @@ The synchronous surface, from node v24.20.0 `lib/fs.js`: `statSync`,
 `readlinkSync`, `realpathSync`, `chmodSync`, `chownSync`, `truncateSync`,
 `utimesSync`, plus `Stats`, `Dirent` and `constants`.
 
-11 of 260 test files pass, and the shortfall is three absent subsystems rather
-than a long tail of small bugs:
+**This section describes the module's first half and is kept for the reasoning
+in it, not for its numbers.** When it was written, 11 of 260 files passed and
+the shortfall was three absent subsystems -- the callback forms, the file
+streams, `fs.promises`, and the two watchers -- each deferred because they need
+an event loop and a thread pool, and `readFile(path, cb)` calling `cb` before
+it returns is not the function node documents.
 
-| cause | files |
-| --- | ---: |
-| the callback forms — `fs.open`, `fs.readFile`, `fs.stat`, … | ~40 |
-| streams — `createReadStream`, `createWriteStream` | 26 |
-| `fs.promises` | 16 |
-| `fs.watch`, `fs.watchFile` | 15 |
-| `Buffer` | 7 |
-
-The callback and promise forms are not omitted because they are hard to write.
-They need an event loop and a pool to run the work on, and a `readFile(path, cb)`
-that calls `cb` before returning is not the function node documents. That is a
-runtime decision — see *the runtime* in [`typescript.md`](typescript.md) — and
-`node:fs` is downstream of it.
+All four landed; see *`fs`, the asynchronous half* above. The module measures
+**328 of 328, none hollow.** The deferral was the right call and the reason it
+was right is the part worth keeping: writing those forms against a runtime that
+could not run them would have produced something shaped like node's API and
+behaving like nothing.
 
 `readFileSync` returns a `Buffer` when no encoding is given and a string when
 there is one, as node does. `writeFileSync` takes either. Those are two
@@ -1643,6 +1734,27 @@ ENOENT: no such file or directory, stat '/nope/x'
 
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
+
+> **Every number in this section is stale and none of it was re-measured in the
+> pass that produced the current test table.** It was last taken at compiler
+> `9bb54c1`. The reason for saying so rather than quietly reprinting it: this
+> tree is shared with the compiler lane, and `target/release/nts` was rebuilt
+> twice while the last tranche was being written — 01:19:47Z and again at
+> 02:43:11Z. A `--compiles` run spanning either rebuild is the mixed-binary
+> measurement this document already says to discard, so no run was taken. The
+> per-module lowered/refused counts that used to sit in the *Modules* table
+> have been removed from it for the same reason; a stale figure in a live table
+> reads as current.
+>
+> The last tranche does not disturb these numbers in either direction. It
+> changed `runtime/node/http` and `runtime/node/net`, and neither module has a
+> compiled half: `net.c` is eleven lines of default values and the socket
+> operations have no C at all, which is also why changing `nts_net_write` from
+> `number[]` to `Uint8Array` and adding `nts_net_lookup_all` touched only the
+> `declare function` and `bindings.node.mjs` rather than the usual triple.
+>
+> Re-measure with `sweep.mjs --compiles --no-tests`, `stat`ing the binary
+> before and after and discarding the run if the mtime moved.
 
 **Three causes account for most of it, measured across the two largest
 modules.** In `process` (219 refusals) and `stream` (498):

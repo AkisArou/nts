@@ -344,6 +344,8 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
 
   #options: RequestOptions;
   #port: number;
+  /** The options this request's socket was acquired with, for `getName`. */
+  #connectionOptions: AgentConnectionOptions | undefined;
   #errorEmitted = false;
   #joinDuplicateHeaders = false;
   #path = "";
@@ -541,14 +543,29 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
       timeout: this.timeout,
       highWaterMark: opts.highWaterMark,
     };
+    // Retained so that releasing this request's socket names the same pool
+    // entry that acquiring it did. `getName` reads `socketPath`,
+    // `localAddress` and `family` as well as host and port.
+    this.#connectionOptions = connectionOptions;
     if (opts.signal !== undefined) addAbortSignal(opts.signal, this);
     if (this.destroyed) return;
     if (this.agent) {
       this.agent.addRequest(this, connectionOptions);
     } else {
+      // `net.connect` reads `path` as the name of a Unix socket, while HTTP
+      // options use `path` for the request target. Node resolves the
+      // collision before it creates the connection: `socketPath` is copied
+      // over `path`, and `path` is cleared when there is no `socketPath`, so
+      // a request for `/` is never mistaken for a pipe name
+      // (`lib/_http_client.js`). The agent path does the same copy in
+      // `#connectionOptions`; this is the branch that has no agent to do it.
+      const connectOptions: AgentConnectionOptions =
+        connectionOptions.socketPath === undefined
+          ? connectionOptions
+          : { ...connectionOptions, path: connectionOptions.socketPath };
       const createConnection = opts.createConnection;
       if (createConnection === undefined) {
-        const socket = globalAgent.createConnection(connectionOptions);
+        const socket = globalAgent.createConnection(connectOptions);
         nextTick(() => this.onSocket(socket));
       } else {
         let completed = false;
@@ -565,7 +582,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
         };
         let socket: HTTPDuplex | undefined;
         try {
-          socket = createConnection(connectionOptions, onCreated);
+          socket = createConnection(connectOptions, onCreated);
         } catch (error) {
           onCreated(error);
           return;
@@ -969,7 +986,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     const agent = this.agent;
     if (agent instanceof Agent) {
       agent.release(
-        agent.getName({ host: this.host, port: this.#port }),
+        agent.getName(this.#connectionOptions ?? { host: this.host, port: this.#port }),
         socket,
         reusable,
         keepAliveHint,

@@ -156,12 +156,23 @@ globalThis.nts_net_lookup = (host, family, cb) => {
   });
 };
 
+globalThis.nts_net_lookup_all = (host, family, cb) => {
+  lookup(
+    host,
+    { family: family === 4 || family === 6 ? family : 0, all: true },
+    (error, results) => {
+      if (error) cb(codeOf(error), [], []);
+      else cb(0, results.map((entry) => entry.address), results.map((entry) => entry.family));
+    },
+  );
+};
+
 globalThis.nts_net_read_start = (handle, onData, onEnd, onError) => {
   const entry = sockets.get(handle);
   if (!entry) return;
   if (!entry.reading) {
     entry.reading = true;
-    entry.socket.on("data", (chunk) => onData(Array.from(chunk)));
+    entry.socket.on("data", (chunk) => onData(chunk));
     entry.socket.on("end", () => onEnd());
     entry.socket.on("error", (e) => onError(codeOf(e)));
   }
@@ -178,10 +189,7 @@ globalThis.nts_net_write = (handle, bytes, cb) => {
     cb(-9); // EBADF
     return -9;
   }
-  const queued = !entry.socket.write(
-    Buffer.from(bytes),
-    (error) => cb(error ? codeOf(error) : 0),
-  );
+  const queued = !entry.socket.write(bytes, (error) => cb(error ? codeOf(error) : 0));
   return queued ? 1 : 0;
 };
 

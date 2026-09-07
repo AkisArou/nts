@@ -119,18 +119,32 @@ declare function nts_net_lookup(
   family: number,
   callback: (errno: number, address: string, family: number) => void,
 ): void;
+/**
+ * Every address the resolver has for `host`, in its order.
+ *
+ * A separate operation rather than a flag on `nts_net_lookup`, because the two
+ * answer with different shapes and the single-address form is what a connect
+ * with an explicit `family` still wants. The auto-select-family walk needs all
+ * of them: a host with an `AAAA` record and a service listening only on IPv4
+ * connects in node and would fail here on the first address.
+ */
+declare function nts_net_lookup_all(
+  host: string,
+  family: number,
+  callback: (errno: number, addresses: string[], families: number[]) => void,
+): void;
 
 /** Start delivering incoming bytes. Nothing arrives before this is called. */
 declare function nts_net_read_start(
   handle: number,
-  onData: (bytes: number[]) => void,
+  onData: (bytes: Uint8Array) => void,
   onEnd: () => void,
   onError: (errno: number) => void,
 ): void;
 declare function nts_net_read_stop(handle: number): void;
 declare function nts_net_write(
   handle: number,
-  bytes: number[],
+  bytes: Uint8Array,
   callback: (errno: number) => void,
 ): number;
 /** Send `FIN`: nothing more will be written, but reading continues. */
@@ -524,7 +538,7 @@ export class Socket extends Duplex {
   #onReadBuffer: Uint8Array | undefined;
   #onReadBufferFactory: (() => Uint8Array) | undefined;
   #onReadCallback: OnReadOptions["callback"] | undefined;
-  #pendingReadBytes: number[] | undefined;
+  #pendingReadBytes: Uint8Array | undefined;
   #pendingReadOffset = 0;
   #pendingReadEnd = false;
   #destroyOnIdleData = false;
@@ -868,6 +882,30 @@ export class Socket extends Duplex {
       return;
     }
 
+    if (useAutoSelectFamily) {
+      // Ask for every address. Resolving one and connecting to it is not a
+      // cheaper version of this walk -- it is a different behaviour, and the
+      // difference shows exactly when it matters: `localhost` answers `::1`
+      // first on a dual-stack host, so a service bound only to `127.0.0.1`
+      // refused the connection and nothing tried the second address.
+      nts_net_lookup_all(host, options.family ?? 0, (errno, addresses, families) => {
+        if (errno < 0) {
+          complete(dnsException(errno, "getaddrinfo", host), undefined);
+          return;
+        }
+        const resolved: LookupAddress[] = [];
+        for (let index = 0; index < addresses.length; index++) {
+          const address = addresses[index];
+          const addressFamily = families[index];
+          if (address !== undefined && addressFamily !== undefined) {
+            resolved.push({ address, family: addressFamily });
+          }
+        }
+        complete(null, resolved);
+      });
+      return;
+    }
+
     nts_net_lookup(host, options.family ?? 0, (errno, address, family) => {
       if (errno < 0) {
         complete(dnsException(errno, "getaddrinfo", host), undefined);
@@ -1075,7 +1113,7 @@ export class Socket extends Duplex {
 
     nts_net_read_start(
       this._handle,
-      (bytes: number[]) =>
+      (bytes: Uint8Array) =>
         this.#inScope(() => {
           this.#refreshTimeout();
           if (this.#destroyOnIdleData && bytes.length > 0) {
@@ -1166,17 +1204,14 @@ export class Socket extends Duplex {
     return generated;
   }
 
-  #deliverOnReadBytes(bytes: number[], start: number): void {
+  #deliverOnReadBytes(bytes: Uint8Array, start: number): void {
     if (this.#onReadCallback === undefined) return;
     let offset = start;
     while (offset < bytes.length) {
       const buffer = this.#onReadBuffer;
       if (buffer === undefined) return;
       const count = Math.min(buffer.byteLength, bytes.length - offset);
-      for (let index = 0; index < count; index++) {
-        const byte = bytes[offset + index];
-        if (byte !== undefined) buffer[index] = byte;
-      }
+      buffer.set(bytes.subarray(offset, offset + count));
       offset += count;
       this.bytesRead += count;
       const keepReading = this.#invokeOnReadCallback(count, buffer);
@@ -1306,7 +1341,7 @@ export class Socket extends Duplex {
       if (request === undefined) finish();
       else request.complete(finish);
     };
-    const queued = nts_net_write(this._handle, Array.from(buffer), onWritten);
+    const queued = nts_net_write(this._handle, buffer, onWritten);
     if (queued > 0) {
       request = new SocketRequest("WRITEWRAP", this.#asyncId);
     }

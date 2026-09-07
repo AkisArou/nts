@@ -23,6 +23,7 @@ import { AsyncResource } from "../../async_hooks/src/resource.ts";
 import { validateNumberRange, validateOneOf } from "../../internal/validators.ts";
 import { ERR_FEATURE_UNAVAILABLE_ON_PLATFORM } from "../../internal/errors.ts";
 import type { HTTPDuplex } from "./outgoing.ts";
+import { env as processEnvironment } from "../../process/src/env.ts";
 import { ProxyConfig, proxyConfigFromEnvironment, selectProxy } from "./proxy.ts";
 import type { ProxyEnvironment } from "./proxy.ts";
 
@@ -322,8 +323,21 @@ export class Agent extends EventEmitter {
     this.#release(name, socket, reusable);
   }
 
-  #release(name: string, socket: HTTPDuplex, reusable: boolean): void {
+  #release(requestedName: string, socket: HTTPDuplex, reusable: boolean): void {
     if (!this.#owns(socket)) return;
+    // The pool key has to be the one this socket was filed under.
+    //
+    // Node captures one options object when it creates a socket and hands
+    // that same object to `getName` at both ends -- acquisition, and again in
+    // the `free` handler via `agent.emit('free', s, options)` -- so the two
+    // keys agree by construction rather than by two computations happening to
+    // match. Recomputing the key from a request's host and port drops every
+    // other field `getName` reads, and `socketPath` is one of them: a
+    // connection opened for a Unix socket was filed under a key no later
+    // lookup could produce, so keep-alive reuse missed and each request
+    // opened a new connection.
+    const created = this.#socketOptions.get(socket);
+    const name = created === undefined ? requestedName : this.getName(created);
     const inUse = this.sockets[name];
     if (inUse) {
       const at = inUse.indexOf(socket);
@@ -607,8 +621,28 @@ export function createGlobalAgent(proxyEnv?: ProxyEnvironment): Agent {
   return new Agent({ keepAlive: true, scheduling: "lifo", timeout: 5000, proxyEnv });
 }
 
+/**
+ * Whether the global agent routes through the environment's proxy.
+ *
+ * Node reads one normalized option, `--use-env-proxy`, once and only when the
+ * global agent is constructed (`lib/_http_agent.js`). That option is fed from
+ * two places: the command-line flag, and `NODE_USE_ENV_PROXY`, which
+ * `src/node_options.cc` normalizes with an exact comparison against `"1"` --
+ * so `NODE_USE_ENV_PROXY=true` does not enable it and neither does `=0`.
+ *
+ * Only the environment half is visible from here. This profile has no
+ * normalized startup-option state, so the command-line flag cannot be
+ * observed; a test that passes `--use-env-proxy` rather than the variable is
+ * a genuine runtime gap and is recorded as one rather than approximated by
+ * scanning `execArgv`, which would report the flag as present in cases where
+ * node's own normalization would have rejected it.
+ */
+function useEnvironmentProxy(): boolean {
+  return processEnvironment.NODE_USE_ENV_PROXY === "1";
+}
+
 /** The agent `http.request` uses when the caller does not supply one. */
-export let globalAgent = createGlobalAgent();
+export let globalAgent = createGlobalAgent(useEnvironmentProxy() ? processEnvironment : undefined);
 
 /** Read the live binding when constructing Node's writable CommonJS facade. */
 export function readGlobalAgentBinding(): Agent {
