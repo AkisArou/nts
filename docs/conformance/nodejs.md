@@ -4311,6 +4311,45 @@ That is a reading of the output and not a measurement, and it is recorded as
 such. What the six negatives buy is a much smaller space for the compiler lane to
 search than the module name alone would have given them.
 
+## The closure call slot, a blocker with no diagnostic
+
+`async_hooks`, `diagnostics_channel` and `timers` each failed clang on one line,
+which turned out to be this profile's own `declare function` claiming the runtime
+symbol `nts_enqueue_microtask` with a different signature. That is repaired: the
+binding is `nts_node_enqueue_microtask` and `internal/microtask.c` adapts through
+the runtime's own `nts_callback_task`.
+
+**The adapter is staged rather than working, and nothing will tell you so.** The
+converter takes a slot index and the runtime calls straight through it —
+`methods[entry->slot]` — so a wrong slot is a null call rather than a type error.
+The compiler assigns a closure's call slot *after* every named method in the
+program, and the emitted vtables say what that means:
+
+    async_hooks          { 0,0,0,0,0,0,0,0, Closure3__call }    slot 8
+    diagnostics_channel  { 0,0,0,0,0, Closure18__call }         slot 5
+    buffer               { 0,0,0,0,0, Closure2__call }          slot 5
+    punycode             { Closure5__call }                     slot 0
+
+The worst possible distribution for a hardcoded constant: `punycode`, the module
+with no methods and the one anybody tests first, is the single program where `0`
+is right. The three modules this was written for would typecheck, compile, link,
+and crash on their first microtask — a failure that looks like success until it
+runs, and strictly worse than the clang error it replaced.
+
+**It cannot be derived here, and that is checked rather than assumed.**
+`NtsDescriptor` carries `void *const *methods` and **no count**, so there is
+nothing to scan and no way to find the last entry. Only `program.c` knows the
+number. The compiler lane is publishing it as `nts_closure_call_slot`; until it
+appears in `nts_runtime.h`, `microtask.c` carries `0` behind a `TODO` and those
+three modules are not to be run against it.
+
+**There is no fixture for this and there cannot usefully be one.** Nothing
+refuses, `emit-c` succeeds, clang succeeds, the addon links and loads. The defect
+is a constant that is correct in one program out of twenty-two, and the only
+instrument that would catch it is running the module and watching it crash. It is
+recorded here because a blocker with no diagnostic is the kind that gets
+forgotten, not because it is hard to fix.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
