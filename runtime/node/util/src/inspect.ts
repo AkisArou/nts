@@ -1057,7 +1057,11 @@ function formatWithKeys(
   ctx.indentationLvl += 2;
   try {
     for (const key of keys) {
-      output.push(formatProperty(ctx, value, key, recurseTimes));
+      // Inlined rather than calling `formatProperty`, because this line is on
+      // the recursion path: every level of a nested structure costs a frame
+      // here, and node's equivalent chain is shorter than ours was. See the
+      // note on `formatValue` about why that is measured rather than assumed.
+      output.push(`${formatKey(ctx, key)}: ${formatValue(ctx, value[key], recurseTimes + 1)}`);
     }
     for (const key of hiddenKeys) {
       output.push(
@@ -1121,16 +1125,6 @@ function formatKey(ctx: Context, key: string): string {
   return /^[a-zA-Z_][a-zA-Z_0-9]*$/.test(key)
     ? ctx.stylize(key, "name")
     : ctx.stylize(quoteString(key), "string");
-}
-
-/** `key: value` for one own property, with the key spelled as node spells it. */
-function formatProperty(
-  ctx: Context,
-  value: InspectableObject,
-  key: string,
-  recurseTimes: number,
-): string {
-  return `${formatKey(ctx, key)}: ${formatValue(ctx, value[key], recurseTimes + 1)}`;
 }
 
 /**
