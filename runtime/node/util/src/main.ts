@@ -34,14 +34,22 @@ import { isNodeStream, isReadableStream, isWritableStream } from "../../internal
 import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
-// Node re-exports the Encoding globals from `node:util`, and they are the same
-// objects a program reaches as `TextEncoder` and `TextDecoder`. Re-exported
-// from web-platform rather than reimplemented, so the identity holds.
-export { TextDecoder, TextEncoder } from "../../../web-platform/src/core/encoding.ts";
-
 export { inspect, inspectDefaultOptions, format, formatWithOptions, types };
 export { deprecate };
 export { parseArgs };
+
+// Node re-exports the Encoding globals from `node:util`, and they are the same
+// objects a program reaches as `TextEncoder` and `TextDecoder`. Re-exported
+// from web-platform rather than reimplemented, so the identity holds.
+//
+// Placed next to `parseArgs` because node exports it there, and for no other
+// reason. It was moved here to fix `Object.keys(require("util"))` order and
+// that did nothing: `shape.mjs` spreads this module's namespace object, and a
+// module namespace's keys are **alphabetical by specification**, not source
+// order. No arrangement of these statements can change it. Matching node's
+// order would mean `shape.mjs` naming its keys explicitly, which is exactly
+// what `punycode/shape.mjs` does and says it does.
+export { TextDecoder, TextEncoder } from "../../../web-platform/src/core/encoding.ts";
 export type {
   ParseArgsConfig,
   ParseArgsOptionDescriptor,

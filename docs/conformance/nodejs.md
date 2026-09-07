@@ -387,7 +387,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,789 applicable test files pass** across twenty-two modules,
+**1,790 applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -517,7 +517,7 @@ model that makes *Y* inapplicable" — which a reader should not confuse with a
 claim that *Y* covers anything.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,789
+warns about elsewhere, so the two numbers belong next to each other: **1,790
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -2875,9 +2875,14 @@ These, by contrast, are real and hold today, and nothing asserts them:
 `buffer.Blob`, `buffer.File` and `buffer.atob`, each identical to its global.
 
 **Export key order diverges in eight modules, and is recorded rather than
-fixed.** `Object.keys(require(m))` is observable, and CommonJS preserves
-assignment order, so a shape assembled in a different order is a different
-object to anything that enumerates. Measured against node for all 22:
+fixed.** `Object.keys(require(m))` is observable, and node's order is its
+own module's assignment order. This profile's is **alphabetical** — and the
+reason is worth knowing before anyone tries to fix one: `shape.mjs` spreads the
+TypeScript module's namespace object, and a module namespace's keys are sorted
+by specification. **No arrangement of `export` statements can change it.** The
+only lever is a `shape.mjs` that names its keys explicitly, which is exactly
+what `punycode/shape.mjs` does and says it does. Measured against node for all
+22:
 
 | module | first divergence |
 | --- | --- |
@@ -2911,6 +2916,13 @@ committed. **A claim about the code, written in a document, with nothing
 measuring it** is the same shape as the comment-versus-test rule recorded
 elsewhere here — and this document asserts that rule two sections above the
 place it broke it.
+
+**Then the fix for it did nothing, and that was measured too.** Moving the
+Encoding re-export next to `parseArgs`, where node has it, left `TextDecoder` at
+index 0. The mechanism was misremembered twice: the order does not come from
+this profile's source at all. It comes from the namespace object `shape.mjs`
+spreads, and that is sorted. The statement now sits beside `parseArgs` because
+node exports it there, and the comment says the move changed nothing.
 
 Three exist now.
 
