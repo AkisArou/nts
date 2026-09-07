@@ -49,12 +49,12 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 | request-body progress callbacks              | missing  | `onBodySent` and `onRequestSent` remain.                                                                                                        |
 | response trailers                            | provider | H1/H2 parse them; public dispatcher response-data exposure remains.                                                                             |
 | raw response headers/trailers                | missing  | Requires an exact ByteString-preserving Node facade.                                                                                            |
-| `Client`                                     | provider | Strict H1 and prior-knowledge H2 engines exist; the public single-origin client, configuration and stats facade remain.                         |
+| `Client`                                     | shared   | A typed single-origin lifecycle/stats wrapper exists over provider dispatchers; exact Undici options and package facade remain.                 |
 | `H2CClient`                                  | provider | `Http2Transport` is an explicit h2c/prior-knowledge engine; public class/facade remains.                                                        |
 | `Pool`                                       | provider | H1 has bounded per-origin pooling and H2 multiplexes; unified protocol-aware public pool remains.                                               |
 | `RoundRobinPool`                             | missing  | Selection, health, stats and lifecycle remain.                                                                                                  |
 | `BalancedPool`                               | missing  | Weighted/health-aware upstream management and mutation remain.                                                                                  |
-| `Agent`                                      | missing  | Environment-owned origin routing, eviction, limits and public stats remain.                                                                     |
+| `Agent`                                      | shared   | Environment-local lazy origin routing, bounded idle-LRU eviction, exact close/destroy and aggregate typed stats exist over provider factories.  |
 | global dispatcher getters/setters            | missing  | Must be environment-owned, never a process/module global.                                                                                       |
 | custom connector / `buildConnector`          | provider | `SocketConnector` is the portable typed connection boundary; Node option/facade and negotiated ALPN metadata remain.                            |
 | HTTP/1.1                                     | shared   | Strict streaming parser/writer, pooling, timeouts, cancellation and real-socket tests exist.                                                    |

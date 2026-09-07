@@ -100,6 +100,15 @@ export type { TransportBodySource, TransportErrorCode } from "./fetch/transport.
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
+export type {
+  AgentOptions,
+  AgentOriginStats,
+  AgentStats,
+  OriginDispatcher,
+  OriginDispatcherFactory,
+  OriginDispatcherStats,
+} from "./dispatch/agent.ts";
 export { DiagnosticsInterceptor, DispatchDiagnosticContext } from "./dispatch/diagnostics.ts";
 export type {
   DiagnosticsInterceptorOptions,
