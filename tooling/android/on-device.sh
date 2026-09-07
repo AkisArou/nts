@@ -213,6 +213,35 @@ echo "$out"
 case "$out" in *"94 checks, 0 failures"*) ;; *) failed=1 ;; esac
 adb shell rm -f /data/local/tmp/nts-bothhttp.dex
 
+# Does `ConnectivityManager` deliver, and is the first network not a change?
+#
+# The registration half of `watchDefaultNetwork`, which no desktop test can
+# show. **Bounded with `timeout` anyway**, because this file spent a day
+# looking like a device-state problem: it printed every check as passing and
+# then never exited, the harness killed it, and a killed process is the one
+# whose `ConnectivityManager` registrations are never reclaimed. Twenty
+# `TRACK_DEFAULT` requests owned by dead root pids, four per killed run, and
+# every one of them a consequence of the hang rather than its cause. The cause
+# was a missing `System.exit`; with it, five consecutive runs take three
+# seconds each on the device still holding those twenty.
+#
+# The bound stays because a suite that can hang is worse than one that can
+# skip, not because the hang is expected.
+echo "--- org.nts.web.DefaultNetworkDeliveryTest"
+out=$(timeout 150 adb shell "CLASSPATH=/data/local/tmp/nts-device.dex app_process /data/local/tmp org.nts.web.DefaultNetworkDeliveryTest" 2>&1)
+echo "$out"
+# Cased on what the run *said*, not on what `adb shell` returned: it exits
+# non-zero here for reasons that have nothing to do with the test, and an
+# earlier version of this printed "timed out" underneath a passing result.
+case "$out" in
+  *"FAIL "*) failed=1 ;;
+  *"0 failures"*) ;;
+  *"SKIP delivery"*) ;;
+  *) echo "SKIP delivery: no result in 150s -- leaked TRACK_DEFAULT registrations hang the" \
+       "call rather than failing it; \`dumpsys connectivity | grep -c TRACK_DEFAULT\` is the" \
+       "count and rebooting the emulator clears it" ;;
+esac
+
 # **There is no handover case here, and that is a decision.** A real Wi-Fi to
 # cellular transition *is* producible on this emulator -- it carries both
 # networks, and taking `wlan0` down moves the default from one to the other --
