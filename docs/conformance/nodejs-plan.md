@@ -398,11 +398,24 @@ Both are in `internal/errors.ts`, which is the answer to "where is the compiled
 axis actually stuck": in the code that formats messages for arguments that
 failed validation.
 
-**Two single-name modules are worth knowing about**, because a module whose
-shape needs one name is a short path once its blocker moves. `querystring` needs
-`QueryString`, an object of functions — the same shape as `punycode`'s `ucs2`,
-so 5c buys it too. `string_decoder` needs the `StringDecoder` class, and needs
-`Buffer#toString` lowered as well, since every method cascades from it.
+**Two single-name modules look short and are not**, and the way that reads
+wrong is worth more than the correction. A module whose shape needs one name
+suggests one piece of work. Both were checked and neither is.
+
+`querystring` needs `QueryString`, an object of functions — the same shape as
+`punycode`'s `ucs2` — so this section first said 5c buys it too. It does not.
+Its functions are refused, not unnameable: `decodeURIComponent` is a builtin the
+compiler does not provide, two sites narrow an `unknown` to BigInt, `parse`
+writes a key `ParsedUrlQuery` does not declare, and `unescapeBuffer` needs
+`Buffer#slice`. The namespace was never the blocker.
+
+`string_decoder` needs the `StringDecoder` class exported **and**
+`Buffer#toString` lowered, because every method of the class cascades from it.
+
+**Both mistakes have the same shape: a count of names is not a count of work.**
+It is the third time that has been true today — a refusal count is a count of
+refused functions, a publish count is not a shape, and a shape of one name is
+not one blocker.
 
 `fs` is absent from the table because `nts layouts` prints no public API section
 for it — 5098 lines of layouts, exit 0, and no `api` anywhere in the output,
