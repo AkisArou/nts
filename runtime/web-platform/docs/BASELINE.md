@@ -3300,3 +3300,69 @@ Measured with the same pinned binary built at `43fda4d3`: before, 1,302 primary
 disappeared; that pair is one message with a shifted type id. The single real addition
 is a `for...of` binding two names over a header sequence — destructuring `[name, value]`
 while copying — which is the iteration-protocol prerequisite.
+
+## I committed a file overwritten by my own measurement script
+
+`733e6492` shipped `runtime/web-platform/src/fetch/transport.ts` containing the
+contents of `runtime/web-platform/src/http1/transport.ts`. The tree did not type-check
+for the duration of that commit.
+
+The cause is worth writing down because the procedure that caused it is one this ledger
+has praised repeatedly. Isolating a slice's diagnostics means swapping the changed files
+for HEAD's copies, measuring, and swapping back. That script backed each file up by its
+**basename**, and those two files share one. The second backup overwrote the first, and
+the restore then wrote the HTTP/1 transport into both paths.
+
+Two things let it reach a commit. The full gate ran *before* the isolation step rather
+than after it, so 504/504 was a true statement about a tree that no longer existed by
+the time it was committed. And `commit-mine.sh` runs clippy, which has nothing to say
+about TypeScript, so the last gate between a broken tree and a commit does not look at
+this lane's source at all.
+
+Recovered by restoring the file from `398d34b1` and re-applying the interim-response
+addition to it. `http1/transport.ts` was never damaged and kept its half of the change.
+After recovery the repository type-checks, the complete local corpus passes 508/508 with
+zero skipped, the pinned upstream corpus is unchanged at 2,278 of 2,286 applicable, the
+root solution build is green, and the NTS frontier reads 1,303 primary `NTS1001` and 242
+`NTS1003` — the same figures measured before the swap, which is the evidence that the
+committed source is the source that was measured.
+
+The procedure is now: back up by full path, and re-run the type-check after any
+file-swapping measurement and before committing. A measurement that mutates the tree is
+a mutation, and it needed its own control exactly as a sabotage does.
+
+## Which Request fields do something, and which deliberately do not
+
+The plan keeps browser-oriented fields observable even where their enforcement
+algorithm is excluded: there is no document, so no unload for `keepalive` to survive, no
+CORS for `mode` to select, and no document origin for `referrerPolicy` to derive from.
+Inert is correct for those. It is also indistinguishable from outside from a field that
+should do something and does not — which is what `integrity` was until earlier in this
+session. So the split is asserted rather than assumed.
+
+`mode`, `referrerPolicy` and `keepalive` are readable, survive a clone, and survive a
+Cache round trip; observable metadata that vanished in storage would be observable only
+until it mattered. `priority` is accepted in the init and deliberately has no getter,
+because Fetch defines `RequestInit.priority` and no matching attribute — inventing one
+would be as wrong as omitting one the standard does define.
+
+The decisive test sends two real requests differing only in an inert field and compares
+the bytes the server received. If any of them ever starts affecting the wire, that is
+where it surfaces, and the entry has to move to the enforced side deliberately.
+
+The contrast is asserted too: method and headers reach the wire, `redirect` validates,
+`duplex` is required for a streaming body, an aborted signal rejects, and integrity
+stops a request it cannot verify. That last one stops it with a *descriptive* TypeError
+rather than an opaque network error, because a missing digest provider is a
+configuration mistake rather than a network outcome — while a digest that is computed
+and does not match is a network error, opaque as Fetch requires. Both halves are now
+asserted, in this suite and the integrity one.
+
+Two sabotages, both restored, and both re-run after the recovery above because their
+first run had been against a tree that did not compile. Making `keepalive` set a
+`keep-alive` header was caught by the identical-bytes test. Giving `priority` a getter
+was caught by the unexposed-field test.
+
+The complete local Node-host/real-socket corpus passes 508/508 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable.
