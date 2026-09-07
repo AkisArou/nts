@@ -17,6 +17,7 @@ import type { HeadersInit } from "./headers.ts";
 import type { FileURLProvider } from "./file-url.ts";
 import type { DigestProvider } from "./integrity.ts";
 import { ReadableStream } from "../streams/readable.ts";
+import { bodyContentType } from "./body.ts";
 
 export type RequestRedirect = "follow" | "error" | "manual";
 
@@ -541,7 +542,7 @@ export class Request extends Body {
     return "half";
   }
 
-  protected override contentType(): string | null {
+  protected override [bodyContentType](): string | null {
     return this.headers.get("content-type");
   }
 
@@ -579,6 +580,16 @@ export class Request extends Body {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes; safe here because this prototype now carries no
+    // non-standard names -- the body's MIME hook is symbol-keyed and invisible to
+    // `getOwnPropertyNames`.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "Request",
       writable: false,

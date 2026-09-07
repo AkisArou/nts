@@ -144,7 +144,15 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
  * `idl-internal-surface.test.mjs`. Adding a class here without first clearing its internals
  * would enumerate those too, which is the ordering that makes this list the interesting part.
  */
-const FULLY_CONFORMANT = ["Headers", "TextDecoder", "TextEncoder", "TextDecoderStream", "TextEncoderStream"];
+const FULLY_CONFORMANT = [
+  "Headers",
+  "Request",
+  "Response",
+  "TextDecoder",
+  "TextDecoderStream",
+  "TextEncoder",
+  "TextEncoderStream",
+];
 
 suite("members of a cleared interface are enumerable, as Web IDL requires", () => {
   const wrong = [];

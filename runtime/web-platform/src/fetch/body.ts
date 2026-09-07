@@ -63,6 +63,15 @@ export function convertBodyInit(input: BodyInit | null | undefined): BodyInit | 
 }
 
 /** Internal body representation: replay source is separate from one-shot stream state. */
+/**
+ * The body's own MIME type, supplied by whichever interface extends it.
+ *
+ * Symbol-keyed for the same reason as the `Headers` internals: `protected` is a
+ * compile-time notion that leaves an ordinary method on the prototype, and Web IDL says an
+ * interface prototype carries the interface's members and nothing else.
+ */
+export const bodyContentType: unique symbol = Symbol("Body content type");
+
 export class BodyState {
   stream: ReadableStream<Uint8Array> | null;
   readonly type: string | null;
@@ -234,12 +243,12 @@ export abstract class Body {
   }
 
   async blob(): Promise<Blob> {
-    return new Blob([await this.bytes()], { type: this.contentType() ?? "" });
+    return new Blob([await this.bytes()], { type: this[bodyContentType]() ?? "" });
   }
 
   async formData(): Promise<FormData> {
     const bytes = await this.bytes();
-    const mime = parseMIMEType(this.contentType() ?? "");
+    const mime = parseMIMEType(this[bodyContentType]() ?? "");
 
     if (mime?.essence === "multipart/form-data") return decodeMultipart(bytes, mime);
     if (mime?.essence !== "application/x-www-form-urlencoded")
@@ -249,7 +258,7 @@ export abstract class Body {
     return result;
   }
 
-  protected abstract contentType(): string | null;
+  protected abstract [bodyContentType](): string | null;
 
   /** @internal */ getState(): BodyState {
     return this.bodyState;

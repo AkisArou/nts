@@ -103,8 +103,6 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "releaseBYOB",
     "requestClose",
   ],
-  Request: ["contentType"],
-  Response: ["contentType"],
   WebSocket: ["closeForRuntime", "connect", "fail", "finish", "readLoop", "unregister"],
 };
 
@@ -145,7 +143,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 41);
+  assert.equal(total, 39);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {

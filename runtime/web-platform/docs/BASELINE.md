@@ -6206,3 +6206,26 @@ on controllers and readers as well as internals on the stream, and only a type-a
 separate the two. Do not do that one with a regular expression.
 
 814/814 host, upstream 2,602 tests with 2,566 passing and the same eight failures.
+
+## `Request` and `Response` join them, and `protected` turns out to be the same story
+
+One internal each, and it was the same shape a third time. `contentType` is `protected
+abstract` on the shared `Body` base and overridden by both — and `protected`, like `private`,
+is a compile-time notion that leaves an ordinary method on the prototype. Three access
+modifiers now, three times the same lesson: **`private`, `protected` and `#` are not three
+strengths of the same thing. Two are comments and one is a runtime guarantee, and only the
+guarantee changes what a consumer sees.**
+
+Symbol-keyed on the base, so one declaration covers both subclasses and the hook stays exactly
+as reachable as it was.
+
+`Request` and `Response` now carry nothing non-standard and their members are enumerable.
+That makes **seven fully conformant interfaces** — `Headers`, `Request`, `Response`,
+`TextDecoder`, `TextEncoder`, `TextDecoderStream`, `TextEncoderStream` — and takes the
+non-standard prototype surface from 63 at the start of the day to **39**.
+
+Frontier unchanged, upstream unchanged, 816/816 host.
+
+The rest is `ReadableStream`'s seventeen, `EventTarget`'s seven, `Event`'s seven, `WebSocket`'s
+six and `AbortSignal`'s two. The mechanism is settled and demonstrated three times; what is
+left is the type-aware pass over the streams module that a name-based scan cannot do safely.
