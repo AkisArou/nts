@@ -8,6 +8,7 @@ import type { FetchTransport, TransportRequest, TransportResponse } from "../fet
 import { addressOf } from "../http/address.ts";
 import { certificateCovers } from "../http/certificate.ts";
 import { contentLength } from "../http/fields.ts";
+import type { Http2ResponseHeaders } from "./headers.ts";
 import type {
   CancelHandle,
   ConnectAddress,
@@ -267,6 +268,7 @@ export class Http2Transport implements FetchTransport {
           headers: fields,
           body: request.body,
           signal,
+          onInformational: this.informationalObserver(request),
         });
         timer?.cancel();
         const bodyForbidden = request.method === "HEAD" || nullBodyStatus(response.status);
@@ -379,6 +381,31 @@ export class Http2Transport implements FetchTransport {
     this.opening.set(key, opening);
     ignoreRejection(opening);
     return this.awaitWithAbort(opening, request.signal);
+  }
+
+  /**
+   * Adapts this request's interim-response observer to the connection's.
+   *
+   * The connection resets a stream if its callback throws, which is the right thing
+   * for a provider defect but not for a caller merely observing. Catching here means
+   * the connection never sees an observer exception, so the shared contract — an
+   * exception is reported and does not change the request — holds over HTTP/2 exactly
+   * as it does over HTTP/1, while the connection keeps its own safety net.
+   */
+  private informationalObserver(
+    request: TransportRequest,
+  ): ((headers: Http2ResponseHeaders) => void) | undefined {
+    const observer = request.onInformational;
+    if (observer === undefined) return undefined;
+    return (headers) => {
+      const copied: HeaderEntry[] = [];
+      for (const field of headers.headers) copied.push([field.name, field.value]);
+      try {
+        observer({ status: headers.status, headers: copied });
+      } catch (error) {
+        this.scheduler.reportError(error);
+      }
+    };
   }
 
   /**

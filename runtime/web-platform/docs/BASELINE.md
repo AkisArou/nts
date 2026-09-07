@@ -3366,3 +3366,44 @@ was caught by the unexposed-field test.
 The complete local Node-host/real-socket corpus passes 508/508 with zero skipped. The
 pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
 failing and 14 named not-applicable.
+
+## The HTTP/2 half of early hints was already built and unreachable
+
+`Http2ClientConnection.request` has accepted an `onInformational` callback all along,
+and `Http2Transport` never passed one. The mechanism existed; nothing routed through
+it. That is the third instance of that shape found in this lane during this session,
+after `createInternalResponse` and the inert coalescing, and the first where the
+unrouted mechanism was somebody else's rather than one I had just written.
+
+Wiring it required deciding one difference. The connection **resets the stream** if its
+callback throws, which is right for a provider defect: a broken callback inside the
+protocol engine is a protocol problem. It is wrong for a caller merely observing, and
+it contradicts the contract the HTTP/1 path documents — an exception is reported and
+does not change the request. The adapter therefore catches the observer's exception and
+reports it through the scheduler, so the connection never sees one and keeps its safety
+net for the case it was written for.
+
+Three tests against a real HTTP/2 server using node's `additionalHeaders`: two `103`
+responses arriving in order with their `Link` fields before a `200`, an observer that
+throws leaving both the stream and the response intact, and a request without an
+observer behaving exactly as before. Pseudo-headers are asserted absent from what a
+caller is handed — `:status` is protocol framing, not a hint, and it is already carried
+as `status`.
+
+Two sabotages, both restored. Not passing the observer through — the state this was
+found in — was caught by two tests. Letting an observer exception reach the connection
+was caught by the one that exists for it.
+
+**A tooling note that belongs in the evidence rather than only in a habit.** Both
+sabotages first ran against a tree that did not type-check, so the previous emit was
+still in place and the tests reported green against the code the mutation was meant to
+replace. That is a control that always agrees. Sabotages in this lane now run through a
+wrapper that refuses when `tsc` has anything to say, and diagnostic isolation runs
+through one that keys backups by full path and verifies the restore compiles — the two
+failures that produced the corrupted commit recorded above.
+
+The complete local Node-host/real-socket corpus passes 511/511 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green. The
+NTS frontier is 1,303 primary `NTS1001` and 242 `NTS1003` both before and after: this
+slice reaches no dependency the transport had not already reached.

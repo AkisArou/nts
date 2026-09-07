@@ -453,3 +453,95 @@ suite("graceful drain waits for provider work from an open it cancelled", async 
   assert.equal(providerWorkOutstanding, false);
   assert.equal(transport.stats.connecting, 0);
 });
+
+suite("early hints arrive over HTTP/2 through the same contract", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    // `additionalHeaders` is how node's HTTP/2 server sends an interim response.
+    stream.additionalHeaders({ ":status": 103, link: "</style.css>; rel=preload" });
+    stream.additionalHeaders({ ":status": 103, link: "</app.js>; rel=preload" });
+    stream.respond({ ":status": 200, "content-type": "text/plain" });
+    stream.end("done");
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+
+  const seen = [];
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/hinted`), {
+      onInformational: (interim) => seen.push(interim),
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await consume(response.body)).toString(), "done");
+
+  // The same shape the HTTP/1 transport delivers: status plus name/value pairs, in
+  // order, before the final response.
+  assert.deepEqual(
+    seen.map((interim) => interim.status),
+    [103, 103],
+  );
+  assert.equal(
+    seen[0].headers.some(([name, value]) => name === "link" && value.includes("style.css")),
+    true,
+  );
+  assert.equal(
+    seen[1].headers.some(([name, value]) => name === "link" && value.includes("app.js")),
+    true,
+  );
+  // Pseudo-headers are not part of what a caller is handed.
+  for (const interim of seen) {
+    assert.equal(
+      interim.headers.some(([name]) => name.startsWith(":")),
+      false,
+      "a pseudo-header is protocol framing, not a hint",
+    );
+  }
+});
+
+suite("an observer that throws does not reset the HTTP/2 stream", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    stream.additionalHeaders({ ":status": 103, link: "</a.css>; rel=preload" });
+    stream.respond({ ":status": 200 });
+    stream.end("fine");
+  });
+  const reported = [];
+  const primitives = createHostNodePrimitives();
+  const scheduler = {
+    enqueue: (task) => primitives.scheduler.enqueue(task),
+    delay: (milliseconds, task) => primitives.scheduler.delay(milliseconds, task),
+    reportError: (error) => reported.push(error),
+  };
+  const transport = new Http2Transport(new HostNodeSocketConnector(), scheduler);
+  t.after(() => transport.close());
+
+  // The connection resets a stream if its own callback throws, which is right for a
+  // provider defect. A caller merely observing must not be able to trigger it.
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/throws`), {
+      onInformational: () => {
+        throw new Error("observer failed");
+      },
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await consume(response.body)).toString(), "fine");
+  assert.equal(reported.length, 1);
+  assert.match(String(reported[0]), /observer failed/);
+});
+
+suite("a request with no observer is unaffected over HTTP/2", async (t) => {
+  const port = await h2Server(t, (stream) => {
+    stream.additionalHeaders({ ":status": 103, link: "</a.css>" });
+    stream.respond({ ":status": 200 });
+    stream.end("past");
+  });
+  const primitives = createHostNodePrimitives();
+  const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
+  t.after(() => transport.close());
+  const response = await transport.dispatch(
+    transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/plain`)),
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await consume(response.body)).toString(), "past");
+});
