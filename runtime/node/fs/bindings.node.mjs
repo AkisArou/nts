@@ -300,6 +300,13 @@ globalThis.nts_fs_open_bytes_async = (path, flags, mode, cb) =>
 globalThis.nts_fs_close_async = (fd, cb) => fs.close(fd, relay(cb));
 
 globalThis.nts_fs_read_async = (fd, length, position, cb) => {
+  // Same case as `nts_fs_fstat_async` above: libuv answers a closed
+  // FileHandle's sentinel descriptor with UV_EBADF, while node's public
+  // `fs.read` rejects -1 before libuv ever sees it.
+  if (fd < 0) {
+    process.nextTick(cb, -9, 0, []);
+    return;
+  }
   const buffer = Buffer.alloc(length);
   fs.read(fd, buffer, 0, length, position < 0 ? null : position, (error, bytesRead) => {
     if (error) cb(codeOf(error), 0, []);
@@ -308,6 +315,10 @@ globalThis.nts_fs_read_async = (fd, length, position, cb) => {
 };
 
 globalThis.nts_fs_read_bigint_async = (fd, length, position, cb) => {
+  if (fd < 0) {
+    process.nextTick(cb, -9, 0, []);
+    return;
+  }
   const buffer = Buffer.alloc(length);
   fs.read(fd, buffer, 0, length, position < 0n ? null : position, (error, bytesRead) => {
     if (error) cb(codeOf(error), 0, []);

@@ -46,6 +46,7 @@ import {
 } from "../../internal/validators.ts";
 import { uvException } from "../../internal/uv.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
+import { ReadableStream } from "../../../web-platform/src/streams/readable.ts";
 import * as callbacks from "./async.ts";
 import { isBigIntStatFs, isBigIntStats } from "./stats.ts";
 import type {
@@ -447,6 +448,11 @@ export interface FileHandleWriterOptions {
   chunkSize?: number | undefined;
 }
 
+export interface FileHandleWebStreamOptions {
+  type?: string;
+  autoClose?: boolean;
+}
+
 export interface FileHandlePullOptions extends FileHandleWriterOptions {
   signal?: AbortSignalLike | undefined;
 }
@@ -660,7 +666,7 @@ export class FileHandle extends EventEmitter {
       };
       if (typeof offsetOrOptions === "object") {
         const offset = offsetOrOptions?.offset ?? 0;
-        callbacks.read(
+        callbacks.readFileHandle(
           this.#fd,
           buffer,
           {
@@ -673,7 +679,7 @@ export class FileHandle extends EventEmitter {
         );
       } else {
         const offset = offsetOrOptions ?? 0;
-        callbacks.read(
+        callbacks.readFileHandle(
           this.#fd,
           buffer,
           offset,
@@ -818,6 +824,69 @@ export class FileHandle extends EventEmitter {
     return parsed.transforms.length === 0
       ? source
       : createParsedPullSync(source, parsed.transforms);
+  }
+
+  /**
+   * This handle as a web `ReadableStream`, node's `readableWebStream`.
+   *
+   * Always byte-oriented, whatever `type` says: the stream auto-allocates and
+   * the source answers the BYOB request, so a `mode: "byob"` reader has its
+   * own buffer filled rather than handed a copy. The `ReadableStream` is the
+   * canonical one from `web-platform`; nothing about streams is restated here.
+   */
+  readableWebStream(options: FileHandleWebStreamOptions = {}): ReadableStream<Uint8Array> {
+    this.#requireOperationAvailable();
+    // Node locks before it validates, so a rejected `options` still leaves the
+    // handle claimed. Transcribed rather than tidied.
+    this.#operationLocked = true;
+
+    validateObject(options, "options");
+    const type = options.type ?? "bytes";
+    const autoClose = options.autoClose ?? false;
+    validateBoolean(autoClose, "options.autoClose");
+    if (type !== "bytes") {
+      emitWarning(
+        'A non-"bytes" options.type has no effect. A byte-oriented steam is ' +
+          "always created.",
+        "ExperimentalWarning",
+        "",
+      );
+    }
+
+    const done = async (): Promise<void> => {
+      this._unrefForStream();
+      if (autoClose) await this.close();
+    };
+
+    const readable = new ReadableStream<Uint8Array>({
+      type: "bytes",
+      autoAllocateChunkSize: 16_384,
+      pull: async (controller) => {
+        const request = controller.byobRequest;
+        const view = request?.view;
+        if (request === null || view === null || view === undefined) {
+          throw new Error("auto-allocating byte stream pulled with no BYOB view");
+        }
+        const { bytesRead } = await this.read(view, view.byteOffset, view.byteLength);
+        if (bytesRead === 0) {
+          controller.close();
+          await done();
+        }
+        request.respond(bytesRead);
+      },
+      cancel: async () => {
+        await done();
+      },
+    });
+
+    this._refForStream();
+    // Closing the handle ends the stream even while a reader holds it, which
+    // is why this is the internal cancel: the public one rejects on a locked
+    // stream, and a handle closing under a reader is exactly that case.
+    this.once("close", () => {
+      void readable.cancelInternal(undefined);
+    });
+    return readable;
   }
 
   /**

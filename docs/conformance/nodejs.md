@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,725 of node's own applicable test files pass** across twenty-two modules,
+**1,735 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -315,8 +315,8 @@ which is the first time that has been true here.
 It is also the second run of that sweep, and the first one is worth keeping.
 It reported 1,724, with `util` at 19/20 — a module this tranche does not touch
 and whose dependencies it does not touch either. Two direct re-runs of `util`
-gave 20/20, the second sweep gave 20/20 and 1,725, and 1,725 is exactly the
-1,719 above plus the six this tranche adds. So the 19 was one intermittently
+gave 20/20, the second sweep gave 20/20 and 1,725, and 1,725 was exactly the
+1,719 before it plus the six that tranche added. So the 19 was one intermittently
 failing file rather than a regression. It is recorded rather than quietly
 dropped, because a sweep that can print a number one lower than the truth is a
 fact about the instrument: a single green run here is weaker evidence than this
@@ -353,8 +353,13 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,725
+warns about elsewhere, so the two numbers belong next to each other: **1,735
 measured, 408 excluded, 0 hollow.**
+
+The ten `fs` files below move the first number without touching the second.
+They were never excluded; they were never *seen*. That is the distinction this
+line is for: an exclusion is a decision someone can audit, and a file no
+pattern matches is not a decision at all.
 
 **The `compiles` column is not in this table, and its absence is deliberate.**
 It was last measured at compiler `9bb54c1`, which is long superseded, and it
@@ -374,7 +379,7 @@ still.
 | `console` | **17 / 17** | 0 | complete |
 | `dgram` | **75 / 75** | 0 | UDP |
 | `diagnostics_channel` | **32 / 32** | 0 | complete |
-| `fs` | **328 / 328** | 0 | sync, callback and promise surfaces, file streams, watchers |
+| `fs` | **338 / 338** | 0 | sync, callback and promise surfaces, file streams, watchers, `FileHandle.readableWebStream` |
 | `http` | **396 / 396** | 0 | a complete HTTP/1.1 implementation, parser and env-proxy routing included; no HTTPS or HTTP/2 |
 | `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
@@ -713,6 +718,61 @@ plural, so the two matched nothing anywhere and appeared in no denominator on
 either axis — the failure mode a green sweep is structurally unable to show.
 Both are now claimed and both pass. The completeness audit above has been
 corrected rather than quietly amended, because it is the audit that was wrong.
+
+The correction was worth generalising, and generalising it found more. Taking
+every module's pattern — the explicit ones and `run.mjs`'s
+`^test-<module>(-.*)?` default — and asking which of node's 4,494
+`test/parallel` files match no module at all leaves 2,630, nearly all of them
+belonging to subsystems this profile does not have. Filtering those for a name
+that mentions a module we *do* own leaves a shortlist worth reading by hand,
+and ten of them were `fs` tests: `test-file-write-stream.js` and its four
+numbered siblings, `test-file-read-noexist.js`,
+`test-file-validate-mode-flag.js`, and the three `test-filehandle-*` files.
+Every one calls `require('fs')`. `fs` was reporting 328 of 328 while ten of its
+own pinned tests were in nobody's denominator.
+
+Eight of the ten passed the moment they were claimed, which is the
+uncomfortable part: that coverage had been earned and never counted. The other
+two are the subject of the section below.
+
+## Ten `fs` tests nothing was running, and the two that failed
+
+Eight of the ten newly-claimed `fs` files passed unchanged. `fs` goes from 328
+to 338, with sabotage failing all 338. The two that failed were both worth
+having.
+
+**`FileHandle.readableWebStream` did not exist.** Node's returns a byte
+`ReadableStream` that auto-allocates and answers the BYOB request, so a
+`mode: "byob"` reader has its own buffer filled rather than being handed a
+copy. Nothing about streams is restated in `fs` to do this: the class is the
+canonical `ReadableStream` from `web-platform`, which already implements
+`ReadableByteStreamController`, `byobRequest` and `autoAllocateChunkSize`.
+One detail is not decoration — closing the handle has to end the stream *while
+a reader holds it*, and the public `cancel()` rejects on a locked stream, so
+this uses the same internal cancel that a reader's own `cancel()` goes through.
+`test-filehandle-readablestream.js` checks exactly that case, along with the
+BYOB reader, the three `ERR_INVALID_STATE` states, and the warning for a
+non-`"bytes"` type.
+
+**A closed handle answered the wrong error, in two layers.**
+`test-filehandle-autoclose.mjs` asserts that reading an auto-closed handle
+rejects with `EBADF`. Ours said `ERR_OUT_OF_RANGE`, because node's `FileHandle`
+talks to the binding while ours went through the public `fs.read`, whose job is
+to reject a descriptor like `-1` before it reaches libuv. The fix is the shape
+this repo had already used for `fstat`, applied twice: `async.ts` now splits
+`read` into a validating wrapper and a `readFileHandle` helper that accepts the
+closed sentinel, and the host binding answers a negative descriptor with
+`UV_EBADF` instead of letting node's own `fs.read` reject it. Both layers were
+needed, and finding only the first is why the test still failed after the
+obvious fix.
+
+The same split applies in principle to `write`, `readv`, `writev` and the rest
+of `FileHandle`, which still report `ERR_OUT_OF_RANGE` on a closed handle. It
+is deliberately not done here. `fstat` was split when a test demanded it, and
+`read` was split when a test demanded it; doing the remaining dozen now would
+be behaviour nothing measures, which is the same argument this document makes
+for not inventing channel names. It is recorded so the next test that demands
+one finds the reason rather than the surprise.
 
 ## `path`
 

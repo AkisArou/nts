@@ -1,1 +1,1 @@
-^test-fs(?:-.*)?\.(?:js|mjs)$
+^(test-fs(?:-.*)?|test-filehandle(?:-.*)?|test-file-(?:write-stream[0-9]*|read-noexist|validate-mode-flag))\.(?:js|mjs)$

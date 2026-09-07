@@ -484,7 +484,29 @@ export function read(
   suppliedCallback?: unknown,
 ): void {
   validateFileDescriptor(fd);
+  readFileHandle(
+    fd,
+    bufferOrOptionsOrCallback,
+    offsetOrOptionsOrCallback,
+    lengthOrCallback,
+    position,
+    suppliedCallback,
+  );
+}
 
+/**
+ * FileHandle's read path accepts its closed `-1` sentinel so the native
+ * operation can report EBADF. Public `fs.read` still validates descriptors
+ * before entering this helper.
+ */
+export function readFileHandle(
+  fd: number,
+  bufferOrOptionsOrCallback?: unknown,
+  offsetOrOptionsOrCallback?: unknown,
+  lengthOrCallback?: unknown,
+  position?: unknown,
+  suppliedCallback?: unknown,
+): void {
   let buffer: ArrayBufferView;
   let options: AsyncReadOptions | null | undefined;
   let callback: ReadCallback;
