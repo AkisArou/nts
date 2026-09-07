@@ -312,14 +312,36 @@ public final class StoreTest {
         check(NtsStore.sourceRead(empty, 4) != null, "the refusal consumed the range");
         NtsStore.sourceClose(empty);
 
-        // And a view already open is unaffected by a later commit, because the
-        // descriptor pins what it was opened over rather than the path.
+        // And a view already open keeps reading what it was opened over, both
+        // when the key is **replaced** and when it is **deleted**.
+        //
+        // Replacement is a correctness property: a Blob composes and slices
+        // immutable ranges, so a reader that saw a replacement mid-read breaks
+        // the guarantee it is built on. Deletion is a *lifetime* one -- without
+        // it nothing above this seam can release stored bytes while anything
+        // might still be reading them, so every caller either leaks or guesses.
+        //
+        // Both hold here for one reason: the handle is an open descriptor, and
+        // a rename or an unlink changes the directory rather than the file it
+        // named. That is a property of the platform, not of this code, which is
+        // exactly why it is asserted rather than assumed -- and asserted on ART
+        // as well, where the filesystem underneath is not the desktop's.
         long pinned = NtsStore.sourceOpen("cache", "big", 0, 10);
         write("cache", "big", "REPLACEDXX");
         byte[] original = NtsStore.sourceRead(pinned, 100);
         check(original != null && new String(original, "UTF-8").equals("0123456789"),
             "an open ranged view saw a value committed after it opened");
         NtsStore.sourceClose(pinned);
+
+        long survives = NtsStore.sourceOpen("cache", "big", 0, 10);
+        check(NtsStore.delete("cache", "big"), "the key to be deleted was not there");
+        check(NtsStore.sourceSize("cache", "big") == -1, "the key was not deleted");
+        byte[] afterDelete = NtsStore.sourceRead(survives, 100);
+        check(afterDelete != null && new String(afterDelete, "UTF-8").equals("REPLACEDXX"),
+            "an open ranged view stopped reading when its key was deleted");
+        check(NtsStore.sourceRead(survives, 100) == null, "the surviving range did not end");
+        NtsStore.sourceClose(survives);
+        write("cache", "big", "0123456789");
         NtsStore.delete("cache", "big");
 
         // ----- a committed value outlives the handle that wrote it ----------
