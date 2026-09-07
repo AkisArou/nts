@@ -445,6 +445,38 @@ export const CORPORA = {
       { name: "resolve", args: (s) => ["http://base.example/x/y", s] },
       { name: "domainToASCII", args: (s) => [s] },
       { name: "domainToUnicode", args: (s) => [s] },
+      // The file-URL pair, which is this lane's own and is where percent
+      // encoding, a leading slash and a Windows drive letter all interact.
+      {
+        label: "pathToFileURL",
+        call: (m, s) => {
+          try {
+            return m.pathToFileURL(s).href;
+          } catch (error) {
+            return `threw ${error.name}: ${error.code ?? ""}`;
+          }
+        },
+      },
+      {
+        label: "fileURLToPath",
+        call: (m, s) => {
+          try {
+            return m.fileURLToPath(`file://${s}`);
+          } catch (error) {
+            return `threw ${error.name}: ${error.code ?? ""}`;
+          }
+        },
+      },
+      {
+        label: "urlToHttpOptions",
+        call: (m, s) => {
+          try {
+            return JSON.stringify(m.urlToHttpOptions(new URL(`http://h/${s}`)));
+          } catch (error) {
+            return `threw ${error.name}: ${error.code ?? ""}`;
+          }
+        },
+      },
     ],
   },
 
