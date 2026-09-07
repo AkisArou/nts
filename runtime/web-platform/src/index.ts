@@ -1,6 +1,12 @@
 export { DOMException } from "./core/errors.ts";
 
 export { AbortController, AbortSignal } from "./core/abort.ts";
+export type {
+  DnsAddress,
+  DnsAddressFamily,
+  DnsResolveOptions,
+  DnsResolver,
+} from "./provider/primitives.ts";
 
 export {
   CloseEvent,
@@ -100,6 +106,14 @@ export type { TransportBodySource, TransportErrorCode } from "./fetch/transport.
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export {
+  DnsCache,
+  DnsConnectionError,
+  DnsConnector,
+  DnsLookupLimitError,
+  DnsNoAddressError,
+} from "./dispatch/dns.ts";
+export type { DnsCacheOptions, DnsCacheStats, DnsConnectorOptions } from "./dispatch/dns.ts";
 export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
 export type {
   AgentOptions,

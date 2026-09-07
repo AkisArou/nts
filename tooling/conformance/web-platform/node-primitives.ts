@@ -3,6 +3,7 @@
 
 import { connect as tcpConnect, isIP } from "node:net";
 import type { Socket } from "node:net";
+import { lookup as dnsLookup } from "node:dns";
 import { connect as tlsConnect } from "node:tls";
 import { randomFillSync } from "node:crypto";
 import { EOL } from "node:os";
@@ -15,6 +16,9 @@ import type {
   ByteConnection,
   CancelHandle,
   ConnectAddress,
+  DnsAddress,
+  DnsResolveOptions,
+  DnsResolver,
   PlatformPrimitives,
   RandomSource,
   Scheduler,
@@ -256,9 +260,10 @@ export class HostNodeSocketConnector implements SocketConnector {
       return Promise.reject(new RangeError(`Connect timeout must be 1..${MAX_TIMER_DELAY_MS} ms`));
     return new Promise<ByteConnection>((resolve, reject) => {
       const ca = typeof this.options.ca === "string" ? this.options.ca : this.options.ca?.slice();
+      const physicalHostname = address.resolvedAddress ?? address.hostname;
       const socket = address.secure
         ? tlsConnect({
-            host: address.hostname,
+            host: physicalHostname,
             port: address.port,
             servername: isIP(address.hostname) === 0 ? address.hostname : undefined,
             rejectUnauthorized: true,
@@ -266,7 +271,7 @@ export class HostNodeSocketConnector implements SocketConnector {
             ALPNProtocols: ["http/1.1"],
             ca,
           })
-        : tcpConnect({ host: address.hostname, port: address.port });
+        : tcpConnect({ host: physicalHostname, port: address.port });
       let settled = false;
       let dispose = (): void => {};
       const timer = setTimeout(
@@ -304,6 +309,55 @@ export class HostNodeSocketConnector implements SocketConnector {
         const connection = new HostNodeByteConnection(socket);
         cleanup();
         resolve(connection);
+      });
+    });
+  }
+}
+
+/** Host-only resolver used to exercise the shared DNS policy without delegating Fetch. */
+export class HostNodeDnsResolver implements DnsResolver {
+  private readonly ttlMilliseconds: number;
+
+  constructor(ttlMilliseconds = 10000) {
+    if (!Number.isFinite(ttlMilliseconds) || ttlMilliseconds < 0) {
+      throw new RangeError("DNS TTL must be a non-negative finite number");
+    }
+    this.ttlMilliseconds = ttlMilliseconds;
+  }
+
+  resolve(
+    hostname: string,
+    options: DnsResolveOptions,
+    signal: AbortSignal,
+  ): Promise<readonly DnsAddress[]> {
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<readonly DnsAddress[]>((resolve, reject) => {
+      let settled = false;
+      const unsubscribe = signal.subscribe(() => {
+        if (settled) return;
+        settled = true;
+        reject(signal.reason);
+      });
+      const family = options.families.length === 1 ? options.families[0] : 0;
+      dnsLookup(hostname, { all: true, family, order: "verbatim" }, (error, addresses) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        if (error !== null) {
+          reject(error);
+          return;
+        }
+        const result: DnsAddress[] = [];
+        for (const address of addresses) {
+          if (result.length >= options.maximumAddresses) break;
+          if (address.family !== 4 && address.family !== 6) continue;
+          result.push({
+            address: address.address,
+            family: address.family,
+            ttlMilliseconds: this.ttlMilliseconds,
+          });
+        }
+        resolve(result);
       });
     });
   }

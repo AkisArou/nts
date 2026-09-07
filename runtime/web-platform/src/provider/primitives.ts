@@ -38,10 +38,38 @@ export interface URLParser {
 }
 
 export interface ConnectAddress {
+  /** Logical authority used for pooling, HTTP Host, TLS SNI and certificate verification. */
   readonly hostname: string; // IPv6 has no surrounding brackets at this boundary.
   readonly port: number;
   readonly secure: boolean;
   readonly connectTimeoutMs: number;
+  /** Optional physical endpoint selected by the shared resolver; never use it as TLS identity. */
+  readonly resolvedAddress?: string;
+  readonly resolvedFamily?: DnsAddressFamily;
+}
+
+export type DnsAddressFamily = 4 | 6;
+
+export interface DnsAddress {
+  readonly address: string;
+  readonly family: DnsAddressFamily;
+  /** Provider-reported positive-cache lifetime. Zero keeps the answer request-local. */
+  readonly ttlMilliseconds: number;
+}
+
+export interface DnsResolveOptions {
+  readonly families: readonly DnsAddressFamily[];
+  /** Provider must not materialize more records than this shared-policy bound. */
+  readonly maximumAddresses: number;
+}
+
+/** Provider-owned nonblocking DNS primitive. Shared code owns cache and selection policy. */
+export interface DnsResolver {
+  resolve(
+    hostname: string,
+    options: DnsResolveOptions,
+    signal: AbortSignal,
+  ): Promise<readonly DnsAddress[]>;
 }
 
 /**

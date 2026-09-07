@@ -8,6 +8,10 @@ export type {
   ByteConnection,
   CancelHandle,
   ConnectAddress,
+  DnsAddress,
+  DnsAddressFamily,
+  DnsResolveOptions,
+  DnsResolver,
   PlatformPrimitives,
   RandomSource,
   Scheduler,
@@ -28,6 +32,14 @@ export { TransportError } from "./fetch/transport.ts";
 
 export { composeFetchTransport } from "./dispatch/interceptor.ts";
 export type { FetchInterceptor } from "./dispatch/interceptor.ts";
+export {
+  DnsCache,
+  DnsConnectionError,
+  DnsConnector,
+  DnsLookupLimitError,
+  DnsNoAddressError,
+} from "./dispatch/dns.ts";
+export type { DnsCacheOptions, DnsCacheStats, DnsConnectorOptions } from "./dispatch/dns.ts";
 export { Agent, AgentOriginLimitError, AgentPendingLimitError, Client } from "./dispatch/agent.ts";
 export type {
   AgentOptions,
