@@ -2459,6 +2459,24 @@ what one fix will show for free.
 The prose below was written against 1,509, and before that 946; read its
 *reasoning* and not its arithmetic until each claim is re-derived.
 
+> **This column counts HIR lowering and is blind to what the C backend
+> refuses.** `nts hir` reports `punycode` at **16 functions lowered, 3
+> refused**. `emit-c --napi` on the same module and the same binary then
+> refuses six more — `encode`, `decode`, `mapDomain`, `toASCII`, `toUnicode`,
+> the module's entire public surface — and its artifact publishes nothing.
+>
+> That is not a discrepancy to reconcile; the two commands run different
+> passes. The HIR pass that drops callers of refused functions runs long
+> before the backend can refuse anything, so a backend refusal is invisible
+> here by construction. **So 12,278 is an upper bound on what reaches an
+> artifact, and for some modules a very loose one.**
+>
+> The clearest demonstration is a pair of binaries where the two axes moved in
+> opposite directions: `adc9e193` and `8c305c87` report *identical* totals,
+> 12,278 / 6,794, while between them the artifact axis went from five modules
+> building with two segfaulting to eight building with none. A whole class of
+> defect was fixed and this column did not move by one.
+
 **This axis is moving, and a single anchored figure understates that.** Three
 measurements inside one hour, each from its own pinned copy while
 `target/release` moved on underneath:
