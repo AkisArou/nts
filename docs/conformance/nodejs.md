@@ -1814,17 +1814,52 @@ struct NtsObj_Tuple2206 {
 };
 ```
 
-**The four that link fail the same way, and it is the failure this document
-already has a name for.** `buffer` 0/51, `os` 0/6, `querystring` 0/4,
-`string_decoder` 0/3 — every one at load: *Cannot convert undefined or null to
-object*, *Cannot read properties of undefined*, *SD is not a constructor*.
-Those are the symptoms of a module whose top-level statements never ran. Ten of
-the twenty-two builds print `no wrapper for module#init: a class member`. See
-*A compiled module was missing its initialization entirely* under
-**Conventions**: that failure cost twenty-three statements across this profile
-once, including the whole of IDNA in `url`. It announces itself now, with a
-named cause, which is an improvement over silence — but the artifact still
-initializes nothing.
+**The four that link fail for a sharper reason than "it did not initialize",
+and it is worth reading the export tables side by side.** `buffer` 0/51, `os`
+0/6, `querystring` 0/4, `string_decoder` 0/3, every one at load. The addons
+load fine; what they contain is wrong:
+
+| addon | what it exports |
+| --- | --- |
+| `string_decoder` | `utf8Length`, `normalizeEncodingName`, `byteLengthIn`, `revokeObjectURL` |
+| `buffer` | the same four, and nothing else |
+| `querystring` | those four, plus `escape` |
+| `os` | those four, plus `hostname`, `type`, `release`, `version`, `machine`, `arch`, `platform`, `homedir`, `tmpdir`, `endianness`, `uptime` |
+
+Three things are wrong with that and they are probably one bug.
+
+**Every addon carries the same four foreign names.** `normalizeEncodingName`
+and `byteLengthIn` are internal helpers in `buffer/src/encodings.ts`;
+`revokeObjectURL` is in `buffer/src/blob.ts`. A `string_decoder` addon has no
+business exporting a Blob function. These are private helpers of a
+transitively-imported module appearing as the module's public surface.
+
+**The module's own exports are missing.** `string_decoder/src/main.ts` exports
+the `StringDecoder` class and the addon contains none of it — which is exactly
+what *SD is not a constructor* means. `querystring/src/main.ts` exports
+`QueryString`, `parse`, `stringify`, `unescape`, `decode` and `encode`; the
+addon has `escape` alone.
+
+**What survives in `os` says what the filter is.** The eleven that made it are
+exactly the ones returning a string or a number. Everything returning an object
+or an array — `constants`, `cpus`, `networkInterfaces`, `userInfo`, `loadavg` —
+is gone, as are the values that are not functions at all, `EOL` and `devNull`.
+A class (`StringDecoder`) and an object literal (`QueryString`) do not survive
+either.
+
+Read together: **the N-API export table is not the module's export list.** It
+looks like the free functions with scalar-representable signatures, gathered
+from the whole linked program rather than from the module being built. No
+`shape.mjs` can repair that — the functions are not in the artifact to be
+reached — and each of those four `shape.mjs` files was checked against its
+module's real exports before this was written, so the facade is asking for the
+right things.
+
+Ten of the twenty-two builds also print `no wrapper for module#init: a class
+member`, and see *A compiled module was missing its initialization entirely*
+under **Conventions** for what a missing initializer costs. But `os` and
+`querystring` print no such refusal and still fail, so the export table is a
+defect in its own right rather than a consequence of that one.
 
 Reproduce any of it with one line:
 
