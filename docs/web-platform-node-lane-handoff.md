@@ -141,6 +141,18 @@ mechanical here will notice. Identity constraints live only in the other lane's 
 in an agreement; ask before moving or re-wrapping a shared class, and do not expect a
 gate to ask for you.
 
+The NodeJS lane searched their pinned suite and found exactly one explicit `===`
+assertion, `test-global-encoder.js`, covering `TextEncoder`/`TextDecoder`, `URL`,
+`URLSearchParams`, `Blob`, `File`, `AbortController`, `AbortSignal`, `Event`,
+`EventTarget` and `CustomEvent`. **Do not read that as the exposure.** They also named
+the invisible form, which is the one that matters: `instanceof` across the boundary. A
+program that builds a `Blob` from the global and hands it to something checking
+`instanceof` against a differently-sourced `Blob` fails exactly as an identity failure
+does, matches no search for `===`, and surfaces as a wrong-type error rather than a
+missing reference. Neither lane has a list of those and neither should invent one — a
+guessed list would look like coverage. Every canonical global reused across the boundary
+is a candidate, which is the whole rule.
+
 ## Last completed slice
 
 Commit `03c03d93` removed repeated ambient declarations and made the environment slot
