@@ -1831,3 +1831,39 @@ live compiled-source frontier is 1180 primary `NTS1001` refusals and 195 depende
 `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. The increase is new policy source reaching existing
 language prerequisites; it is not compiled interceptor evidence.
+
+## Bounded in-flight request deduplication
+
+At `98097617`, the shared interceptor layer deduplicates eligible bodyless safe
+requests while preserving an independent response body, trailers promise, and abort
+outcome for every subscriber. The default eligibility is `GET`; configurable method,
+skip-header, and excluded-header policies remain conservative, and the collision-free
+key length-prefixes the method, URL, and exact retained header sequence.
+
+Deduplication is deliberately bounded in four dimensions: pending requests,
+subscribers per request, buffered bytes per subscriber, and aggregate buffered bytes.
+An exhausted pending or subscriber slot falls back to an independent dispatch rather
+than changing the request's answer. A slow subscriber alone receives a typed buffer
+error and releases its reserved budget. Exact accounting survives copied chunks,
+copy failures, cancellation, and terminal delivery; no hidden per-subscriber queue can
+grow without limit.
+
+Subscribers may join only before the first response-data event. They receive copied
+byte chunks and copied trailers, so one consumer cannot mutate another's result. One
+subscriber aborting or canceling does not disturb the rest; the last subscriber's
+departure aborts and cancels the upstream request, with cleanup awaited. An upstream
+failure retains the same error identity for every subscriber, and asynchronous setup
+failures cannot escape as unhandled rejections.
+
+The focused deduplication corpus passes 11/11 and the complete local
+Node-host/real-socket suite passes 331/331. The pinned WPT slice remains 2275/2283
+applicable cases with 14 named not-applicable cases and the same eight visible
+structural/common-compiler failures.
+
+A sabotage changed aggregate-budget admission from strictly greater-than to
+greater-than-or-equal. The exact-boundary global-budget precondition fell from 1/1 to
+0/1 with `DeduplicationBufferError`, then returned to 1/1 after restoration. The live
+compiled-source frontier is 1207 primary `NTS1001` refusals and 202 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase is new shared policy source reaching
+existing language prerequisites; it is not compiled deduplication evidence.
