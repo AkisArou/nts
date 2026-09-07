@@ -1307,3 +1307,43 @@ frontier is 754 primary `NTS1001` refusals and 105 dependent `NTS1003` cascades,
 zero `NTS1004` module diagnostics, zero JVM-backend diagnostics, and no invalid HIR.
 This is the final-source dependency frontier, not evidence that cookies execute on a
 compiled provider yet.
+
+## HTTP cache policy core
+
+At `fedfa74e`, Fetch can be given an environment-owned `HttpCache` whose policy is
+implemented once in shared TypeScript rather than delegated to a platform HTTP
+client. The normative inputs are RFC 9111, the Fetch Standard's HTTP-network-or-cache
+algorithm, RFC 9110 date/list grammar, and RFC 5861. Standalone Undici `8.10.2` is a
+compatibility and provider-shape reference, not the policy authority. That version is
+newer than the `8.9.0` fix for `GHSA-jr45-8vmc-qm54`; the focused corpus separately
+proves that optional whitespace around the `=` in qualified `private` and `no-cache`
+directives cannot discard the protected field list.
+
+The shared core implements strict `Cache-Control`, `Age`, and all three HTTP-date
+wire forms; corrected age and freshness; private/shared storage rules; Authorization
+constraints; `Vary` selection; Fetch cache modes; fresh and stale reuse; ETag and
+Last-Modified validation with 304 metadata merge; unsafe-method target invalidation;
+qualified-field stripping; `stale-if-error`; per-variant coalesced
+`stale-while-revalidate`; and corrected `Age` emission. Request `no-store` bypasses
+both lookup and storage, and legacy `Pragma: no-cache` is recognized as an exact
+comma-list member rather than by substring.
+
+The storage interface is streaming and transactional: a response becomes visible
+only after end of body and successful commit. Cancellation, source failure, entry
+limits, and store failure abort the partial transaction without failing or replacing
+the network response. The in-memory implementation copies chunks, is replayable,
+and enforces entry-count, total-byte, and per-entry-byte bounds with deterministic
+least-recently-used eviction. Persistent crash-safe storage remains a provider
+obligation over this same byte/metadata contract; it is not claimed by this
+checkpoint. The separate public `Cache`/`CacheStorage` API, same-origin
+`Location`/`Content-Location` invalidation, and request collapsing also remain
+future work and are not hidden behind the RFC 9111 label.
+
+All 23 focused cache tests and all 199 local Node-host/real-socket tests pass. The
+complete pinned upstream slice remains 2143/2151 applicable cases with eight named
+not-applicable cases and the same eight visible structural/common-compiler failures;
+the cache tranche introduces no WPT failure or exclusion. The live NTS check reports
+782 primary `NTS1001` refusals, 116 dependent `NTS1003` cascades, zero `NTS1004`
+module diagnostics, zero JVM-backend diagnostics, and no invalid HIR. This increase
+is the final cache source reaching existing compiler dependencies, not compiled-cache
+execution evidence.
