@@ -200,6 +200,30 @@ error text, the struct with `void abort; void close; void start;` in it, and the
 call passing a closure pointer where a three-field struct is declared. Neither
 has a minimal reproduction.
 
+**Read from the generated C that is still on disk, the `void` fields are three
+WHATWG Streams dictionaries**, and the shape of the evidence rules out the
+obvious explanation:
+
+    struct NtsObj_Type1880 { NtsHeader header;
+        void abort; void close; void start; void type; void write; };   UnderlyingSink
+    struct NtsObj_Type1882 { NtsHeader header;
+        void highWaterMark; void size; };                               QueuingStrategy
+    struct NtsObj_Type2206 { NtsHeader header;
+        void cancel; void pull; void start; };                          UnderlyingSource
+
+**Every field is `void`, not the exotic ones.** `QueuingStrategy.highWaterMark`
+is `number | undefined`, and a property of that type compiles on its own — it is
+one of the fixtures above. So this is not "the field's type is unrepresentable"
+applied five times; it is a struct emitted with *no* field type resolved.
+
+`UnderlyingSink<W>` is generic and its members are optional callbacks over `W`,
+which suggests the struct is laid out without an instantiation to resolve them.
+Two candidates are staged and **neither has been run**: a generic interface of
+optional callbacks reached only through a generic function, and a property typed
+exactly `undefined` (`UnderlyingSink` declares `type?: undefined`, and `type` is
+one of the five). Whichever reproduces becomes the fixture; if neither does, the
+analysis is wrong and this paragraph says so.
+
 Two were written and both were wrong. A fixture calling `queueMicrotask` does
 not typecheck in a bare program — the name is not in scope — and one declaring
 an object type of optional function members lowers cleanly and compiles clean,
