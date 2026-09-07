@@ -144,8 +144,39 @@ for (const entry of api) {
 }
 
 // ---------------------------------------------------------------------------
+// What the module's *shape* needs, which is not the same as what it exports.
+//
+// `shape.mjs` assembles node's CommonJS surface out of typed exports, so the
+// two counts come apart in both directions. `async_hooks` publishes 17 of 31
+// and none of it matters: the 17 are internal helpers that `net` and `http`
+// import across module boundaries, while the four names node's tests use are
+// all absent. A raw publish count invites exactly that mistake, so the number
+// this prints first is the one that decides whether a test can run.
+
+/** The `exports.X` names read inside `shape.mjs`'s `shape()`. */
+function shapeRequires() {
+  const path = join(ROOT, "runtime/node", module, "shape.mjs");
+  if (!existsSync(path)) return undefined;
+  const text = readFileSync(path, "utf8");
+  const start = text.indexOf("export function shape(");
+  if (start < 0) return undefined;
+  const next = text.indexOf("\nexport function ", start + 1);
+  const body = text.slice(start, next < 0 ? text.length : next);
+  return [...new Set([...body.matchAll(/\bexports\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]))].sort();
+}
 
 const published = api.filter((e) => e.published);
+const publishedNames = new Set(published.map((e) => e.name));
+const required = shapeRequires();
+if (required !== undefined) {
+  const missing = required.filter((n) => !publishedNames.has(n));
+  console.log(
+    `${module}: shape needs ${required.length} name(s), ` +
+      `${required.length - missing.length} published, ${missing.length} missing`,
+  );
+  if (missing.length > 0) console.log(`  missing: ${missing.join(", ")}`);
+}
+
 console.log(`${module}: ${published.length} of ${api.length} exports published`);
 if (published.length > 0) {
   console.log(`  published: ${published.map((e) => e.name).join(", ")}`);
