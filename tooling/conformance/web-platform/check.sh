@@ -55,6 +55,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/server-handshake.test.mjs \
   tooling/conformance/web-platform/test/snapshot-agent.test.mjs \
   tooling/conformance/web-platform/test/spill.test.mjs \
+  tooling/conformance/web-platform/test/textdecoder-differential.test.mjs \
   tooling/conformance/web-platform/test/trailers.test.mjs \
   tooling/conformance/web-platform/test/tunnel.test.mjs \
   tooling/conformance/web-platform/test/utf8-differential.test.mjs \

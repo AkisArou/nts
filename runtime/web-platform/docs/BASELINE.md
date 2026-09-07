@@ -5179,3 +5179,44 @@ length and the write comparison. Ignoring the `start` of a ranged decode fails, 
 first form was refused for not type-checking.
 
 Local corpus 721/721 with zero skipped, upstream unchanged at 2,408 of 2,418.
+
+## A differential against node, and node was the one that was wrong
+
+`TextDecoder` is now compared against node's across the product of three encodings, the
+`fatal` flag, the `ignoreBOM` flag and arbitrary streaming splits. The pinned WPT
+fixtures cover the standard's cases; this covers the *combinations*, which no fixture
+enumerates because the product is large and dull, and which is where an implementation
+with correct pieces still gets the interaction wrong. UTF-16 landed today and is the
+least-exercised code in this lane, which is why it went first.
+
+It failed immediately, on two of the twelve combinations — `utf-8` streamed with
+`ignoreBOM` false, fatal and not. **The divergence is real and node has it.**
+
+    [0xEA, 0xEF, 0xBB, 0xBF, 0x41]
+
+    decoded whole      node: U+FFFD U+FEFF U+0041     this: U+FFFD U+FEFF U+0041
+    split 1 / 3 / 1    node: U+FFFD U+0041            this: U+FFFD U+FEFF U+0041
+
+Node's two answers disagree **with each other** for the same bytes. A byte-order mark is
+removed only when the stream *starts* with one; here the stream starts with a truncated
+three-byte lead, so the `EF BB BF` that follows is U+FEFF and is data. Node's
+whole-buffer answer says so and its streamed answer drops it.
+
+So the streaming comparison lost its oracle, and rather than delete the case or accept
+node's answer, the property changed: **a split must not be observable.** Streamed output
+is compared against this decoder's own whole-buffer output for the same bytes. That is a
+weaker oracle and a stronger statement — it catches every split-boundary defect without
+borrowing anybody's opinion about the BOM, and the whole-buffer path still faces node.
+
+The disagreement itself is a test now, written so it fails if node ever agrees with
+itself, because a workaround whose reason has silently expired is worse than the bug.
+
+This is the lesson from the percent-decoding fuzz arriving from the other direction. There
+the oracle was a reimplementation and it was wrong on its first run. Here the oracle is a
+mature independent implementation and it is *still* wrong, on one case, in a way visible
+only because it contradicts itself. **A differential locates a disagreement; it never
+says whose.** What settled it was a property neither implementation gets to vote on.
+
+Three encodings, twelve combinations, seven thousand inputs each: 26 assertions across
+84,000 comparisons. Local corpus 747/747 with zero skipped, upstream unchanged at 2,408
+of 2,418.
