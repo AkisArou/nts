@@ -1,5 +1,10 @@
-import { coerceToByteString, requireDictionary, toUnsignedShort } from "../core/webidl.ts";
-import type { RandomSource } from "../provider/primitives.ts";
+import {
+  coerceToByteString,
+  coerceToUSVString,
+  requireDictionary,
+  toUnsignedShort,
+} from "../core/webidl.ts";
+import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
@@ -16,7 +21,11 @@ export interface ResponseInit {
 export interface ResponseContext {
   random: RandomSource;
   bodyPolicy: BodyPolicy;
+  urls: URLParser;
+  baseURL?: string;
 }
+
+export type ResponseType = "basic" | "cors" | "default" | "error" | "opaque" | "opaqueredirect";
 
 declare function nts_environment_platform(): WebPlatformRuntime;
 
@@ -54,11 +63,11 @@ export function isRedirectStatus(status: number): boolean {
 export class Response extends Body {
   private readonly context: ResponseContext;
   private responseStatus: number;
-  readonly statusText: string;
-  readonly headers: Headers;
+  private readonly responseStatusText: string;
+  private readonly responseHeaders: Headers;
   private responseURL = "";
   private wasRedirected = false;
-  private responseType: "default" | "basic" | "error" = "default";
+  private responseType: ResponseType = "default";
 
   constructor(body?: BodyInit | null, init?: ResponseInit);
   /** @internal */ constructor(
@@ -90,8 +99,8 @@ export class Response extends Body {
     super(state);
     this.context = context;
     this.responseStatus = status;
-    this.statusText = statusText;
-    this.headers = headers;
+    this.responseStatusText = statusText;
+    this.responseHeaders = headers;
   }
 
   get status(): number {
@@ -102,6 +111,14 @@ export class Response extends Body {
     return this.status >= 200 && this.status <= 299;
   }
 
+  get statusText(): string {
+    return this.responseStatusText;
+  }
+
+  get headers(): Headers {
+    return this.responseHeaders;
+  }
+
   get url(): string {
     return this.responseURL;
   }
@@ -110,7 +127,7 @@ export class Response extends Body {
     return this.wasRedirected;
   }
 
-  get type(): "default" | "basic" | "error" {
+  get type(): ResponseType {
     return this.responseType;
   }
 
@@ -147,20 +164,34 @@ export class Response extends Body {
   }
 
   static redirect(url: string, status = 302): Response {
-    if (!isRedirectStatus(status)) throw new RangeError("Invalid redirect status");
+    const convertedURL = coerceToUSVString(url);
+    const convertedStatus = toUnsignedShort(status);
     const runtime = nts_environment_platform();
-    const absolute = runtime.requestContext.urls.parse(url).href;
-    const result = new Response(null, { status, headers: [["location", absolute]] });
+    const absolute = runtime.requestContext.urls.parse(
+      convertedURL,
+      runtime.requestContext.baseURL,
+    ).href;
+    if (!isRedirectStatus(convertedStatus)) throw new RangeError("Invalid redirect status");
+    const result = new Response(null, {
+      status: convertedStatus,
+      headers: [["location", absolute]],
+    });
     result.headers.makeImmutable();
     return result;
   }
 
   static json(data: unknown, init: ResponseInit = {}): Response {
+    // Web IDL converts the complete init dictionary before the JSON algorithm.
+    const convertedInit = convertResponseInit(init);
     const text = JSON.stringify(data);
     if (text === undefined) throw new TypeError("Value is not JSON serializable");
-    const headers = new Headers(init.headers);
+    const headers = convertedInit.headers ?? new Headers();
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
-    return new Response(text, { status: init.status, statusText: init.statusText, headers });
+    return new Response(text, {
+      status: convertedInit.status,
+      statusText: convertedInit.statusText,
+      headers,
+    });
   }
 
   /** @internal */ static fromTransport(

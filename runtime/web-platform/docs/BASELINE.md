@@ -1085,3 +1085,33 @@ green. The live compiled-source frontier is 618 primary `NTS1001` refusals, 82
 `NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics,
 and no invalid HIR. The changed frontier is final Request source reaching existing
 compiler dependencies; it is not compiled-provider progress.
+
+The canonical `Response` now carries its complete standalone Fetch object shape.
+Its `statusText` and `headers` attributes are getter-backed read-only values, and
+the `type` union covers every Fetch response type. `Response.redirect()` performs
+Web IDL argument conversion before its algorithm, resolves relative locations
+against the owning environment's base URL, validates the converted unsigned-short
+status, and returns an immutable header list. `Response.json()` likewise converts
+the complete initializer before serializing its data, so observable conversion and
+serialization failures occur in the specified order. The body consumer now
+validates every stream chunk at runtime as a `Uint8Array`; TypeScript's static
+`ReadableStream<Uint8Array>` annotation is not trusted at a JavaScript boundary.
+
+Twelve complete, unchanged current WPT Response fixtures and their support script
+are pinned by exact Git blob hash. They add 118 source cases covering constructor
+initialization, static factories, locked and disturbed streams, error propagation,
+invalid stream chunks, empty bodies, and stream cancellation. All 113 applicable
+cases pass. Five exact cases are named not applicable to this standalone harness:
+four require the WPT HTTP server, which the harness deliberately does not replace
+with host `fetch`, and one assumes an empty multipart body has no wire bytes even
+though a structurally complete multipart body contains its closing boundary.
+
+Across the complete pinned slice, 1711 of 1720 applicable cases pass, with seven
+named not-applicable cases. The same nine visible failures remain: three Headers
+iterator-shape cases, one readable byte/BYOB tee case, two direct-promise-fulfillment
+cases, two explicit-receiver callback cases, and one readable async-iterator shape
+case. The local Node-host suite passes 152/152 and the root TypeScript solution is
+green. The live NTS frontier remains 618 primary `NTS1001` refusals, 82 dependent
+`NTS1003` cascades, zero JVM-backend diagnostics, zero `NTS1004` module diagnostics,
+and no invalid HIR. Host conformance remains evidence for the shared algorithms;
+it does not claim that the pending compiler and provider prerequisites are complete.

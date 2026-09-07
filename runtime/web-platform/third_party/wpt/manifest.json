@@ -4,7 +4,8 @@
   "pinType": "Git blob SHA-1 (content addressed)",
   "support": {
     "common/get-host-info.sub.js": "e9ec61659c3927e519170bc4e5253f91b7671945",
-    "common/utils.js": "d410b0753582e061572302f3ce9118e95635c6b1"
+    "common/utils.js": "d410b0753582e061572302f3ce9118e95635c6b1",
+    "fetch/api/resources/utils.js": "3721d9bf9cc7cf6d01709aa5e22de2eb9bd4bda7"
   },
   "files": {
     "fetch/api/headers/header-setcookie.any.js": "cafb780c2c75a9ae6a84fb842f0d0fa075aeffd8",
@@ -22,6 +23,18 @@
     "fetch/api/request/request-init-stream.any.js": "f0ae441a00258ddd37998387a347d801b4029cec",
     "fetch/api/request/request-keepalive.any.js": "cb4506db46c931ca347b05a7caa108292e480fc1",
     "fetch/api/request/request-structure.any.js": "5e7855385554bd1c3ef04cfbec78dcfd9f9e9678",
+    "fetch/api/response/response-cancel-stream.any.js": "91140d1afd183b2b6ba2e5fa24bb85c1a7ae40ab",
+    "fetch/api/response/response-consume-empty.any.js": "a5df356258658957137d09ef38da6d71fd7ed488",
+    "fetch/api/response/response-error-from-stream.any.js": "33cad40e757bdeec058620f05272faa1fe39706d",
+    "fetch/api/response/response-error.any.js": "a76bc4380286fac47b96425abaa6217ed5291e52",
+    "fetch/api/response/response-from-stream.any.js": "ea5192bfb10dcf316ef953c809b89a7682de92a3",
+    "fetch/api/response/response-init-001.any.js": "559e49ad11ffe13a7a291935f6540b6a177e4c9f",
+    "fetch/api/response/response-init-002.any.js": "6c0a46e480406c359abcc7cc315810a844fff6ec",
+    "fetch/api/response/response-init-contenttype.any.js": "3a7744c28782c87f0a92cfaab17512ca0859b25c",
+    "fetch/api/response/response-static-error.any.js": "4097eab37b4c90e8c453027b99fbf4ed31a08b42",
+    "fetch/api/response/response-static-json.any.js": "5ec79e69aa3f9c1009050b083e0cf8c0cc76e1dc",
+    "fetch/api/response/response-static-redirect.any.js": "b16c56d83003d9b08944e67f9492046e9c890b48",
+    "fetch/api/response/response-stream-bad-chunk.any.js": "8e83cd190873a904a366b8eb6cdcc44229f742c0",
     "xhr/formdata/append.any.js": "6871f69df591cc468e5fd99ae6456d48ad96e3a9",
     "xhr/formdata/constructor.any.js": "43704538ab2489a6cbd7a2449532a040fdb4adbd",
     "xhr/formdata/delete.any.js": "9424614f961b2e4b88ad0355d4da9d9e3ad9bccf",
@@ -39,6 +52,15 @@
     },
     "fetch/api/request/request-consume-empty.any.js": {
       "Consume empty FormData request body as text": "The fixture itself marks this empty-string expectation as unclear; a conforming multipart encoder and standalone Undici emit the required closing boundary even for an empty entry list."
+    },
+    "fetch/api/response/response-consume-empty.any.js": {
+      "Consume empty FormData response body as text": "The fixture assumes an empty multipart body has no wire bytes; a conforming multipart encoder and standalone Undici emit the required closing boundary even for an empty entry list."
+    },
+    "fetch/api/response/response-cancel-stream.any.js": {
+      "Accessing .body after canceling it": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
+      "Cancelling a closed Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
+      "Cancelling a loading Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
+      "Cancelling a starting Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle."
     }
   },
   "nodeWpt": {

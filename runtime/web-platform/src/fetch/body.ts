@@ -162,6 +162,9 @@ export class BodyState {
       while (true) {
         const result = await reader.read();
         if (result.done) return concatBytes(chunks, total);
+        if (!(result.value instanceof Uint8Array)) {
+          throw new TypeError("Response body stream chunks must be Uint8Array values");
+        }
         total += result.value.length;
         if (total > this.policy.maxConsumeBytes)
           throw new LimitError("Body consumption exceeded configured limit");

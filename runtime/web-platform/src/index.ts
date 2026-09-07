@@ -80,7 +80,7 @@ export type {
 } from "./fetch/request.ts";
 
 export { Response } from "./fetch/response.ts";
-export type { ResponseInit } from "./fetch/response.ts";
+export type { ResponseInit, ResponseType } from "./fetch/response.ts";
 
 export { fetch } from "./fetch/fetch.ts";
 

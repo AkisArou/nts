@@ -1886,6 +1886,88 @@ test("Response static factories, immutable redirects, JSON and no-content status
   assert.throws(() => redirect.headers.set("a", "b"));
   for (const status of [204, 205, 304]) assert.throws(() => makeResponse("", { status }));
 });
+test("Response attributes are read-only and static factories follow Web IDL conversion", async () => {
+  const response = makeResponse("body", { status: 201, statusText: "Created" });
+  for (const name of ["type", "url", "redirected", "status", "ok", "statusText", "headers"]) {
+    assert.throws(() => {
+      response[name] = "changed";
+    }, TypeError);
+  }
+  assert.equal(response.status, 201);
+  assert.equal(response.statusText, "Created");
+  assert.equal(response.headers, response.headers);
+
+  assert.equal(makeRedirectResponse("https://example.test/", 65_536 + 302).status, 302);
+  const basedRuntime = createHostNodeWebPlatform({ baseURL: "https://example.test/fetch/" });
+  try {
+    assert.equal(
+      makeRedirectResponse("relative").headers.get("location"),
+      "https://example.test/fetch/relative",
+    );
+  } finally {
+    basedRuntime.close();
+    globalThis.nts_environment_platform = () => api;
+  }
+  const redirectOrder = [];
+  const redirected = makeRedirectResponse(
+    {
+      toString() {
+        redirectOrder.push("url");
+        return "https://example.test/converted";
+      },
+    },
+    {
+      valueOf() {
+        redirectOrder.push("status");
+        return 303;
+      },
+    },
+  );
+  assert.deepEqual(redirectOrder, ["url", "status"]);
+  assert.equal(redirected.status, 303);
+
+  const jsonOrder = [];
+  const jsonResponse = Response.json(
+    {
+      get value() {
+        jsonOrder.push("data");
+        return 1;
+      },
+    },
+    {
+      get headers() {
+        jsonOrder.push("headers");
+        return { "x-order": "1" };
+      },
+      get status() {
+        jsonOrder.push("status");
+        return 202;
+      },
+      get statusText() {
+        jsonOrder.push("statusText");
+        return "Accepted";
+      },
+    },
+  );
+  assert.deepEqual(jsonOrder, ["headers", "status", "statusText", "data"]);
+  assert.deepEqual(await jsonResponse.json(), { value: 1 });
+  assert.equal(jsonResponse.status, 202);
+  assert.equal(jsonResponse.headers.get("content-type"), "application/json");
+
+  class SerializationError extends Error {}
+  assert.throws(
+    () =>
+      Response.json(
+        {
+          get value() {
+            throw new SerializationError();
+          },
+        },
+        { status: 0 },
+      ),
+    SerializationError,
+  );
+});
 test("Response applies Web IDL conversion before validation and body extraction", async () => {
   for (const input of [200.9, "201", 65_536 + 204, 65_536 + 599]) {
     const actual = makeResponse(null, { status: input });
