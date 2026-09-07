@@ -126,14 +126,30 @@ for (const name of names) {
   // worse than useless -- `includes("")` is true, so a fixture that asserted
   // nothing would report "reproduces" -- so they are asserted against the
   // emitted file instead.
+  // Absence, which is a blocker shape the other three forms cannot state. Some
+  // defects are a constant the backend does not emit: nothing refuses, nothing
+  // is missing from the export table, and the artifact builds and loads. The
+  // only statement that captures it is "program.c does not contain this yet",
+  // and it flips to needing-a-person on the day it does -- which is the correct
+  // loud outcome, the same as `FIXED`.
+  const lacksC = /^lacks-c\s+(.+)$/.exec(wanted);
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
   // And a fourth: a blocker visible only in the *wrapper*. `emits-addon` reads
   // addon.c, where a defect can be that two exports each got their own
   // `napi_create_function` over one implementation -- which publishes both names
   // and still breaks an identity node guarantees.
   const emitsAddon = /^emits-addon\s+(.+)$/.exec(wanted);
-  const holds = emitsC !== null
-    ? readEmitted(output, "program.c").includes(emitsC[1])
+  // Absence has to be read from a file that exists. `readEmitted` answers `""`
+  // for a missing one, and `"".includes(x)` is false, so the naive spelling --
+  // `!readEmitted(...).includes(text)` -- reports the blocker as *holding* when
+  // `emit-c` failed outright and wrote nothing. A check that passes when its
+  // subject does not exist is the thing this whole directory is against, and it
+  // was in the first draft of the form written to catch exactly that.
+  const program = readEmitted(output, "program.c");
+  const holds = lacksC !== null
+    ? program.length > 0 && !program.includes(lacksC[1])
+    : emitsC !== null
+    ? program.includes(emitsC[1])
     : emitsAddon !== null
     ? readEmitted(output, "addon.c").includes(emitsAddon[1])
     : expectsClean
@@ -154,7 +170,9 @@ for (const name of names) {
     continue;
   }
   unexpected++;
-  if (emitsC !== null || emitsAddon !== null) {
+  if (lacksC !== null) {
+    console.log(`  FIXED       ${name}: the backend now emits it. Expected absence of:`);
+  } else if (emitsC !== null || emitsAddon !== null) {
     console.log(`  FIXED       ${name}: no longer emits it. Expected:`);
   } else if (expectsClean) {
     console.log(`  REGRESSED   ${name}: expected no refusal, got:`);

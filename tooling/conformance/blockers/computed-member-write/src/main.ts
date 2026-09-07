@@ -1,9 +1,27 @@
 // expect: `name`, which `an anonymous type` does not declare
 //
-// Writing a computed member into a `Record<string, number>` refuses, because the
-// target is read as an anonymous type and a dynamic key is not one of its
-// declared properties. The key is a `string` known only at runtime, which is the
-// entire point of a `Record`.
+// Writing a computed member into a `Record<string, number>` refuses.
+//
+// **The diagnostic misleads, and it misled both lanes for hours.** It says
+// "`name`, which `an anonymous type` does not declare", which reads as a missing
+// member on a struct whose other members are fine — so it looks like a small
+// lowering gap. What is actually true is that `Record<string, number>` is an
+// **index signature**: the type has no members at all and its keys are not known
+// until run time. There is nothing for `table[name]` to resolve to.
+//
+// That makes this a representation decision rather than a lowering arm. The
+// compiler lane's reading: property access and `Object.keys` on an
+// index-signature type would have to route through the real `NtsMap` this
+// compiler already has, while preserving `OrdinaryOwnPropertyKeys` order so that
+// `constants.signals.SIGINT` and `Object.keys(constants.signals)` behave as
+// node's plain object does — and it has to be a *typed* map rather than a
+// general one, because dynamic ordinary-object maps are a stated non-goal.
+//
+// So this is a design piece, not twenty minutes, and `os` stays dark until it
+// lands. It was briefly first in the queue on my argument that it costs `os` the
+// whole module at load. That argument is still true and it was the wrong
+// conclusion: cost-if-unfixed is not the same as value-per-hour, and I gave the
+// first as though it were the second.
 //
 // **This is the last thing between `os` and a shape that loads.** After the
 // compiler lane's module-evaluation fix, `os.node` links, loads and publishes 17
