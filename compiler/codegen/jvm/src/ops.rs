@@ -2969,6 +2969,23 @@ impl Emitter<'_> {
         }
         self.load(code, pool, lhs)?;
         self.load(code, pool, rhs)?;
+        // **A `long` shift takes an `int` count**, which is the one place the
+        // JVM's arithmetic is not shaped like the IR's. HIR types a shift's
+        // count to match the value being shifted, which is right for C -- where
+        // `a >> b` is fine with both 64-bit -- and right for LLVM, whose `lshr`
+        // requires the two to agree. `lushr` requires the opposite: a `long` and
+        // an `int`.
+        //
+        // Emitting it without this pushed four words where the accounting
+        // expected three, which `Code::shift` is right about and the operand
+        // loading was wrong about. It showed up as the emitter's own balance
+        // check -- "emitting %24 moved the operand stack from 0 to 1" -- in
+        // `hpack-huffman.ts`, found by the shared lane compiling that module on
+        // its own. It is invisible in the whole-project run, because the module
+        // is refused at a language gap first.
+        if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::UShr) && kind == Kind::Long {
+            code.convert(&origin, insn::L2I, Kind::Long, Kind::Int);
+        }
         match op {
             BinOp::Add => code.arithmetic(&origin, insn::ADD, kind),
             BinOp::Sub => code.arithmetic(&origin, insn::SUB, kind),
