@@ -243,10 +243,24 @@ Re-measured: `test-buffer-resizable.js`, `test-buffer-sharedarraybuffer.js`,
 `test-buffer-pool-untransferable.js` and `test-net-transfer-guards.js` still
 fail, and `test-util-types.js` still skips, each for the reason its entry
 gives. The eight harness-attributed exclusions were checked the same way
-earlier and also still hold. **No exclusion in this profile has gone stale**,
-which is worth stating as a measured result rather than left as an assumption —
-it is the claim that keeps the denominators honest, and until now nothing had
-tested it.
+earlier and also still hold.
+
+**The file set each module measures was audited for the obvious way to lose
+tests silently**: three modules are named with underscores while node names
+their tests with hyphens. `string_decoder` matches
+`^test-string-decoder(-.*)?`, `diagnostics_channel` finds all 57 of node's
+files, and `async_hooks` carries a second alternation for
+`test-async-local-storage-*`. None of the three loses a file to its own name.
+
+**No exclusion has gone stale, and no module is silently missing tests.** Both
+halves are worth stating as measured results rather than left as assumptions —
+together they are the claim that keeps the denominators honest, and until now
+neither had been tested.
+
+A wider version of the second audit — *which node tests require this module but
+are not in its set* — is not worth running. 3,868 files `require('assert')`,
+because nearly every test in node's suite does, and requiring a module is not
+testing it.
 
 **One surface in this profile is hollow by construction and is not excluded,
 because the honest fix is not available yet.** `http/src/main.ts` exports
