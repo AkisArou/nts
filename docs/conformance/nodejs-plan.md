@@ -155,11 +155,28 @@ The warning arrives as a real event rather than as text:
     process 'warning' events seen: 1
       [ 'DeprecationWarning|DEP0040|The `punycode` module is deprecated…' ]
 
-**Two things stay true, and belong beside the win rather than after it.**
-`version` does not publish — a string constant node's test never touches — so
-the row carries `incomplete: version absent`. `punycode` passes every test it
-has while its surface is one name short of node's. And the pass is node's own
-test plus one local file; both are real, and neither is the whole module.
+**One thing stays true, and belongs beside the win rather than after it.** The
+pass is node's own test plus one local file; both are real, and neither is the
+whole module.
+
+The other was that `version` did not publish — a string constant node's test
+never touches — so the row carried `incomplete: version absent` and `punycode`
+passed every test it had while its surface was one name short of node's. **That
+is fixed at `f4b8595c`**: all six names publish, the qualifier is gone, and
+`blockers/value-export` is a regression guard rather than a blocker. The
+resolution had been wrong twice over — it named another module's global rather
+than this one's, and it reported a global as a missing function — and those were
+never the same claim.
+
+**The module also holds under reference counting.** `counted-lane.sh` builds
+every module that builds with `--rc` and `-DNTS_PROVIDER_RC` together and poison
+on, and `punycode` passes 2 of 2 with 55 retain/release sites live. So the one
+green module does not depend on an allocator that never frees, and nothing on
+its paths reads a slot after release. The lane's *first* run reported the same
+row and it was worthless — it passed a build holding zero rc sites, because
+`target/node` belongs to no session and another lane rebuilt the module fifteen
+seconds later — so it now probes its own switch on both sides of the test run
+and discards a row whose artifact changed underneath it.
 
 **What the day looked like from the other end.** This axis began at *0 of 22,
 and nobody has walked a module end to end*. Seven blockers, six of them found by
