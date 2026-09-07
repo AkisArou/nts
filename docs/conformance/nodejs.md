@@ -2248,8 +2248,27 @@ forty-eight times further from green than `punycode` is, and the two largest,
 This is the ordering the stage histogram does not give. `path` reaches
 `all-passes-degenerate` and `punycode` does not compile at all, which reads as
 `path` being ahead — and on distance it is six times behind. Where a module
-*stops* and how far it is from *moving* are different measurements, and only
-the second one is a plan.
+*stops* and how far it is from *moving* are different measurements.
+
+**And neither of them is a priority ordering, which is a correction to what
+this section first said.** It claimed the distance column says "which one to
+attack first". It does not. The compiler session put it better than I will:
+*distance to green is a fine ordering when the destination is the thing you
+want, and ordering by proximity is how you end up doing the four cheapest
+things and none of the important ones.* A green Node module is this document's
+goal; it is not the compiler's, whose goal is a compiler that does not emit
+wrong answers. When those coincide it is luck.
+
+They coincided for `punycode`, and the reason its first blocker is being taken
+is **not** that it is closest. It is that a function refused at emit time has
+its body dropped, a diagnostic pushed, and **every call to it left standing** —
+the HIR pass that drops callers of refused functions runs earlier and cannot
+see a backend refusal. C catches it at link time. A lane that resolves lazily,
+or a call that is simply never reached, would ship it. That is a wrong answer,
+and it would be worth fixing if this profile did not exist.
+
+So read the column as what it is: **how far each module is from a green
+artifact, and nothing about what anyone should do next.**
 
 Two caveats on the column. Distinct refusal kinds is a proxy: some kinds are
 one feature and some are a family, and cascaded functions are not counted at
