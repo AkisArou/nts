@@ -3407,3 +3407,58 @@ pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 pass
 failing and 14 named not-applicable. The root TypeScript solution build is green. The
 NTS frontier is 1,303 primary `NTS1001` and 242 `NTS1003` both before and after: this
 slice reaches no dependency the transport had not already reached.
+
+## Trailers had consumers and no producer
+
+`TransportResponse.trailers` is read by the diagnostics interceptor, the deduplication
+layer, the bounded response collector, the retry layer and the snapshot recorder. No
+real transport ever set it. HTTP/1 read the trailer section, validated it for forbidden
+framing fields, and threw it away; HTTP/2 never surfaced one. The only thing producing
+trailers anywhere in this lane was `MockAgent`, so every consumer's trailer handling
+was exercised exclusively against a fixture.
+
+That is the same shape as the inert coalescing and the unrouted HTTP/2 interim hook, in
+its fourth variety: not a dead mechanism and not an unrouted one, but a field with a
+whole population of careful consumers and nothing on the other end. It is the hardest
+of the four to notice, because every individual piece of code reads as correct.
+
+The HTTP/1 transport now settles a trailers promise on every ending. A chunked body
+resolves with the parsed fields. A fixed-length or EOF-framed body, and a response with
+no body at all, resolve empty — those framings cannot carry a trailer section, and
+resolving is the difference between "there are none" and a promise nobody ever settles.
+A body that fails or is cancelled rejects, so a caller awaiting trailers learns the body
+failed rather than waiting for a section that is not coming. The promise is
+rejection-ignored at the source, because nothing obliges a caller to await it and an
+unobserved rejection must not escape.
+
+Six tests: a chunked response delivering two trailer fields, trailers *not* settling
+until the body has been read, both no-trailer framings resolving empty, the pre-existing
+forbidden-framing-trailer refusal surviving, a truncated body rejecting, and a cancelled
+body rejecting.
+
+Three sabotages, all restored and all run through a wrapper that refuses when the
+mutation does not type-check. Discarding the parsed fields again took the corpus from
+6/6 to 4/6. Settling the promise when the response head is built rather than when the
+body ends took it to 2/6. Leaving the trailers pending on a body failure took it to
+4/6, and both failures were eight-second timeouts — which is what a promise nobody
+settles looks like, and the reason resolving empty rather than leaving pending is a
+decision worth making explicitly.
+
+**One test caught a defect in its own harness first.** The truncated-body case timed
+out because the fixture server wrote the response and left the socket open, so a
+`content-length` shortfall was never observable — the reader was waiting for bytes that
+were not coming. The server now ends the socket, and the comment says why, because
+"the trailers never settled" and "the server never finished" look identical from the
+assertion.
+
+The complete local Node-host/real-socket corpus passes 517/517 with zero skipped. The
+pinned upstream corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8
+failing and 14 named not-applicable. The root TypeScript solution build is green.
+
+Not claimed: HTTP/2 trailers, which arrive as a second HEADERS frame and are already
+collected by the connection but not surfaced on the transport response; that is the
+same gap one protocol over and is now the known next piece.
+
+Measured with the same pinned binary built at `43fda4d3`: 1,303 primary `NTS1001` and
+242 `NTS1003` before and after, with zero `NTS1004`, zero `NTS4xxx` and no invalid HIR.
+One message differs between the runs and it is the same message with a shifted type id.

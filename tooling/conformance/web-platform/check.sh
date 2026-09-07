@@ -39,6 +39,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/retry.test.mjs \
   tooling/conformance/web-platform/test/server-handshake.test.mjs \
   tooling/conformance/web-platform/test/snapshot-agent.test.mjs \
+  tooling/conformance/web-platform/test/trailers.test.mjs \
   tooling/conformance/web-platform/test/virtual-time.test.mjs \
   tooling/conformance/web-platform/test/websocket-server.test.mjs \
   tooling/conformance/web-platform/test/websocket-server-lifetime.test.mjs \

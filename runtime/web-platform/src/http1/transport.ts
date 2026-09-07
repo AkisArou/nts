@@ -6,6 +6,7 @@ import { ReadableStream } from "../streams/readable.ts";
 import type { ReadableStreamDefaultReader } from "../streams/readable.ts";
 import { encodeByteString } from "../core/encoding.ts";
 import { ProtocolError, LimitError, DOMException } from "../core/errors.ts";
+import { ignoreRejection } from "../core/promise.ts";
 import type {
   ByteConnection,
   CancelHandle,
@@ -268,11 +269,21 @@ export class Http1Transport implements FetchTransport {
           statusText: head.statusText,
           headers: head.headers,
           body: null,
+          trailers: Promise.resolve([]),
         };
       }
       const framing = responseFraming(headers);
       let remaining = framing.length;
       let needsChunkEnd = false;
+      // Trailers were parsed, validated and discarded. Every consumer of
+      // `TransportResponse.trailers` handled a field no real transport produced, so
+      // only the mock ever exercised them. This settles it on every ending: the parsed
+      // fields for a chunked body, nothing for a framing that cannot carry them, and
+      // the body's own failure when the body fails.
+      const trailerResult = Promise.withResolvers<readonly HeaderEntry[]>();
+      // Nobody is obliged to await trailers, and a rejection nobody observes must not
+      // escape as an unhandled one.
+      ignoreRejection(trailerResult.promise);
       const source = new ReadableStream<Uint8Array>(
         {
           pull: async (controller) => {
@@ -290,6 +301,7 @@ export class Http1Transport implements FetchTransport {
                     if (isForbiddenTrailerName(name))
                       throw new ProtocolError("Forbidden framing trailer");
                   finish(reusable);
+                  trailerResult.resolve(trailers);
                   controller.close();
                   return;
                 }
@@ -309,6 +321,8 @@ export class Http1Transport implements FetchTransport {
               if (data === null) {
                 if (framing.kind !== "eof") throw new ProtocolError("Truncated HTTP response body");
                 finish(false);
+                // An EOF-framed body carries no trailer section by construction.
+                trailerResult.resolve([]);
                 controller.close();
                 return;
               }
@@ -316,15 +330,23 @@ export class Http1Transport implements FetchTransport {
               controller.enqueue(data);
               if (framing.kind === "fixed" && remaining === 0) {
                 finish(reusable);
+                trailerResult.resolve([]);
                 controller.close();
               }
             } catch (error) {
               finish(false);
-              controller.error(hasFailure ? failure : error);
+              const reason = hasFailure ? failure : error;
+              // A caller awaiting trailers learns the body failed rather than waiting
+              // for a section that is never going to arrive.
+              trailerResult.reject(reason);
+              controller.error(reason);
             }
           },
-          cancel: () => {
+          cancel: (reason) => {
             finish(false);
+            trailerResult.reject(
+              reason ?? new DOMException("The response body was cancelled", "AbortError"),
+            );
           },
         },
         { highWaterMark: 0, size: (data) => data.length },
@@ -334,6 +356,7 @@ export class Http1Transport implements FetchTransport {
         statusText: head.statusText,
         headers: head.headers,
         body: source,
+        trailers: trailerResult.promise,
       };
     } catch (error) {
       finish(false);
