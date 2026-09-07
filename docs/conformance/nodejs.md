@@ -4192,7 +4192,17 @@ arms read the value back at the narrowed type. Three roots, not one:
 
 The narrowing is the refusal, not the conversion: `String(v)` refuses exactly
 where `` `${v}n` `` does, an `if` behaves as a `switch` arm does, and a
-parameter *declared* `bigint` compiles. `instanceof` was tested per class —
+parameter *declared* `bigint` compiles.
+
+**And the source cannot be written differently, which was checked rather than
+assumed.** Node's own `determineSpecificType` (`lib/internal/errors.js:996`) is
+this function line for line — the same `switch (typeof value)`, the same
+`` `type bigint (${value}n)` ``, the same `` `type symbol (${String(value)})` ``.
+The only divergence is the `object` arm, where node reads
+`value.constructor.name` and this profile calls `staticObjectName` instead,
+because reading a constructor's name is a §13 non-goal. So the two narrowed
+reads are node's code shape and not ours, there is no faithful rewrite that
+avoids them, and the only place this can be fixed is the compiler. `instanceof` was tested per class —
 `Uint8Array`, `ArrayBuffer` and `Promise` work; `DataView`, `Map`, `Set` and
 `Date` have no class.
 
