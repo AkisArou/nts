@@ -111,6 +111,92 @@ export const CORPORA = {
     ],
   },
 
+  fs: {
+    // Read-only, against a directory that is in the repository, so both
+    // processes see byte-identical state without either of them writing
+    // anything. What is compared is *path handling and error codes* -- a
+    // trailing slash on a file, a `..` that escapes, a NUL byte, an empty
+    // string -- which is where two implementations of the same syscalls
+    // disagree even when the syscalls do not.
+    //
+    // Nothing here creates, moves or removes a file. A differential that
+    // mutates shared state is a differential whose two sides ran against
+    // different filesystems.
+    fixed: [
+      "", "/", ".", "..", "./", "../", "src", "src/", "src/main.ts",
+      "src/main.ts/", "src/main.ts/.", "nope", "nope/", "src//main.ts",
+      "src/./main.ts", "src/../src/main.ts", "../punycode/src/main.ts",
+      "src/main.ts\u0000", "\u0000", "ü", "日", " ", "  ", "src ",
+    ],
+    input: (rnd) => {
+      const PARTS = ["src", "main.ts", "..", ".", "", "nope", "ü", " ", "shape.mjs"];
+      const SEPS = ["/", "//", "/./", "/../"];
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 4);
+      for (let i = 0; i < k; i++) out += (i ? choose(rnd, SEPS) : "") + choose(rnd, PARTS);
+      if (rnd() < 0.25) out += choose(rnd, SEPS);
+      return out;
+    },
+    // Asserted rather than compared, because comparison cannot see it: if the
+    // base were missing, both sides would answer ENOENT to everything and the
+    // corpus would report perfect agreement over nothing at all. Demonstrated
+    // by pointing it at a directory that does not exist, which fails the run
+    // with the reason rather than passing with 2,268 comparisons.
+    precondition: (fs) => {
+      const base = `${new URL(".", import.meta.url).pathname}../../runtime/node/punycode/`;
+      if (!fs.existsSync(base)) return `no such directory: ${base}`;
+      if (!fs.statSync(base).isDirectory()) return `not a directory: ${base}`;
+      return fs.readdirSync(base).includes("src") ? true : "the fixture directory is empty";
+    },
+    calls: (() => {
+      // Absolute, derived from this file rather than from the working
+      // directory. A relative base would make both sides fail identically from
+      // any other cwd -- ENOENT equals ENOENT -- and the corpus would report
+      // agreement while comparing nothing.
+      const HERE = new URL(".", import.meta.url).pathname;
+      const BASE = `${HERE}../../runtime/node/punycode/`;
+      const attempt = (fn) => {
+        try {
+          return `ok:${fn()}`;
+        } catch (error) {
+          return `${error.code ?? error.name}`;
+        }
+      };
+      return [
+        { label: "existsSync", call: (m, s) => attempt(() => m.existsSync(BASE + s)) },
+        {
+          label: "statSync kind",
+          call: (m, s) =>
+            attempt(() => {
+              const st = m.statSync(BASE + s);
+              return `${st.isFile()}/${st.isDirectory()}/${st.isSymbolicLink()}`;
+            }),
+        },
+        {
+          label: "lstatSync kind",
+          call: (m, s) =>
+            attempt(() => {
+              const st = m.lstatSync(BASE + s);
+              return `${st.isFile()}/${st.isDirectory()}/${st.isSymbolicLink()}`;
+            }),
+        },
+        {
+          label: "readdirSync",
+          call: (m, s) => attempt(() => m.readdirSync(BASE + s).sort().join(",")),
+        },
+        {
+          label: "readFileSync size",
+          call: (m, s) => attempt(() => m.readFileSync(BASE + s).length),
+        },
+        {
+          label: "realpathSync tail",
+          call: (m, s) => attempt(() => m.realpathSync(BASE + s).split("/").slice(-2).join("/")),
+        },
+        { label: "accessSync", call: (m, s) => attempt(() => m.accessSync(BASE + s) ?? "void") },
+      ];
+    })(),
+  },
+
   assert: {
     // The comparisons and, just as much, the *messages*. `deepStrictEqual`'s
     // failure text is a diff produced by `inspect`, and it is the part a person

@@ -97,6 +97,27 @@ for (const name of modules) {
   process.noDeprecation = true;
   const upstream = require_(`node:${name}`);
 
+  // A corpus may declare what has to be true before its answers mean anything.
+  // The `fs` one reads a directory in the repository, and if that directory
+  // were missing both sides would return ENOENT, compare equal, and report
+  // agreement while comparing nothing. Comparison cannot catch that -- two
+  // identical failures are identical -- so the precondition is asserted against
+  // node rather than compared, and a false one fails the run.
+  if (typeof corpus.precondition === "function") {
+    let held;
+    try {
+      held = corpus.precondition(upstream);
+    } catch (error) {
+      held = `threw ${error.message}`;
+    }
+    if (held !== true) {
+      console.error(`${name}: precondition does not hold (${held}); its comparisons would be`);
+      console.error(`  two identical failures, which compare equal and mean nothing.`);
+      failed = true;
+      continue;
+    }
+  }
+
   let compared = 0;
   let diverged = 0;
   const absent = new Set();
