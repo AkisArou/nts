@@ -2898,10 +2898,19 @@ an unobserved difference is still a difference, and because `punycode`'s
 already decided this mattered, for one module, and the other twenty-one were
 never checked.
 
-`util`'s entry is a regression this document's own author introduced, and it is
-the only one worth fixing on sight: before the Encoding re-export was added,
-`util`'s order matched node's. Node places `TextDecoder` at index 28, after
-`parseArgs`; the new export went in at the top of `main.ts`.
+**`util`'s entry was written up as "a regression this author introduced" and
+that was wrong, which is worth keeping.** The claim was that `util`'s order
+matched node's until the Encoding re-export went in at the top of `main.ts`. It
+did not. Removing that pair from the comparison, `util` still diverges at index
+2 — node has `callbackify` where this profile has `aborted`. The re-export
+deepened an existing divergence and moved its first difference from index 2 to
+index 0; it did not create one.
+
+The check that caught it took one command, and the sentence had already been
+committed. **A claim about the code, written in a document, with nothing
+measuring it** is the same shape as the comment-versus-test rule recorded
+elsewhere here — and this document asserts that rule two sections above the
+place it broke it.
 
 Three exist now.
 
