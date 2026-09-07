@@ -423,6 +423,22 @@ another session's lane: an internal, non-web-observable resist option on
 Node profile's `AbortController`/`AbortSignal` for tests. Recorded as a
 provider dependency and reported to that lane rather than worked around.
 
+**The second of those two is now the binding one, and it is shared.** The
+web-platform lane has since built the weak-listener half that `util.aborted`
+needed, and it did not close `test-aborted-util.js` either — because the seam
+reaches the canonical `EventTarget`'s own private state, and a pinned test's
+`new AbortController()` is the host's. That is measurable rather than
+inferred: a probe through the substitution reports the ordinary registration
+taken, not the weak one.
+
+So two of this profile's remaining failures have one root between them, and it
+is not the option in either case. **This profile does not install the canonical
+abort globals**, so our modules receive an `AbortSignal` from the host and
+cannot pass it any option node reaches for privately — neither the resist flag
+nor a weakly-held handler. Building more options against a signal we do not own
+buys nothing; installing the globals closes both. Recorded here so the next
+person costing this work prices the globals rather than the options.
+
 The first two columns are what
 
 ```sh
