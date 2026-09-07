@@ -971,3 +971,49 @@ cascades, zero JVM-backend refusals, the same type-only-edge `NTS1004`, and no
 invalid HIR. These counts grew because the final-form internal pipe algorithms and
 promise observers are now visible to the compiler; they remain a dependency
 inventory rather than a claim of compiler progress.
+
+The complete unchanged `streams/piping/*.any.js` family is now pinned: thirteen
+fixtures add 229 cases. The pipe state machine acquires both locks synchronously,
+tracks every outstanding write through terminal propagation, honors destination
+backpressure without serializing writes that the destination can accept, and waits
+for queued writes before applying close, error, cancellation, or abort. Missed
+notifications cannot lose the final source chunk: source close and error are held
+while a read result is being distributed, then become the next terminal action.
+Signal abort, source failure, destination failure, and source/destination close each
+retain their distinct `preventAbort`, `preventCancel`, and `preventClose` behavior.
+
+Of those 229 cases, 226 pass. One unchanged test requires a readable byte stream and
+BYOB teeing, which belongs to the separately planned byte-controller work. Two
+unchanged `then-interception` tests install an inherited `then` on
+`Object.prototype`: settling an internal read-result capability through ordinary
+ECMAScript promise resolution incorrectly assimilates that property. The Streams
+operation is direct promise fulfillment, not `ResolvePromise`; a typed common-runtime
+fulfillment primitive is therefore required. Adding an own `then`, changing the
+iterator-result prototype, or using descriptor manipulation would make the shared
+source observably wrong and is not used.
+
+The complete eleven-file `streams/transform-streams/*.any.js` family adds another
+133 pinned cases. The paired state machine implements default identity transform,
+readable-side backpressure, writable sequencing, synchronous `start`, asynchronous
+`transform`, `flush`, and `cancel`, reentrant strategy calls, controller enqueue,
+error and terminate operations, and the Standard's cancellation/error races. It
+passes 132 of 133 cases. The one visible miss overwrites captured transformer
+callbacks' own `.call` and `.apply` properties and is the same typed
+explicit-receiver compiler prerequisite already exposed by WritableStream.
+
+Together the two new families pass 358 of 362 cases, and the aggregate pinned result
+is 1429 of 1435. The other two aggregate failures remain the Web-IDL async-iterator
+prototype/descriptor shape and the WritableStream explicit-receiver case; none is
+hidden behind a host shim. The complete local Node-host suite is 148/148 and the root
+TypeScript solution is green. The live compiled-source frontier is 613 primary
+`NTS1001` refusals, 79 `NTS1003` cascades, zero JVM-backend refusals, the same
+type-only-edge `NTS1004`, and no invalid HIR.
+
+One final-source typing obligation remains deliberately explicit in the current
+TransformStream work: when no transform callback is supplied, an arbitrary input
+chunk becomes the arbitrary output type. The upstream TypeScript declaration models
+that erased boundary with `any`, which this profile rejects. Host conformance is
+currently measured with one localized assertion at that exact line; the slice is not
+final until the compiler/common-runtime lane supplies the checked erased-value shape
+and the assertion is removed. The passing state-machine evidence does not waive the
+source audit.

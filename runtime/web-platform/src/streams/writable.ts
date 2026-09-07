@@ -195,6 +195,18 @@ class WritableStreamState<W> {
     return this.#writer !== null;
   }
 
+  get stateName(): WritableStateName {
+    return this.#state;
+  }
+
+  get storedError(): unknown {
+    return this.#storedError;
+  }
+
+  get closeQueuedOrInFlight(): boolean {
+    return this.#closeQueuedOrInFlight();
+  }
+
   get signal(): AbortSignal {
     return this.#abortSignal;
   }
@@ -650,6 +662,11 @@ export class WritableStream<W = unknown> {
   }
 }
 
+/** @internal */
+export function isWritableStream<W>(value: unknown): value is WritableStream<W> {
+  return value instanceof WritableStream && value[writableStreamState] !== undefined;
+}
+
 export class WritableStreamDefaultWriter<W = unknown> {
   readonly [writableWriterState]: WritableWriterState<W>;
 
@@ -725,6 +742,51 @@ export function writableStreamDefaultWriterReady<W>(
 }
 
 /** @internal */
+export function writableStreamDefaultWriterClosed<W>(
+  writer: WritableStreamDefaultWriter<W>,
+): Promise<void> {
+  return writer[writableWriterState].closed.promise;
+}
+
+/** @internal */
+export function writableStreamCanAcceptWrites<W>(stream: WritableStream<W>): boolean {
+  const state = stream[writableStreamState];
+  return state.stateName === "writable" && !state.closeQueuedOrInFlight;
+}
+
+/** @internal */
+export function writableStreamIsWritable<W>(stream: WritableStream<W>): boolean {
+  return stream[writableStreamState].stateName === "writable";
+}
+
+/** @internal */
+export function writableStreamIsClosingOrClosed<W>(stream: WritableStream<W>): boolean {
+  const state = stream[writableStreamState];
+  return state.stateName === "closed" || state.closeQueuedOrInFlight;
+}
+
+/** @internal */
+export function writableStreamIsErrored<W>(stream: WritableStream<W>): boolean {
+  const state = stream[writableStreamState].stateName;
+  return state === "errored" || state === "erroring";
+}
+
+/** @internal */
+export function writableStreamIsFullyErrored<W>(stream: WritableStream<W>): boolean {
+  return stream[writableStreamState].stateName === "errored";
+}
+
+/** @internal */
+export function writableStreamStoredError<W>(stream: WritableStream<W>): unknown {
+  return stream[writableStreamState].storedError;
+}
+
+/** @internal */
+export function writableStreamError<W>(stream: WritableStream<W>, reason: unknown): void {
+  stream[writableStreamState].error(reason);
+}
+
+/** @internal */
 export function writableStreamDefaultWriterAbort<W>(
   writer: WritableStreamDefaultWriter<W>,
   reason: unknown,
@@ -743,6 +805,24 @@ export function writableStreamDefaultWriterClose<W>(
   const stream = writer[writableWriterState].stream;
   if (stream === null) {
     return Promise.reject(new TypeError("Writer has been released"));
+  }
+  return stream.close();
+}
+
+/** @internal */
+export function writableStreamDefaultWriterCloseWithErrorPropagation<W>(
+  writer: WritableStreamDefaultWriter<W>,
+): Promise<void> {
+  const state = writer[writableWriterState];
+  const stream = state.stream;
+  if (stream === null) {
+    return Promise.reject(new TypeError("Writer has been released"));
+  }
+  if (stream.stateName === "closed" || stream.closeQueuedOrInFlight) {
+    return state.closed.promise;
+  }
+  if (stream.stateName === "errored" || stream.stateName === "erroring") {
+    return Promise.reject(stream.storedError);
   }
   return stream.close();
 }

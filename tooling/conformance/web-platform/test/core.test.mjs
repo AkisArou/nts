@@ -24,6 +24,8 @@ import {
   File,
   FormData,
   URLSearchParams,
+  TransformStream,
+  TransformStreamDefaultController,
   WritableStream,
   WritableStreamDefaultController,
   WritableStreamDefaultWriter,
@@ -2742,6 +2744,57 @@ test("ReadableStream.from is demand-driven and closes its iterator with the canc
   const values = [];
   for await (const value of promisedValues) values.push(value);
   assert.deepEqual(values, ["a", "b"]);
+});
+test("TransformStream preserves callback receivers, backpressure, and flush ordering", async () => {
+  const events = [];
+  const transformer = {
+    suffix: "!",
+    start(controller) {
+      assert.equal(this, transformer);
+      assert.ok(controller instanceof TransformStreamDefaultController);
+      events.push("start");
+    },
+    transform(chunk, controller) {
+      assert.equal(this, transformer);
+      events.push(["transform", chunk]);
+      controller.enqueue(chunk + this.suffix);
+    },
+    flush(controller) {
+      assert.equal(this, transformer);
+      events.push("flush");
+      controller.enqueue("done");
+    },
+  };
+  const stream = new TransformStream(transformer);
+  const writer = stream.writable.getWriter();
+  const reader = stream.readable.getReader();
+
+  const write = writer.write("a");
+  await tick();
+  assert.deepEqual(events, ["start"]);
+  assert.deepEqual(await reader.read(), { done: false, value: "a!" });
+  await write;
+
+  const close = writer.close();
+  assert.deepEqual(await reader.read(), { done: false, value: "done" });
+  assert.deepEqual(await reader.read(), { done: true, value: undefined });
+  await close;
+  assert.deepEqual(events, ["start", ["transform", "a"], "flush"]);
+});
+test("TransformStream cancellation retires both sides with the original reason", async () => {
+  const reason = new Error("stop transform");
+  let canceledWith;
+  const stream = new TransformStream({
+    cancel(received) {
+      canceledWith = received;
+    },
+  });
+  const writer = stream.writable.getWriter();
+  const closed = writer.closed;
+
+  await stream.readable.cancel(reason);
+  assert.equal(canceledWith, reason);
+  await assert.rejects(closed, (error) => error === reason);
 });
 test("Response.clone retains an immutable redirect header guard", () => {
   const clone = makeRedirectResponse("https://example.test/").clone();

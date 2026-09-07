@@ -48,6 +48,14 @@ export {
   WritableStreamDefaultController,
   WritableStreamDefaultWriter,
 } from "./streams/writable.ts";
+export { TransformStream, TransformStreamDefaultController } from "./streams/transform.ts";
+export type {
+  Transformer,
+  TransformerCancelCallback,
+  TransformerFlushCallback,
+  TransformerStartCallback,
+  TransformerTransformCallback,
+} from "./streams/transform.ts";
 export type {
   UnderlyingSink,
   UnderlyingSinkAbortCallback,

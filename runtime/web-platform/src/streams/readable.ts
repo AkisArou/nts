@@ -1,6 +1,7 @@
 import { LimitError } from "../core/errors.ts";
 import { ignoreRejection } from "../core/promise.ts";
 import { AbortSignal } from "../core/abort.ts";
+import { abortSignalBrand } from "../core/abort-brand.ts";
 import { coerceToBoolean, coerceToDOMString, requireDictionary } from "../core/webidl.ts";
 import { Fifo } from "./fifo.ts";
 import { QueueWithSizes } from "./queue-with-sizes.ts";
@@ -12,12 +13,19 @@ import {
 } from "./queuing-strategy.ts";
 import {
   acquireWritableStreamDefaultWriter,
+  isWritableStream,
   WritableStream,
+  writableStreamCanAcceptWrites,
   writableStreamDefaultWriterAbort,
-  writableStreamDefaultWriterClose,
+  writableStreamDefaultWriterClosed,
+  writableStreamDefaultWriterCloseWithErrorPropagation,
   writableStreamDefaultWriterReady,
   writableStreamDefaultWriterRelease,
   writableStreamDefaultWriterWrite,
+  writableStreamIsClosingOrClosed,
+  writableStreamIsErrored,
+  writableStreamIsWritable,
+  writableStreamStoredError,
   type WritableStreamDefaultWriter,
 } from "./writable.ts";
 
@@ -91,6 +99,9 @@ interface ConvertedPipeOptions {
 
 type StreamState = "readable" | "closed" | "errored";
 
+const readableStreamBrand: unique symbol = Symbol("ReadableStream brand");
+const readableStreamStateName: unique symbol = Symbol("ReadableStream state name");
+const readableStreamStoredErrorValue: unique symbol = Symbol("ReadableStream stored error");
 const defaultReadableSource = {
   cancel: undefined,
   pull: undefined,
@@ -132,10 +143,20 @@ function convertPipeOptions(options: StreamPipeOptions | null): ConvertedPipeOpt
   const preventCancel = coerceToBoolean(options.preventCancel);
   const preventClose = coerceToBoolean(options.preventClose);
   const signal = options.signal;
-  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+  if (
+    signal !== undefined &&
+    (signal === null ||
+      typeof signal !== "object" ||
+      !(abortSignalBrand in signal) ||
+      signal[abortSignalBrand] !== true)
+  ) {
     throw new TypeError("Stream pipe signal must be an AbortSignal");
   }
   return { preventAbort, preventCancel, preventClose, signal };
+}
+
+function isReadableStream<T>(value: unknown): value is ReadableStream<T> {
+  return value instanceof ReadableStream && value[readableStreamBrand] === true;
 }
 
 /**
@@ -143,6 +164,7 @@ function convertPipeOptions(options: StreamPipeOptions | null): ConvertedPipeOpt
  * in-flight underlying pull and explicit ownership; byte/BYOB support is separate.
  */
 export class ReadableStream<T> {
+  readonly [readableStreamBrand] = true;
   #source: UnderlyingSource<T> | null;
   readonly #controller: ReadableStreamDefaultController<T>;
   readonly #highWaterMark: number;
@@ -239,8 +261,20 @@ export class ReadableStream<T> {
     return this.#isDisturbed;
   }
 
+  /** @internal */ get [readableStreamStateName](): StreamState {
+    return this.#state;
+  }
+
+  /** @internal */ get [readableStreamStoredErrorValue](): unknown {
+    return this.#storedError;
+  }
+
   /** @internal */ get queuedSize(): number {
     return this.#queue.totalSize;
+  }
+
+  /** @internal */ get canCloseOrEnqueue(): boolean {
+    return this.#state === "readable" && !this.#closeRequested;
   }
 
   /** @internal */ markDisturbed(): void {
@@ -286,15 +320,28 @@ export class ReadableStream<T> {
     transform: ReadableWritablePair<R, T>,
     options: StreamPipeOptions | null = defaultPipeOptions,
   ): ReadableStream<R> {
+    if (!isReadableStream<T>(this)) {
+      throw new TypeError("ReadableStream method called on an incompatible receiver");
+    }
     if (transform === null || typeof transform !== "object") {
       throw new TypeError("Stream transform must be a readable/writable pair");
     }
     const readable = transform.readable;
-    const writable = transform.writable;
-    if (!(readable instanceof ReadableStream) || !(writable instanceof WritableStream)) {
-      throw new TypeError("Stream transform must contain readable and writable streams");
+    if (!isReadableStream<R>(readable)) {
+      throw new TypeError("Stream transform must contain a readable stream");
     }
-    const piping = this.pipeTo(writable, options);
+    const writable = transform.writable;
+    if (!isWritableStream<T>(writable)) {
+      throw new TypeError("Stream transform must contain a writable stream");
+    }
+    const converted = convertPipeOptions(options);
+    if (this.locked) {
+      throw new TypeError("ReadableStream is locked");
+    }
+    if (writable.locked) {
+      throw new TypeError("WritableStream is locked");
+    }
+    const piping = startPipe(this, writable, converted);
     ignoreRejection(piping);
     return readable;
   }
@@ -303,19 +350,24 @@ export class ReadableStream<T> {
     destination: WritableStream<T>,
     options: StreamPipeOptions | null = defaultPipeOptions,
   ): Promise<void> {
-    const converted = convertPipeOptions(options);
-    if (!(destination instanceof WritableStream)) {
-      return Promise.reject(new TypeError("Destination must be a WritableStream"));
+    try {
+      if (!isReadableStream<T>(this)) {
+        throw new TypeError("ReadableStream method called on an incompatible receiver");
+      }
+      if (!isWritableStream<T>(destination)) {
+        throw new TypeError("Destination must be a WritableStream");
+      }
+      const converted = convertPipeOptions(options);
+      if (this.locked) {
+        throw new TypeError("ReadableStream is locked");
+      }
+      if (destination.locked) {
+        throw new TypeError("WritableStream is locked");
+      }
+      return startPipe(this, destination, converted);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    if (this.locked) {
-      return Promise.reject(new TypeError("ReadableStream is locked"));
-    }
-    if (destination.locked) {
-      return Promise.reject(new TypeError("WritableStream is locked"));
-    }
-    const reader = new ReadableStreamDefaultReader(this);
-    const writer = acquireWritableStreamDefaultWriter(destination);
-    return pipeReadableToWritable(this, reader, writer, converted);
   }
 
   /** @internal */ async cancelInternal(reason: unknown): Promise<void> {
@@ -742,6 +794,43 @@ export class ReadableStreamDefaultController<T> {
   }
 }
 
+/** @internal */
+export function readableStreamCanCloseOrEnqueue<T>(stream: ReadableStream<T>): boolean {
+  return stream.canCloseOrEnqueue;
+}
+
+/** @internal */
+export function readableStreamClose<T>(stream: ReadableStream<T>): void {
+  if (stream[readableStreamStateName] === "readable") {
+    stream.requestClose();
+  }
+}
+
+/** @internal */
+export function readableStreamDesiredSize<T>(stream: ReadableStream<T>): number | null {
+  return stream.desiredSize;
+}
+
+/** @internal */
+export function readableStreamEnqueue<T>(stream: ReadableStream<T>, chunk: T): void {
+  stream.enqueue(chunk);
+}
+
+/** @internal */
+export function readableStreamError<T>(stream: ReadableStream<T>, reason: unknown): void {
+  stream.fail(reason);
+}
+
+/** @internal */
+export function readableStreamIsErrored<T>(stream: ReadableStream<T>): boolean {
+  return stream[readableStreamStateName] === "errored";
+}
+
+/** @internal */
+export function readableStreamStoredError<T>(stream: ReadableStream<T>): unknown {
+  return stream[readableStreamStoredErrorValue];
+}
+
 export class ReadableStreamDefaultReader<T> {
   #stream: ReadableStream<T> | null;
   #closedCapability = Promise.withResolvers<void>();
@@ -810,70 +899,252 @@ export class ReadableStreamDefaultReader<T> {
   }
 }
 
-async function pipeReadableToWritable<T>(
+function startPipe<T>(
   source: ReadableStream<T>,
-  reader: ReadableStreamDefaultReader<T>,
-  writer: WritableStreamDefaultWriter<T>,
+  destination: WritableStream<T>,
   options: ConvertedPipeOptions,
 ): Promise<void> {
-  const aborted = Promise.withResolvers<never>();
-  ignoreRejection(aborted.promise);
-  let aborting = false;
-  const unsubscribe = options.signal?.subscribe(() => {
-    aborting = true;
-    aborted.reject(options.signal?.reason);
-  });
+  const reader = new ReadableStreamDefaultReader(source);
+  const writer = acquireWritableStreamDefaultWriter(destination);
+  source.markDisturbed();
+  const pipe = new PipeState(source, destination, reader, writer, options);
+  pipe.start();
+  return pipe.promise;
+}
 
-  const waitFor = <R>(promise: Promise<R>): Promise<R> =>
-    options.signal === undefined ? promise : Promise.race([promise, aborted.promise]);
+type PipeAction = () => Promise<void>;
 
-  try {
-    while (true) {
+class PipeState<T> {
+  readonly #result = Promise.withResolvers<void>();
+  readonly #source: ReadableStream<T>;
+  readonly #destination: WritableStream<T>;
+  readonly #reader: ReadableStreamDefaultReader<T>;
+  readonly #writer: WritableStreamDefaultWriter<T>;
+  readonly #options: ConvertedPipeOptions;
+  #shuttingDown = false;
+  #pendingWrites = 0;
+  #writeFailed = false;
+  #writeFailure: unknown;
+  #writeDrain: PromiseWithResolvers<void> | null = null;
+  #unsubscribe: (() => void) | null = null;
+  #reading = false;
+  #sourceClosePending = false;
+
+  constructor(
+    source: ReadableStream<T>,
+    destination: WritableStream<T>,
+    reader: ReadableStreamDefaultReader<T>,
+    writer: WritableStreamDefaultWriter<T>,
+    options: ConvertedPipeOptions,
+  ) {
+    this.#source = source;
+    this.#destination = destination;
+    this.#reader = reader;
+    this.#writer = writer;
+    this.#options = options;
+  }
+
+  get promise(): Promise<void> {
+    return this.#result.promise;
+  }
+
+  start(): void {
+    const signal = this.#options.signal;
+    if (signal !== undefined && signal.aborted) {
+      this.#abort(signal.reason);
+      return;
+    }
+    if (signal !== undefined) {
+      this.#unsubscribe = signal.subscribe(() => this.#abort(signal.reason));
+    }
+
+    this.#pump();
+    this.#watchSource();
+    this.#watchDestination();
+
+    if (this.#source[readableStreamStateName] === "errored") {
+      this.#sourceErrored(this.#source[readableStreamStoredErrorValue]);
+    } else if (writableStreamIsErrored(this.#destination)) {
+      this.#destinationErrored(writableStreamStoredError(this.#destination));
+    } else if (this.#source[readableStreamStateName] === "closed") {
+      this.#sourceClosed();
+    } else if (writableStreamIsClosingOrClosed(this.#destination)) {
+      this.#destinationClosed();
+    }
+  }
+
+  async #pump(): Promise<void> {
+    while (!this.#shuttingDown) {
       try {
-        await waitFor(writableStreamDefaultWriterReady(writer));
-      } catch (error) {
-        if (aborting) throw error;
-        if (!options.preventCancel) await source.cancelInternal(error);
-        throw error;
+        await writableStreamDefaultWriterReady(this.#writer);
+      } catch {
+        return;
       }
-
-      let result: ReadResult<T>;
-      try {
-        result = await waitFor(source.read(reader));
-      } catch (error) {
-        if (aborting) throw error;
-        if (!options.preventAbort) await writableStreamDefaultWriterAbort(writer, error);
-        throw error;
+      if (this.#shuttingDown) return;
+      if (this.#source[readableStreamStateName] === "closed") {
+        this.#sourceClosed();
+        return;
       }
-
-      if (result.done) {
-        if (!options.preventClose) {
-          await waitFor(writableStreamDefaultWriterClose(writer));
-        }
+      if (this.#source[readableStreamStateName] === "errored") {
+        this.#sourceErrored(this.#source[readableStreamStoredErrorValue]);
         return;
       }
 
+      let result: ReadResult<T>;
+      this.#reading = true;
       try {
-        await waitFor(writableStreamDefaultWriterWrite(writer, result.value));
+        result = await this.#source.read(this.#reader);
       } catch (error) {
-        if (aborting) throw error;
-        if (!options.preventCancel) await source.cancelInternal(error);
-        throw error;
+        this.#reading = false;
+        this.#sourceErrored(error);
+        return;
+      }
+      this.#reading = false;
+      if (this.#shuttingDown) return;
+      if (result.done) {
+        this.#sourceClosePending = false;
+        this.#sourceClosed();
+        return;
+      }
+      this.#trackWrite(writableStreamDefaultWriterWrite(this.#writer, result.value));
+      if (this.#sourceClosePending) {
+        this.#sourceClosePending = false;
+        this.#sourceClosed();
       }
     }
-  } catch (error) {
-    if (!aborting) throw error;
-    const reason = options.signal?.reason;
-    const actions: Promise<void>[] = [];
-    if (!options.preventAbort) actions.push(writableStreamDefaultWriterAbort(writer, reason));
-    if (!options.preventCancel) actions.push(source.cancelInternal(reason));
-    await Promise.all(actions);
-    throw reason;
-  } finally {
-    unsubscribe?.();
-    source.release(reader);
-    writableStreamDefaultWriterRelease(writer);
   }
+
+  async #watchSource(): Promise<void> {
+    try {
+      await this.#reader.closed;
+      this.#sourceClosed();
+    } catch (error) {
+      this.#sourceErrored(error);
+    }
+  }
+
+  async #watchDestination(): Promise<void> {
+    try {
+      await writableStreamDefaultWriterClosed(this.#writer);
+      this.#destinationClosed();
+    } catch (error) {
+      this.#destinationErrored(error);
+    }
+  }
+
+  #trackWrite(write: Promise<void>): void {
+    this.#pendingWrites++;
+    this.#observeWrite(write);
+  }
+
+  async #observeWrite(write: Promise<void>): Promise<void> {
+    try {
+      await write;
+    } catch (error) {
+      if (!this.#writeFailed) {
+        this.#writeFailed = true;
+        this.#writeFailure = error;
+      }
+    }
+    this.#pendingWrites--;
+    if (this.#pendingWrites !== 0 || this.#writeDrain === null) return;
+    const drain = this.#writeDrain;
+    this.#writeDrain = null;
+    if (this.#writeFailed) drain.reject(this.#writeFailure);
+    else drain.resolve();
+  }
+
+  #waitForPendingWrites(): Promise<void> {
+    if (this.#pendingWrites === 0) {
+      return this.#writeFailed ? Promise.reject(this.#writeFailure) : Promise.resolve();
+    }
+    const drain = Promise.withResolvers<void>();
+    this.#writeDrain = drain;
+    return drain.promise;
+  }
+
+  #sourceErrored(error: unknown): void {
+    if (this.#options.preventAbort) {
+      this.#shutdown(true, error);
+      return;
+    }
+    this.#shutdown(true, error, () => writableStreamDefaultWriterAbort(this.#writer, error));
+  }
+
+  #destinationErrored(error: unknown): void {
+    if (this.#options.preventCancel) {
+      this.#shutdown(true, error);
+      return;
+    }
+    this.#shutdown(true, error, () => this.#source.cancelInternal(error));
+  }
+
+  #sourceClosed(): void {
+    if (this.#reading) {
+      this.#sourceClosePending = true;
+      return;
+    }
+    if (this.#options.preventClose) {
+      this.#shutdown(false, undefined);
+      return;
+    }
+    this.#shutdown(false, undefined, () =>
+      writableStreamDefaultWriterCloseWithErrorPropagation(this.#writer),
+    );
+  }
+
+  #destinationClosed(): void {
+    const error = new TypeError("Destination WritableStream is closed");
+    if (this.#options.preventCancel) {
+      this.#shutdown(true, error);
+      return;
+    }
+    this.#shutdown(true, error, () => this.#source.cancelInternal(error));
+  }
+
+  #abort(reason: unknown): void {
+    const actions: PipeAction[] = [];
+    if (!this.#options.preventAbort && writableStreamIsWritable(this.#destination)) {
+      actions.push(() => writableStreamDefaultWriterAbort(this.#writer, reason));
+    }
+    if (!this.#options.preventCancel && this.#source[readableStreamStateName] === "readable") {
+      actions.push(() => this.#source.cancelInternal(reason));
+    }
+    this.#shutdown(true, reason, () => runPipeActions(actions));
+  }
+
+  #shutdown(rejected: boolean, reason: unknown, action?: PipeAction): void {
+    if (this.#shuttingDown) return;
+    this.#shuttingDown = true;
+    this.#finishShutdown(rejected, reason, action);
+  }
+
+  async #finishShutdown(rejected: boolean, reason: unknown, action?: PipeAction): Promise<void> {
+    try {
+      if (writableStreamCanAcceptWrites(this.#destination)) {
+        await this.#waitForPendingWrites();
+      }
+      if (action !== undefined) await action();
+      this.#finalize(rejected, reason);
+    } catch (error) {
+      this.#finalize(true, error);
+    }
+  }
+
+  #finalize(rejected: boolean, reason: unknown): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = null;
+    this.#source.release(this.#reader);
+    writableStreamDefaultWriterRelease(this.#writer);
+    if (rejected) this.#result.reject(reason);
+    else this.#result.resolve();
+  }
+}
+
+async function runPipeActions(actions: PipeAction[]): Promise<void> {
+  const promises: Promise<void>[] = [];
+  for (const action of actions) promises.push(action());
+  await Promise.all(promises);
 }
 
 export interface TeeOptions<T> {

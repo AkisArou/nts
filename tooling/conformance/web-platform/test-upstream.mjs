@@ -13,6 +13,7 @@ import { MessageChannel } from "node:worker_threads";
 const repositoryRoot = new URL("../../../", import.meta.url);
 const localWptRoot = new URL("runtime/web-platform/third_party/wpt/", repositoryRoot);
 const manifest = JSON.parse(readFileSync(new URL("manifest.json", localWptRoot), "utf8"));
+const fixtureFilter = process.env.NTS_WEB_PLATFORM_FIXTURE;
 
 if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
   const build = spawnSync(
@@ -50,6 +51,8 @@ const {
   ReadableStreamDefaultReader,
   TextDecoder,
   TextEncoder,
+  TransformStream,
+  TransformStreamDefaultController,
   WritableStream,
 } = await import("./node_modules/.tsbuild/host/runtime/web-platform/src/index.js");
 const { createHostNodeWebPlatform } =
@@ -107,6 +110,7 @@ async function settleWithCleanups(outcome, cleanups) {
 
 function createWptContext(path, pending) {
   let contextIntrinsicTypeError = TypeError;
+  let promiseTestQueue = Promise.resolve();
   const context = createContext({
     AbortController,
     AbortSignal,
@@ -143,6 +147,8 @@ function createWptContext(path, pending) {
     ReadableStreamDefaultReader,
     TextDecoder,
     TextEncoder,
+    TransformStream,
+    TransformStreamDefaultController,
     TypeError,
     Uint8Array,
     Uint8ClampedArray,
@@ -321,25 +327,38 @@ function createWptContext(path, pending) {
           return () => asynchronousFailure.reject(new Error(message));
         },
       };
-      const body = Promise.resolve().then(() => {
-        return fn(test);
-      });
-      const timeout = Promise.withResolvers();
-      const timer = setTimeout(
-        () => timeout.reject(new Error(`Upstream promise test timed out: ${name}`)),
-        5000,
-      );
-      const outcome = Promise.race([body, asynchronousFailure.promise, timeout.promise]);
-      const result = settleWithCleanups(outcome, cleanups)
-        .finally(() => clearTimeout(timer))
-        .then(
-          () => reportPass(path, name),
-          (error) => reportFailure(path, name, error),
+      const scheduled = promiseTestQueue.then(async () => {
+        const body = Promise.resolve().then(() => fn(test));
+        const timeout = Promise.withResolvers();
+        const timer = setTimeout(
+          () => timeout.reject(new Error(`Upstream promise test timed out: ${name}`)),
+          5000,
         );
+        try {
+          await settleWithCleanups(
+            Promise.race([body, asynchronousFailure.promise, timeout.promise]),
+            cleanups,
+          );
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+      const result = scheduled.then(
+        () => reportPass(path, name),
+        (error) => reportFailure(path, name, error),
+      );
+      promiseTestQueue = result;
       pending.push(result);
     },
     promise_rejects_exactly(_test, expected, promise, message) {
       return assert.rejects(promise, (error) => error === expected, message);
+    },
+    promise_rejects_dom(_test, name, promise, message) {
+      return assert.rejects(
+        promise,
+        (error) => error instanceof DOMException && error.name === name,
+        message,
+      );
     },
     promise_rejects_js(_test, constructor, promise, message) {
       return assert.rejects(promise, constructor, message);
@@ -407,6 +426,7 @@ async function runFixture(root, path, data, verifiedSupport) {
 
 const localSupport = new Map();
 for (const [path, expectedHash] of Object.entries(manifest.files)) {
+  if (fixtureFilter !== undefined && path !== fixtureFilter) continue;
   const data = readVerified(localWptRoot, path, expectedHash);
   if (path.endsWith(".js")) {
     await runFixture(localWptRoot, path, data, localSupport);
@@ -426,6 +446,7 @@ for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.support)) {
   nodeSupport.set(path, readVerified(nodeWptRoot, path, expectedHash));
 }
 for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.tests)) {
+  if (fixtureFilter !== undefined && path !== fixtureFilter) continue;
   await runFixture(nodeWptRoot, path, readVerified(nodeWptRoot, path, expectedHash), nodeSupport);
 }
 
