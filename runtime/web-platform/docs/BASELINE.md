@@ -5966,3 +5966,80 @@ untouched.
 Worth recording because the risk was real and the reason it did not land is not foresight.
 `tsc` refused the file that mattered, for a reason having nothing to do with the twelve
 modules behind it.
+
+## `TextDecoderStream` and `TextEncoderStream`, and what the frontier is actually counting
+
+The Encoding standard's two transform streams were missing, which is why the eleven
+`encoding/streams` fixtures had been sitting unpinned and reading as "out of profile". They
+were out of profile because the classes did not exist, not because the area does not apply.
+
+Upstream grows **2,433 to 2,547**, with 2,515 passing and the failure count back at the same
+eight structural ones.
+
+Neither class adds a codec. Both hold a `TransformStream` privately and forward `readable`
+and `writable`, and the decoder is the existing `TextDecoder` with `stream: true` — so the
+new fixtures test the existing codec through a new seam rather than a second implementation
+of it.
+
+**The genuinely new part is the encoder's surrogate handling**, and it is why
+`TextEncoder.encode` cannot simply be called per chunk: `encode` performs USVString
+conversion, which replaces a lone surrogate with U+FFFD *immediately*. A high surrogate at
+the end of one chunk has to be held and joined with a low surrogate at the start of the next.
+Encoding each chunk independently turns one astral character split across a boundary into two
+replacement characters — and every value still round-trips for input that happens not to
+straddle one, which is why it needs a fixture rather than a review.
+
+### Two real defects the new fixtures found
+
+**`TextDecoder.decode()` on a detached buffer threw.** Web IDL says getting a copy of a
+detached buffer source yields an *empty byte sequence*, so a transferred `ArrayBuffer` must
+decode to nothing. This threw `TypeError` from `new Uint8Array(detached)`. That is a bug in
+the codec, not in the stream — found only because the stream fixture transfers a buffer, and
+nothing in the existing corpus ever did.
+
+**An `undefined` chunk decoded to the empty string instead of erroring the stream.**
+`decode()` with no argument is *valid* and answers `""` — right for the codec, wrong for a
+stream, where a chunk must be a buffer source. Every other bad chunk was already refused
+inside `decode`; this one was not, because for the codec it is not bad. The stream refuses it
+explicitly now.
+
+Nine of the new tests are marked not applicable with a reason: they exercise `Shift_JIS`,
+`ISO-2022-JP`, `ISO-8859-14`, `iso-8859-2` and `ascii`, and this profile implements UTF-8,
+UTF-16LE and UTF-16BE only — declined by the decoder's constructor rather than decoded
+incorrectly.
+
+### The instrument selected nothing and reported it as clean
+
+Five sabotages were run against `NTS_WEB_PLATFORM_FIXTURE=encoding/streams` and all five
+came back with **zero failures and zero tests**. The filter was an exact path match, so an
+area prefix selected nothing, and a run over no tests prints the same shape as a run where
+nothing broke.
+
+It is a prefix now, and it **exits non-zero when a filter selects nothing** — because the
+only reason this was caught is that five consecutive sabotages surviving is implausible
+enough to look at. Four would have been believable.
+
+The guard was then written *below* the `process.exit` that ends the script, so it never ran;
+the control that proved it fires was a filter matching nothing, checked before trusting it.
+Re-run properly, all five sabotages are caught.
+
+### What the frontier is counting, measured
+
+The two classes moved the frontier **1,297 to 1,407**, which looked disproportionate for two
+small classes. It is, and the reason is not the classes.
+
+A control: **one additional `TransformStream<number, boolean>` — a single unused function,
+one new instantiation with fresh type arguments — costs a further 180 primaries**, from
+1,407 to 1,587. More than both real classes together.
+
+So a refusal inside a generic is counted **once per instantiation**, and the frontier is
+partly a measure of how many times an already-refused generic is instantiated rather than of
+how much new code is refused. That belongs beside the earlier finding that three
+spec-conformant spellings of one declaration cost 42, 35 and 0: **the count is a property of
+the code as written, not only of what the compiler cannot do.**
+
+The two instantiations here are the correct type arguments. Widening them to something
+already instantiated would buy the number back and lose the type safety, which is the
+workaround this lane does not make.
+
+814/814 host, upstream 2,515 of 2,523 applicable, compiled axis unchanged at 138 of 142.

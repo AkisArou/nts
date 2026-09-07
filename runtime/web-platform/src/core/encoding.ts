@@ -30,9 +30,14 @@ function bufferSourceBytes(
     return emptyBytes;
   }
   if (ArrayBuffer.isView(input)) {
+    // A view whose buffer was transferred reports zero length, and constructing over it
+    // throws. Web IDL says getting a copy of a detached buffer source yields an empty byte
+    // sequence, so an emptied view decodes to nothing rather than failing.
+    if (input.byteLength === 0) return emptyBytes;
     return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   }
   if (input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+    if (input.byteLength === 0) return emptyBytes;
     return new Uint8Array(input);
   }
   throw new TypeError("TextDecoder input must be an ArrayBuffer or ArrayBufferView");

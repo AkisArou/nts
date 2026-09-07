@@ -15,7 +15,16 @@ import { MessageChannel } from "node:worker_threads";
 const repositoryRoot = new URL("../../../", import.meta.url);
 const localWptRoot = new URL("runtime/web-platform/third_party/wpt/", repositoryRoot);
 const manifest = JSON.parse(readFileSync(new URL("manifest.json", localWptRoot), "utf8"));
+// A prefix, not an exact path. It was exact, and an area prefix therefore selected nothing
+// and reported a clean run over zero tests -- which reads exactly like "nothing broke".
 const fixtureFilter = process.env.NTS_WEB_PLATFORM_FIXTURE;
+let fixtureFilterMatched = 0;
+const fixtureSelected = (path) => {
+  if (fixtureFilter === undefined) return true;
+  const hit = path === fixtureFilter || path.startsWith(fixtureFilter);
+  if (hit) fixtureFilterMatched++;
+  return hit;
+};
 
 if (process.env.NTS_WEB_PLATFORM_COMPILED !== "1") {
   const build = spawnSync(
@@ -62,7 +71,9 @@ const {
   ReadableStreamDefaultController,
   ReadableStreamDefaultReader,
   TextDecoder,
+  TextDecoderStream,
   TextEncoder,
+  TextEncoderStream,
   TransformStream,
   TransformStreamDefaultController,
   URLSearchParams,
@@ -327,7 +338,9 @@ function createWptContext(
     ReadableStreamDefaultReader,
     structuredClone,
     TextDecoder,
+    TextDecoderStream,
     TextEncoder,
+    TextEncoderStream,
     TransformStream,
     TransformStreamDefaultController,
     TypeError,
@@ -708,7 +721,7 @@ for (const [path, expectedHash] of Object.entries(manifest.support ?? {})) {
   localSupport.set(path, readVerified(localWptRoot, path, expectedHash));
 }
 for (const [path, expectedHash] of Object.entries(manifest.files)) {
-  if (fixtureFilter !== undefined && path !== fixtureFilter) continue;
+  if (!fixtureSelected(path)) continue;
   const data = readVerified(localWptRoot, path, expectedHash);
   if (path.endsWith(".js")) {
     await runFixture(localWptRoot, path, data, localSupport);
@@ -728,7 +741,7 @@ for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.support)) {
   nodeSupport.set(path, readVerified(nodeWptRoot, path, expectedHash));
 }
 for (const [path, expectedHash] of Object.entries(manifest.nodeWpt.tests)) {
-  if (fixtureFilter !== undefined && path !== fixtureFilter) continue;
+  if (!fixtureSelected(path)) continue;
   await runFixture(nodeWptRoot, path, readVerified(nodeWptRoot, path, expectedHash), nodeSupport);
 }
 
@@ -745,4 +758,10 @@ hostRuntime.close();
 await new Promise((resolve, reject) =>
   eventSourceServer.close((error) => (error === undefined ? resolve() : reject(error))),
 );
+// Before the exit status, not after it: placed below, this never ran, and a filter that
+// selected nothing still reported a clean zero.
+if (fixtureFilter !== undefined && fixtureFilterMatched === 0) {
+  console.error(`NTS_WEB_PLATFORM_FIXTURE=${fixtureFilter} selected no fixtures.`);
+  process.exit(1);
+}
 process.exit(failed === 0 ? 0 : 1);

@@ -29,6 +29,7 @@ export type {
 } from "./core/events.ts";
 
 export { TextDecoder, TextEncoder } from "./core/encoding.ts";
+export { TextDecoderStream, TextEncoderStream } from "./core/encoding-streams.ts";
 export type {
   AllowSharedBufferSource,
   TextDecoderOptions,

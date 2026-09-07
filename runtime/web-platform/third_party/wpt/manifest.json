@@ -106,17 +106,21 @@
     "fetch/data-urls/processing.any.js": 73
   },
   "notApplicable": {
-    "service-workers/cache-storage/cache-add.https.any.js": {
-      "Cache.addAll with opaque-filtered 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    "dom/events/EventTarget-removeEventListener.any.js": {
+      "removing a null event listener should succeed": "The assertion calls globalThis.removeEventListener, which requires the global object itself to be an EventTarget. That is true of Window and Worker and deliberately false here: this profile installs no ambient globals, so there is no global event target to remove a listener from. The rest of the fixture runs against a constructed EventTarget and passes."
     },
-    "service-workers/cache-storage/cache-match.https.any.js": {
-      "cors-exposed header should be stored correctly.": "This case asserts browser CORS response-header filtering, including hiding Set-Cookie. The standalone server/mobile profile intentionally exposes the Node/Undici-compatible header surface.",
-      "Cache.match ignores vary headers on opaque response.": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
-      "Cache.match blob should be sliceable": "The cache behavior is applicable and covered by the focused suite and pinned Blob fixtures, but this upstream case consumes the slice through browser-only FileReader rather than Blob.text() or Blob.arrayBuffer()."
+    "encoding/streams/decode-attributes.any.js": {
+      "encoding attribute should have correct value for 'ascii'": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "encoding attribute should have correct value for 'iso-8859-2'": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly."
     },
-    "service-workers/cache-storage/cache-put.https.any.js": {
-      "Cache.put with opaque-filtered HTTP 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
-      "Cache.put with a VARY:* opaque response should not reject": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    "encoding/streams/decode-non-utf8.any.js": {
+      "TextDecoderStream should be able to decode ISO-2022-JP": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to decode ISO-8859-14": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to decode Shift_JIS": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to decode invalid sequences in ISO-2022-JP": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to decode invalid sequences in Shift_JIS": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to reject invalid sequences in ISO-2022-JP": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly.",
+      "TextDecoderStream should be able to reject invalid sequences in Shift_JIS": "This profile implements UTF-8, UTF-16LE and UTF-16BE only; the legacy single-byte and multi-byte encodings are declined by the decoder's constructor rather than decoded incorrectly."
     },
     "fetch/api/headers/header-setcookie.any.js": {
       "Set-Cookie is a forbidden response header": "Browser response filtering is outside the standalone server/mobile profile; modern Node and standalone Undici expose Set-Cookie through getSetCookie()."
@@ -124,20 +128,29 @@
     "fetch/api/request/request-consume-empty.any.js": {
       "Consume empty FormData request body as text": "The fixture itself marks this empty-string expectation as unclear; a conforming multipart encoder and standalone Undici emit the required closing boundary even for an empty entry list."
     },
-    "fetch/api/response/response-consume-empty.any.js": {
-      "Consume empty FormData response body as text": "The fixture assumes an empty multipart body has no wire bytes; a conforming multipart encoder and standalone Undici emit the required closing boundary even for an empty entry list."
-    },
     "fetch/api/response/response-cancel-stream.any.js": {
       "Accessing .body after canceling it": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
       "Cancelling a closed Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
       "Cancelling a loading Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle.",
       "Cancelling a starting Response stream": "This upstream case requires the WPT HTTP server; the standalone harness deliberately forbids host/network fetch as an oracle."
     },
+    "fetch/api/response/response-consume-empty.any.js": {
+      "Consume empty FormData response body as text": "The fixture assumes an empty multipart body has no wire bytes; a conforming multipart encoder and standalone Undici emit the required closing boundary even for an empty entry list."
+    },
+    "service-workers/cache-storage/cache-add.https.any.js": {
+      "Cache.addAll with opaque-filtered 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    },
+    "service-workers/cache-storage/cache-match.https.any.js": {
+      "Cache.match blob should be sliceable": "The cache behavior is applicable and covered by the focused suite and pinned Blob fixtures, but this upstream case consumes the slice through browser-only FileReader rather than Blob.text() or Blob.arrayBuffer().",
+      "Cache.match ignores vary headers on opaque response.": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
+      "cors-exposed header should be stored correctly.": "This case asserts browser CORS response-header filtering, including hiding Set-Cookie. The standalone server/mobile profile intentionally exposes the Node/Undici-compatible header surface."
+    },
+    "service-workers/cache-storage/cache-put.https.any.js": {
+      "Cache.put with a VARY:* opaque response should not reject": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile.",
+      "Cache.put with opaque-filtered HTTP 206 response": "Opaque filtered responses are produced by browser CORS mode and do not exist in the standalone server/mobile Fetch profile."
+    },
     "streams/readable-byte-streams/templated.any.js": {
       "ReadableStream with byte source (empty) BYOB reader: canceling via the reader should cause the reader to act closed": "The shared default-reader template expects value: undefined, but the current Streams algorithm and the pinned Node reference return a new zero-length transferred view for a BYOB read issued after cancellation. The dedicated byte-stream cancellation cases cover pending-read cancellation separately."
-    },
-    "dom/events/EventTarget-removeEventListener.any.js": {
-      "removing a null event listener should succeed": "The assertion calls globalThis.removeEventListener, which requires the global object itself to be an EventTarget. That is true of Window and Worker and deliberately false here: this profile installs no ambient globals, so there is no global event target to remove a listener from. The rest of the fixture runs against a constructed EventTarget and passes."
     }
   },
   "nodeWpt": {
@@ -151,51 +164,65 @@
       "streams": "f8f26a372f357370846226ff64db1f9cc98a1edb"
     },
     "support": {
+      "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9",
       "common/gc.js": "ac43a4cfaf7735a08dfd1be177918167f815e800",
       "common/sab.js": "a3ea610e165d0d56ef1faab2ed49186d4e03c392",
-      "FileAPI/support/Blob.js": "e8a52425a170854eb687d15bbdad547cbdb7cab9",
+      "dom/abort/resources/abort-signal-any-tests.js": "8f897c934e87eab427004268299c1c547a957727",
+      "encoding/resources/decoding-helpers.js": "78e52da014b7c56451c00a0419c7cedfca01ab18",
+      "encoding/resources/encodings.js": "80933bf9386cb629537c32ca4dc5c22a81d7e872",
+      "encoding/streams/resources/readable-stream-from-array.js": "5c12ba8c8bba60ef52a689abae17d1f1e0bfc458",
+      "encoding/streams/resources/readable-stream-to-array.js": "fda03e2264492296d9b26986d15211384a6a8b16",
       "streams/resources/recording-streams.js": "661fe512f516c6c331025b74e6bf936e130f32c7",
       "streams/resources/rs-test-templates.js": "73ef0463768d23847186867fa68e968074b5fa8f",
       "streams/resources/rs-utils.js": "0f7742a5b3b190cdc82bb03a2fae62ce517fcf02",
-      "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8",
-      "encoding/resources/encodings.js": "80933bf9386cb629537c32ca4dc5c22a81d7e872",
-      "encoding/resources/decoding-helpers.js": "78e52da014b7c56451c00a0419c7cedfca01ab18",
-      "dom/abort/resources/abort-signal-any-tests.js": "8f897c934e87eab427004268299c1c547a957727"
+      "streams/resources/test-utils.js": "a38f78027bf0e90ae4bca4a3557982768ad402e8"
     },
     "tests": {
+      "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
+      "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
+      "FileAPI/blob/Blob-constructor.any.js": "03155b99cb20ea34fa5167e5107141e18fc08647",
+      "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
+      "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
+      "FileAPI/blob/Blob-slice.any.js": "bedc8d737302a0f4c0464db103c66bfe1ca2e3e2",
+      "FileAPI/blob/Blob-stream.any.js": "453144cac964a627bb2a004d435887b15ddc96d3",
+      "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
+      "FileAPI/file/File-constructor.any.js": "0b0185c40bf83c5781630c72878764f2ef5588c6",
       "dom/abort/AbortSignal.any.js": "c2fc88d3b4f103a995e0e6450ba4a0a4cabcad8e",
+      "dom/abort/abort-signal-any.any.js": "b4abb14c1a3eff64cee0c171c1ca03cf89ccc9af",
       "dom/abort/event.any.js": "eda769e8d8f39dd16e19a8d24c038e86baf1c459",
       "dom/abort/timeout.any.js": "61b595e717c844259b6f75d9bd8b1cbd9b66d8d2",
       "dom/events/AddEventListenerOptions-once.any.js": "b4edd4345c5e3431d77a6ed56dc573d4000f4c43",
       "dom/events/AddEventListenerOptions-passive.any.js": "8e59cf5b379f2e806fa52b82d87dd09f90c212d7",
       "dom/events/AddEventListenerOptions-signal.any.js": "e6a34261594bcaf43057fc46ed734bcf105d68ee",
+      "dom/events/Event-constructors.any.js": "faa623ea92991b72742477a18471449f5382f1a8",
+      "dom/events/Event-isTrusted.any.js": "00bcecd0ed67a07128a2555820d6e12f72aee990",
       "dom/events/EventTarget-add-remove-listener.any.js": "b1d7ffb3e07fbe2038f0e33a8e63173edf12234c",
       "dom/events/EventTarget-addEventListener.any.js": "e22da4aff850a2f0042c5ecda4c844cc1852f2ec",
       "dom/events/EventTarget-constructible.any.js": "4125d23f0c965066c91d95c9ba83ac711fdabbc3",
+      "dom/events/EventTarget-removeEventListener.any.js": "289dfcfbabde0f68d739a093985f4f2601665126",
+      "encoding/api-basics.any.js": "768f8159313ece26042dbe20f8894d5c37c3aa48",
       "encoding/api-surrogates-utf8.any.js": "52d297314940413151667dd60d03bcd154a0b23c",
       "encoding/encodeInto.any.js": "9ea36d23d08cca0d1c380015d415de2abec95f2a",
+      "encoding/streams/backpressure.any.js": "0f67e3358414d344132fdf7f8efe072511a7a80e",
+      "encoding/streams/decode-attributes.any.js": "f64f45b56acba90f27689e1c4e2934648bf9fec3",
+      "encoding/streams/decode-bad-chunks.any.js": "21d61427a2bca357af37df1767bac9a538f233b6",
+      "encoding/streams/decode-ignore-bom.any.js": "92f89c80158c358cdfdc06fdaae6e48e068f9f9f",
+      "encoding/streams/decode-incomplete-input.any.js": "3add74336df33008685d4eabe32f965db3b722d2",
+      "encoding/streams/decode-non-utf8.any.js": "effdee3b430de5dac64962054ed9b5763181e3e1",
+      "encoding/streams/decode-split-character.any.js": "d589694fce9f167a20194e106b90aeb23698cdb4",
+      "encoding/streams/decode-utf8.any.js": "f6fceb299bdd368ea04c673c3a1c995ebec175fc",
+      "encoding/streams/encode-bad-chunks.any.js": "4a926a67d287c924e7853f5d31fb798d7f704f03",
+      "encoding/streams/encode-utf8.any.js": "a5ba8f91eaf7f54454cbc0f56647db12ac7f6f3b",
+      "encoding/streams/readable-writable-properties.any.js": "8084cb9942145064387e18e685fc7a87c6422e07",
       "encoding/textdecoder-arguments.any.js": "2d137b7aa37e15dbb4a93315f616891fee01a6b2",
+      "encoding/textdecoder-byte-order-marks.any.js": "31350fdf689ed6e8ab277eb0bfdaa7a068d02acb",
       "encoding/textdecoder-copy.any.js": "61de4142bf27a25df5e6dfb0395c9eb392e58334",
+      "encoding/textdecoder-eof.any.js": "e41e326aace2440f9f46969bbce6d82c1e582507",
+      "encoding/textdecoder-fatal.any.js": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
+      "encoding/textdecoder-ignorebom.any.js": "e825698ba405230d90da085e6fae70c364cbec16",
+      "encoding/textdecoder-streaming.any.js": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
+      "encoding/textdecoder-utf16-surrogates.any.js": "7e8322cd19c2133ea4bf557e0502be343b5d524f",
       "encoding/textencoder-utf16-surrogates.any.js": "31657516455bd60b803600db9f36f641504d1c15",
-      "FileAPI/blob/Blob-array-buffer.any.js": "2310646e5fdeab300bcea66e4035adbdf3651685",
-      "FileAPI/blob/Blob-bytes.any.js": "5173b3715c8054ff724899c336fea5c3d221a0d2",
-      "FileAPI/blob/Blob-constructor.any.js": "03155b99cb20ea34fa5167e5107141e18fc08647",
-      "FileAPI/blob/Blob-newobject.any.js": "e036c3a9a743e6710b386c72e3a0960bbfdb86e9",
-      "FileAPI/blob/Blob-slice.any.js": "bedc8d737302a0f4c0464db103c66bfe1ca2e3e2",
-      "FileAPI/blob/Blob-slice-overflow.any.js": "388fd9282c94abe8a296eee6dfe45dca4de400e2",
-      "FileAPI/blob/Blob-text.any.js": "d04fa97cffe6a3d81f520f7ac92ac44e699fa004",
-      "FileAPI/file/File-constructor.any.js": "0b0185c40bf83c5781630c72878764f2ef5588c6",
-      "streams/queuing-strategies.any.js": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
-      "streams/readable-byte-streams/bad-buffers-and-views.any.js": "eae8dde03f6b8da8d2c8f975d8b7473401e5fef0",
-      "streams/readable-byte-streams/construct-byob-request.any.js": "a26f949ee29d945a264f368dda9e890f26fa3fdc",
-      "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js": "92bd0a26a0ec05c2c3b8dcd25ce347964d1705d5",
-      "streams/readable-byte-streams/general.any.js": "50f4f019ff220ff45e01f67e19f5e1e48242d256",
-      "streams/readable-byte-streams/non-transferable-buffers.any.js": "4bddaef5d647df724d218930fdee6f4c65a012ae",
-      "streams/readable-byte-streams/patched-global.any.js": "ce2e9e9993ae57eee33b15400da4c85260ab66e2",
-      "streams/readable-byte-streams/read-min.any.js": "4010e3750ce2a84afd1686db9ecd3b9f38543806",
-      "streams/readable-byte-streams/respond-after-enqueue.any.js": "e51efa061a6511b2c22a6df541b99209827c11be",
-      "streams/readable-byte-streams/tee.any.js": "60d82b9cf6a1fdfb9ff89d7bbd7d304982026844",
-      "streams/readable-byte-streams/templated.any.js": "e4c10f7685962e4ceff328f5c3a4076916da0df5",
       "streams/piping/abort.any.js": "e813b017769c6805f7682d150f202107ceb6b438",
       "streams/piping/close-propagation-backward.any.js": "25bd475ed13e77d9021a5228021ab23e1b945a91",
       "streams/piping/close-propagation-forward.any.js": "0ec94f80abf04b2093e3297a0bbb81a63bbb6a74",
@@ -209,6 +236,34 @@
       "streams/piping/then-interception.any.js": "fc48c3683114785d7187038a9d520d0c4c1039d2",
       "streams/piping/throwing-options.any.js": "186f8ded1968a4f1b4f25cf8dd2e5d2ccbb3bfdb",
       "streams/piping/transform-streams.any.js": "e079bb637cad0da3f2bb6a28569e49b84d540c2a",
+      "streams/queuing-strategies.any.js": "9efc4570cf2ee2e2eb1525434351420ddc0d5e97",
+      "streams/readable-byte-streams/bad-buffers-and-views.any.js": "eae8dde03f6b8da8d2c8f975d8b7473401e5fef0",
+      "streams/readable-byte-streams/construct-byob-request.any.js": "a26f949ee29d945a264f368dda9e890f26fa3fdc",
+      "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js": "285b427e2778623979a28de8b6c91dfc774cc4e6",
+      "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js": "92bd0a26a0ec05c2c3b8dcd25ce347964d1705d5",
+      "streams/readable-byte-streams/general.any.js": "50f4f019ff220ff45e01f67e19f5e1e48242d256",
+      "streams/readable-byte-streams/non-transferable-buffers.any.js": "4bddaef5d647df724d218930fdee6f4c65a012ae",
+      "streams/readable-byte-streams/patched-global.any.js": "ce2e9e9993ae57eee33b15400da4c85260ab66e2",
+      "streams/readable-byte-streams/read-min.any.js": "4010e3750ce2a84afd1686db9ecd3b9f38543806",
+      "streams/readable-byte-streams/respond-after-enqueue.any.js": "e51efa061a6511b2c22a6df541b99209827c11be",
+      "streams/readable-byte-streams/tee.any.js": "60d82b9cf6a1fdfb9ff89d7bbd7d304982026844",
+      "streams/readable-byte-streams/templated.any.js": "e4c10f7685962e4ceff328f5c3a4076916da0df5",
+      "streams/readable-streams/async-iterator.any.js": "e192201b531da7c24e0bcae1834f08a00cf8757d",
+      "streams/readable-streams/bad-strategies.any.js": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
+      "streams/readable-streams/bad-underlying-sources.any.js": "3d77b923d178a0134f3f3d0590be0f4fd836c7a5",
+      "streams/readable-streams/cancel.any.js": "d44222f1497f0acbf9d080b0668f9759c001d716",
+      "streams/readable-streams/constructor.any.js": "0b995f0cb16bde21df887a717690eaa853a988b9",
+      "streams/readable-streams/count-queuing-strategy-integration.any.js": "a8c1b91d0068e316463400395601c995b9f89f40",
+      "streams/readable-streams/crashtests/garbage-collection.any.js": "6e9d80c41425b13800717f9e27184f64f1514752",
+      "streams/readable-streams/default-reader.any.js": "f92862719e47c178e3bdb1ddcf2cfa12b84b4514",
+      "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66",
+      "streams/readable-streams/from.any.js": "2b28a05fee398c523d049c56aff190e771eb19f2",
+      "streams/readable-streams/garbage-collection.any.js": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
+      "streams/readable-streams/general.any.js": "eee3f62215eeb07e6a1c06d004defd98324b270e",
+      "streams/readable-streams/patched-global.any.js": "c208824c8644695771cfbe4dd4ace71ed4b49df5",
+      "streams/readable-streams/reentrant-strategies.any.js": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
+      "streams/readable-streams/tee.any.js": "c2c2e48230721163c09f4d4f6d1aee0c9a0a66fa",
+      "streams/readable-streams/templated.any.js": "4f2440c0880bb738b9755d9df2f56882c9b8188e",
       "streams/transform-streams/backpressure.any.js": "47a21fb7e71fed837832dd1b91b5100a3513131d",
       "streams/transform-streams/cancel.any.js": "9b369bfb7c68b4c6301376eeae8701030d02357f",
       "streams/transform-streams/errors.any.js": "bea060b6590818f0d6c3e95309b1d1e8bcc2a9a1",
@@ -220,21 +275,6 @@
       "streams/transform-streams/reentrant-strategies.any.js": "a6d459655856a7da4f4185b33c5e516c73f51868",
       "streams/transform-streams/strategies.any.js": "57e113e668ce2478a654a4e5ae5c9872e002c7fa",
       "streams/transform-streams/terminate.any.js": "a959e70fe693397a4a1a0f24d45fabead2cdc6f8",
-      "streams/readable-streams/async-iterator.any.js": "e192201b531da7c24e0bcae1834f08a00cf8757d",
-      "streams/readable-streams/bad-strategies.any.js": "49fa4bdbece5b58dfa159b52d615c3505deb269c",
-      "streams/readable-streams/bad-underlying-sources.any.js": "3d77b923d178a0134f3f3d0590be0f4fd836c7a5",
-      "streams/readable-streams/cancel.any.js": "d44222f1497f0acbf9d080b0668f9759c001d716",
-      "streams/readable-streams/constructor.any.js": "0b995f0cb16bde21df887a717690eaa853a988b9",
-      "streams/readable-streams/count-queuing-strategy-integration.any.js": "a8c1b91d0068e316463400395601c995b9f89f40",
-      "streams/readable-streams/default-reader.any.js": "f92862719e47c178e3bdb1ddcf2cfa12b84b4514",
-      "streams/readable-streams/floating-point-total-queue-size.any.js": "8b88c21d7f0b531266bbec7cb6d764b51d63db66",
-      "streams/readable-streams/from.any.js": "2b28a05fee398c523d049c56aff190e771eb19f2",
-      "streams/readable-streams/garbage-collection.any.js": "abcb4cf21b8955846a5c99b94efb5829e1e4b98d",
-      "streams/readable-streams/general.any.js": "eee3f62215eeb07e6a1c06d004defd98324b270e",
-      "streams/readable-streams/patched-global.any.js": "c208824c8644695771cfbe4dd4ace71ed4b49df5",
-      "streams/readable-streams/reentrant-strategies.any.js": "8ae7b98e8d5eefbb603157c69c2d250c79702e29",
-      "streams/readable-streams/tee.any.js": "c2c2e48230721163c09f4d4f6d1aee0c9a0a66fa",
-      "streams/readable-streams/templated.any.js": "4f2440c0880bb738b9755d9df2f56882c9b8188e",
       "streams/writable-streams/aborting.any.js": "9d8e80b1de63c5ae6d8377b3d56183d6ea3fb264",
       "streams/writable-streams/bad-strategies.any.js": "a1ef0791168f99186925acbe869ac8449e0f4e79",
       "streams/writable-streams/bad-underlying-sinks.any.js": "3c434ffe60ccb98f6c8eb96a06d0c61af46b283d",
@@ -249,21 +289,7 @@
       "streams/writable-streams/properties.any.js": "ae0549f0871b4866877dffbccf8803eeaa897d06",
       "streams/writable-streams/reentrant-strategy.any.js": "18ce9e84759a11bed4f4b31f5e82cf6948a2b739",
       "streams/writable-streams/start.any.js": "17972b568ceb24fee7a758a9d7a1147b26a030d6",
-      "streams/writable-streams/write.any.js": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c",
-      "encoding/api-basics.any.js": "768f8159313ece26042dbe20f8894d5c37c3aa48",
-      "encoding/textdecoder-byte-order-marks.any.js": "31350fdf689ed6e8ab277eb0bfdaa7a068d02acb",
-      "encoding/textdecoder-eof.any.js": "e41e326aace2440f9f46969bbce6d82c1e582507",
-      "encoding/textdecoder-fatal.any.js": "054b35f21f488795a5d0559bd8ea1fdb243099ae",
-      "encoding/textdecoder-ignorebom.any.js": "e825698ba405230d90da085e6fae70c364cbec16",
-      "encoding/textdecoder-streaming.any.js": "e473a7056e24d3dbc4383bb904f14e99e559d2f2",
-      "encoding/textdecoder-utf16-surrogates.any.js": "7e8322cd19c2133ea4bf557e0502be343b5d524f",
-      "FileAPI/blob/Blob-stream.any.js": "453144cac964a627bb2a004d435887b15ddc96d3",
-      "dom/abort/abort-signal-any.any.js": "b4abb14c1a3eff64cee0c171c1ca03cf89ccc9af",
-      "dom/events/Event-constructors.any.js": "faa623ea92991b72742477a18471449f5382f1a8",
-      "dom/events/Event-isTrusted.any.js": "00bcecd0ed67a07128a2555820d6e12f72aee990",
-      "dom/events/EventTarget-removeEventListener.any.js": "289dfcfbabde0f68d739a093985f4f2601665126",
-      "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js": "285b427e2778623979a28de8b6c91dfc774cc4e6",
-      "streams/readable-streams/crashtests/garbage-collection.any.js": "6e9d80c41425b13800717f9e27184f64f1514752"
+      "streams/writable-streams/write.any.js": "20a2885bf3512ab6da3bb9aeecbc0e48022e741c"
     }
   }
 }
