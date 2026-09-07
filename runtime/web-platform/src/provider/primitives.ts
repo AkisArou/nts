@@ -92,6 +92,187 @@ export interface ByteConnection {
 
 export interface SocketConnector {
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection>;
+
+  /**
+   * Optional negotiation capability. Declared here rather than only on
+   * {@link NegotiatingSocketConnector} so a provider author reading the interface
+   * they implement can see that it exists, and so callers ask a declared question
+   * instead of probing for a member the type does not mention.
+   */
+  readonly reportsNegotiatedProtocol?: boolean;
+
+  connectNegotiated?(address: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection>;
+}
+
+/**
+ * A connected byte stream together with what TLS actually negotiated for it.
+ *
+ * The selection is reported on the connect result rather than as a field on
+ * `ByteConnection`, so a raw byte stream carries no TLS concept it has no use for,
+ * and the asymmetry stays visible: the caller offers a list and is told the one that
+ * was chosen.
+ */
+export interface NegotiatedConnection {
+  readonly connection: ByteConnection;
+  /**
+   * The application protocol TLS selected, or null when nothing was negotiated.
+   *
+   * Null is unambiguous only because of the contract on
+   * {@link NegotiatingSocketConnector}: a connector that cannot report a selection
+   * is never offered a choice, so null means cleartext or a single known answer and
+   * never "negotiation happened and this provider cannot say what it chose".
+   */
+  readonly protocol: string | null;
+  /**
+   * dNSName subject-alternative names as presented by the peer certificate, empty
+   * for cleartext. Reusing a connection for a second origin is sound only when the
+   * certificate covers it, so a pool that coalesces on hostname alone is a
+   * cross-origin routing defect; an empty list simply cannot coalesce.
+   */
+  readonly certificateNames: readonly string[];
+}
+
+/**
+ * A connector that reports what TLS negotiated.
+ *
+ * `reportsNegotiatedProtocol` is a capability declaration rather than documentation.
+ * Shared policy may offer more than one protocol in `ConnectAddress.alpnProtocols`
+ * only to a connector that declares `true`. A provider that cannot report the
+ * selection declares `false` and is then offered exactly one protocol, so an absent
+ * answer cannot be confused with an unreported one.
+ *
+ * This is not hypothetical caution. Android exposes
+ * `SSLSocket.getApplicationProtocol` only from API 29 while this project targets API
+ * 26; the method compiles against the API-26 stub and is absent on the device. A
+ * provider there that offered `["h2", "http/1.1"]`, negotiated h2, and reported
+ * nothing would have shared policy select HTTP/1.1 and speak it into an h2
+ * connection.
+ *
+ * The declaration is therefore a property of this connector instance, answerable at
+ * runtime, and never a build-time constant: one Android build runs on both API 26 and
+ * API 29, so a provider decides per instance rather than needing two providers.
+ */
+export interface NegotiatingSocketConnector extends SocketConnector {
+  readonly reportsNegotiatedProtocol: boolean;
+
+  connectNegotiated(address: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection>;
+}
+
+/** Ordered protocols to offer, and the single one to request when none can be reported. */
+export interface ProtocolPreference {
+  /** Offered in order to a connector that reports its selection. */
+  readonly ordered: readonly string[];
+  /**
+   * Requested alone when the connector cannot report. Named explicitly rather than
+   * taken from a position in `ordered`, because the safe single choice is the most
+   * compatible protocol and not the most preferred one.
+   */
+  readonly whenUnreportable: string;
+}
+
+export function isNegotiatingSocketConnector(
+  connector: SocketConnector,
+): connector is NegotiatingSocketConnector {
+  return (
+    typeof connector.reportsNegotiatedProtocol === "boolean" &&
+    connector.connectNegotiated !== undefined
+  );
+}
+
+/**
+ * The protocols shared policy is allowed to offer this connector.
+ *
+ * This is where the contract is enforced, so that a provider cannot be merely
+ * careful about it and every caller gets the same rule.
+ */
+export function offeredProtocols(
+  connector: SocketConnector,
+  preference: ProtocolPreference,
+): readonly string[] {
+  if (preference.ordered.length === 0) throw new TypeError("A protocol preference cannot be empty");
+  if (!preference.ordered.includes(preference.whenUnreportable)) {
+    throw new TypeError("The unreportable protocol must be one of the offered protocols");
+  }
+  if (isNegotiatingSocketConnector(connector) && connector.reportsNegotiatedProtocol) {
+    return preference.ordered;
+  }
+  return [preference.whenUnreportable];
+}
+
+/**
+ * Connect through any connector and describe the result uniformly.
+ *
+ * A connector that does not report a selection yields `protocol: null` and no
+ * certificate names, which is exactly what the contract above makes safe: it was
+ * offered one protocol, so there is nothing it could have chosen instead.
+ */
+export async function connectNegotiated(
+  connector: SocketConnector,
+  address: ConnectAddress,
+  signal: AbortSignal,
+): Promise<NegotiatedConnection> {
+  if (isNegotiatingSocketConnector(connector)) {
+    return connector.connectNegotiated(address, signal);
+  }
+  const connection = await connector.connect(address, signal);
+  return { connection, protocol: null, certificateNames: [] };
+}
+
+/**
+ * A TLS upgrader that reports what it negotiated.
+ *
+ * Proxied TLS reaches the peer through {@link TlsUpgrader} rather than through a
+ * connector, so the same declaration and the same contract have to exist here or
+ * automatic protocol selection would silently stop working the moment a tunnel is
+ * involved. `reportsNegotiatedProtocol` carries the identical meaning and the
+ * identical per-instance requirement.
+ */
+export interface NegotiatingTlsUpgrader extends TlsUpgrader {
+  readonly reportsNegotiatedProtocol: boolean;
+
+  upgradeNegotiated(
+    connection: ByteConnection,
+    target: ConnectAddress,
+    signal: AbortSignal,
+  ): Promise<NegotiatedConnection>;
+}
+
+export function isNegotiatingTlsUpgrader(
+  upgrader: TlsUpgrader,
+): upgrader is NegotiatingTlsUpgrader {
+  return (
+    typeof upgrader.reportsNegotiatedProtocol === "boolean" &&
+    upgrader.upgradeNegotiated !== undefined
+  );
+}
+
+/** The protocols shared policy may offer this upgrader, under the same contract. */
+export function offeredUpgradeProtocols(
+  upgrader: TlsUpgrader,
+  preference: ProtocolPreference,
+): readonly string[] {
+  if (preference.ordered.length === 0) throw new TypeError("A protocol preference cannot be empty");
+  if (!preference.ordered.includes(preference.whenUnreportable)) {
+    throw new TypeError("The unreportable protocol must be one of the offered protocols");
+  }
+  if (isNegotiatingTlsUpgrader(upgrader) && upgrader.reportsNegotiatedProtocol) {
+    return preference.ordered;
+  }
+  return [preference.whenUnreportable];
+}
+
+/** Upgrade through any upgrader and describe the result uniformly. */
+export async function upgradeNegotiated(
+  upgrader: TlsUpgrader,
+  connection: ByteConnection,
+  target: ConnectAddress,
+  signal: AbortSignal,
+): Promise<NegotiatedConnection> {
+  if (isNegotiatingTlsUpgrader(upgrader)) {
+    return upgrader.upgradeNegotiated(connection, target, signal);
+  }
+  const upgraded = await upgrader.upgrade(connection, target, signal);
+  return { connection: upgraded, protocol: null, certificateNames: [] };
 }
 
 /**
@@ -107,6 +288,15 @@ export interface TlsUpgrader {
     target: ConnectAddress,
     signal: AbortSignal,
   ): Promise<ByteConnection>;
+
+  /** Optional negotiation capability; see {@link NegotiatingTlsUpgrader}. */
+  readonly reportsNegotiatedProtocol?: boolean;
+
+  upgradeNegotiated?(
+    connection: ByteConnection,
+    target: ConnectAddress,
+    signal: AbortSignal,
+  ): Promise<NegotiatedConnection>;
 }
 
 export interface PlatformPrimitives {

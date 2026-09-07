@@ -2231,3 +2231,100 @@ plan's canonical-ownership row rather than anything about this listener option. 
 also means the dispatch-time liveness branch has no evidence from either lane: the
 Node gc case does not reach the shared registration at all, and this host cannot force
 the window. Recording that here so the absence is not later mistaken for agreement.
+
+## The connect result reports what TLS negotiated
+
+`ConnectAddress.alpnProtocols` said what a caller requested and nothing said what TLS
+selected, so shared policy could not offer `["h2", "http/1.1"]` once and then choose
+the engine over that same socket. The host adapter validated an expected protocol
+internally and discarded the answer. This closes the open decision recorded in the
+Node-lane handoff, with the shape agreed by the compiler/common-runtime and JVM owners
+before any file was edited.
+
+The result travels on the connect, not on the connection. `NegotiatedConnection`
+carries `{ connection, protocol, certificateNames }`. A field on `ByteConnection` would
+have put a TLS concept on every byte stream, including the WebSocket and deterministic
+in-memory engines that have no use for one, and it would have hidden the asymmetry
+that the caller offers a list and is told the single thing chosen. `certificateNames`
+is the peer's dNSName SANs as presented, and it is here before HTTP/2 connection
+coalescing rather than after: reusing a connection for a second origin is sound only
+when the certificate covers it, so coalescing on hostname alone is a cross-origin
+routing defect. Cleartext presents no names and therefore simply cannot coalesce.
+
+**The contract is the part that matters, and it came from a device measurement.** The
+JVM owner ran the candidate shape on a real API-26 device rather than reasoning about
+it: `SSLSocket.getApplicationProtocol`, `SSLParameters.setApplicationProtocols` and
+`SSLParameters.getApplicationProtocols` are all absent there, arriving at API 29, while
+`X509Certificate.getSubjectAlternativeNames` is available. All three missing methods
+compile cleanly against the API-26 `android.jar`, so a compile check would have said
+the shape was answerable and the failure would have been a `NoSuchMethodError` on the
+declared floor.
+
+That makes "empty means cleartext" wrong, because it conflates *no ALPN happened* with
+*ALPN happened and this platform cannot report it*. A provider that offered
+`["h2","http/1.1"]`, negotiated h2 and reported nothing would have shared policy select
+HTTP/1.1 and speak it into an h2 connection — the exact failure `alpnProtocols` exists
+to prevent, one layer lower. Rather than a four-state `protocol` that every use site
+can mishandle, the rule is that **a connector which cannot report a selection is never
+offered a choice**: it is asked for exactly one protocol, so an absent answer is
+unambiguous. `offeredProtocols` and `offeredUpgradeProtocols` enforce that centrally,
+so a provider cannot merely be careful about it.
+
+The single protocol is named explicitly in `ProtocolPreference.whenUnreportable`
+rather than taken from a position in the ordered list, because the safe choice is the
+most compatible protocol and not the most preferred one. The declaration is a
+per-instance property, not a build-time constant: one Android build runs on both API 26
+and API 29, and baking it in would need two providers where one should do. The same
+declaration and contract exist on `NegotiatingTlsUpgrader`, because proxied TLS reaches
+the peer through the upgrader rather than a connector and would otherwise silently lose
+protocol selection the moment a tunnel is involved.
+
+The capability is declared as optional members on `SocketConnector` and `TlsUpgrader`
+themselves rather than only on the negotiating sub-interfaces. A provider author
+reading the interface they implement can then see that the capability exists, and
+detection asks a declared question instead of probing structurally for a member the
+type does not mention. `connectNegotiated` and `upgradeNegotiated` free functions
+accept any connector or upgrader, so code written before this ABI keeps working and is
+described uniformly as `protocol: null` with no certificate names — which the contract
+makes safe, since such a provider was only ever offered one protocol.
+
+Seven focused tests pass, including real TLS. A direct connect to a server offering
+`["h2","http/1.1"]` reports `h2` and exactly `["target.test"]` from a fixture
+presenting `IP Address:127.0.0.1, DNS:target.test`, so IP entries are excluded and only
+names that could justify reuse are reported. A server offering only `http/1.1` reports
+that. A tunnelled TLS session through a real HTTP CONNECT proxy negotiates and reports
+identically to a direct one. Malformed preferences — an empty list, or an unreportable
+protocol absent from the offered list — are refused rather than silently narrowed.
+
+The unreportable case asserts the danger rather than the helper's return value. The
+test server records the protocol it actually selected, and the test waits for that
+observation, because the server sees its side of the handshake after the client sees
+its own and reading the record immediately finds it empty. With the contract in place
+the server selects `http/1.1`, matching the `null` the client is told.
+
+The sabotage made `offeredProtocols` ignore the declaration. The focused corpus fell
+from 7/7 to 5/7, and a probe under the sabotage shows the precise divergence: offered
+`["h2","http/1.1"]`, **server selected `h2`, client told `null`**. Restored, the server
+selects `http/1.1` and the two agree. The complete local Node-host/real-socket corpus
+passes 417/417 with zero skipped, and the new file is registered in
+`tooling/conformance/web-platform/check.sh`. The pinned upstream corpus is unchanged at
+2,300 total, 2,286 applicable, 2,278 passing, 8 failing and 14 named not-applicable.
+The root TypeScript solution build is green.
+
+This is the ABI and its contract only. Automatic HTTP/1.1 versus HTTP/2 selection over
+one connected stream is **not** implemented here, and neither is HTTP/2 connection
+coalescing; `certificateNames` is carried so that coalescing cannot later be built
+without it. No provider other than the ordinary-Node conformance host implements the
+new members yet, and host execution is not evidence that any real provider can report
+a selection — on the declared Android floor it demonstrably cannot.
+
+Measured with the same pinned binary built at `43fda4d3`. Before, 1,270 primary
+`NTS1001` and 228 `NTS1003`; after, 1,274 primary and 230 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR in both. Four new primaries, none
+disappearing. Two are the optional negotiation members reaching an unrepresentable
+union of a function type and `undefined`; two are further observations of the
+`WeakRef` array dependency already recorded for `AbortSignal.any`, reached because
+these entry points take an `AbortSignal`. An earlier revision that detected the
+capability with `in` instead of declaring it produced six new primaries and no extra
+cascades; the declared version was kept for design reasons and happens to cost two
+fewer primaries and two more cascades.

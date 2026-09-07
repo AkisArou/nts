@@ -12,13 +12,25 @@ export type {
   DnsAddressFamily,
   DnsResolveOptions,
   DnsResolver,
+  NegotiatedConnection,
+  NegotiatingSocketConnector,
+  NegotiatingTlsUpgrader,
   PlatformPrimitives,
+  ProtocolPreference,
   RandomSource,
   Scheduler,
   SocketConnector,
   TlsUpgrader,
   URLParser,
   URLRecord,
+} from "./provider/primitives.ts";
+export {
+  connectNegotiated,
+  isNegotiatingSocketConnector,
+  isNegotiatingTlsUpgrader,
+  offeredProtocols,
+  offeredUpgradeProtocols,
+  upgradeNegotiated,
 } from "./provider/primitives.ts";
 
 export type {

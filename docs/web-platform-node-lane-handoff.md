@@ -185,7 +185,24 @@ shutdown. Preserve them when introducing automatic HTTP protocol selection.
 
 ## Open decisions and dependencies
 
-### Negotiated ALPN is not exposed by the shared connection ABI
+### Negotiated ALPN: the ABI is settled and landed; selection is not built
+
+Resolved for the ABI half. `NegotiatedConnection`, `NegotiatingSocketConnector`,
+`NegotiatingTlsUpgrader`, `ProtocolPreference` and the `offeredProtocols` /
+`offeredUpgradeProtocols` contract are in `runtime/web-platform/src/provider/`, agreed
+with the compiler/common-runtime and JVM owners before editing. The rule that fell out
+of a real API-26 device measurement is that **a connector which cannot report a
+selection is never offered a choice**. See "The connect result reports what TLS
+negotiated" in `runtime/web-platform/docs/BASELINE.md`.
+
+Still open: automatic HTTP/1.1 versus HTTP/2 selection over one connected stream, for
+direct, HTTP-proxy tunnel and SOCKS routes; and HTTP/2 connection coalescing, which
+must use `certificateNames` rather than hostname alone. Only the ordinary-Node
+conformance host implements the new members.
+
+The original statement of the problem follows.
+
+### Negotiated ALPN was not exposed by the shared connection ABI
 
 `ConnectAddress.alpnProtocols` expresses what the caller requests, but
 `ByteConnection` does not expose the protocol selected by TLS. The current host
@@ -301,8 +318,8 @@ at all.
 2. Verify the environment slot end to end on C, LLVM and JVM with a compiled fixture,
    including install-before-read, replacement, two-environment isolation, close, and
    bootstrap order.
-3. Coordinate and land the negotiated-ALPN result in the typed provider ABI. Then
-   build automatic HTTP/1.1 versus HTTP/2 selection over one connected stream,
+3. The negotiated-ALPN result is landed and its contract is enforced centrally. Still
+   to build: automatic HTTP/1.1 versus HTTP/2 selection over one connected stream,
    including direct, HTTP-proxy tunnel, and SOCKS routes.
 4. Done. A SOCKS pooling regression proves two logical target origins never reuse one
    target-bound tunnel merely because the proxy endpoint is the same; see "One proxy

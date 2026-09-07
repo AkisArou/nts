@@ -5,6 +5,7 @@ import { connect as tcpConnect, isIP } from "node:net";
 import type { Socket } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
 import { checkServerIdentity, connect as tlsConnect } from "node:tls";
+import type { TLSSocket } from "node:tls";
 import { randomFillSync } from "node:crypto";
 import { EOL } from "node:os";
 import { URL } from "node:url";
@@ -19,11 +20,12 @@ import type {
   DnsAddress,
   DnsResolveOptions,
   DnsResolver,
+  NegotiatedConnection,
+  NegotiatingSocketConnector,
+  NegotiatingTlsUpgrader,
   PlatformPrimitives,
   RandomSource,
   Scheduler,
-  SocketConnector,
-  TlsUpgrader,
   URLParser,
 } from "../../../runtime/web-platform/src/provider.ts";
 
@@ -32,6 +34,26 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 function requiredAlpn(address: ConnectAddress): readonly string[] {
   return address.alpnProtocols ?? ["http/1.1"];
+}
+
+/** dNSName subject-alternative names exactly as the peer presented them. */
+function dnsNamesOf(socket: TLSSocket): readonly string[] {
+  const certificate = socket.getPeerCertificate();
+  const alternative: unknown = certificate.subjectaltname;
+  if (typeof alternative !== "string" || alternative === "") return [];
+  const names: string[] = [];
+  for (const entry of alternative.split(",")) {
+    const trimmed = entry.trim();
+    if (trimmed.startsWith("DNS:")) names.push(trimmed.slice(4));
+  }
+  return names;
+}
+
+/** The protocol TLS selected, normalized to the shared `string | null` reporting. */
+function selectedProtocol(selected: string | false | null | undefined): string | null {
+  return selected === undefined || selected === false || selected === null || selected === ""
+    ? null
+    : selected;
 }
 
 function validateAlpn(selected: string | false | null, requested: readonly string[]): void {
@@ -283,16 +305,32 @@ export class HostNodeByteConnection implements ByteConnection {
 
 export interface HostNodeSocketOptions {
   ca?: string | readonly string[];
+  /**
+   * Host-only switch used to exercise the unreportable-provider contract without
+   * inventing a second provider. A real provider decides this from the platform.
+   */
+  reportsNegotiatedProtocol?: boolean;
 }
 
-export class HostNodeSocketConnector implements SocketConnector {
+export class HostNodeSocketConnector implements NegotiatingSocketConnector {
   private readonly options: HostNodeSocketOptions;
+  /**
+   * Node reports `TLSSocket.alpnProtocol`, so this host connector answers. A
+   * provider that cannot is offered exactly one protocol instead; this is declared
+   * per instance because the same build may run where the platform can and cannot.
+   */
+  readonly reportsNegotiatedProtocol: boolean;
 
   constructor(options: HostNodeSocketOptions = {}) {
     this.options = options;
+    this.reportsNegotiatedProtocol = options.reportsNegotiatedProtocol ?? true;
   }
 
   connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+    return this.connectNegotiated(address, signal).then((result) => result.connection);
+  }
+
+  connectNegotiated(address: ConnectAddress, signal: AbortSignal): Promise<NegotiatedConnection> {
     if (signal.aborted) return Promise.reject(signal.reason);
     if (
       !Number.isInteger(address.connectTimeoutMs) ||
@@ -300,7 +338,7 @@ export class HostNodeSocketConnector implements SocketConnector {
       address.connectTimeoutMs > MAX_TIMER_DELAY_MS
     )
       return Promise.reject(new RangeError(`Connect timeout must be 1..${MAX_TIMER_DELAY_MS} ms`));
-    return new Promise<ByteConnection>((resolve, reject) => {
+    return new Promise<NegotiatedConnection>((resolve, reject) => {
       const ca = typeof this.options.ca === "string" ? this.options.ca : this.options.ca?.slice();
       const physicalHostname = address.resolvedAddress ?? address.hostname;
       const socket = address.secure
@@ -347,10 +385,16 @@ export class HostNodeSocketConnector implements SocketConnector {
           finishError(signal.reason);
           return;
         }
+        let protocol: string | null = null;
+        let certificateNames: readonly string[] = [];
         if (address.secure) {
           try {
             if (!("alpnProtocol" in socket)) throw new TypeError("TLS socket has no ALPN result");
             validateAlpn(socket.alpnProtocol, requiredAlpn(address));
+            protocol = this.reportsNegotiatedProtocol
+              ? selectedProtocol(socket.alpnProtocol)
+              : null;
+            certificateNames = dnsNamesOf(socket);
           } catch (error) {
             finishError(error);
             return;
@@ -359,18 +403,21 @@ export class HostNodeSocketConnector implements SocketConnector {
         settled = true;
         const connection = new HostNodeByteConnection(socket);
         cleanup();
-        resolve(connection);
+        resolve({ connection, protocol, certificateNames });
       });
     });
   }
 }
 
 /** Host-only TLS primitive used to test shared CONNECT/SOCKS tunnel policy. */
-export class HostNodeTlsUpgrader implements TlsUpgrader {
+export class HostNodeTlsUpgrader implements NegotiatingTlsUpgrader {
   private readonly options: HostNodeSocketOptions;
+  /** Same declaration and same per-instance rule as the connector. */
+  readonly reportsNegotiatedProtocol: boolean;
 
   constructor(options: HostNodeSocketOptions = {}) {
     this.options = options;
+    this.reportsNegotiatedProtocol = options.reportsNegotiatedProtocol ?? true;
   }
 
   upgrade(
@@ -378,6 +425,14 @@ export class HostNodeTlsUpgrader implements TlsUpgrader {
     target: ConnectAddress,
     signal: AbortSignal,
   ): Promise<ByteConnection> {
+    return this.upgradeNegotiated(connection, target, signal).then((result) => result.connection);
+  }
+
+  upgradeNegotiated(
+    connection: ByteConnection,
+    target: ConnectAddress,
+    signal: AbortSignal,
+  ): Promise<NegotiatedConnection> {
     if (!(connection instanceof HostNodeByteConnection)) {
       return Promise.reject(new TypeError("Host TLS requires a HostNodeByteConnection"));
     }
@@ -393,7 +448,7 @@ export class HostNodeTlsUpgrader implements TlsUpgrader {
       connection.close();
       return Promise.reject(error);
     }
-    return new Promise<ByteConnection>((resolve, reject) => {
+    return new Promise<NegotiatedConnection>((resolve, reject) => {
       const ca = typeof this.options.ca === "string" ? this.options.ca : this.options.ca?.slice();
       const socket = tlsConnect({
         socket: raw,
@@ -428,15 +483,19 @@ export class HostNodeTlsUpgrader implements TlsUpgrader {
           fail(signal.reason);
           return;
         }
+        let protocol: string | null = null;
+        let certificateNames: readonly string[] = [];
         try {
           validateAlpn(socket.alpnProtocol, requiredAlpn(target));
+          protocol = this.reportsNegotiatedProtocol ? selectedProtocol(socket.alpnProtocol) : null;
+          certificateNames = dnsNamesOf(socket);
         } catch (error) {
           fail(error);
           return;
         }
         settled = true;
         cleanup();
-        resolve(new HostNodeByteConnection(socket));
+        resolve({ connection: new HostNodeByteConnection(socket), protocol, certificateNames });
       };
       socket.once("error", fail);
       socket.once("close", closed);
