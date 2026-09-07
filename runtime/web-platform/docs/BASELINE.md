@@ -6120,3 +6120,45 @@ then the enumerability fix becomes safe, then pin the harness that checks it.
 Upstream is **2,602 tests, 2,566 passing, 8 failing** — the corpus grew by 169 today and the
 failure count is the same eight structural ones it started at. 814/814 host, frontier
 unchanged at 1,407/337.
+
+## The harness has no name for what this runtime is
+
+`FileAPI/idlharness.any.js` was pinned, run, and **unpinned again**, and the reason is worth
+more than the fixture would have been.
+
+It reports **`Blob interface should not exist`** and the same for `File`. Not that they are
+wrong — that they should be *absent*.
+
+idlharness decides what to expect by asking which global it is running in: a `Window`, one of
+the three worker scopes, or — failing all of those — a plain realm, for which it tests only
+`[Exposed=*]` interfaces. This runner answers "plain realm", which is the true statement: a
+`vm` context with no `Window` and no worker scope.
+
+`TextDecoder` is `[Exposed=*]`. **`Blob` and `File` are `[Exposed=(Window,Worker)]`.** So
+`encoding/idlharness` passes not because the environment is classified correctly but because
+its IDL is exposed everywhere and the classification never mattered. The first fixture whose
+IDL is scoped, the answer becomes wrong in the strongest possible way: the harness asserts
+that interfaces this profile deliberately provides must not be there.
+
+**There is a one-line change that makes it pass, and taking it would be the mistake this
+ledger keeps recording.** Declaring `DedicatedWorkerGlobalScope` in the sandbox and making
+`self` an instance of it produces exactly the right expectation set — this profile's exposure
+is essentially the Worker set. It is also a claim about the environment that is **not true**,
+made by somebody who already knows what the oracle should say. That is the fourth item in
+`docs/records/0207`, applied to myself: *an oracle acquired after a disagreement is an oracle
+chosen while knowing what it should say*, and fabricating a global to make a harness agree is
+the same move one step further along.
+
+So the honest position: **idlharness's model of "which global am I" has no slot for a
+server/mobile runtime that exposes the Worker set without being a Worker**, and every
+idlharness fixture whose IDL is not `[Exposed=*]` is blocked on that. It is not a bug in the
+harness and not a defect in the implementation. It is a question about what this profile
+*claims to be*, which belongs to the governing plan and the repository owner rather than to a
+lane that would answer it in whichever direction turns a fixture green.
+
+`encoding/idlharness` stays, because its IDL is `[Exposed=*]` and the classification is
+genuinely irrelevant to it. `interfaces/FileAPI.idl` and `interfaces/url.idl` were unpinned
+with the fixture: support that nothing loads is an unrouted mechanism, which this lane gates
+against elsewhere and should not exempt itself from.
+
+Upstream steady at **2,602 tests, 2,566 passing, 8 failing**, 814/814 host.
