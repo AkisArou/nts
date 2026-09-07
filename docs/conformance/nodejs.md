@@ -1756,10 +1756,18 @@ NTS_BIN=<a pinned copy> node tooling/conformance/sweep.mjs --addons --no-tests
 ```
 
 reports every module and, more usefully, **where each one stops** —
-`emit-refused`, `c-did-not-compile`, `built-but-dead` (it links, it loads, and
-it exports the wrong things), or `green` — with the clang error-class
-histogram. The stage is the actionable half: a count of "not green" tells a
-compiler session nothing, and the stage tells it which pass to look at.
+`emit-refused`, `c-did-not-compile`, `built-exports-nothing`,
+`built-exports-partial`, or `green` — with the clang error-class histogram. The
+stage is the actionable half: a count of "not green" tells a compiler session
+nothing, and the stage tells it which pass to look at.
+
+The last two are split because after the export-table fix below they mean
+different work. **Nothing published** means every name the module exports is a
+class, or a `const` bound to a native function; the blocker is class values
+crossing the ABI. **Some published** means the table is right as far as it
+goes and the absent entries are the ones whose types cannot cross — an object
+return, an array return. `os` is the second kind and `string_decoder` will be
+the first.
 
 That command exists because this axis had a result before it had an
 instrument. It was first measured by a shell loop typed by hand, whose first
@@ -1840,11 +1848,34 @@ three same-family pairs are guarded and the three cross-family pairs are not.
 The invariant, stated by that session and worth keeping here because this
 document is where its consequences are counted: **a layout whose name is its
 identity must not merge with any differently-named layout, whatever family the
-other is in.** The missing-member class above is what the same mistake looks
-like from the other side — code emitted against one layout, a struct emitted
-for another, and the size assertion catching the disagreement it exists for —
-so some of that 57 may fall out with it. Recorded as a prediction, not a
-result.
+other is in.**
+
+**The prediction that went with it was wrong, and this is the entry that says
+so.** I wrote that the 57 missing-member errors looked like the same mistake
+seen from the other side, and that some of them might fall out with the `path`
+fix; the compiler session said the same and made it the first thing they would
+check. Measured, A/B with one corpus and two binaries: `async_hooks` 2 clang
+errors to 1, `path` 1 to 0 and compiling, `zlib` 16 to 15, every other module
+unchanged. The `NtsObj_Context` errors are untouched, and they are the
+*opposite* defect — two distinct layouts both named `Context`, each emitting
+`struct NtsObj_Context`, which is over-separation rather than over-merging, and
+the size assertion catching precisely what it was put there for. Two people
+predicting the same wrong thing is worth as much shelf space as either of them
+being right, which is why it stays here instead of being edited out.
+
+**The export table is fixed and the fix makes some tables empty, which is
+correct.** `Func::exported` was set from the `export` modifier, which does not
+know which file it is in, so the table was every `export` in the linked
+program — that is why a `string_decoder` addon carried a Blob revoker. It is
+now the entry module's export list. `string_decoder` and `buffer` publish
+nothing at all afterwards, and that is the honest answer rather than a
+regression: their surface is classes, the four names they used to carry were
+`buffer` internals that were never theirs, and class values crossing the ABI is
+separate and much larger work. `os` keeps its eleven, and its twelve absent
+ones now separate into two causes — four return objects or arrays that cannot
+cross the ABI, and three are `export const totalmem = nts_os_totalmem`, a const
+bound to a native function, which is not a function declaration and so was
+never in the table to be filtered.
 
 **Two modules fail on a single clang error each, which makes them the cheapest
 things on this list to look at.**

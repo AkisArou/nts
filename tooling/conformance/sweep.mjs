@@ -46,6 +46,7 @@
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import process from "node:process";
 
 const HERE = import.meta.dirname;
@@ -140,7 +141,25 @@ function addon(module) {
   if (tally === null) return { stage: "runner-produced-nothing", detail: "", clang: [] };
   const applicable = tally.pass + tally.fail;
   if (tally.pass === 0 && applicable > 0) {
-    return { stage: "built-but-dead", detail: `0 / ${applicable}`, clang: [], tally };
+    // An addon that publishes nothing and one that publishes some of the right
+    // names are different situations and want different work. Empty means every
+    // name this module exports is a class or a const bound to a native
+    // function, so the blocker is class values crossing the ABI. Non-empty
+    // means the table is right as far as it goes and the missing entries are
+    // the ones whose types cannot cross -- an object return, an array return.
+    // Collapsing the two hides which of those a module is waiting on.
+    let published = 0;
+    try {
+      published = Object.keys(createRequire(import.meta.url)(artifact)).length;
+    } catch {
+      return { stage: "built-but-unloadable", detail: `0 / ${applicable}`, clang: [], tally };
+    }
+    return {
+      stage: published === 0 ? "built-exports-nothing" : "built-exports-partial",
+      detail: `0 / ${applicable}, ${published} name(s) published`,
+      clang: [],
+      tally,
+    };
   }
   return { stage: applicable > 0 && tally.pass === applicable ? "green" : "partial", detail: `${tally.pass} / ${applicable}`, clang: [], tally };
 }
