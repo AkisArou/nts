@@ -5769,3 +5769,68 @@ Both sabotages caught: a clean interface growing a method, and a listed interfac
 one beyond its list.
 
 812/812 host, upstream unchanged at 2,410 of 2,418.
+
+## Why the compiled axis is stuck at five modules
+
+An attempt to grow the compiled axis failed, and failing located the reason it has been
+stuck. Writing it down because the axis is the only evidence any of this *runs*, and the
+constraint on it turned out not to be what the file's own header assumes.
+
+Eighteen exported functions across the runtime take only scalars, return a scalar, and
+carry no refusal of their own — the shape `nts check` can generate cases for. Adding them
+took the axis from 13 functions to 31 and then broke it completely: **the backend declined
+six functions and nothing ran at all.**
+
+The header of `compiled/src/main.ts` says the limit is that modules "reachable only through
+the wider import graph pull in the whole runtime and its 1,300 refusals". That is true and
+it is not the binding constraint. `core/webidl.ts` **imports nothing at all** — a true leaf,
+holding the seven Web IDL numeric conversions, which are the most demanding arithmetic
+available on this axis: truncation toward zero, modulo 2^16 / 2^32 / 2^64 wrapping, and the
+special cases for `NaN`, both infinities and negative zero. Exactly where a backend whose
+narrowing saturates instead of wrapping would disagree.
+
+It cannot be added either, because one unrelated function in it is declined.
+
+### The narrowing that has no layout
+
+    export function f(value: unknown): void {
+      if (value !== undefined && value !== null) {
+        throw new TypeError("no");
+      }
+    }
+
+Excluding **both** nullish values narrows `unknown` to `{}`, the empty object type, which
+has no layout. Controlled four ways, same file, same body, only the condition changing:
+
+| condition | narrows to | result |
+|---|---|---|
+| `value !== undefined` | `{}` &#124; `null` | compiles |
+| `value !== null` | `{}` &#124; `undefined` | compiles |
+| `value !== undefined && value !== null` | `{}` | **declined** |
+| `value !== null && value !== undefined` | `{}` | **declined** |
+
+`NTS2006 an object type with no layout` on c and llvm, `NTS4001 a value of unrepresentable
+type: an object` on jvm. This is `requireDictionary` in `core/webidl.ts`, and it is the
+shape of every Web IDL dictionary check.
+
+### The asymmetry is the part that matters
+
+A frontend refusal is *recorded and survivable*: `NTS1001` marks one function undone and
+everything else in the unit still compiles and still runs on this axis. A backend decline
+is not — `nothing can be checked until they are removed or supported`. So a single function
+of this shape in an otherwise-clean leaf module makes **the entire module unreachable**, and
+there is no way to take the seven good functions without it.
+
+That is why the axis has five modules rather than fifty, and it is a different problem from
+the frontier count. Lowering more of the language raises the axis only if the last declining
+function in each module is also lowered; until then a module is all-or-nothing.
+
+**A correction, on the record because it nearly became the report.** The first isolation
+concluded the trigger was an `unknown` parameter, "regardless of what the body does with
+it". The control disproved it in one run: an `unknown` parameter with an empty body compiles
+fine, and so does one that is compared against a single nullish value. The claim was formed
+from two positive cases and no negative one — the same mistake this ledger has recorded in
+three other lanes today, made here.
+
+No source changed. The eighteen functions are not added, because adding them would report a
+green axis of thirteen while silently declining the rest.
