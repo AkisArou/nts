@@ -266,6 +266,14 @@ test("header block assembler enforces CONTINUATION exclusivity and byte limits",
     () => oversized.accept(frame(HTTP2_FRAME_CONTINUATION, HTTP2_FLAG_END_HEADERS, 1, bytes(3, 4))),
     /configured limit/,
   );
+
+  const tooFragmented = new Http2HeaderBlockAssembler(10, 2);
+  tooFragmented.accept(frame(HTTP2_FRAME_HEADERS, 0, 1));
+  tooFragmented.accept(frame(HTTP2_FRAME_CONTINUATION, 0, 1));
+  assert.throws(
+    () => tooFragmented.accept(frame(HTTP2_FRAME_CONTINUATION, HTTP2_FLAG_END_HEADERS, 1)),
+    /too many fragments/,
+  );
 });
 
 test("encoder and decoder enforce negotiated and absolute frame-size bounds", () => {

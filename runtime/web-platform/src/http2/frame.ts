@@ -253,7 +253,14 @@ export async function readHttp2Frame(
     streamId: readUint32(header, 5) & HTTP2_MAX_WINDOW_SIZE,
     payload,
   };
-  validateHttp2Frame(frame, maximumFrameSize);
+  try {
+    validateHttp2Frame(frame, maximumFrameSize);
+  } catch (error) {
+    // Stream errors need the connection's stream table so they can become an
+    // RST_STREAM without killing unrelated streams.  The connection reparses
+    // the affected payload after the frame has crossed this envelope layer.
+    if (!(error instanceof Http2WireError) || error.streamId === null) throw error;
+  }
   return frame;
 }
 
@@ -269,24 +276,24 @@ export function parseHttp2Data(frame: Http2Frame): Http2DataPayload {
 export function parseHttp2Priority(frame: Http2Frame): Http2Priority {
   requireStreamFrame(frame, "PRIORITY");
   requireLength(frame, 5, "PRIORITY");
-  return parsePriorityFields(frame.payload, 0, frame.streamId);
+  const priority = parsePriorityFields(frame.payload, 0);
+  requireNonSelfDependency(priority, frame.streamId);
+  return priority;
 }
 
-function parsePriorityFields(
-  payload: Uint8Array,
-  offset: number,
-  ownStreamId: number,
-): Http2Priority {
+function parsePriorityFields(payload: Uint8Array, offset: number): Http2Priority {
   const rawDependency = readUint32(payload, offset);
-  const streamDependency = rawDependency & HTTP2_MAX_WINDOW_SIZE;
-  if (streamDependency === ownStreamId) {
-    throw new Http2WireError("HTTP/2 stream depends on itself", HTTP2_PROTOCOL_ERROR, ownStreamId);
-  }
   return {
     exclusive: rawDependency >= 0x80000000,
-    streamDependency,
+    streamDependency: rawDependency & HTTP2_MAX_WINDOW_SIZE,
     weight: (payload[offset + 4] ?? 0) + 1,
   };
+}
+
+function requireNonSelfDependency(priority: Http2Priority, ownStreamId: number): void {
+  if (priority.streamDependency === ownStreamId) {
+    throw new Http2WireError("HTTP/2 stream depends on itself", HTTP2_PROTOCOL_ERROR, ownStreamId);
+  }
 }
 
 export function parseHttp2Headers(frame: Http2Frame): Http2HeadersPayload {
@@ -296,7 +303,7 @@ export function parseHttp2Headers(frame: Http2Frame): Http2HeadersPayload {
   let priority: Http2Priority | null = null;
   if ((frame.flags & HTTP2_FLAG_PRIORITY) !== 0) {
     if (range.end - start < 5) frameSizeError("HEADERS priority fields are truncated");
-    priority = parsePriorityFields(frame.payload, start, frame.streamId);
+    priority = parsePriorityFields(frame.payload, start);
     start += 5;
   }
   return {
@@ -402,7 +409,10 @@ export function validateHttp2Frame(
       parseHttp2Data(frame);
       return;
     case HTTP2_FRAME_HEADERS:
-      parseHttp2Headers(frame);
+      {
+        const headers = parseHttp2Headers(frame);
+        if (headers.priority !== null) requireNonSelfDependency(headers.priority, frame.streamId);
+      }
       return;
     case HTTP2_FRAME_PRIORITY:
       parseHttp2Priority(frame);
@@ -503,17 +513,36 @@ interface PendingHeaderBlock {
 /** Enforces the connection-wide CONTINUATION sequencing rule and a compressed-byte limit. */
 export class Http2HeaderBlockAssembler {
   private readonly maximumBytes: number;
+  private readonly maximumFragments: number;
   private pending: PendingHeaderBlock | null = null;
 
-  constructor(maximumBytes: number) {
+  constructor(maximumBytes: number, maximumFragments = 1024) {
     if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0) {
       throw new RangeError("Invalid compressed header-block limit");
     }
+    if (!Number.isSafeInteger(maximumFragments) || maximumFragments < 1) {
+      throw new RangeError("Invalid HTTP/2 header-block fragment limit");
+    }
     this.maximumBytes = maximumBytes;
+    this.maximumFragments = maximumFragments;
   }
 
   accept(frame: Http2Frame): Http2HeaderBlock | null {
-    validateHttp2Frame(frame, HTTP2_MAX_FRAME_SIZE);
+    try {
+      validateHttp2Frame(frame, HTTP2_MAX_FRAME_SIZE);
+    } catch (error) {
+      // A HEADERS self-dependency is a stream error, but its complete compressed
+      // block still has to be consumed and decoded so the connection-wide HPACK
+      // state remains synchronized.  Preserve it on the assembled result and
+      // let the connection reset the stream after decoding.
+      if (
+        frame.type !== HTTP2_FRAME_HEADERS ||
+        !(error instanceof Http2WireError) ||
+        error.streamId === null
+      ) {
+        throw error;
+      }
+    }
     const pending = this.pending;
     if (pending !== null) {
       if (frame.type !== HTTP2_FRAME_CONTINUATION || frame.streamId !== pending.streamId) {
@@ -549,6 +578,9 @@ export class Http2HeaderBlockAssembler {
   }
 
   private append(pending: PendingHeaderBlock, fragment: Uint8Array): void {
+    if (pending.fragments.length >= this.maximumFragments) {
+      throw new LimitError("HTTP/2 header block has too many fragments");
+    }
     if (fragment.length > this.maximumBytes - pending.bytes) {
       throw new LimitError("Compressed HTTP/2 header block exceeds configured limit");
     }
