@@ -329,14 +329,74 @@ function poison(exports) {
   const poisoned = {};
   for (const key of Object.keys(exports)) {
     const value = exports[key];
-    poisoned[key] =
-      typeof value === "function"
-        ? () => {
-            throw new Error(`poisoned addon export ${key} was called`);
-          }
-        : Symbol(`poisoned ${key}`);
+    if (typeof value === "function") {
+      // A class is a function too, and replacing it with a thrower would break
+      // `shape.mjs` at load rather than at use -- which reports every file as
+      // failing and looks exactly like "no degenerate passes". Keep anything
+      // with a populated prototype; its methods are poisoned instead.
+      const isClass = value.prototype !== undefined && Object.getOwnPropertyNames(value.prototype).length > 1;
+      poisoned[key] = isClass ? poisonClass(value, key) : () => {
+        throw new Error(`poisoned export ${key} was called`);
+      };
+    } else if (value !== null && typeof value === "object") {
+      // An exported object is a facade: `querystring`'s `shape.mjs` returns
+      // `exports.QueryString` and the tests call *its* methods, so leaving it
+      // alone let the entire module escape mutation and report four survivors
+      // that were an artefact of this function rather than of any test.
+      const copy = {};
+      for (const inner of Object.keys(value)) {
+        const member = value[inner];
+        copy[inner] =
+          typeof member === "function"
+            ? () => {
+                throw new Error(`poisoned ${key}.${inner} was called`);
+              }
+            : member;
+      }
+      poisoned[key] = copy;
+    } else {
+      // Primitives are left alone. Replacing an exported constant breaks the
+      // facade at load, and a run where every file fails for that reason is
+      // indistinguishable from one where nothing was degenerate.
+      poisoned[key] = value;
+    }
   }
   return poisoned;
+}
+
+/** Same class, every method throwing: the shape survives, the behaviour does not. */
+function poisonClass(Class, name) {
+  class Poisoned extends Class {}
+  for (const method of Object.getOwnPropertyNames(Class.prototype)) {
+    if (method === "constructor") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(Class.prototype, method);
+    if (descriptor === undefined || typeof descriptor.value !== "function") continue;
+    Object.defineProperty(Poisoned.prototype, method, {
+      ...descriptor,
+      value() {
+        throw new Error(`poisoned ${name}.${method} was called`);
+      },
+    });
+  }
+  // Statics too. `Buffer.alloc`, `Buffer.from` and `Buffer.concat` are static,
+  // and node's tests reach for them far more often than for instance methods --
+  // poisoning only the prototype left forty of `buffer`'s fifty files passing
+  // and looked exactly like forty degenerate tests.
+  for (const stat of Object.getOwnPropertyNames(Class)) {
+    if (stat === "length" || stat === "name" || stat === "prototype") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(Class, stat);
+    if (descriptor === undefined || typeof descriptor.value !== "function" || !descriptor.writable) {
+      continue;
+    }
+    Object.defineProperty(Poisoned, stat, {
+      ...descriptor,
+      value() {
+        throw new Error(`poisoned ${name}.${stat} was called`);
+      },
+    });
+  }
+  Object.defineProperty(Poisoned, "name", { value: Class.name });
+  return Poisoned;
 }
 
 let underTest;
@@ -349,6 +409,7 @@ try {
     const shims = join(moduleDir, "bindings.node.mjs");
     if (existsSync(shims)) await import(shims);
     exports = await import(join(moduleDir, "src/main.ts"));
+    if (mutatedAddon) exports = poison(exports);
   }
   const shapePath = join(moduleDir, "shape.mjs");
   let shapeModule = null;

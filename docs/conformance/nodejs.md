@@ -402,6 +402,40 @@ counting takes `net` from 132 to 129, named by `test-net-bytes-read.js`,
 cannot be made to fail on purpose is not evidence, and 0 hollow on its own does
 not establish that it can.
 
+**The TypeScript lane now has the same mutation the compiled lane got, and it
+was the lane that needed it more** — all 1,719 passes live here and it had only
+the blanking control. `--mutate-addon` applies to this lane too: exported
+functions throw, exported classes keep their shape with every prototype *and
+static* method throwing, exported object facades have their function members
+replaced.
+
+Measured across eighteen modules (all but `http`, `fs`, `stream` and `net`,
+which are slow rather than different): **622 passes, 22 survive mutation.**
+Nine modules drop to zero, including `dgram` 75, `zlib` 66 and `url` 44.
+
+**No survivor inspected was a degenerate pass, and the detector has three named
+blind spots that explain all of them:**
+
+| blind spot | example |
+| --- | --- |
+| data properties, which mutation does not touch | `test-process-execpath.js`, `test-buffer-constants.js`, `test-os-eol.js` |
+| identity and existence assertions | `test-path-posix-exists.js`, `test-util-types-exists.js` |
+| tests that assert a *throw* — which a throwing poison satisfies | `test-buffer-failed-alloc-typed-arrays.js` |
+
+The third is a design weakness rather than an accident: poisoning by throwing
+makes "this should throw" tests pass for the wrong reason, which is the same
+shape as everything else on this page. So **a survivor is not evidence of a
+degenerate test, and this column cannot be read as one.**
+
+**Building it found two holes in itself, both of which looked like findings.**
+Poisoning only prototype methods left `buffer` at 40 survivors of 50 —
+`Buffer.alloc`, `from` and `concat` are static, and node's tests reach for
+statics far more than instance methods. And leaving exported objects alone let
+`querystring` escape entirely, because its `shape.mjs` returns
+`exports.QueryString` and the tests call *its* members: four survivors of four,
+which read as a wholly degenerate module and were an artefact of the tool.
+Both were caught by the numbers being too round to believe.
+
 **`hollow` is how many of those passes survive the module being removed.**
 
 ```sh
