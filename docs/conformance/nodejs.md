@@ -1900,6 +1900,11 @@ NTS_TSGO=<tsgo> <nts> emit-c runtime/node/<mod>/tsconfig.json --out /tmp/x --nap
 **Measured: the cascade is larger than the refusal in every module checked,
 and the ledger's refusal count excludes it.**
 
+Profile-wide the cascade is 4,033 diagnostics, of which 744 name a validator
+or `ERR_INVALID_ARG_TYPE` as their *immediate* cause — `fs` 115, `http` 89,
+`zlib` 49, `stream` 46, `dgram` 44. The transitive share rooted there is larger
+and is not computed here.
+
 | module | root refusals (`NTS1001`) | cascaded (`NTS1003`) | what this file's `refused` column says |
 | --- | ---: | ---: | ---: |
 | `os` | 100 | 127 | 100 |
@@ -1908,13 +1913,35 @@ and the ledger's refusal count excludes it.**
 | `buffer` | 93 | 123 | 93 |
 | `path` | 33 | 52 | 33 |
 
-The `refused` column matches `NTS1001` exactly in all five, so **6,878 counts
+The `refused` column matches `NTS1001` exactly in all five, so **6,866 counts
 root refusals and is not inflated by cascades** — the concern that it might be
-does not survive the check. What it does mean is that a cascaded function is
-counted neither as lowered nor as refused, so `lowered + refused` is not the
-function total and the lowering *rates* above are computed over a subset. The
-rates remain comparable to each other, since all three rows were taken the same
-way; they are not a share of the whole profile.
+does not survive the check.
+
+**The bias runs the other way, it has a direction, and it is large.** A
+cascaded function is counted neither as lowered nor as refused, so it leaves
+the measurement entirely. Profile-wide there are **4,033 such diagnostics**
+against 12,181 lowered and 6,866 refused:
+
+```
+counted    12,181 lowered + 6,866 refused = 19,047
+invisible   4,033 cascaded, in neither column
+rate as recorded                       64.0%
+rate if each cascade is one function   52.8%
+```
+
+Eleven points, and the direction is what makes it a bias rather than
+imprecision. **The functions a root refusal blocks are exactly the ones it
+removes from the denominator** — `ERR_INVALID_ARG_TYPE#constructor` takes the
+whole validator layer out of both columns, and the validators are the
+population its refusal is *about*. So the more leverage a root has, the more of
+its own impact it hides, and closing a high-leverage root will move the rate
+*less* than closing a trivial one, because it drags a pile of previously
+uncounted functions into the denominator as it lands.
+
+Stated as inference on one point: whether each `NTS1003` line is one function
+or one call site is not established here, so 4,033 is an upper bound on the
+invisible population and 52.8% a lower bound on the rate. The direction of the
+bias does not depend on which it is.
 
 **`call to undeclared function` is two different bugs wearing one error
 message,** which is worth separating because only one of them announces
