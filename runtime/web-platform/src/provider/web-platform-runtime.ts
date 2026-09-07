@@ -12,6 +12,7 @@ import type { RequestContext, RequestInit } from "../fetch/request.ts";
 import { Request } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import type { ContentDecoder, FetchTransport } from "../fetch/transport.ts";
+import { readContentCodingPolicy, type ContentCodingPolicy } from "../fetch/content-coding.ts";
 import { EventSource, readEventSourcePolicy } from "../eventsource/event-source.ts";
 import type {
   EventSourceContext,
@@ -39,6 +40,8 @@ export interface WebPlatformOptions {
   fetchTransport?: FetchTransport;
   webSocketTransport?: WebSocketTransport;
   contentDecoder?: ContentDecoder;
+  /** Configurable server/mobile defense against decompression bombs. */
+  contentCodingPolicy?: Partial<ContentCodingPolicy>;
   eventSource?: EventSourceOptions;
   /** Injected policy is not owned or closed by this runtime. */
   cookies?: FetchCookiePolicy;
@@ -82,6 +85,7 @@ export class WebPlatformRuntime implements EventSourceContext {
 
   constructor(primitives: PlatformPrimitives, options: WebPlatformOptions = {}) {
     const bodyPolicy = readBodyPolicy(options.bodyPolicy);
+    const contentCodingPolicy = readContentCodingPolicy(options.contentCodingPolicy);
     const maxRedirects = options.maxRedirects ?? 20;
     if (!Number.isSafeInteger(maxRedirects) || maxRedirects < 0) {
       throw new RangeError("Invalid redirect limit");
@@ -126,6 +130,7 @@ export class WebPlatformRuntime implements EventSourceContext {
       maxRedirects,
       options.cookies,
       options.httpCache,
+      contentCodingPolicy,
     );
     this.fetch = client.fetch;
     this.caches = createCacheStorage(

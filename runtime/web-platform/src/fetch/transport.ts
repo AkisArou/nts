@@ -26,6 +26,9 @@ export interface FetchTransport {
 
 /** Optional native decompressor; coding decisions and order belong to Fetch. */
 export interface ContentDecoder {
+  /** Exact HTTP content-coding tokens this provider is prepared to decode. */
+  readonly codings: readonly string[];
+
   supports(coding: string): boolean;
 
   decode(coding: string, source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array>;

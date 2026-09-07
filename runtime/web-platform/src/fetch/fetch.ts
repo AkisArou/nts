@@ -8,7 +8,7 @@ import type { URLRecord } from "../provider/primitives.ts";
 import type { WebPlatformRuntime } from "../provider/web-platform-runtime.ts";
 import { bytesStream, ReadableStream } from "../streams/readable.ts";
 import { BodyState } from "./body.ts";
-import { Headers } from "./headers.ts";
+import { Headers, isToken } from "./headers.ts";
 import { Request, validateRequestURL } from "./request.ts";
 import type { RequestContext, RequestInit } from "./request.ts";
 import { isRedirectStatus, nullBodyStatus, Response } from "./response.ts";
@@ -20,6 +20,11 @@ import type {
 } from "./transport.ts";
 import { processDataURL } from "./data-url.ts";
 import { fetchBlob } from "./blob-url.ts";
+import {
+  decodeContentCodings,
+  standardContentCodingPolicy,
+  type ContentCodingPolicy,
+} from "./content-coding.ts";
 
 declare function nts_environment_platform(): WebPlatformRuntime;
 
@@ -163,6 +168,8 @@ export class FetchClient {
   private readonly maxRedirects: number;
   private readonly cookies: FetchCookiePolicy | undefined;
   private readonly cache: HttpCache | undefined;
+  private readonly contentCodingPolicy: ContentCodingPolicy;
+  private readonly acceptEncoding: string;
 
   constructor(
     transport: FetchTransport,
@@ -171,6 +178,7 @@ export class FetchClient {
     maxRedirects = 20,
     cookies?: FetchCookiePolicy,
     cache?: HttpCache,
+    contentCodingPolicy: ContentCodingPolicy = standardContentCodingPolicy,
   ) {
     this.transport = transport;
     this.cacheTransport = { dispatch: (request) => abortableDispatch(transport, request) };
@@ -179,6 +187,8 @@ export class FetchClient {
     this.maxRedirects = maxRedirects;
     this.cookies = cookies;
     this.cache = cache;
+    this.contentCodingPolicy = contentCodingPolicy;
+    this.acceptEncoding = readAcceptEncoding(decoder);
   }
 
   readonly fetch = async (input: string | Request, init: RequestInit = {}): Promise<Response> => {
@@ -195,8 +205,7 @@ export class FetchClient {
     let body = request.getState();
     const headers = new Headers(request.headers);
     if (!headers.has("accept")) headers.set("accept", "*/*");
-    // Identity is a deliberate baseline, not a silent dependency on host decompression.
-    if (!headers.has("accept-encoding")) headers.set("accept-encoding", "identity");
+    if (!headers.has("accept-encoding")) headers.set("accept-encoding", this.acceptEncoding);
     let count = 0;
     try {
       while (true) {
@@ -335,10 +344,13 @@ export class FetchClient {
               for (const coding of codings)
                 if (this.decoder === undefined || !this.decoder.supports(coding))
                   throw new TypeError("Unsupported content coding: " + coding);
-              for (let i = codings.length - 1; i >= 0; --i) {
-                const coding = codings[i];
-                if (coding !== undefined && this.decoder !== undefined)
-                  responseBody = this.decoder.decode(coding, responseBody);
+              if (codings.length > 0 && this.decoder !== undefined) {
+                responseBody = decodeContentCodings(
+                  responseBody,
+                  codings,
+                  this.decoder,
+                  this.contentCodingPolicy,
+                );
               }
             }
             responseBody = abortableBody(responseBody, request.signal);
@@ -368,4 +380,19 @@ export class FetchClient {
 
 function emptyBody(context: RequestContext): BodyState {
   return BodyState.empty(context.bodyPolicy);
+}
+
+function readAcceptEncoding(decoder: ContentDecoder | undefined): string {
+  if (decoder === undefined || decoder.codings.length === 0) return "identity";
+  const seen: string[] = [];
+  for (const coding of decoder.codings) {
+    if (!isToken(coding) || coding !== coding.toLowerCase() || coding === "identity") {
+      throw new TypeError("Invalid advertised content coding: " + coding);
+    }
+    if (!decoder.supports(coding)) {
+      throw new TypeError("Content decoder advertises an unsupported coding: " + coding);
+    }
+    if (!seen.includes(coding)) seen.push(coding);
+  }
+  return seen.join(", ");
 }

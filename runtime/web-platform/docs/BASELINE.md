@@ -1413,3 +1413,43 @@ passes 216/216. Removing the origin check makes the focused suite fail 24/25 by
 deleting an attacker-selected cross-origin entry; restoring it returns 25/25. The
 live source frontier is 806 primary `NTS1001` refusals and 128 dependent `NTS1003`
 cascades, with zero module or JVM-backend diagnostics and no invalid HIR.
+
+## Content-coding policy and host reference codecs
+
+Shared Fetch now owns the complete content-coding policy around provider codec
+primitives. The request advertises exactly the lower-case HTTP tokens declared by
+the installed decoder, preserves an explicit caller `Accept-Encoding`, and falls
+back to `identity` when the provider declares no decoder. Response codings are
+decoded in reverse application order while one outer budget counts original wire
+bytes and final decoded bytes across the whole stack. The default server/mobile
+safety policy caps one decoded response at 256 MiB and caps expansion at 100:1 after
+a 1 MiB grace allowance; both limits are explicit provider configuration and may be
+raised or set to `Infinity`. They are resource policy, not limits attributed to the
+Fetch Standard.
+
+The budget is pull-driven and cancels the decoder stack with the same `LimitError`
+as soon as either bound is crossed. It does not trust `Content-Length`, intermediate
+decoder sizes, or a provider's estimate. A direct transport test proves the cancel
+reason reaches the decoder input. Removing the ratio predicate makes the ordinary
+compressed-bomb test fail with a missing rejection and makes the open-input
+cancellation test time out, so neither a stale build nor an unobserved guard can
+report the sabotage as green.
+
+The ordinary-Node reference provider streams through native zlib/Brotli primitives.
+Gzip trailer/CRC and zlib Adler corruption are rejected, truncated Brotli is
+rejected, and HTTP `deflate` accepts both its zlib-wrapped form and the deployed raw
+DEFLATE fallback. The raw-form probe remains incremental when its first two wire
+bytes arrive separately. Codec availability is data on the provider interface,
+preventing Fetch from advertising an implementation merely because another target
+has it; format/checksum/trailer validation remains an obligation of every provider
+that declares a token.
+
+The ten focused coding cases pass 10/10, all local Node-host and real-socket tests
+pass 222/222, and the repository TypeScript solution builds. The unchanged full
+upstream slice remains 2265/2273 applicable cases with 14 named not-applicable cases
+and the same eight visible structural/common-compiler failures; this tranche adds no
+WPT failure or exclusion. The live NTS frontier is 812 primary `NTS1001` refusals
+and 128 dependent `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero
+JVM-backend diagnostics, and no invalid HIR. The six additional primaries are the
+final policy/stream source reaching existing lowering gaps, not compiled-provider
+evidence.

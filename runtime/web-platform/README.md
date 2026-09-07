@@ -47,6 +47,15 @@ belongs to conformance tooling; the native provider is part of the Node runtime;
 mobile implementations live with their owning runtime. Only capability contracts
 and provider-independent observable algorithms belong here.
 
+Content decoding is likewise split at that boundary: a provider supplies streaming
+gzip, deflate, and Brotli codec primitives, while shared Fetch code owns coding
+order, cancellation, and resource policy. `contentCodingPolicy` defaults to a
+256 MiB decoded-body ceiling and a 100:1 final-decoded/wire-byte ratio after a
+1 MiB grace allowance. These are configurable server/mobile safety limits, not
+Fetch-standard limits; an embedder may raise either limit or set it to `Infinity`
+explicitly. A coding must not be advertised unless the provider's decoder validates
+its format, checksum, and trailer as applicable.
+
 `index.ts` is deliberately narrower than the source tree: parsers, pools, codecs,
 transport requests, provider primitives, policy helpers, and internal error types are
 not Web globals. Providers use `provider.ts`; focused conformance tests import an

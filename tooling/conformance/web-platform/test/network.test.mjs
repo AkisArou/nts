@@ -5,7 +5,7 @@ import http from "node:http";
 import net from "node:net";
 import https from "node:https";
 import { createHash } from "node:crypto";
-import { gzipSync, brotliCompressSync, deflateSync } from "node:zlib";
+import { gzipSync, brotliCompressSync, deflateRawSync, deflateSync } from "node:zlib";
 import { once } from "node:events";
 import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 import {
@@ -18,6 +18,7 @@ import {
   Response,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
 import { ConnectionPool } from "../node_modules/.tsbuild/host/runtime/web-platform/src/http1/pool.js";
+import { decodeContentCodings } from "../node_modules/.tsbuild/host/runtime/web-platform/src/fetch/content-coding.js";
 import { createHostNodePrimitives } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-primitives.js";
 import { tlsFixture } from "./tls-fixture.mjs";
 
@@ -283,6 +284,88 @@ for (const [coding, compress] of [
     assert.equal(await r.text(), "streamed content ".repeat(1000));
     assert.equal(r.headers.get("content-encoding"), coding);
   });
+suite("Advertised content codings match the provider and preserve caller policy", async (t) => {
+  const observed = [];
+  const s = await server(t, (req, res) => {
+    observed.push(req.headers["accept-encoding"]);
+    res.end("ok");
+  });
+  const api = runtime(t);
+  await (await api.fetch(s.url)).text();
+  await (await api.fetch(s.url, { headers: { "accept-encoding": "identity" } })).text();
+  const identityOnly = runtime(t, {
+    contentDecoder: {
+      codings: [],
+      supports: () => false,
+      decode: () => {
+        throw new Error("An unadvertised decoder must not run");
+      },
+    },
+  });
+  await (await identityOnly.fetch(s.url)).text();
+  assert.deepEqual(observed, ["br, gzip, deflate", "identity", "identity"]);
+
+  assert.throws(
+    () =>
+      runtime(t, {
+        contentDecoder: {
+          codings: ["gzip"],
+          supports: () => false,
+          decode: (_coding, source) => source,
+        },
+      }),
+    /advertises an unsupported coding/i,
+  );
+  assert.throws(
+    () =>
+      runtime(t, {
+        contentDecoder: {
+          codings: ["gzip, deflate"],
+          supports: () => true,
+          decode: (_coding, source) => source,
+        },
+      }),
+    /invalid advertised content coding/i,
+  );
+});
+suite("HTTP deflate accepts zlib-wrapped and interoperable raw streams", async (t) => {
+  const expected = "raw deflate ".repeat(1000);
+  const zlib = deflateSync(Buffer.from(expected));
+  const raw = deflateRawSync(Buffer.from(expected));
+  const s = await server(t, async (req, res) => {
+    res.writeHead(200, { "content-encoding": "deflate" });
+    if (req.url === "/raw") {
+      res.write(raw.subarray(0, 1));
+      await tick();
+      res.end(raw.subarray(1));
+    } else res.end(zlib);
+  });
+  const api = runtime(t);
+  assert.equal(await (await api.fetch(s.url + "/zlib")).text(), expected);
+  assert.equal(await (await api.fetch(s.url + "/raw")).text(), expected);
+});
+suite("Content decoders reject corrupt checksums and coded payloads", async (t) => {
+  const corruptGzip = gzipSync(Buffer.from("checksum"));
+  corruptGzip[corruptGzip.length - 1] ^= 1;
+  const corruptDeflate = deflateSync(Buffer.from("adler"));
+  corruptDeflate[corruptDeflate.length - 1] ^= 1;
+  const brotli = brotliCompressSync(Buffer.from("brotli"));
+  const corruptBrotli = brotli.subarray(0, brotli.length - 1);
+  const s = await server(t, (req, res) => {
+    const [coding, bytes] =
+      req.url === "/gzip"
+        ? ["gzip", corruptGzip]
+        : req.url === "/deflate"
+          ? ["deflate", corruptDeflate]
+          : ["br", corruptBrotli];
+    res.writeHead(200, { "content-encoding": coding });
+    res.end(bytes);
+  });
+  const api = runtime(t);
+  for (const coding of ["gzip", "deflate", "br"]) {
+    await assert.rejects((await api.fetch(s.url + "/" + coding)).arrayBuffer());
+  }
+});
 suite("Reversed coding stack, decompression errors, consumption byte cap", async (t) => {
   const encoded = gzipSync(brotliCompressSync(Buffer.from("stacked")));
   const s = await server(t, (req, res) => {
@@ -299,6 +382,97 @@ suite("Reversed coding stack, decompression errors, consumption byte cap", async
   await assert.rejects((await api.fetch(s.url + "/bad")).text());
   const bounded = runtime(t, { bodyPolicy: { maxConsumeBytes: 3 } });
   await assert.rejects((await bounded.fetch(s.url)).text(), /limit/);
+});
+suite("Content-coding policy bounds decoded bytes and wire expansion", async (t) => {
+  const text = "compression bomb ".repeat(131072);
+  const encoded = gzipSync(Buffer.from(text));
+  const s = await server(t, (_req, res) => {
+    res.writeHead(200, { "content-encoding": "gzip", "content-length": encoded.length });
+    res.end(encoded);
+  });
+
+  const defaults = runtime(t);
+  await assert.rejects((await defaults.fetch(s.url)).text(), /expansion ratio/i);
+
+  const byteBounded = runtime(t, {
+    contentCodingPolicy: {
+      maxDecodedBytes: 1024,
+      maxExpansionRatio: Infinity,
+      ratioGraceBytes: 0,
+    },
+  });
+  await assert.rejects((await byteBounded.fetch(s.url)).text(), /decoded.*byte limit/i);
+
+  const ratioBounded = runtime(t, {
+    contentCodingPolicy: {
+      maxDecodedBytes: Infinity,
+      maxExpansionRatio: 2,
+      ratioGraceBytes: 1024,
+    },
+  });
+  await assert.rejects((await ratioBounded.fetch(s.url)).text(), /expansion ratio/i);
+
+  const relaxed = runtime(t, {
+    contentCodingPolicy: {
+      maxDecodedBytes: text.length,
+      maxExpansionRatio: Infinity,
+      ratioGraceBytes: 0,
+    },
+  });
+  assert.equal(await (await relaxed.fetch(s.url)).text(), text);
+});
+suite("Content-coding limit cancels the decoder stack with the same failure", async () => {
+  let cancellation;
+  const wire = new ReadableStream({
+    start(controller) {
+      controller.enqueue(Uint8Array.of(1));
+    },
+    cancel(reason) {
+      cancellation = reason;
+    },
+  });
+  const expandingDecoder = {
+    supports() {
+      return true;
+    },
+    decode(_coding, source) {
+      const input = source.getReader();
+      let emitted = false;
+      return new ReadableStream({
+        async pull(controller) {
+          if (emitted) return;
+          emitted = true;
+          await input.read();
+          controller.enqueue(new Uint8Array(2048));
+        },
+        cancel(reason) {
+          return input.cancel(reason);
+        },
+      });
+    },
+  };
+  const guarded = decodeContentCodings(wire, ["test"], expandingDecoder, {
+    maxDecodedBytes: Infinity,
+    maxExpansionRatio: 1,
+    ratioGraceBytes: 0,
+  });
+  const error = await new Response(guarded).arrayBuffer().then(
+    () => null,
+    (reason) => reason,
+  );
+  assert.match(String(error), /expansion ratio/i);
+  assert.equal(cancellation, error);
+});
+suite("Content-coding policy rejects invalid limits at runtime construction", (t) => {
+  for (const contentCodingPolicy of [
+    { maxDecodedBytes: -1 },
+    { maxDecodedBytes: 0.5 },
+    { maxExpansionRatio: 0.5 },
+    { maxExpansionRatio: Number.NaN },
+    { ratioGraceBytes: -1 },
+  ]) {
+    assert.throws(() => runtime(t, { contentCodingPolicy }), RangeError);
+  }
 });
 for (const [name, wire, headError] of [
   [
