@@ -1903,3 +1903,38 @@ The live compiled-source frontier is 1207 primary `NTS1001` refusals and 204 dep
 `NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
 diagnostics, and no invalid HIR. These counts describe shared diagnostics reaching
 existing language prerequisites, not compiled observer evidence.
+
+## Bounded multi-origin Agent and Client lifecycle
+
+At `7e546f21`, the shared dispatcher layer has an environment-local `Agent` that
+lazily creates one provider dispatcher per canonical HTTP(S) origin and a `Client`
+that enforces one canonical origin. The provider factory remains the protocol and
+connection owner; no shared module or process global stores a default dispatcher.
+
+The Agent's origin map is a least-recently-used order with an explicit retained-origin
+bound. Only a provider dispatcher that reports itself fully idle may be evicted, and
+its close must settle before the replacement is constructed. A failed close restores
+the old entry, while a bound occupied by live work produces a typed
+`UND_ERR_MAX_ORIGINS_REACHED` error. Origin creation is serialized to prevent racing
+duplicate dispatchers and has its own explicit queue bound and typed overflow instead
+of an unbounded promise chain. Abort during serialized eviction prevents replacement
+creation.
+
+Graceful close and exact-reason destroy are idempotent, reject new work immediately,
+and cover every owned dispatcher. Aggregate typed statistics include retained and
+idle origins, connection/pending/running totals, dispatches, evictions, the bounded
+creation backlog, and per-origin snapshots. Provider `idle` is a lifecycle contract:
+it may become true only when eviction cannot interrupt a request or live body.
+
+The focused Agent/Client corpus passes 12/12 and the complete local
+Node-host/real-socket suite passes 354/354. The pinned WPT slice remains 2275/2283
+applicable cases with 14 named not-applicable cases and the same eight visible
+structural/common-compiler failures.
+
+A sabotage inverted the idle-dispatcher guard. The live-work preservation
+precondition fell from 1/1 to 0/1 because the busy origin was evicted and the request
+incorrectly succeeded, then returned to 1/1 after restoration. The live
+compiled-source frontier is 1219 primary `NTS1001` refusals and 205 dependent
+`NTS1003` cascades, with zero `NTS1004` module diagnostics, zero JVM-backend
+diagnostics, and no invalid HIR. The increase is new shared dispatcher source reaching
+existing language prerequisites; it is not compiled Agent evidence.
