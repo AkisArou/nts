@@ -4115,6 +4115,49 @@ earlier probe did exactly that and reported that `Readable` is not an
 `EventEmitter`. The file asserts that the base of the chain *behaves* as an
 emitter instead, which is the property the link exists to provide.
 
+## One message, four kinds of work
+
+`no wrapper for X: is exported and is not a function this backend can name` is
+the most-quoted line in this document, and it was read for weeks as a single
+backend limitation. It is four, and they have nothing to do with each other:
+
+| kind | example | fixture | status |
+| --- | --- | --- | --- |
+| a value | `export const version = "2.1.0"` | `value-export` | **fixed** at `f4b8595c` |
+| a class | `export class Decoder {}` | `export-class` | real work: constructor, prototype, finalizer |
+| a shorthand property | `export const ucs2 = { decode, encode }` | `export-object-shorthand` | a spelling — explicit keys publish |
+| a module namespace | `export * as posix from "./posix.ts"` | `export-namespace` | how `path` is built |
+
+**The shorthand one is the reason this table exists.** `punycode` publishes its
+`ucs2` and a bare fixture of "an exported object literal of functions" did not,
+on the same binary, which should not have been possible. `punycode` writes
+`{ decode: codec.ucs2decode, encode: codec.ucs2encode }` — explicit keys,
+because the functions it names live in another module and the shorthand was
+never available to it. So the module that works does not work because of
+anything it knows. It works because of a spelling its imports forced on it, and
+this document described that as a backend limitation for as long as it stood.
+
+Two candidates and a control separated it: explicit keys with differently named
+locals published, explicit keys with *identically* named locals published,
+shorthand refused. The name collision between property and local was the better
+hypothesis and is wrong.
+
+**A fifth thing hides behind a message that is not printed at all.** An alias —
+`export const decode = parse` — publishes both names and builds *two*
+`napi_create_function` calls over one implementation, so `querystring.decode ===
+querystring.parse` is false on the compiled axis and true on node. Nothing
+refuses, no wrapper is reported missing, both names are in the export table, and
+an export-surface diff finds nothing absent. Only an identity comparison
+disagrees, and node's own tests contain none. `blockers/export-alias-identity`.
+
+That entry was also filed on a wrong premise of this document's own: the
+per-module blocker chains listed `decode -> parse` and `parse -> parse` together
+under "cannot name this kind of export", which could not have been about
+aliasing, since `parse` is a plain exported function. Both were absent because
+neither had been compiled — the module having lost its initializer. **A grouped
+diagnostic is not a cause**, three times in one day, and twice it was passed to
+another lane before being checked.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
