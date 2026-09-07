@@ -109,6 +109,20 @@ export type {
   OriginDispatcherFactory,
   OriginDispatcherStats,
 } from "./dispatch/agent.ts";
+export {
+  BalancedPool,
+  BalancedPoolLimitError,
+  BalancedPoolMissingUpstreamError,
+  Pool,
+  RoundRobinPool,
+} from "./dispatch/pool.ts";
+export type {
+  BalancedPoolOptions,
+  BalancedPoolStats,
+  BalancedPoolUpstream,
+  BalancedPoolUpstreamStats,
+  PoolStats,
+} from "./dispatch/pool.ts";
 export { DiagnosticsInterceptor, DispatchDiagnosticContext } from "./dispatch/diagnostics.ts";
 export type {
   DiagnosticsInterceptorOptions,
