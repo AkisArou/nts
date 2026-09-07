@@ -2119,6 +2119,28 @@ under **Conventions** for what a missing initializer costs. But `os` and
 `querystring` print no such refusal and still fail, so the export table is a
 defect in its own right rather than a consequence of that one.
 
+### The shortest path to one green module
+
+Nothing on this axis is close, but `punycode` is closest and it is worth
+naming exactly, because "0 of 22 and blocked" is not a target and this is.
+
+It has **one** applicable test file, and its whole public surface lowers —
+`encode`, `decode`, `toASCII` and `toUnicode` draw no diagnostic at all, and
+the N-API wrapper declines none of them. Three named things stand between that
+and a green row:
+
+| blocker | what it is | what it costs |
+| --- | --- | --- |
+| `NTS2002 a value of type ``never`` reached code generation` | `codec.ts`'s `error(type): never`. It is refused and its **eight call sites are emitted anyway**, which is the module's two clang errors | the C does not compile |
+| `NTS1003 module#init ... calls emitWarning` | rooted in two refusals in `internal/process-warning.ts` — a call of a function value with no closures, and `code`, which `Error` does not declare | `DEP0040` never fires, and `test-punycode.js:30` asserts it with `common.expectWarning` |
+| `NTS1001 ucs2decode, a function used as a value` | `punycode.ucs2` is an object holding function values | `punycode.ucs2.decode` and `.encode`, which the test exercises |
+
+That is the complete list for the smallest module in the profile — three
+compiler features for one test file. It is a fair measure of how far the
+compiled axis is from its first honest pass, and a better one than the stage
+histogram, which says where modules stop but not how much stands between them
+and moving.
+
 Reproduce any of it with one line:
 
 ```sh
