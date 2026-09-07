@@ -302,6 +302,40 @@ fn report_graph_health(stats: &nts_frontend_ts::FrontendStats) {
 /// than a refusal: a base named here has to be laid out as the prefix every
 /// backend already treats it as, and when it is not, seeing both field lists
 /// side by side is the whole diagnosis.
+/// What an addon would publish.
+///
+/// Invisible until it was printed: an export the wrapper cannot represent is
+/// dropped silently, so a missing one costs a test failure naming nothing
+/// rather than a diagnostic.
+fn print_public_api(program: &hir::Program) {
+    if program.public_api.is_empty() && program.public_namespaces.is_empty() {
+        return;
+    }
+    println!("\npublic api");
+    let names = |emitted: &str| program.funcs.iter().any(|func| func.name == emitted);
+    let missing = |emitted: &str| {
+        if names(emitted) {
+            ""
+        } else {
+            "   (no function of that name)"
+        }
+    };
+    for (emitted, published) in &program.public_api {
+        println!("  {published} -> {emitted}{}", missing(emitted));
+    }
+    // A namespace and its members, which this printed nothing about while the
+    // built addon published one. The Node lane read the omission as a missing
+    // export and reported `punycode` as four of six on the evening `ucs2`
+    // started working -- understated by the export that had just been
+    // repaired, by the instrument that exists to say so.
+    for (namespace, members) in &program.public_namespaces {
+        println!("  {namespace} (namespace)");
+        for (property, emitted) in members {
+            println!("    {property} -> {emitted}{}", missing(emitted));
+        }
+    }
+}
+
 fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
     let mut source = TsgoApi::for_compilation(tsgo_binary);
@@ -355,16 +389,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     // What an addon would publish, which was invisible until now: an export the
     // wrapper cannot represent is dropped silently, so a missing one costs a
     // test failure naming nothing rather than a diagnostic.
-    if !program.public_api.is_empty() {
-        println!("\npublic api");
-        for (emitted, published) in &program.public_api {
-            let has = program.funcs.iter().any(|func| func.name == *emitted);
-            println!(
-                "  {published} -> {emitted}{}",
-                if has { "" } else { "   (no function of that name)" }
-            );
-        }
-    }
+    print_public_api(program);
 
     // The same question `verify` asks, reported rather than refused.
     for layout in &program.layouts {

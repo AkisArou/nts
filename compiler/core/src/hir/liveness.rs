@@ -32,9 +32,9 @@
 //! mistake shows up as a release the verifier rejects rather than as anything
 //! subtle — but only once a program carries an object around a loop.
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{BlockId, Func, ValueId};
+use super::{BlockId, Func, OpKind, Terminator, ValueId};
 
 /// A hard bound on the fixpoint. Liveness converges in at most one pass per
 /// block over a reducible graph; reaching this means a bug, and looping forever
@@ -123,6 +123,27 @@ pub fn analyze(func: &Func) -> Liveness {
     // Precomputed per block, since the fixpoint revisits them.
     let used: Vec<FxHashSet<ValueId>> = (0..count).map(|index| reads(func, index)).collect();
     let defined: Vec<FxHashSet<ValueId>> = (0..count).map(|index| writes(func, index)).collect();
+    // Only *frame* objects, and only because their retain is a no-op: an
+    // immortal header has no count to raise, so a name cannot keep one alive
+    // and the frame has to. See `super::undominated_names` for the objects this
+    // cannot be done for, which `place_allocations` keeps off the frame.
+    let names = object_names(func);
+    let mut frame_named_by: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
+    for (alias, roots) in &names {
+        let framed: Vec<ValueId> = roots
+            .iter()
+            .copied()
+            .filter(|root| {
+                matches!(
+                    func.values[root.0 as usize].kind,
+                    OpKind::ObjectNew { frame: true }
+                )
+            })
+            .collect();
+        if !framed.is_empty() {
+            frame_named_by.insert(*alias, framed);
+        }
+    }
 
     for _ in 0..ROUND_CAP {
         let mut changed = false;
@@ -135,6 +156,26 @@ pub fn analyze(func: &Func) -> Liveness {
 
             let mut entering = out.clone();
             entering.extend(used[index].iter().copied());
+            // A frame object is kept alive by whatever names it, and a name is
+            // not a reference here.
+            //
+            // The gap this closes is one `throw` wide. `throw new
+            // RangeError("Invalid code point " + n)` puts the error in the
+            // frame, packs it into an erased value to throw, and the erased
+            // value is what the `catch` reads -- so the object died at the
+            // `Erase` and `rc::release_value` gave its message string back
+            // while the handler was still about to concatenate it. Under
+            // `NTS_RC=1` the next allocation reused the freed buffer and the
+            // answer came back `range:range:d code point 2147483647` where node
+            // says `range:Invalid code point 2147483647`. Six cases, in the one
+            // lane that counts, and nothing in the corpus reached it: the shape
+            // needs a computed message, a frame-placed error, and a `catch`
+            // that reads it back.
+            for value in entering.iter().copied().collect::<Vec<_>>() {
+                if let Some(named) = frame_named_by.get(&value) {
+                    entering.extend(named.iter().copied());
+                }
+            }
             for value in &defined[index] {
                 entering.remove(value);
             }
@@ -179,6 +220,78 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
     used
 }
 
+/// Which objects each value is another name for.
+///
+/// `Erase` and `Unerase` rename rather than copy -- `own::repackages` says so
+/// and borrows on the strength of it -- and a block parameter renames whatever
+/// each edge hands it. Both are followed, to a fixpoint, because a name of a
+/// name is still a name.
+///
+/// Two callers, asking opposite questions of the same relation.
+/// [`analyze`] uses it to keep a *frame* object live for as long as anything
+/// can still reach it; [`super::undominated_names`] uses it to find the objects
+/// for which that is impossible.
+pub(super) fn object_names(func: &Func) -> FxHashMap<ValueId, Vec<ValueId>> {
+    let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
+    let note = |named: &mut FxHashMap<ValueId, Vec<ValueId>>, alias: ValueId, of: ValueId| {
+        let roots = if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. }) {
+            vec![of]
+        } else {
+            named.get(&of).cloned().unwrap_or_default()
+        };
+        if roots.is_empty() {
+            return false;
+        }
+        let here = named.entry(alias).or_default();
+        let mut grew = false;
+        for root in roots {
+            if !here.contains(&root) {
+                here.push(root);
+                grew = true;
+            }
+        }
+        grew
+    };
+
+    for _ in 0..ROUND_CAP {
+        let mut changed = false;
+        for block in &func.blocks {
+            for value in &block.ops {
+                if let OpKind::Erase { value: inner } | OpKind::Unerase { value: inner } =
+                    &func.values[value.0 as usize].kind
+                {
+                    changed |= note(&mut named, *value, *inner);
+                }
+            }
+            let edges: Vec<(BlockId, &Vec<ValueId>)> = match &block.terminator {
+                Terminator::Jump { target, args } => vec![(*target, args)],
+                Terminator::Branch {
+                    then_target,
+                    then_args,
+                    else_target,
+                    else_args,
+                    ..
+                } => vec![(*then_target, then_args), (*else_target, else_args)],
+                Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
+                    Vec::new()
+                }
+            };
+            for (target, args) in edges {
+                for (slot, argument) in args.iter().enumerate() {
+                    let Some(param) = func.blocks[target.0 as usize].params.get(slot) else {
+                        continue;
+                    };
+                    changed |= note(&mut named, *param, *argument);
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    named
+}
+
 /// Values a block defines: its operations and its own parameters.
 fn writes(func: &Func, index: usize) -> FxHashSet<ValueId> {
     let block = &func.blocks[index];
@@ -188,13 +301,13 @@ fn writes(func: &Func, index: usize) -> FxHashSet<ValueId> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(in crate::hir) mod tests {
     use super::*;
     use crate::hir::{Block, HirType, Op, OpKind, Param, Terminator};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
-    fn origin() -> Origin {
+    pub(super) fn origin() -> Origin {
         Origin::source(Location {
             file: SourceId(0),
             span: Span::new(0, 1),
@@ -276,6 +389,113 @@ mod tests {
             frame: None,
             abstract_declaration: false,
         }
+    }
+
+    /// Two objects thrown from two arms and caught at one handler.
+    ///
+    /// `f(a) { if (..) { throw %1 } else { throw %4 } }` with the handler as a
+    /// block parameter -- the shape `merged` in `examples/code-points` has, and
+    /// the one `undominated_names` exists for.
+    pub(in crate::hir) fn joining() -> Func {
+        let values = vec![
+            op(OpKind::Param(0)),                        // %0
+            op(OpKind::ObjectNew { frame: true }),       // %1  thrown from one arm
+            op(OpKind::Erase { value: ValueId(1) }),     // %2
+            op(OpKind::Binary {
+                op: crate::hir::BinOp::Lt,
+                lhs: ValueId(0),
+                rhs: ValueId(0),
+            }), // %3
+            op(OpKind::ObjectNew { frame: true }),       // %4  thrown from the other
+            op(OpKind::Erase { value: ValueId(4) }),     // %5
+            op(OpKind::Unerase { value: ValueId(6) }),   // %7  read in the handler
+        ];
+        let mut values = values;
+        values.insert(6, op(OpKind::BlockParam(0))); // %6  the handler's parameter
+        Func {
+            name: "f".to_owned(),
+            params: vec![Param {
+                name: "a".to_owned(),
+                ty: HirType::Float { bits: 64 },
+                origin: origin(),
+                known: crate::hir::facts::Facts::TOP,
+                shape: crate::hir::ParamShape::Ordinary,
+            }],
+            return_type: HirType::Float { bits: 64 },
+            values,
+            blocks: vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(3)],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(3),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(1), ValueId(2)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(3),
+                        args: vec![ValueId(2)],
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(4), ValueId(5)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(3),
+                        args: vec![ValueId(5)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(6)],
+                    ops: vec![ValueId(7)],
+                    terminator: Terminator::Return(Some(ValueId(0))),
+                },
+            ],
+            origin: origin(),
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        }
+    }
+
+    #[test]
+    fn an_erased_value_names_the_object_inside_it() {
+        let named = object_names(&joining());
+        assert_eq!(named.get(&ValueId(2)).map(Vec::as_slice), Some(&[ValueId(1)][..]));
+        assert_eq!(named.get(&ValueId(5)).map(Vec::as_slice), Some(&[ValueId(4)][..]));
+    }
+
+    /// The half that ordinary liveness cannot supply: a name arrives at a block
+    /// parameter, and the parameter names whatever every edge hands it.
+    #[test]
+    fn a_block_parameter_names_both_objects_that_reach_it() {
+        let named = object_names(&joining());
+        let mut roots = named.get(&ValueId(6)).cloned().unwrap_or_default();
+        roots.sort_unstable();
+        assert_eq!(roots, vec![ValueId(1), ValueId(4)]);
+        // And a name of a name is still a name, which is why this is a
+        // fixpoint rather than one pass.
+        let mut through = named.get(&ValueId(7)).cloned().unwrap_or_default();
+        through.sort_unstable();
+        assert_eq!(through, vec![ValueId(1), ValueId(4)]);
+    }
+
+    /// A frame object stays live for as long as anything names it. Without
+    /// this, `%1` dies at the `Erase` in block 1 and `rc::release_value` gives
+    /// its fields back before block 3 reads them.
+    #[test]
+    fn a_frame_object_outlives_the_erase_that_names_it() {
+        let live = analyze(&joining());
+        assert!(live.live_out(BlockId(1)).contains(&ValueId(1)));
+        assert!(live.live_in(BlockId(3)).contains(&ValueId(1)));
     }
 
     #[test]

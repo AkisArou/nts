@@ -1,0 +1,35 @@
+ideal 0
+allocated 0
+because Argued before measuring, and the first argument was wrong.
+because
+because What was argued: seventeen allocations, one per call, because
+because `nts_string_from_code_point` was not in `hir::frame_capacity` and a
+because heap string per code point is what the loop would pay. Measured
+because seventeen, which agreed -- and the agreement was the answer to the
+because wrong question. `flow::string_span` had said `upto(2.0)` about this
+because helper since before the guard existed, and `frame_capacity` had never
+because asked. Two ways of asking one question, and only one of them was
+because being read.
+because
+because So the bound is two code units: a code point above the basic plane is
+because a surrogate pair and one at or below it is a single unit. That is a
+because bound on what the helper *is* rather than on any argument, which is
+because what lets it be stated before the call -- the same shape as
+because `fromCharCode`'s one and `String(x)`'s forty.
+because
+because The guard is what makes it exact rather than optimistic. Anything
+because that is not an integer in [0, 0x10FFFF] throws before the call, so no
+because argument reaches the helper whose result is longer than two units. A
+because bound that holds only because a check upstream holds is worth saying
+because out loud: remove `lower::guard_code_point` and this number is a lie
+because rather than a miss.
+because
+because Zero and zero, then. Nothing is allocated, so nothing is counted.
+because
+because What the case is for, as in `repeat-guard`: the message. Node's reads
+because `Invalid code point 1.5`, so the compiler concatenates the value into
+because it, and a lowering that did that before the branch rather than on the
+because throwing path would allocate one string per call, throw or not, and
+because still agree with node on every case. Nothing in the differential can
+because see an allocation that changes no answer. Here it is the difference
+because between zero and seventeen.

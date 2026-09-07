@@ -2762,14 +2762,88 @@ fn split_unions(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(split::split_unions).sum()
 }
 
+/// Objects whose reference reaches a block the object does not dominate.
+///
+/// The frame cannot hold one. A frame object's header is immortal, so the
+/// retain that would keep it alive returns immediately and its fields are given
+/// back by `rc::release_value` where its live range ends -- which means that
+/// range has to cover every value that can still reach it, and the release has
+/// to be emitted somewhere the object is in scope.
+///
+/// At a join it is neither. `acrossTheHierarchy` throws a `TypeError` from one
+/// arm and a `RangeError` from another and catches both, so the handler's
+/// parameter names two objects and neither arm dominates it. Extending liveness
+/// there produced a release naming a value that does not dominate its use --
+/// twenty-four `NotDominated` entries across six inserted blocks, under
+/// `NTS_RC=1` only, because `Provider::NoGc` inserts nothing.
+///
+/// So the answer for those is the heap, where the retain is real and the whole
+/// question is the runtime's. It costs an allocation on a path that merges two
+/// thrown objects and reads a field off the survivor; it buys back the
+/// invariant that a frame object is released exactly where it is still named.
+fn undominated_names(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<ValueId> {
+    let names = liveness::object_names(func);
+    if names.is_empty() {
+        return rustc_hash::FxHashSet::default();
+    }
+    let mut defined_in: Vec<Option<BlockId>> = vec![None; func.values.len()];
+    for (index, block) in func.blocks.iter().enumerate() {
+        let at = BlockId(u32::try_from(index).unwrap_or(0));
+        for value in block.ops.iter().chain(&block.params) {
+            if let Some(slot) = defined_in.get_mut(value.0 as usize) {
+                *slot = Some(at);
+            }
+        }
+    }
+    let reachable = verify::reachable_blocks(func);
+    let idom = verify::dominators(func, &reachable);
+    let dominates = |over: BlockId, under: BlockId| {
+        let mut at = Some(under);
+        while let Some(block) = at {
+            if block == over {
+                return true;
+            }
+            at = idom[block.0 as usize];
+        }
+        false
+    };
+
+    let mut refused = rustc_hash::FxHashSet::default();
+    for (alias, roots) in &names {
+        let Some(Some(used_in)) = defined_in.get(alias.0 as usize).copied() else {
+            continue;
+        };
+        for root in roots {
+            let Some(Some(made_in)) = defined_in.get(root.0 as usize).copied() else {
+                continue;
+            };
+            // Only an object with reference fields, because the walk over
+            // those fields is the whole of what has to be placed. Without them
+            // `own::counted_here` does not count the object at all, there is no
+            // release to emit and nothing to dominate -- and refusing the frame
+            // anyway cost `duck-typed`, `imported-instanceof`, `in-narrowing`,
+            // `instanceof-class` and `upcast` seventeen heap allocations each,
+            // for objects holding nothing but numbers.
+            if !dominates(made_in, used_in)
+                && !own::reference_fields(func, layouts, *root).is_empty()
+            {
+                refused.insert(*root);
+            }
+        }
+    }
+    refused
+}
+
 fn place_allocations(program: &mut Program) -> usize {
     let escapes = escape::analyze_program(program);
+    let layouts = program.layouts.clone();
     let mut framed = 0;
 
     for (func, escapes) in program.funcs.iter_mut().zip(&escapes) {
+        let refused = undominated_names(func, &layouts);
         for index in 0..func.values.len() {
             let value = ValueId(u32::try_from(index).unwrap_or(0));
-            if !escapes.is_frame_local(value) {
+            if !escapes.is_frame_local(value) || refused.contains(&value) {
                 continue;
             }
             if matches!(func.values[index].kind, OpKind::ObjectNew { frame: false }) {
@@ -2819,6 +2893,18 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
     if name == "nts_string_from_char_code" {
         return Some(1);
     }
+    // Two, by the same argument and for the same reason it is a different
+    // function: a code point above 0xFFFF is a surrogate *pair*, and one at or
+    // below it is a single unit. Either way the bound is on what the helper is
+    // rather than on any argument, which is what lets it be stated here.
+    //
+    // The guard is what makes this exact rather than optimistic. Anything that
+    // is not an integer in [0, 0x10FFFF] throws before the call -- see
+    // `lower::guard_code_point` -- so there is no argument reaching this helper
+    // whose result is longer than two units.
+    if name == "nts_string_from_code_point" {
+        return Some(2);
+    }
     // `String(x)`, whose length is bounded by what a double *is* rather than by
     // any argument: the shortest round-tripping decimal needs at most 17
     // significant digits, and the widest shape around them is
@@ -2863,6 +2949,54 @@ mod tests {
             methods: Vec::new(),
             base: None,
         }
+    }
+
+    /// A frame object whose name reaches a block it does not dominate.
+    ///
+    /// Both objects in `liveness::tests::joining` are thrown from one arm of a
+    /// branch and caught at a join, so neither arm dominates the handler. With
+    /// a reference field each there is nowhere to put the walk that gives that
+    /// field back, and the frame is refused for both.
+    #[test]
+    fn an_object_named_where_it_does_not_dominate_cannot_be_framed() {
+        let mut func = liveness::tests::joining();
+        let holder = layout(
+            "Holder",
+            7,
+            vec![Field {
+                name: "message".to_owned(),
+                ty: HirType::Managed(ManagedType::String),
+                readonly: false,
+            }],
+        );
+        for value in [ValueId(1), ValueId(4)] {
+            func.values[value.0 as usize].ty = HirType::Managed(ManagedType::Object(TypeId(7)));
+        }
+        let refused = undominated_names(&func, std::slice::from_ref(&holder));
+        assert!(refused.contains(&ValueId(1)));
+        assert!(refused.contains(&ValueId(4)));
+    }
+
+    /// The same shape with nothing to give back. `own::counted_here` does not
+    /// count an object with no reference fields, so there is no release to
+    /// place and no reason to refuse the frame -- and refusing anyway cost five
+    /// memory cases seventeen heap allocations each.
+    #[test]
+    fn an_object_with_no_reference_fields_keeps_its_frame() {
+        let mut func = liveness::tests::joining();
+        let holder = layout(
+            "Holder",
+            7,
+            vec![Field {
+                name: "count".to_owned(),
+                ty: HirType::Float { bits: 64 },
+                readonly: false,
+            }],
+        );
+        for value in [ValueId(1), ValueId(4)] {
+            func.values[value.0 as usize].ty = HirType::Managed(ManagedType::Object(TypeId(7)));
+        }
+        assert!(undominated_names(&func, std::slice::from_ref(&holder)).is_empty());
     }
 
     /// Two types that differ only in what they extend are two classes.

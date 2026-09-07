@@ -857,6 +857,23 @@ void nts_counting_reset(void);
 void nts_release(NtsHeader *object);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
                                       double length);
+
+/* A `number[]`, allocated by something that is not the compiled program.
+ *
+ * The generated `program.c` carries a `static const` descriptor per element
+ * type, which is right for compiled code and unreachable from anywhere else --
+ * and the Node-API wrapper is a separate translation unit. So the one array
+ * shape that crosses the boundary needs a descriptor the runtime owns.
+ *
+ * Interchangeable with the generated one rather than merely similar: every
+ * array helper reads `descriptor->size` and `->erased` and never compares a
+ * descriptor by identity, and both say eight bytes and no erased elements. A
+ * `number[]` built here can be handed to compiled code, and one built there can
+ * be read here.
+ *
+ * `elements` is `NTS_ELEMENTS(array, double)` and `header.length` is how many
+ * there are, exactly as for a generated one. */
+NTS_ALLOCATES NtsArray *nts_array_of_numbers(double length);
 /* The same, without zeroing the elements. Only for an allocation the compiler
  * fills completely before anything can read it; see the definition. */
 NTS_ALLOCATES NtsArray *
@@ -1411,6 +1428,14 @@ NtsString *nts_string_from_char_code(double code);
  * and every one of them dies on the next line. */
 NtsString *nts_string_from_char_code_into(NtsHeader *into, double code);
 NtsString *nts_string_from_code_point(double point);
+/* The same, into storage the caller supplies. Two code units at most, because a
+ * code point above the basic plane is a surrogate pair and one at or below it
+ * is a single unit -- a bound on what the helper *is* rather than on any
+ * argument, which is what lets `hir::frame_capacity` state it before the call.
+ *
+ * `punycode`'s `ucs2.encode` is `result += String.fromCodePoint(cp)` once per
+ * code point, and every one of those strings dies on the next line. */
+NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
 /* `String(v)` on a value carrying its own tag. Exact for `undefined`, `null`,
  * a boolean, a number and a string; every other tag is a lowering that should
  * have refused, and it aborts rather than guessing. */
@@ -2120,6 +2145,24 @@ NtsEnvironment *nts_environment_current(void);
  * and cannot name a class the program invented. */
 void nts_environment_install_platform(NtsHeader *runtime);
 NtsHeader *nts_environment_platform(void);
+/* Whether there is one to read, without reading it.
+ *
+ * The pair, rather than a nullable accessor, and for the reason the paragraph
+ * above gives for aborting: a `_or_null` form would put the absence into the
+ * declared TypeScript return, and bootstrap would then depend on how absence is
+ * represented. This composes with the non-nullable accessor instead -- ask,
+ * then read -- and adds no representation.
+ *
+ * The asking is what the Web-platform lane needed. `File`'s constructor calls
+ * the runtime unguarded and a program with none installed throws, which is
+ * accepted; `Event` cannot, because `AbortController`, `AbortSignal` and
+ * `EventTarget` are usable with no runtime installed and 41 host tests rely on
+ * it. `Event.timeStamp` is zero where there is no clock rather than a throw.
+ *
+ * Deliberately not `NTS_READS_ONLY`. It reads a slot `install` writes, and
+ * `pure` would let a compiler answer a second call from the first across an
+ * installation. */
+bool nts_environment_has_platform(void);
 
 /* A second environment, and its close.
  *

@@ -50,6 +50,10 @@ enum Cross {
     Number,
     Bool,
     Str,
+    /// A `number[]`. Crosses as a JavaScript array of numbers, copied in both
+    /// directions -- a handle would mean deciding who owns the storage
+    /// afterwards, which is the question `ArrayBuffer` is refused over.
+    Numbers,
     /// A record, by index into the program's layouts. Crosses as a plain
     /// JavaScript object of its fields.
     Object(usize),
@@ -87,11 +91,21 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         HirType::Managed(
             ManagedType::Buffer | ManagedType::DataView | ManagedType::View(_),
         ) => None,
-        // HIR currently does not retain the distinction between a declared
-        // `string[]` parameter and a `...strings: string[]` rest parameter.
-        // Treating both as rest made an ordinary array parameter receive all
-        // remaining JavaScript arguments instead of one array. Refuse both
-        // directions until that source fact crosses the HIR boundary.
+        // A `number[]` crosses as a copy. `Param::shape` carries `Rest` now, so
+        // the reason this used to refuse -- that HIR did not distinguish
+        // `...args: number[]` from `args: number[]`, and treating both as rest
+        // made an ordinary array parameter swallow every remaining argument --
+        // no longer holds; `wrapper` asks the shape instead.
+        //
+        // Only `number[]`. An array of references is a copy whose elements each
+        // need marshalling and whose ownership question is per element, and an
+        // array of anything narrower than a double is the same work again with
+        // a width; neither is answered by the same rule.
+        HirType::Managed(ManagedType::Array(element))
+            if matches!(**element, HirType::Float { bits: 64 }) =>
+        {
+            Some(Cross::Numbers)
+        }
         HirType::Managed(ManagedType::Array(_)) => None,
         // A promise has no synchronous crossing: its value does not exist yet.
         // Handing one to JavaScript means creating a napi deferred and resolving
@@ -412,6 +426,73 @@ static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
         (size_t)s->length, out);
 }
 
+/* A JavaScript array of numbers, copied into a `number[]` compiled code can
+ * read. Rejects a non-array and a non-numeric element rather than coercing:
+ * `punycode.ucs2.encode(["a"])` is a caller mistake and silently reading zero
+ * would make it look like a compiler one. */
+/* A `napi_status` and not a `bool`, because that is what `nts_napi_expect`
+ * takes -- and `true` reaching it as a status is `napi_invalid_arg`, so a
+ * bool-returning version reported every array as the wrong type while looking
+ * exactly right at the call site. */
+static napi_status nts_from_napi_numbers(napi_env env, napi_value value,
+                                         NtsArray **out) {
+    bool is_array = false;
+    napi_status status = napi_is_array(env, value, &is_array);
+    if (status != napi_ok) return status;
+    if (!is_array) return napi_array_expected;
+
+    uint32_t length = 0;
+    status = napi_get_array_length(env, value, &length);
+    if (status != napi_ok) return status;
+
+    NtsArray *array = nts_array_of_numbers((double)length);
+    if (array == NULL) return napi_generic_failure;
+
+    /* NTS_ITEMS, not NTS_ELEMENTS: an array's storage is behind the
+     * `elements` pointer so that growing one can move it, and only a string
+     * keeps its data inline right after the header. Writing through the string
+     * macro put the first three elements over the array's own header. */
+    double *slots = NTS_ITEMS(array, double);
+    for (uint32_t at = 0; at < length; at++) {
+        napi_value element = NULL;
+        status = napi_get_element(env, value, at, &element);
+        if (status == napi_ok) {
+            /* Not a coercion: `napi_get_value_double` fails on anything that is
+             * not a number, so `["1"]` is refused rather than silently read as
+             * `[1]`. A compiled `number[]` parameter says what it takes. */
+            status = napi_get_value_double(env, element, &slots[at]);
+        }
+        if (status != napi_ok) {
+            nts_release((NtsHeader *)array);
+            return status;
+        }
+    }
+    *out = array;
+    return napi_ok;
+}
+
+/* And back: a `number[]` as a JavaScript array. A copy, because a handle would
+ * mean deciding who owns the storage afterwards -- the question `ArrayBuffer`
+ * is refused over, and the reason to answer it once rather than per type. */
+static napi_status nts_to_napi_numbers(napi_env env, const NtsArray *array,
+                                       napi_value *out) {
+    if (array == NULL) return napi_get_undefined(env, out);
+
+    uint32_t length = array->header.length;
+    napi_status status = napi_create_array_with_length(env, (size_t)length, out);
+    if (status != napi_ok) return status;
+
+    const double *slots = NTS_ITEMS(array, double);
+    for (uint32_t at = 0; at < length; at++) {
+        napi_value element = NULL;
+        status = napi_create_double(env, slots[at], &element);
+        if (status != napi_ok) return status;
+        status = napi_set_element(env, *out, at, element);
+        if (status != napi_ok) return status;
+    }
+    return napi_ok;
+}
+
 /* Raise what compiled code threw as a catchable JavaScript exception.
  *
  * A compiled program's own `try` is fully lowered, so this is reached only at
@@ -424,6 +505,13 @@ static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
  * class it describes; the message comes from the throw site, because a
  * descriptor records where an object's references are and not what they are
  * called. That is the same split `nts_uncaught` works from. */
+/* Defined in `runtime/node/internal/process.c`, which every addon links.
+ * `void *` rather than `napi_env` so the same declaration serves a standalone
+ * build with no Node-API headers on its include path. Declared here as well as
+ * in `nts_node.h` so this translation unit is well-formed on its own rather
+ * than only under `build.sh`'s `-include`. */
+void nts_napi_set_env(void *env);
+
 static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
     NtsValue thrown = nts_landing_thrown(landing);
     const NtsString *detail = nts_landing_detail(landing);
@@ -484,15 +572,16 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
 
 "#;
 
-/// One function's wrapper, or why it has none.
-fn wrapper(
+/// Every reason a function gets no wrapper, or what crosses if it does.
+///
+/// Separated from [`wrapper`] because they are two things: this one only ever
+/// says no, and everything below it only ever writes C. Reading a refusal meant
+/// scrolling past forty lines of `format!` to find the next one.
+fn crossings_of(
     func: &hir::Func,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
-    release_managed: bool,
-    return_is_borrowed: bool,
-    consumed_parameters: Option<&FxHashSet<u32>>,
-) -> Result<String, Skipped> {
+) -> Result<(Cross, Vec<Cross>), Skipped> {
     // A constructor or a method is reached through its class, and the class is
     // not something this can hand to JavaScript yet.
     if func.name.contains('#') {
@@ -530,6 +619,22 @@ fn wrapper(
     // Refused here rather than repaired, because the repair is the descriptor
     // question and that is a design rather than a patch. `void` joins it: a
     // parameter with no value to read has no name to give either.
+    // A rest parameter is an array the CALL gathers, so a wrapper handed one
+    // JavaScript array would have to decide whether it is the array or the
+    // first of the gathered arguments -- and treating every array parameter as
+    // rest is what made an ordinary one swallow the remaining arguments. The
+    // shape is on the parameter now, so the two are told apart rather than
+    // refused together.
+    if let Some(parameter) = func
+        .params
+        .iter()
+        .find(|parameter| parameter.shape == hir::ParamShape::Rest)
+    {
+        return Err(Skipped {
+            function: func.name.clone(),
+            reason: format!("takes a rest parameter `{}`", parameter.name),
+        });
+    }
     if let Some(parameter) = func
         .params
         .iter()
@@ -543,6 +648,20 @@ fn wrapper(
             reason: format!("takes {}, which crosses outward only", spell(&parameter.ty)),
         });
     }
+
+    Ok((ret, crossings))
+}
+
+/// One function's wrapper. Every refusal is [`crossings_of`]'s.
+fn wrapper(
+    func: &hir::Func,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+    release_managed: bool,
+    return_is_borrowed: bool,
+    consumed_parameters: Option<&FxHashSet<u32>>,
+) -> Result<String, Skipped> {
+    let (ret, crossings) = crossings_of(func, layouts, classes)?;
 
     let symbol = c_identifier(&func.name);
     let params: Vec<String> = func.params.iter().map(|p| c_type(&p.ty, layouts)).collect();
@@ -612,7 +731,7 @@ fn wrapper(
     out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(&args) {
-            if matches!(crossing, Cross::Str) {
+            if matches!(crossing, Cross::Str | Cross::Numbers) {
                 let _ = writeln!(
                     out,
                     "    if ({name} != NULL) nts_release((NtsHeader *){name});"
@@ -672,6 +791,7 @@ fn declare_argument(
         ),
         Cross::Bool => format!("    bool {name} = false;\n"),
         Cross::Str => format!("    NtsString *{name} = NULL;\n"),
+        Cross::Numbers => format!("    NtsArray *{name} = NULL;\n"),
         Cross::Object(_) | Cross::Void => String::new(),
     }
 }
@@ -698,6 +818,12 @@ fn unmarshal(
         ),
         Cross::Str => format!(
             "    if (!nts_napi_expect(env, nts_from_napi_string(env, argv[{index}], &{name}), \"expected a string argument\")) goto nts_napi_cleanup;\n"
+        ),
+        // A `number[]` is copied element by element. The descriptor comes from
+        // the runtime rather than from `program.c`, which keeps its own to
+        // itself -- see `nts_array_of_numbers`.
+        Cross::Numbers => format!(
+            "    if (!nts_napi_expect(env, nts_from_napi_numbers(env, argv[{index}], &{name}), \"expected an array of numbers\")) goto nts_napi_cleanup;\n"
         ),
         // An object argument would have to be *allocated*, and allocation needs
         // the layout's descriptor, which `program.c` keeps to itself. Reading a
@@ -786,6 +912,18 @@ fn marshal(
             }
             text.push_str(
                 "    if (!nts_napi_check(env, result_status, \"could not create a string\")) goto nts_napi_cleanup;\n",
+            );
+            text
+        }
+        Cross::Numbers => {
+            let mut text = format!(
+                "    NtsArray *result = {call};\n{after_call}    napi_status result_status = nts_to_napi_numbers(env, result, &out);\n"
+            );
+            if release_result {
+                text.push_str("    nts_release((NtsHeader *)result);\n");
+            }
+            text.push_str(
+                "    if (!nts_napi_check(env, result_status, \"could not create an array\")) goto nts_napi_cleanup;\n",
             );
             text
         }
@@ -928,7 +1066,7 @@ fn emit_module_init_prototype(program: &hir::Program, out: &mut String) -> bool 
 
 fn emit_namespaces(
     program: &hir::Program,
-    wrapped: &[(&str, &str)],
+    emitted: &[&str],
     skipped: &mut Vec<Skipped>,
     out: &mut String,
 ) {
@@ -939,8 +1077,8 @@ fn emit_namespaces(
             "    napi_value {object};\n    if (!nts_napi_check(env, napi_create_object(env, &{object}), \"could not create an exported namespace\")) return NULL;"
         );
         let mut whole = true;
-        for (property, emitted) in properties {
-            if !wrapped.iter().any(|(symbol, _)| *symbol == emitted.as_str()) {
+        for (property, name_of) in properties {
+            if !emitted.contains(&name_of.as_str()) {
                 whole = false;
                 skipped.push(Skipped {
                     function: format!("{name}.{property}"),
@@ -948,7 +1086,7 @@ fn emit_namespaces(
                 });
                 continue;
             }
-            let symbol = c_identifier(emitted);
+            let symbol = c_identifier(name_of);
             let key = c_string_literal(property);
             let _ = write!(
                 out,
@@ -1058,6 +1196,8 @@ pub fn emit(program: &hir::Program) -> Addon {
     // The emitted symbol and the name it goes out under, which differ wherever
     // two modules declared one name or a re-export renamed it.
     let mut wrapped: Vec<(&str, &str)> = Vec::new();
+    // Every symbol that got a wrapper, published or not.
+    let mut emitted: Vec<&str> = Vec::new();
     for func in &program.funcs {
         let names = published(program, func);
         // A namespace member needs a wrapper too, and is registered on the
@@ -1083,6 +1223,12 @@ pub fn emit(program: &hir::Program) -> Addon {
                 // `export const alias = impl.upper` are one function and two
                 // properties, and a loop that asked each function for *a* name
                 // published it once under whichever came first.
+                // The symbol is recorded whether or not it is published under
+                // a name of its own: a namespace member has no top-level name
+                // and still has a wrapper, and looking it up in `wrapped`
+                // reported the namespace as unbuildable while its wrapper sat
+                // in the same file.
+                emitted.push(func.name.as_str());
                 for publish in names {
                     wrapped.push((func.name.as_str(), publish));
                 }
@@ -1105,6 +1251,22 @@ pub fn emit(program: &hir::Program) -> Addon {
     // called until this week. `module#init` exists whenever the file has a
     // module-scope declaration at all, and where it does not there is nothing
     // to run and nothing is emitted.
+    // Hand the runtime the environment before anything can want it.
+    //
+    // A compiled program's diagnostics have nowhere to go in a standalone
+    // binary, so `runtime/node/internal/process.c` writes a warning to stderr.
+    // An addon is not standalone -- it is running *inside* node, where there is
+    // a `process` to emit on -- and `process.emitWarning` is the faithful
+    // route: node defers the `'warning'` event to a later tick, so an
+    // expectation registered after the module loads still catches it, which is
+    // what `common.expectWarning` in node's own tests needs and what a line on
+    // stderr can never satisfy.
+    //
+    // Before `module__init()`, and that is the whole of the ordering argument:
+    // `punycode`'s top-level code is where its `DEP0040` warning is emitted, so
+    // an env set afterwards is set too late. Only `NAPI_MODULE_INIT` has one to
+    // give.
+    out.push_str("    nts_napi_set_env(env);\n");
     if runs_module_init {
         let _ = writeln!(
             out,
@@ -1120,7 +1282,7 @@ pub fn emit(program: &hir::Program) -> Addon {
             "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
         );
     }
-    emit_namespaces(program, &wrapped, &mut skipped, &mut out);
+    emit_namespaces(program, &emitted, &mut skipped, &mut out);
     out.push_str("    return exports;\n}\n");
 
     report_unrepresentable_exports(program, &wrapped, &mut skipped);

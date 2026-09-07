@@ -1,0 +1,55 @@
+ideal 34
+allocated 34
+because Measured before it was argued, which is the wrong order and worth
+because saying. The first reading was eighty-five and the argument came
+because after it -- and having the number first is exactly what makes an
+because argument agree with it. So the argument was made against the emitted
+because counting code line by line instead, thirty-four necessary and
+because fifty-one not, and then the fifty-one were removed rather than
+because written down as a gap. The number below is what is left, and the
+because number this case exists to defend is neither of these two.
+because
+because Allocations: thirty-four, two per call. `"Invalid code point " + i`
+because takes the number through `nts_number_to_string_into`, which has a
+because frame slot and is free, and concatenates -- one heap string, because
+because a concatenation's length is its operands' and the call site does not
+because state theirs. `"range:" + message` is the second. The `RangeError`
+because itself is in the frame and costs nothing.
+because
+because Operations: thirty-four, one owned and one given back per string,
+because and it took two elisions to get there from eighty-five. Both were
+because arguments already written down and reaching nothing.
+because
+because The first is the retain and release on the *erased* frame object.
+because `own::counted_from` says an erased value costs what the value inside
+because costs and names this exact case -- "`throw new Error(m)` caught in
+because the same function erases an object that lives in the frame" -- and it
+because applied to nothing, because a frame object with reference fields IS
+because counted, so that its own death emits the walk over them. The name
+because emits no walk. Thirty-four operations, two per call, each reading an
+because immortal header and returning.
+because
+because The second is releasing `name`, which holds the literal
+because `"RangeError"` and nothing else. `own::costs_nothing` has answered
+because `true` for a `ConstString` since `constant-field` was written; what
+because stopped it is that `inert_slots` gave up on the whole function the
+because moment it saw a call. A callee can only write through what it is
+because handed, and both calls here are handed strings and a double -- so
+because the rule is now what it always meant, and the seventeen are gone.
+because
+because **What this case is really for is a release that happened too
+because early.** A frame object's header is immortal, so the retain that
+because would keep it alive returns immediately; what keeps its fields alive
+because is the frame, and `rc::release_value` gives them back where the
+because object's live range ends. Liveness ended that range at the `Erase`
+because that packs the reference for the throw -- so the message was
+because released while the handler was still about to read it, and the next
+because allocation reused the buffer.
+because
+because That is a wrong answer and not a leak, which is why it belongs here:
+because this harness checks that the counted answer matches the uncounted
+because one, and this case's answer is the length of a string built from the
+because message. Under the defect it read `range:range:d code point 12345`
+because where node says `range:Invalid code point 12345`. Nothing in the
+because corpus reached it -- the shape needs a computed message, a
+because frame-placed error, and a `catch` that reads it back.

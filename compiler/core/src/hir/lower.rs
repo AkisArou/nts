@@ -13921,6 +13921,125 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// `String.fromCodePoint(x)` throws a `RangeError` for anything that is
+    /// not a code point.
+    ///
+    /// The specification is: throw unless `x` is an integer in
+    /// `[0, 0x10FFFF]`. Three tests, and the third earns its place twice --
+    /// `NaN` fails every comparison, so `x < 0` and `x > 0x10FFFF` are both
+    /// false for it, and only `x !== trunc(x)` catches it. `-0` is an integer
+    /// and is not less than zero, which is the answer.
+    ///
+    /// Here rather than in the runtime, and that is the whole point: the C
+    /// helper printed the value and called `abort()`, so `ucs2.encode([NaN])`
+    /// took the process down where node throws something catchable. A runtime
+    /// cannot fix that on its own -- a `RangeError` is laid out by the
+    /// *program*, and the descriptor lives in the generated file -- so the
+    /// check belongs where the class can be built. Putting it in HIR also
+    /// means the JVM lane, which has its own `fromCodePoint`, is guarded by
+    /// the same three tests rather than by a second copy of them.
+    fn guard_code_point(&mut self, id: NodeId, point: ValueId) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let below = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: point,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let throwing = self.new_block();
+        let second = self.new_block();
+        let third = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: below,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: second,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(second);
+        let ceiling = self.push(
+            OpKind::ConstFloat(1_114_111.0),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let above = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: point,
+                rhs: ceiling,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: above,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: third,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(third);
+        let truncated = self.push(
+            OpKind::Unary {
+                op: UnOp::Trunc,
+                operand: point,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let whole = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: point,
+                rhs: truncated,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: whole,
+            then_target: carry_on,
+            then_args: Vec::new(),
+            else_target: throwing,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(throwing);
+        // The value is in the message, because node's is: `Invalid code point
+        // 1.5`, not a fixed sentence. That is the one place a provided error
+        // needs a message it cannot spell as a constant, which is why
+        // `throw_provided_error` grew a form taking the text as a value.
+        let text = HirType::Managed(ManagedType::String);
+        let prefix = self.push(
+            OpKind::ConstString("Invalid code point ".to_owned()),
+            text.clone(),
+            origin.clone(),
+        );
+        let printed = self.runtime_call(
+            "nts_number_to_string",
+            vec![point],
+            text.clone(),
+            origin.clone(),
+        );
+        let message = self.runtime_call("nts_concat", vec![prefix, printed], text, origin);
+        self.throw_provided_error_text(id, "RangeError", message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+        self.switch_to(carry_on);
+        Ok(())
+    }
+
     /// Build one of the provided error classes and throw it, from here.
     ///
     /// For a check the *language* specifies and a runtime helper cannot make.
@@ -13932,6 +14051,23 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         class: &str,
         message: &str,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let message = self.push(
+            OpKind::ConstString(message.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin,
+        );
+        self.throw_provided_error_text(id, class, message)
+    }
+
+    /// The same, for a message this compiler has to *compute* -- node puts the
+    /// offending value in `Invalid code point 1.5`, and a constant cannot.
+    fn throw_provided_error_text(
+        &mut self,
+        id: NodeId,
+        class: &str,
+        message: ValueId,
     ) -> Result<(), Diagnostic> {
         // The snapshot's type where the program named the class, and a
         // synthetic one where it did not.
@@ -13983,15 +14119,15 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         let text = HirType::Managed(ManagedType::String);
-        for (field, value) in [("message", message), ("name", class)] {
+        let name = self.push(
+            OpKind::ConstString(class.to_owned()),
+            text,
+            origin.clone(),
+        );
+        for (field, value) in [("message", message), ("name", name)] {
             let Some(at) = layout.index_of(field) else {
                 continue;
             };
-            let value = self.push(
-                OpKind::ConstString(value.to_owned()),
-                text.clone(),
-                origin.clone(),
-            );
             self.push(
                 OpKind::FieldSet {
                     object: error,
@@ -19532,6 +19668,11 @@ impl<'a> FuncBuilder<'a> {
             }
             (Intrinsic::UnaryCall(name), [argument]) => {
                 let operand = self.lower_expression(*argument)?;
+                // A code point the helper will not accept throws before it is
+                // reached. See `guard_code_point`.
+                if name == "nts_string_from_code_point" {
+                    self.guard_code_point(id, operand)?;
+                }
                 Ok(self.runtime_call(name, vec![operand], ty, origin))
             }
             (Intrinsic::BinaryCall(name), [left, right]) => {

@@ -938,8 +938,28 @@ fn inert_slots(
                     callee: super::Callee::Direct(name),
                     ..
                 } if harmless.contains(name) => {}
-                // A global is reachable from inside any callee, and a call that
-                // is not harmless can write through whatever it is handed.
+                // A callee can only write through what it is handed, so a call
+                // handed nothing that can lead to an object cannot reach one.
+                //
+                // A string and a scalar are the whole of that: neither has a
+                // reference field, so neither is a path to an allocation this
+                // function made. The objects tracked here are `ObjectNew`s and
+                // `ArrayNew`s of this function plus its parameters, and the
+                // only way one of those reaches a callee is as an argument --
+                // a store that put it somewhere else is a `FieldSet` recorded
+                // above, and a global is `GlobalSet`, which still gives up.
+                //
+                // `caught-message` is what asked. Its `name` slot holds the
+                // literal `"RangeError"` and nothing else, so the walk over the
+                // dying error's fields loads an immortal word and releases it
+                // -- seventeen times, once per call -- and the whole reason
+                // that was not already elided is that the function also
+                // concatenates two strings. Two string arguments, and the
+                // blanket rule gave up the entire function for them.
+                OpKind::Call { args, .. }
+                    if args
+                        .iter()
+                        .all(|argument| !leads_to_an_object(&func.values[argument.0 as usize].ty)) => {}
                 OpKind::GlobalSet { .. } | OpKind::Call { .. } => {
                     return rustc_hash::FxHashSet::default();
                 }
@@ -984,6 +1004,22 @@ fn inert_slots(
 ///
 /// A null, an object that lives in the frame, or a read of a slot that only
 /// ever holds one of those.
+/// Whether a value of this type can be a path to an object with fields.
+///
+/// Deliberately a short allow-list rather than a deny-list: a type this does
+/// not recognise answers `true` and gives up, which is the direction a wrong
+/// answer here has to fail in.
+fn leads_to_an_object(ty: &HirType) -> bool {
+    !matches!(
+        ty,
+        HirType::Int { .. }
+            | HirType::Float { .. }
+            | HirType::Bool
+            | HirType::Void
+            | HirType::Managed(super::ManagedType::String)
+    )
+}
+
 fn costs_nothing(
     func: &Func,
     inert: &rustc_hash::FxHashSet<(ValueId, u32)>,
@@ -1567,7 +1603,29 @@ fn counted_from(
         // through to -- `throw new Error(m)` caught in the same function erases
         // an object that lives in the frame, and the wrapper was retained on
         // the edge into the handler and released on both ways out of it.
-        OpKind::Erase { value: inner } => counted_from(func, layouts, inner, seen),
+        OpKind::Erase { value: inner } => {
+            // ...and a frame object is the case that argument was written for
+            // and did not reach. It is counted -- see `counted_here` -- only so
+            // that its own death emits the walk over its reference fields, and
+            // an `Error` always has two, so the intended elision applied to
+            // exactly nothing. The *name* emits no walk: `rc::release_value`
+            // takes that branch on `ObjectNew { frame: true }` and this is an
+            // `Erase`, so counting it is a retain and a release that each read
+            // an immortal header and return.
+            //
+            // The duty stays with the object, which is where the walk is. What
+            // makes that safe is the other half of this repair: liveness keeps
+            // a frame object alive for as long as anything still names it, so
+            // the walk is no longer emitted before the handler has read the
+            // fields.
+            if matches!(
+                func.values[inner.0 as usize].kind,
+                OpKind::ObjectNew { frame: true }
+            ) {
+                return false;
+            }
+            counted_from(func, layouts, inner, seen)
+        }
         _ => counted_here(func, layouts, value),
     }
 }

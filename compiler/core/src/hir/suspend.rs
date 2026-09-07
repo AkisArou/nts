@@ -368,6 +368,7 @@ fn rewrite(func: &Func, index: usize) -> Result<Rewritten, Diagnostic> {
     let layout = Layout {
         types: vec![frame_id],
         name: frame_name,
+        interfaces: Vec::new(),
         fields: frame_fields(func, &spilled, mode, generator.map(|frame| &frame.yields)),
         methods: Vec::new(),
         // A suspended frame extends nothing.

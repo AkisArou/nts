@@ -239,6 +239,8 @@ void nts_environment_install_platform(NtsHeader *runtime) {
   nts_release(previous);
 }
 
+bool nts_environment_has_platform(void) { return nts_env->platform != NULL; }
+
 NtsHeader *nts_environment_platform(void) {
   if (!nts_env->platform) {
     fprintf(stderr,
@@ -1475,6 +1477,16 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
 /* Zeroed rather than left as holes: there is no `undefined` in a double, so a
  * hole has no representation to leave behind. This is what `new Array(n)` gets,
  * and anything else the source can read before it writes. */
+/* The same shape `codegen/c` emits for a `double` element type: kind, element
+   size, no references, no erased elements, and a name the runtime prints. */
+static const NtsDescriptor nts_desc_number_array = {
+    NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0, 0, 0, 0, "double[]", 0, 0,
+};
+
+NtsArray *nts_array_of_numbers(double length) {
+  return nts_array_new(&nts_desc_number_array, length);
+}
+
 NtsArray *nts_array_new(const NtsDescriptor *descriptor, double length) {
   NtsArray *array = nts_array_allocate(descriptor, length);
   memset(array->elements, 0, (size_t)array->header.length * descriptor->size);
@@ -2749,22 +2761,38 @@ NtsString *nts_string_from_char_code_into(NtsHeader *into, double code) {
  * name for the one above.
  *
  * A code point above 0xFFFF is *two* code units, so this can return a string of
- * length 2 where `fromCharCode` always returns one -- and node throws a
- * RangeError for a value that is not an integer in [0, 0x10FFFF], which this
- * cannot do, so it stops and says which value. Answering with a lone surrogate
- * or a truncation would be a wrong string rather than a missing feature. */
+ * length 2 where `fromCharCode` always returns one.
+ *
+ * **The range check is not here.** node throws a `RangeError` for anything that
+ * is not an integer in [0, 0x10FFFF], and a `RangeError` is laid out by the
+ * *program* -- its descriptor lives in the generated file -- so this function
+ * has nothing to allocate and never did. It used to print the value and
+ * `abort()` on that reasoning, which took the process down where node throws
+ * something catchable: `punycode.ucs2.encode([NaN])` could not be tested at all
+ * rather than failing one assertion. `hir::lower::guard_code_point` makes the
+ * check where the class can be built, which is where `"x".repeat(-1)` already
+ * put its own.
+ *
+ * What is left here is the empty string, and it is chosen the same way
+ * `nts_str_repeat` chooses its clamp: a value that reaches this line got past
+ * the guard, so the guard is broken, and the useful behaviour is the one a
+ * differential can SEE. An `abort()` is a crashed case, which the harness
+ * scores as declined and the step still reports as agreement -- measured, by
+ * moving the guard's ceiling one past `0x10FFFF` and watching the suite stay
+ * green. An empty string is a wrong answer, and a wrong answer is caught. */
 NtsString *nts_string_from_code_point(double point) {
+  return nts_string_from_code_point_into(NULL, point);
+}
+
+NtsString *nts_string_from_code_point_into(NtsHeader *into, double point) {
   if (!(point >= 0.0 && point <= 1114111.0) || point != nts_to_integer(point)) {
-    fprintf(stderr,
-            NTS_REFUSED "String.fromCodePoint(%g), which is not a code point\n",
-            point);
-    abort();
+    return nts_str_build(into, 0, 0);
   }
   uint32_t value = (uint32_t)point;
   if (value <= 0xFFFFu) {
-    return nts_string_from_char_code((double)value);
+    return nts_string_from_char_code_into(into, (double)value);
   }
-  NtsString *out = nts_str_build(NULL, 2, 1);
+  NtsString *out = nts_str_build(into, 2, 1);
   uint16_t *units = NTS_ELEMENTS(out, uint16_t);
   value -= 0x10000u;
   units[0] = (uint16_t)(0xD800u + (value >> 10));
