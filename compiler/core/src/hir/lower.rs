@@ -2089,6 +2089,63 @@ fn lower_module_initializer(
     }
 }
 
+/// The entry modules' exports, as `(emitted name, published name)`.
+///
+/// See [`super::Program::public_api`] for why a backend needs this and why
+/// `Func::exported` cannot stand in for it.
+///
+/// "Entry" is `evaluation_order`'s rule -- a module with no incoming edge --
+/// and it has to be, because it is the one this program already treats as the
+/// thing node would run. Computed separately from that function rather than
+/// returned by it: that one answers a question about *order* and this one
+/// answers a question about *surface*, and they share only the edges.
+///
+/// The alias hop is what makes `export * from "./posix.ts"` work. The frontend
+/// has already followed re-export chains to the end, so one `aliased` read
+/// reaches the declaration however many files the name travelled through --
+/// which is most of `runtime/node`, where a module's `main.ts` is usually a
+/// list of re-exports and almost nothing is declared in the file that publishes
+/// it. Without the hop this returns the entry's own declarations, which for
+/// `path` is none of them.
+fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> Vec<(String, String)> {
+    let mut imported = vec![false; snapshot.modules.len()];
+    for module in &snapshot.modules {
+        for target in &module.imports {
+            if let Some(flag) = imported.get_mut(target.0 as usize) {
+                *flag = true;
+            }
+        }
+    }
+    let mut api: Vec<(String, String)> = Vec::new();
+    for (module, into) in snapshot.modules.iter().zip(&imported) {
+        if *into {
+            continue;
+        }
+        for (published, symbol) in &module.exports {
+            let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
+                continue;
+            };
+            // One hop, because the frontend followed the chain already.
+            let record = record
+                .aliased
+                .and_then(|to| snapshot.symbols.get(to.0 as usize))
+                .unwrap_or(record);
+            let Some(&declaration) = record.declarations.first() else {
+                continue;
+            };
+            let emitted = naming
+                .qualified
+                .get(&declaration)
+                .cloned()
+                .unwrap_or_else(|| record.name.clone());
+            api.push((emitted, published.clone()));
+        }
+    }
+    api.sort_unstable();
+    api.dedup();
+    api
+}
+
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     let mut lowered = Lowered::default();
@@ -2228,6 +2285,8 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
 
+    lowered.program.public_api = public_api(snapshot, &shared.naming);
+
     canonicalize_objects(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
     // function the checker knows about is either lowered or refused, and never
@@ -2328,6 +2387,33 @@ fn is_signature_name(name: &str) -> bool {
     name.starts_with("Fn") && name.contains("__")
 }
 
+/// Whether this layout's **name** is its identity.
+///
+/// Three families of layout are deliberately empty, or deliberately identical
+/// in shape, and each is nominal: a provided error class, a function type, and
+/// a class used as a value. Record 0096 predicted the family and said why --
+/// shape cannot answer a nominal question about a shape with nothing in it --
+/// and the guard against it was then written three times, once per family, each
+/// time requiring the *same* family on both sides.
+///
+/// Three same-family guards leave the three CROSS-family pairs open, and node's
+/// `path` walked into one. `Ctor_Error` is an empty token; `Fn...` is an empty
+/// signature; neither guard looked at the other, so `same_shape` merged them.
+/// The result was `normalizeString`'s fourth parameter -- `isPathSeparator`, a
+/// function -- emitted with the type of the `Error` constructor, and the only
+/// vtable in the program naming a `Ctor_Error#call` that no pass ever emits.
+/// The C did not compile, which is the good outcome; the same merge in a
+/// program without that slot is a wrong type nobody is told about.
+///
+/// So the rule is stated once and over both sides rather than one side twice: a
+/// layout whose name is its identity does not merge with a differently-named
+/// layout, whatever family the other one is in.
+fn nominal_name(name: &str) -> bool {
+    super::builtin::is_error(name)
+        || is_signature_name(name)
+        || super::builtin::is_constructor_name(name)
+}
+
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
@@ -2352,18 +2438,8 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // them into one layout with one descriptor -- and `e instanceof
             // TypeError` was then true of a `RangeError`, and an uncaught
             // `TypeError` printed whichever of the four had been laid out first.
-            // Nothing could see either until `instanceof` existed.
-            let two_errors = super::builtin::is_error(&known.name)
-                && super::builtin::is_error(&layout.name)
-                && known.name != layout.name;
-            // Function types are the second family shape cannot answer for, and
-            // for the same reason: every one of them is *empty*. A function
-            // type is a signature rather than a class, so `Fn` layouts have no
-            // fields, no methods and no base -- and `same_shape` therefore says
-            // all of them are one layout.
-            //
-            // That was harmless while nothing dispatched through a function
-            // type. It stopped being harmless the moment a closure declared its
+            // Nothing could see either until `instanceof` existed, and two
+            // function types were one layout until a closure declared its
             // `call` in one: `examples/function-values` collapsed
             // `(number) => number`, `(number) => void` and
             // `(number, number) => number` into a single layout holding eight
@@ -2372,28 +2448,15 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // `Closure9.call is (D)V where the method it overrides is (D)D` --
             // and nothing on a lane with pointers could.
             //
-            // The names are structural, so this merges two ids for one written
-            // signature and separates two signatures. That is the distinction
-            // `same_shape` cannot make about a shape that is empty.
-            let two_signatures = is_signature_name(&known.name)
-                && is_signature_name(&layout.name)
-                && known.name != layout.name;
-            // The third family, and the third for the same reason. A class used
-            // as a value is an object that exists to have an address: no
-            // fields, no methods, no base, so `same_shape` says every one of
-            // them is every other one -- and `err.constructor === TypeError`
-            // would then be true of a `RangeError`, which is the same wrong
-            // answer the error classes themselves gave before `two_errors`.
-            //
-            // Record 0096 said this shape would recur and why: shape cannot
-            // answer a nominal question about a shape with nothing in it.
-            let two_tokens = super::builtin::is_constructor_name(&known.name)
-                && super::builtin::is_constructor_name(&layout.name)
-                && known.name != layout.name;
+            // These were three separate tests, one per family, and each asked
+            // whether BOTH sides were in that family. See `nominal_name` for
+            // what that missed and what node's `path` did with it. The names
+            // are structural, so this still merges two ids for one written
+            // signature and separates two signatures.
+            let named_apart = known.name != layout.name
+                && (nominal_name(&known.name) || nominal_name(&layout.name));
             known.types.iter().any(|ty| layout.types.contains(ty))
-                || (!two_errors
-                    && !two_signatures
-                    && !two_tokens
+                || (!named_apart
                     && known.same_shape(&layout.fields, &layout.methods, layout.base))
         }) {
             for ty in layout.types {

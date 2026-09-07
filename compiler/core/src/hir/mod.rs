@@ -1378,6 +1378,35 @@ pub struct Program {
     /// question the provider does not answer. Without this field the backend
     /// could not tell the two cases apart.
     pub provider: Provider,
+    /// The program's public surface: `(emitted name, name it is published as)`.
+    ///
+    /// The exports of the *entry* modules -- those nothing in this program
+    /// imports -- resolved through re-export aliases to the declaration that
+    /// actually lowered, and paired with the name the entry publishes it under.
+    ///
+    /// Recorded rather than derived because a backend is handed the program
+    /// alone, and `evaluation_order` already computes the entry rule and throws
+    /// it away. Its comment says why keeping it is the point: "the frontend
+    /// does not know the product -- a library's surface is its exports and an
+    /// executable's is its entry, and that choice is made after lowering."
+    ///
+    /// [`Func::exported`] cannot answer this. It means "the declaration carries
+    /// `export`", set from a modifier that does not know which file it is in,
+    /// so an addon built from it publishes every `export` in the whole linked
+    /// program -- `os.node` exported `normalizeEncodingName`, `byteLengthIn`
+    /// and `revokeObjectURL`, three private helpers inside `node:buffer`, and a
+    /// `string_decoder` addon exported a Blob URL revoker. The flag is not
+    /// wrong and is not changed: a helper reached by an import is genuinely a
+    /// reachability root. It is just answering a different question.
+    ///
+    /// Both halves of the pair are needed and neither can be derived from the
+    /// other. Two modules may declare one name -- `path`'s `posix.ts` and
+    /// `win32.ts` both have `basename` -- so the emitted name is qualified as
+    /// `basename@posix`, and publishing under a name stripped back at the `@`
+    /// would publish both under `basename` and let the second silently win.
+    /// And a re-export may rename, so the published name is the entry's, not
+    /// the declaration's.
+    pub public_api: Vec<(String, String)>,
 }
 
 /// A variable that outlives every call.
@@ -2253,7 +2282,6 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     // backend is handed the program alone and one of them has to act on this.
     // Set here, beside the pass it describes, so the two cannot drift.
     program.provider = options.provider;
-
     // Bounds checks last, once the facts are as sharp as they are going to get:
     // a check is removed only where the index was proven, and specialization
     // and folding are what sharpen the index.
