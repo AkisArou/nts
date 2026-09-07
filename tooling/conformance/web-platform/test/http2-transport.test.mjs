@@ -395,3 +395,61 @@ test("HTTP/2 Fetch transport validates declared body length before opening a soc
   assert.equal(calls, 0);
   transport.close();
 });
+
+suite("graceful drain waits for provider work from an open it cancelled", async (t) => {
+  const primitives = createHostNodePrimitives();
+  // A connector whose cancellation settles late: it observes the abort but keeps
+  // provider work outstanding for a while afterwards, which is ordinary for a real
+  // socket stack and is exactly the case a drain must not walk away from.
+  let observedAbort = false;
+  let providerWorkOutstanding = true;
+  let releaseConnect;
+  const connectReleased = new Promise((resolve) => {
+    releaseConnect = resolve;
+  });
+  const connector = {
+    connect(_address, signal) {
+      signal.subscribe(() => {
+        observedAbort = true;
+      });
+      return connectReleased.then(() => {
+        providerWorkOutstanding = false;
+        throw new Error("the cancelled connect finally settled");
+      });
+    },
+  };
+
+  const transport = new Http2Transport(connector, primitives.scheduler);
+  t.after(() => transport.close());
+  const url = primitives.urls.parse("http://drain.example/slow");
+  const dispatch = transport.dispatch(transportRequest(url));
+  dispatch.catch(() => {});
+  // Let the open reach the connector before draining.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    transport.stats.connecting,
+    1,
+    "an open must be in flight for this test to mean anything",
+  );
+
+  let drained = false;
+  const drain = transport.drain().then(() => {
+    drained = true;
+  });
+  assert.equal(observedAbort, true, "drain must cancel an in-flight open");
+
+  // Give drain every opportunity to settle early.
+  for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    drained,
+    false,
+    "drain reported completion while provider work from a cancelled open was outstanding",
+  );
+  assert.equal(providerWorkOutstanding, true);
+
+  releaseConnect();
+  await drain;
+  assert.equal(drained, true);
+  assert.equal(providerWorkOutstanding, false);
+  assert.equal(transport.stats.connecting, 0);
+});

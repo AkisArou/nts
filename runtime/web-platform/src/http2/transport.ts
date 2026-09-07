@@ -263,11 +263,26 @@ export class Http2Transport implements FetchTransport {
 
   private async finishDrain(): Promise<void> {
     const reason = new TypeError("HTTP/2 transport is draining");
+    // Capture the in-flight opens before dropping them. Cancelling an open does not
+    // end the provider work it started: a connector may observe the abort and keep a
+    // socket attempt outstanding well afterwards. A drain that forgot these would
+    // report completion while that work was still running.
+    const outstanding = [...this.opening.values()];
     for (const cancellation of this.openingCancellation.values()) cancellation.abort(reason);
     this.openingCancellation.clear();
     this.opening.clear();
     this.openingEstablished.clear();
     this.current.clear();
+    // Settlement, not success: a cancelled open ends as a rejection, and that is the
+    // normal ending here rather than a failure of the drain.
+    await Promise.all(
+      outstanding.map((open) =>
+        open.then(
+          () => {},
+          () => {},
+        ),
+      ),
+    );
     const draining: Promise<void>[] = [];
     for (const connection of this.all) draining.push(connection.drain());
     await Promise.all(draining);

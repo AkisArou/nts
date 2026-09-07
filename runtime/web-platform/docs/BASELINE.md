@@ -2343,3 +2343,48 @@ these entry points take an `AbortSignal`. An earlier revision that detected the
 capability with `in` instead of declaring it produced six new primaries and no extra
 cascades; the declared version was kept for design reasons and happens to cost two
 fewer primaries and two more cascades.
+
+## A cancelled open is not a finished open
+
+Graceful HTTP/2 drain reported completion while provider work it had just cancelled
+was still running. `finishDrain()` aborted every in-flight open, cleared the map of
+their promises, and then awaited only the connections that already existed. An open
+still inside `connector.connect()` was simply dropped.
+
+Cancelling an open does not end the work it started. A connector observes the abort
+and may keep a socket attempt outstanding well afterwards, which is ordinary for a real
+socket stack; on a provider whose cancellation settles late the gap is wide. During it,
+`drain()` had already resolved, so a caller that treats drain as "no provider work
+remains" — the reason to prefer it over `close()` — was told something untrue.
+
+The fix snapshots the in-flight opens before dropping them and awaits their
+*settlement* before draining connections. A cancelled open ends as a rejection, and
+that is its normal ending here rather than a failure of the drain. Ordering matters:
+opens are awaited first, because an open that wins the race still finds `accepting`
+false, closes the bytes it obtained, and removes itself.
+
+This makes drain's completion unbounded by design when a provider never settles a
+cancelled connect. That is the correct reading of a graceful drain, and `close()`
+remains the forceful path that does not wait; the two were already distinguished by
+`dcfb2a78` and this preserves that distinction rather than blurring it.
+
+The precondition is the strongest available, because the defect was in shipped code
+rather than introduced to be caught. The new test drives an open into a connector that
+observes the abort but keeps work outstanding, asserts that an open really is in flight
+before draining, and then gives drain twenty turns to settle early. Against the previous
+implementation it failed with "drain reported completion while provider work from a
+cancelled open was outstanding"; against the fix, drain stays pending until the
+connector's work settles and only then resolves, with `stats.connecting` back to zero.
+
+The focused HTTP/2 transport corpus passes 8/8 and the complete local
+Node-host/real-socket corpus passes 418/418 with zero skipped. The pinned upstream
+corpus is unchanged at 2,300 total, 2,286 applicable, 2,278 passing, 8 failing and 14
+named not-applicable. The root TypeScript solution build is green.
+
+Measured with the same pinned binary built at `43fda4d3`: before, 1,274 primary
+`NTS1001` and 230 `NTS1003`; after, 1,275 primary and 229 cascades, with zero
+`NTS1004`, zero `NTS4xxx` and no invalid HIR. The one new primary is `Map#values`
+reaching the iteration protocol, which is prerequisite five in the integration plan;
+writing the snapshot as a `for...of` push loop instead moved the message rather than
+removing it, at the identical total, so the concise form that states "snapshot before
+mutating" was kept.

@@ -327,9 +327,10 @@ was found to be what actually drains ART's reference queue.
    endpoint is not one connection pool" in `runtime/web-platform/docs/BASELINE.md`.
 5. Done. The public constructor context-injection paths are removed and internal
    construction and identity are preserved; see the ledger entry named above.
-6. Audit graceful HTTP/2 drain against a connect that is still opening. In particular,
-   prove `drain()` cannot report completion while provider work from a cancelled open
-   remains outstanding, even if cancellation settles late.
+6. Done, and it found a real defect. `drain()` did report completion while provider
+   work from a cancelled open was outstanding; it now awaits the settlement of every
+   open it cancelled. See "A cancelled open is not a finished open" in
+   `runtime/web-platform/docs/BASELINE.md`.
 7. Reconcile the exact eight upstream structural failures with the current
    compiler/common-runtime work. Do not turn them into local prototype or `.call`
    tricks.
