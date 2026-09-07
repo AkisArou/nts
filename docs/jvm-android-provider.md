@@ -221,11 +221,18 @@ Three things, and only one of them is code.
   manifestation is tested; only the hardware reordering that would expose a
   missing barrier is not. See `docs/records/0181` for the five routes and which
   one worked.
-- **An API-26 emulator or device**, for the coverage the plan names and a
-  desktop JVM cannot give: lifecycle, Wi-Fi/cellular transitions, the
-  `NetworkSecurityPolicy` cleartext check, private and debug CAs, background
-  restrictions, slow peers and DNS races. `tooling/android/on-device.sh` is
-  written and its paths are checked; it has never been run against hardware.
+- **An ARM device.** The emulator on this machine is `x86_64`, so the ordering
+  hazard is still unobtainable there too -- and an ARM system image under full
+  emulation is a model of a weak memory system rather than one, which is worth
+  no more than the x86 run.
+- **A device at API 26 specifically, and one that is not an emulator.** What
+  runs today is API 36 on `x86_64`, which is real ART -- concurrent copying
+  collector with read barriers, Conscrypt over BoringSSL, framework natives
+  `dalvikvm` does not link -- and it covers the cleartext policy, TLS with a
+  private root, hostname rejection, handshake timeouts, capacity, timers, close
+  races and the two-adapter HTTP corpus. What it does not cover is the API floor
+  the library actually declares, Wi-Fi/cellular transitions, background
+  restrictions and DNS races, which need a device with a radio.
 - **HTTP/2 against a real controlled peer**, which is deferred rather than
   missing. `OkHttpNetworking.client()` pins the protocol list to HTTP/1.1 alone
   and asserts it, because the deterministic reference speaks HTTP/1.1 and the
@@ -244,7 +251,22 @@ Three things, and only one of them is code.
   aliases and `slice` copies. Ten cases are written and waiting; raised with the
   owner of `hir::lower`.
 
-Everything else the plan asks of this lane has evidence. What arrived most
+Everything else the plan asks of this lane has evidence, and since
+`tooling/android/on-device.sh` started running, that evidence is from ART rather
+than from a desktop JVM standing in for it:
+
+    ok 1..11  org.nts.web.NetworkPrimitivesTest
+    EnvTest          26 checks, 0 failures
+    CloseRaceTest    240 checks, 0 failures
+    Stress           16 producers x 200 rounds, credits balanced
+    ok 1..11  again, against the R8-shrunk library
+    both-http        78 checks, 0 failures
+    device: every suite green on ART
+
+The last of those is the plan's device evidence that transparent decompression
+cannot alter exposed headers unnoticed. Sabotaged on the device as well as on
+the desktop -- removing the adapter's explicit `Accept-Encoding` fails it three
+ways, on the headers and on 62 encoded bytes arriving as 52 decoded ones. What arrived most
 recently, and what it cost:
 
 - **Typed arrays lower and run.** `examples/typed-arrays` agrees with node on

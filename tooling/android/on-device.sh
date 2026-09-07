@@ -156,6 +156,37 @@ else
   echo "--- no cached R8; run \`cargo test -p nts-codegen-jvm --test android\` first to pin and fetch it"
 fi
 
+# The two-adapter HTTP corpus, on the device.
+#
+# The desktop run proves the production adapter and the deterministic reference
+# expose the same status, headers and body bytes. On ART it is a different
+# OkHttp -- Conscrypt over BoringSSL rather than JSSE, a concurrent copying
+# collector, and a dex that went through d8 -- so the transparent-decompression
+# case is the one worth having here: the plan asks for device evidence that
+# decompression cannot alter exposed headers unnoticed, and that is what this
+# corpus is for.
+#
+# OkHttp goes in as an **input** here rather than as a library, because unlike
+# the R8 run this dex has to actually execute it. That is the same distinction
+# `the_pinned_dependencies_dex_at_the_same_api_floor` makes: shrink ours, run
+# theirs.
+mkdir -p "$work/http/classes" "$work/http/dex"
+javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/http/classes" \
+  "$here"/runtime/jvm/web-platform/android/src/okhttp/java/org/nts/web/*.java \
+  "$here"/compiler/codegen/jvm/tests/android/BothHttp.java
+# shellcheck disable=SC2046
+"$tools/d8" --min-api 26 --lib "$platform" --output "$work/http/dex" \
+  "$jar" $(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar) \
+  $(find "$work/http/classes" -name '*.class')
+adb push "$work/http/dex/classes.dex" /data/local/tmp/nts-bothhttp.dex > /dev/null
+echo "--- BothHttp, both adapters over one server"
+out=$(adb shell "CLASSPATH=/data/local/tmp/nts-bothhttp.dex app_process /data/local/tmp BothHttp" 2>&1)
+echo "$out"
+# The count, not only the zero: a corpus that stopped running half its cases
+# reports no failures perfectly well.
+case "$out" in *"78 checks, 0 failures"*) ;; *) failed=1 ;; esac
+adb shell rm -f /data/local/tmp/nts-bothhttp.dex
+
 adb shell rm -f /data/local/tmp/nts-device.dex /data/local/tmp/store.p12
 [ "$failed" -eq 0 ] || { echo "device run failed"; exit 1; }
 echo "device: every suite green on ART"
