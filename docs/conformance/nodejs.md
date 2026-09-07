@@ -2895,6 +2895,25 @@ what `punycode/shape.mjs` does and says it does. Measured against node for all
 | `url` | node `Url, parse, resolve` — ours `URL, URLSearchParams, Url` |
 | `util` | node `_errnoException, …` — ours `TextDecoder, TextEncoder, …` |
 
+**Exported function arity diverges too, and is recorded on the same terms.**
+`fn.length` is observable and node's suite does assert it in places, though not
+on any of these:
+
+    querystring.unescapeBuffer     1  node 2
+    url.URL                        0  node 1
+    url.URLSearchParams            1  node 0
+    url.fileURLToPath              2  node 1
+    url.fileURLToPathBuffer        2  node 1
+    util._errnoException           3  node 0
+    util._exceptionWithHostPort    5  node 0
+    util.isDeepStrictEqual         2  node 3
+    events.EventEmitterAsyncResource  1  node 0
+
+Several have visible causes — node's `_errnoException` is bound, so its `length`
+is 0 where a plain declaration reports its parameters — and none is reached by a
+pinned test, or the sweep would not be at 1,790. Listed so the next person to
+find one knows it was seen rather than missed.
+
 **Exactly one pinned test in node's whole `parallel/` suite enumerates a
 module's keys** (`test-permission-fs-supported.js`, and the permission model is
 not in this profile), so the oracle cannot see any of this. It is listed because
