@@ -309,6 +309,7 @@ compiler against our house style.
     cargo test -p nts-codegen-jvm --test store   # the durable store, and the syscalls a commit makes
     sh tooling/android/on-device.sh          # the same suites on ART, plus the R8-shrunk library
     sh tooling/android/barrier.sh            # does `volatile` reach the compiler and make a fence
+    sh tooling/android/arm-barrier.sh        # the same question of the arm64 compiler
     sh tooling/jvm/sabotage.sh <edit> <driver>   # prove one can fail, without breaking the tree
 
 Every Java driver reports a **check count** and every harness asserts the number
@@ -324,20 +325,38 @@ leaves wrong source in a checkout three sessions build from, for a window
 
 Two pieces of hardware, and one protocol that is not this lane's to write.
 
-- **An arm64 host, or an ARM device.** The image is installed and unusable:
+- **An ARM device, for the race itself.** The emulator will not help:
 
       FATAL | QEMU2 emulator does not support arm64 CPU architecture
 
-  The SDK emulator runs an arm64 guest only on an arm64 host. So the
-  publication race of `docs/records/0181` is still unobtainable, and so is
-  seeing ART emit `dmb ish` -- which needs no race, only an ARM compiler, and
-  would have been worth having.
+  The SDK emulator runs an arm64 guest only on an arm64 host, so showing a
+  reader observe a half-published object -- the race `docs/records/0181` is
+  about -- still needs two cores executing ARM64 concurrently and there are
+  none here.
 
-  What runs is the other half, on x86_64: `tooling/android/barrier.sh` compiles
-  two methods differing only in the keyword with **ART's own AOT compiler** and
-  disassembles them with its own dumper. `volatile` gets `lock add [rsp], 0`,
-  plain gets nothing. Not the race -- the compiler on the platform we ship to
-  discharging the obligation the JMM gives it.
+  **The compiler's half is no longer missing**, and this section used to say it
+  was. `tooling/android/arm-barrier.sh` runs ART's own **arm64** `oatdump`
+  under `qemu-user` over the arm64 boot image and compares a volatile write
+  against a plain one:
+
+      void java.util.concurrent.atomic.AtomicInteger.set(int)   volatile int value
+        stlr w2, [x16]              <- release store
+      void java.io.CharArrayWriter.reset()                      plain int count
+        str wzr, [x1, #20]          <- plain store
+
+  `stlr` is ARM64's release store, emitted for the volatile field and not for
+  the plain one, by the compiler that ships on the architecture this lane
+  targets. `barrier.sh` beside it asks the same question of x86_64 and gets
+  `lock add [rsp], 0`.
+
+  Two limits, because they are the difference between this and the race.
+  **It is not our code**: `dex2oat` under `qemu-user` will not cross-compile a
+  dex -- it opens the file, closes it and exits, with its diagnostics going to
+  a `logd` that a user-mode sysroot does not have, probed and absent 1,092
+  times in one run. So the evidence is Android's own compiled code, and what
+  carries across is the compiler rather than the class. **And it is not
+  execution**: nothing ARM64 is run for its behaviour, only disassembled, so an
+  emulator with wrong semantics would print the same bytes.
 
 - **A stable way to produce a network transition**, which is not the same as a
   radio and is the correction to what this said before. The emulator carries
