@@ -369,14 +369,25 @@ with the state after that work.
    subresource integrity, which had been accepted on `Request` and enforced nowhere;
    and a portable deterministic virtual-time `Scheduler`.
 
-   The **WebSocket server** row is the largest one still open and is now partly built.
-   Its handshake exists — request validation, the accept derivation, subprotocol
+   The **WebSocket server** row is the largest one still open and is now substantially
+   built. Its handshake exists — request validation, the accept derivation, subprotocol
    selection and RFC 7692 `permessage-deflate` negotiation from the server side — and
-   the canonical client completes it over a real socket. What does not exist is a
-   server: no connection lifecycle, no session, no separate public module, and nothing
-   connecting the negotiated compression parameters to the shared codec, which is
-   currently wired for the client direction only. That codec reuse is the next real
-   piece, and it is a refactor of message assembly rather than new protocol work.
+   so does a server-side session: masking is the only asymmetry in the framing, so the
+   message engine took a role rather than being written twice, and
+   `adoptServerWebSocketSession` drives it over a connection the caller has upgraded.
+   The canonical client and a server built from these pieces round-trip text, binary
+   and compressed messages over a real socket.
+
+   What does not exist is the surrounding server: no accept loop, no connection
+   lifecycle owner, no backpressure policy above the session, and no separate public
+   module or package. The plan asks for all of those. Note that the last is a packaging
+   decision touching repository layout, so it is worth agreeing before building.
+
+   The **Testing and observability** row is now essentially closed: mock and snapshot
+   transports, typed diagnostics, statistics, a portable deterministic virtual-time
+   `Scheduler`, seeded protocol fuzzing with asserted generator coverage, and an
+   asserted error taxonomy. What remains there is opt-in tracing beyond the existing
+   diagnostics, if anything.
 
 ## Reproduction commands
 
