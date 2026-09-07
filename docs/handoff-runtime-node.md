@@ -105,6 +105,26 @@ courtesy on top of it for builds and test sweeps.
 
 ## Git
 
-Commit through a private `GIT_INDEX_FILE` and run a plain `git reset` after.
-Three sessions share one `.git/index`; `git add` fights over it, and moving HEAD
-without the reset leaves the others seeing phantom deletions.
+Name the paths on the commit itself. No staging, no private index, no reset:
+
+```
+git commit -m "..." -- <paths>
+```
+
+or `tooling/gate/commit-mine.sh -F <message-file> -- <paths>`, which does the
+same and refuses a workspace that does not lint.
+
+**This paragraph used to say the opposite** — commit through a private
+`GIT_INDEX_FILE` and `git reset` after — and that recipe removed **1,121 files
+in one commit**. A private index built from a partial tree does not record the
+files it was never told about, so the commit reads as a mass deletion of
+everything outside it. The reset afterwards does not undo a commit.
+
+Three sessions share one `.git/index`, which is the real problem the private
+index was reaching for, and a partial commit solves it without the hazard:
+`git commit -- <paths>` never consults staged state, so nothing another session
+has in flight can be swept in.
+
+One thing naming paths does *not* protect against, learned the same day: a named
+file can still be dirty with somebody else's work in it. Run `git diff <path>`
+first and confirm the hunks are yours.
