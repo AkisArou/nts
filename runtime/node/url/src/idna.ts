@@ -72,6 +72,42 @@ function isDisallowed(c: number): boolean {
   return false;
 }
 
+/**
+ * Is this a valid opaque host? Everything except the forbidden code points.
+ *
+ * A non-special scheme does not have a *domain*, only a string, so no IDNA and
+ * no IPv4 shorthand. `web+demo://%zz` keeps its `%zz`.
+ */
+export function isForbiddenHostCodePoint(c: number): boolean {
+  switch (c) {
+    case 0x00:
+    case 0x09:
+    case 0x0a:
+    case 0x0d:
+    case 0x20:
+    case 0x23:
+    case 0x2f:
+    case 0x3a:
+    case 0x3c:
+    case 0x3e:
+    case 0x3f:
+    case 0x40:
+    case 0x5b:
+    case 0x5c:
+    case 0x5d:
+    case 0x5e:
+    case 0x7c:
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** The domain set adds `%`, since a domain is percent-decoded before parsing. */
+export function isForbiddenDomainCodePoint(c: number): boolean {
+  return isForbiddenHostCodePoint(c) || c <= 0x1f || c === 0x25 || c === 0x7f;
+}
+
 /** UTS-46 mapping, reduced. Returns `null` when the domain cannot be one. */
 function map(domain: string): string | null {
   let out = "";
@@ -94,21 +130,70 @@ function map(domain: string): string | null {
  * `bücher.example.com` becomes `xn--bcher-kva.example.com` rather than one
  * encoded blob.
  */
-export function domainToASCII(domain: string): string | null {
+/**
+ * UTS-46 mapping plus the forbidden set: everything both directions share.
+ *
+ * The forbidden check lived only in `parser.ts`, applied to `domainToASCII`'s
+ * *result*, so the public `url.domainToASCII` never ran it at all --
+ * `domainToASCII("http://a")` returned its input where node returns `""`. A
+ * differential over 4,000 generated URLs found it as 8,046 divergences. No
+ * pinned test covers it, because passing a URL to a function that takes a
+ * domain is a misuse; node still defines an answer for it.
+ */
+function mapAndValidate(domain: string): string | null {
   const mapped = map(domain);
   if (mapped === null) return null;
+  for (const ch of mapped) {
+    if (isForbiddenDomainCodePoint(ch.codePointAt(0) ?? 0)) return null;
+  }
+  return mapped;
+}
+
+/**
+ * The parser's conversion: the host it extracted, converted or rejected.
+ *
+ * Separate from the public `domainToASCII` below, and the difference is not
+ * cosmetic. `http://a%2Fb/` percent-decodes to the host `a/b`, which the URL
+ * Standard makes a *parse failure*; the public function truncates at a `/`
+ * instead, and using it here would turn that failure into the host `a`.
+ */
+export function hostToASCII(domain: string): string {
+  const mapped = mapAndValidate(domain);
+  if (mapped === null) return "";
   try {
     return punycodeToASCII(mapped);
   } catch {
     // A label that is not valid Punycode -- `xn--` followed by nonsense.
-    return null;
+    return "";
   }
 }
 
-export function domainToUnicode(domain: string): string {
+/**
+ * Everything from the first path, query or fragment delimiter is not part of
+ * the domain.
+ *
+ * Node's `domainToASCII` accepts more than a domain and takes the domain out
+ * of it: `domainToASCII("1.2.3.4//x#f")` is `"1.2.3.4"` and
+ * `domainToASCII("ü/日")` is `"xn--tda"`. What is left still has to be a
+ * domain, so `"a:80"`, `"a@b"` and `"a%2Fb"` are all `""` -- `:` `@` and `%`
+ * are forbidden in one and are not delimiters.
+ */
+export function beforeDelimiter(domain: string): string {
+  for (let i = 0; i < domain.length; i++) {
+    const c = domain[i];
+    if (c === "/" || c === "\\" || c === "?" || c === "#") return domain.slice(0, i);
+  }
+  return domain;
+}
+
+/** The parser's Unicode direction, on a host it has already extracted. */
+export function hostToUnicode(domain: string): string {
+  const mapped = mapAndValidate(domain);
+  if (mapped === null) return "";
   try {
-    return punycodeToUnicode(domain);
+    return punycodeToUnicode(mapped);
   } catch {
     return "";
   }
 }
+

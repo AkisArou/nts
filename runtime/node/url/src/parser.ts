@@ -24,7 +24,11 @@
 import { ERR_INVALID_URL } from "../../internal/errors.ts";
 import { decodeIn } from "../../buffer/src/encodings.ts";
 import { percentDecodeBytes } from "../../../web-platform/src/core/percent.ts";
-import { domainToASCII } from "./idna.ts";
+import {
+  hostToASCII,
+  isForbiddenDomainCodePoint,
+  isForbiddenHostCodePoint,
+} from "./idna.ts";
 
 export { percentDecodeBytes };
 
@@ -358,41 +362,6 @@ export function percentDecodeString(input: string): string {
 
 // ------------------------------------------------------------------ hosts
 
-/**
- * Is this a valid opaque host? Everything except the forbidden code points.
- *
- * A non-special scheme does not have a *domain*, only a string, so no IDNA and
- * no IPv4 shorthand. `web+demo://%zz` keeps its `%zz`.
- */
-function isForbiddenHostCodePoint(c: number): boolean {
-  switch (c) {
-    case 0x00:
-    case 0x09:
-    case 0x0a:
-    case 0x0d:
-    case 0x20:
-    case 0x23:
-    case 0x2f:
-    case 0x3a:
-    case 0x3c:
-    case 0x3e:
-    case 0x3f:
-    case 0x40:
-    case 0x5b:
-    case 0x5c:
-    case 0x5d:
-    case 0x5e:
-    case 0x7c:
-      return true;
-    default:
-      return false;
-  }
-}
-
-/** The domain set adds `%`, since a domain is percent-decoded before parsing. */
-function isForbiddenDomainCodePoint(c: number): boolean {
-  return isForbiddenHostCodePoint(c) || c <= 0x1f || c === 0x25 || c === 0x7f;
-}
 
 function parseOpaqueHost(input: string): string | null {
   for (const ch of input) {
@@ -664,7 +633,7 @@ export function parseHost(input: string, isNotSpecial: boolean): string | null {
   if (input === "") return null;
 
   const domain = percentDecodeString(input);
-  const ascii = domainToASCII(domain);
+  const ascii = hostToASCII(domain);
   // An input that maps to nothing -- a lone soft hyphen -- is a failure, not
   // an empty host.
   if (ascii === null || ascii === "") return null;

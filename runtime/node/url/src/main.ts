@@ -13,7 +13,7 @@
 // from https://url.spec.whatwg.org/. It passes the Web Platform Tests corpus
 // node checks itself against: 892 of 892 parses, 278 of 278 setter cases.
 
-import { domainToASCII, domainToUnicode } from "./idna.ts";
+import { domainToASCII, domainToUnicode } from "./domain.ts";
 
 export { URL, isURL } from "./url.ts";
 export { URLSearchParams } from "./searchparams.ts";

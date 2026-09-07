@@ -15,7 +15,7 @@ import {
 } from "../../internal/errors.ts";
 import { validateObject, validateString } from "../../internal/validators.ts";
 import { posix, win32 } from "../../path/src/main.ts";
-import { domainToUnicode } from "./idna.ts";
+import { hostToUnicode } from "./idna.ts";
 import { URL } from "./url.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import { percentDecodeBytes } from "../../../web-platform/src/core/percent.ts";
@@ -76,7 +76,7 @@ function pathFromUrlWin32(url: URL): string {
   if (hostname !== "") {
     // A host on a `file:` URL is a UNC share. Through `domainToUnicode` in
     // case the parser encoded it as Punycode on the way in.
-    return `\\\\${domainToUnicode(hostname)}${pathname}`;
+    return `\\\\${hostToUnicode(hostname)}${pathname}`;
   }
   // Otherwise the first segment has to be a drive letter, or there is no way
   // to say which volume the path is on.
@@ -114,7 +114,7 @@ function pathBufferFromUrlWin32(url: URL): Buffer {
   if (hostname !== "") {
     return Buffer.concat([
       Buffer.from("\\\\", "ascii"),
-      Buffer.from(domainToUnicode(hostname), "utf8"),
+      Buffer.from(hostToUnicode(hostname), "utf8"),
       decoded,
     ]);
   }

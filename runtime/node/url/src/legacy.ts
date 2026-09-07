@@ -24,7 +24,7 @@ import {
 } from "../../querystring/src/main.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
 import { URL } from "./url.ts";
-import { domainToASCII, domainToUnicode } from "./idna.ts";
+import { hostToASCII, hostToUnicode } from "./idna.ts";
 
 const CHAR_TAB = 9;
 const CHAR_LINE_FEED = 10;
@@ -443,7 +443,7 @@ export class Url {
             throw new ERR_INVALID_URL(url);
           }
         } else {
-          hostname = domainToASCII(hostname) ?? "";
+          hostname = hostToASCII(hostname);
 
           // Two spoofing routes, both closed here rather than corrected.
           // An empty hostname now must have been emptied by the IDNA step,
@@ -1224,7 +1224,7 @@ function formatWhatwg(
 function domainToUnicodeHost(host: string): string {
   // Only a Punycode label has anything to decode; anything else comes back
   // unchanged, so this is safe to apply unconditionally.
-  return host.startsWith("[") ? host : domainToUnicode(host) || host;
+  return host.startsWith("[") ? host : hostToUnicode(host) || host;
 }
 
 export function resolve(source: string, relative: string): string {
