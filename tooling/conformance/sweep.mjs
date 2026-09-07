@@ -445,4 +445,32 @@ if (!withCompiles && modules.length > 1) {
   const text = `${audit.stdout ?? ""}${audit.stderr ?? ""}`.trimEnd();
   if (text !== "") console.log(`\n${text}`);
   if (audit.status !== 0) process.exitCode = 4;
+
+  // The differential, for the same reason and at a fraction of its full size.
+  // Node's tests are a fixed set of inputs a human chose; this asks node the
+  // questions nobody wrote down, and it has found three real bugs -- a
+  // `__proto__` that ordered itself first in `querystring`, a `domainToASCII`
+  // that applied a mapping where node parses a host, and a `Buffer.from(str,
+  // "base64")` that skipped every character above U+00FF and sized its
+  // allocation from a count that could be zero.
+  //
+  // 200 iterations rather than the default, because it runs every sweep and
+  // every one of those three showed up in the first few hundred inputs. The
+  // full run is `differential-ts.mjs --all`, and is worth doing when a corpus
+  // changes or an encoding is touched.
+  const differential = spawnSync(
+    process.execPath,
+    [join(HERE, "differential-ts.mjs"), "--all", "--iterations", "200"],
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  );
+  const diffText = `${differential.stdout ?? ""}${differential.stderr ?? ""}`.trimEnd();
+  const summary = diffText
+    .split("\n")
+    .filter((line) => line.includes("comparison(s)") || line.includes("divergence"))
+    .join("\n");
+  if (diffText !== "") {
+    console.log(`\ndifferential against node:`);
+    console.log(differential.status === 0 ? summary : diffText);
+  }
+  if (differential.status !== 0) process.exitCode = 5;
 }
