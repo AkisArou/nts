@@ -131,6 +131,52 @@ export const CORPORA = {
     ],
   },
 
+  string_decoder: {
+    // A StringDecoder exists to carry a partial character across a chunk
+    // boundary, so the boundary is the whole test. Each input is encoded and
+    // then split at every position in turn, which puts a split inside a
+    // two-, three- and four-byte sequence and inside a surrogate pair.
+    //
+    // Three pinned test files cover this module. Chunked decoding of astral
+    // text is not among them.
+    fixed: [
+      "", "a", "ü", "€", "😀", "aü", "ü😀", "😀😀", "日本語", "a😀b",
+      "\uD800", "\uDC00", "a\uD800", "\uD83D\uDE00", "ÿÿÿÿ", "€€€€",
+    ],
+    input: (rnd) => unicodeWord(rnd, 6),
+    calls: ["utf8", "utf16le", "latin1", "base64", "hex", "ascii"].flatMap((enc) => [
+      {
+        label: `whole(${enc})`,
+        call: (m, s) => {
+          const d = new m.StringDecoder(enc);
+          return d.write(Buffer.from(s, "utf8")) + d.end();
+        },
+      },
+      {
+        label: `split-every-byte(${enc})`,
+        call: (m, s) => {
+          const bytes = Buffer.from(s, "utf8");
+          const out = [];
+          for (let cut = 0; cut <= bytes.length; cut++) {
+            const d = new m.StringDecoder(enc);
+            out.push(d.write(bytes.subarray(0, cut)) + d.write(bytes.subarray(cut)) + d.end());
+          }
+          return out.join("|");
+        },
+      },
+      {
+        label: `byte-at-a-time(${enc})`,
+        call: (m, s) => {
+          const bytes = Buffer.from(s, "utf8");
+          const d = new m.StringDecoder(enc);
+          let out = "";
+          for (let i = 0; i < bytes.length; i++) out += d.write(bytes.subarray(i, i + 1));
+          return out + d.end();
+        },
+      },
+    ]),
+  },
+
   url: {
     // The legacy parser is the interesting half: `url.parse` predates WHATWG,
     // has its own rules for slashes, auth and hosts, and 45 pinned files is
