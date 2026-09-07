@@ -31,6 +31,13 @@ export interface StringWritable {
  * accepts.
  */
 export interface WritableLike extends StringWritable {
+  end?:
+    | ((
+        chunk?: string,
+        encodingOrCallback?: string | ((err?: Error | null) => void),
+        callback?: (err?: Error | null) => void,
+      ) => unknown)
+    | undefined;
   isTTY?: boolean | undefined;
   columns?: number | undefined;
   getColorDepth?: (() => number) | undefined;
@@ -82,6 +89,35 @@ class StandardStream extends EventEmitter implements WritableLike {
       callback(null);
     }
     return true;
+  }
+
+  /**
+   * Node's `end`, which on a standard stream does not end anything.
+   *
+   * `process.stdout` is a `Writable` whose `_destroy` is a no-op, so `end()`
+   * writes its final chunk and finishes the stream while the descriptor stays
+   * open -- a program cannot take the process's own output away from the rest
+   * of the program. That is what node's
+   * `test-stdout-cannot-be-closed-child-process-pipe.js` is named after.
+   *
+   * One documented difference from a real `Writable`: a later `write` here
+   * still succeeds rather than reporting `ERR_STREAM_WRITE_AFTER_END`. This
+   * class is the smaller protocol described at the top of the file rather than
+   * a stream, and no pinned test asks for that error on a standard stream.
+   */
+  end(
+    chunk?: string,
+    encodingOrCallback?: string | ((err?: Error | null) => void),
+    callback?: (err?: Error | null) => void,
+  ): this {
+    const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+    if (chunk !== undefined) {
+      this.write(chunk, done);
+    } else if (done !== undefined) {
+      done(null);
+    }
+    this.emit("finish");
+    return this;
   }
 
   get isTTY(): boolean {

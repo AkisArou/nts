@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,736 of node's own applicable test files pass** across twenty-two modules,
+**1,743 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow**. Every module is green but one, and that one failure
 names a provider dependency rather than a defect.
 
@@ -312,16 +312,24 @@ The whole table comes from a single `sweep.mjs` run over the tree this tranche
 commits, with sabotage on. It is one run rather than two anchored separately,
 which is the first time that has been true here.
 
-It is also the second run of that sweep, and the first one is worth keeping.
-It reported 1,724, with `util` at 19/20 — a module this tranche does not touch
-and whose dependencies it does not touch either. Two direct re-runs of `util`
-gave 20/20, the second sweep gave 20/20 and 1,725, and 1,725 was exactly the
-1,719 before it plus the six that tranche added. So the 19 was one intermittently
-failing file rather than a regression. It is recorded rather than quietly
-dropped, because a sweep that can print a number one lower than the truth is a
-fact about the instrument: a single green run here is weaker evidence than this
-document's arithmetic has been treating it as, and the next unexplained -1
-should be re-run before it is believed *or* acted on.
+**The sweep is not quite deterministic, and that is measured rather than
+suspected.** It has now twice printed a total one lower than the truth, both
+times with `util` at 19/20 — a module neither tranche touched, nor any of its
+dependencies. Both times a re-run gave 20/20 and a total matching the
+arithmetic exactly: 1,725 = 1,719 + 6, and later 1,743 = 1,736 + 7. In between,
+`util` was run directly five times and passed 20/20 every time, so whichever
+file it is fails only under the sequential full-profile load the sweep applies,
+never in isolation.
+
+Two consequences, and the second matters more. A single green sweep is weaker
+evidence than this document's arithmetic has been treating it as, so an
+unexplained -1 gets re-run before it is believed *or* acted on. And the flake
+deserves chasing on its own account, because an intermittently failing test is
+a hollow test's opposite number: it reports a defect that is not there, and
+"measure it again" is exactly the habit that would let a real intermittent
+regression be re-rolled away. This is recorded so the next person to see a -1
+knows both that it has happened before and that the right response is to name
+the file rather than to run the sweep until it is green.
 
 **The previous revision of this section was wrong by about a thousand files, in
 the flattering direction.** It read 766 passing of 1,462 applicable with 22
@@ -331,14 +339,14 @@ nobody had re-run the sweep that would have said so. A stale ledger is a
 weaker failure than a wrong measurement, but it is the same failure: a number
 in this file that nothing was checking.
 
-**The denominators moved too, and that is the part to read carefully.** 410
+**The denominators moved too, and that is the part to read carefully.** 421
 files across the profile are excluded, each with an individually named reason
 in its module's `not-applicable`. Read as buckets: 149 are §13 language
 non-goals, roughly 140 are private V8 or engine internals, 62 depend on a
 module that does not exist here yet (`http2`, `worker_threads`, `cluster`,
-`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 39 are temporary
-runtime gaps, 12 are harness or runner limitations that `tooling/conformance`
-owns and can recover, and 8 exist *because* the file passed under sabotage.
+`child_process`, `tls`, `vm`, `crypto`, the ESM loader), 46 are temporary
+runtime gaps, 15 are harness or runner limitations that `tooling/conformance`
+owns and can recover, and 9 exist *because* the file passed under sabotage.
 That last bucket is the healthy one --
 `test-console-self-assign.js` is excluded on the grounds that "assigning any
 writable global property to itself has no observable assertion and passes
@@ -353,8 +361,8 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,736
-measured, 410 excluded, 0 hollow.**
+warns about elsewhere, so the two numbers belong next to each other: **1,743
+measured, 421 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
 ten `fs` files below were never excluded; they were never *seen*, and eight of
@@ -387,7 +395,7 @@ still.
 | `net` | **132 / 132** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
-| `process` | **69 / 69** | 0 | complete but for `process.binding`, `stdin` and workers |
+| `process` | **76 / 76** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
@@ -834,6 +842,56 @@ and is excluded by name. Others are host-process facts (`process.ppid`,
 (`process.report`, `process.domain`), or deliberate refusals. What the diff
 buys is that each is now a line someone can argue with, instead of absent from
 both the code and the document.
+
+## Eighteen `test-std*` files, and the input half of the process
+
+The export diff and the pattern audit met here. `process` was reporting 69 of
+69 and missing `process.stdin` — `stdout` and `stderr` are present, the input
+half is not, and no exclusion mentioned it. The reason nothing had said so is
+the pattern audit's third instance: node names these tests `test-stdin-*`,
+`test-stdout-*` and `test-stderr-*`, `process`'s pattern wanted
+`^test-process(-.*)?`, and all **eighteen** of them matched no module anywhere.
+
+Claiming them took eight passes and then gave one back, which is the part
+worth reading. Seven passed untouched. An eighth needed one small thing, and
+it is a nice illustration of what a test name is worth:
+`test-stdout-cannot-be-closed-child-process-pipe.js` calls
+`process.stdout.end('foo')` in a child and requires it to exit 0 having
+written exactly `foo`. Node's `process.stdout` is a `Writable` whose `_destroy`
+is a no-op, so `end()` flushes and finishes while the descriptor stays open —
+a program cannot take the process's own output away from the rest of the
+program, which is what the file is named after. Our standard streams had no
+`end` at all. They have one now, with one documented difference: a later
+`write` still succeeds rather than reporting `ERR_STREAM_WRITE_AFTER_END`,
+because this class is deliberately the smaller protocol its header describes
+rather than a `Writable`, and no pinned test asks for that error here.
+
+**The ninth pass was hollow, and was deleted rather than banked.**
+`test-stdin-hang.js` passed empty-module sabotage. Its own comment says why:
+it "only verifies that invoking the stdin getter does not cause node to hang",
+so it asserts nothing observable, and a blanked module does not hang either.
+It is doubly empty here, since the getter it invokes returns `undefined`. That
+is a pass this tranche created and then removed, on the same ground as
+`console`'s `test-console-self-assign.js`. `process` ends at **76**, up from
+69, with sabotage failing all 76.
+
+The remaining eleven are excluded, in three groups, each named per file.
+
+Three are the `type: module` boundary this profile hits whenever a test shells
+out to one of node's CommonJS `.js` fixtures: the root `package.json` makes the
+spawned child read it as ESM and it dies on `require` before reaching the
+behaviour under test. That is the same cause already recorded for
+`test-process-execve.js` and its siblings.
+
+Seven need `process.stdin`, and the blocker under it is specific enough to
+write down. (The eleventh is the hollow one above.) Node builds `stdin` from fd 0 according to what the descriptor
+*is* — a `net.Socket` for a pipe, an `fs.ReadStream` for a file, a
+`tty.ReadStream` for a terminal. Our `net.SocketOptions` already declares `fd`,
+and the constructor ignores it: a socket built on fd 0 constructs without
+complaint and never delivers a byte. So the first piece of work is not
+`process.stdin` at all, it is adopting an already-open descriptor in
+`net.Socket`, and `tty` is a module this profile does not have. Recorded here
+rather than attempted halfway.
 
 ## `path`
 
