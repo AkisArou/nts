@@ -225,11 +225,18 @@ function addon(module) {
   // the first row on an axis that has only ever reported zero will be quoted,
   // and it should carry its own caveat.
   const missing = stage === "green" ? shapeNamesMissingFrom(module, artifact) : [];
+  const incomplete = missing.length > 0 ? `incomplete: ${missing.join(", ")} absent` : "";
   return {
     stage,
+    // Its own field as well as part of `detail`, because the two output paths
+    // print different things and the qualifier has to survive both. The first
+    // version put it only in `detail`, which the with-tests row does not print
+    // -- so the first green row this axis ever produced came out unqualified,
+    // which is the exact outcome the annotation was added to prevent.
+    incomplete,
     detail: `${tally.pass} / ${applicable}` +
       (degenerate > 0 ? `, ${degenerate} degenerate` : "") +
-      (missing.length > 0 ? `, incomplete: ${missing.join(", ")} absent` : ""),
+      (incomplete === "" ? "" : `, ${incomplete}`),
     clang: [],
     tally,
     degenerate,
@@ -384,6 +391,7 @@ for (const module of modules) {
         ? `  ${module.padEnd(22)} ${String(real.pass).padStart(3)} / ${String(applicable).padEnd(4)}` +
           `${hollow === null ? "" : ` hollow ${hollow}`}` +
           `${compiled === null ? "" : ` addon ${compiled.stage}`}` +
+          `${compiled?.incomplete ? `, ${compiled.incomplete}` : ""}` +
           `  (${((Date.now() - started) / 1000).toFixed(0)}s)\n`
         : `  ${module.padEnd(22)} ${lowering ? `${lowering.lowered} lowered, ${lowering.refused} refused, ${lowering.backend} backend-refused` : "no compiler"}\n`,
   );
@@ -396,7 +404,7 @@ rows.sort((a, b) =>
     ? (b.pass / (b.applicable || 1)) - (a.pass / (a.applicable || 1))
     : (b.lowering?.lowered ?? 0) - (a.lowering?.lowered ?? 0));
 
-if (withAddons && !withTests) {
+if (withAddons) {
   console.log(`\n| module | compiled artifact | |`);
   console.log(`| --- | :---: | :---: |`);
   for (const { module, compiled } of rows) {
