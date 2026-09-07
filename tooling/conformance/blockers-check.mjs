@@ -127,8 +127,15 @@ for (const name of names) {
   // nothing would report "reproduces" -- so they are asserted against the
   // emitted file instead.
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
+  // And a fourth: a blocker visible only in the *wrapper*. `emits-addon` reads
+  // addon.c, where a defect can be that two exports each got their own
+  // `napi_create_function` over one implementation -- which publishes both names
+  // and still breaks an identity node guarantees.
+  const emitsAddon = /^emits-addon\s+(.+)$/.exec(wanted);
   const holds = emitsC !== null
     ? readEmitted(output, "program.c").includes(emitsC[1])
+    : emitsAddon !== null
+    ? readEmitted(output, "addon.c").includes(emitsAddon[1])
     : expectsClean
     ? isClean
     : output.includes(wanted);
@@ -138,7 +145,7 @@ for (const name of names) {
     continue;
   }
   unexpected++;
-  if (emitsC !== null) {
+  if (emitsC !== null || emitsAddon !== null) {
     console.log(`  FIXED       ${name}: no longer emits it. Expected:`);
   } else if (expectsClean) {
     console.log(`  REGRESSED   ${name}: expected no refusal, got:`);
