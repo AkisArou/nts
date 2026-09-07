@@ -107,19 +107,20 @@ axis. That would be the first non-zero this axis has ever reported.
 
 ### punycode passes node's own test as a compiled addon
 
-**It has been done, and the distance left is 21 characters in a generated
-file.** Blocker 7's remaining piece is one line only `NAPI_MODULE_INIT` can
-write, so it was written *by hand* into the generated `addon.c` and compiled
-with `build.sh`'s own flags:
+**It is done, on the compiler as it ships.** The emitter writes
+`nts_napi_set_env(env)` before `module__init()`, and a clean rebuild from an
+empty build directory passes:
 
-    NAPI_MODULE_INIT() {
-        nts_napi_set_env(env);     <- this, and nothing else
-        module__init();
-
-    node:punycode against node's own tests — punycode-envpatched.node
+    node:punycode against node's own tests — target/node/punycode.node
       pass  test-punycode.js
       pass  local/error-identity-static.js
       2 file(s): 2 passed, 0 failed, 0 skipped, 0 not applicable
+
+The route there was to hand-patch that one line into the generated `addon.c`
+first and compile it with `build.sh`'s own flags — which turned "this should
+work" into "the only difference between the addon that fails and the one that
+passes is 21 characters", and is why the ask could be made as *sufficient*
+rather than *necessary*.
 
 **Not degenerate.** Keep the names and destroy the behaviour and both files
 fail — `test-punycode.js` on *"poisoned export encode was called"*, the identity
@@ -131,16 +132,18 @@ The warning arrives as a real event rather than as text:
     process 'warning' events seen: 1
       [ 'DeprecationWarning|DEP0040|The `punycode` module is deprecated…' ]
 
-**What this is and is not.** It is proof that everything in the tree works and
-that the one line asked of the compiler lane is *sufficient*, which could not be
-said this morning — the only difference between the addon that fails and the
-addon that passes is those 21 characters. It is **not** a green row: the patch
-lives in generated output, the generator belongs to the compiler lane, and it is
-not committed. The axis reads 0 until the emitter writes that line itself.
+**Two things stay true, and belong beside the win rather than after it.**
+`version` does not publish — a string constant node's test never touches — so
+the row carries `incomplete: version absent`. `punycode` passes every test it
+has while its surface is one name short of node's. And the pass is node's own
+test plus one local file; both are real, and neither is the whole module.
 
-Two things will still be true when it does. `version` does not publish, so the
-row will carry `incomplete: version absent`. And the pass is node's own test
-plus one local file; both are real and neither is the whole module.
+**What the day looked like from the other end.** This axis began at *0 of 22,
+and nobody has walked a module end to end*. Seven blockers, six of them found by
+walking rather than by reading, and one of those found by a test written in the
+evening about a difference this document had recorded in the morning and left
+alone. Every one is now a fixture that will say `FIXED` out loud the next time
+somebody repairs it.
 
 ### The blockers are fixtures, not sentences
 
