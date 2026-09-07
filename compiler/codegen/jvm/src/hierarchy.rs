@@ -111,10 +111,24 @@ pub fn member_name(func_name: &str) -> String {
 /// silently drop its fields and its constructor.
 #[must_use]
 pub fn is_interface(program: &Program, layout: &Layout) -> bool {
-    program
+    let named = program
         .layouts
         .iter()
-        .any(|other| other.interfaces.iter().any(|id| layout.types.contains(id)))
+        .any(|other| other.interfaces.iter().any(|id| layout.types.contains(id)));
+    if !named {
+        return false;
+    }
+    // **Named is not sufficient, and `examples/declared-wider` is why.**
+    // `interface Tagged extends Error` puts `Error` in `Tagged.interfaces`,
+    // and `Error` is a class with a `message` field. A JVM interface has no
+    // instance fields and no subclasses that reach it through `super_class`,
+    // so treating it as one refused the example by name -- correctly, but for
+    // a relation that is a class relation wearing an interface's spelling.
+    //
+    // A dispatch root that carries state, or that something extends, is that
+    // class. `Layout.base` already relates the two, and the assignability
+    // check reports it when it does not.
+    declared(program, layout).is_empty() && !extended(program, layout)
 }
 
 /// The interfaces this layout declares, as binary class names.
@@ -128,6 +142,13 @@ pub fn implemented(program: &Program, layout: &Layout) -> Vec<String> {
         .interfaces
         .iter()
         .filter_map(|id| program.layout(*id))
+        // Only what is *emitted* as an interface. `interface Tagged extends
+        // Error` records `Error` here, and `Error` is a class -- declaring it
+        // in `interfaces[]` gives `IncompatibleClassChangeError: class
+        // nts.gen.Tagged can not implement nts.gen.Error, because it is not an
+        // interface`, at load rather than at a call. The two halves have to
+        // agree, so they ask the same question.
+        .filter(|at| is_interface(program, at))
         .map(crate::types::class_name)
         .collect()
 }

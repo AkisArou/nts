@@ -3914,6 +3914,20 @@ impl Emitter<'_> {
             Terminator::Return(value) => {
                 match value {
                     Some(value) => {
+                        // **A return is an assignment to the declared return
+                        // type, and it was the one place this was not checked.**
+                        // `examples/declared-wider` returns an object allocated
+                        // with the base's fields from a function declaring the
+                        // wider type, and the JVM answered `VerifyError: Bad
+                        // return type` at link -- correct, and a stack trace
+                        // rather than the two class names.
+                        //
+                        // Worth being precise about what it catches, because
+                        // the other lanes do not: the caller of that function
+                        // writes the wider field on the narrower object, which
+                        // on a pointer-cast backend is a heap write past the
+                        // end of the allocation.
+                        self.assignable_types(self.ty(*value), &self.func.return_type.clone())?;
                         // The *method descriptor's* kind, not the value's. They
                         // agree wherever this backend holds a value in its
                         // declared representation and they are exactly what
