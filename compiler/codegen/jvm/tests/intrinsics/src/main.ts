@@ -13,21 +13,39 @@
 // type yet -- see `runtime/web-platform/android/intrinsics.d.ts`, where the
 // gated entries say so. Four of nine, and the four are named rather than
 // silently the ones that happened to work.
+//
+// The declarations are not here. They come from
+// `runtime/web-platform/android/intrinsics.d.ts` through this fixture's
+// tsconfig, so calling one with the wrong arity or the wrong type stops
+// compiling. Restating them here compiled just as well and asserted nothing --
+// which is what four hand-written copies of one ABI buys.
+//
+// And the calls go through `socket.ts` rather than naming the flat intrinsics,
+// because that is how a provider will be written: the FFI spelling named once,
+// in one module, and `openCount()` everywhere else. It also puts that module on
+// the path this test already walks, so the wrapper is compiled by the JVM
+// backend rather than merely typechecked.
 
-declare function nts_jvm_web_open_count(): number;
-declare function nts_jvm_web_network_changed(): number;
-declare function nts_jvm_web_close(handle: number): void;
-declare function nts_jvm_web_cancel_connect(request: number): void;
+import * as socket from "../../../../../../runtime/web-platform/android/socket.ts";
 
-/** How many connections the provider is holding. */
-export function openCount(): number {
-  return nts_jvm_web_open_count();
+/**
+ * How many connections the provider is holding.
+ *
+ * Named `openNow` rather than `openCount` because the wrapper exports that name
+ * too, and two modules exporting one name is a collision the backend resolves
+ * by qualifying both -- `openCount@socket` and `openCount@main`. Correct, and
+ * invisible to a driver that reflects for `openCount`. Renaming the probe keeps
+ * this test about the intrinsic boundary rather than about name mangling, which
+ * has its own tests.
+ */
+export function openNow(): number {
+  return socket.openCount();
 }
 
 /** Close one, and report what is left -- so the close is observable, not assumed. */
 export function closeOne(handle: number): number {
-  nts_jvm_web_close(handle);
-  return nts_jvm_web_open_count();
+  socket.close(handle);
+  return socket.openCount();
 }
 
 /**
@@ -37,8 +55,8 @@ export function closeOne(handle: number): number {
  * second is the one that matters during teardown.
  */
 export function cancelUnissued(request: number): number {
-  nts_jvm_web_cancel_connect(request);
-  return nts_jvm_web_open_count();
+  socket.cancelConnect(request);
+  return socket.openCount();
 }
 
 /**
@@ -50,5 +68,5 @@ export function cancelUnissued(request: number): number {
  * program eventually sees is a timeout arriving long after its cause.
  */
 export function changed(): number {
-  return nts_jvm_web_network_changed();
+  return socket.networkChanged();
 }

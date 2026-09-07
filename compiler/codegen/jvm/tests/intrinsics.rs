@@ -163,3 +163,172 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// How a declared type is spelled in a descriptor.
+///
+/// Only the kinds the wired four use, plus the two a gated declaration writes,
+/// so an unrecognised type is a `None` that fails loudly rather than a silent
+/// default. `Uint8Array` is deliberately absent: it is what `ManagedType::View`
+/// would become, and until that exists there is nothing to be right about.
+fn descriptor_of(ts: &str) -> Option<&'static str> {
+    Some(match ts.trim() {
+        "number" => "D",
+        "void" => "V",
+        "boolean" => "Z",
+        "string" => "Ljava/lang/String;",
+        _ => return None,
+    })
+}
+
+/// Every `declare function nts_jvm_web_*` in the declarations, as
+/// `(name, descriptor_or_none, wired)`.
+///
+/// A declaration whose types this test cannot spell gets `None` rather than a
+/// guess -- that is every gated one, and it is the same fact as "cannot be
+/// written in TypeScript yet" seen from the other side.
+fn declarations() -> Vec<(String, Option<String>, bool)> {
+    let text = std::fs::read_to_string(
+        repository().join("runtime/web-platform/android/intrinsics.d.ts"),
+    )
+    .expect("the declarations are checked in");
+
+    let mut found = Vec::new();
+    let mut rest = text.as_str();
+    while let Some(at) = rest.find("declare function nts_jvm_web_") {
+        // Back up over the doc comment to find whether it says WIRED, stopping
+        // at the previous declaration so a marker cannot be read twice.
+        // The doc comment immediately before this declaration: between the last
+        // `/**` and its `*/`, and only when nothing but whitespace separates
+        // that `*/` from the `declare`. The version without that last condition
+        // let a declaration with no doc of its own inherit the previous one's
+        // marker, which would have made every entry after a WIRED one look
+        // wired too.
+        let before = &rest[..at];
+        let wired = before.rfind("*/").is_some_and(|close| {
+            before[close + 2..].trim().is_empty()
+                && before[..close]
+                    .rfind("/**")
+                    .is_some_and(|open| before[open..close].contains("WIRED"))
+        });
+
+        rest = &rest[at + "declare function ".len()..];
+        let end = rest.find(';').expect("a declaration ends");
+        let signature = &rest[..end];
+        rest = &rest[end..];
+
+        let open = signature.find('(').expect("a declaration has parameters");
+        let name = signature[..open].trim().to_owned();
+        let close = signature.rfind(')').expect("a declaration closes them");
+        let parameters = &signature[open + 1..close];
+        let returns = signature[close + 1..].trim_start_matches(':').trim();
+
+        // A parameter is `name: type`, and a type may itself contain a colon
+        // only inside a closure -- which is a type this test cannot spell, so
+        // splitting on the first colon is enough for everything it can.
+        let mut descriptor = String::from("(");
+        let mut spellable = true;
+        for one in parameters.split(',') {
+            let one = one.trim();
+            if one.is_empty() {
+                continue;
+            }
+            let ty = one.split_once(':').map_or("", |it| it.1);
+            match descriptor_of(ty) {
+                Some(it) => descriptor.push_str(it),
+                None => spellable = false,
+            }
+        }
+        descriptor.push(')');
+        match descriptor_of(returns) {
+            Some(it) => descriptor.push_str(it),
+            None => spellable = false,
+        }
+        found.push((name, spellable.then_some(descriptor), wired));
+    }
+    found
+}
+
+/// The declarations, the compiler's table, and the shipped Java are three
+/// statements of one ABI. This is the assertion that keeps them one fact.
+///
+/// Record 0077's rule: where two things must agree and only one can be deleted,
+/// make the second assert rather than compute. There were four copies of these
+/// signatures an hour ago -- the declarations, the compiler's table, the Java,
+/// and a set the test fixture restated for itself. The fixture's copy is gone
+/// (it now includes the real declarations, which had been in no tsconfig at
+/// all), and the remaining three are checked here.
+#[test]
+fn the_declarations_the_table_and_the_jar_agree() {
+    let declared = declarations();
+    assert!(
+        declared.len() >= nts_codegen_jvm::ops::WEB_INTRINSICS.len(),
+        "there are more entries in the table than declarations to justify them"
+    );
+
+    for entry in nts_codegen_jvm::ops::WEB_INTRINSICS {
+        let found = declared
+            .iter()
+            .find(|it| it.0 == entry.declared)
+            .unwrap_or_else(|| panic!("`{}` is in the table and not declared", entry.declared));
+        assert_eq!(
+            found.1.as_deref(),
+            Some(entry.descriptor),
+            "`{}`: the declaration and the table disagree",
+            entry.declared
+        );
+        assert!(found.2, "`{}` is wired and its declaration does not say WIRED", entry.declared);
+    }
+
+    // The complement, so marking something WIRED is a claim rather than a
+    // comment: a declaration that says it while no table entry exists fails
+    // here, and so does a gated one that quietly grew an implementation.
+    for (name, _, wired) in &declared {
+        let in_table =
+            nts_codegen_jvm::ops::WEB_INTRINSICS.iter().any(|it| it.declared == *name);
+        assert_eq!(
+            *wired, in_table,
+            "`{name}`: the declaration says {}, the table says {}",
+            if *wired { "WIRED" } else { "GATED" },
+            if in_table { "wired" } else { "absent" }
+        );
+    }
+
+    let Some(javap) = tool("javap") else {
+        eprintln!("SKIP the jar half: no JDK");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-intrinsic-drift-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
+    std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).expect("write the jar");
+
+    // `-s` prints descriptors, so this compares the emitted descriptor against
+    // the shipped method's rather than against its Java signature reformatted.
+    let listed = Command::new(&javap)
+        .args(["-p", "-s", "-cp"])
+        .arg(&jar)
+        .arg("nts.rt.NtsSocket")
+        .output()
+        .expect("javap runs");
+    assert!(listed.status.success(), "{}", String::from_utf8_lossy(&listed.stderr));
+    let text = String::from_utf8_lossy(&listed.stdout);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    for entry in nts_codegen_jvm::ops::WEB_INTRINSICS {
+        assert_eq!(entry.owner, "nts/rt/NtsSocket", "this half only reads one class");
+        let at = text
+            .find(&format!(" {}(", entry.member))
+            .unwrap_or_else(|| panic!("`{}` is not in the shipped jar", entry.member));
+        let following = &text[at..];
+        let descriptor = following
+            .lines()
+            .nth(1)
+            .and_then(|it| it.trim().strip_prefix("descriptor: "))
+            .unwrap_or_else(|| panic!("javap printed no descriptor for `{}`", entry.member));
+        assert_eq!(
+            descriptor, entry.descriptor,
+            "`{}`: the table and the shipped Java disagree",
+            entry.declared
+        );
+    }
+}

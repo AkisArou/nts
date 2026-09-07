@@ -214,18 +214,87 @@ leaves wrong source in a checkout three sessions build from, for a window
 
 ## What this lane is still waiting for
 
-- **`ManagedType::View { element }`**, so the typed arrays have a lowering.
-  `DataView` landed separately because it carries nothing; the views carry an
-  element and bring the 97 match sites and the `elements`-narrowing collision
-  with them. The runtime half is finished and oracle-tested at 3,128 lines —
-  eleven element types with `set`, `copyWithin`, `subarray`, `slice` and the
-  bigint pair — so the descriptor and extern tables are an evening once the
-  variant exists.
-- **The `nts_jvm_web_*` intrinsic declarations to be agreed.** The proposal is
-  written and typechecks — `runtime/web-platform/android/intrinsics.d.ts`, with
-  the Java behind every entry — and three of them are themselves gated on the
-  byte-view type. Until then the transports are reachable from Java and not from
-  TypeScript.
+- **A lowering that constructs `ManagedType::View`.** The variant landed; no
+  program produces one yet. The JVM half is wired — `types::view_class` maps an
+  element to one of eight classes and the descriptor and frame tables carry it —
+  so this lane is waiting on `lower` rather than on itself.
+
+  Eight of eleven. `NtsViewU8C`, `NtsViewI64` and `NtsViewU64` are built,
+  oracle-tested and reachable from Java, and `hir::builtin`'s
+  `typed_array_element` names neither `Uint8ClampedArray` nor the two bigint
+  arrays — so `view_class` returns `None` for them, which is a refusal by name.
+  It must stay one: clamping and wrapping disagree on exactly the inputs
+  typed-array code is written for, so an unsigned 8-bit element must never be
+  guessed to have been the clamped one.
+- **The five gated `nts_jvm_web_*` intrinsics.** Four are wired end to end and
+  tested — see `docs/records/0186`. The other five take an environment handle or
+  a byte view, and neither a common environment type nor a lowered `View`
+  exists. They are marked GATED in the declarations, and
+  `the_declarations_the_table_and_the_jar_agree` asserts the wired and gated
+  lists are complements, so a marker is a claim rather than a comment.
 - **ARM hardware**, for the publication race itself. The keyword and the
   barrier it generates are both checked; only the reordering that would expose
   their absence is not. See `docs/records/0181`.
+
+## `import { OkHttpClient } from "java:okhttp3"`
+
+Raised by the repository's owner, and it is a better spelling than the one the
+JVM plan carries. Worth writing down now, while nothing is built, because the
+difference is not cosmetic.
+
+The plan's step 10 is `nts bind --jar android.jar --out types/android.d.ts`: a
+generate step producing a `.d.ts` you check in and import by path. That is a
+**fourth statement of an ABI**, and this lane has just spent a day on what those
+cost — the networking intrinsics had their signatures written four times with
+nothing asserting they agreed, and the fixture's copy went on compiling after
+the real declarations changed. A checked-in generated `.d.ts` is the same shape:
+it can be stale against the jar it came from, and nothing notices.
+
+A `java:` specifier removes the artifact rather than checking it. The frontend
+resolves the specifier against the **pinned, hash-verified jar** that
+`dependencies.tsv` already names, so there is no second thing to be out of date
+with the first. That is the whole argument, and it is the same argument as
+`WEB_INTRINSICS` being public so a test can read the compiler's real table
+instead of parsing Rust to find out what the compiler believes.
+
+What it does **not** change: the hard parts are all still there. A class-file
+reader (the same crate as the writer — the format is symmetric), nullability
+that Java's type system does not express, overload collapse where `f(int)`,
+`f(long)` and `f(double)` all become `f(number)`, and the transitive closure
+where binding `OkHttpClient` drags in most of the JDK. The spelling is nearly
+free once those exist; none of them is free.
+
+What it costs specifically: `tsgo` resolves module specifiers and is
+`third_party`. So `java:` is served by generating into a cache directory that is
+**not** checked in and mapping it with `paths` in the tsconfig — which is the
+generated artifact again, but as a build product rather than a source file, and
+that is exactly the difference between something that can drift and something
+that cannot.
+
+### The specifier is the package, the named imports are the classes
+
+The owner's examples settle a question the plan left open:
+
+    import { Button, EditText } from "android:widget";
+    import { AndroidNetworking } from "java:org.nts.web";
+    import { OkHttpClient } from "java:okhttp3";
+
+Not `java:okhttp3.OkHttpClient`. A specifier naming one class would make the
+import list redundant with the specifier and would need one specifier per class;
+naming the **package** and importing classes from it decomposes exactly the way
+`android.widget.Button` already does, and it is what makes `{ Button, EditText }`
+read as one import rather than two.
+
+Two consequences worth having in advance. `android:` as a separate scheme from
+`java:` is not sugar: the Android SDK is a compile-only jar resolved from
+`$ANDROID_HOME` at a pinned API level, where `java:` resolves against the
+repository's own pinned dependencies — different sources, different verification,
+and a scheme is where that difference should be visible rather than in a path.
+And `hir::reachable` already answers the transitive-closure question the plan
+names as hard: an import that names three classes is a closure request rooted at
+three names, not at a jar.
+
+None of this is the current lane's work. The four wired intrinsics are the
+boundary the plan asked for — "a small typed runtime-owned intrinsic table", and
+small is the point. This is written here so that when step 10 arrives it starts
+from the better shape rather than rediscovering it.

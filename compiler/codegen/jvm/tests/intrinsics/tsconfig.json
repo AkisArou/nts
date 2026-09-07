@@ -1,6 +1,8 @@
 {
+  "//": "The declarations come from `runtime/web-platform/android/intrinsics.d.ts` rather than being restated here. That file is the ABI statement the plan asks for, and until this fixture included it, it was in no tsconfig at all -- a document nothing typechecked. A fixture that re-declared the four names would have been a second answer to what they are, and would have gone on compiling after the real declarations changed.",
   "extends": "../../../../../tsconfig.fixtures.json",
   "include": [
-    "src"
+    "src",
+    "../../../../../runtime/web-platform/android/intrinsics.d.ts"
   ]
 }

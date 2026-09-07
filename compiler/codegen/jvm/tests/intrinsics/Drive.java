@@ -123,7 +123,7 @@ public final class Drive {
                 }
             }
 
-            System.out.println("open " + (int) call("openCount"));
+            System.out.println("open " + (int) call("openNow"));
             System.out.println("after close " + (int) call("closeOne", opened[0].handle));
 
             // A request id no `connect` ever returned. Idempotent, and it must
@@ -131,7 +131,7 @@ public final class Drive {
             System.out.println("after cancel " + (int) call("cancelUnissued", 987654));
 
             System.out.println("changed " + (int) call("changed"));
-            System.out.println("open " + (int) call("openCount"));
+            System.out.println("open " + (int) call("openNow"));
 
             // And again, because the second sweep has nothing to close and must
             // say so rather than repeat the first answer.

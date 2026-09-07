@@ -562,8 +562,36 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
 /// A table rather than a naming rule, because `hir::runtime` is the single
 /// answer about what a helper *takes*. A missing entry is a refusal by name
 /// and never a call to something that does not exist.
-/// The fixed networking intrinsics: the typed boundary a *program* crosses to
-/// reach a provider.
+/// One of the fixed networking intrinsics: the typed boundary a *program*
+/// crosses to reach a provider.
+///
+/// `declared` is what TypeScript writes; the rest is what the call becomes.
+/// Both halves are here because they are the thing that can disagree -- the
+/// declarations live in `runtime/web-platform/android/intrinsics.d.ts` and the
+/// Java lives in `runtime/jvm`, and this table is the only place the two are
+/// named together.
+#[derive(Debug)]
+pub struct Intrinsic {
+    /// The `declare function` name, as a program writes it.
+    pub declared: &'static str,
+    /// The runtime class the call lands on.
+    pub owner: &'static str,
+    /// The static method's name there.
+    pub member: &'static str,
+    /// Its descriptor, which is what the *declaration* says: `number` is `D`
+    /// and `void` is `V`. Not restated from the Java --
+    /// `runtime_agrees_with_hir`'s rule applies here too, and a `(D)V` where
+    /// the Java takes an `int` would be a wrong conversion in one backend only.
+    pub descriptor: &'static str,
+}
+
+/// The fixed networking intrinsics, as a table rather than a match, because a
+/// test reads it.
+///
+/// Public for exactly that reason. Three things state this ABI -- the
+/// declarations, this, and the Java -- and the alternative to exposing the
+/// middle one was a test that parsed Rust source to find out what the compiler
+/// believes, which is a fourth statement wearing a check's clothing.
 ///
 /// Separate from `core_external` because the source of truth is different.
 /// Those names come from `runtime/c`'s header and the middle end emits them;
@@ -573,26 +601,44 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
 /// inventing a middle-end concept for four static methods would be a second
 /// answer to a question the FFI path already answers.
 ///
-/// **Four of nine.** The declarations in
-/// `runtime/web-platform/android/intrinsics.d.ts` also cover connect, read,
-/// write, random-fill and the two reservation calls, and every one of those
-/// takes an environment handle or a byte view. `ManagedType::View` does not
-/// exist and there is no common environment type, so those five are absent
-/// from this table *and* from the fixture -- named as gated rather than left
-/// to look like they were never tried.
-///
-/// The descriptors are not restated from the Java: they are what the
-/// declaration says, `number` being `D` and `void` being `V`, and
-/// `runtime_agrees_with_hir`'s rule applies here too -- a `(D)V` where the
-/// Java takes an `int` would be a wrong conversion in one backend only.
+/// **Four of nine.** The declarations also cover connect, read, write,
+/// random-fill and the two reservation calls, and every one of those takes an
+/// environment handle or a byte view. `ManagedType::View` does not exist and
+/// there is no common environment type, so those five are absent here, marked
+/// GATED where they are declared, and `every_wired_intrinsic_is_declared`
+/// asserts the two lists are complements rather than merely both present.
+pub const WEB_INTRINSICS: &[Intrinsic] = &[
+    Intrinsic {
+        declared: "nts_jvm_web_open_count",
+        owner: types::SOCKET,
+        member: "openCount",
+        descriptor: "()D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_network_changed",
+        owner: types::SOCKET,
+        member: "networkChanged",
+        descriptor: "()D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_close",
+        owner: types::SOCKET,
+        member: "close",
+        descriptor: "(D)V",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_cancel_connect",
+        owner: types::SOCKET,
+        member: "cancelConnect",
+        descriptor: "(D)V",
+    },
+];
+
 fn web_external(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
-    Some(match name {
-        "nts_jvm_web_open_count" => (types::SOCKET, "openCount", "()D"),
-        "nts_jvm_web_network_changed" => (types::SOCKET, "networkChanged", "()D"),
-        "nts_jvm_web_close" => (types::SOCKET, "close", "(D)V"),
-        "nts_jvm_web_cancel_connect" => (types::SOCKET, "cancelConnect", "(D)V"),
-        _ => return None,
-    })
+    WEB_INTRINSICS
+        .iter()
+        .find(|it| it.declared == name)
+        .map(|it| (it.owner, it.member, it.descriptor))
 }
 
 /// The rest of the refusal when `external` has no entry for a name.

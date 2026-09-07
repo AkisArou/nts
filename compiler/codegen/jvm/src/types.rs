@@ -187,6 +187,37 @@ pub const BUFFER: &str = "nts/rt/NtsBuffer";
 
 /// A `DataView`: a buffer, an offset, and a length that may track the buffer's.
 pub const VIEW: &str = "nts/rt/NtsDataView";
+
+/// The class for a typed array over `element`.
+///
+/// Eleven classes rather than one with a kind field, and the difference is
+/// measured: record 0182 has a monomorphic `getAt` at 0.177 ns against 0.924 ns
+/// through the generic pair, because a monomorphic call site inlines to a shift
+/// and a load and a switch on a kind does not.
+///
+/// **Eight of the eleven.** `NtsViewU8C`, `NtsViewI64` and `NtsViewU64` exist in
+/// `runtime/jvm` and are reachable from Java, and `hir::builtin`'s
+/// `typed_array_element` names neither `Uint8ClampedArray` nor the two bigint
+/// arrays -- so no program can produce a `View` over them and this returns
+/// `None`, which is a refusal by name. When the middle end gains them, the
+/// runtime half is already written and oracle-verified; what it must *not* do
+/// is guess that an unsigned 8-bit element might have been the clamped one,
+/// because clamping and wrapping disagree on exactly the inputs typed-array
+/// code is written for.
+#[must_use]
+pub fn view_class(element: &HirType) -> Option<&'static str> {
+    Some(match element {
+        HirType::Int { bits: 8, signed: true } => "nts/rt/NtsViewI8",
+        HirType::Int { bits: 8, signed: false } => "nts/rt/NtsViewU8",
+        HirType::Int { bits: 16, signed: true } => "nts/rt/NtsViewI16",
+        HirType::Int { bits: 16, signed: false } => "nts/rt/NtsViewU16",
+        HirType::Int { bits: 32, signed: true } => "nts/rt/NtsViewI32",
+        HirType::Int { bits: 32, signed: false } => "nts/rt/NtsViewU32",
+        HirType::Float { bits: 32 } => "nts/rt/NtsViewF32",
+        HirType::Float { bits: 64 } => "nts/rt/NtsViewF64",
+        _ => return None,
+    })
+}
 pub const MAP_DESCRIPTOR: &str = "Lnts/rt/NtsMap;";
 
 /// The reference transport: sockets, TLS, proxies, and the network-change
@@ -272,6 +303,15 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
                 nts_jvm_emitter::descriptor::array_of(&descriptor(shape, element)?)
             }
         }
+        // A window onto a buffer, and a *different class per element* -- which
+        // is the one place this backend's shape differs from `runtime/c`'s,
+        // where one `NtsView` struct carries a kind. The C header says why the
+        // JVM may do this: "ordinary indexed access is emitted inline by the
+        // backends, because a call per element is not a price a typed array can
+        // pay", and a monomorphic receiver is what makes that inlining land.
+        HirType::Managed(ManagedType::View(element)) => {
+            nts_jvm_emitter::descriptor::object(view_class(element)?)
+        }
         // A `double` and an identity, which is what the `NtsDate` struct in
         // `nts_runtime.h` is once the collector's header is the platform's.
         // Two operations reach it and both are about the same field; it is a
@@ -314,6 +354,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::Symbol
             | ManagedType::Date
             | ManagedType::Buffer
+            | ManagedType::View(_)
             | ManagedType::DataView
             | ManagedType::Array(_)
             | ManagedType::Map(..)
@@ -362,6 +403,13 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Array(_)) => {
                 VType::Object(descriptor(shape, ty)?)
             }
+            // The class, not the descriptor: a view is an ordinary object, so
+            // this is the `Array`-when-growable case rather than the bare-array
+            // one, and passing `Lnts/rt/NtsViewU8;` here is the
+            // `ClassFormatError` that arm's comment names.
+            HirType::Managed(ManagedType::View(element)) => {
+                VType::Object(view_class(element)?.to_owned())
+            }
             HirType::Managed(ManagedType::Object(id)) => {
                 VType::Object(class_name(program.layout(*id)?))
             }
@@ -403,6 +451,13 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),
+        // The element, for the reason the array arm below gives: the refusals
+        // this most needs to be readable are the three element types the
+        // runtime has and the middle end has not, and "a typed array" three
+        // times says nothing about which.
+        HirType::Managed(ManagedType::View(element)) => {
+            format!("a typed array of {}", short(element))
+        }
         HirType::Managed(ManagedType::DataView) => "a data view".to_owned(),
         // The element, because the one message that most needs this is two
         // arrays that differ only in it -- `an array` twice says nothing about
