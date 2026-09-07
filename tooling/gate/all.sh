@@ -281,8 +281,20 @@ profile() {
   refusals=$(cat "$root/target/gate-profile/.refusals" 2>/dev/null || echo 0)
   printf '  %s modules emitted, %s refusal(s)\n' \
     "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
-  # The ceiling. Lower it when a feature earns it.
-  ceiling=6951
+  # The ceiling. Lower it when a feature earns it -- and raise it when the
+  # CORPUS earns it, which is new and is now the faster of the two.
+  #
+  # This went 6551 -> 6947 -> 7461 inside one hour, and none of it was the
+  # compiler: measured by running the binary from before those hours over the
+  # corpus of after them, which gives 7461 as well. `runtime/node` is being
+  # grown by another session at roughly five hundred refusals an hour, and a
+  # refusal count tracks corpus size before it tracks anything else.
+  #
+  # So the 400 of slack below is now about a quarter of an hour rather than a
+  # month of work, and the session growing the corpus should expect to raise
+  # this in the same commit. Two binaries over one corpus is the measurement
+  # that tells the two causes apart, and it costs one loop.
+  ceiling=7861
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1
@@ -436,7 +448,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 117 "through the LLVM backend, counting" ); }
+  backend_examples 118 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -447,7 +459,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 117 "through the LLVM backend" ); }
+  backend_examples 118 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -512,7 +524,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # `examples/open-typed-values` needs `instanceof` against a typed array, and
   # on a lane with no descriptors that is a different mechanism -- named to that
   # session before this landed, and theirs to raise when it does.
-  backend_examples 116 "through the JVM backend" ); }
+  backend_examples 118 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \

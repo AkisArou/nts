@@ -284,6 +284,11 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         // about the value, and the one place a tuple and an object differ on
         // this lane.
         "nts_is_array" => (types::VALUE, "isArray", "(Lnts/rt/NtsValue;)Z"),
+        // `instanceof ArrayBuffer` and `instanceof Uint8Array`. One class and
+        // nine classes, so both are an `instanceof` rather than a descriptor
+        // read followed by a field read -- see `NtsValue.isViewKind`.
+        "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
+        "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
         "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),
         "nts_buffer_new" => (types::BUFFER, "allocate", "(D)Lnts/rt/NtsBuffer;"),
         "nts_buffer_new_resizable" => {

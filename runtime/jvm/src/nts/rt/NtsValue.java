@@ -72,6 +72,57 @@ public final class NtsValue {
             || ref instanceof NtsArrayZ;
     }
 
+    /** `instanceof ArrayBuffer`, which is one class here and one descriptor there. */
+    public static boolean isBuffer(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        return ref instanceof NtsBuffer;
+    }
+
+    /**
+     * `instanceof Uint8Array`, and the eight others.
+     *
+     * <p>**One test here, two on the C lane, and the difference is the point.**
+     * All nine typed arrays share one struct in `runtime/c`, so the descriptor
+     * says *some* typed array and a `kind` field says which -- and reading that
+     * field out of an object which has none is undefined behaviour that happens
+     * to answer correctly, which record 0195 records as the one failure a
+     * differential cannot tell from correctness.
+     *
+     * <p>There are nine classes here, so `instanceof` answers both questions at
+     * once and there is no field to read out of the wrong object. That is not a
+     * cleverness; it is what record 0182's measurement bought -- the classes
+     * exist because a monomorphic accessor is 0.177 ns/element against 0.924
+     * through one that switches on a kind, and this is the same fact showing up
+     * as a safety property.
+     *
+     * <p>The kinds are `NTS_ELEMENT_*`, and 2 is `Uint8ClampedArray`, which this
+     * runtime has a class for even though no lowering produces one yet. It
+     * answers here rather than being left to fall through to `false`: a wrong
+     * `false` for a value that *is* one would be the same silent lie the
+     * descriptor-field read is.
+     */
+    public static boolean isViewKind(NtsValue value, double kind) {
+        Object ref = value == null ? null : value.ref;
+        if (ref == null) {
+            return false;
+        }
+        switch ((int) kind) {
+            case 0: return ref instanceof NtsViewI8;
+            case 1: return ref instanceof NtsViewU8;
+            case 2: return ref instanceof NtsViewU8C;
+            case 3: return ref instanceof NtsViewI16;
+            case 4: return ref instanceof NtsViewU16;
+            case 5: return ref instanceof NtsViewI32;
+            case 6: return ref instanceof NtsViewU32;
+            case 7: return ref instanceof NtsViewF32;
+            case 8: return ref instanceof NtsViewF64;
+            // A kind this runtime has no class for cannot be any value it
+            // holds. Answering `false` is right and answering anything else
+            // would be a guess about a numbering that is not this lane's.
+            default: return false;
+        }
+    }
+
     public static String tagName(int tag) {
         switch (tag) {
             case UNDEFINED: return "undefined";
