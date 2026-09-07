@@ -4043,15 +4043,26 @@ an allocator expecting it to — with `-DNTS_POISON=1` riding along so a freed
 slot reads `a5d03c3c3c3c3c3c` rather than a zero indistinguishable from a
 legitimate one.
 
-| module | result | rc sites |
+| module | result | rc sites, before → after module evaluation |
 | --- | --- | ---: |
-| `buffer` | 0 passed, 54 failed, 41 n/a | 271 |
-| `os` | 0 passed, 6 failed, 4 n/a | 203 |
-| `path` | 2 passed, 16 failed, 1 skipped | 98 |
-| `punycode` | **2 passed, 0 failed** | 55 |
-| `querystring` | 0 passed, 5 failed, 1 n/a | 209 |
-| `string_decoder` | 0 passed, 3 failed, 1 n/a | 272 |
-| `url` | 0 passed, 47 failed, 3 n/a | 328 |
+| `buffer` | 0 passed, 54 failed, 41 n/a | 271 → 271 |
+| `os` | 0 passed, 7 failed, 4 n/a | 203 → **303** |
+| `path` | 2 passed, 17 failed, 1 skipped | 98 → 98 |
+| `punycode` | **2 passed, 0 failed** | 55 → 55 |
+| `querystring` | 0 passed, 6 failed, 1 n/a | 209 → **289** |
+| `string_decoder` | 0 passed, 3 failed, 1 n/a | 272 → 272 |
+| `url` | 0 passed, 47 failed, 3 n/a | 328 → **526** |
+
+**The right-hand column is the most interesting number here and it was not what
+the lane was built to measure.** A retain/release site exists only where the
+lowering emitted code, so the count is a rough size of the compiled program.
+Three modules grew sharply when module evaluation stopped being all-or-nothing —
+`url` by 60%, `os` by half, `querystring` by 38% — and the four that did not
+grow are the four that never lost their initializer. So the excision's effect is
+visible in a number nobody chose for the purpose, from a lane built to catch
+use-after-free, which is the kind of corroboration worth more than the intended
+measurement. Their *test* results did not move at all: all three still fail at
+the export table or the shape.
 
 **Every number is identical to the uncounted run.** Six of the seven fail at the
 export table, which they do either way, so counting tells us nothing new about
