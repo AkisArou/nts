@@ -4703,3 +4703,60 @@ a promise — the same shape `ProxyAuthenticator` already has. Narrowing the con
 promise-only would remove the refusal and would be a compiler-gap workaround; it stays.
 
 Local corpus 701/701 with zero skipped, upstream unchanged at 2,278 of 2,286.
+
+## Interceptor order, and a rule that was backwards until it was measured
+
+The plan asks for "explicit ordering and ownership". Composition order was defined —
+array order is outer to inner, with responses unwinding in reverse — but *which* order
+to compose in was not written down anywhere, and an ordering rule nobody can falsify is
+a preference wearing a rule's clothes.
+
+Three constraints are now documented on `composeFetchTransport`, and each is a test that
+runs **both** arrangements. A test that exercised only the recommended order would pass
+just as happily if the order did not matter at all.
+
+`ResponseErrorInterceptor` must be outside `RetryInterceptor`, because it throws on any
+status at or above 400: from the inside it converts a retryable `503` into an exception
+before retry has a status to act on. Swapped, the 503 is thrown and nothing is retried.
+
+It must also be outside `AuthenticationInterceptor`, for the same reason with a sharper
+edge: a `401` is a challenge, and thrown from the inside it becomes an error the
+authenticator is never offered. Swapped, the authenticator is not consulted at all.
+
+`DumpInterceptor` is not an ordering question but an exclusion. It returns `body: null`,
+so anything outside it that needs a body — which is exactly `ResponseErrorInterceptor`,
+whose error carries one — gets nothing. Compose one or the other.
+
+### The third rule was written backwards, and the test is what said so
+
+The documentation first claimed `RetryInterceptor` should be **outside**
+`AuthenticationInterceptor`, reasoning that a challenge is best answered close to the
+transport where it costs no retry budget. That is wrong, and the measurement is
+unambiguous: on a script alternating retryable failures and challenges, retry-outside
+costs five attempts and fails, authentication-outside costs four and succeeds.
+
+The reason is that `401` is not a retryable status, so retry never loops on a challenge —
+the interaction runs the other way. With retry on the outside, every retry of a
+*retryable* failure re-runs the whole authentication exchange from unauthenticated. With
+authentication outside, the credential is obtained once and retry re-sends a request that
+already carries it.
+
+The intuition was about which layer *sees* the challenge. The behaviour is about which
+layer *repeats* the other. Those are different questions and I answered the wrong one.
+
+This is the argument for testing both arrangements rather than the recommended one,
+made by the practice catching its own author within a minute of the rule being written.
+Had the test only exercised the documented order it would have passed, and the
+documentation would have been confidently wrong in a file that other lanes read.
+
+A fourth test is the control on the controls: with a transport *error* rather than a
+status, retry and authentication do not interact at all, so the differences above have
+to come from challenge handling rather than from composition overhead.
+
+Nothing is claimed about `DiagnosticsInterceptor` or `DeduplicationInterceptor`. Both
+have defensible positions, this lane has demonstrated neither, and saying so is more
+useful than a preference dressed as a rule — which is precisely the failure mode the
+third constraint just walked into.
+
+Local corpus 705/705 with zero skipped, upstream unchanged at 2,278 of 2,286, frontier
+unchanged at 1,294 primary `NTS1001` and 314 `NTS1003`.

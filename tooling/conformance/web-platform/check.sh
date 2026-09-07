@@ -33,6 +33,7 @@ node --expose-gc --test \
   tooling/conformance/web-platform/test/flat-store.test.mjs \
   tooling/conformance/web-platform/test/fuzz.test.mjs \
   tooling/conformance/web-platform/test/hpack.test.mjs \
+  tooling/conformance/web-platform/test/interceptor-order.test.mjs \
   tooling/conformance/web-platform/test/http2-connection.test.mjs \
   tooling/conformance/web-platform/test/http2-frame.test.mjs \
   tooling/conformance/web-platform/test/http2-headers.test.mjs \
