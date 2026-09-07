@@ -297,6 +297,8 @@ export type {
 export { spilledRequestBodyStore } from "./dispatch/replay-store.ts";
 export { DurableSpillArea } from "./storage/spill.ts";
 export type { DurableSpillAreaOptions, SpilledBody } from "./storage/spill.ts";
+export { DurableCacheStorageStore } from "./cache/durable-cache-storage.ts";
+export type { DurableCacheStorageStoreOptions } from "./cache/durable-cache-storage.ts";
 export { DurableHttpCacheStore } from "./cache/durable-store.ts";
 export type { DurableHttpCacheStoreOptions } from "./cache/durable-store.ts";
 export { MemoryHttpCacheStore } from "./cache/store.ts";

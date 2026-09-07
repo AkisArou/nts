@@ -4034,3 +4034,82 @@ Same pinned compiler on both sides: 1,267 to 1,269 primary `NTS1001` and 296 to 
 The complete local Node-host/real-socket corpus passes 612/612 with zero skipped, the
 compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
 upstream corpus is unchanged at 2,278 of 2,286 applicable.
+
+## The Cache API over provider-owned durable storage
+
+The plan asks for "a separate `Cache`/`CacheStorage` API with provider-owned durable
+storage", and the memory store's own comment already said production providers should
+inject a durable one. `DurableCacheStorageStore` is that store.
+
+The name map is one key and each cache's entry list is one key, so both are replaced
+atomically by construction: `compareExchange` is a read, a revision comparison and a
+single-key write, and there is no window in which half a list is visible. Bodies are
+separate keys, written before the list that names them and deleted after the list that
+stopped naming them — the same ordering as the HTTP cache store, for the same reason.
+
+**`read` returns the same `Blob` for the same stored body every time**, and that is not
+a cache for speed. It is what makes a caller's round trip cheap: the API above reads a
+list, changes one entry and exchanges it back, and every unchanged entry arrives holding
+a Blob this store handed out. Recognising it is the difference between rewriting every
+body on every put and rewriting none of them. A Blob that arrives fresh is new by
+definition and is stored.
+
+It is driven two ways. Directly, where the store's own contract lives — revisions,
+handle ownership, body lifetime — and through the real `Cache` and `CacheStorage`
+objects, because a store that satisfies its interface and cannot serve the API above it
+has only passed a test of itself. That second path also checks the thing the whole slice
+is for: a second `open` of the same bytes finds what the first one put there.
+
+### A duplicated vocabulary that cannot rot
+
+The codec has to duplicate eight unions that are declared as types elsewhere, because a
+type is not a value. The failure mode if one drifts is bad and quiet: a member added to
+`RequestDestination` writes fine, fails to decode, and takes its **whole list** with it,
+because an entry that cannot be read makes the list unreadable.
+
+So each array carries a `Covers<Union, (typeof array)[number]>` alias, and each alias is
+the type argument of the `oneOf` that reads that field — checked where it is relied
+upon, rather than in a block of assertions off to one side. Deleting `"xslt"` from the
+array is a compile error naming `"xslt"`. The first form of this did not survive: eight
+aliases declared and never used are eight `TS6196` errors, and a check the compiler
+deletes is not a check.
+
+Eight sabotages, all restored: not comparing the revision, writing the list before its
+bodies, leaving unreferenced bodies, building a new Blob per read, not cleaning up a
+body written before a failure, accepting a handle from another store, and dropping one
+request field from the codec.
+
+Three of those were answered by tests too weak to be evidence, and all three were weak
+the same way — **the sabotage was unreachable from the case the test set up.**
+
+The quota test could not reach the cleanup path at all: the entry-count limit refuses a
+two-entry exchange before any body is written, so a one-entry oversize body throws
+before storing and there was no written body to clean up. The cleanup is reachable from
+the interrupted exchange instead, and that test now asserts on storage **before** the
+reopen, because reclamation at `open` would otherwise hide a failed exchange that left
+its body behind.
+
+The foreign-handle test passed for the wrong reason: the other store's handle named list
+`0`, and this store had no list `0`, so removing the ownership check still produced an
+error — just a different one. Both stores now allocate an id that collides, so accepting
+the handle would read, and then write, somebody else's cache.
+
+### What it costs at the frontier
+
+Same pinned compiler on both sides: 1,269 to 1,279 primary `NTS1001` and 297 to 311
+`NTS1003`, zero `NTS1004`, zero `NTS4xxx`, zero invalid HIR. The largest single-slice
+movement this session, which a file this size should produce.
+
+Two categories are new to this project's frontier. **A parameter of unrepresentable type
+(an array of the type parameter `T`)** — that is `oneOf<T extends string>(allowed:
+readonly T[])`, and it is the price of the vocabulary check being generic. And
+**"`#appendBlob`, a declaration outside every walk"**, which is worth reading carefully
+before believing: `#appendBlob` is called by `#storeBody`, which is called by
+`compareExchange`, so it is reachable in the source. The reading that fits is that
+nothing *compilable* reaches it, because the callers are refused — a consequence of the
+cascade rather than a finding about this code. Left standing, and raised with the
+compiler lane rather than worked around.
+
+The complete local Node-host/real-socket corpus passes 636/636 with zero skipped, the
+compiled axis holds at 54 cases across 5 functions on jvm, c and llvm, and the pinned
+upstream corpus is unchanged at 2,278 of 2,286 applicable.
