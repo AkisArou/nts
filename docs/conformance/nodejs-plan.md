@@ -465,9 +465,36 @@ It is the third time that has been true today — a refusal count is a count of
 refused functions, a publish count is not a shape, and a shape of one name is
 not one blocker.
 
-`fs` is absent from the table because `nts layouts` prints no public API section
-for it — 5098 lines of layouts, exit 0, and no `api` anywhere in the output,
-where every other module has one. Reported to the compiler lane.
+`fs`'s published count is unknown rather than zero, because `nts layouts` prints
+no public API section for it — 5098 lines, exit 0, and no `api` anywhere in the
+output, where every other module has one. Reported to the compiler lane. The
+refusal census comes from `emit-c` and is unaffected, so the rest of `fs` is
+legible:
+
+**`fs` has 2,077 refused constructs and the answer is not in `fs`.**
+
+|  count | kind | where |
+| ---: | --- | --- |
+| 204 | a property of unrepresentable type (`T \| null`) | `web-platform/streams/fifo.ts`, `writable.ts` |
+| 164 | a property of unrepresentable type | `web-platform/streams/writable.ts` |
+| 101 | a property of unrepresentable type (`T \| undefined`) | `web-platform/provider`, `node/readline` |
+| 82 | a member of a class this compiler has no type for | `web-platform/streams/readable.ts` |
+| 77 | assigning to this property | `node/url/searchparams.ts`, `streams/fifo.ts` |
+
+Roughly **450 of the 2,077 are in three web-platform stream files**, and the
+single largest kind is a **nullable or optional property** — `T | null` and
+`T | undefined` together are 305 sites. That is not an exotic construct. It is
+how anyone writes a linked list, a pending slot or an options bag, and it is why
+`fs`, `stream`, `readline` and `http` all sit where they do.
+
+**This is a different tier from the `punycode` work, and the table above hides
+that.** `f64[]` and the error class buy one module with one pinned test file.
+Nullable properties buy the streams-shaped half of the profile, and `fs` alone
+is 359 test files. "0 of 22" made `fs` and `punycode` look equidistant when one
+is two features away and the other is a language feature away.
+
+It also means **web-platform's source is on the compiled critical path for
+`node:fs`**, which neither lane had stated.
 
 ## B. Breadth — the 24 modules that do not exist
 
