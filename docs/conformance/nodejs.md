@@ -304,7 +304,7 @@ the reason for every skip, so they can be read rather than assumed. Neither is
 counted as a pass or a failure, which is what `sweep.mjs` reports and what the
 rows below are.
 
-**1,770 of node's own applicable test files pass** across twenty-two modules,
+**1,772 of node's own applicable test files pass** across twenty-two modules,
 **of which 0 are hollow, and none fail.** Every module is green. That last
 sentence has not been true before, and the paragraph below records what the
 final one cost, because "all green" is the claim most worth distrusting in this
@@ -372,7 +372,7 @@ exclusions were conditional and the condition was met. The last two are the
 denominator having been wrong.
 
 A pass rate against a shrinking denominator is exactly the shape this document
-warns about elsewhere, so the two numbers belong next to each other: **1,770
+warns about elsewhere, so the two numbers belong next to each other: **1,772
 measured, 420 excluded, 0 hollow.**
 
 Both numbers moved for the same reason, and the reason is worth stating. The
@@ -406,7 +406,7 @@ still.
 | `net` | **144 / 144** | 0 | `Socket` and `Server`, with auto-select-family actually running |
 | `os` | **6 / 6** | 0 | complete |
 | `path` | **17 / 17** | 0 | complete but for `matchesGlob` |
-| `process` | **84 / 84** | 0 | complete but for `process.binding`, `stdin` and workers |
+| `process` | **86 / 86** | 0 | complete but for `process.binding`, `stdin` and workers |
 | `punycode` | **1 / 1** | 0 | complete |
 | `querystring` | **4 / 4** | 0 | complete |
 | `readline` | **24 / 24** | 0 | the line editor and the splitter |
@@ -962,6 +962,34 @@ reported as "the suite does not check delay" by anyone who did not probe what
 the mutation had actually done. **A mutation is a claim about the code it
 changed, and needs its own control** — the same sentence as the census
 printing its lane, one level down.
+
+## A comment asserting a property no test covers
+
+The web-platform lane put it best, after finding it three times in a few hours:
+**a comment asserting a property no test covers is a test asserting nothing,
+except nobody runs a comment.** Applied to the comments this session added,
+two of them were exactly that.
+
+`internal/stdio.ts` said that after `process.stdout.end()` a later write "still
+succeeds rather than reporting `ERR_STREAM_WRITE_AFTER_END`", a deliberate
+difference from a real `Writable`. Nothing checked it. And `process`'s signal
+watcher said it "does not hold the process open", because waiting for a signal
+that may never arrive is not work — also unchecked, and the failure it guards
+against would appear as a *timeout* rather than an assertion, which is the
+least legible way for a suite to break.
+
+Both are now `local/` tests, and both were verified to be able to fail:
+mutating `end()` to close the stream, and giving the signal watcher something
+that holds the loop open, each turns its test red. `process` goes to 86.
+
+The signal test is deliberately two-sided, and that is the general lesson
+rather than a detail of this file. Its second assertion is about a process
+*exiting*, and a test that only asserts an exit passes just as well when the
+listener was never registered at all — so it first shows the signal is
+delivered, then shows the watcher does not overstay. **Sabotage tests whether
+the test is empty; a positive assertion tests whether the implementation is.**
+A suite made only of refusals cannot tell you whether the thing refusing
+exists.
 
 ## Comparing the export surface to node's, which nothing had done
 
