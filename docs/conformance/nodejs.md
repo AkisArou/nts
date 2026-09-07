@@ -2871,6 +2871,29 @@ truncates at a `/` instead. One function served both, so the parser now keeps
 out which part of its argument is a domain. **They were one function, and every
 call site got whichever behaviour it happened to have.**
 
+**And a third in `buffer`, three bugs in one layer.** `Buffer.from(str,
+"base64")` does not see a JavaScript string: V8 writes one byte per UTF-16 code
+unit — the low byte — and node decodes that. So `U+0452` is indistinguishable
+from `"R"` (0x52), and `U+013D` terminates the payload exactly as `"="` does.
+This profile indexed its tables by the whole code unit, making every character
+above U+00FF a skip. Hex had the same defect.
+
+Separately, `byteLength` counted only alphabet characters where node computes a
+**bound from the length** — strip at most two trailing `=`, multiply what is
+left. So `byteLength("A===", "base64")` was 0 against node's 1, and a
+40-character string with no valid characters in it was 0 against node's 30.
+That is the allocation `Buffer.from` sizes against, so it did not merely
+misreport: **it truncated.**
+
+4,142 divergences, cleared in three measured steps — `byteLength` to 1,330, the
+base64 low byte to 12, the hex low byte to 0. None of it is reachable from
+node's own 76 `test-buffer-*.js` files, and the reason is worth stating: there
+is no reason to write a base64 test whose input is Cyrillic. **The oracle's
+inputs are the ones a human thought to write down.**
+
+Every rule here was verified against node rather than read off its source. The
+padding-on-a-low-byte case was expected to go the other way.
+
 Current state, all lanes:
 
 | corpus | comparisons | divergences |
@@ -2880,6 +2903,7 @@ Current state, all lanes:
 | `path`, TypeScript | 36,234 | 0 |
 | `querystring`, TypeScript | 16,076 | 0 |
 | `url`, TypeScript | 20,120 | 0 |
+| `buffer`, TypeScript | 44,225 | 0 |
 
 Two processes are needed on the TypeScript lane, because inside the
 substitution `require("node:path")` and `require("path")` are the same object
