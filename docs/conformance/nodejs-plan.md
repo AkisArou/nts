@@ -48,17 +48,39 @@ Then `path` (85 total refusals, 17 tests, pure computation, no bindings), then
 `diagnostics_channel` / `async_hooks` / `timers`, which sit together around 90
 to 106 and are the first with real test weight behind them.
 
-**Measured since this was written, and it changes what those two mean.** The
-frontier is about *import edges* rather than about which code is hard.
-`punycode`'s single root is in `internal/process-warning.ts`, reached through
-one call. `path` has 32 roots and only 6 are in its own source — **21 are in
-`internal/errors.ts` and 5 in `internal/validators.ts`**, the layer every
-module imports. `diagnostics_channel` is the opposite: its roots are its own
-(`Map<string | symbol, WeakRef>` unrepresentable, rest parameters, an `unknown`
-narrowed to never). So the shared `internal/` layer is the bottleneck for the
-modules that are otherwise closest, and fixing it moves several at once —
-while `punycode` remains the shortest path to the axis reporting anything at
-all.
+**Measured across all 22 modules since this was written, and it changes what
+the ordering means.** 6,039 (module, root) pairs over 1,491 distinct root
+sites, on one pinned binary. The frontier is about *import edges* rather than
+about which code is hard.
+
+**Twenty-one root sites in `internal/errors.ts` each block 20 of the 22
+modules** — not twenty pairs, twenty modules apiece. Seven of the twenty-one
+are the same kind, *a conversion to string from this type*, so they may be one
+fix rather than seven.
+
+Counting each module's roots and how many lie outside the shared `internal/`
+layer:
+
+| module | roots | outside `internal/` |
+| --- | ---: | ---: |
+| `punycode` | 1 | **0** |
+| `path` | 32 | 6 |
+| `async_hooks` | 53 | 20 |
+| `diagnostics_channel` | 55 | 20 |
+| `timers` | 60 | 26 |
+| `fs` | 1065 | 1016 |
+
+**`punycode` is the only module whose every root is in shared code.** That is a
+better reason to take it first than its size: it is the one module where
+fixing the shared layer is *sufficient*. `path` is the interesting second — its
+six own roots are all in `glob-matcher.ts`, which serves `matchesGlob`, the one
+function `path` does not claim behaviourally anyway.
+
+So the two goals separate cleanly. **For the first artifact to exist**, it is
+the annotated-const bug under `punycode` and nothing else. **For the most
+modules reachable per fix**, it is `internal/errors.ts`. Both are the compiler
+lane's; this lane's job was to say which is which, and to keep saying it with
+numbers that were re-measured rather than remembered.
 
 **Order by destination, not by proximity.** The list above is sorted by
 cheapness, and cheapness is a tiebreak rather than a reason. `punycode` is
