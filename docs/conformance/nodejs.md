@@ -2150,6 +2150,25 @@ under **Conventions** for what a missing initializer costs. But `os` and
 `querystring` print no such refusal and still fail, so the export table is a
 defect in its own right rather than a consequence of that one.
 
+### The axis has never once reported a pass, including to itself
+
+Worth separating from the compiler's side of it, because it is a fact about
+this document's instruments rather than about `nts`.
+
+**No module's compiled artifact has ever produced a single non-degenerate
+pass.** Not one, across twenty-two modules, in every measurement taken. Which
+means the stage classification, the mutation check and the distance ordering
+below all measure a quantity that has only ever been zero — and
+`sweep.mjs --addons` has never had to print `green`. An instrument that has
+never returned a positive result has not been tested against the case it
+exists for. The `green` branch is unexercised code in a checking tool, which
+is precisely the category this file keeps finding things in.
+
+So the first green module, whenever it arrives, tests two things: the compiler,
+and whether this apparatus can recognise success when it sees it. The second is
+not rhetorical — the one time this axis reported passes at all, they were
+`undefined === undefined`, and the control in place at the time said clean.
+
 ### The shortest path to one green module
 
 Nothing on this axis is close, but `punycode` is closest and it is worth
