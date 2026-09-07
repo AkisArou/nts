@@ -231,11 +231,19 @@ Two pieces of hardware, and one protocol that is not this lane's to write.
   plain gets nothing. Not the race -- the compiler on the platform we ship to
   discharging the obligation the JMM gives it.
 
-- **A device with a radio**, for Wi-Fi/cellular transitions, background
-  restrictions and DNS races. The *decision* a transition triggers is tested
-  without one -- `DefaultNetworkWatch` has thirteen cases and no `android.*`
-  import -- and what is missing is `ConnectivityManager` actually delivering
-  those events, and in that order.
+- **A stable way to produce a network transition**, which is not the same as a
+  radio and is the correction to what this said before. The emulator carries
+  both a WiFi and a cellular network, and with `adb root` taking `wlan0` down
+  moves the default from one to the other exactly as a handover does. A test
+  that did it saw `watchDefaultNetwork` sweep the open connections, and the
+  sabotage that removes the registration left three open.
+
+  It is not in the suite because it would not do it twice: it then hung from
+  two different dex compositions, wedged `adb`, and left the device without
+  Wi-Fi when killed. A case that cannot be run twice in a row is not a ratchet.
+  See `docs/records/0199`. The transition *decision* stays tested thirteen ways
+  on a desktop JVM, and background restrictions and DNS races still want real
+  hardware.
 
 - **HTTP/2 against a real controlled peer**, which is deferred and is not this
   lane's to implement: the shared layer owns the protocol engine. What is this

@@ -213,6 +213,19 @@ echo "$out"
 case "$out" in *"94 checks, 0 failures"*) ;; *) failed=1 ;; esac
 adb shell rm -f /data/local/tmp/nts-bothhttp.dex
 
+# **There is no handover case here, and that is a decision.** A real Wi-Fi to
+# cellular transition *is* producible on this emulator -- it carries both
+# networks, and taking `wlan0` down moves the default from one to the other --
+# and a test that did it observed `watchDefaultNetwork` sweep the open
+# connections, with the sabotage that removes the registration leaving three
+# open. That measurement happened.
+#
+# It is not here because it did not happen *twice*. The same test then hung,
+# from its own dex and from this one, wedged `adb` repeatedly, and left the
+# device with no Wi-Fi when killed. A case that cannot be run twice in a row is
+# not evidence a suite can carry, whatever it showed once. See
+# `docs/records/0199`.
+
 # Does `volatile` reach ART's compiler and produce a barrier?
 #
 # The half of `docs/records/0181` that is checkable without ARM. It does not
