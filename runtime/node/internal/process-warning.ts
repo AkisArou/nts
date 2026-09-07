@@ -26,6 +26,7 @@ let processWarningHandler: ProcessWarningHandler | undefined;
 declare function nts_process_emit_warning_object(
   message: string,
   name: string,
+  code: string,
   warning: Error,
 ): void;
 
@@ -35,10 +36,15 @@ export function setProcessWarningHandler(handler: ProcessWarningHandler): void {
 }
 
 /** Deliver the exact warning object, preserving module-specific fields. */
-export function emitProcessWarning(warning: Error): void {
+export function emitProcessWarning(warning: Error, code: string): void {
   const handler = processWarningHandler;
   if (handler === undefined) {
-    nts_process_emit_warning_object(warning.message, warning.name, warning);
+    // The host call site stays inside this function, where `warning` is a
+    // parameter typed `Error`. Calling it from `emitWarning` instead emitted a
+    // `NtsObj_ProcessWarning *` against a declaration that says
+    // `NtsObj_Error *`, because widening at an assignment does not change what
+    // the value is -- only what a parameter says it accepts does.
+    nts_process_emit_warning_object(warning.message, warning.name, code, warning);
     return;
   }
   handler(warning);
@@ -53,5 +59,10 @@ export function emitWarning(message: string, name: string, code: string): void {
   const warning: ProcessWarning = new Error(message);
   warning.name = name;
   if (code !== "") warning.code = code;
-  emitProcessWarning(warning);
+  // The code travels beside the object rather than only on it. A compiled
+  // addon always takes the host path -- `node:process` is not in its program,
+  // so nothing installs a handler -- and the host hands it to
+  // `process.emitWarning(message, name, code)`, whose three-argument form is
+  // what sets `warning.code` on node's side. Node's own tests assert that code.
+  emitProcessWarning(warning, code);
 }

@@ -26,6 +26,21 @@ bool nts_stderr_is_tty(void);
 void nts_process_really_exit(double code);
 struct NtsObj_Error;
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
+                                     NtsString *code,
                                      struct NtsObj_Error *warning);
+
+/* Hand this translation unit the Node-API environment, when there is one.
+ *
+ * A compiled addon runs inside node, so a process warning belongs on node's
+ * `process` rather than on the diagnostic stream -- but reaching it needs an
+ * `napi_env`, and nothing in the generated program has one to give. The addon's
+ * `NAPI_MODULE_INIT` does, and calling this before `module__init()` is what
+ * makes the difference between a warning node's own tests can observe and a
+ * line of text on stderr.
+ *
+ * Declared as `void *` so this header stays usable by a standalone build with
+ * no Node-API headers in its include path. Never called there, and the sink
+ * falls back to stderr when it is not. */
+void nts_napi_set_env(void *env);
 
 #endif

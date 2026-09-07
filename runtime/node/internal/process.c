@@ -189,25 +189,105 @@ bool nts_stderr_is_tty(void) { return uv_guess_handle(2) == UV_TTY; }
 
 void nts_process_really_exit(double code) { _Exit((int)code); }
 
-/* The fallback warning sink for a native program that does not include the
- * `node:process` compatibility module. When that module is present it installs
- * the typed TypeScript handler in `internal/process-warning.ts`, so the exact
- * Error object is emitted there and this function is not reached.
+#if defined(__has_include)
+#  if __has_include(<node_api.h>)
+#    define NTS_HAVE_NODE_API 1
+#  endif
+#endif
+
+#ifdef NTS_HAVE_NODE_API
+#include <node_api.h>
+
+/* Set once by the addon's `NAPI_MODULE_INIT`, before the module body runs.
+ * Null in a standalone binary, which is the case the stderr sink below is for. */
+static napi_env nts_host_env = NULL;
+
+void nts_napi_set_env(void *env) { nts_host_env = (napi_env)env; }
+
+/* `process.emitWarning(message, name, code)`.
+ *
+ * Node defers the `'warning'` event to a later tick, which is why a listener
+ * registered after the addon loads still sees this -- and why an addon that
+ * writes to stderr instead is unobservable to `common.expectWarning`, whatever
+ * the text says.
+ *
+ * Every failure here falls through to the stderr sink rather than being
+ * reported: a warning is a diagnostic, and losing one silently would be worse
+ * than printing it the old way. */
+static bool nts_emit_warning_through_node(const char *message_text,
+                                          const char *name_text,
+                                          const char *code_text) {
+    napi_env env = nts_host_env;
+    if (env == NULL) return false;
+
+    napi_value global, process, emit_warning;
+    if (napi_get_global(env, &global) != napi_ok) return false;
+    if (napi_get_named_property(env, global, "process", &process) != napi_ok) return false;
+    napi_valuetype kind;
+    if (napi_typeof(env, process, &kind) != napi_ok || kind != napi_object) return false;
+    if (napi_get_named_property(env, process, "emitWarning", &emit_warning) != napi_ok) {
+        return false;
+    }
+    if (napi_typeof(env, emit_warning, &kind) != napi_ok || kind != napi_function) return false;
+
+    napi_value args[3];
+    if (napi_create_string_utf8(env, message_text, NAPI_AUTO_LENGTH, &args[0]) != napi_ok) {
+        return false;
+    }
+    if (napi_create_string_utf8(env, name_text, NAPI_AUTO_LENGTH, &args[1]) != napi_ok) {
+        return false;
+    }
+    /* The three-argument form is what carries the code. `process.emitWarning
+     * (message, name)` leaves `warning.code` undefined, and node's own tests
+     * assert the code -- `common.expectWarning(type, message, code)`. */
+    size_t argc = 2;
+    if (code_text != NULL && code_text[0] != '\0') {
+        if (napi_create_string_utf8(env, code_text, NAPI_AUTO_LENGTH, &args[2]) != napi_ok) {
+            return false;
+        }
+        argc = 3;
+    }
+
+    napi_value ignored;
+    return napi_call_function(env, process, emit_warning, argc, args, &ignored) == napi_ok;
+}
+#else
+void nts_napi_set_env(void *env) { (void)env; }
+#endif
+
+/* The warning sink for a program that does not include the `node:process`
+ * compatibility module. When that module is present it installs the typed
+ * TypeScript handler in `internal/process-warning.ts`, so the exact Error
+ * object is emitted there and this function is not reached.
+ *
+ * A compiled addon *always* reaches it -- `node:process` is not in its program
+ * -- and an addon is running inside node, where a warning belongs on
+ * `process` rather than on the diagnostic stream. So this tries node first and
+ * writes to stderr only when there is no host to hand it to, which is the
+ * standalone case the stderr path was written for.
  *
  * `warning` is kept in the ABI because the Node host stand-in forwards that
- * exact object. A native diagnostic stream has no object receiver, so only its
- * already-extracted name and message are written here. */
+ * exact object; neither path here has an object receiver, so the already
+ * extracted name, message and code are what get used. */
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
+                                     NtsString *code,
                                      struct NtsObj_Error *warning) {
     (void)warning;
     char *message_text = native_string(message);
     char *name_text = native_string(name);
+    char *code_text = native_string(code);
     if (message_text == NULL || name_text == NULL) {
         fputs("Warning: unable to allocate warning text\n", stderr);
     } else {
-        fprintf(stderr, "(node:%d) %s: %s\n", (int)uv_os_getpid(), name_text,
-                message_text);
+#ifdef NTS_HAVE_NODE_API
+        if (!nts_emit_warning_through_node(message_text, name_text, code_text))
+#endif
+        {
+            fprintf(stderr, "(node:%d) %s: %s\n", (int)uv_os_getpid(), name_text,
+                    message_text);
+        }
     }
     free(message_text);
     free(name_text);
+    free(code_text);
 }

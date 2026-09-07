@@ -993,7 +993,7 @@ class MaxListenersExceededWarning extends Error {
 }
 
 function emitWarning(warning: MaxListenersExceededWarning): void {
-  emitProcessWarning(warning);
+  emitProcessWarning(warning, "");
 }
 
 function copyOwnedEventTargetListeners(

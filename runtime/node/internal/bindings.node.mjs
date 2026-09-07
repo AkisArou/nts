@@ -45,7 +45,7 @@ globalThis.nts_process_pid = () => process.pid;
 globalThis.nts_process_argv = () => process.argv.slice();
 globalThis.nts_process_argv0 = () => process.argv0;
 globalThis.nts_process_exec_path = () => process.execPath;
-globalThis.nts_process_emit_warning_object = (_message, _name, warning) => {
+globalThis.nts_process_emit_warning_object = (_message, _name, _code, warning) => {
   // Preserve identity: EventEmitter warnings carry `emitter`, `type`, and
   // `count`, and callers observe those fields on the process warning event.
   process.emitWarning(warning);
