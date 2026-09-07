@@ -140,6 +140,10 @@ typedef struct NtsQueue {
 #endif
 
 struct NtsEnvironment {
+  /* Where an uncaught `throw` lands, innermost first, or null for a program
+     whose outer edge is the end of the process. Not on the hot path and first
+     only because it is the one field a `throw` reads. See `NtsLanding`. */
+  NtsLanding *landing;
   /* -- one cache line: the reference-counting and allocation hot path -- */
   size_t retains;
   size_t releases;
@@ -1206,7 +1210,51 @@ size_t nts_cycle_candidates(void) { return nts_env->candidates; }
  * `String(e)` would: this is the end of the program, so a thrown object prints
  * whatever the compiler could tell us about it and otherwise says plainly that
  * it was an object. */
+/* The innermost landing, per environment: a throw is a lane-local event and an
+ * environment is what a lane owns. */
+void nts_landing_push(NtsLanding *landing) {
+  if (!landing) {
+    return;
+  }
+  landing->previous = nts_env->landing;
+  landing->thrown = nts_value_of_undefined();
+  landing->detail = NULL;
+  nts_env->landing = landing;
+}
+
+void nts_landing_pop(NtsLanding *landing) {
+  if (landing && nts_env->landing == landing) {
+    nts_env->landing = landing->previous;
+  }
+}
+
+NtsValue nts_landing_thrown(const NtsLanding *landing) {
+  return landing ? landing->thrown : nts_value_of_undefined();
+}
+
+const NtsString *nts_landing_detail(const NtsLanding *landing) {
+  return landing ? landing->detail : NULL;
+}
+
+const char *nts_thrown_class(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return NULL;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor ? object->descriptor->name : NULL;
+}
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail) {
+  /* An embedder with somewhere to put it gets it, and the process survives.
+     Popped here rather than by the caller, because the caller is reached by a
+     jump and the frame it lands in is no longer the innermost one. */
+  NtsLanding *landing = nts_env->landing;
+  if (landing) {
+    nts_env->landing = landing->previous;
+    landing->thrown = value;
+    landing->detail = detail;
+    longjmp(landing->frame, 1);
+  }
   fputs("nts: uncaught ", stderr);
   const NtsString *text = NULL;
   switch (nts_value_tag(value)) {

@@ -411,6 +411,50 @@ static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
         env, (const char *)NTS_ELEMENTS(s, unsigned char),
         (size_t)s->length, out);
 }
+
+/* Raise what compiled code threw as a catchable JavaScript exception.
+ *
+ * A compiled program's own `try` is fully lowered, so this is reached only at
+ * the outer edge -- where control leaves compiled code and returns to
+ * JavaScript. Before it existed the runtime printed `nts: uncaught RangeError`
+ * and terminated the process, so `punycode.decode("-")` killed node instead of
+ * throwing something `assert.throws` could see.
+ *
+ * The name comes from the thrown object's descriptor, which does record the
+ * class it describes; the message comes from the throw site, because a
+ * descriptor records where an object's references are and not what they are
+ * called. That is the same split `nts_uncaught` works from. */
+static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
+    NtsValue thrown = nts_landing_thrown(landing);
+    const NtsString *detail = nts_landing_detail(landing);
+    const char *class_name = nts_thrown_class(thrown);
+
+    /* Through the same conversion every returned string goes through, so a
+     * two-byte message crosses as one rather than as mojibake. */
+    napi_value message = NULL;
+    if (detail == NULL || nts_to_napi_string(env, detail, &message) != napi_ok) {
+        if (napi_create_string_utf8(env, "", 0, &message) != napi_ok) {
+            napi_throw_error(env, NULL, "compiled code threw");
+            return;
+        }
+    }
+
+    napi_value error = NULL;
+    if (napi_create_error(env, NULL, message, &error) != napi_ok) {
+        napi_throw_error(env, NULL, "compiled code threw");
+        return;
+    }
+    /* `e.name`, so `assert.throws(f, RangeError)` and a `name` comparison both
+     * see what the source threw rather than a bare `Error`. */
+    if (class_name != NULL) {
+        napi_value name = NULL;
+        if (napi_create_string_utf8(env, class_name, NAPI_AUTO_LENGTH, &name) == napi_ok) {
+            napi_set_named_property(env, error, "name", name);
+        }
+    }
+    napi_throw(env, error);
+}
+
 "#;
 
 /// One function's wrapper, or why it has none.
@@ -511,6 +555,14 @@ fn wrapper(
         out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
     }
 
+    // The landing pad, so a `throw` that reaches the edge becomes a catchable
+    // JavaScript exception instead of taking the process down. Set up after the
+    // arguments are unmarshalled, because those have their own failure path and
+    // nothing compiled has run yet.
+    out.push_str(
+        "    NtsLanding nts_landing;\n    if (setjmp(nts_landing.frame) != 0) {\n        nts_napi_raise(env, &nts_landing);\n        out = NULL;\n        goto nts_napi_cleanup;\n    }\n    nts_landing_push(&nts_landing);\n",
+    );
+
     let call = format!("{symbol}({})", args.join(", "));
     let after_call = forget_consumed_arguments(
         &crossings,
@@ -527,7 +579,10 @@ fn wrapper(
         release_managed,
         return_is_borrowed,
     ));
-    out.push_str("nts_napi_cleanup:\n");
+    // Popped at the one place every path reaches. `nts_landing_pop` names the
+    // frame rather than popping blindly, so the throw path -- which pops on the
+    // way out -- and this one cannot between them remove somebody else's.
+    out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(&args) {
             if matches!(crossing, Cross::Str) {
@@ -855,6 +910,22 @@ pub fn emit(program: &hir::Program) -> Addon {
         out.push_str("};\n\n");
     }
 
+    // The initializer's own prototype. The addon is a separate translation unit
+    // from `program.c`, so it declares everything it calls -- `wrapper` emits
+    // one per wrapped function and this is the one function the addon calls
+    // that nothing wraps.
+    let runs_module_init = program
+        .funcs
+        .iter()
+        .any(|func| func.name == nts_core::hir::lower::MODULE_INIT);
+    if runs_module_init {
+        let _ = writeln!(
+            out,
+            "void {}(void);\n",
+            c_identifier(nts_core::hir::lower::MODULE_INIT)
+        );
+    }
+
     let mut skipped = Vec::new();
     // The emitted symbol and the name it goes out under, which differ wherever
     // two modules declared one name or a re-export renamed it.
@@ -880,6 +951,26 @@ pub fn emit(program: &hir::Program) -> Addon {
     }
 
     out.push_str("NAPI_MODULE_INIT() {\n");
+    // Run the module's own top-level code before anything can call into it.
+    //
+    // Without this every module-scope value stays at its static initializer,
+    // which for a reference is null -- `punycode`'s `const delimiter = "-"` was
+    // null when `decode` read it, and the addon loaded, published all four
+    // functions and then segfaulted inside `nts_str_find` on the first call
+    // that touched one.
+    //
+    // The C backend's `--main` path has always done this; the addon path never
+    // did, and nothing noticed because no module reached the point of being
+    // called until this week. `module#init` exists whenever the file has a
+    // module-scope declaration at all, and where it does not there is nothing
+    // to run and nothing is emitted.
+    if runs_module_init {
+        let _ = writeln!(
+            out,
+            "    {}();",
+            c_identifier(nts_core::hir::lower::MODULE_INIT)
+        );
+    }
     for (name, publish) in &wrapped {
         let symbol = c_identifier(name);
         let property = c_string_literal(publish);

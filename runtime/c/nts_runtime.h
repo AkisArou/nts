@@ -21,6 +21,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <setjmp.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -1536,6 +1537,55 @@ NTS_READS_ONLY double nts_array_at(const NtsArray *a, double at);
  * called, so the runtime cannot find a field by name and the compiler can --
  * this is that fact handed over rather than guessed at. Null for everything
  * else, a thrown string included: `value` already carries its text. */
+/* Where a `throw` that nothing in compiled code caught lands, when an embedder
+ * has somewhere to put it.
+ *
+ * A compiled program's own `try` is fully lowered -- a handler is a block and a
+ * `throw` is a jump -- so this is only reached at the OUTER edge, where control
+ * leaves compiled code entirely. For a standalone program that edge is the end
+ * of the process and `nts_uncaught` prints and exits. For a Node-API addon it
+ * is the boundary back into JavaScript, where the right answer is a catchable
+ * exception rather than a dead process: `punycode.decode("-")` must throw a
+ * `RangeError` that `assert.throws` can see, and until this existed it printed
+ * `nts: uncaught RangeError` and took the process with it.
+ *
+ * A stack, because addons nest: JavaScript may call in, and compiled code may
+ * call back out through a callback that itself enters compiled code again.
+ * Each entry pushes, and the value that arrives is read off the frame that
+ * caught it.
+ *
+ * `setjmp` is the mechanism and its cost is stated rather than hidden: a
+ * non-local jump out of compiled code does not run the releases that the
+ * reference-counting provider inserted between the throw and this frame, so a
+ * thrown-through call leaks whatever those frames held. That is the same
+ * trade a C program makes with `longjmp`, it is bounded by the throw being
+ * exceptional, and it is why this is at the boundary rather than inside the
+ * lowering -- an ordinary `try` never comes near it. */
+typedef struct NtsLanding {
+  jmp_buf frame;
+  struct NtsLanding *previous;
+  NtsValue thrown;
+  /* The message, which the compiler supplies at the throw site because a
+     descriptor records where an object's references are and not what they are
+     called -- so the runtime cannot read a `message` field and the compiler
+     can. The same fact `nts_uncaught` is handed. */
+  const NtsString *detail;
+} NtsLanding;
+
+/* Make `landing` the innermost one. Call after `setjmp` returns zero. */
+void nts_landing_push(NtsLanding *landing);
+/* Remove `landing` if it is the innermost. Idempotent, and it names the frame
+ * rather than popping blindly: the throw path pops on the way out, and the
+ * ordinary path must not then pop somebody else's. */
+void nts_landing_pop(NtsLanding *landing);
+/* What the throw carried, on the non-zero return from `setjmp`. */
+NTS_READS_ONLY NtsValue nts_landing_thrown(const NtsLanding *landing);
+/* The message that came with it, or null. */
+NTS_READS_ONLY const NtsString *nts_landing_detail(const NtsLanding *landing);
+/* The class name a thrown object carries, for an embedder building its own
+ * error object. Null for anything that is not a reference. */
+NTS_READS_ONLY const char *nts_thrown_class(NtsValue value);
+
 _Noreturn void nts_uncaught(NtsValue value, const NtsString *detail);
 
 /* `x instanceof C`, for one candidate class.
