@@ -4,7 +4,8 @@ What is implemented, what node's own tests say about it, and what stops it
 compiling.
 
 Companion to [`typescript.md`](typescript.md), which tracks the language and the
-runtime under it. This file is the `node:*` surface built on top.
+runtime under it. This file is the `node:*` surface built on top, and
+[`nodejs-plan.md`](nodejs-plan.md) is what to do about what it says.
 
 ## Two axes, and they move independently
 
