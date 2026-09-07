@@ -106,6 +106,36 @@ axis. That would be the first non-zero this axis has ever reported.
 
 ### What the last mile actually contains, measured
 
+**Scoreboard, re-measured on each new compiler binary rather than remembered:**
+
+| # | blocker | state |
+| --- | --- | --- |
+| 1 | an annotated `const` takes its receiver type from the initializer | open, compiler lane |
+| 2 | the Node-API wrapper never called `module__init` | **fixed**, verified here |
+| 3 | `build.sh` named three of the four generated `.c` files | **fixed**, this lane |
+| 4 | a compiled `throw` did not cross the boundary | **fixed**, but the error *class* is flattened |
+| 5 | the addon exports functions only — no values, no namespaces | open, compiler lane |
+
+**Blocker 4's remainder is measurable across three lanes**, which is the only
+way to see it: `codec.ts:36` throws `new RangeError("Invalid input")`; host
+node and TypeScript-on-node both report `RangeError`; the compiled addon
+reports `Error`. The message survives, the constructor does not. It decides the
+test, because `test-punycode.js` matches on the error's string form —
+`/^RangeError: Invalid input$/` — and `Error: Invalid input` does not match.
+
+**Blocker 5 only became visible once 4 stopped killing the process.** The
+pinned test then ran past every throw and died on `punycode.ucs2.encode`.
+`punycode`'s public shape is six keys — `version`, `ucs2`, and four functions —
+and `NAPI_MODULE_INIT` publishes the four functions. That is also what the
+sweep has been calling `built-exports-partial`: `os` reports "0 / 6, 4 name(s)
+published" and every one of its tests dies on `Cannot read properties of
+undefined (reading 'UV_UDP_REUSEADDR')`, because `os.constants` is a table
+rather than a function. **A module whose public API is not purely functions
+cannot currently be an addon, and that is most of them** — which makes 5 a
+wider gate than 1, since 1 is specific to `punycode`.
+
+
+
 The path was walked end to end by routing around the first refusal temporarily.
 The workaround was reverted; what it bought was an inventory, and **three of the
 four blockers were invisible until someone walked it.**
