@@ -2486,11 +2486,38 @@ It has **one** applicable test file, and its whole public surface lowers —
 the N-API wrapper declines none of them. Three named things stand between that
 and a green row:
 
-| blocker | what it is | what it costs |
-| --- | --- | --- |
-| `NTS2002 a value of type ``never`` reached code generation` | `codec.ts`'s `error(type): never`. It is refused and its **eight call sites are emitted anyway**, which is the module's two clang errors | the C does not compile |
-| `NTS1003 module#init ... calls emitWarning` | rooted in two refusals in `internal/process-warning.ts` — a call of a function value with no closures, and `code`, which `Error` does not declare | `DEP0040` never fires, and `test-punycode.js:30` asserts it with `common.expectWarning` |
-| `NTS1001 ucs2decode, a function used as a value` | `punycode.ucs2` is an object holding function values | `punycode.ucs2.decode` and `.encode`, which the test exercises |
+Three blockers when this was written. **Two are closed and one remains:**
+
+| blocker | state |
+| --- | --- |
+| `NTS2002`, `error(type): never` refused with its eight call sites emitted anyway | **closed** — it was the segfault, not a compile error |
+| `NTS1001 ucs2decode, a function used as a value` | **closed**, and it closed `a call of a function value in a program with no closures` for free: that refusal fires when the program has no closure slot at all, and wrapping `ucs2decode` gave the program a closure |
+| `NTS1001 code, which Error does not declare` | **open**, and not cheap |
+
+The last one is `internal/process-warning.ts:55`:
+
+```ts
+interface ProcessWarning extends Error { code?: string }
+const warning: ProcessWarning = new Error(message);
+if (code !== "") warning.code = code;
+```
+
+An `Error` is allocated with `message` and `name`; the declared type says it
+also has a `code` slot, and there is nowhere to put the value. The honest
+repair allocates at the *declared* type, which base-first layout makes cheap to
+upcast — but the descriptor then belongs to `ProcessWarning`, so
+`warning instanceof Error` stops holding unless the provided-error hierarchy is
+taught about it. **That is a class-values feature, not a lowering arm**, and
+the compiler session has declined to put a number on it. Recorded that way
+rather than as one item left, because a distance table that counts it as one
+would be lying by arithmetic.
+
+**A third item recorded here was withdrawn.** String-literal `const` folding
+for `delimiter` was named as a blocker and is not one: the refusal is at *read*
+time, firing only when `module#init` is absent, so if the initializer runs
+`delimiter` is assigned and nothing needs folding. It was an optimisation
+mistaken for a requirement by someone who had just been looking at the null
+pointer it caused.
 
 That is the complete list for the smallest module in the profile — three
 compiler features for one test file.
@@ -2579,7 +2606,12 @@ what one fix will show for free.
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 
-**12,278 functions lower across twenty-two modules, against 6,794 refused.**
+**12,278 functions lower to HIR across twenty-two modules, against 6,794
+refused.** The wording matters and this file got it wrong for most of a day.
+*"Functions lower"* reads as a claim about the product; it is a claim about one
+stage. The C backend refuses some of these afterwards, and the artifact axis is
+where that shows — this document's own rule about a green step being a claim
+about what it looked at applies to a green number too.
 The prose below was written against 1,509, and before that 946; read its
 *reasoning* and not its arithmetic until each claim is re-derived.
 
