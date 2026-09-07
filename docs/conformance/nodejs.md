@@ -4308,8 +4308,47 @@ explain why all its fields go void together, where a partially-void struct like
 `NtsObj_Type7151` is the other cause, one field at a time.
 
 That is a reading of the output and not a measurement, and it is recorded as
-such. What the six negatives buy is a much smaller space for the compiler lane to
+such. What the negatives buy is a much smaller space for the compiler lane to
 search than the module name alone would have given them.
+
+**And then the ninth reduction was not a reduction at all — it was noticing that
+`util` cannot reach a stream.** `util` imports `core/events.ts` and
+`core/encoding.ts` and nothing else of the web-platform lane's. Neither mentions
+streams. So the question that should have been asked on the first day is not
+"which shape of dictionary breaks" but **"how is a stream dictionary in this
+program at all"**:
+
+    util/src/main.ts -> core/events.ts -> provider/environment.ts
+                     -> provider/web-platform-runtime.ts -> fetch/body.ts
+                     -> streams/readable.ts -> UnderlyingSource, QueuingStrategy
+
+Four hops inside another lane's source. `WebPlatformRuntime` is a provider
+interface and names the platform's types, `body` names `ReadableStream`, and the
+dictionaries come with it — into a program that **cannot construct a stream at
+run time at all**. Nothing on that path is ever built by `util`.
+
+Every one of the earlier reductions had the type *used*, so the obvious next
+hypothesis was that the shape which breaks is a type in the program that nothing
+constructs — reached only because something else in the file graph mentions it in
+a type position, which is a thing nobody writes a test for because it looks like
+dead code rather than a case.
+
+**That does not reproduce either.** An interface reachable only through a
+type-only import, held as a field of a class nobody instantiates, emits
+`NtsObj_Sink` with all five fields resolved to `NtsValue`. Ten reductions now,
+all clean.
+
+So what this chain establishes is **provenance and not cause**: it explains how a
+stream dictionary is in `util`'s program at all, which was a real puzzle and had
+gone unasked for a week. It does not explain why the fields are `void`. Those are
+two different questions and the first one being answered was worth having on its
+own — but the story was good enough that it was written here as though it settled
+the second, and it does not.
+
+This was found by fixing `tooling/conformance/web-platform-reach.mjs`, which had
+been stopping at the first web-platform file rather than walking through it. The
+same fix corrected a scope answer given to that lane twice: `streams/readable.ts`
+reaches **twelve** of twenty-two modules, not one.
 
 ## The closure call slot, a blocker with no diagnostic
 
@@ -4343,12 +4382,21 @@ number. The compiler lane is publishing it as `nts_closure_call_slot`; until it
 appears in `nts_runtime.h`, `microtask.c` carries `0` behind a `TODO` and those
 three modules are not to be run against it.
 
-**There is no fixture for this and there cannot usefully be one.** Nothing
-refuses, `emit-c` succeeds, clang succeeds, the addon links and loads. The defect
-is a constant that is correct in one program out of twenty-two, and the only
-instrument that would catch it is running the module and watching it crash. It is
-recorded here because a blocker with no diagnostic is the kind that gets
-forgotten, not because it is hard to fix.
+**It is fixtured, and the sentence that stood here said it could not be.** That
+sentence read: "there is no fixture for this and there cannot usefully be one",
+on the grounds that nothing refuses, `emit-c` succeeds, clang succeeds, and the
+addon links and loads. All of that is true and none of it is a reason. It was a
+claim about `blockers-check.mjs`'s vocabulary presented as a claim about the
+defect — which is the same confusion this blocker is itself made of, an
+instrument's limits mistaken for the world's.
+
+What the defect needs is a statement of **absence**: `program.c` does not contain
+`nts_closure_call_slot`. The checker grew `lacks-c` for it, and
+`blockers/closure-call-slot` holds while the constant is missing and reports
+`FIXED` the day it appears — at which point the `0` in
+`runtime/node/internal/microtask.c` becomes the symbol and the fixture becomes a
+guard. Three lines of checker for a blocker that had been written off as
+untestable.
 
 ## A byte view is two failures, and `string_decoder` is two fixes
 
