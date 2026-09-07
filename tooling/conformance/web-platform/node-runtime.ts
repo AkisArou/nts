@@ -2,6 +2,7 @@ import {
   installWebPlatformRuntime,
   WebPlatformRuntime,
 } from "../../../runtime/web-platform/src/provider.ts";
+import type { HostNodeSystemProxyResolver } from "./node-primitives.ts";
 import type { WebPlatformOptions } from "../../../runtime/web-platform/src/provider.ts";
 import { HostNodeContentDecoder } from "./node-content-decoder.ts";
 import { HostNodeWebSocketDeflate } from "./node-websocket-deflate.ts";
@@ -24,15 +25,19 @@ export function createHostNodeWebPlatform(
   options: WebPlatformOptions = {},
   sockets: HostNodeSocketOptions = {},
   reportError?: (error: unknown) => void,
+  systemProxyFor?: HostNodeSystemProxyResolver,
 ): WebPlatformRuntime {
-  const runtime = new WebPlatformRuntime(createHostNodePrimitives(sockets, reportError), {
+  const runtime = new WebPlatformRuntime(
+    createHostNodePrimitives(sockets, reportError, systemProxyFor),
+    {
     ...options,
     contentDecoder: options.contentDecoder ?? new HostNodeContentDecoder(),
     webSocketDeflate:
       options.webSocketDeflate === undefined
         ? new HostNodeWebSocketDeflate()
         : (options.webSocketDeflate ?? undefined),
-  });
+    },
+  );
   // Host conformance has one active JavaScript environment. Native providers
   // implement this same typed installation through their environment bootstrap.
   installWebPlatformRuntime(runtime);

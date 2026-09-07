@@ -5834,3 +5834,75 @@ three other lanes today, made here.
 
 No source changed. The eighteen functions are not added, because adding them would report a
 green axis of thirteen while silently declining the rest.
+
+## `systemProxyFor`, and a hedge that became a reason
+
+The proxy row's last piece. `PlatformPrimitives` gains `systemProxyFor(url): string | null`,
+returning the classic result grammar that `parseProxyResult` already parses, and the
+Proxies row closes.
+
+Four questions went to the JVM lane, all four came back measured on an API-26 device, and
+three of them turned assumptions into facts.
+
+**Synchronous stays, and now says why.** `ProxySelector.getDefault().select(URI)` is 46–87 µs
+on the first call of a cold process and 2–11 µs after, with no network, no file read and no
+PAC fetch behind it. The signature was specified synchronous because a proxy lookup that
+turned the event loop would reorder everything downstream of it; that was reasoning, and it
+is now a number.
+
+**Per-URL stops being a hedge.** With distinct `http.proxyHost` and `https.proxyHost`, the
+selector answers differently for `http://example.com/a`, `https://other.example.org/b` and
+`ftp://example.com/f`. Scheme-sensitive *and* host-sensitive, so the URL argument is
+load-bearing on both axes rather than decoration for a global setting.
+
+**Null is documented as unreachable on one provider.** An unconfigured Android selector
+returns exactly one `Proxy.NO_PROXY` for every URL — never empty, never a throw — so the
+`| null` arm cannot occur there. It stays for platforms with no proxy story at all, and the
+declaration says so, because otherwise an always-`DIRECT` provider reads as a broken one.
+
+### The answer that changed the code
+
+The bypass list was applied on this side with the reasoning that "the two platforms disagree
+about whether their own bypass rules are reflected, and applying a bypass twice is harmless
+where trusting the wrong one is not." That was a hedge written without evidence.
+
+The measurement removed the premise: Android *does* apply its own rules —
+`http.nonProxyHosts` entries come back `DIRECT` for `localhost`, `127.0.0.1` and
+`*.internal`. The hedge was wrong about the disagreement it was hedging against.
+
+The double application stays, for a **better reason that only became visible once the hedge
+was disproved**. `NoProxyMatcher` carries the *caller's* configured list, which is a
+different set from the system's, which no provider can know about, and which has to be
+honoured on every platform including ones with no system bypass list at all. So the comment
+changed from "the platforms disagree, so hedge" to "these are two different lists, and the
+second is applied here because nothing below can know it". Same code, and it now says
+something true.
+
+### What the host answers, and why it is not the environment variables
+
+`createHostNodePrimitives` returns `null` for every URL by default. That is the honest
+answer rather than a stub: **Node has no system proxy API.** What a Node process has is
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` — which `EnvironmentProxyPolicy` already reads,
+and wiring them in here too would give one question two answers that could disagree. A
+resolver can be injected for an embedder that has a real source, or for a test.
+
+`systemProxyPolicy()` reads the environment **when a URL is resolved**, not when the policy
+is built, so a policy can be constructed before a runtime exists and a provider whose
+settings change mid-process is asked again rather than answered from a cache. A sabotage
+capturing the runtime at construction is caught, and so is one that drops the URL argument.
+
+### Two limits recorded, both volunteered by the lane that measured them
+
+A bare `app_process` never receives the framework's copy of the global proxy into system
+properties, so what was measured is `DefaultProxySelector`'s own behaviour with those
+properties set directly — **not** that a device's global proxy setting reaches a real app.
+And the account of Android resolving PAC inside a framework service that publishes an
+ordinary `host:port` is documented behaviour, **not** device evidence; no PAC was configured.
+
+Both are recorded with the boundary attached. A peer marking the edge of their own
+measurement unprompted is worth more than the measurement, and this ledger has spent the
+session on instruments that were reasonable and not about the object they appeared to
+describe.
+
+Frontier: **1,297 primaries unchanged**, 319 to 321 cascades. 814/814 host, upstream steady
+at 2,410 of 2,418.

@@ -32,6 +32,7 @@ import type {
   RandomSource,
   Scheduler,
   URLParser,
+  URLRecord,
 } from "../../../runtime/web-platform/src/provider.ts";
 
 const MAX_IO_BYTES = 64 * 1024;
@@ -663,9 +664,24 @@ export class HostNodeDnsResolver implements DnsResolver {
   }
 }
 
+/**
+ * How this host answers `systemProxyFor`.
+ *
+ * The default is `null` for every URL, and that is the honest answer rather than a stub:
+ * Node has no system proxy API. What a Node process has is `HTTP_PROXY`, `HTTPS_PROXY` and
+ * `NO_PROXY`, which `EnvironmentProxyPolicy` already reads -- and wiring those in here too
+ * would give one question two answers that could disagree, which is the arrangement this
+ * runtime avoids everywhere else.
+ *
+ * A resolver can be supplied so that a host embedder with a real source of system settings,
+ * or a test, can provide one.
+ */
+export type HostNodeSystemProxyResolver = (url: URLRecord) => string | null;
+
 export function createHostNodePrimitives(
   options: HostNodeSocketOptions = {},
   reportError?: (error: unknown) => void,
+  systemProxyFor: HostNodeSystemProxyResolver = () => null,
 ): PlatformPrimitives {
   return {
     sockets: new HostNodeSocketConnector(options),
@@ -679,6 +695,7 @@ export function createHostNodePrimitives(
     // whose origin is documented as "an arbitrary time in the past" and which returns a
     // `BigInt` that two other providers would have to implement.
     monotonicMilliseconds: () => performance.now(),
+    systemProxyFor,
   };
 }
 

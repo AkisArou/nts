@@ -407,6 +407,40 @@ export interface PlatformPrimitives {
   wallTimeMilliseconds(): number;
 
   /**
+   * The system's proxy answer for this URL, or null where the platform has no opinion.
+   *
+   * The classic proxy auto-configuration result grammar --
+   * `"PROXY host:port; SOCKS5 host:port; DIRECT"` -- parsed by `parseProxyResult` above
+   * this seam. A string rather than a structured type because that grammar is the shape
+   * both platform APIs already produce, and because it keeps the parsing on the side
+   * where it is tested.
+   *
+   * **Synchronous, and measured to be affordable.** `ProxySelector.getDefault().select`
+   * on an API-26 device is 46-87us on the first call of a cold process and 2-11us after,
+   * with no network, no file read and no PAC fetch behind it. A lookup that turned the
+   * event loop would reorder everything downstream of it, so this was specified
+   * synchronous first and confirmed second rather than the other way round.
+   *
+   * **A provider does not evaluate PAC, and must not.** A PAC file is a JavaScript
+   * program, and every platform that supports one already runs it inside its own proxy
+   * stack -- Android in a framework service that publishes an ordinary `host:port`,
+   * Apple in `CFNetworkCopyProxiesForURL`. A second evaluation would answer differently
+   * from every other application on the same device. What crosses this seam is the
+   * resolved answer.
+   *
+   * **The result may already have the platform's own bypass rules applied**, and on
+   * Android it does: `http.nonProxyHosts` entries come back as `DIRECT`. That is not the
+   * same set as a caller's configured no-proxy list, which is applied above this seam
+   * because nothing below can know it.
+   *
+   * Returning null means "no opinion", which a caller treats as `DIRECT`. Android never
+   * produces it -- an unconfigured selector answers `Proxy.NO_PROXY` for every URL, so
+   * the null arm is unreachable there. It stays for platforms that have no proxy story
+   * at all, so that an always-`DIRECT` provider is not mistaken for a broken one.
+   */
+  systemProxyFor(url: URLRecord): string | null;
+
+  /**
    * Milliseconds since an origin fixed for the lifetime of this provider.
    *
    * Monotonically non-decreasing, sub-millisecond where the provider has it. Two values

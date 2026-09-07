@@ -49,7 +49,11 @@ import {
   type WebSocketStreamContext,
   type WebSocketStreamOptions,
 } from "../websocket/websocket-stream.ts";
-import type { PlatformPrimitives, TlsUpgrader } from "./primitives.ts";
+import type {
+  PlatformPrimitives,
+  TlsUpgrader,
+  URLRecord,
+} from "./primitives.ts";
 
 export interface WebPlatformProxyOptions extends EnvironmentProxyOptions {
   /** TLS over an existing stream is required for CONNECT and SOCKS target security. */
@@ -241,6 +245,10 @@ export class WebPlatformRuntime
 
   monotonicMilliseconds(): number {
     return this.primitives.monotonicMilliseconds();
+  }
+
+  systemProxyFor(url: URLRecord): string | null {
+    return this.primitives.systemProxyFor(url);
   }
 
   createObjectURL(blob: Blob): string {

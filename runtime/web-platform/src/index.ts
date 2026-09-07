@@ -131,6 +131,7 @@ export {
   directResolution,
   parseProxyResult,
   SystemProxyPolicy,
+  systemProxyPolicy,
 } from "./dispatch/proxy-resolution.ts";
 export type {
   ProxyResolution,

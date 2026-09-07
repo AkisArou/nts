@@ -13,7 +13,9 @@ import {
   NoProxyMatcher,
   parseProxyResult,
   SystemProxyPolicy,
+  systemProxyPolicy,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/index.js";
+import { createHostNodeWebPlatform } from "../node_modules/.tsbuild/host/tooling/conformance/web-platform/node-runtime.js";
 
 const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
 const kinds = (result) => result.routes.map((route) => route.kind);
@@ -169,4 +171,29 @@ suite("a scheme with no proxy story is direct without asking", () => {
 suite("a host with no answer is direct", () => {
   const policy = new SystemProxyPolicy(() => null);
   assert.deepEqual(kinds(policy.resolve(url("http://example.test/"))), ["direct"]);
+});
+
+suite("the platform-backed policy reads the provider, not a captured value", (t) => {
+  // Built before any runtime exists, which is the point: a policy constructed at module
+  // scope must not require one, and a provider whose settings change during the process
+  // must be asked again rather than answered from a cache.
+  const policy = systemProxyPolicy();
+  const asked = [];
+  const api = createHostNodeWebPlatform({}, {}, undefined, (target) => {
+    asked.push(target.href);
+    return asked.length === 1 ? "PROXY first.test:1" : "PROXY second.test:2";
+  });
+  t.after(() => api.close());
+  assert.equal(policy.resolve(url("http://a.test/")).routes[0].hostname, "first.test");
+  assert.equal(policy.resolve(url("http://b.test/")).routes[0].hostname, "second.test");
+  assert.deepEqual(asked, ["http://a.test/", "http://b.test/"]);
+});
+
+suite("a host with no system proxy story answers direct, not an error", (t) => {
+  // The default on this host, and the honest one: Node has no system proxy API. The
+  // environment variables it does have are EnvironmentProxyPolicy's, and giving one
+  // question two answers that could disagree is the arrangement this runtime avoids.
+  const api = createHostNodeWebPlatform();
+  t.after(() => api.close());
+  assert.deepEqual(kinds(systemProxyPolicy().resolve(url("http://a.test/"))), ["direct"]);
 });

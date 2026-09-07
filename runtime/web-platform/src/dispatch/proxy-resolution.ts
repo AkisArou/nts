@@ -17,6 +17,7 @@
 // tried in order, where `DIRECT` means no proxy. Keywords are matched case-insensitively and
 // unrecognised ones are skipped, because a result naming one scheme this project cannot
 // speak must not take the routes beside it down with it.
+import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { URLRecord } from "../provider/primitives.ts";
 import { NoProxyMatcher } from "./proxy-policy.ts";
 
@@ -206,11 +207,14 @@ export function parseProxyResult(value: string): ProxyResolution {
 export type SystemProxyResolver = (url: URLRecord) => string | null;
 
 /**
- * System proxy lookup, with the bypass list applied on this side.
+ * System proxy lookup, with the caller's bypass list applied on this side.
  *
- * The no-proxy list is applied here rather than deferred to the host because the two
- * platforms disagree about whether their own bypass rules are already reflected in what they
- * return, and applying a bypass twice is harmless where trusting the wrong one is not.
+ * The host may already have applied its *own* bypass rules -- on Android it does, measured:
+ * `http.nonProxyHosts` entries come back as `DIRECT`. This is a different list. It is the
+ * one the caller configured, which no provider can know about, and it has to be honoured on
+ * every platform including those with no system bypass list at all.
+ *
+ * So the two are not redundant, and applying this one here is not distrust of the platform.
  */
 export class SystemProxyPolicy {
   private readonly resolver: SystemProxyResolver;
@@ -227,4 +231,18 @@ export class SystemProxyPolicy {
     const result = this.resolver(url);
     return result === null ? directResolution : parseProxyResult(result);
   }
+}
+
+/**
+ * A {@link SystemProxyPolicy} backed by the installed platform.
+ *
+ * The environment is read when a URL is resolved rather than when the policy is built, so a
+ * policy can be constructed before a runtime exists -- and so that a provider whose proxy
+ * settings change during the process is asked again rather than cached.
+ */
+export function systemProxyPolicy(noProxy?: NoProxyMatcher): SystemProxyPolicy {
+  return new SystemProxyPolicy(
+    (url) => currentWebPlatformRuntime().systemProxyFor(url),
+    noProxy,
+  );
 }
