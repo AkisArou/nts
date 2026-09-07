@@ -5568,3 +5568,30 @@ loses it. TypeScript treats the two forms as the same program, and so should the
 
 The shorthand stays. Rewriting it would be a compiler-gap workaround, and the refusal is
 worth more visible than absent.
+
+## The assertions that hold when every value is right
+
+Written on the Node lane's suggestion, and their framing is the whole argument: they had
+been asserting identities node's own tests have no reason to state — `querystring.decode ===
+querystring.parse`, `path.posix.posix === path.posix` — all true, none asserted upstream,
+and all of them structural properties **a compiled backend would lose while passing every
+test it has**.
+
+This lane has the same surfaces. `controller.signal`, `request.headers`, `response.body` and
+an abort `reason` are all required to be *the same object* on every read, not an equal one,
+and the repair that breaks them is the one that looks correct: an accessor that builds its
+result per read returns something `deepEqual` cannot distinguish, satisfies every test
+written in terms of contents, and silently breaks listener registration, stream locking, and
+any `WeakMap` keyed on the object.
+
+Eight assertions, and the one negative that keeps them honest — `clone()` must *not* share
+the original's stream, which is the property clone exists to provide.
+
+Three sabotages, all caught, and the useful detail is how far each reached. A controller
+minting a fresh signal per read takes down the direct identity assertion **and** the derived
+request that has to follow the original abort. A body accessor rebuilding an equivalent
+stream takes down the locking observation **and** the clone test. Neither mutation changes a
+single value anyone can read; both change which object holds it.
+
+No shared source moved, so there is no frontier cost to report: this slice is entirely
+evidence about behaviour that was already correct and previously unasserted.
