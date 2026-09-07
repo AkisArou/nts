@@ -551,3 +551,112 @@ fn the_listing_agrees_with_javap() {
     assert!(!expected.is_empty(), "javap output was not parsed:\n{main}");
     assert_eq!(got, expected, "\nours:\n{ours}\ntheirs:\n{main}");
 }
+
+/// A call through an interface reaches two different implementations.
+///
+/// The instruction is five bytes where every other invoke is three, and it
+/// resolves through a pool tag of its own. Neither of those is checked by the
+/// verifier -- a `Methodref` where an `InterfaceMethodref` belongs raises
+/// `IncompatibleClassChangeError` at the call, on first execution of that site
+/// and never at load -- so this runs the site rather than only building it.
+///
+/// **The local is typed `Sink` and a `Counting` is stored into it, which is the
+/// half that surprises.** JVMS 4.10.1.2 makes any class assignable to any
+/// interface without checking, so that store verifies whether or not `Counting`
+/// declares the interface. What makes it *work* is the `implements` edge in the
+/// class file, and the only thing that would report its absence is this call,
+/// at run time. So the assertion that matters is not that the class verifies --
+/// it would either way -- but that one call site returns two answers.
+#[test]
+fn a_call_through_an_interface_reaches_two_implementations() {
+    let Some(java) = java_home_bin("java") else {
+        return;
+    };
+    let origin = origin();
+
+    // The interface: abstract, no `SUPER` bit, `java/lang/Object` as super.
+    // Its pool needs nothing added -- an abstract method has no body to
+    // reference anything from -- so this one is not mutable.
+    let pool = Pool::new();
+    let mut sink = ClassBuilder::new("Sink", "java/lang/Object");
+    sink.access = access::PUBLIC | access::INTERFACE | access::ABSTRACT;
+    sink.method(access::PUBLIC | access::ABSTRACT, "write", "(D)D", None);
+    let sink = sink.build(pool).expect("build Sink");
+
+    // Two implementers whose answers differ, because a dispatch with one
+    // implementation is indistinguishable from a direct call.
+    let mut implementers = Vec::new();
+    for (name, family, operand) in
+        [("Counting", insn::ADD, 1.0f64), ("Doubling", insn::MUL, 2.0f64)]
+    {
+        let mut pool = Pool::new();
+        let locals = vec![VType::Object(name.into()), VType::Double];
+        let max_locals = locals.iter().map(VType::slots).sum();
+        let mut code = Code::new(locals, max_locals);
+        code.load(&origin, Kind::Double, 1);
+        code.const_double(&origin, &mut pool, operand);
+        code.arithmetic(&origin, family, Kind::Double);
+        code.ret(&origin, Some(Kind::Double));
+        let body = code.finish(&pool).expect("finish write");
+
+        let mut class = ClassBuilder::new(name, "java/lang/Object");
+        class.interfaces.push("Sink".into());
+        class.default_constructor(&origin, &mut pool).expect("<init>");
+        class.method(access::PUBLIC, "write", "(D)D", Some(body));
+        implementers.push(class.build(pool).expect("build implementer"));
+    }
+
+    let mut pool = Pool::new();
+
+    // One call site, reached twice. A separate method rather than two
+    // `invokeinterface`s inline: two sites could each be right about a
+    // different class and the test would still pass.
+    let locals = vec![VType::Object("Sink".into())];
+    let max_locals = locals.iter().map(VType::slots).sum();
+    let mut through = Code::new(locals, max_locals);
+    through.load(&origin, Kind::Ref, 0);
+    through.const_double(&origin, &mut pool, 2.25);
+    through.invoke_interface(&origin, &mut pool, "Sink", "write", "(D)D");
+    through.ret(&origin, Some(Kind::Double));
+    let through = through.finish(&pool).expect("finish through");
+
+    let locals = vec![VType::Object(ARGS.into()), VType::Object("Sink".into())];
+    let max_locals = locals.iter().map(VType::slots).sum();
+    let mut code = Code::new(locals, max_locals);
+    code.initialize_locals(&origin, 1);
+    for name in ["Counting", "Doubling"] {
+        code.new_object(&origin, &mut pool, name);
+        code.dup(&origin);
+        code.invoke_special(&origin, &mut pool, name, "<init>", "()V");
+        // Through a `Sink`-typed slot, so the store is the assignment the
+        // verifier is being asked about and not merely an argument.
+        code.store(&origin, Kind::Ref, 1);
+        out(&mut code, &mut pool, &origin);
+        code.load(&origin, Kind::Ref, 1);
+        code.invoke_static(&origin, &mut pool, "Main", "through", "(LSink;)D");
+        println(&mut code, &mut pool, &origin, "D");
+    }
+    code.ret(&origin, None);
+    let body = code.finish(&pool).expect("finish main");
+
+    let mut main = ClassBuilder::new("Main", "java/lang/Object");
+    main.default_constructor(&origin, &mut pool).expect("<init>");
+    main.method(access::PUBLIC | access::STATIC, "through", "(LSink;)D", Some(through));
+    main.method(access::PUBLIC | access::STATIC, "main", "([Ljava/lang/String;)V", Some(body));
+    let main = main.build(pool).expect("build Main");
+
+    let dir = work_dir("InterfaceDispatch");
+    for class in [&sink, &implementers[0], &implementers[1], &main] {
+        std::fs::write(dir.join(class.path()), &class.bytes).expect("write");
+    }
+    let output = Command::new(java)
+        .arg("-Xverify:all")
+        .arg("-XX:-UsePerfData")
+        .arg("-cp")
+        .arg(&dir)
+        .arg("Main")
+        .output()
+        .expect("run java");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "3.25\n4.5");
+}

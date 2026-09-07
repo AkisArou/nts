@@ -30,6 +30,7 @@ mod tag {
     pub(super) const STRING: u8 = 8;
     pub(super) const FIELDREF: u8 = 9;
     pub(super) const METHODREF: u8 = 10;
+    pub(super) const INTERFACE_METHODREF: u8 = 11;
     pub(super) const NAME_AND_TYPE: u8 = 12;
 }
 
@@ -191,6 +192,19 @@ impl Pool {
 
     pub fn method_ref(&mut self, class: &str, name: &str, descriptor: &str) -> u16 {
         self.reference(tag::METHODREF, class, name, descriptor)
+    }
+
+    /// The same triple under tag 11 rather than tag 10.
+    ///
+    /// A separate entry and not a spelling of the same one: JVMS 4.4.2 gives
+    /// interface methods their own tag, `invokeinterface` requires it, and
+    /// `invokevirtual` requires the other. Resolving one through the wrong tag
+    /// is an `IncompatibleClassChangeError` at the call rather than anything
+    /// the verifier reports, so the two must not share a pool entry -- which
+    /// they would if this delegated, because the key is `(tag, class, nat)` and
+    /// the tag is what keeps them apart.
+    pub fn interface_method_ref(&mut self, class: &str, name: &str, descriptor: &str) -> u16 {
+        self.reference(tag::INTERFACE_METHODREF, class, name, descriptor)
     }
 
     pub fn write(&self, out: &mut Vec<u8>) {

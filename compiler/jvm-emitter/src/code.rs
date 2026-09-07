@@ -621,15 +621,41 @@ impl Code {
             self.fail(Error::BadDescriptor(signature.to_owned()));
             return;
         };
-        // No `invokeinterface` arm. This backend emits no interfaces at all:
-        // a closure extends a per-descriptor abstract class and `NtsHost` is an
-        // abstract class rather than an interface with a default method, which
-        // record 0096 and the plan settle for reasons that have nothing to do
-        // with this method -- interface defaults need Android API 24. The five-
-        // byte encoding was written, never reached, and is gone with the
-        // `invoke_interface` that would have reached it.
+        // `invokeinterface` is not routed through here, because it is neither
+        // three bytes nor a `Methodref`. It has its own method below; this one
+        // stays the three-byte shape it was.
         let index = pool.method_ref(class, name, signature);
         self.op_u2(origin, opcode, index, arguments + receiver, result);
+    }
+
+    /// `invokeinterface`, which is five bytes where every other invoke is three.
+    ///
+    /// The two extra bytes are a count and a zero. The count is the argument
+    /// words *including* the receiver -- the same number this method already
+    /// computes to know what to pop, which is why it is derived here rather
+    /// than passed in: a caller that had to supply it would one day supply the
+    /// word count of a `long` as one. The zero is reserved and JVMS 4.9.1
+    /// requires it to be zero, so it is written rather than left to a caller.
+    ///
+    /// The pool entry is an `InterfaceMethodref`, not a `Methodref`. Nothing
+    /// checks that at verification: a mismatched tag resolves at the call and
+    /// raises `IncompatibleClassChangeError` there, on the first execution of
+    /// that site and not before. So the tag is chosen by which method emits the
+    /// instruction, where it cannot be got wrong, rather than by an argument.
+    pub fn invoke_interface(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
+        let Some((arguments, result)) = descriptor::call_effect(signature) else {
+            self.fail(Error::BadDescriptor(signature.to_owned()));
+            return;
+        };
+        let popped = arguments + 1;
+        let index = pool.interface_method_ref(class, name, signature);
+        let [hi, lo] = index.to_be_bytes();
+        // The count is a `u1`. A method whose arguments exceed 255 words cannot
+        // be called through an interface at all, and the class file has no way
+        // to say so -- `Class::to_bytes` refuses a method with more than 255
+        // argument words before reaching here, which is the same limit.
+        let count = u8::try_from(popped).unwrap_or(u8::MAX);
+        self.emit(origin, &[insn::INVOKEINTERFACE, hi, lo, count, 0], popped, result);
     }
 
     pub fn invoke_static(&mut self, origin: &Origin, pool: &mut Pool, class: &str, name: &str, signature: &str) {
