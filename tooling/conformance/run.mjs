@@ -44,7 +44,15 @@ const arg = (name, fallback = null) => {
 };
 
 const moduleName = arg("--module");
-const addon = arg("--addon");
+/**
+ * Resolved here rather than in the child, because the child runs with `cwd`
+ * set to node's checkout so that upstream tests resolving `./test/...` find
+ * it. A relative `--addon` therefore resolved against `third_party/node`
+ * rather than against the directory the user typed it in, and reported
+ * `Cannot find module` naming a path nobody had asked for.
+ */
+const addonArg = arg("--addon");
+const addon = addonArg === null ? null : resolvePath(addonArg);
 const only = arg("--only");
 const verbose = argv.includes("--verbose");
 /**

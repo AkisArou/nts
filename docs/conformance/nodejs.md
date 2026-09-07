@@ -2169,6 +2169,29 @@ and whether this apparatus can recognise success when it sees it. The second is
 not rhetorical — the one time this axis reported passes at all, they were
 `undefined === undefined`, and the control in place at the time said clean.
 
+**That half no longer has to wait for the compiler.** A positive control lives
+in `tooling/conformance/positive-control.cjs`: `punycode`'s own TypeScript,
+handed to the instrument through the `--addon` path. Not a compiled artifact
+and not pretending to be one — a subject whose answers are known good.
+
+```sh
+node tooling/conformance/run.mjs --module punycode      --addon tooling/conformance/positive-control.cjs                 # 1 passed
+node tooling/conformance/run.mjs --module punycode      --addon tooling/conformance/positive-control.cjs --mutate-addon  # 0 passed
+```
+
+The first says the pass path works, so **a zero on this axis is the compiler
+and not the harness** — a claim that had been assumed all along and never
+checked. The second is the false-positive test on the mutation detector, which
+had only ever been shown to fire when it *should*: a real pass is not called
+degenerate.
+
+**Building it immediately found a defect in the harness.** `--addon` was
+resolved in the child, which runs with `cwd` set to node's checkout so upstream
+tests resolving `./test/...` find it — so a relative `--addon` resolved against
+`third_party/node` and reported `Cannot find module` naming a path nobody had
+typed. Every existing caller passed an absolute path, so nothing had ever hit
+it. `run.mjs` resolves it against the caller's directory now.
+
 ### The shortest path to one green module
 
 Nothing on this axis is close, but `punycode` is closest and it is worth
