@@ -333,6 +333,22 @@ export function stylizeWithColor(str: string, styleType: StyleType): string {
 export interface InspectOptions {
   depth?: number | null;
   colors?: boolean;
+  /**
+   * Node's `showHidden` reports every non-enumerable own property. This
+   * profile reports the ones it can name statically -- an array's `length` and
+   * a typed array's five -- and not a function's
+   * `[name]`, `[arguments]`, `[caller]` or `[prototype]`, which are the
+   * function metadata §13 refuses. A differential against node found the array
+   * case as 101 divergences through `%o`, which is `showHidden` with a depth
+   * of 4; the function case is a refusal and stays one.
+   *
+   * A boxed `String` is the one remaining gap: node prints
+   * `[String: 'hi'] { [length]: 2 }` and this prints the label alone, because
+   * the boxed-primitive path returns early when there are no enumerable keys.
+   * Measured, not assumed, and left rather than plumbed -- `%o` on a boxed
+   * primitive is not a thing anyone does, and the early return is what keeps
+   * the ordinary case from growing a `{}`.
+   */
   showHidden?: boolean;
   breakLength?: number;
   compact?: number | boolean;
@@ -760,6 +776,7 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
       "",
       ["[", "]"],
       indented(ctx, () => formatArrayEntries(ctx, value, recurseTimes)),
+      ctx.showHidden ? ["length"] : [],
     );
   }
   if (isTypedArray(value)) {
@@ -776,6 +793,31 @@ function formatByShape(ctx: Context, value: InspectableObject, recurseTimes: num
     }
     if (value.length > limit) {
       entries.push(`... ${value.length - limit} more item${value.length - limit > 1 ? "s" : ""}`);
+    }
+    if (ctx.showHidden) {
+      // Node's order, which is the declaration order of these properties
+      // rather than anything alphabetical. Appended to `entries` rather than
+      // passed as hidden keys because `[buffer]` needs its own spelling: node
+      // suppresses an ArrayBuffer's `[Uint8Contents]` when it is reached
+      // *through* a typed array, having just printed those same bytes as the
+      // elements. Formatting it generically printed them twice.
+      entries.push(
+        `${ctx.stylize("[BYTES_PER_ELEMENT]", "string")}: ${
+          ctx.stylize(formatNumber(value.BYTES_PER_ELEMENT), "number")
+        }`,
+        `${ctx.stylize("[length]", "string")}: ${
+          ctx.stylize(formatNumber(value.length), "number")
+        }`,
+        `${ctx.stylize("[byteLength]", "string")}: ${
+          ctx.stylize(formatNumber(value.byteLength), "number")
+        }`,
+        `${ctx.stylize("[byteOffset]", "string")}: ${
+          ctx.stylize(formatNumber(value.byteOffset), "number")
+        }`,
+        `${ctx.stylize("[buffer]", "string")}: ArrayBuffer { ${
+          ctx.stylize("[byteLength]", "string")
+        }: ${ctx.stylize(formatNumber(value.buffer.byteLength), "number")} }`,
+      );
     }
     return formatWithKeys(ctx, value, recurseTimes, label, ["[", "]"], entries);
   }
