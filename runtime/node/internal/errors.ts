@@ -399,11 +399,70 @@ export class ERR_OUT_OF_RANGE extends NodeRangeError {
  * name.
  */
 function inspectString(value: string): string {
-  const encoded = JSON.stringify(value)
-    .slice(1, -1)
-    .replaceAll("\\u0000", "\\x00")
-    .replaceAll("'", "\\'");
-  return `'${encoded}'`;
+  // Node's escaping table, not `JSON.stringify`'s. The two agree on almost
+  // nothing in the control range: `JSON.stringify` writes `\u0001` where node
+  // writes `\x01`, uses lowercase hex where node uses upper, and passes `\x7f`
+  // through unescaped entirely. This read `JSON.stringify(value).slice(1, -1)`
+  // and patched up `\u0000` alone, so every control character except NUL came
+  // out in the wrong notation:
+  //
+  //     "\x01"  node '\x01'   was '\u0001'
+  //     "\x1f"  node '\x1F'   was '\u001f'
+  //     "\x7f"  node '\x7F'   was unescaped
+  //
+  // `runtime/node/util/src/inspect.ts` already had this right; this is a
+  // private second copy in `internal/` that had it wrong, which is the whole
+  // reason it was worth writing down rather than quietly editing.
+  //
+  // Still an approximation in one respect, deliberately: node chooses its quote
+  // character to avoid escaping (`util.inspect("it's")` is double-quoted), and
+  // this always single-quotes and escapes. That belongs with the real
+  // `util.inspect` this function's header already promises will replace it.
+  let escaped = "";
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code === 0x27) {
+      escaped += "\\'";
+    } else if (code === 0x5c) {
+      escaped += "\\\\";
+    } else if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+      escaped += escapeControlCharacter(code);
+    } else if (code >= 0xd800 && code <= 0xdfff) {
+      // A well-formed pair passes through as itself; a lone surrogate is named.
+      if (code <= 0xdbff && i + 1 < value.length) {
+        const trailing = value.charCodeAt(i + 1);
+        if (trailing >= 0xdc00 && trailing <= 0xdfff) {
+          escaped += value.slice(i, i + 2);
+          i++;
+          continue;
+        }
+      }
+      escaped += `\\u${code.toString(16)}`;
+    } else {
+      escaped += value[i];
+    }
+  }
+  return `'${escaped}'`;
+}
+
+/** Node `lib/internal/util/inspect.js`. Five named escapes, then `\xHH` upper. */
+function escapeControlCharacter(code: number): string {
+  switch (code) {
+    case 0x08:
+      return "\\b";
+    case 0x09:
+      return "\\t";
+    case 0x0a:
+      return "\\n";
+    case 0x0c:
+      return "\\f";
+    case 0x0d:
+      return "\\r";
+    default: {
+      const hex = code.toString(16).toUpperCase();
+      return `\\x${hex.length === 1 ? `0${hex}` : hex}`;
+    }
+  }
 }
 
 function inspectPropertyName(name: string): string {
