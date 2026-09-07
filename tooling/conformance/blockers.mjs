@@ -261,12 +261,27 @@ if (apiUnreadable !== undefined) {
   console.log(`  The refusal census below is from emit-c and is unaffected.`);
 } else {
   if (required !== undefined) {
-    const missing = required.filter((n) => !publishedNames.has(n));
+    // A name the listing does not mention at all is *unknown*, not missing.
+    // `nts layouts` omits namespace exports from its public API section, so
+    // `punycode`'s `ucs2` is absent from it while the built addon publishes it
+    // and `ucs2.encode` works. Reporting that as missing understated the
+    // module by the one export that had just been repaired.
+    const listed = new Set(api.map((e) => e.name));
+    const missing = required.filter((n) => listed.has(n) && !publishedNames.has(n));
+    const unknown = required.filter((n) => !listed.has(n));
     console.log(
       `${module}: shape needs ${required.length} name(s), ` +
-        `${required.length - missing.length} published, ${missing.length} missing`,
+        `${required.length - missing.length - unknown.length} published, ` +
+        `${missing.length} missing` +
+        (unknown.length > 0 ? `, ${unknown.length} not listed` : ""),
     );
     if (missing.length > 0) console.log(`  missing: ${missing.join(", ")}`);
+    if (unknown.length > 0) {
+      console.log(
+        `  not listed by \`nts layouts\` (a namespace, or a kind it does not` +
+          ` show): ${unknown.join(", ")}`,
+      );
+    }
   }
   console.log(`${module}: ${published.length} of ${api.length} exports published`);
 }
