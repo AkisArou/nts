@@ -4903,6 +4903,60 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## The bindings nothing could disagree with node about
+
+There is a category worse than "not yet checked": **no instrument in this tree
+was capable of reporting these wrong.**
+
+    the interpreted lane calls a stand-in, and a stand-in that delegates --
+      globalThis.nts_os_tmpdir = () => os.tmpdir()
+    agrees with node by construction whatever the C does
+
+    the compiled lane would catch it, but only for a module that builds,
+    and fifteen of twenty-two do not
+
+A binding that is *both* stubbed by delegation and unprobed is therefore
+unmeasured in the strict sense. `tooling/conformance/standin-blindspot.mjs`
+counts them, and the count is meant to go down:
+
+    310 stand-in(s); 54 delegate to node; 53 of those are probed
+    1 binding(s) no lane can disagree with node about
+
+**It started at 17 and the seventeen were named rather than counted**, because a
+count cannot be worked through. Ten were `fs`: `stat` and `stat_bigint`, utf8 and
+byte reads and writes by descriptor, and the `_bytes` path variants — `access`,
+`realpath`, `mkdtemp`, `symlink` — which take and answer a path as a byte column
+rather than a string. Those are the likeliest to be wrong and the least likely to
+be noticed, because a test suite written in JavaScript passes strings.
+
+Six more were `process`, and they looked unprobeable: `cpu_usage`, `rss`,
+`memory_usage` and `resource_usage` **fill a caller-provided array and answer an
+errno**, so the result is the mutation rather than the return. A homogeneous
+number tuple crosses as `NtsArray *`, so the array can be handed in from
+TypeScript and read back after the call, which turns a mutation into something
+comparable. `umask` mutates process-global state the runner shares, so it is
+probed as a round trip inside one call — set `0o077`, keep what came back,
+restore, read again — and the previous mask it answers is node's own `umask`
+exactly.
+
+**The one that remains is `nts_os_cpus`**, and it is blocked for a reason that is
+written down and reproducing: its declaration is `[string[], number[]]`, and the
+compiler gives a heterogeneous tuple a struct return no C binding in this tree
+can produce. See `blockers/heterogeneous-tuple-return`.
+
+### Two habits that came out of this
+
+**Compare by magnitude only where the value moves, and say why.** `cpu user
+time` and `rss` differ between two calls by construction, so an equality check
+there fails for a reason that is not a defect. The bands are chosen so a *unit*
+error still cannot pass: milliseconds where microseconds belong is a factor of a
+thousand, and a 10× band catches it.
+
+**A count is not a shape.** `resource_usage` is checked as errno, column count,
+*and* how many columns are non-negative — because a count alone passes for a
+binding that fills the first two columns and leaves fourteen zeroes, which is
+precisely what a short `memcpy` does.
+
 ## A defect class neither lane can see, and the audit that closes it
 
 A binding is a triple: a `declare function` in TypeScript, an implementation in
