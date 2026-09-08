@@ -183,14 +183,32 @@ that has happened here.
 
 ## The remaining gap, as currently understood
 
-Per character the escaper pays a bounds check (often elided -- the emitted C calls `nts_unit`
-directly), a test of `NTS_TWO_BYTE`, a load, and a conversion to `double` -- the conversion is
-still there, since removing it from the comparisons bought nothing. A host specializes the loop
-for narrow or wide **once** and then loads.
+`json-serialize` profiles as: `quoteJSONString` 21.2%, `nts_str_raw` 13.7%, `nts_number_to_string`
+13.5%, `nts_release` 12.1%, `work` 11.3%, `nts_free` 6.6%, `nts_each_reference` 4.7%.
 
-The representation test being per character is the shape of what is left. That is in the scan
-loop, which is the condition the goal names for proposing a compiler intrinsic to MainClaude
-rather than working around it.
+**Allocation and reference counting are 37% of that and are not the lever.** The append/join pair
+says allocation volume is nearly free and the `NoGc` counterfactual says reference counting is a
+2.3x *win*, so this is the third time a profile has offered a ranking in place of a price. It is
+recorded here so the next reader does not spend a day on it.
+
+**The escaper's classification is floating point, and that is now traced to a single fact: the
+integer entry returns a `double`.** Fixing the index took `json-scan` 46%, but
+`nts_str_char_code_at_int` hands back a `double`, so the *value* is a double even when the index
+is perfect. The emitted escaper compares against `92.0`, `32.0`, `34.0` and `55296.0` in floating
+point, once per character.
+
+Coercing with `| 0` cannot win this from TypeScript and the measurement says so: `nts_to_int32`
+runs on every character while the saving is also per character, so it trades three operations for
+at most two. That is why the `| 0` entry sits under Refuted rather than here -- **it was not the
+wrong idea, it was the right idea at the wrong end.** A runtime entry returning `int32_t` removes
+the conversion instead of moving it, and that is the compiler's to give; it is with MainClaude
+alongside the index finding.
+
+`nts_number_to_string` at 13.5% is the other compiler-side item and is untouched by anything here.
+
+So `json-serialize`, `json-build-append` and `json-build-join` are at their limit without a
+representation change, and saying so is more useful than another micro-experiment. `json-scan` was
+the row where the lever was in my hands, and it moved 46%.
 
 ## Instruments
 
