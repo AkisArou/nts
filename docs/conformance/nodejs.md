@@ -4529,6 +4529,46 @@ The honest inventory is the fixture directory, and it is twenty-one entries. Not
 each revision looked like progress while being a fact about how much was
 visible.
 
+## The interpreted lane cannot see a divergence in the C
+
+`os.tmpdir()` disagreed with node on the compiled axis and agreed on the
+interpreted one, and the reason is structural rather than accidental.
+
+Node's chain takes the first **non-empty** of `TMPDIR`, `TMP`, `TEMP`, then
+`/tmp`. `uv_os_tmpdir` takes the first that is **present**. Measured against node
+directly:
+
+    TMPDIR=/tmpdir TMP=/tmp TEMP=/temp   ->  /tmpdir
+    TMPDIR=""                            ->  /tmp
+    TMPDIR="" TMP=""                     ->  /temp
+    TMPDIR="" TMP="" TEMP=""             ->  /tmp
+
+Through libuv the second line answered `/tmp` for the wrong reason and the third
+answered `/tmp` outright, because an empty `TMPDIR` ended the search. The chain
+is spelled in TypeScript now, which is where `lib/os.js` spells it.
+
+**It could not have been caught on the interpreted lane, because the stand-in
+was node.** `bindings.node.mjs` had `globalThis.nts_os_tmpdir = () =>
+os.tmpdir()`. A stand-in that delegates to the host cannot disagree with the
+host: it can establish that the binding is *called*, and nothing about what the
+binding *computes*.
+
+**This is not one binding. It is 78.** Counting stand-ins in `runtime/node/**`
+that call straight into node's own implementation — `os.hostname()`,
+`process.cwd()`, `fs.closeSync()`, `os.getPriority()`, and seventy-four more —
+every one is a place where the C could diverge from node and the interpreted
+lane would report nothing.
+
+So the honest statement about the green axis is narrower than it has been
+written here: **1,807 of 1,807 validates this profile's TypeScript. It does not
+validate the C bindings at all.** Those are checked only by the compiled lane,
+and only for the modules that reach it — which is one. Seventy-seven of the
+seventy-eight have never been compared against node by anything.
+
+That is the sharpest form of "a measurement on one axis is a claim about that
+axis only" this project has produced, because here the second axis is not merely
+unmeasured — the first one is *constructed so that it cannot fail*.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under

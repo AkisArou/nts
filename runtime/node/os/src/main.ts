@@ -31,6 +31,7 @@ declare function nts_os_static_information(): [
 ];
 declare function nts_os_homedir(): string;
 declare function nts_os_tmpdir(): string;
+declare function nts_process_env(name: string): string;
 declare function nts_os_uptime(): number;
 declare function nts_os_totalmem(): number;
 declare function nts_os_freemem(): number;
@@ -198,12 +199,41 @@ export function homedir(): string {
   return value;
 }
 
-/** Upstream `lib/os.js:181`. The posix branch; Windows consults `%TEMP%`. */
+/**
+ * Upstream `lib/os.js:181`. The posix branch; Windows consults `%TEMP%`.
+ *
+ * The chain is spelled here rather than delegated to `uv_os_tmpdir`, because
+ * the two disagree and node is the oracle. libuv stops at the first variable
+ * that is *present*; node stops at the first that is *non-empty*. Measured
+ * against node directly, with all three set and then emptied in turn:
+ *
+ *     TMPDIR=/tmpdir TMP=/tmp TEMP=/temp   ->  /tmpdir
+ *     TMPDIR=""                            ->  /tmp
+ *     TMPDIR="" TMP=""                     ->  /temp
+ *     TMPDIR="" TMP="" TEMP=""             ->  /tmp
+ *
+ * Through libuv the second line answered `/tmp` for the wrong reason and the
+ * third answered `/tmp` outright, because an empty `TMPDIR` ended the search.
+ *
+ * **This was invisible on the interpreted lane by construction.** The binding
+ * stand-in in `bindings.node.mjs` was `() => os.tmpdir()` -- node's own
+ * implementation -- so that lane could not disagree with node no matter what
+ * the C did. A stand-in that delegates to the host cannot detect a divergence
+ * in the thing it stands in for; it can only detect that the binding is called.
+ * The compiled lane is where this surfaced, on `local/core-static.js`.
+ */
 export function tmpdir(): string {
-  const value = nts_os_tmpdir();
-  const errno = nts_errno();
-  if (errno !== 0) throw systemError(-errno, "uv_os_tmpdir");
-  return value || "/tmp";
+  const candidate = nts_process_env("TMPDIR") ||
+    nts_process_env("TMP") ||
+    nts_process_env("TEMP") ||
+    "/tmp";
+  // Node trims one trailing separator and leaves the root alone: `/tmpdir/`
+  // becomes `/tmpdir`, `/` stays `/`, and a trailing backslash is not a
+  // separator on posix so `/tmpdir\` is untouched.
+  if (candidate.length > 1 && candidate.endsWith("/")) {
+    return candidate.slice(0, -1);
+  }
+  return candidate;
 }
 
 export function endianness(): "BE" | "LE" {

@@ -11,14 +11,32 @@
 // ordinary and keeps all metaobject work at this host boundary.
 export function shape(exports) {
   const copyTable = (table) => Object.assign(Object.create(null), table);
-  const constants = Object.assign(Object.create(null), {
-    UV_UDP_REUSEADDR: exports.constants.UV_UDP_REUSEADDR,
-    dlopen: copyTable(exports.constants.dlopen),
-    errno: copyTable(exports.constants.errno),
-    signals: copyTable(exports.constants.signals),
-    priority: copyTable(exports.constants.priority),
-  });
-  Object.freeze(constants.signals);
+
+  // `constants` may be absent, and a shape that dereferences it anyway turns a
+  // partially published addon into a module that cannot load at all.
+  //
+  // That is not hypothetical: the compiled `os` publishes 17 of the 23 names
+  // this shape wants, and every one of its seven applicable test files failed
+  // with "Cannot read properties of undefined (reading 'UV_UDP_REUSEADDR')" --
+  // one message, at load, for tests that never touch `constants`. **A shape that
+  // throws on a missing export reports one fact about the addon and hides seven.**
+  //
+  // Absence is not being swallowed here: `sweep.mjs` computes the names a
+  // module's shape needs against the names its addon publishes and reports the
+  // difference, so a missing `constants` is already named by the instrument
+  // whose job that is. What this stops is one absence masquerading as total
+  // failure.
+  const rawConstants = exports.constants;
+  const constants = rawConstants === undefined
+    ? undefined
+    : Object.assign(Object.create(null), {
+      UV_UDP_REUSEADDR: rawConstants.UV_UDP_REUSEADDR,
+      dlopen: copyTable(rawConstants.dlopen),
+      errno: copyTable(rawConstants.errno),
+      signals: copyTable(rawConstants.signals),
+      priority: copyTable(rawConstants.priority),
+    });
+  if (constants !== undefined) Object.freeze(constants.signals);
 
   // `lib/os.js` publishes this exact insertion order. ESM namespace objects
   // are sorted, so spell out the CommonJS surface instead of spreading one.
