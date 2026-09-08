@@ -37,6 +37,14 @@
 // A second control names a global the compiler *does* provide, so the fixture
 // cannot be read as "static members of built-ins are unsupported".
 //
+// **This fixture reports `CHANGED` on the committed binary, and that is
+// correct.** Without `AnyView`, `usesIsView(buf: ArrayBufferView | string)` is
+// refused on its *parameter* before anything reaches `ArrayBuffer.isView`, so
+// the expectation does not match and the harness says so. It is a downstream
+// blocker: it becomes visible only once the representation it stands behind
+// exists. Read `CHANGED` here as "AnyView is not in this binary", not as a
+// broken fixture, and check it against a binary that has it.
+//
 // `string_decoder` is the shortest path to a second green module: this global,
 // plus the export-class arm for `export class StringDecoder`. Its `shape.mjs`
 // reads only `exports.StringDecoder`, so `export default { StringDecoder }`

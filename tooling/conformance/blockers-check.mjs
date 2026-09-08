@@ -102,8 +102,16 @@ for (const name of names) {
   const fileForm = /^(?:emit-c\b[^>]*->\s*)?(emits-c|emits-addon|lacks-c|duplicates-c)\b/
     .test(expected);
   const viaEmit = expected.includes("emit-c") || fileForm;
+  // Flags written into the expectation's command prefix, beyond the `--napi`
+  // every file-form fixture gets. `--rc` is the one that motivated this: a
+  // defect can exist only under reference counting, and until now there was no
+  // way to say so -- the fixture would have had to assert against a build the
+  // harness does not produce.
+  const extraFlags = (/^emit-c\b([^>]*)->/.exec(expected)?.[1] ?? "")
+    .split(/\s+/)
+    .filter((f) => f.startsWith("--") && f !== "--napi");
   const output = viaEmit
-    ? run(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blk-")), "--napi"])
+    ? run(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blk-")), "--napi", ...extraFlags])
     : run(["hir", tsconfig]);
 
   // Two ways for a fixture to say "this works now". `nothing refused` is the
@@ -184,6 +192,44 @@ for (const name of names) {
   // Compiled with the same force-includes `build.sh` uses: without them a
   // missing prototype is an implicit declaration rather than an error, and a
   // fixture about a prototype would report clean.
+  // Compiling the emitted C, and -- when the fixture named a flag -- compiling
+  // the build *without* it too.
+  //
+  // A fixture that says "this fails under `--rc`" is making two claims, and the
+  // second one is the whole content: it fails *with* the flag and compiles
+  // *without* it. Asserting only the first would hold just as well for a
+  // program that does not compile at all, which is a different defect with a
+  // different owner. The control was in the prose of the first draft and prose
+  // is not a control; three fixtures were wrong on 2026-09-08 for exactly that.
+  // **How far this control has been demonstrated, precisely.** Inverting the
+  // condition below flips `rc-widened-global-save` from `reproduces` to
+  // `FIXED`, so the branch is load-bearing rather than decorative. It has *not*
+  // been shown to reject a real mis-attributed fixture, because there is
+  // currently no program in this tree that emits non-compiling C without
+  // `--rc`: all five `fails-to-compile` fixtures went FIXED on 2026-09-08. That
+  // is a good state for the compiler and an untested state for this check, and
+  // the two are worth writing down separately.
+  const compileEmitted = (dir) => {
+    const cc = spawnSync("clang", [
+      "-std=c11", "-c", join(dir, "program.c"), "-I", dir,
+      "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
+      "-include", join(ROOT, "runtime/node/internal/shared.h"),
+      "-I", join(ROOT, "runtime/c"),
+      "-I", join(ROOT, "runtime/node/internal"),
+      "-I", join(ROOT, "third_party/node/src"),
+      "-I", join(ROOT, "third_party/node/deps/uv/include"),
+      "-o", "/dev/null",
+    ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+    return `${cc.stdout ?? ""}${cc.stderr ?? ""}`.split("\n").filter((l) => l.includes("error:"));
+  };
+  let controlErrors = null;
+  if (failsToCompile !== null && extraFlags.length > 0) {
+    const dir = mkdtempSync(join(tmpdir(), "nts-blk-ctl-"));
+    const plain = run(["emit-c", tsconfig, "--out", dir, "--napi"]);
+    const emitted = /wrote .* to (\S+)/.exec(plain);
+    controlErrors = emitted === null ? ["control build emitted nothing"] : compileEmitted(emitted[1]);
+  }
+
   let compileErrors = null;
   if (failsToCompile !== null && program.length > 0) {
     const emitted = /wrote .* to (\S+)/.exec(output);
@@ -207,7 +253,10 @@ for (const name of names) {
   const holds = failsToCompile !== null
     ? compileErrors !== null && compileErrors.length > 0 &&
       (failsToCompile[1] === undefined ||
-        compileErrors.some((l) => l.includes(failsToCompile[1])))
+        compileErrors.some((l) => l.includes(failsToCompile[1]))) &&
+      // With a flag named, the flagless build must be clean or the fixture is
+      // not about the flag.
+      (controlErrors === null || controlErrors.length === 0)
     : duplicatesC !== null
     ? occurrences(program, duplicatesC[1]) > 1
     : lacksC !== null
