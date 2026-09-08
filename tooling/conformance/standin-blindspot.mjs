@@ -70,6 +70,24 @@ for (const file of globSync(join(ROOT, "tooling/conformance/probes/*.ts"))) {
 }
 
 const blind = [...delegating.keys()].filter((n) => !probed.has(n)).sort();
+
+// Zero is this instrument's *goal*, which is exactly what makes a broken run
+// dangerous here: "0 bindings no lane can disagree with node about" is the
+// sentence it prints on success and the sentence it prints when it read nothing
+// at all. A result that cannot tell absence-of-problem from
+// absence-of-measurement is the failure four separate instruments in this
+// directory have had today, each by a different mechanism.
+//
+// So the counts it *scanned* are the floor, not the count it found.
+if (standins.size === 0 || probed.size === 0) {
+  console.log("  INSTRUMENT FAILURE: nothing was scanned.");
+  console.log(`    ${standins.size} stand-in(s) found in runtime/node/*/bindings.node.mjs`);
+  console.log(`    ${probed.size} probed binding(s) found in tooling/conformance/probes/*.ts`);
+  console.log("  A zero below would mean 'no blind spots', and with nothing read");
+  console.log("  it would mean nothing. Check both globs before believing it.");
+  process.exit(2);
+}
+
 console.log(`  ${standins.size} stand-in(s); ${delegating.size} delegate to node; ` +
   `${delegating.size - blind.length} of those are probed`);
 console.log(`  ${blind.length} binding(s) no lane can disagree with node about`);

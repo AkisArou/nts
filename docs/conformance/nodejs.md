@@ -2816,6 +2816,46 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## One failure, four instruments, four mechanisms
+
+Named by the compiler lane and worth stating once for all of them: **a result
+that cannot distinguish absence-of-problem from absence-of-measurement.** Four
+separate instruments had it today and no two shared a mechanism:
+
+- `counted-lane.sh` — `$(grep -c ... || echo 0)` yields `"0\n0"`, the `-eq` test
+  errors, the `if` falls through. Dead since written, and dead only in the case
+  it existed for.
+- `cascade-reach.mjs` — a cone membership test matched `join` against
+  `join@posix`. A silent zero from a name mismatch, indistinguishable from a
+  real negative.
+- `cascade-reach.mjs` again — reported `INSTRUMENT FAILURE` for `punycode`, the
+  one module that lowers completely, because its text could not tell "compiles
+  cleanly" from "the frontend never ran".
+- a comparison harness reading a stale output file, reporting the previous run's
+  result as a pass.
+
+So the remaining instruments were audited for the same property rather than
+waiting for each to fail:
+
+    standin-blindspot.mjs   zero is its GOAL, so a broken run read as success.
+                            Now refuses when it scanned no stand-ins or no probes.
+    binding-abi-audit.mjs   "0 checked, 0 disagreeing" is what a clean audit and
+                            a broken one both print, and the sweep matches any
+                            line containing "disagreeing". Now refuses at zero --
+                            and diagnoses a missing input rather than throwing an
+                            unhandled ENOENT from inside `readFileSync`, which
+                            was loud but said nothing about which file.
+
+Both controlled by running a copy from a directory where their inputs do not
+exist. `standin-blindspot` reports what it scanned; `binding-abi-audit` names
+the missing header.
+
+**The general form: an instrument that reports a count must also report the size
+of what it examined**, because the two zeros are otherwise the same sentence.
+`standin-blindspot` is the sharpest case in the tree — zero blind spots is the
+outcome the whole file exists to reach, so the broken run and the finished one
+printed the same line.
+
 ## `ArrayBufferView` as a parameter type: 17 modules, 621 sites
 
 Measured on the gate binary, every module through `emit-c`:

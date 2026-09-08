@@ -21,7 +21,7 @@
 // This reads the declarations and the C prototypes and compares them directly,
 // which finds the whole class in one pass instead of one probe at a time.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { globSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,6 +95,20 @@ function prototypes() {
     ...globSync(join(ROOT, "runtime/node/**/*.h"), { exclude: (p) => p.includes("node_modules") }),
     join(ROOT, "runtime/c/nts_runtime.h"),
   ];
+  // The runtime header is named rather than globbed, so a missing one threw an
+  // unhandled `ENOENT` from inside `readFileSync` -- a crash, which is loud but
+  // says nothing about which input was absent. The check below turns it into the
+  // same INSTRUMENT FAILURE the empty-glob case produces, because they are the
+  // same finding: the audit had nothing to compare against.
+  const unreadable = files.filter((file) => !existsSync(file));
+  if (unreadable.length > 0 || files.length === 0) {
+    console.log("  INSTRUMENT FAILURE: the audit's inputs are not where it looked.");
+    console.log(`    ${files.length} header file(s) named, ${unreadable.length} missing:`);
+    for (const file of unreadable.slice(0, 4)) console.log(`      ${file}`);
+    console.log("  Nothing can be compared, so a zero-disagreement result would");
+    console.log("  be a statement about this script rather than about the tree.");
+    process.exit(2);
+  }
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     const re = /^([A-Za-z_][A-Za-z0-9_]*(?:\s+\*|\s*\*|\s))\s*(nts_[A-Za-z0-9_]+)\s*\(([\s\S]*?)\)\s*;/gm;
@@ -156,6 +170,19 @@ for (const [name, d] of [...decls].sort()) {
   mismatches++;
   console.log(`  MISMATCH  ${name}   ${d.file}  vs  ${p.file}`);
   for (const problem of problems) console.log(`            ${problem}`);
+}
+
+// `0 checked, 0 disagreeing` is what a clean audit and a broken one both print,
+// and `sweep.mjs` reads any line containing "disagreeing" as the result. Same
+// failure as the stand-in blind spot one file over: a count with no floor cannot
+// say whether it measured nothing or found nothing. Four instruments in this
+// directory have had that fault today, each by a different mechanism.
+if (checked === 0) {
+  console.log("\n  INSTRUMENT FAILURE: no binding had a prototype to check.");
+  console.log(`    ${noProto} declared with no prototype found.`);
+  console.log("  A zero disagreement count means nothing when nothing was");
+  console.log("  compared. Check the header and declaration globs.");
+  process.exit(2);
 }
 
 console.log(
