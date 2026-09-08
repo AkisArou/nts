@@ -156,15 +156,43 @@ function shapesIn(name) {
   return found;
 }
 
+// The exports the module wanted and did not get, so a cone can be reported in
+// the units anybody actually cares about.
+//
+// Matched on the name *before* any `@scope` suffix, which is the trap this
+// exists to close. The compiler names a function `join@posix`; the export table
+// wants `join`. Checking membership with the plain name finds nothing and reads
+// as "none of the missing exports are in this cone" -- which is what I concluded
+// about `path` for several minutes, on a cone that in fact contains all
+// twenty-three of them. A silent zero from a name mismatch looks exactly like a
+// real negative result.
+const wanted = new Set(
+  lines
+    .map((l) => /^no wrapper for (\S+?): is exported and no function of that name/.exec(l.trim()))
+    .filter((m) => m !== null)
+    .map((m) => m[1]),
+);
+const base = (name) => name.split("@")[0].replace(/#.*$/, "");
+
 const scored = roots
-  .map((r) => ({ root: r, size: cone(r).size }))
+  .map((r) => {
+    const c = cone(r);
+    return {
+      root: r,
+      size: c.size,
+      exports: [...new Set([...c].map(base))].filter((n) => wanted.has(n)).sort(),
+    };
+  })
   .sort((a, b) => b.size - a.size);
 
 console.log(`  ${module_}: ${primary.length} primary refusal(s), ` +
   `${cascaded.size} function(s) stopped by cascade\n`);
 console.log("  Primary refusals ranked by the size of their cone:\n");
-for (const { root, size } of scored.slice(0, 10)) {
+for (const { root, size, exports } of scored.slice(0, 10)) {
   console.log(`  ${String(size).padStart(4)}  ${root}`);
+  if (exports.length > 0) {
+    console.log(`        unblocks ${exports.length} missing export(s): ${exports.join(" ")}`);
+  }
   const shapes = shapesIn(root);
   if (shapes.length === 0) {
     console.log("        (could not attribute a shape to this one by line range)");
