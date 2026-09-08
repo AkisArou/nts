@@ -23,7 +23,7 @@ lane has moved.
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
 | `awfy-queens` | 1.24x | partly narrowing -- 2 f64 block params, 6 f64 adds |
-| `generic-classes` | 1.13x | C2 unrolls the reference's loop and not ours |
+| `generic-classes` | 1.13x | no cause found: assembly is comparable |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
 | `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
@@ -179,16 +179,25 @@ Two of the three are now answered by an assembly diff:
 - **`elementwise` is at its floor.** Both lanes vectorise -- 36 `vmulpd` against
   the reference's 45, an unroll-factor difference on the same SIMD shape. 1.03x
   with both vectorised is not a gap worth opening.
-- **`generic-classes` is an unrolling difference, and the instruction counts say
-  so backwards.** Our `work$whole` compiles to **284** instructions and the
-  reference's `work` to **526** -- and the reference is *faster*. Its body
-  carries roughly twice ours (12 `xor` / 18 `add` / 31 `cmp` against 7 / 10 /
-  8), which is C2 unrolling its loop and not ours. Re-measured quiet, twice, to
-  rule out the contaminated sweep: **1.13x / 1.21x**, so it is real. Why the
-  loop is not counted is the open question and it is the only row where fewer
-  instructions are the problem. **Not** the split constructor: that was the
-  obvious suspect, since we emit four calls an iteration where the reference
-  emits two, and it prices at 0.99x -- see the list above. All
+- **`generic-classes` has no cause anyone has found, and my first answer was
+  wrong.** I reported it as an unrolling difference on the strength of our
+  `work$whole` compiling to 284 instructions against the reference's 526. **That
+  compared different kinds of compilation.** `PrintAssembly` emits every one, and
+  `%` in the header marks on-stack replacement; taking the first match in each
+  file gave our C1/OSR block against their C1 block. Comparing the *standard C2*
+  compilations of both:
+
+      ours     194 instructions   54 xor    5 cmp
+      theirs   214 instructions   33 xor   24 cmp
+
+  Comparable in size, and if anything ours is the more unrolled. The reference
+  also carries G1 write barriers -- its erased `Object` field needs them and our
+  monomorphised `double`/`boolean` fields do not -- so it is doing strictly more
+  work per store and still winning.
+
+  The row is real: **1.13x / 1.21x** re-measured quiet, twice. The split
+  constructor is excluded at 0.99x, the assembly is comparable, both scalar
+  replace at 0.00 bytes/op. Nothing found. All
 three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
 bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
 `ifnull`.
