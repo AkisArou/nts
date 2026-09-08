@@ -45,9 +45,24 @@ pub struct PackageRef {
     pub dir: Utf8PathBuf,
 }
 
+/// A checker diagnostic, kept because the pass that resolves also checks.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    pub file: Utf8PathBuf,
+    /// `TS2591`, `TS7006`.
+    pub code: String,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Resolution {
     pub modules: Vec<ResolvedModule>,
+    /// Everything the checker complained about while resolving.
+    ///
+    /// Free: the pass that answers "where did this specifier go" is a
+    /// typecheck, and throwing its errors away would mean running a second one
+    /// to find out whether the source just acquired can actually be built.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl Resolution {
@@ -105,8 +120,12 @@ pub fn trace(tsgo: &Utf8Path, tsconfig: &Utf8Path) -> Result<Resolution, Resolut
 #[must_use]
 pub fn parse(trace: &str) -> Resolution {
     let mut modules = Vec::new();
+    let mut diagnostics = Vec::new();
     for line in trace.lines() {
         let Some(rest) = line.strip_prefix("======== Module name '") else {
+            if let Some(diagnostic) = parse_diagnostic(line) {
+                diagnostics.push(diagnostic);
+            }
             continue;
         };
         let Some((specifier, rest)) = rest.split_once('\'') else {
@@ -131,7 +150,22 @@ pub fn parse(trace: &str) -> Resolution {
             file,
         });
     }
-    Resolution { modules }
+    Resolution {
+        modules,
+        diagnostics,
+    }
+}
+
+/// `path(line,col): error TSxxxx: message`
+fn parse_diagnostic(line: &str) -> Option<Diagnostic> {
+    let (location, rest) = line.split_once("): error TS")?;
+    let (code, message) = rest.split_once(": ")?;
+    let file = location.rsplit_once('(')?.0;
+    Some(Diagnostic {
+        file: Utf8PathBuf::from(file),
+        code: format!("TS{code}"),
+        message: message.to_owned(),
+    })
 }
 
 /// The package a resolved file belongs to, from its path.
@@ -179,6 +213,20 @@ noise that is not a resolution
 ======== Module name './math.ts' was successfully resolved to '/r/packages/lib/src/math.ts'. ========
 ======== Module name 'gone' was not resolved. ========
 ";
+
+    /// The pass that resolves also checks, and its complaints are the only
+    /// evidence that acquired source can be built.
+    #[test]
+    fn diagnostics_are_read_out_of_the_same_pass() {
+        let resolution = parse(
+            "/r/.nts/vendor/p@1.0.0/src/i.ts(25,50): error TS2591: Cannot find name 'process'.\n",
+        );
+        assert_eq!(resolution.diagnostics.len(), 1);
+        let first = &resolution.diagnostics[0];
+        assert_eq!(first.code, "TS2591");
+        assert_eq!(first.file, "/r/.nts/vendor/p@1.0.0/src/i.ts");
+        assert_eq!(first.message, "Cannot find name 'process'.");
+    }
 
     #[test]
     fn a_subpath_specifier_keeps_its_own_identity() {

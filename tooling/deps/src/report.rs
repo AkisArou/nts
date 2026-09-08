@@ -50,6 +50,7 @@ pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
                 "  {:width$}  {:9}  {detail}",
                 package.name, package.version
             );
+            complaints_of(package, &mut out);
             if verbose {
                 for (specifier, at) in &package.mapped {
                     let _ = writeln!(out, "      {specifier} -> {at}");
@@ -72,6 +73,18 @@ pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
         }
     }
 
+    notes(acquisition, &acquired, &mut out);
+
+    if let Some(tsconfig) = &acquisition.tsconfig {
+        let _ = write!(out, "\ncompile with: {tsconfig}\n");
+    }
+
+    out
+}
+
+/// Everything after the two lists: what was not expanded, not installed, not
+/// kept, and not buildable.
+fn notes(acquisition: &Acquisition, acquired: &[&PackageReport], out: &mut String) {
     let patterns: Vec<&PackageReport> = acquisition
         .packages
         .iter()
@@ -104,11 +117,40 @@ pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
         );
     }
 
-    if let Some(tsconfig) = &acquisition.tsconfig {
-        let _ = write!(out, "\ncompile with: {tsconfig}\n");
+    let unbuildable: Vec<&PackageReport> = acquisition
+        .packages
+        .iter()
+        .filter(|package| package.acquired() && !package.complaints.is_empty())
+        .collect();
+    if !unbuildable.is_empty() {
+        let total: usize = unbuildable
+            .iter()
+            .map(|package| package.complaints.iter().map(|c| c.count).sum::<usize>())
+            .sum();
+        let _ = write!(
+            out,
+            "\n{} of {} acquired packages have {total} problem(s) in their recovered\nsource — most often an ambient their own build supplied. The source is real;\nit was written for a configuration this project does not have.\n",
+            unbuildable.len(),
+            acquired.len(),
+        );
     }
 
-    out
+}
+
+/// What the checker said about one package's recovered source.
+///
+/// Acquired and buildable are different claims. A package whose recovered
+/// source the checker complains about was still acquired — the source is real —
+/// but saying only that would be half the story, and the half a developer finds
+/// out later.
+fn complaints_of(package: &PackageReport, out: &mut String) {
+    for complaint in package.complaints.iter().take(3) {
+        let _ = writeln!(
+            out,
+            "      {} × {}: {}",
+            complaint.count, complaint.code, complaint.example
+        );
+    }
 }
 
 /// The same thing, for anything that would otherwise parse the text.
@@ -134,6 +176,11 @@ pub fn json(acquisition: &Acquisition) -> serde_json::Value {
             "depth": package.depth,
             "files": package.files,
             "patterns": package.patterns,
+            "complaints": package.complaints.iter().map(|complaint| serde_json::json!({
+                "code": complaint.code,
+                "count": complaint.count,
+                "example": complaint.example,
+            })).collect::<Vec<_>>(),
             "specifiers": package.mapped.iter()
                 .map(|(specifier, at)| serde_json::json!({ "specifier": specifier, "resolvesTo": at }))
                 .collect::<Vec<_>>(),

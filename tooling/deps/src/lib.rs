@@ -59,6 +59,22 @@ pub struct PackageReport {
     pub files: usize,
     /// `exports` subpath patterns, which are reported rather than guessed at.
     pub patterns: Vec<String>,
+    /// What the checker said about this package's *recovered* source.
+    ///
+    /// Acquired and buildable are different claims, and this is the second.
+    /// Measured over a real corpus: seven of fourteen acquired packages arrive
+    /// with nothing to say here, and the rest are mostly missing an ambient
+    /// their own build supplied.
+    pub complaints: Vec<Complaint>,
+}
+
+/// One kind of thing the checker said about a package's recovered source.
+#[derive(Debug, Clone)]
+pub struct Complaint {
+    pub code: String,
+    pub count: usize,
+    /// The first message of this kind, as an example.
+    pub example: String,
 }
 
 impl PackageReport {
@@ -143,15 +159,22 @@ fn as_workspace_package(
         mapped,
         files: 0,
         patterns: patterns.to_vec(),
+        complaints: Vec::new(),
     })
 }
 
-/// What one resolution pass found: packages with the specifiers each must
-/// answer, and specifiers that resolved to source outside any `node_modules`.
-type Traced = (
-    Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)>,
-    Vec<(String, Utf8PathBuf)>,
-);
+/// What one resolution pass found.
+#[derive(Debug, Clone, Default)]
+struct Traced {
+    /// Packages, with the specifiers each must answer.
+    packages: Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)>,
+    /// Specifiers that resolved to source outside any `node_modules` — a
+    /// sibling package in the same repository.
+    locals: Vec<(String, Utf8PathBuf)>,
+    /// What the checker said in passing. Free, and the only evidence that
+    /// acquired source can be built.
+    diagnostics: Vec<resolution::Diagnostic>,
+}
 
 /// One package to work through, and — when the checker answered — the
 /// specifiers it has to satisfy. `None` means fall back to its manifest.
@@ -217,7 +240,11 @@ fn resolved_packages(
             }
         }
     }
-    Some((packages, local))
+    Some(Traced {
+        packages,
+        locals: local,
+        diagnostics: resolution.diagnostics,
+    })
 }
 
 /// Acquire everything acquirable for the project rooted at `project`.
@@ -249,6 +276,7 @@ pub fn acquire(
     // about, and re-deriving the whole set from the newest trace would lose it.
     let mut discovered: Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> = Vec::new();
     let mut local: Vec<(String, Utf8PathBuf)> = Vec::new();
+    let mut complaints: Vec<resolution::Diagnostic> = Vec::new();
     let mut trace_with = tsconfig.to_owned();
     let mut last: Option<Acquisition> = None;
 
@@ -260,7 +288,13 @@ pub fn acquire(
             &vendor_root,
         );
         let mut grew = false;
-        if let Some((packages, locals)) = traced {
+        if let Some(Traced {
+            packages,
+            locals,
+            diagnostics,
+        }) = traced
+        {
+            complaints = diagnostics;
             for (package, specifiers) in packages {
                 if let Some((_, known)) =
                     discovered.iter_mut().find(|(known, _)| known.dir == package.dir)
@@ -284,11 +318,17 @@ pub fn acquire(
             }
         }
 
-        let resolved = options
-            .tsgo
-            .as_ref()
-            .map(|_| (discovered.clone(), local.clone()));
-        let acquisition = acquire_once(&project_dir, tsconfig, resolved.as_ref(), options)?;
+        let resolved = options.tsgo.as_ref().map(|_| Traced {
+            packages: discovered.clone(),
+            locals: local.clone(),
+            diagnostics: Vec::new(),
+        });
+        let mut acquisition = acquire_once(&project_dir, tsconfig, resolved.as_ref(), options)?;
+        // The trace that answered "where did this go" also typechecked, and its
+        // complaints about the *vendor tree* are the only evidence that the
+        // source just acquired can be built. Attributed from the previous
+        // pass's trace, which is the newest one that saw the current tree.
+        attribute(&mut acquisition, &complaints, &vendor_root);
         let next = acquisition.tsconfig.clone();
         last = Some(acquisition);
 
@@ -320,7 +360,11 @@ fn work_list(
 ) -> WorkList {
     let mut queue: WorkList = Vec::new();
     match resolved {
-        Some((traced, local)) => {
+        Some(Traced {
+            packages: traced,
+            locals: local,
+            ..
+        }) => {
             // A sibling package in the same repository: the checker already
             // named its source file, so there is nothing to recover and nothing
             // to choose. Point at it.
@@ -337,6 +381,7 @@ fn work_list(
                         mapped: vec![(specifier.clone(), file.clone())],
                         files: 0,
                         patterns: Vec::new(),
+                        complaints: Vec::new(),
                     });
                 }
             }
@@ -369,6 +414,66 @@ fn work_list(
     }
 
     queue
+}
+
+/// Attach the checker's complaints to the packages whose source they are about.
+///
+/// Only the vendor tree: an error in the developer's own code is theirs, was
+/// there before acquisition, and is not this tool's to report. Grouped by
+/// error code rather than listed, because forty instances of `Cannot find name
+/// 'process'` are one fact about a package's build environment and not forty
+/// facts.
+fn attribute(
+    acquisition: &mut Acquisition,
+    diagnostics: &[resolution::Diagnostic],
+    vendor_root: &Utf8Path,
+) {
+    for package in &mut acquisition.packages {
+        package.complaints.clear();
+    }
+    // The vendor directory's own name, matched inside the path rather than as a
+    // prefix: tsgo reports a file relative to *its* working directory, so an
+    // absolute prefix does not match and every complaint was silently dropped.
+    let marker = format!(
+        "/{}/",
+        vendor_root
+            .file_name()
+            .map_or_else(|| ".nts/vendor".to_owned(), ToOwned::to_owned)
+    );
+    for diagnostic in diagnostics {
+        let path = diagnostic.file.as_str();
+        let Some(at) = path.rfind(&marker) else {
+            continue;
+        };
+        // `<name>@<version>/…`, the way `emit::package_dir` wrote it.
+        let Some(slug) = path[at + marker.len()..]
+            .split('/')
+            .next()
+            .map(ToOwned::to_owned)
+        else {
+            continue;
+        };
+        let Some(package) = acquisition.packages.iter_mut().find(|package| {
+            emit::package_dir(&format!("{}@{}", package.name, package.version)) == slug
+        }) else {
+            continue;
+        };
+        match package
+            .complaints
+            .iter_mut()
+            .find(|complaint| complaint.code == diagnostic.code)
+        {
+            Some(complaint) => complaint.count += 1,
+            None => package.complaints.push(Complaint {
+                code: diagnostic.code.clone(),
+                count: 1,
+                example: diagnostic.message.clone(),
+            }),
+        }
+    }
+    for package in &mut acquisition.packages {
+        package.complaints.sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
+    }
 }
 
 /// What every package in one pass shares.
@@ -469,6 +574,7 @@ fn acquire_package(
             mapped,
             files: recovery.files.len(),
             patterns,
+            complaints: Vec::new(),
         },
         files_written,
     ))
