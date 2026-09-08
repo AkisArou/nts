@@ -28,9 +28,16 @@ class Link {
 // Allocates, so not inert -- this is the ordinary path, kept beside the others
 // so a mistake in either shows up as a difference between them.
 function chain(length: number): Link {
+  // Bounded here rather than at each caller, the way `generators` bounds
+  // `upTo`: every walk in this file goes through it. The differential sweeps a
+  // pool containing 2^31 and 2^53, and a chain of two billion `Link`s is
+  // neither built by node nor by the compiled program -- both are killed at
+  // twenty seconds and the case is abandoned, which is scored as neither
+  // agreement nor disagreement and costs the rest of the batch with it.
+  const bound = length > 65536 ? 65536 : length;
   const head = new Link(0);
   let tail = head;
-  for (let i = 1; i < length; i++) {
+  for (let i = 1; i < bound; i++) {
     const made = new Link(i);
     tail.next = made;
     tail = made;

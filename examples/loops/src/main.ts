@@ -1,7 +1,17 @@
 export function sumTo(n: number): number {
+  // The bound is in the condition rather than hoisted into a preamble, because
+  // this function is a *structural* fixture: `hir_lowering` asserts its body is
+  // two adds and one constant and nothing else, which is the whole point --
+  // rebinding a name costs the add, not the add plus a store plus a reload. A
+  // hoisted `const bound = ...` adds a block and the assertion finds the wrong
+  // one.
+  //
+  // Bounded at all because the differential sweeps `n` through 2^53, which no
+  // loop finishes; the case is killed at twenty seconds on both sides and
+  // abandoned, taking the rest of this function's batch with it.
   let total = 0;
   let i = 0;
-  while (i < n) {
+  while (i < n && i < 65536) {
     total = total + i;
     i = i + 1;
   }

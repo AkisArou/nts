@@ -452,7 +452,23 @@ function bounded(n: number): number {
   // `% 7` keeps it small, keeps a negative negative -- which yields nothing at
   // all, the case a loop that reads before testing gets wrong -- and keeps a
   // fraction fractional.
-  return n % 7;
+  //
+  // `NaN` is mapped away, and it has to be. `NaN % 7` is `NaN`, and
+  // `CountdownSteps` reports `done: this.at < 0` -- which is **false** for
+  // `NaN`, forever. The iterator never ends and neither does the walk, on
+  // either side: node hangs on `breaksEarly(NaN)` exactly as the compiled
+  // program does.
+  //
+  // So the case tested nothing and cost a twenty-second timeout on each side,
+  // which the harness then reports as "not a disagreement and not a refusal"
+  // and abandons -- along with the rest of that function's cases. Six of them
+  // in this file, and the gate pays for all of it five times because five
+  // backend lanes run the same examples.
+  //
+  // Mapped to zero rather than guarded at the call sites: zero yields nothing
+  // at all, which is the answer a negative already gives, so every walk here
+  // keeps a case it can actually finish.
+  return Number.isNaN(n) ? 0 : n % 7;
 }
 
 class CountdownSteps {

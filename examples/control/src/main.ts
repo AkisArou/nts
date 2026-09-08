@@ -40,10 +40,18 @@ export function classify(n: number): number {
 // `do` runs its body before it asks, so this is `n` for every `n` above zero
 // and one for the rest.
 export function countUp(n: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = n > 65536 ? 65536 : n;
   let i = 0;
   do {
     i = i + 1;
-  } while (i < n);
+  } while (i < bound);
   return i;
 }
 
@@ -62,8 +70,12 @@ export function upTo(n: number): number {
 
 // `continue` in a `for` must still run the update, or the loop never ends.
 export function odds(n: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let total = 0;
-  for (let i = 0; i < n; i += 1) {
+  for (let i = 0; i < bound; i += 1) {
     if (i % 2 === 0) {
       continue;
     }
@@ -75,8 +87,12 @@ export function odds(n: number): number {
 // A `continue` written inside a `switch` belongs to the loop around it: a
 // `switch` is something to break out of, not something to continue.
 export function throughSwitch(n: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let total = 0;
-  for (let i = 0; i < n; i += 1) {
+  for (let i = 0; i < bound; i += 1) {
     switch (i % 3) {
       case 0:
         continue;

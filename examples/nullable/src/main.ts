@@ -24,8 +24,12 @@ class Element {
 // Build a list, then walk it. `head` starts absent and the walk ends when the
 // chain does.
 export function sumChain(n: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let head: Element | null = null;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     const made = new Element(i);
     made.next = head;
     head = made;
@@ -41,8 +45,12 @@ export function sumChain(n: number): number {
 
 // The length of a chain, counted with truthiness rather than a comparison.
 export function lengthOf(n: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let head: Element | null = null;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     const made = new Element(i);
     made.next = head;
     head = made;
@@ -70,8 +78,16 @@ function findValue(head: Element | null, wanted: number): Element | undefined {
 }
 
 export function foundAt(n: number, wanted: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = n > 65536 ? 65536 : n;
   let head: Element | null = null;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     const made = new Element(i);
     made.next = head;
     head = made;

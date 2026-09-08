@@ -7,8 +7,30 @@
 // is one call and one field read -- nothing allocated per element.
 
 function* upTo(limit: number): Generator<number, void, unknown> {
+  // Clamped, and the clamp is about the *harness* rather than about
+  // generators.
+  //
+  // `nts check` sweeps each parameter through a deliberately hostile pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as values and useless as a
+  // loop bound: a walk to 2^31 through a generator -- a state machine with a
+  // heap frame per resumption -- does not finish on either side, so both are
+  // killed at twenty seconds and the case is *abandoned*. An abandoned case is
+  // scored as neither agreement nor disagreement; it buys nothing but wall
+  // clock, and this file was buying 361 seconds of it, which the gate then pays
+  // five times over because five backend lanes run the same examples.
+  //
+  // Clamping does not weaken the fixture, it strengthens it: the same case is
+  // now *checked* rather than abandoned, and node computes the clamped answer
+  // exactly as the compiled program does. Sixty-four is past every interesting
+  // boundary this file has -- the two-state generator, the early stop, the
+  // nested walk -- and small enough to finish instantly.
+  //
+  // `NaN > 64` is false, so a `NaN` limit keeps its old behaviour of running no
+  // iterations, which is what `i < NaN` did before. A negative limit is
+  // likewise unchanged.
+  const bound = limit > 64 ? 64 : limit;
   let i = 0;
-  while (i < limit) {
+  while (i < bound) {
     yield i;
     i = i + 1;
   }
@@ -122,8 +144,11 @@ export function nested(outer: number, inner: number): number {
 
 // A generator whose element is not a number.
 function* words(n: number): Generator<string, void, unknown> {
+  // Bounded for the reason `upTo` is, and more sharply: each iteration builds a
+  // string, so a hostile bound exhausts memory before it exhausts the clock.
+  const bound = n > 32 ? 32 : n;
   let i = 0;
-  while (i < n) {
+  while (i < bound) {
     yield "w" + i;
     i = i + 1;
   }
@@ -182,9 +207,13 @@ export function twoFrames(a: number, b: number): number {
 // A parameter read after the suspension, so it has to be in the frame rather
 // than in a C local that the return threw away.
 function* strided(from: number, step: number, count: number): Generator<number, void, unknown> {
+  // `count` is the bound; `from` and `step` are values and stay unclamped, so
+  // the hostile pool still reaches the arithmetic this generator exists to
+  // check -- 2^53 as a starting point, a negative stride, a NaN step.
+  const bound = count > 64 ? 64 : count;
   let made = 0;
   let at = from;
-  while (made < count) {
+  while (made < bound) {
     yield at;
     at = at + step;
     made = made + 1;
@@ -202,7 +231,11 @@ export function strideSum(from: number, step: number, count: number): number {
 // A generator that yields from inside a nested block and a `for` loop, so the
 // suspension is not at the top level of the body.
 function* triangle(rows: number): Generator<number, void, unknown> {
-  for (let row = 0; row < rows; row = row + 1) {
+  // Bounded like the others, and this one quadratically: `rows` rows yield
+  // `rows * (rows + 1) / 2` values, so a hostile bound is worse here than
+  // anywhere else in the file.
+  const bound = rows > 24 ? 24 : rows;
+  for (let row = 0; row < bound; row = row + 1) {
     for (let col = 0; col <= row; col = col + 1) {
       yield row * 10 + col;
     }

@@ -23,16 +23,24 @@ class Counter {
 }
 
 export function run(step: number, times: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = times > 65536 ? 65536 : times;
   const c = new Counter(step);
-  for (let i = 0; i < times; i++) {
+  for (let i = 0; i < bound; i++) {
     c.advance();
   }
   return c.count;
 }
 
 export function scaled(step: number, times: number, factor: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = times > 65536 ? 65536 : times;
   const c = new Counter(step);
-  for (let i = 0; i < times; i++) {
+  for (let i = 0; i < bound; i++) {
     c.advance();
   }
   return c.scaledBy(factor);
@@ -79,8 +87,16 @@ function bump(c: Counter, times: number): number {
 }
 
 export function borrowChain(step: number, times: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = times > 65536 ? 65536 : times;
   const c = makeCounter(step);
-  return bump(c, times);
+  return bump(c, bound);
 }
 
 // A managed value carried around a loop as a block parameter, replaced every
@@ -88,8 +104,12 @@ export function borrowChain(step: number, times: number): number {
 // this is the case that separates a loop which touches the count every
 // iteration from one that does not.
 export function chain(times: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = times > 65536 ? 65536 : times;
   let c = makeCounter(1);
-  for (let i = 0; i < times; i++) {
+  for (let i = 0; i < bound; i++) {
     c = makeCounter(i);
     c.advance();
   }

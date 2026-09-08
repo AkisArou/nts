@@ -10,8 +10,12 @@ function twice(n: number): number {
 }
 
 export function pipeline(rounds: 64): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = rounds > 64 ? 64 : rounds;
   let total = 0;
-  for (let i = 0; i < rounds; i++) {
+  for (let i = 0; i < bound; i++) {
     total = twice(clamp(total + i));
   }
   return total;

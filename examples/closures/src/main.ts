@@ -82,10 +82,18 @@ export function tagged(v: number): number {
 // Higher order over the whole array, which is what `map` will be once it takes
 // one of these.
 export function applyToAll(v: number, times: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = times > 65536 ? 65536 : times;
   const step = (x: number): number => x * 2 + 1;
   let total = 0;
   let at = 0;
-  while (at < times) {
+  while (at < bound) {
     total = total + step(v + at);
     at = at + 1;
   }

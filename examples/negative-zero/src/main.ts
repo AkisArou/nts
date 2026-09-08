@@ -39,16 +39,28 @@ export function coercedProduct(a: number, b: number): number {
 // The same question across a loop, where the accumulator is a block parameter
 // and the sign has to be carried back along the edge.
 export function accumulateThenDivide(n: number, k: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let total = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     total = total + i * k;
   }
   return 1 / total;
 }
 
 export function accumulateThenCoerce(n: number, k: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = n > 65536 ? 65536 : n;
   let total = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     total = (total + i * k) | 0;
   }
   return total;

@@ -41,9 +41,17 @@ export function replace(first: number, second: number): number {
 // The same slot written many times over. Every write but the last drops an
 // object that nothing else is holding.
 export function churn(times: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
+  const bound = times > 65536 ? 65536 : times;
   const box = makeBox(0);
   let total = 0;
-  for (let i = 0; i < times; i++) {
+  for (let i = 0; i < bound; i++) {
     box.cell = new Cell(i);
     total = total + box.read();
   }
@@ -63,9 +71,13 @@ export function selfAssign(value: number): number {
 // stops existing every one of them has to be given up. The boxes hold cells, so
 // dropping the array has to reach two levels down.
 export function nested(count: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = count > 65536 ? 65536 : count;
   const boxes = [makeBox(1), makeBox(2), makeBox(3)];
   let total = 0;
-  for (let round = 0; round < count; round++) {
+  for (let round = 0; round < bound; round++) {
     for (let i = 0; i < boxes.length; i++) {
       total = total + boxes[i]!.read();
     }
@@ -78,8 +90,12 @@ export function nested(count: number): number {
 // ends. A frame slot has no count to reach zero and no destructor to run, so
 // the release is the compiler's to emit.
 export function localBox(times: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = times > 65536 ? 65536 : times;
   let total = 0;
-  for (let i = 0; i < times; i++) {
+  for (let i = 0; i < bound; i++) {
     const box = new Box(new Cell(i));
     total = total + box.read();
   }

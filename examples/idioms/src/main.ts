@@ -1,7 +1,11 @@
 // The way an integer loop is actually written.
 export function sumTo(n: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = n > 65536 ? 65536 : n;
   let total = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < bound; i++) {
     total += i;
   }
   return total;
@@ -19,8 +23,12 @@ export function triangle(): number {
 // A hash loop: bitwise operators make every value an integer by construction,
 // no matter what came in.
 export function hash(seed: number, rounds: number): number {
+  // Bounded: the differential sweeps this parameter through a pool holding
+  // 2^31, 2^32 and 2^53, which are values worth testing and loop bounds that
+  // finish on neither side. See `examples/generators` for the whole reason.
+  const bound = rounds > 65536 ? 65536 : rounds;
   let h = seed | 0;
-  for (let i = 0; i < rounds; i++) {
+  for (let i = 0; i < bound; i++) {
     h = (h << 5) - h + i;
     h &= 0xffff;
   }
@@ -28,8 +36,15 @@ export function hash(seed: number, rounds: number): number {
 }
 
 export function countDown(start: number): number {
+  // Bounded because the differential sweeps this parameter through a pool that
+  // contains 2^31, 2^32 and 2^53. Those are useful as *values* and useless as a
+  // loop bound: neither node nor the compiled program finishes, both are killed
+  // at twenty seconds, and the case is abandoned along with the rest of this
+  // function's batch -- scored as neither agreement nor disagreement, so it
+  // bought nothing but wall clock, five times over because five backend lanes
+  // run the same examples. Clamped, the same case is checked instead.
   let steps = 0;
-  let i = start;
+  let i = start > 65536 ? 65536 : start;
   while (i > 0) {
     i--;
     steps++;
