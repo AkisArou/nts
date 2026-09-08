@@ -1,4 +1,18 @@
-// expect: emit-c --napi -> emits-addon result = access(
+// expect: emit-c --napi -> emits-c double access_(
+//
+// FIXED, and kept as a guard on the escape. The C symbol is `access_` now while
+// the JavaScript name stays `access`, so nothing in the addon's own translation
+// units carries a name libc also has. Verified behaviourally as well as by the
+// emitted text: an export named `access` answers `-2`, `0`, `-2` for a missing,
+// existing and empty path, which is ENOENT and correct and agrees with node.
+//
+// **Two fixes were needed and they close opposite directions.** The escape above
+// stops a program's `strlen` preempting libc's *for the runtime*, which makes 58
+// such calls in `nts_runtime.c`. `build.sh` linking addons with
+// `-fvisibility=hidden` stops libc preempting the *program*: that took
+// `punycode.node` from 360 exported dynamic symbols to 2, and among the 358 were
+// the bundled QuickJS internals. An escape list cannot close that direction,
+// because the risk there is libc's dynamic symbol table rather than any header.
 //
 // An exported function whose name is also a libc symbol is **silently replaced
 // by libc's at load time**. The wrapper emits the bare name:

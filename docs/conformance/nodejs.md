@@ -4658,6 +4658,51 @@ green row that cannot fail, introduced by the corpus written to expose exactly
 that. The TypeScript lane skips it out loud, because a missing row and a passing
 row look identical in a summary.
 
+## An addon exported 360 symbols and called libc instead of itself
+
+An exported function whose name is also a libc symbol was **silently replaced by
+libc's**. A probe exporting `access` over `nts_fs_access` answered `0` for every
+input — missing path, empty path, root-only path, existing file. Renaming the
+export to `probeAccess` and changing nothing else gave `-2`, `0`, `-2`: ENOENT,
+correct, agreeing with node. The binding was right the whole time.
+
+No refusal, no clang warning, an addon that links and loads and returns plausible
+values. Every instrument here reported success.
+
+**The mechanism took two wrong explanations to reach, and the second was mine.**
+The first guess was that `build.sh` force-includes `<unistd.h>` so the
+declaration conflicts. It does not, and clang says nothing. `nm` settles it: the
+addon **defines** `T access` and never calls it. A shared object linked without
+`-Bsymbolic` routes calls to its own globals through the PLT, and the dynamic
+linker resolves them against the global symbol table, where libc was bound first.
+
+The two facts that pin it are worth keeping. Node's own `fs` is **unaffected** by
+loading the addon, because node and libuv resolved their `access` before it
+loaded — so nothing interposes on them. And a `static` internal function is safe:
+an internal `read` emits as `static double read(double)` and runs correctly,
+because a static definition has no dynamic symbol to preempt.
+
+**Two fixes were needed, closing opposite directions of one hazard.**
+
+| direction | fix | why the other cannot close it |
+| --- | --- | --- |
+| libc preempts the program | `-fvisibility=hidden` in `build.sh` | an escape list cannot enumerate libc's dynamic symbol table |
+| the program preempts libc *for the runtime* | escaping the emitted C symbol | hidden visibility does not apply in a standalone binary, where the program's symbols win |
+
+The second is not hypothetical: `nts_runtime.c` makes **58** calls to `memcpy`,
+`strlen` and their neighbours, so a program exporting `strlen` would have the
+runtime calling it on every string operation. That is why `<string.h>` and
+`<math.h>` were escaped from the beginning; POSIX was simply missing from the
+list.
+
+**Hidden visibility took `punycode.node` from 360 exported dynamic symbols to
+2** — the two Node-API entry points. Among the 358 were the bundled QuickJS
+internals, `cr_free`, `cr_init`, `cr_op`. `access` was found only because a probe
+happened to name an export after it.
+
+Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
+module that does not compile.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
