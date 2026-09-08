@@ -64,8 +64,23 @@ BLOCKED="fs process"
 KNOWN_UNRESOLVED="nts_async_context_get nts_async_context_set nts_on_collected
 nts_net_get_tos nts_net_read_start nts_net_ref nts_net_server_ref
 nts_net_set_keepalive nts_net_set_no_delay nts_net_set_tos
-nts_os_homedir nts_os_hostname nts_os_tmpdir nts_os_uptime
-nts_str_to_lower_case nts_udp_recv_stop nts_udp_ref"
+nts_udp_recv_stop nts_udp_ref"
+
+# The first version of this list also carried `nts_os_homedir`,
+# `nts_os_hostname`, `nts_os_tmpdir`, `nts_os_uptime` and
+# `nts_str_to_lower_case`, read out of `target/node/process.node`. **That
+# artifact was two days old.** `process` is in BLOCKED and has not built since,
+# so `nm -D` on it described a tree that no longer exists -- and all five of
+# those symbols are in fact defined, four in `os/os.c` and one in
+# `runtime/c/nts_unicode.c`.
+#
+# Pinning them would have been worse than not checking: the set would have
+# tolerated five names on the day `process` started building and one of them
+# really was missing. A stale artifact manufactures a finding exactly the way a
+# stale baseline manufactures progress, and `target/node` holds whatever the
+# last successful build left, which for a BLOCKED module is anything at all.
+#
+# Read only artifacts newer than the change you are asking about.
 
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 if [ ! -x "$compiler" ]; then
