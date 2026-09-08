@@ -42,6 +42,24 @@ ln -sfn "$root/third_party/node" "$tree/third_party/node"
 mkdir -p "$tree/target"
 ln -sfn "$root/target/tsgo" "$tree/target/tsgo"
 
+# `node_modules` too, and forgetting them cost a wrong number.
+#
+# They are gitignored, so a worktree never has them, and `tsc` cannot resolve
+# without them: a sweep run from a pinned tree reported **`typecheck: 0 of 22`**
+# where the same command in the checkout reports 22 of 22. That reads as a total
+# regression in the profile and is an artefact of the tree it ran in.
+#
+# 256K in total and only `.tsbuild` directories, so this copies rather than
+# links -- a link would make the pinned tree share build state with the checkout,
+# which is the coupling the pin exists to remove.
+for module in "$root"/runtime/node/*/; do
+  modules=$(basename "$module")
+  if [ -d "$module/node_modules" ]; then
+    mkdir -p "$tree/runtime/node/$modules"
+    cp -R "$module/node_modules" "$tree/runtime/node/$modules/" 2>/dev/null || true
+  fi
+done
+
 # `target/node` inside the worktree, which is the other half of why this works:
 # the shared `target/node` is owned by no session, so another lane rebuilding
 # the same module mid-run silently substitutes the artifact under test.

@@ -303,6 +303,29 @@ const require = (await import("node:module")).createRequire(import.meta.url);
  * this runs 22 typechecks rather than one.
  */
 async function typecheckFailures(modules) {
+  // Is the checker even here? A tree without a root `node_modules` -- a fresh
+  // `git worktree`, which is how every pinned measurement runs -- has no `tsc`,
+  // and `pnpm exec tsc` then prints the literal string `undefined` followed by
+  // `Command "tsc" not found`. This reported that first line faithfully, so a
+  // pinned sweep read:
+  //
+  //     typecheck: 0 of 22 module(s) typecheck against their own tsconfig
+  //       assert: undefined
+  //       async_hooks: undefined
+  //
+  // which is a total regression in the profile if you believe it, and is a
+  // missing tool. Twenty-two identical failures are a property of the
+  // environment, never of twenty-two modules.
+  const probe = spawnSync("pnpm", ["exec", "tsc", "--version"], {
+    encoding: "utf8",
+    cwd: ROOT,
+    maxBuffer: 1024 * 1024,
+  });
+  const probeOut = `${probe.stdout ?? ""}${probe.stderr ?? ""}`;
+  if (probe.error !== undefined || !/^Version \d/m.test(probeOut)) {
+    return { unavailable: probeOut.split("\n").filter((l) => l.trim() !== "")[0] ?? "pnpm exec tsc produced nothing" };
+  }
+
   const limit = 8;
   const found = [];
   const queue = [...modules];
@@ -362,7 +385,16 @@ if (wants("exports")) {
 }
 
 if (wants("typecheck")) {
-  const found = await typecheckFailures(modules);
+  const result = await typecheckFailures(modules);
+  if (result.unavailable !== undefined) {
+    console.log("typecheck: INSTRUMENT FAILURE -- `tsc` is not available here.");
+    console.log(`  ${result.unavailable}`);
+    console.log("  This says nothing about the modules. A tree with no root");
+    console.log("  node_modules -- a fresh `git worktree` -- has no checker, and");
+    console.log("  reporting that as 22 failures is a claim about the wrong thing.");
+    process.exitCode = 2;
+  } else {
+  const found = result;
   console.log(
     `typecheck: ${modules.length - found.length} of ${modules.length} module(s) ` +
       `typecheck against their own tsconfig`,
@@ -375,6 +407,7 @@ if (wants("typecheck")) {
         "rather than its source. Per-module configs read source. Believe these.",
     );
     failed = true;
+  }
   }
 }
 

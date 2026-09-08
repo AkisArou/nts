@@ -2816,6 +2816,41 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `typecheck: 0 of 22` was a missing tool, not a broken profile
+
+The first full sweep run from a pinned worktree reported:
+
+    typecheck: 0 of 22 module(s) typecheck against their own tsconfig
+      assert: undefined
+      async_hooks: undefined
+      ...
+
+Read literally, the entire TypeScript profile had stopped typechecking. The same
+command in the checkout says **22 of 22**.
+
+A `git worktree` has no root `node_modules` — they are gitignored — so `tsc` is
+not installed in it. `pnpm exec tsc` then prints the literal string `undefined`
+followed by `Command "tsc" not found`, and the audit reported that first line
+faithfully, once per module.
+
+**Twenty-two identical failures are a property of the environment, never of
+twenty-two modules**, and nothing in the output said which it was. Two fixes:
+
+- `audit.mjs --typecheck` now probes for the checker first and reports
+  `INSTRUMENT FAILURE -- tsc is not available here` instead of counting
+  twenty-two failures. Controlled both ways: the checkout reports 22 of 22, the
+  worktree reports the instrument failure.
+- `pinned-tree.sh` copies `runtime/node/*/node_modules` into the tree it makes.
+  256K in total, only `.tsbuild` directories. Copied rather than linked, because
+  a link would make the pinned tree share build state with the checkout, which
+  is the coupling the pin exists to remove.
+
+That is the fifth instance today of one shape: **a result that cannot
+distinguish absence-of-problem from absence-of-measurement.** This one is the
+most dangerous of the five, because the number it produced was not a suspicious
+zero — it was a plausible catastrophe, and the natural response to it is to go
+looking for what broke the profile.
+
 ## The sweep already knew which exports were missing and declined to say
 
 `shapeNamesMissingFrom` derives, from a module's own `shape.mjs`, the names that
