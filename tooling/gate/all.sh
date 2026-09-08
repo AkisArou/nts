@@ -593,11 +593,11 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # javac's 25. Materialising the same three booleans in the reference, one
   # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
   #
-  # 116 rather than the LLVM lane's 117, which is what a per-lane floor is for.
-  # `examples/open-typed-values` needs `instanceof` against a typed array, and
-  # on a lane with no descriptors that is a different mechanism -- named to that
-  # session before this landed, and theirs to raise when it does.
-  backend_examples 124 "through the JVM backend" ); }
+  # 125, level with the LLVM lane. The per-lane gap this paragraph used to
+  # record -- `examples/open-typed-values`, which needs `instanceof` against a
+  # typed array, and on a lane with no descriptors is a different mechanism --
+  # no longer shows in the count.
+  backend_examples 125 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
