@@ -6466,3 +6466,67 @@ appears exactly where an implementation has been useful enough to grow, and that
 against it has to carry a citation every time it disagrees.
 
 822/822 host, upstream unchanged at 2,566 of 2,574.
+
+## The non-standard prototype surface is zero, and the gate that guarded it was hollow
+
+`ReadableStream`'s seventeen, the two readers' three each, and the BYOB request's one are
+symbol-keyed. **Sixty-three to zero in a day.** Every interface prototype in this runtime
+carries the interface's members and nothing else, and every one of them is enumerable as Web
+IDL requires.
+
+This was the set that could not be done by matching names, and it could not: the first attempt
+rewrote `ReadableStreamDefaultReader.read` and `ReadableStreamDefaultController.enqueue` — both
+*legitimate* Web IDL members that happen to share a name with an internal — and `tsc` reported
+125 errors. Confining the declaration edit to `ReadableStream`'s body and the two structural
+interfaces, then rewriting call sites **from the compiler's own reported positions** rather
+than by pattern, brought that to 53 errors on the right receivers and zero after.
+
+`?.[symbol]` is legal where `?.#private` is not, which is the one place the two mechanisms
+differ in reach.
+
+### The sabotage that passed, and the gate it condemned
+
+Reverting a symbol-keyed member to a name is **refused by the type checker** at every call
+site — the mechanism guarantees that. So the sabotage that matters is the other one: adding a
+*new* named member, which no type checker can object to.
+
+**It passed.** The gate's coverage was a hardcoded list of thirteen interfaces, written when
+the table held sixty-three entries and only a handful of prototypes were clean. With the table
+emptied, that list was checking thirteen names and missing every other interface in the
+runtime — including `ReadableStream`, where all seventeen of the last batch lived.
+
+It enumerates the barrel now, and the same sabotage fails. **A gate whose coverage is a list
+goes stale the moment the thing it guards changes shape**, and this one went stale *because
+the work succeeded*: every interface it named was cleaned, so the list stopped naming anything
+that could go wrong.
+
+Widening it immediately found `CustomEvent.initCustomEvent`, which the narrow version had
+never looked at. That one is a **fifth** node divergence — `interfaces/dom.idl` declares it,
+marked legacy, and node does not implement it — and is excluded by citation.
+
+### The cost, stated plainly
+
+The frontier moves **1,403 → 1,428 primaries and 337 → 318 cascades**. Twenty-five more
+refusals and nineteen fewer cascades, because a computed member name is a construct this
+compiler does not lower yet and each symbol-keyed declaration is one.
+
+That is a real price for conformance and it is paid knowingly. The alternative was leaving
+sixty-three non-standard members on public prototypes to keep a number down, which is the
+trade this lane does not make — and the same compiler will lower computed members eventually,
+at which point the price disappears and the conformance does not.
+
+### What the peer lane found that this could not
+
+`fs/src/promises.ts` called `ReadableStream.cancelInternal` — the one prototype method of this
+runtime that lane reaches, needed because `FileHandle.readableWebStream()` must end its stream
+when the handle closes and the *public* cancel rejects on a locked stream. Their per-module
+typecheck caught it; their aggregate project reference did not, because it reads built
+declarations rather than source.
+
+Their conclusion is the one worth recording: an answer about specific names reported as an
+answer about the category. Six such answers today, each of which felt like knowledge. The
+symbol is exported precisely so that a runtime owning a stream's source can reach what script
+cannot.
+
+822/822 host, upstream unchanged at 2,566 of 2,574, zero `NTS1004`, zero `NTS4xxx`, zero
+invalid HIR.

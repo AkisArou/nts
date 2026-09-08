@@ -207,6 +207,7 @@ suite("making them enumerable did not expose an internal", () => {
     const theirs = new Set([
       ...Object.getOwnPropertyNames(conformant.prototype),
       ...(CONSTANTS_ON_PROTOTYPE[name] ?? []),
+      ...(ORACLE_OMITS[name] ?? []),
     ]);
     const extra = Object.getOwnPropertyNames(api[name].prototype).filter(
       (key) => key !== "constructor" && !theirs.has(key),
@@ -258,6 +259,17 @@ const HOST_EXTENSIONS = {
  */
 const CONSTANTS_ON_PROTOTYPE = {
   Event: ["NONE", "CAPTURING_PHASE", "AT_TARGET", "BUBBLING_PHASE"],
+  WebSocket: ["CONNECTING", "OPEN", "CLOSING", "CLOSED"],
+};
+
+/**
+ * Standard members this runtime has that the oracle does not implement.
+ *
+ * `CustomEvent.initCustomEvent` is declared in `interfaces/dom.idl` — marked `// legacy`, but
+ * declared — and node does not provide it. Listed so that having it does not read as an extra.
+ */
+const ORACLE_OMITS = {
+  CustomEvent: ["initCustomEvent"],
 };
 
 /**

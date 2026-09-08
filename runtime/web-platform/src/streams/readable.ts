@@ -136,19 +136,19 @@ const readableStreamStoredErrorValue: unique symbol = Symbol("ReadableStream sto
 
 interface ReadableByteStreamHost {
   readonly [readableStreamStateName]: StreamState;
-  fail(error: unknown): void;
-  finishByteStream(settleReads?: boolean): void;
+  [kStreamFail](error: unknown): void;
+  [kStreamFinishByteStream](settleReads?: boolean): void;
 }
 
 interface ReadableStreamBYOBHost extends ReadableByteStreamHost {
-  attachBYOB(reader: ReadableStreamBYOBReader): void;
-  cancelInternal(reason: unknown): Promise<void>;
-  readInto(
+  [kStreamAttachBYOB](reader: ReadableStreamBYOBReader): void;
+  [kStreamCancelInternal](reason: unknown): Promise<void>;
+  [kStreamReadInto](
     reader: ReadableStreamBYOBReader,
     view: ReadableStreamBYOBView,
     minimumElements: number,
   ): Promise<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>>;
-  releaseBYOB(reader: ReadableStreamBYOBReader): void;
+  [kStreamReleaseBYOB](reader: ReadableStreamBYOBReader): void;
 }
 const defaultReadableSource = {
   cancel: undefined,
@@ -223,6 +223,53 @@ function isReadableStream<T>(value: unknown): value is ReadableStream<T> {
  * Default-reader Streams implementation. Reads are pull-driven, with a single
  * in-flight underlying pull and explicit ownership; byte/BYOB support is separate.
  */
+/**
+ * Keys for the seventeen members `ReadableStream` exposes to the rest of this runtime and
+ * that Web IDL does not define on it.
+ *
+ * A genuine cross-class and cross-module protocol: the byte state, the readers, the tee and
+ * pipe machinery and four other modules all reach them, so `#private` cannot express it and
+ * the structural interfaces could not carry a private identifier at all. Symbols keep every
+ * caller working while taking all seventeen off the enumerable prototype.
+ *
+ * **Several of these names are also legitimate Web IDL members of the controllers and
+ * readers** -- `enqueue`, `read`, `desiredSize`, `fail`, `release`. That is why this could not
+ * be done by matching names: the first attempt rewrote
+ * `ReadableStreamDefaultReader.read` and `ReadableStreamDefaultController.enqueue` as well,
+ * and `tsc` reported 125 errors. The type checker separates them; a regular expression
+ * cannot, and the edit is confined to this class and the two structural interfaces.
+ */
+/**
+ * Keys for the members the stream machinery calls on a reader, which Web IDL does not define.
+ *
+ * `ReadableStreamDefaultReader` and `ReadableStreamBYOBReader` both carry them, and both are
+ * driven by the stream rather than by their own methods.
+ */
+/** How the byte controller retires a BYOB request; not a member of the interface. */
+export const kByobRequestInvalidate: unique symbol = Symbol("BYOB request invalidate");
+
+export const kReaderReleased: unique symbol = Symbol("reader released");
+export const kReaderFinish: unique symbol = Symbol("reader finish");
+export const kReaderFail: unique symbol = Symbol("reader fail");
+
+export const kStreamAttach: unique symbol = Symbol("ReadableStream attach");
+export const kStreamAttachBYOB: unique symbol = Symbol("ReadableStream attachBYOB");
+export const kStreamByteStream: unique symbol = Symbol("ReadableStream byteStream");
+export const kStreamCanCloseOrEnqueue: unique symbol = Symbol("ReadableStream canCloseOrEnqueue");
+export const kStreamCancelInternal: unique symbol = Symbol("ReadableStream cancelInternal");
+export const kStreamDesiredSize: unique symbol = Symbol("ReadableStream desiredSize");
+export const kStreamDisturbed: unique symbol = Symbol("ReadableStream disturbed");
+export const kStreamEnqueue: unique symbol = Symbol("ReadableStream enqueue");
+export const kStreamFail: unique symbol = Symbol("ReadableStream fail");
+export const kStreamFinishByteStream: unique symbol = Symbol("ReadableStream finishByteStream");
+export const kStreamMarkDisturbed: unique symbol = Symbol("ReadableStream markDisturbed");
+export const kStreamQueuedSize: unique symbol = Symbol("ReadableStream queuedSize");
+export const kStreamRead: unique symbol = Symbol("ReadableStream read");
+export const kStreamReadInto: unique symbol = Symbol("ReadableStream readInto");
+export const kStreamRelease: unique symbol = Symbol("ReadableStream release");
+export const kStreamReleaseBYOB: unique symbol = Symbol("ReadableStream releaseBYOB");
+export const kStreamRequestClose: unique symbol = Symbol("ReadableStream requestClose");
+
 export class ReadableStream<T> {
   readonly [readableStreamBrand] = true;
   #source: UnderlyingSource<T> | null = null;
@@ -331,11 +378,11 @@ export class ReadableStream<T> {
     return this.#currentReader !== null;
   }
 
-  /** @internal */ get byteStream(): boolean {
+  get [kStreamByteStream](): boolean {
     return this.#byteState !== null;
   }
 
-  /** @internal */ get disturbed(): boolean {
+  get [kStreamDisturbed](): boolean {
     return this.#isDisturbed;
   }
 
@@ -347,19 +394,19 @@ export class ReadableStream<T> {
     return this.#storedError;
   }
 
-  /** @internal */ get queuedSize(): number {
+  get [kStreamQueuedSize](): number {
     const byteState = this.#byteState;
     return byteState === null ? this.#queue.totalSize : byteState.queuedSize;
   }
 
-  /** @internal */ get canCloseOrEnqueue(): boolean {
+  get [kStreamCanCloseOrEnqueue](): boolean {
     const byteState = this.#byteState;
     return byteState === null
       ? this.#state === "readable" && !this.#closeRequested
       : byteState.canCloseOrEnqueue;
   }
 
-  /** @internal */ markDisturbed(): void {
+  [kStreamMarkDisturbed](): void {
     this.#isDisturbed = true;
   }
 
@@ -388,20 +435,20 @@ export class ReadableStream<T> {
     return new ReadableStreamDefaultReader(this);
   }
 
-  /** @internal */ attach(reader: ReadableStreamDefaultReader<T>): void {
+  [kStreamAttach](reader: ReadableStreamDefaultReader<T>): void {
     if (this.locked) {
       throw new TypeError("Stream is locked");
     }
     this.#currentReader = reader;
     if (this.#state === "closed") {
-      reader.finish();
+      reader[kReaderFinish]();
     }
     if (this.#state === "errored") {
-      reader.fail(this.#storedError);
+      reader[kReaderFail](this.#storedError);
     }
   }
 
-  /** @internal */ attachBYOB(reader: ReadableStreamBYOBReader): void {
+  [kStreamAttachBYOB](reader: ReadableStreamBYOBReader): void {
     if (this.locked) {
       throw new TypeError("Stream is locked");
     }
@@ -410,10 +457,10 @@ export class ReadableStream<T> {
     }
     this.#currentReader = reader;
     if (this.#state === "closed") {
-      reader.finish();
+      reader[kReaderFinish]();
     }
     if (this.#state === "errored") {
-      reader.fail(this.#storedError);
+      reader[kReaderFail](this.#storedError);
     }
   }
 
@@ -421,7 +468,7 @@ export class ReadableStream<T> {
     if (this.locked) {
       return Promise.reject(new TypeError("Stream is locked"));
     }
-    return this.cancelInternal(reason);
+    return this[kStreamCancelInternal](reason);
   }
 
   pipeThrough<R>(
@@ -478,7 +525,7 @@ export class ReadableStream<T> {
     }
   }
 
-  /** @internal */ async cancelInternal(reason: unknown): Promise<void> {
+  async [kStreamCancelInternal](reason: unknown): Promise<void> {
     this.#isDisturbed = true;
     if (this.#state === "closed") {
       return;
@@ -503,8 +550,8 @@ export class ReadableStream<T> {
     }
   }
 
-  /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>>;
-  /** @internal */ read(reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<unknown>> {
+  [kStreamRead](reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>>;
+  [kStreamRead](reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<unknown>> {
     if (reader !== this.#currentReader) {
       return Promise.reject(new TypeError("Reader has been released"));
     }
@@ -534,7 +581,7 @@ export class ReadableStream<T> {
     return result.promise;
   }
 
-  /** @internal */ release(reader: ReadableStreamDefaultReader<T>): void {
+  [kStreamRelease](reader: ReadableStreamDefaultReader<T>): void {
     if (reader !== this.#currentReader) {
       return;
     }
@@ -546,10 +593,10 @@ export class ReadableStream<T> {
     } else {
       byteState.releaseDefault(error);
     }
-    reader.released(error);
+    reader[kReaderReleased](error);
   }
 
-  /** @internal */ readInto(
+  [kStreamReadInto](
     reader: ReadableStreamBYOBReader,
     view: ReadableStreamBYOBView,
     minimumElements: number,
@@ -568,17 +615,17 @@ export class ReadableStream<T> {
     return byteState.readInto(view, minimumElements, this.#state === "closed");
   }
 
-  /** @internal */ releaseBYOB(reader: ReadableStreamBYOBReader): void {
+  [kStreamReleaseBYOB](reader: ReadableStreamBYOBReader): void {
     if (reader !== this.#currentReader) {
       return;
     }
     this.#currentReader = null;
     const error = new TypeError("Reader has been released");
     this.#byteState?.releaseBYOB(error);
-    reader.released(error);
+    reader[kReaderReleased](error);
   }
 
-  /** @internal */ enqueue(value: T): void {
+  [kStreamEnqueue](value: T): void {
     if (this.#byteState !== null) {
       throw new TypeError("A byte stream can only be enqueued through its byte controller");
     }
@@ -593,14 +640,14 @@ export class ReadableStream<T> {
         const sizeOf = this.#sizeOf;
         this.#queue.enqueue(value, sizeOf === undefined ? 1 : sizeOf(value));
       } catch (error) {
-        this.fail(error);
+        this[kStreamFail](error);
         throw error;
       }
     }
     this.#maybePull();
   }
 
-  /** @internal */ requestClose(): void {
+  [kStreamRequestClose](): void {
     const byteState = this.#byteState;
     if (byteState !== null) {
       byteState.requestClose();
@@ -626,15 +673,15 @@ export class ReadableStream<T> {
     } else {
       byteState.finish(settleByteReads);
     }
-    this.#currentReader?.finish();
+    this.#currentReader?.[kReaderFinish]();
     this.#resolvePendingAsClosed();
   }
 
-  /** @internal */ finishByteStream(settleReads = false): void {
+  [kStreamFinishByteStream](settleReads = false): void {
     this.#finish(settleReads);
   }
 
-  /** @internal */ fail(error: unknown): void {
+  [kStreamFail](error: unknown): void {
     if (this.#state !== "readable") {
       return;
     }
@@ -647,11 +694,11 @@ export class ReadableStream<T> {
     } else {
       byteState.fail(error);
     }
-    this.#currentReader?.fail(error);
+    this.#currentReader?.[kReaderFail](error);
     this.#rejectPending(error);
   }
 
-  /** @internal */ get desiredSize(): number | null {
+  get [kStreamDesiredSize](): number | null {
     if (this.#state === "errored") {
       return null;
     }
@@ -668,7 +715,7 @@ export class ReadableStream<T> {
       this.#started = true;
       this.#maybePull();
     } catch (error) {
-      this.fail(error);
+      this[kStreamFail](error);
     }
   }
 
@@ -695,7 +742,7 @@ export class ReadableStream<T> {
       pullResult = pullAlgorithm.call(source, controller);
     } catch (error) {
       this.#pulling = false;
-      this.fail(error);
+      this[kStreamFail](error);
       return;
     }
     this.#observePull(pullResult);
@@ -711,7 +758,7 @@ export class ReadableStream<T> {
       }
     } catch (error) {
       this.#pulling = false;
-      this.fail(error);
+      this[kStreamFail](error);
     }
   }
 
@@ -760,6 +807,14 @@ export class ReadableStream<T> {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes; this prototype carries no non-standard names.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStream",
       writable: false,
@@ -846,7 +901,7 @@ class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
     }
 
     try {
-      const read = await stream.read(reader);
+      const read = await stream[kStreamRead](reader);
       if (read.done) {
         this.#release();
         result.resolve({ done: true, value: undefined });
@@ -870,7 +925,7 @@ class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
       return;
     }
 
-    const cancellation = this.#preventCancel ? Promise.resolve() : stream.cancelInternal(value);
+    const cancellation = this.#preventCancel ? Promise.resolve() : stream[kStreamCancelInternal](value);
     this.#release();
     try {
       await cancellation;
@@ -884,7 +939,7 @@ class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
     const stream = this.#stream;
     const reader = this.#reader;
     if (stream !== null && reader !== null) {
-      stream.release(reader);
+      stream[kStreamRelease](reader);
     }
     this.#stream = null;
     this.#reader = null;
@@ -964,19 +1019,19 @@ export class ReadableStreamDefaultController<T> {
   }
 
   get desiredSize(): number | null {
-    return this.#stream.desiredSize;
+    return this.#stream[kStreamDesiredSize];
   }
 
   enqueue(chunk: T): void {
-    this.#stream.enqueue(chunk);
+    this.#stream[kStreamEnqueue](chunk);
   }
 
   close(): void {
-    this.#stream.requestClose();
+    this.#stream[kStreamRequestClose]();
   }
 
   error(reason: unknown = undefined): void {
-    this.#stream.fail(reason);
+    this.#stream[kStreamFail](reason);
   }
 
 
@@ -1201,7 +1256,7 @@ export class ReadableStreamBYOBRequest {
     state.respondWithNewView(view);
   }
 
-  /** @internal */ invalidate(): void {
+  [kByobRequestInvalidate](): void {
     this.#state = null;
     this.#view = null;
   }
@@ -1210,6 +1265,14 @@ export class ReadableStreamBYOBRequest {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes; this prototype carries no non-standard names.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStreamBYOBRequest",
       writable: false,
@@ -1252,7 +1315,7 @@ export class ReadableByteStreamController {
   }
 
   error(reason: unknown = undefined): void {
-    this.#state.stream.fail(reason);
+    this.#state.stream[kStreamFail](reason);
   }
 
 
@@ -1288,7 +1351,7 @@ export class ReadableStreamBYOBReader {
     }
     this.#stream = stream;
     ignoreRejection(this.closed);
-    stream.attachBYOB(this);
+    stream[kStreamAttachBYOB](this);
   }
 
   get closed(): Promise<void> {
@@ -1324,22 +1387,22 @@ export class ReadableStreamBYOBReader {
     if (stream === null) {
       throw new TypeError("Reader has been released");
     }
-    return await stream.readInto(this, view, minimumElements);
+    return await stream[kStreamReadInto](this, view, minimumElements);
   }
 
   cancel(reason: unknown = undefined): Promise<void> {
     const stream = this.#stream;
     return stream === null
       ? Promise.reject(new TypeError("Reader has been released"))
-      : stream.cancelInternal(reason);
+      : stream[kStreamCancelInternal](reason);
   }
 
   releaseLock(): void {
-    this.#stream?.releaseBYOB(this);
+    this.#stream?.[kStreamReleaseBYOB](this);
     this.#stream = null;
   }
 
-  /** @internal */ released(error: unknown): void {
+  [kReaderReleased](error: unknown): void {
     if (this.#closedState !== "pending") {
       this.#closedCapability = Promise.withResolvers<void>();
       this.#closedState = "pending";
@@ -1349,13 +1412,13 @@ export class ReadableStreamBYOBReader {
     this.#closedCapability.reject(error);
   }
 
-  /** @internal */ finish(): void {
+  [kReaderFinish](): void {
     if (this.#closedState !== "pending") return;
     this.#closedState = "fulfilled";
     this.#closedCapability.resolve();
   }
 
-  /** @internal */ fail(error: unknown): void {
+  [kReaderFail](error: unknown): void {
     if (this.#closedState !== "pending") return;
     this.#closedState = "rejected";
     this.#closedCapability.reject(error);
@@ -1365,6 +1428,14 @@ export class ReadableStreamBYOBReader {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes; this prototype carries no non-standard names.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStreamBYOBReader",
       writable: false,
@@ -1531,7 +1602,7 @@ class ReadableByteStreamState {
     ) {
       const error = new TypeError("Byte stream closed with an incomplete typed-array element");
       result.reject(error);
-      this.stream.fail(error);
+      this.stream[kStreamFail](error);
       return result.promise;
     }
     this.#pullIntos.enqueue(descriptor);
@@ -1614,11 +1685,11 @@ class ReadableByteStreamState {
     const descriptor = this.#pullIntos.peek();
     if (descriptor !== undefined && descriptor.bytesFilled % descriptor.elementSize !== 0) {
       const error = new TypeError("Byte stream closed with an incomplete typed-array element");
-      this.stream.fail(error);
+      this.stream[kStreamFail](error);
       throw error;
     }
     this.#clearAlgorithms();
-    this.stream.finishByteStream(false);
+    this.stream[kStreamFinishByteStream](false);
   }
 
   respond(bytesWritten: number): void {
@@ -1866,7 +1937,7 @@ class ReadableByteStreamState {
     if (this.#queueTotalSize !== 0) return;
     if (this.#closeRequested) {
       this.#clearAlgorithms();
-      this.stream.finishByteStream(false);
+      this.stream[kStreamFinishByteStream](false);
     } else {
       this.#maybePull();
     }
@@ -1892,7 +1963,7 @@ class ReadableByteStreamState {
   }
 
   #invalidateBYOBRequest(): void {
-    this.#currentBYOBRequest?.invalidate();
+    this.#currentBYOBRequest?.[kByobRequestInvalidate]();
     this.#currentBYOBRequest = null;
   }
 
@@ -1902,7 +1973,7 @@ class ReadableByteStreamState {
       this.#started = true;
       this.#maybePull();
     } catch (error) {
-      this.stream.fail(error);
+      this.stream[kStreamFail](error);
     }
   }
 
@@ -1928,7 +1999,7 @@ class ReadableByteStreamState {
       result = pull.call(source, this.#controller);
     } catch (error) {
       this.#pulling = false;
-      this.stream.fail(error);
+      this.stream[kStreamFail](error);
       return;
     }
     this.#observePull(result);
@@ -1944,7 +2015,7 @@ class ReadableByteStreamState {
       }
     } catch (error) {
       this.#pulling = false;
-      this.stream.fail(error);
+      this.stream[kStreamFail](error);
     }
   }
 
@@ -1957,29 +2028,29 @@ class ReadableByteStreamState {
 
 /** @internal */
 export function readableStreamCanCloseOrEnqueue<T>(stream: ReadableStream<T>): boolean {
-  return stream.canCloseOrEnqueue;
+  return stream[kStreamCanCloseOrEnqueue];
 }
 
 /** @internal */
 export function readableStreamClose<T>(stream: ReadableStream<T>): void {
   if (stream[readableStreamStateName] === "readable") {
-    stream.requestClose();
+    stream[kStreamRequestClose]();
   }
 }
 
 /** @internal */
 export function readableStreamDesiredSize<T>(stream: ReadableStream<T>): number | null {
-  return stream.desiredSize;
+  return stream[kStreamDesiredSize];
 }
 
 /** @internal */
 export function readableStreamEnqueue<T>(stream: ReadableStream<T>, chunk: T): void {
-  stream.enqueue(chunk);
+  stream[kStreamEnqueue](chunk);
 }
 
 /** @internal */
 export function readableStreamError<T>(stream: ReadableStream<T>, reason: unknown): void {
-  stream.fail(reason);
+  stream[kStreamFail](reason);
 }
 
 /** @internal */
@@ -2007,10 +2078,10 @@ export class ReadableStreamDefaultReader<T> {
     }
     this.#stream = stream;
     ignoreRejection(this.closed);
-    stream.attach(this);
+    stream[kStreamAttach](this);
   }
 
-  /** @internal */ released(error: unknown): void {
+  [kReaderReleased](error: unknown): void {
     if (this.#closedState !== "pending") {
       this.#closedCapability = Promise.withResolvers<void>();
       this.#closedState = "pending";
@@ -2024,22 +2095,22 @@ export class ReadableStreamDefaultReader<T> {
     if (this.#stream === null) {
       return Promise.reject(new TypeError("Reader has been released"));
     }
-    return this.#stream.read(this);
+    return this.#stream[kStreamRead](this);
   }
 
   cancel(reason: unknown = undefined): Promise<void> {
     if (this.#stream === null) {
       return Promise.reject(new TypeError("Reader has been released"));
     }
-    return this.#stream.cancelInternal(reason);
+    return this.#stream[kStreamCancelInternal](reason);
   }
 
   releaseLock(): void {
-    this.#stream?.release(this);
+    this.#stream?.[kStreamRelease](this);
     this.#stream = null;
   }
 
-  /** @internal */ finish(): void {
+  [kReaderFinish](): void {
     if (this.#closedState !== "pending") {
       return;
     }
@@ -2047,7 +2118,7 @@ export class ReadableStreamDefaultReader<T> {
     this.#closedCapability.resolve();
   }
 
-  /** @internal */ fail(error: unknown): void {
+  [kReaderFail](error: unknown): void {
     if (this.#closedState !== "pending") {
       return;
     }
@@ -2059,6 +2130,14 @@ export class ReadableStreamDefaultReader<T> {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes; this prototype carries no non-standard names.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStreamDefaultReader",
       writable: false,
@@ -2075,7 +2154,7 @@ function startPipe<T>(
 ): Promise<void> {
   const reader = new ReadableStreamDefaultReader(source);
   const writer = acquireWritableStreamDefaultWriter(destination);
-  source.markDisturbed();
+  source[kStreamMarkDisturbed]();
   const pipe = new PipeState(source, destination, reader, writer, options);
   pipe.start();
   return pipe.promise;
@@ -2162,7 +2241,7 @@ class PipeState<T> {
       let result: ReadResult<T>;
       this.#reading = true;
       try {
-        result = await this.#source.read(this.#reader);
+        result = await this.#source[kStreamRead](this.#reader);
       } catch (error) {
         this.#reading = false;
         this.#sourceErrored(error);
@@ -2245,7 +2324,7 @@ class PipeState<T> {
       this.#shutdown(true, error);
       return;
     }
-    this.#shutdown(true, error, () => this.#source.cancelInternal(error));
+    this.#shutdown(true, error, () => this.#source[kStreamCancelInternal](error));
   }
 
   #sourceClosed(): void {
@@ -2268,7 +2347,7 @@ class PipeState<T> {
       this.#shutdown(true, error);
       return;
     }
-    this.#shutdown(true, error, () => this.#source.cancelInternal(error));
+    this.#shutdown(true, error, () => this.#source[kStreamCancelInternal](error));
   }
 
   #abort(reason: unknown): void {
@@ -2277,7 +2356,7 @@ class PipeState<T> {
       actions.push(() => writableStreamDefaultWriterAbort(this.#writer, reason));
     }
     if (!this.#options.preventCancel && this.#source[readableStreamStateName] === "readable") {
-      actions.push(() => this.#source.cancelInternal(reason));
+      actions.push(() => this.#source[kStreamCancelInternal](reason));
     }
     this.#shutdown(true, reason, () => runPipeActions(actions));
   }
@@ -2303,7 +2382,7 @@ class PipeState<T> {
   #finalize(rejected: boolean, reason: unknown): void {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
-    this.#source.release(this.#reader);
+    this.#source[kStreamRelease](this.#reader);
     writableStreamDefaultWriterRelease(this.#writer);
     if (rejected) this.#result.reject(reason);
     else this.#result.resolve();
@@ -2550,7 +2629,7 @@ class ByteTeeState<T> {
       throw new RangeError("Invalid chunk size");
     }
     for (const branch of this.branches) {
-      if (!branch.canceled && branch.stream.queuedSize + size > this.#limit) {
+      if (!branch.canceled && branch.stream[kStreamQueuedSize] + size > this.#limit) {
         throw new LimitError("Clone backlog exceeded configured limit");
       }
     }
@@ -2756,7 +2835,7 @@ class TeeState<T> {
         throw new RangeError("Invalid chunk size");
       }
       for (const branch of this.branches) {
-        if (!branch.canceled && branch.stream.queuedSize + size > this.limit) {
+        if (!branch.canceled && branch.stream[kStreamQueuedSize] + size > this.limit) {
           throw new LimitError("Clone backlog exceeded configured limit");
         }
       }
@@ -2878,7 +2957,7 @@ export function tee<T>(
   stream: ReadableStream<T>,
   options: TeeOptions<T> = defaultTeeOptions,
 ): [ReadableStream<T>, ReadableStream<T>] {
-  if (stream.byteStream) {
+  if (stream[kStreamByteStream]) {
     const state = new ByteTeeState(stream, options);
     return [state.branches[0].stream, state.branches[1].stream];
   }
@@ -2987,14 +3066,14 @@ class ByteTransferSource<T> implements UnderlyingByteSource {
  * transfer. The proxy stream owns its reader even after a terminal transition.
  */
 export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
-  if (stream.byteStream) {
+  if (stream[kStreamByteStream]) {
     const source = new ByteTransferSource(stream);
-    stream.markDisturbed();
+    stream[kStreamMarkDisturbed]();
     return new ReadableStream<T>(source, { highWaterMark: 0 });
   }
   const reader = stream.getReader();
 
-  stream.markDisturbed();
+  stream[kStreamMarkDisturbed]();
   return new ReadableStream<T>(
     {
       async pull(controller) {

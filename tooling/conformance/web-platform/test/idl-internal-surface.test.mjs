@@ -1,43 +1,27 @@
-// The internal machinery that is publicly reachable, pinned so it cannot grow.
+// The internal machinery that is publicly reachable, and the assertion that there is none.
 //
-// This test does not fix anything. It measures a deviation and stops it getting worse,
-// which is the honest thing to do with a gap too large to close in passing.
+// This file began as a measurement of a deviation too large to close in passing: sixty-three
+// members that Web IDL does not define, sitting on interface prototypes because they were
+// ordinary public methods. It recorded them, asserted the list could shrink and never grow,
+// and named the mechanism that would close it.
 //
-// Web IDL says an interface prototype carries the interface's members and nothing else.
-// These classes carry forty-five more, down from sixty-three:
-// `ReadableStream.prototype.markDisturbed` is publicly callable, and so on. They are
-// internal wiring between modules in this runtime, reachable because they are ordinary
-// public methods.
+// The list is empty. What the file is for now is keeping it that way.
 //
-// **Why the rest are not simply made private, measured rather than assumed.** This file
-// used to say `#private` was not free here, citing a real diagnostic and misreading it --
-// that refusal is about a property's *type*, not about privacy. Converting four
-// `TextDecoder` members moved the frontier not at all, so eighteen are private now and gone
-// from these prototypes. What remains resists for reasons `tsc` supplies:
+// **The three mechanisms, in the order they apply.** `#private` where a member is used only
+// inside its own class -- free on the frontier, measured, after this file spent a day
+// carrying the opposite claim as a reason not to try. **Symbol keys** where it crosses
+// classes or modules, because `Object.getOwnPropertyNames` does not report symbols. **Then**
+// the enumerability fix, which is only safe once a prototype has no non-standard names left:
+// a blanket pass before that point would have enumerated the internals too, making one
+// deviation worse to improve the other.
 //
-//   - `Event.initialize` and `Event.applyConvertedEventInit` are called from *outside* the
-//     `Event` class. Single-file is not single-class, and `#private` is per class.
-//   - Every one of `ReadableStream`'s seventeen is a cross-class protocol. Six are declared
-//     on the structural interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost`,
-//     where a private identifier is not legal at all; the rest are `ReadableStream`
-//     delegating to `ReadableByteStreamState`, which cannot reach another class's private
-//     members. All five that looked safe were attempted, and all five were refused.
-//   - The remainder are called from other modules entirely.
+// **`tsc` finds every syntactic use of a renamed member and none of the reflective ones.**
+// `in`, `typeof x.name`, `hasOwnProperty`, a name in a lookup table. Run that grep first.
 //
-// So these are an architecture rather than an oversight. The mechanism that would close
-// them is symbol-keyed members -- which `readable.ts` already uses for `readableStreamBrand`
-// and two others, and which `Object.getOwnPropertyNames` does not report, so it would fix
-// the enumerability deviation below at the same time. That is a cross-module refactor and
-// is not being done in passing.
-//
-// The rule this enforces: **the list may shrink, never grow.** A new public method on an
-// interface prototype fails here and has to be justified, which is the same shape as the
-// error taxonomy gate -- a check whose whole value is refusing to let a default happen
-// quietly.
-//
-// The oracle is node's prototype for each interface, so the list is exactly "members this
-// runtime exposes that a conformant implementation does not". Interfaces node does not
-// implement are absent from the table for that reason, not because they are clean.
+// The oracle is node's prototype per interface, with the divergences cited individually in
+// `webidl-surface.test.mjs` -- five places where node is the best available oracle for
+// interface shape and is not the standard.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -64,33 +48,27 @@ const IDL_CONSTANTS = new Set([
  * regression. The assertion is exact equality in both directions, so a removal has to
  * change this table and the count below rather than passing silently.
  */
-const INTERNAL_PROTOTYPE_MEMBERS = {
-  ReadableStream: [
-    "attach",
-    "attachBYOB",
-    "byteStream",
-    "canCloseOrEnqueue",
-    "cancelInternal",
-    "desiredSize",
-    "disturbed",
-    "enqueue",
-    "fail",
-    "finishByteStream",
-    "markDisturbed",
-    "queuedSize",
-    "read",
-    "readInto",
-    "release",
-    "releaseBYOB",
-    "requestClose",
-  ],
+const INTERNAL_PROTOTYPE_MEMBERS = {};
+
+/**
+ * Standard members this runtime has that the oracle does not implement.
+ *
+ * `CustomEvent.initCustomEvent` is declared in `interfaces/dom.idl` -- marked `// legacy`, but
+ * declared -- and node does not provide it. Excluded by citation, not convenience: the claim
+ * is checkable against an IDL file pinned in this repository.
+ */
+const ORACLE_OMITS = {
+  CustomEvent: ["initCustomEvent"],
 };
 
 function internalMembers(name) {
   const mine = Object.getOwnPropertyNames(api[name].prototype).filter(
     (key) => key !== "constructor" && !IDL_CONSTANTS.has(key),
   );
-  const conformant = new Set(Object.getOwnPropertyNames(globalThis[name].prototype));
+  const conformant = new Set([
+    ...Object.getOwnPropertyNames(globalThis[name].prototype),
+    ...(ORACLE_OMITS[name] ?? []),
+  ]);
   return mine.filter((key) => !conformant.has(key)).sort();
 }
 
@@ -105,14 +83,19 @@ suite("the non-standard prototype surface is exactly what is written down", () =
   }
 });
 
-suite("no other interface has grown one", () => {
-  // The table above only lists interfaces that already deviate. This catches a *new*
-  // deviation on an interface that is currently clean, which the table alone cannot.
-  const clean = ["AbortSignal", "EventTarget", "Blob", "File", "FormData", "URLSearchParams", "TextEncoder", "MessageEvent",
-    "CloseEvent", "DOMException", "AbortController", "WritableStream", "TransformStream"];
+suite("no interface has grown a non-standard member", () => {
+  // Enumerated from the barrel rather than from a list. The list version was written when the
+  // table above held sixty-three entries and only a handful of interfaces were clean; with the
+  // table empty it was checking thirteen names and missing every other interface in the
+  // runtime -- including `ReadableStream`, which is where all seventeen of the last batch
+  // were. A sabotage adding a named method to `ReadableStream` passed it.
+  //
+  // A gate whose coverage is a list goes stale the moment the thing it guards changes shape.
   const grown = [];
-  for (const name of clean) {
-    if (typeof globalThis[name] !== "function" || typeof api[name] !== "function") continue;
+  for (const [name, constructor] of Object.entries(api)) {
+    if (typeof constructor !== "function" || !constructor.prototype) continue;
+    if (!/^[A-Z]/.test(name)) continue;
+    if (typeof globalThis[name] !== "function") continue;
     const extra = internalMembers(name);
     if (extra.length > 0) grown.push(`${name}: ${extra.join(" ")}`);
   }
@@ -123,24 +106,26 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 17);
+  assert.equal(total, 0);
 });
 
-suite("interface members are not enumerable, which Web IDL requires them to be", () => {
-  // A second deviation, recorded rather than fixed. Web IDL gives operations
-  // `{ writable: true, enumerable: true, configurable: true }` and attribute accessors
-  // `{ enumerable: true, configurable: true }`; ES class members are non-enumerable, so
-  // every member here is. The consequence is that `for (const k in headers)` yields
-  // nothing where a conformant implementation enumerates the prototype's members.
+suite("interface members are enumerable, as Web IDL requires", () => {
+  // This assertion used to run the other way. It pinned the deviation -- every member
+  // non-enumerable, where Web IDL gives operations
+  // `{ writable: true, enumerable: true, configurable: true }` -- with a note saying that if
+  // it ever started failing, the deviation was fixed and this was what needed updating.
   //
-  // Not fixed in passing because a blanket pass would also enumerate the sixty-three
-  // internal members above, making a second deviation worse to improve the first. The
-  // two have to be closed in that order.
-  const descriptor = Object.getOwnPropertyDescriptor(api.ReadableStream.prototype, "cancel");
-  assert.equal(descriptor.enumerable, false, "if this is true, the deviation is fixed");
-  assert.equal(
-    Object.getOwnPropertyDescriptor(globalThis.ReadableStream.prototype, "cancel").enumerable,
-    true,
-    "and this is what it should be",
-  );
+  // It started failing. The blocker was never enumerability itself: it was that a blanket
+  // pass would also enumerate the sixty-three internal members, making one deviation worse to
+  // improve the other. Those are gone, so this is safe, and the assertion is now the fix.
+  const wrong = [];
+  for (const name of ["Headers", "ReadableStream", "Request", "Response", "Event"]) {
+    for (const key of Object.getOwnPropertyNames(api[name].prototype)) {
+      if (key === "constructor") continue;
+      if (!Object.getOwnPropertyDescriptor(api[name].prototype, key).enumerable) {
+        wrong.push(`${name}.${key}`);
+      }
+    }
+  }
+  assert.deepEqual(wrong, []);
 });

@@ -78,6 +78,9 @@ import {
 import {
   abortSignalSubscribe,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
+// Symbol-keyed stream internals: off the interface prototype and off the public barrel,
+// so a test reaches them the same way the runtime does.
+import { kStreamDisturbed } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 const NativeHeaders = globalThis.Headers;
 const NativeDecoder = globalThis.TextDecoder;
 const NativeEncoder = globalThis.TextEncoder;
@@ -1711,7 +1714,7 @@ test("Transferred byte streams preserve BYOB reads and source ownership", async 
   const source = bytesStream(Uint8Array.of(1, 2, 3, 4), 2);
   const moved = transfer(source);
   assert.equal(source.locked, true);
-  assert.equal(source.disturbed, true);
+  assert.equal(source[kStreamDisturbed], true);
   const reader = moved.getReader({ mode: "byob" });
   const firstInput = new Uint8Array(3);
   const first = await reader.read(firstInput, { min: 2 });

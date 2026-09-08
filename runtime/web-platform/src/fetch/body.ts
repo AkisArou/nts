@@ -8,7 +8,12 @@ import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
 import type { RandomSource } from "../provider/primitives.ts";
-import { ReadableStream, tee, transfer } from "../streams/readable.ts";
+import {
+  ReadableStream,
+  kStreamDisturbed,
+  tee,
+  transfer,
+} from "../streams/readable.ts";
 import type { TransportBodySource } from "./transport.ts";
 
 export type BodyInit =
@@ -105,7 +110,7 @@ export class BodyState {
   ): BodyState {
     if (input === undefined || input === null) return BodyState.empty(policy);
     if (input instanceof ReadableStream) {
-      if (input.locked || input.disturbed) throw new TypeError("Body stream is unusable");
+      if (input.locked || input[kStreamDisturbed]) throw new TypeError("Body stream is unusable");
       return new BodyState(input, null, null, null, policy);
     }
     let blob: Blob;
@@ -130,7 +135,7 @@ export class BodyState {
   }
 
   get used(): boolean {
-    return this.stream?.disturbed ?? false;
+    return this.stream?.[kStreamDisturbed] ?? false;
   }
 
   get unusable(): boolean {

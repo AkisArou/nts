@@ -38,6 +38,9 @@ import { tlsFixture } from "./tls-fixture.mjs";
 import {
   abortSignalSubscribe,
 } from "../node_modules/.tsbuild/host/runtime/web-platform/src/core/abort-brand.js";
+// Symbol-keyed stream internals: off the interface prototype and off the public barrel,
+// so a test reaches them the same way the runtime does.
+import { kStreamDisturbed } from "../node_modules/.tsbuild/host/runtime/web-platform/src/streams/readable.js";
 
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
@@ -133,7 +136,7 @@ suite("Incremental chunked upload and response with trailers", async (t) => {
   );
   const r = await api.fetch(s.url, { method: "POST", body, duplex: "half" });
   assert.equal(await r.text(), "012");
-  assert.equal(body.disturbed, true);
+  assert.equal(body[kStreamDisturbed], true);
   assert.equal(api.http1.pool.stats.idle, 1);
 });
 for (const status of [301, 302, 303, 307, 308])
