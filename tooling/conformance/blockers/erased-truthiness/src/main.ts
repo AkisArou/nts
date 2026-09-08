@@ -1,4 +1,9 @@
-// expect: emit-c --napi -> emits-c (bool)v
+// expect: emit-c --napi -> fails-to-compile where arithmetic or pointer type is required
+//
+// **The expectation names a clang error, not a string in `program.c`.** It said
+// `emits-c <text>` and that is a substring match: a fragment taken from broken
+// output can also occur in correct output, and this one did. It reported
+// `reproduces` after the defect was fixed, and would have gone on doing so.
 //
 // A truthiness test on an erased value is emitted as a **C cast** rather than as
 // a tag check, and clang rejects it:

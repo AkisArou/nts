@@ -144,6 +144,19 @@ for (const name of names) {
   // same struct defined twice, which clang rejects as a redefinition. `emits-c`
   // cannot state it, because one definition is what a correct compiler emits and
   // the fixture would pass after the fix.
+  // A sixth form, and the one the others could not state: **the emitted C does
+  // not compile**.
+  //
+  // `emits-c <text>` is a substring match, and a substring chosen from a broken
+  // program can also appear in a correct one. `identity-across-subtype` expected
+  // `(double)v` -- which was the pointer comparison when it was filed and is a
+  // legitimate int-to-double conversion now -- so it reported `reproduces` for a
+  // defect that had been fixed. Five fixtures were in that state at once, all of
+  // them mine, and the harness could not have told anyone.
+  //
+  // For a defect whose whole nature is that clang rejects the output, the
+  // expectation should say so. This runs the compiler.
+  const failsToCompile = /^fails-to-compile(?:\s+(.+))?$/.exec(wanted);
   const duplicatesC = /^duplicates-c\s+(.+)$/.exec(wanted);
   const lacksC = /^lacks-c\s+(.+)$/.exec(wanted);
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
@@ -168,7 +181,34 @@ for (const name of names) {
     continue;
   }
   const occurrences = (haystack, needle) => haystack.split(needle).length - 1;
-  const holds = duplicatesC !== null
+  // Compiled with the same force-includes `build.sh` uses: without them a
+  // missing prototype is an implicit declaration rather than an error, and a
+  // fixture about a prototype would report clean.
+  let compileErrors = null;
+  if (failsToCompile !== null && program.length > 0) {
+    const emitted = /wrote .* to (\S+)/.exec(output);
+    const dir = emitted === null ? null : emitted[1];
+    if (dir !== null) {
+      const cc = spawnSync("clang", [
+        "-std=c11", "-c", join(dir, "program.c"), "-I", dir,
+        "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
+        "-include", join(ROOT, "runtime/node/internal/shared.h"),
+        "-I", join(ROOT, "runtime/c"),
+        "-I", join(ROOT, "runtime/node/internal"),
+        "-I", join(ROOT, "third_party/node/src"),
+        "-I", join(ROOT, "third_party/node/deps/uv/include"),
+        "-o", "/dev/null",
+      ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+      const text = `${cc.stdout ?? ""}${cc.stderr ?? ""}`;
+      compileErrors = text.split("\n").filter((l) => l.includes("error:"));
+    }
+  }
+
+  const holds = failsToCompile !== null
+    ? compileErrors !== null && compileErrors.length > 0 &&
+      (failsToCompile[1] === undefined ||
+        compileErrors.some((l) => l.includes(failsToCompile[1])))
+    : duplicatesC !== null
     ? occurrences(program, duplicatesC[1]) > 1
     : lacksC !== null
     ? program.length > 0 && !program.includes(lacksC[1])
@@ -194,7 +234,9 @@ for (const name of names) {
     continue;
   }
   unexpected++;
-  if (duplicatesC !== null) {
+  if (failsToCompile !== null) {
+    console.log(`  FIXED       ${name}: the emitted C compiles now. Expected a clang error:`);
+  } else if (duplicatesC !== null) {
     console.log(`  FIXED       ${name}: emitted once now, not twice. Expected duplicates of:`);
   } else if (lacksC !== null) {
     console.log(`  FIXED       ${name}: the backend now emits it. Expected absence of:`);

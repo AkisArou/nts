@@ -2879,6 +2879,49 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## Five fixtures were reporting defects that had been fixed
+
+`emits-c <text>` is a **substring match**, and a fragment taken from broken
+output can occur in correct output too. Five of mine did:
+
+    identity-across-subtype    emits-c (double)v
+    upcast-to-base             emits-c NtsObj_Base * made
+    async-returning-object     emits-c nts_promise_fulfill_tagged(
+    closure-as-function-value  emits-c NtsObj_Fn__
+    erased-truthiness          emits-c (bool)v
+
+`(double)v` was the pointer comparison when the fixture was written. On the
+16:24 binary it matches `v15 = (double)v14` — an ordinary int-to-double
+conversion in correct output. The fixture reported `reproduces` and would have
+gone on reporting it forever.
+
+**All five were fixed by the compiler lane and all five said otherwise**, which
+means every "still reproduces" this lane reported in the last few hours was
+worth less than it read. Found by compiling each fixture's output with clang
+rather than trusting the harness: twelve of thirteen `emits-c` fixtures produce
+C that now compiles.
+
+### The harness gained the form it was missing
+
+For a defect whose whole nature is that clang rejects the output, the honest
+expectation is *this does not compile*. `blockers-check.mjs` now has
+`fails-to-compile [text]`, which runs the compiler — with the same
+force-includes `build.sh` uses, since without them a missing prototype is an
+implicit declaration and a fixture about a prototype reports clean.
+
+The five are converted, and the run went from **35 as expected, 6 loud** to
+**31 as expected, 10 loud**. The four extra are all fixes landing.
+
+**This is the same failure as `path.sep`, one level up.** There, a shim supplied
+the value a test was checking, so the test could not fail. Here, a fixture
+checked a string the correct output also contains, so the fixture could not
+fail. Both were written carefully by someone who had just written the thing they
+were checking, and neither was controlled against a *fixed* compiler — only
+against a broken one, where they passed for the right reason by accident.
+
+A fixture needs both controls: it must fail when the defect is absent, not only
+hold when it is present.
+
 ## A `uses` file is a substitution list, and I read it as a dependency list
 
 **The worst mistake of the day, and it is mine.** I wrote an audit on the

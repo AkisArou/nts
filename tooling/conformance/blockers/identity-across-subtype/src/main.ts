@@ -1,4 +1,9 @@
-// expect: emit-c --napi -> emits-c (double)v
+// expect: emit-c --napi -> fails-to-compile pointer cannot be cast to type 'double'
+//
+// **The expectation names a clang error, not a string in `program.c`.** It said
+// `emits-c <text>` and that is a substring match: a fragment taken from broken
+// output can also occur in correct output, and this one did. It reported
+// `reproduces` after the defect was fixed, and would have gone on doing so.
 //
 // `===` between a subtype reference and a supertype reference is emitted as a
 // **numeric** comparison of two pointers:

@@ -1,4 +1,9 @@
-// expect: emit-c --napi -> emits-c NtsObj_Base * made
+// expect: emit-c --napi -> fails-to-compile incompatible pointer types assigning
+//
+// **The expectation names a clang error, not a string in `program.c`.** It said
+// `emits-c <text>` and that is a substring match: a fragment taken from broken
+// output can also occur in correct output, and this one did. It reported
+// `reproduces` after the defect was fixed, and would have gone on doing so.
 //
 // A subclass instance assigned to a base-typed binding emits C that clang
 // rejects:
