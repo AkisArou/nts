@@ -29,8 +29,8 @@ sentence, which will go stale.
 
 ## The situation in one paragraph
 
-Two axes move independently. **TypeScript-on-node: 1,828 of 1,828 across 22
-modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by twenty-one tests written
+Two axes move independently. **TypeScript-on-node: 1,829 of 1,829 across 22
+modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by twenty-two tests written
 against seams node's own suite cannot reach — see the byte-path and encoding
 sections of the ledger. **The number comes from per-module runs, not from a clean sweep.** Two full
 sweeps today were discarded, both correctly: the first because `util` reported 23
