@@ -211,7 +211,12 @@ function addon(module) {
   const real = tally.pass - degenerate;
   const stage = applicable > 0 && real === applicable
     ? "green"
-    : real > 0 ? "partial" : "all-passes-degenerate";
+    // Named for the passes, not the tests. `all-passes-degenerate` read as "all
+    // tests pass, degenerately" to the person who wrote it, an hour later, in
+    // his own table -- `path` is 2 passed and 17 failed, and the row means both
+    // passes were hollow. The two readings call for opposite work, so the label
+    // says which noun it quantifies.
+    : real > 0 ? "partial" : "every-pass-hollow";
 
   // Passing every test is not the same as being complete, and this axis is
   // about to have a row where the difference matters. `punycode` publishes

@@ -2789,7 +2789,7 @@ movement, once for editing the running wrapper. **It completed at `06:01:45` on
     http                  403 / 403  h0      c-did-not-compile
     net                   146 / 146  h0      c-did-not-compile
     os                      7 / 7    h0      partial            <- 4 of 7
-    path                   19 / 19   h0      all-passes-degenerate
+    path                   19 / 19   h0      every-pass-hollow
     process                87 / 87   h0      c-did-not-compile
     punycode                2 / 2    h0      green              <- 2 of 2
     querystring             6 / 6    h0      built-exports-nothing
@@ -2816,7 +2816,7 @@ different kinds of failure that a pass/fail column would have flattened:
   compiles, links and loads, and its export table is empty. Nothing refused.
 - `built-exports-partial` — `buffer`. Some names publish and the ones the tests
   need do not.
-- `all-passes-degenerate` — `path`. **The name means every *pass* was
+- `every-pass-hollow` — `path`. **The name means every *pass* was
   degenerate, not that every test passes**, and I misread my own label within an
   hour of writing this table down. Run the same artifact directly and it is
   `2 passed, 17 failed, 1 skipped`. Both passes are
@@ -3581,8 +3581,12 @@ keeps the addon's exported names and destroys their behaviour: every exported
 function throws, every exported value becomes something nothing expects. A file
 that still passes did not depend on what the module *does*. `--addons` runs it
 against every compiled pass automatically and subtracts the survivors, so a
-module whose passes are all degenerate reports `all-passes-degenerate` rather
+module whose passes are all degenerate reports `every-pass-hollow` rather
 than a number — which is what `path` reports today, `2 / 17, 2 degenerate`.
+
+That stage was called `all-passes-degenerate` until 2026-09-08, when it misled
+its own author into writing "every test passes" in a summary table. Rows recorded
+above under the old name keep it, because they record what the tool printed.
 
 The distinction from sabotage is the whole point and is worth stating in one
 line: **sabotage removes the module and asks whether the suite is connected to

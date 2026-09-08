@@ -55,7 +55,7 @@ that does not build.
        15  c-did-not-compile
         4  built-exports-nothing
         1  built-exports-partial
-        1  all-passes-degenerate
+        1  every-pass-hollow
         1  green
 
 That `1` is `punycode`, and it is a day old. This document was written when the
