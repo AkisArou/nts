@@ -1,4 +1,9 @@
-// expect: emit-c --napi --rc -> fails-to-compile incompatible pointer types assigning
+// expect: emit-c --napi --rc -> compiles
+//
+// **FIXED, kept as a guard.** the save-temporary takes the storage's type now.
+//
+// The filing below is kept: what it argued is why the fix mattered.
+//
 //
 // Under reference counting, assigning to a module-scope binding of a **wide**
 // type emits a save-temporary declared with the type of the value being

@@ -1,4 +1,9 @@
-// expect: NTS1001 `ArrayBuffer.isView`, a global member with no definition here
+// expect: lowers
+//
+// **FIXED, kept as a guard.** the global is provided now.
+//
+// The filing below is kept: what it argued is why the fix mattered.
+//
 //
 // `ArrayBuffer.isView` has no definition in this compiler, and it is the single
 // thing standing between `string_decoder`'s own source and having nothing left
