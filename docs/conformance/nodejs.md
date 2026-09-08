@@ -2832,7 +2832,7 @@ re-run on the 14:18 probe binary from a tree pinned at `9b116611`:
     string_decoder        0 of 4                        197
     url                   0 of 52                       454
 
-**1,766 retain/release sites, and every result is identical to the uncounted
+**1,666 retain/release sites, and every result is identical to the uncounted
 lane.** No invalid HIR, no `NOT COUNTED` row, no `OVERWRITTEN` row, no crash
 under poison. Reference counting still changes nothing observable.
 
