@@ -525,8 +525,14 @@ Copy from here.
 >    tree, and the 22-module node profile unchanged. It is with the main lane.
 >
 >    *Done for this lane when: the change is handed over verified, and this
->    document records whether it was taken.* **Status: handed over; the main
->    lane's to land or decline.**
+>    document records whether it was taken.* **Status: taken.** The main lane
+>    has it applied in their tree; the test file goes in beside it. Verified
+>    against their build — both cases correct, the 133-example sweep unchanged,
+>    and the node profile's 15 `builtin` refusals all genuine `lib.d.ts` globals
+>    that keep the old wording.
+>
+>        `pad`, an imported name whose implementation is not in this program
+>        `parseFloat`, a builtin this compiler does not provide
 >
 >    The half that does not need their tree is already in: `nts deps` names the
 >    package, the reason it could not be acquired, and the specifiers the program
