@@ -38,7 +38,14 @@ const TAKES_A_VALUE: [&str; 1] = ["--out"];
 /// `--no-acquire` opts out.
 fn project(rest: &[String]) -> Result<Utf8PathBuf> {
     let named = named_project(rest)?;
-    if rest.iter().any(|arg| arg == "--no-acquire") {
+    // `--no-acquire` for a single run; `NTS_NO_ACQUIRE=1` for a whole shell.
+    // The environment switch exists because this changes what *every* command
+    // compiles, and five sessions share this checkout: somebody who finds a
+    // lane red needs a way to take this out of the picture in one variable
+    // rather than by editing arguments in a script they did not write.
+    if rest.iter().any(|arg| arg == "--no-acquire")
+        || std::env::var("NTS_NO_ACQUIRE").is_ok_and(|value| value != "0")
+    {
         return Ok(named);
     }
     acquire(&named)
@@ -58,7 +65,17 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
     if !dir.join("package.json").is_file() {
         return Ok(tsconfig.to_owned());
     }
-    let acquisition = nts_deps::acquire(&dir, tsconfig, nts_deps::Options::default())?;
+    let acquisition = nts_deps::acquire(
+        &dir,
+        tsconfig,
+        &nts_deps::Options {
+            // The checker resolves the program this compiler compiles, so it is
+            // the authority on which specifier means which file. Without it,
+            // acquisition falls back to reading manifests and says so.
+            tsgo: nts_frontend_ts::tsgo::locate(),
+            ..nts_deps::Options::default()
+        },
+    )?;
 
     // Quiet when everything worked, and specific when it did not. There is no
     // JavaScript fallback, so a dependency this compiler cannot take has to be
@@ -83,6 +100,17 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
                 package.route.describe()
             );
         }
+        // Said here because the refusal that follows cannot say it. A name
+        // imported from one of these resolves to a declaration and no body, and
+        // the lowerer reports that as `a builtin this compiler does not
+        // provide` -- which sends its reader to `hir::builtin`, where nothing is
+        // missing. Until that diagnostic can name the package, this line is what
+        // connects the two.
+        eprintln!(
+            "  a name imported from one of these will refuse below as \
+             \"a builtin this compiler does not provide\"; the implementation \
+             is what is missing, not the builtin"
+        );
     }
     Ok(acquisition.tsconfig.unwrap_or_else(|| tsconfig.to_owned()))
 }
@@ -215,10 +243,14 @@ fn main() -> Result<()> {
         Some("check") => check(&args.collect::<Vec<String>>()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
-            let mut positional = rest.iter().filter(|a| !a.starts_with("--"));
-            let tsconfig = positional
-                .next()
-                .map_or_else(|| Utf8PathBuf::from("tsconfig.json"), Utf8PathBuf::from);
+            // Through `project`, like every other command that builds a
+            // program. It used to scan for the first non-`--` argument itself,
+            // which found the same path *and* skipped dependency acquisition --
+            // so `emit-c`, the most build-like command there is, was the one
+            // that refused an imported name as a builtin. `project` already
+            // knows `--out` takes a value, which is the reason the hand-rolled
+            // scan existed.
+            let tsconfig = project(&rest)?;
             // `--out <dir>` writes the program *and* the runtime, which is what
             // it takes to compile anything. Without it the program goes to
             // stdout, which is convenient to read and not enough to build.
@@ -1804,8 +1836,9 @@ fn deps(rest: &[String]) -> Result<()> {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf);
     let options = nts_deps::Options {
         dry_run: rest.iter().any(|arg| arg == "--dry-run"),
+        tsgo: nts_frontend_ts::tsgo::locate(),
     };
-    let acquisition = nts_deps::acquire(&dir, &tsconfig, options)?;
+    let acquisition = nts_deps::acquire(&dir, &tsconfig, &options)?;
     if rest.iter().any(|arg| arg == "--json") {
         println!("{}", nts_deps::report::json(&acquisition));
     } else {
