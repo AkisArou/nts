@@ -28,7 +28,7 @@ not measured clean and should not be quoted.**
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
-| `awfy-queens` | 1.26x | **cause found for 58% of it**: `[D` where AWFY has `int[]` |
+| `awfy-queens` | 1.25x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
@@ -708,9 +708,31 @@ what it showed was that the *bytecode shape* was not the cause, and I read that
 as nothing being the cause. The thing that was already written down two lines
 below it, in the same file, was.
 
-The residual is real and unexplained: **1.103x** with the element type held
-equal, which is a smaller and better-posed question than the one this row had
-before.
+**And then a third rung inverted the split, so the 58% above is wrong.** The
+other structural difference is that this backend emits
+`Queens$getRowColumn(Queens, int, int)` -- a **static taking the receiver**,
+which is what `Callee::Direct` becomes here -- where AWFY writes private
+instance methods. Carrying that onto the reference too, five interleaved rounds,
+spreads that do not overlap:
+
+    A  int[]    + instance methods    median  8752.2 ns    AWFY as written
+    B  double[] + instance methods    median  9995.5 ns    +14.2%
+    C  double[] + static receiver     median  9095.4 ns    +3.9%
+    ours                              median 10970.7 ns    +25.3%
+
+**The static shape is 9% *faster* than instance methods**, so this backend's
+choice is a gain and not a cost -- `Callee::Direct` preferring `invokestatic`
+is vindicated on the row where it could most have been doubted.
+
+Which means the element type is not 58% of anything. Against a reference wearing
+**both** of this lane's representational choices the gap is **1.206x**, and that
+is codegen, and it is mine. The `[D` is worth 14.2% on its own and roughly
+**half of it is handed back** by the static shape; the two do not add.
+
+**The correction is the point.** One rung said the element type was most of the
+row. Two rungs say it is a third of it and that the rest is ours. A ladder
+stopped early reads exactly like a ladder that finished, which is the same shape
+as reading "the merge is not the cause" as "there is no cause".
 
 **The scope is exactly two arrays, and both are wrong the same way.** Across all
 51 bench emissions this lane declares only five bare array fields -- everything
