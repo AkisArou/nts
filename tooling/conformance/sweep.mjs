@@ -597,6 +597,29 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // The `uses` files, against what the modules actually import. One of them was
+  // already right about a bug that took an afternoon: `dgram/uses` names `net`,
+  // `dgram` calls `nts_net_default_auto_select_family`, and the build consulted
+  // neither the file nor `net`'s C. The addon compiled, linked, and failed at
+  // `require`.
+  {
+    const uses = spawnSync(process.execPath, [join(HERE, "uses-audit.mjs")], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120_000,
+    });
+    const text = `${uses.stdout ?? ""}${uses.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("uses: INSTRUMENT FAILURE -- no `uses` file read");
+    } else {
+      const summary = text.split("\n").filter((l) => l.includes("with a `uses` file")).join("").trim();
+      if (summary !== "") console.log(`uses: ${summary}`);
+      for (const line of text.split("\n").filter((l) => /UNDECLARED/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+    }
+  }
+
   // The skip lists, read back. A skip removes a file from a denominator, so
   // every percentage in the ledger is computed without it; the entries carry a
   // reason each and were read by a person when written, and nothing had ever
