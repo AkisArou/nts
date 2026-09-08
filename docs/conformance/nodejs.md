@@ -2816,6 +2816,63 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Twelve of the thirteen that do not build are stopped by one shape
+
+Measured on the gate binary, every module built from a pinned tree. Nine build
+now, thirteen do not, and **twelve of the thirteen fail on a type-name
+collision** — `blockers/duplicate-type-name`, which already reproduces.
+
+    NtsObj_Frame              11 modules
+    NtsObj_Blob                8
+    NtsObj_File                8
+    NtsObj_ExternalBlobPart    8
+    NtsObj_Context             4
+    NtsObj_DuplexOptions       4
+    plus BlobExternalSource, FileOptions, Socket, URLSearchParams
+
+The struct name is derived from the declared name alone, so two unrelated types
+with the same source-level name collide in one program. `Frame` is the clearest
+case — two entirely different things, from modules that never import each other:
+
+    struct NtsObj_Frame {          struct NtsObj_Frame {
+        NtsHeader header;              NtsHeader header;
+        bool isArray;                  bool fin;
+        int32_t start;                 int32_t opcode;
+        NtsArray * items;              NtsView * payload;
+        NtsArray * keys;               NtsValue compressed;
+        NtsArray * values;         };
+    };
+
+A frame in an inspect walk and a frame in a WebSocket. Both correct, both
+named `Frame`, and the second definition is a redefinition plus a failed size
+assertion.
+
+**This is the largest single lever on the compiled axis**, and it is larger than
+anything else outstanding: `export-class` unblocks three modules,
+`computed-member-write` unblocks `os`'s `constants`, and this one is in the way
+of twelve. It is not a claim that twelve go green — every module here also has
+`no member named` errors behind the collision, and compiling is necessary and
+not sufficient, as five modules that build and publish almost nothing show.
+
+`timers` is the thirteenth and is not this: it fails on an undeclared identifier
+and an `NtsValue` arithmetic operand.
+
+### The current state of the axis, in exports
+
+    builds & passes    punycode 6 exports, 3 of 3
+    builds             os 17, async_hooks 13, punycode 6, path 4, buffer 3,
+                       diagnostics_channel 0, querystring 0, string_decoder 0,
+                       url 0
+    does not build     assert console dgram events fs http net process
+                       readline stream util zlib   (name collision)
+                       timers                      (undeclared identifier)
+
+`os` at 4 passed and 4 failed is the nearest module to a second green, and its
+four failures are `constants` (computed member write, whose dynamic construction
+is deliberate — `SIGUSR1` is 10 on Linux and 30 on macOS, so a transcribed table
+would be silently wrong on one of them) and `getPriority`/`setPriority` (the
+`errors.ts` chain).
+
 ## The prediction was wrong, and which half of it was wrong matters
 
 Measured on the compiler lane's gate binary, from a worktree pinned at my HEAD.
