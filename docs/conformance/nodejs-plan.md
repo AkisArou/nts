@@ -29,8 +29,13 @@ sentence, which will go stale.
 
 ## The situation in one paragraph
 
-Two axes move independently. **TypeScript-on-node: 1,807 of 1,807 across 22
-modules, 0 hollow, 22 of 22 typechecking.** **Compiled artifact: 1 green and 1
+Two axes move independently. **TypeScript-on-node: 1,812 of 1,812 across 22
+modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by five tests written
+against seams node's own suite cannot reach — see the byte-path and encoding
+sections of the ledger. The sweep that measured it reported `util` at 23 of 24;
+`util` run alone is 24 of 24 three times over, and the machine was loaded, so
+that row is a flake rather than a failure. It is recorded rather than rounded
+away. **Compiled artifact: 1 green and 1
 partial** — `punycode` 2 of 2, and `os` 4 of 7 with 17 of the 23 names its shape
 wants.
 
