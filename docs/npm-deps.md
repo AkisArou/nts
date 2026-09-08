@@ -215,6 +215,82 @@ sees it. Whatever acquires sources has to write them _inside_ the program.
 
 ---
 
+## 3a. The per-project number, which is the one that matters
+
+Everything above is measured package by package out of a tarball. That is the
+wrong unit and §2 says so: a package compiled with nothing calling it is not a
+measurement. `nts deps` measures the right one — a real project, driven by what
+its program imports — and `tooling/npm-survey/corpus.ts` builds the project to
+point it at: all 458 packages installed flat, a program importing all 96 roots.
+
+    packages the program reaches      141   (of 458 installed)
+    acquired                           15   10.6%
+
+    by route
+      110  published JavaScript only
+       14  source map
+        1  shipped TypeScript
+       11  a map that exists and cannot be used:
+             9  sourcesContent has holes
+             3  bundles several sources, names no entry among them
+             1  its sources were JavaScript
+        2  the entry its package.json names is not installed
+
+Two things this says that the per-package number could not.
+
+**The denominator is smaller than the dependency graph.** 141 of 458, because a
+program reaches what it imports rather than what its manifests declare. The rate
+roughly doubles — 5.7% to 10.6% — without anything being acquired that was not
+acquirable before.
+
+**A map that exists is not a map that can be used.** Eleven packages ship one
+and none of the eleven yields source: nine have `null` in `sourcesContent`,
+three are bundles whose map names several sources and no entry, one was
+JavaScript to begin with. That is nearly as many as the fourteen the route
+succeeds on, and it is the sharpest argument in this file against building the
+acquisition pipeline out further: the next tier of effort buys those eleven.
+
+The recovered graphs are whole, which took a second pass to get right. A
+`tsc`-style build emits one file per input, so the *entry's* map carries the
+entry alone — `minimatch` first arrived as `src/index.ts` with five dangling
+imports and looked exactly like a package that has one module. Recovery now
+indexes every map in a package and walks imports between the sources those maps
+*state*, which is not the same as inferring that `dist/ast.js` came from
+`src/ast.ts`. `drizzle-orm` went from 1 file to 291, `minimatch` to 6.
+
+### Recovered source is not automatically buildable source
+
+The original draft said not to equate the two. Handing the acquired corpus to
+the checker says how far apart they are:
+
+    the project's own code, before acquiring   23 errors
+    the project's own code, after acquiring    23 errors
+    added, all of it inside vendored source   218 errors, over 7 of 14 packages
+
+The first two numbers matter as much as the third: **acquisition never made the
+program worse**, it only added source that has its own problems.
+
+The first measurement of this was **3,091**, and 2,850 of them were one package.
+`drizzle-orm` writes `~/entity.ts` throughout and publishes no tsconfig defining
+`~`, so every one of its 291 recovered files imports something that cannot
+resolve. Vendoring that and reporting it as acquired is a partial recovery
+dressed as a success, so it is now a refusal that names the specifier — and the
+count fell to 218 by declining one package rather than by fixing anything.
+
+What is left, over the seven packages that arrive with errors:
+
+| | | |
+|---|---:|---|
+| `TS2591`, `TS2503` | 51 | an ambient the package's own build supplied — `process`, `Buffer`, a namespace |
+| `TS7006` | 26 | implicit `any`: the source assumes a `strict` its build did not set |
+| `TS2307` | 24 | a module still unresolved |
+| `TS2345`, `TS2322`, `TS2532`, `TS2339` | 68 | ordinary type errors under options the source was not written for |
+
+**Seven of fourteen arrive clean.** The other seven need their build
+*environment*, not more source — which is a different problem from acquisition
+and a much smaller one than it looked before the one bad package was separated
+out.
+
 ## 4. What the numbers argue for
 
 **The elaborate acquisition pipeline is not the first thing to build.** Its

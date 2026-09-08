@@ -381,3 +381,162 @@ fn the_generated_config_is_not_a_composite_project() {
     assert_eq!(options["declaration"], false);
     assert_eq!(options["incremental"], false);
 }
+
+/// A `tsc`-style build emits one file per input, so the entry's own map carries
+/// the entry and nothing else. Recovering only that leaves a package whose
+/// every sibling import resolves to nothing — `minimatch` arrived as
+/// `src/index.ts` alone with five dangling imports, and looked exactly like a
+/// package that genuinely has one module.
+#[test]
+fn a_multi_module_package_recovers_its_whole_graph() {
+    let root = fixture("graph");
+    let modules = root.join("packages/app/node_modules");
+
+    // Three modules, three maps, the way `tsc` emits them.
+    write(
+        &modules.join("split/package.json"),
+        r#"{"name":"split","version":"1.0.0","main":"./dist/index.js"}"#,
+    );
+    for (name, source, body) in [
+        (
+            "index",
+            "export { helper } from \"./helper.js\";\nexport { deep } from \"./nested/deep.js\";\n",
+            "export const x=1;\n",
+        ),
+        ("helper", "export const helper = 1;\n", "export const h=1;\n"),
+    ] {
+        write(
+            &modules.join(format!("split/dist/{name}.js")),
+            &format!("{body}//# sourceMappingURL={name}.js.map\n"),
+        );
+        write(
+            &modules.join(format!("split/dist/{name}.js.map")),
+            &format!(
+                r#"{{"version":3,"sources":["../src/{name}.ts"],"sourcesContent":[{}],"mappings":""}}"#,
+                serde_json::to_string(source).unwrap()
+            ),
+        );
+    }
+    write(
+        &modules.join("split/dist/nested/deep.js"),
+        "export const d=1;\n//# sourceMappingURL=deep.js.map\n",
+    );
+    write(
+        &modules.join("split/dist/nested/deep.js.map"),
+        r#"{"version":3,"sources":["../../src/nested/deep.ts"],"sourcesContent":["export const deep = 1;\n"],"mappings":""}"#,
+    );
+    // Shipped, mapped, and imported by nobody.
+    write(
+        &modules.join("split/dist/orphan.js"),
+        "export const o=1;\n//# sourceMappingURL=orphan.js.map\n",
+    );
+    write(
+        &modules.join("split/dist/orphan.js.map"),
+        r#"{"version":3,"sources":["../src/orphan.ts"],"sourcesContent":["export const orphan = 1;\n"],"mappings":""}"#,
+    );
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"split":"1.0.0"}}"#,
+    )
+    .unwrap();
+
+    acquire(&root);
+    let vendor = root.join(".nts/vendor/split@1.0.0/src");
+    assert!(vendor.join("index.ts").is_file(), "the entry");
+    assert!(
+        vendor.join("helper.ts").is_file(),
+        "`./helper.js` names `helper.ts`, and its map is a different map"
+    );
+    assert!(
+        vendor.join("nested/deep.ts").is_file(),
+        "reached through the entry, from a map in another directory"
+    );
+    assert!(
+        !vendor.join("orphan.ts").exists(),
+        "shipped and mapped, but nothing imports it, so it is not in the program"
+    );
+}
+
+/// Recovering files and recovering a *package* are different things, and a
+/// partial recovery presented as a success is the one thing this must not do.
+///
+/// Measured: acquiring a 141-package corpus produced 3,091 typecheck errors and
+/// 2,850 were one package importing `~/entity.ts` — a `paths` alias from a
+/// tsconfig `drizzle-orm` does not publish. Vendoring that and calling it
+/// acquired is worse than not acquiring it.
+#[test]
+fn source_that_cannot_build_is_refused_by_name() {
+    let root = fixture("unbuildable");
+    let modules = root.join("packages/app/node_modules");
+    write(
+        &modules.join("aliased/package.json"),
+        r#"{"name":"aliased","version":"1.0.0","main":"./dist/index.js"}"#,
+    );
+    write(
+        &modules.join("aliased/dist/index.js"),
+        "export const x=1;\n//# sourceMappingURL=index.js.map\n",
+    );
+    write(
+        &modules.join("aliased/dist/index.js.map"),
+        r#"{"version":3,"sources":["../src/index.ts"],"sourcesContent":["import { e } from '~/entity.ts';\nexport const x = e;\n"],"mappings":""}"#,
+    );
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"aliased":"1.0.0"}}"#,
+    )
+    .unwrap();
+
+    let acquisition = acquire(&root);
+    let aliased = acquisition
+        .packages
+        .iter()
+        .find(|package| package.name == "aliased")
+        .expect("in the closure");
+
+    assert!(!aliased.acquired(), "it cannot be built, so it is not acquired");
+    assert!(
+        matches!(
+            &aliased.route,
+            nts_deps::recover::Route::SourceNeedsUnpublishedConfig { specifier }
+                if specifier == "~/entity.ts"
+        ),
+        "and the refusal names what it could not find: {:?}",
+        aliased.route
+    );
+    assert!(
+        !root.join(".nts/vendor/aliased@1.0.0").exists(),
+        "nothing unbuildable is left in the vendor tree"
+    );
+}
+
+/// A node builtin and a real dependency are both fine to import.
+#[test]
+fn an_installed_dependency_and_a_builtin_are_not_unbuildable() {
+    let root = fixture("buildable");
+    let modules = root.join("packages/app/node_modules");
+    write(
+        &modules.join("uses-deps/package.json"),
+        r#"{"name":"uses-deps","version":"1.0.0","main":"./dist/index.js","dependencies":{"mapped":"2.0.0"}}"#,
+    );
+    write(
+        &modules.join("uses-deps/dist/index.js"),
+        "export const x=1;\n//# sourceMappingURL=index.js.map\n",
+    );
+    write(
+        &modules.join("uses-deps/dist/index.js.map"),
+        r#"{"version":3,"sources":["../src/index.ts"],"sourcesContent":["import { x } from 'mapped';\nimport { join } from 'node:path';\nexport const y = [x, join];\n"],"mappings":""}"#,
+    );
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"uses-deps":"1.0.0","mapped":"2.0.0"}}"#,
+    )
+    .unwrap();
+
+    let acquisition = acquire(&root);
+    let package = acquisition
+        .packages
+        .iter()
+        .find(|package| package.name == "uses-deps")
+        .expect("in the closure");
+    assert!(package.acquired(), "route was {:?}", package.route);
+}

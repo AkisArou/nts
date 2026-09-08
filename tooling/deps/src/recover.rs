@@ -31,6 +31,11 @@ pub enum Route {
     JavaScriptOnly,
     /// The entry the manifest names is not in the installed package.
     EntryMissing,
+    /// The source was recovered and cannot be built: it imports something the
+    /// package does not install. Almost always a `paths` alias from the
+    /// package's own tsconfig, which is not published — `drizzle-orm` writes
+    /// `~/entity.ts` throughout and ships no config defining `~`.
+    SourceNeedsUnpublishedConfig { specifier: String },
 }
 
 impl Route {
@@ -53,6 +58,10 @@ impl Route {
             ),
             Self::JavaScriptOnly => "published JavaScript only".to_owned(),
             Self::EntryMissing => "the entry its package.json names is not installed".to_owned(),
+            Self::SourceNeedsUnpublishedConfig { specifier } => format!(
+                "its source imports `{specifier}`, which the package does not install — \
+                 a path alias from a tsconfig it did not publish"
+            ),
         }
     }
 }
@@ -96,8 +105,9 @@ impl Recovery {
             Route::MapIncomplete { .. } => 2,
             Route::MapAmbiguous { .. } => 3,
             Route::MapOfJavaScript => 4,
-            Route::JavaScriptOnly => 5,
-            Route::EntryMissing => 6,
+            Route::SourceNeedsUnpublishedConfig { .. } => 5,
+            Route::JavaScriptOnly => 6,
+            Route::EntryMissing => 7,
         };
         self.entries
             .iter()
@@ -126,9 +136,10 @@ fn is_javascript(path: &str) -> bool {
 pub fn recover(installed: &Installed, entry_points: &[EntryPoint]) -> Recovery {
     let mut recovery = Recovery::default();
     let mut written: FxHashMap<Utf8PathBuf, String> = FxHashMap::default();
+    let index = map_index(&installed.dir);
 
     for entry_point in entry_points {
-        let (route, at) = recover_one(installed, entry_point, &mut written);
+        let (route, at) = recover_one(installed, entry_point, &index, &mut written);
         recovery.entries.push(RecoveredEntry {
             specifier: entry_point.specifier.clone(),
             route,
@@ -142,6 +153,7 @@ pub fn recover(installed: &Installed, entry_points: &[EntryPoint]) -> Recovery {
         .collect();
     files.sort_by(|a, b| a.at.cmp(&b.at));
     recovery.files = files;
+    reject_unbuildable(installed, &mut recovery);
     recovery
 }
 
@@ -188,6 +200,7 @@ pub fn recover_resolved(
     let offered = installed.manifest.entry_points();
     let mut recovery = Recovery::default();
     let mut written: FxHashMap<Utf8PathBuf, String> = FxHashMap::default();
+    let index = map_index(&installed.dir);
 
     for (specifier, declaration) in resolved {
         let targets = implementation_candidates(installed, specifier, declaration, &offered);
@@ -195,7 +208,7 @@ pub fn recover_resolved(
             specifier: specifier.clone(),
             targets,
         };
-        let (route, at) = recover_one(installed, &entry_point, &mut written);
+        let (route, at) = recover_one(installed, &entry_point, &index, &mut written);
         recovery.entries.push(RecoveredEntry {
             specifier: specifier.clone(),
             route,
@@ -209,6 +222,7 @@ pub fn recover_resolved(
         .collect();
     files.sort_by(|a, b| a.at.cmp(&b.at));
     recovery.files = files;
+    reject_unbuildable(installed, &mut recovery);
     recovery
 }
 
@@ -267,9 +281,26 @@ fn implementation_candidates(
     targets
 }
 
+/// Turn a recovery whose source cannot build into a refusal, with the reason.
+fn reject_unbuildable(installed: &Installed, recovery: &mut Recovery) {
+    let Some(specifier) = unbuildable(installed, &recovery.files) else {
+        return;
+    };
+    for entry in &mut recovery.entries {
+        if entry.route.recovered() {
+            entry.route = Route::SourceNeedsUnpublishedConfig {
+                specifier: specifier.clone(),
+            };
+            entry.entry = None;
+        }
+    }
+    recovery.files.clear();
+}
+
 fn recover_one(
     installed: &Installed,
     entry_point: &EntryPoint,
+    index: &MapIndex,
     written: &mut FxHashMap<Utf8PathBuf, String>,
 ) -> (Route, Option<Utf8PathBuf>) {
     let mut best = Route::JavaScriptOnly;
@@ -303,7 +334,7 @@ fn recover_one(
         let Some(map) = read_map(&absolute) else {
             continue;
         };
-        match harvest(&map, &absolute, written) {
+        match harvest(&map, &absolute, index, written) {
             Harvest::Recovered(entry) => return (Route::SourceMap, Some(entry)),
             Harvest::Holes { have, want } => best = worse(best, Route::MapIncomplete { have, want }),
             Harvest::Ambiguous { sources } => best = worse(best, Route::MapAmbiguous { sources }),
@@ -452,6 +483,180 @@ fn word_boundary(text: &str, at: usize, len: usize) -> bool {
     !ident(before) && !ident(after)
 }
 
+
+/// Every TypeScript source any map in a package embeds, by where it belongs.
+///
+/// # Why a package-wide index
+///
+/// A `tsc`-style build emits one file per input, so the *entry's* map carries
+/// the entry and nothing else — recovering only that yields `src/index.ts`
+/// alone, whose five sibling imports resolve to nothing. `minimatch` ships
+/// twelve maps holding exactly those siblings, and the same is true of every
+/// package that is more than one module and is not bundled.
+///
+/// The alternative was to guess that `dist/ast.js` came from `src/ast.ts`,
+/// which is the inference `docs/npm-deps.md` says not to make. The index does
+/// not guess: each map *states* which source it was built from, and the walk
+/// below follows imports between the sources those statements produced.
+type MapIndex = FxHashMap<Utf8PathBuf, String>;
+
+fn map_index(package_dir: &Utf8Path) -> MapIndex {
+    let mut index = MapIndex::default();
+    let mut stack = vec![package_dir.to_owned()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let path = dir.join(&name);
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                // A package's own dependencies are their own packages.
+                if name != "node_modules" {
+                    stack.push(path);
+                }
+                continue;
+            }
+            if !is_javascript(&name) {
+                continue;
+            }
+            let Some(map) = read_map(&path) else {
+                continue;
+            };
+            for (at, source) in map.sources.iter().enumerate() {
+                let leaf = source.rsplit('/').next().unwrap_or(source);
+                if !is_typescript(leaf) {
+                    continue;
+                }
+                let Some(text) = map.contents.get(at).and_then(Option::as_ref) else {
+                    continue;
+                };
+                let Some(dest) = vendor_path(&map.root, source) else {
+                    continue;
+                };
+                index.entry(dest).or_insert_with(|| text.clone());
+            }
+        }
+    }
+    index
+}
+
+/// Resolve a relative import against recovered sources rather than the disk.
+///
+/// The same extension substitution TypeScript uses — `./ast.js` names
+/// `ast.ts` — applied to files that exist only as source-map content.
+fn resolve_in_index(from: &Utf8Path, specifier: &str, index: &MapIndex) -> Option<Utf8PathBuf> {
+    let base = crate::resolve::normalize(&from.parent()?.join(specifier));
+    let stem = base.as_str();
+    let swapped = [
+        stem.strip_suffix(".js").map(|head| format!("{head}.ts")),
+        stem.strip_suffix(".js").map(|head| format!("{head}.tsx")),
+        stem.strip_suffix(".mjs").map(|head| format!("{head}.mts")),
+        stem.strip_suffix(".cjs").map(|head| format!("{head}.cts")),
+    ];
+    swapped
+        .into_iter()
+        .flatten()
+        .map(Utf8PathBuf::from)
+        .chain([base.clone()])
+        .chain(
+            ["ts", "tsx", "mts", "cts"]
+                .into_iter()
+                .map(|ext| Utf8PathBuf::from(format!("{stem}.{ext}"))),
+        )
+        .chain(
+            ["index.ts", "index.tsx", "index.mts", "index.cts"]
+                .into_iter()
+                .map(|leaf| base.join(leaf)),
+        )
+        .find(|candidate| index.contains_key(candidate))
+}
+
+/// Pull an entry and everything it reaches out of the index.
+///
+/// `visited` is tracked separately from `written` on purpose. The entry is
+/// already in `written` when this is called — that is how it was identified —
+/// so keying the walk on `written` made it skip the seed and scan nothing,
+/// which looked exactly like a package that genuinely had one module.
+fn walk_recovered(entry: &Utf8Path, index: &MapIndex, written: &mut FxHashMap<Utf8PathBuf, String>) {
+    let mut visited: Vec<Utf8PathBuf> = Vec::new();
+    let mut queue = vec![entry.to_owned()];
+    while let Some(at) = queue.pop() {
+        if visited.contains(&at) {
+            continue;
+        }
+        let Some(text) = index.get(&at).cloned().or_else(|| written.get(&at).cloned()) else {
+            continue;
+        };
+        visited.push(at.clone());
+        for specifier in import_specifiers(&text) {
+            if !specifier.starts_with('.') {
+                continue;
+            }
+            if let Some(next) = resolve_in_index(&at, &specifier, index) {
+                queue.push(next);
+            }
+        }
+        written.entry(at).or_insert(text);
+    }
+}
+
+
+/// Whether recovered source can actually be built.
+///
+/// Recovering files and recovering a *package* are different things, and the
+/// difference is measurable: acquiring a 141-package corpus produced 3,091
+/// typecheck errors, and 2,850 of them were one package importing `~/entity.ts`
+/// — a `paths` alias from a tsconfig it does not publish. Vendoring that and
+/// reporting it as acquired is a partial recovery presented as a success, which
+/// is the one thing this crate is not allowed to do.
+///
+/// The test is deliberately narrow: a bare specifier that names no installed
+/// package and is not a node builtin. Anything a package legitimately imports
+/// is installed beside it, because that is what a dependency is.
+fn unbuildable(installed: &Installed, files: &[RecoveredFile]) -> Option<String> {
+    for file in files {
+        for specifier in import_specifiers(&file.text) {
+            if specifier.starts_with('.') || specifier.starts_with("node:") {
+                continue;
+            }
+            // `#internal` is the package's own `imports` field, which is
+            // published in its manifest and therefore not this problem.
+            if specifier.starts_with('#') {
+                continue;
+            }
+            let name = package_name_of(&specifier);
+            if BUILTINS.contains(&name.as_str()) {
+                continue;
+            }
+            if crate::resolve::find_package(&installed.dir, &name).is_none() {
+                return Some(specifier);
+            }
+        }
+    }
+    None
+}
+
+/// The package half of a specifier: `zod/v4` is `zod`, `@a/b/c` is `@a/b`.
+fn package_name_of(specifier: &str) -> String {
+    let parts: Vec<&str> = specifier.split('/').collect();
+    if specifier.starts_with('@') && parts.len() >= 2 {
+        format!("{}/{}", parts[0], parts[1])
+    } else {
+        parts.first().map_or_else(String::new, |head| (*head).to_owned())
+    }
+}
+
+/// Node's own modules, which are imported without being installed.
+const BUILTINS: [&str; 30] = [
+    "assert", "async_hooks", "buffer", "child_process", "cluster", "console", "constants",
+    "crypto", "dgram", "diagnostics_channel", "dns", "events", "fs", "http", "http2", "https",
+    "net", "os", "path", "process", "querystring", "readline", "stream", "string_decoder",
+    "timers", "tls", "tty", "url", "util", "zlib",
+];
+
 // ---- source maps ---------------------------------------------------------
 
 #[derive(Debug, Default)]
@@ -542,6 +747,7 @@ fn flatten(value: &serde_json::Value, into: &mut SourceMap) {
 fn harvest(
     map: &SourceMap,
     generated: &Utf8Path,
+    index: &MapIndex,
     written: &mut FxHashMap<Utf8PathBuf, String>,
 ) -> Harvest {
     let typescript: Vec<usize> = (0..map.sources.len())
@@ -587,7 +793,9 @@ fn harvest(
     }
 
     if placed.len() == 1 {
-        return Harvest::Recovered(placed.remove(0).1);
+        let entry = placed.remove(0).1;
+        walk_recovered(&entry, index, written);
+        return Harvest::Recovered(entry);
     }
 
     // Several sources: the entry is the one named after the file being mapped.
@@ -601,7 +809,11 @@ fn harvest(
         })
     });
     match named {
-        Some((_, at)) => Harvest::Recovered(at.clone()),
+        Some((_, at)) => {
+            let entry = at.clone();
+            walk_recovered(&entry, index, written);
+            Harvest::Recovered(entry)
+        }
         None if placed.is_empty() => Harvest::Nothing,
         None => Harvest::Ambiguous {
             sources: placed.len(),
