@@ -82,6 +82,15 @@ function shapeWhatwgClasses(URL, URLSearchParams) {
     "toString",
   ]);
 
+  // These are on **this lane's** `URL` and `URLSearchParams`, not on
+  // web-platform's. `runtime/web-platform` has no `URL` class at all -- only
+  // `URLSearchParams` -- and its own classes install the tag themselves, in a
+  // `static {}` block, as a non-writable non-enumerable configurable data
+  // property, which is what WebIDL requires. `runtime/node/url/src/url.ts:36`
+  // is where the class shaped here comes from. Recorded because the first
+  // version of this note said the opposite and the web-platform lane had to
+  // correct it.
+  //
   // The three `Symbol.toStringTag` values below are a different act from the
   // enumerability shaping above, and the difference is worth stating because a
   // reader will not see it.

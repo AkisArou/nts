@@ -3596,8 +3596,17 @@ right answer by its own harness.
 
 ### And one that cannot be fixed, now labelled instead
 
-`url/shape.mjs` installs three `Symbol.toStringTag` values. That is a different
-act from the enumerability shaping beside it: enumerability is a descriptor on
+`url/shape.mjs` installs three `Symbol.toStringTag` values on **this lane's**
+`URL` and `URLSearchParams` — `runtime/node/url/src/url.ts:36`. The first
+version of this note attributed them to web-platform's classes; that lane
+checked and corrected it. `runtime/web-platform` has **no `URL` class at all**,
+only `URLSearchParams`, and its own classes install the tag themselves in a
+`static {}` block as the non-writable, non-enumerable, configurable data
+property WebIDL requires — asserted by its own `webidl-surface.test.ts` against
+its own barrel, so that test was never passing on this harness.
+
+Installing the tag here is a different act from the enumerability shaping beside
+it: enumerability is a descriptor on
 members the module really defines, while a `toStringTag` is a member the
 compiled module does not define at all, because there is no `Symbol.toStringTag`
 in this lowering. `Object.prototype.toString.call(new URL(...))` reads
