@@ -414,9 +414,9 @@ fn legend(root: &Utf8Path) -> String {
         calls a case's own entry point N times and again at 2N and subtracts, \
         which removes startup and warmup and reports a median; records 0154 \
         and 0155 are three rows that read differently under it, in both \
-        directions, one of them a loss published as a win. The `varied` notes \
-        above catch a row that is unstable *within* one invocation and cannot \
-        catch one that settles differently between them.\n\n\
+        directions, one of them a loss published as a win. The spread table \
+        below catches a row that is unstable *within* one invocation and \
+        cannot catch one that settles differently between them.\n\n\
         **The JVM column excludes startup, deliberately and at this lane's own \
         cost.** It is timed inside its own process after the same 20,000 warmup \
         iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, \
@@ -455,6 +455,40 @@ fn legend(root: &Utf8Path) -> String {
     );
 
     legend
+}
+
+/// The rows whose own five passes disagreed, rendered where they are quoted.
+///
+/// The console printed these and the README carried none of them, so a reader
+/// of the table met a coin flip as a fact. `awfy-sieve` is the case that forced
+/// it: 5.74, 5.74 and 5.38 us on one sitting and 4.49, 4.44 and 4.48 on
+/// another, out of one class file. That is 1.27x or 1.03x against Java, and
+/// **whichever the publishing run happens to get looks entirely plausible in a
+/// table** -- there is nothing in the number itself to say it was a flip.
+///
+/// Empty when nothing varied, so a stable run adds no section rather than a
+/// heading saying "none", which would go stale as reassurance.
+fn spreads(rows: &[Row]) -> String {
+    use std::fmt::Write as _;
+    let mut lines = String::new();
+    for row in rows {
+        for (label, spread) in &row.varied {
+            let _ = writeln!(lines, "| {} | {label} | {spread:.2}x |", row.case);
+        }
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n**These rows disagreed with themselves.** Measured five times from the \
+         same binary, their passes did not agree, so each published number says \
+         which shape the JIT settled into rather than how fast the program is, \
+         and a rerun may land on another shape. They are listed because the table \
+         cannot show it: a flipped row and a solid one are the same number on the \
+         page.\n\n\
+         | case | column | spread across 5 runs |\n\
+         | --- | --- | ---: |\n{lines}"
+    )
 }
 
 fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
@@ -506,12 +540,13 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     }
 
     let legend = legend(root);
+    let spreads = spreads(rows);
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
     let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
         bail!("README.md has no benchmark markers");
     };
-    let updated = format!("{}{START}\n{table}{legend}{}", &text[..from], &text[to..]);
+    let updated = format!("{}{START}\n{table}{legend}{spreads}{}", &text[..from], &text[to..]);
     std::fs::write(&path, updated).with_context(|| format!("writing {path}"))?;
     Ok(())
 }
@@ -556,6 +591,14 @@ struct Row {
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
+    /// Columns whose own five passes disagreed, and by how much.
+    ///
+    /// These were an `eprintln!` and nothing else, so they reached a person
+    /// watching the run and never the file the numbers get quoted from. The
+    /// legend already said "the `varied` notes above", which is true of the
+    /// console and false of the README, where there is nothing above -- so the
+    /// published text pointed at a warning a published reader could not see.
+    varied: Vec<(String, f64)>,
 }
 
 impl Row {
@@ -977,7 +1020,7 @@ fn finish_row(
             None => bail!("a variant that must run did not"),
         }
     };
-    let row = Row {
+    let mut row = Row {
         case: shown.to_owned(),
         cpp: results
             .get(2)
@@ -1000,6 +1043,7 @@ fn finish_row(
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
+        varied: Vec::new(),
     };
     // A row whose own passes disagree has no single number, and printing one of
     // them as though it were the answer is the failure this table exists to
@@ -1016,6 +1060,7 @@ fn finish_row(
                  the program is",
                 shown, label, measured.spread, RUNS
             );
+            row.varied.push((label.to_owned(), measured.spread));
         }
     }
 
@@ -1701,7 +1746,15 @@ fn prepared_program(
     specialize: bool,
     provider: hir::Provider,
 ) -> Result<hir::Program> {
-    let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    // `NTS_TSGO`, then the frontend this repository builds, and only then the
+    // bare name -- the order the CLI, the suite and the differential all use.
+    // This was the last caller left on the bare name, and it failed exactly as
+    // `frontend_binary`'s comment predicts it would: the shim it reaches has no
+    // version set, so all fifty cases reported `frontend transport failed`,
+    // which reads like a compiler fault rather than an unset variable.
+    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
+        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |path| path.to_string())
+    });
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(tsconfig)?;
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
