@@ -2855,6 +2855,54 @@ written down rather than trusted: five earlier sweeps were discarded for exactly
 this, and a contaminated sweep is indistinguishable from a clean one in its own
 output.
 
+## Fifteen modules, and one front door
+
+`c-did-not-compile` covers 15 rows and reads as fifteen problems. Pulling on
+`path` — which *does* build — says it is substantially one.
+
+`path` publishes four names: `_makeLong`, `delimiter`, `sep`,
+`toNamespacedPath`. It does not publish `join`, `resolve`, `normalize`,
+`basename`, `dirname`, `extname`, `parse`, `format`, `relative` or `isAbsolute`.
+
+**The obvious explanation is wrong.** It is not the ABI — not variadics, not
+object returns. `toNamespacedPath(path: string): string` publishes and
+`normalize(path: string): string` does not, and those signatures are identical.
+And the missing ten are not in `program.c` **at all**: `toNamespacedPath____posix`
+is defined there, `normalize____posix` is not. They were never lowered, so no
+wrapper ever had the chance to drop them.
+
+The discriminator is the first line of the body:
+
+    toNamespacedPath   return path;                    publishes
+    normalize          validateString(path, "path");   never lowers
+
+From there it is three calls, and the last one refuses:
+
+    validateString                       internal/validators.ts:19
+      new ERR_INVALID_ARG_TYPE(...)      renders the bad value into the message
+        inspectString                    internal/errors.ts:401
+          `\u${code.toString(16)}`       :440   NTS1001
+
+`ERR_INVALID_ARG_TYPE` cannot build its message without rendering the offending
+value, and rendering a control character means a hex escape. **So no module can
+validate an argument, and validating an argument is the first thing every one of
+node's entry points does.** The fifteen are not fifteen independent compiler
+gaps; a large share of them are one shared front door.
+
+**The control was run rather than assumed**, because the claim was nearly
+recorded without it: argument-less `code.toString()` lowers clean —
+`1 function(s), nothing refused`. The radix argument is the entire refusal, which
+is why `blockers/number-tostring-radix` passes a literal `16`.
+
+Two more sit in the same inspector: a regex literal at errors.ts:469, which is
+the regex-engine-sized item and not a small fix, and BigInt in a template at
+:481, already fixtured as `narrowed-bigint`.
+
+**Nothing here was worked around.** Deleting the hex escape from `inspectString`
+would likely light `path` up, and `code.toString(16)` is how that line is
+correctly written — so this is a fixture and not a patch, for the same reason
+errors.ts still carries the regex literal.
+
 ## The compiled artifact, which is the gate, and its first green row
 
 
