@@ -22,7 +22,7 @@ then `with-lock.sh`.
 | row | nts C | node | bun | nts/node | nts/bun |
 | --- | --- | --- | --- | --- | --- |
 | `json-serialize` | 14.53us | 12.11us | 7.19us | 1.16x | 1.98x |
-| `json-scan` | **3.51us** | 2.92us | 3.32us | 1.21x | 1.06x |
+| `json-scan` | **2.41us** (llvm 2.25) | 2.35us | 2.17us | 0.96x | 1.04x |
 | `json-build-append` | 21.17us | 15.69us | 9.69us | 1.25x | 2.03x |
 | `json-build-join` | 20.78us | 22.43us | 14.56us | **0.95x** | 1.46x |
 
@@ -59,12 +59,28 @@ fast entry -- which is why the escaper always had it. An index passed as a `numb
 is a double and gets the slow one, on every character.
 
 `json-scan` read through `codeAt(source, at, length)` and paid it fourteen times per number.
-Restoring the integer with `| 0` at the read took the row from 4.33us to 3.51us, stable across two
-idle runs, and moved `nts/bun` from 1.22x to 1.06x. node was unaffected within its own noise.
+`| 0` at each read restores the fast entry but leaves a conversion per character: 4.33us to
+3.51us. Coercing **once at function entry** and keeping the index integer across every increment
+(`at = (at + 1) | 0`) removes the conversion too: **4.33us to 2.41us, 46%**, and `nts f64` went
+from 4.39 to 6.21 against it -- specialization now carries this row, where before it did nothing.
+
+Two things pin the index, and only one is obvious. Coercing at entry is not enough on its own:
+`at++` widens it straight back to a double, and all fourteen reads return to the slow entry. The
+first version of this kept its `at < end` guard and stayed fast **because comparing against an
+`int32` re-pinned the type** -- the guard was load-bearing for a reason that had nothing to do
+with bounds. Removing the guard without also fixing the increments took the emission from 22 fast
+reads to 27 slow ones.
+
+The guard is gone for a separate reason: past the end `charCodeAt` is NaN, and every use of a unit
+in the scan is `=== ` a constant or `isDigit`, all of which NaN fails. NaN *is* the end-of-input
+sentinel, so the guard duplicated the one inside `charCodeAt`. Its `length` parameter went with
+it rather than being left unused, since both callers passed `source.length` and a caller passing
+a narrower limit would now be silently wrong.
 
 This is checkable without running anything -- `grep nts_str_char_code_at_int` the emitted C -- and
 it was found that way, not from a profile. **Across every bench emission, only four cases select
-the integer entry.** The defect is general and this fixed one instance of it.
+the integer entry.** The defect is general and this fixed one instance of it; `case-convert` and
+the eight `utf8-*` cases still read through the slow entry and are not mine.
 
 **The escaper is the program.** `quoteJSONString` is 26.98% of `json-build-append` and 36.62% of
 `json-build-join`. Assembly strategy is a sideshow.

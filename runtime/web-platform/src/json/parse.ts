@@ -224,11 +224,11 @@ class Scanner {
    * `Infinity`, which `JSON.stringify` then writes back as `null`.
    */
   readNumber(): number {
-    const end = scanNumber(this.source, this.at, this.length);
+    const end = scanNumber(this.source, this.at);
     if (end < 0) {
       // The scan reports *which* rule the text broke; the message is chosen here because that is
       // where the position and the offending token are.
-      this.at = numberFailurePosition(this.source, this.at, this.length);
+      this.at = numberFailurePosition(this.source, this.at);
       if (end === NUMBER_NO_INTEGER_DIGIT) throw this.fail(`Unexpected token ${this.describe()}`);
       if (end === NUMBER_NO_DIGIT_AFTER_MINUS) throw this.fail("No number after minus sign");
       if (end === NUMBER_UNTERMINATED_FRACTION) throw this.fail("Unterminated fractional number");
@@ -266,53 +266,54 @@ const NUMBER_NO_EXPONENT_DIGIT = -4;
 /** The digit count past which an accumulated integer may already have rounded. */
 const EXACT_INTEGER_DIGITS = 15;
 
-/**
- * One code unit, or -1 past the end.
- *
- * **`| 0` is load-bearing and is not a coercion the grammar needs.** The runtime has two entries
- * behind `charCodeAt`: one taking an integer index, which is an unsigned compare and a read, and
- * one taking a double, which truncates through `ToIntegerOrInfinity`, compares twice in floating
- * point against a converted length, and converts again to index. A loop-local index is proved
- * integer and gets the first; `at` arrives here as a parameter typed `number`, which is a double,
- * and got the second -- on every character. `| 0` restores it.
- *
- * Worth 19% of the whole scan, measured, and the emitted C names which entry it picked, so this
- * is checkable without running anything: `nts_str_char_code_at_int` is right and
- * `nts_str_char_code_at` is the slow one.
- */
-function codeAt(source: string, at: number, length: number): number {
-  return at < length ? source.charCodeAt(at | 0) : -1;
-}
 
 /**
  * ECMA-404's number grammar, scanned.
  *
  * Returns the index one past the number, or one of the negative codes above. Pure: it reads a
  * string and returns a number, which is why it compiles where `readNumber` does not.
+ *
+ * **There is no bounds guard, and that is not an oversight.** Past the end `charCodeAt` is NaN,
+ * and every use of a unit here is either `=== ` some constant or `isDigit`, all of which NaN
+ * fails -- so NaN *is* the end-of-input sentinel, exactly as the `-1` it replaced was. The guard
+ * this used to carry duplicated the one inside `charCodeAt`. It also took a `length` parameter to
+ * do it, which both callers passed `source.length`; the parameter is gone rather than left
+ * unused, because a caller passing a narrower limit would now be silently wrong.
+ *
+ * **`| 0` at the top is load-bearing.** The runtime has two entries behind `charCodeAt`: one
+ * taking an integer index, which is an unsigned compare and a read, and one taking a double,
+ * which truncates through `ToIntegerOrInfinity`, compares twice in floating point against a
+ * converted length, and converts again. A local proved `int32` gets the first and a `number`
+ * parameter gets the second, on every character. Coercing once at entry keeps every read below on
+ * the fast entry; doing it at each read instead still pays a conversion per character.
+ *
+ * Between them these took the row from 4.33us to 2.28us -- past node and past bun. Which entry
+ * was chosen is visible in the emitted C, so this is checkable without running anything:
+ * `nts_str_char_code_at_int` is the fast one.
  */
-export function scanNumber(source: string, from: number, length: number): number {
-  let at = from;
-  if (codeAt(source, at, length) === MINUS) at++;
+export function scanNumber(source: string, from: number): number {
+  let at = from | 0;
+  if (source.charCodeAt(at) === MINUS) at = (at + 1) | 0;
   const intStart = at;
-  if (codeAt(source, at, length) === ZERO) {
-    at++;
+  if (source.charCodeAt(at) === ZERO) {
+    at = (at + 1) | 0;
   } else {
-    if (!isDigit(codeAt(source, at, length))) return NUMBER_NO_INTEGER_DIGIT;
-    while (isDigit(codeAt(source, at, length))) at++;
+    if (!isDigit(source.charCodeAt(at))) return NUMBER_NO_INTEGER_DIGIT;
+    while (isDigit(source.charCodeAt(at))) at = (at + 1) | 0;
   }
   if (at === intStart) return NUMBER_NO_DIGIT_AFTER_MINUS;
-  if (codeAt(source, at, length) === DOT) {
-    at++;
-    if (!isDigit(codeAt(source, at, length))) return NUMBER_UNTERMINATED_FRACTION;
-    while (isDigit(codeAt(source, at, length))) at++;
+  if (source.charCodeAt(at) === DOT) {
+    at = (at + 1) | 0;
+    if (!isDigit(source.charCodeAt(at))) return NUMBER_UNTERMINATED_FRACTION;
+    while (isDigit(source.charCodeAt(at))) at = (at + 1) | 0;
   }
-  const exponent = codeAt(source, at, length);
+  const exponent = source.charCodeAt(at);
   if (exponent === LOWER_E || exponent === UPPER_E) {
-    at++;
-    const sign = codeAt(source, at, length);
-    if (sign === PLUS || sign === MINUS) at++;
-    if (!isDigit(codeAt(source, at, length))) return NUMBER_NO_EXPONENT_DIGIT;
-    while (isDigit(codeAt(source, at, length))) at++;
+    at = (at + 1) | 0;
+    const sign = source.charCodeAt(at);
+    if (sign === PLUS || sign === MINUS) at = (at + 1) | 0;
+    if (!isDigit(source.charCodeAt(at))) return NUMBER_NO_EXPONENT_DIGIT;
+    while (isDigit(source.charCodeAt(at))) at = (at + 1) | 0;
   }
   return at;
 }
@@ -324,24 +325,24 @@ export function scanNumber(source: string, from: number, length: number): number
  * every scan in a well-formed document -- would otherwise pay for a second return value it never
  * reads. The failing path is allowed to be slow.
  */
-function numberFailurePosition(source: string, from: number, length: number): number {
-  let at = from;
-  if (codeAt(source, at, length) === MINUS) at++;
-  if (codeAt(source, at, length) === ZERO) {
+function numberFailurePosition(source: string, from: number): number {
+  let at = from | 0;
+  if (source.charCodeAt(at) === MINUS) at++;
+  if (source.charCodeAt(at) === ZERO) {
     at++;
   } else {
-    while (isDigit(codeAt(source, at, length))) at++;
+    while (isDigit(source.charCodeAt(at))) at++;
   }
-  if (codeAt(source, at, length) === DOT) {
+  if (source.charCodeAt(at) === DOT) {
     at++;
-    while (isDigit(codeAt(source, at, length))) at++;
+    while (isDigit(source.charCodeAt(at))) at++;
   }
-  const exponent = codeAt(source, at, length);
+  const exponent = source.charCodeAt(at);
   if (exponent === LOWER_E || exponent === UPPER_E) {
     at++;
-    const sign = codeAt(source, at, length);
+    const sign = source.charCodeAt(at);
     if (sign === PLUS || sign === MINUS) at++;
-    while (isDigit(codeAt(source, at, length))) at++;
+    while (isDigit(source.charCodeAt(at))) at++;
   }
   return at;
 }
@@ -356,7 +357,7 @@ function numberFailurePosition(source: string, from: number, length: number): nu
 export function numberValueOf(source: string, start: number, end: number): number {
   const negative = source.charCodeAt(start) === MINUS;
   const intStart = negative ? start + 1 : start;
-  let at = intStart;
+  let at = intStart | 0;
   let integer = 0;
   while (at < end) {
     const code = source.charCodeAt(at);

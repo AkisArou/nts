@@ -213,11 +213,11 @@ export function jsonArrayLength(count: number): number {
  * and the reason the *whole* parser has no column here yet.
  */
 export function jsonScanNumber(text: string): number {
-  return scanNumber(text, 0, text.length);
+  return scanNumber(text, 0);
 }
 
 /** The same over an offset, so a case starting mid-string is covered too. */
 export function jsonScanNumberAt(text: string, from: number): number {
   const at = from < 0 ? 0 : from > text.length ? text.length : from;
-  return scanNumber(text, at, text.length);
+  return scanNumber(text, at);
 }

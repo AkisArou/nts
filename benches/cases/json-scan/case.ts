@@ -47,7 +47,7 @@ export function work(iterations: number): number {
         at++;
         continue;
       }
-      const end = scanNumber(source, at, length);
+      const end = scanNumber(source, at);
       if (end < 0) {
         // A rejection. Its code is part of the answer, so a scan that stopped reporting *which*
         // rule broke would change the checksum rather than pass quietly.
