@@ -27,9 +27,9 @@ lane has moved.
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
 | `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
-| `number-format-double` | 1.09x | unprobed |
-| `module-closures` | 1.06x | unprobed |
-| `elementwise` | 1.03x | unprobed |
+| `number-format-double` | 1.09x | 55% our Grisu port vs the JDK's own formatter |
+| `module-closures` | 1.06x | no single cause -- needs `hsdis` |
+| `elementwise` | 1.03x | no single cause -- needs `hsdis` |
 | `upcast` | 1.07x -> **1.01x** | unsigned remainder |
 
 Won: `exceptions` 0.01x, `bigint` 0.19x, `awfy-permute` 0.71x, `mandelbrot`
@@ -141,8 +141,16 @@ narrows. **The scope of that upstream fix is wider than one row**: every `for
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
+**Every row is now probed.** `number-format-double` at 1.09x is 55%
+`NtsGrisu.shortest`, against a reference that calls `Double.toString` -- the
+JDK's own formatter, the Giulietti algorithm since 19. Being within nine percent
+of it with a portable Grisu port is near the floor for this shape; closing it
+means a better Grisu, not a better backend.
+
 **Probed, no single cause.** `awfy-sieve` (`Sieve$sieve` 70%), `awfy-queens`
-(`getRowColumn` 52%) and `generic-classes` (`work$whole`, everything inlined)
+(`getRowColumn` 52%), `generic-classes` (`work$whole`, entirely inlined),
+`module-closures` (`work$whole` + `Closure0$call` + `drive$Closure0`, all
+generated) and `elementwise` (`Program.scale`, 100% of one generated method)
 are all dominated by *generated code* with no runtime helper standing out. All
 three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
 bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
