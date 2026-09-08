@@ -836,10 +836,31 @@ program, `new Queens().innerBenchmarkLoop(n)` on both sides; and eight
 structural differences have been transcribed onto the reference and each priced
 at zero.
 
-**Where I would start next**, and it is a different kind of question from any
-asked so far: count the *calls*. Every measurement here has compared code, and
-the arithmetic says the answer is in how often that code runs. A counter in
-`getRowColumn` on both sides settles in one run what four instruments could not.
+**The calls were counted, and they are identical.** A counter in
+`getRowColumn` on both sides -- the same instrument doing the same extra work on
+each -- reports **8,760 calls an operation on ours and 8,760 on the reference**.
+Same algorithm, same search tree, same count, exactly.
+
+So the row now has three facts that cannot all be about the same program:
+
+    call counts        identical, 8,760 = 8,760
+    per-call code      identical, 3 bounds checks and 3 loads on both
+    instructions/op    +27%
+
+**And the instruction counter is the one to doubt**, because it has already been
+wrong once tonight in exactly this way -- it read +37%, then -5%, then +104%,
+before N was raised. There is a second reason to doubt it here: the +27% is
+measured through `FixedOurs`/`FixedRef`, drivers I wrote, while the 20.6% time
+gap is measured through `Case`, the harness the row is defined by. **Those are
+two different programs**, and nothing establishes that the instruction ratio
+between my drivers is the instruction ratio between the benchmarked ones.
+
+So the honest state of `awfy-queens` is: **1.25x, of which 14.2% is an upstream
+element type with roughly half handed back by a choice of ours that is a gain,
+and the rest is unexplained.** Nine hypotheses have been priced at zero, the
+compiled code is at parity where it is hottest, and the two instruments that
+disagree are a stopwatch that has been consistent all evening and a counter that
+has not. Not a row to spend a third evening on without a better instrument.
 
 ## Open, and whose
 
