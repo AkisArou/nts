@@ -159,7 +159,6 @@ export class ERR_DIR_CLOSED extends NodeError {
 
   constructor() {
     super("Directory handle was closed");
-    this.name = "Error";
   }
 }
 
@@ -169,7 +168,6 @@ export class ERR_DIR_CONCURRENT_OPERATION extends NodeError {
 
   constructor() {
     super("Cannot do synchronous work on directory handle with concurrent asynchronous operations");
-    this.name = "Error";
   }
 }
 
@@ -295,6 +293,33 @@ function formatExpected(
 }
 
 /** `The "path" argument must be of type string. Received type number (42)`. */
+/**
+ * `ERR_INVALID_ARG_TYPE` with a message node's C++ wrote rather than its
+ * template.
+ *
+ * A handful of node's validations happen in the binding rather than in
+ * JavaScript, and those carry the standard `code` with a message that does not
+ * follow the standard shape. `fs.accessSync("/tmp", "x")` is the one this
+ * profile reaches: node answers `mode must be int32 or null/undefined` -- no
+ * quoted name, no "The ... argument" prefix, no "Received" suffix -- because
+ * `accessSync` hands `mode` straight to `binding.access`.
+ *
+ * Reproducing that through the template is not possible, and should not be:
+ * the template is right about every case node builds in JavaScript. This is the
+ * escape hatch for the ones it does not, and it exists so that matching node
+ * does not mean weakening the template.
+ */
+export class ERR_INVALID_ARG_TYPE_BINDING extends NodeTypeError {
+  override get ["constructor"](): unknown {
+    return TypeError;
+  }
+  override readonly code = "ERR_INVALID_ARG_TYPE";
+
+  constructor(message: string) {
+    super(message);
+  }
+}
+
 export class ERR_INVALID_ARG_TYPE extends NodeTypeError {
   override get ["constructor"](): unknown {
     return TypeError;
@@ -345,7 +370,6 @@ export class ERR_INVALID_ARG_TYPE extends NodeTypeError {
     }
 
     super(`The ${subject}must be ${described}. Received ${determineSpecificType(actual)}`);
-    this.name = "TypeError";
   }
 }
 
@@ -386,7 +410,6 @@ export class ERR_OUT_OF_RANGE extends NodeRangeError {
     }
     const head = replaceDefaultBoolean ? name : `The value of "${name}" is out of range.`;
     super(`${head} It must be ${range}. Received ${received}`);
-    this.name = "RangeError";
   }
 }
 
@@ -552,7 +575,6 @@ export class ERR_INVALID_ARG_VALUE extends NodeTypeError {
     }
     const kind = name.includes(".") ? "property" : "argument";
     super(`The ${kind} '${name}' ${reason}. Received ${inspected}`);
-    this.name = "TypeError";
   }
 }
 
@@ -576,7 +598,6 @@ export class ERR_UNHANDLED_ERROR extends NodeError {
 
   constructor(err?: string) {
     super(`Unhandled error.${err === undefined ? "" : ` (${err})`}`);
-    this.name = "Error";
   }
 }
 
@@ -589,7 +610,6 @@ export class ERR_INVALID_URI extends NodeURIError {
 
   constructor() {
     super("URI malformed");
-    this.name = "URIError";
   }
 }
 
@@ -606,7 +626,6 @@ export class ERR_UNKNOWN_ENCODING extends NodeTypeError {
     // inspection used by the rest of this error module.
     const displayed = typeof encoding === "string" ? encoding : inspectValue(encoding);
     super(`Unknown encoding: ${displayed}`);
-    this.name = "TypeError";
   }
 }
 
@@ -628,7 +647,6 @@ export class ERR_MISSING_ARGS extends NodeTypeError {
           ? `${quoted[0]} and ${quoted[1]}`
           : `${quoted.slice(0, -1).join(", ")}, and ${quoted[quoted.length - 1]}`;
     super(`The ${list} argument${names.length > 1 ? "s" : ""} must be specified`);
-    this.name = "TypeError";
   }
 }
 
@@ -641,7 +659,6 @@ export class ERR_ARG_NOT_ITERABLE extends NodeTypeError {
 
   constructor(name: string) {
     super(`${name} must be iterable`);
-    this.name = "TypeError";
   }
 }
 
@@ -654,7 +671,6 @@ export class ERR_CONSOLE_WRITABLE_STREAM extends NodeTypeError {
 
   constructor(name: string) {
     super(`Console expects a writable stream instance for ${name}`);
-    this.name = "TypeError";
   }
 }
 
@@ -667,7 +683,6 @@ export class ERR_INCOMPATIBLE_OPTION_PAIR extends NodeTypeError {
 
   constructor(first: string, second: string) {
     super(`Option "${first}" cannot be used in combination with option "${second}"`);
-    this.name = "TypeError";
   }
 }
 
@@ -680,7 +695,6 @@ export class ERR_INVALID_CURSOR_POS extends NodeTypeError {
 
   constructor() {
     super("Cannot set cursor row without setting its column");
-    this.name = "TypeError";
   }
 }
 
@@ -700,7 +714,6 @@ export class ERR_FALSY_VALUE_REJECTION extends NodeError {
 
   constructor(reason: unknown) {
     super("Promise was rejected with falsy value");
-    this.name = "Error";
     this.reason = reason;
   }
 }
@@ -714,7 +727,6 @@ export class ERR_CONSTRUCT_CALL_REQUIRED extends NodeTypeError {
 
   constructor(name: string) {
     super(`Class constructor ${name} cannot be invoked without \`new\``);
-    this.name = "TypeError";
   }
 }
 
@@ -733,7 +745,6 @@ export class ERR_AMBIGUOUS_ARGUMENT extends NodeTypeError {
 
   constructor(name: string, reason: string) {
     super(`The "${name}" argument is ambiguous. ${reason}`);
-    this.name = "TypeError";
   }
 }
 
@@ -749,7 +760,6 @@ export class ERR_INVALID_RETURN_VALUE extends NodeTypeError {
       `Expected ${input} to be returned from the "${name}" function but got ` +
         `${determineSpecificType(value)}.`,
     );
-    this.name = "TypeError";
   }
 }
 
@@ -762,7 +772,6 @@ export class ERR_UNAVAILABLE_DURING_EXIT extends NodeError {
 
   constructor() {
     super("Cannot call function in process exit handler");
-    this.name = "Error";
   }
 }
 
@@ -775,7 +784,6 @@ export class ERR_INVALID_STATE extends NodeError {
 
   constructor(reason: string) {
     super(`Invalid state: ${reason}`);
-    this.name = "Error";
   }
 }
 
@@ -788,7 +796,6 @@ export class ERR_INVALID_STATE_TYPE extends NodeTypeError {
 
   constructor(reason: string) {
     super(`Invalid state: ${reason}`);
-    this.name = "TypeError";
   }
 }
 
@@ -801,7 +808,6 @@ export class ERR_INVALID_STATE_RANGE extends NodeRangeError {
 
   constructor(reason: string) {
     super(`Invalid state: ${reason}`);
-    this.name = "RangeError";
   }
 }
 
@@ -815,7 +821,6 @@ export class ERR_INVALID_URL extends NodeTypeError {
 
   constructor(input: string) {
     super("Invalid URL");
-    this.name = "TypeError";
     // The offending text is a property rather than part of the message: node
     // keeps messages free of user data so that they group when logged.
     this.input = input;
@@ -835,7 +840,6 @@ export class ERR_INVALID_PROTOCOL extends NodeTypeError {
 
   constructor(actual: string, expected: string) {
     super(`Protocol "${actual}" not supported. Expected "${expected}"`);
-    this.name = "TypeError";
   }
 }
 
@@ -848,7 +852,6 @@ export class ERR_INVALID_FILE_URL_HOST extends NodeTypeError {
 
   constructor(platform: string) {
     super(`File URL host must be "localhost" or empty on ${platform}`);
-    this.name = "TypeError";
   }
 }
 
@@ -862,7 +865,6 @@ export class ERR_INVALID_FILE_URL_PATH extends NodeTypeError {
 
   constructor(reason: string, input?: unknown) {
     super(`File URL path ${reason}`);
-    this.name = "TypeError";
     this.input = input;
   }
 }
@@ -879,7 +881,6 @@ export class ERR_INVALID_URL_SCHEME extends NodeTypeError {
     const wanted =
       list.length === 2 ? `one of scheme ${list[0]} or ${list[1]}` : `of scheme ${list[0]}`;
     super(`The URL must be ${wanted}`);
-    this.name = "TypeError";
   }
 }
 
@@ -928,7 +929,6 @@ export class ERR_ILLEGAL_CONSTRUCTOR extends NodeTypeError {
 
   constructor() {
     super("Illegal constructor");
-    this.name = "TypeError";
   }
 }
 
@@ -948,7 +948,6 @@ export class ERR_INVALID_OBJECT_DEFINE_PROPERTY extends NodeTypeError {
 
   constructor(message: string) {
     super(message);
-    this.name = "TypeError";
   }
 }
 
@@ -961,7 +960,6 @@ export class ERR_UNKNOWN_SIGNAL extends NodeTypeError {
 
   constructor(signal: string) {
     super(`Unknown signal: ${signal}`);
-    this.name = "TypeError";
   }
 }
 
@@ -976,7 +974,6 @@ export class ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET extends NodeError {
     super(
       "`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active",
     );
-    this.name = "Error";
   }
 }
 
@@ -989,7 +986,6 @@ export class ERR_UNKNOWN_CREDENTIAL extends NodeError {
 
   constructor(kind: "User" | "Group", value: number | string) {
     super(`${kind} identifier does not exist: ${value}`);
-    this.name = "Error";
   }
 }
 
@@ -1004,7 +1000,6 @@ export class ERR_FEATURE_UNAVAILABLE_ON_PLATFORM extends NodeTypeError {
     super(
       `The feature ${feature} is unavailable on this platform, which is being used to run Node.js`,
     );
-    this.name = "TypeError";
   }
 }
 
@@ -1025,7 +1020,6 @@ export class ERR_INVALID_ARG_VALUE_RANGE extends NodeRangeError {
   constructor(name: string, value: unknown, reason = "is invalid") {
     const kind = name.includes(".") ? "property" : "argument";
     super(`The ${kind} '${name}' ${reason}. Received ${inspectValue(value)}`);
-    this.name = "RangeError";
   }
 }
 
@@ -1038,7 +1032,6 @@ export class ERR_FS_FILE_TOO_LARGE extends NodeRangeError {
 
   constructor(size: number) {
     super(`File size (${size}) is greater than 2 GiB`);
-    this.name = "RangeError";
   }
 }
 
@@ -1048,7 +1041,6 @@ export class ERR_FS_WATCH_QUEUE_OVERFLOW extends NodeError {
 
   constructor(maxQueue: number) {
     super(`fs.watch() queued more than ${maxQueue} events`);
-    this.name = "Error";
   }
 }
 
@@ -1061,7 +1053,6 @@ export class ERR_MULTIPLE_CALLBACK extends NodeError {
 
   constructor() {
     super("Callback called multiple times");
-    this.name = "Error";
   }
 }
 
@@ -1074,7 +1065,6 @@ export class ERR_OPERATION_FAILED extends NodeError {
 
   constructor(reason: string) {
     super(`Operation failed: ${reason}`);
-    this.name = "Error";
   }
 }
 
@@ -1141,7 +1131,6 @@ export class ERR_METHOD_NOT_IMPLEMENTED extends NodeError {
 
   constructor(name: string) {
     super(`The ${name} method is not implemented`);
-    this.name = "Error";
   }
 }
 
@@ -1154,7 +1143,6 @@ export class ERR_STREAM_CANNOT_PIPE extends NodeError {
 
   constructor() {
     super("Cannot pipe, not readable");
-    this.name = "Error";
   }
 }
 
@@ -1166,7 +1154,6 @@ export class ERR_STREAM_DESTROYED extends NodeError {
 
   constructor(name: string) {
     super(`Cannot call ${name} after a stream was destroyed`);
-    this.name = "Error";
   }
 }
 
@@ -1178,7 +1165,6 @@ export class ERR_STREAM_ALREADY_FINISHED extends NodeError {
 
   constructor(name: string) {
     super(`Cannot call ${name} after a stream was finished`);
-    this.name = "Error";
   }
 }
 
@@ -1197,7 +1183,6 @@ export class ERR_STREAM_NULL_VALUES extends NodeTypeError {
 
   constructor() {
     super("May not write null values to stream");
-    this.name = "TypeError";
   }
 }
 
@@ -1209,7 +1194,6 @@ export class ERR_STREAM_WRITE_AFTER_END extends NodeError {
 
   constructor() {
     super("write after end");
-    this.name = "Error";
   }
 }
 
@@ -1222,7 +1206,6 @@ export class ERR_STREAM_PREMATURE_CLOSE extends NodeError {
 
   constructor() {
     super("Premature close");
-    this.name = "Error";
   }
 }
 
@@ -1234,7 +1217,6 @@ export class ERR_STREAM_PUSH_AFTER_EOF extends NodeError {
 
   constructor() {
     super("stream.push() after EOF");
-    this.name = "Error";
   }
 }
 
@@ -1246,7 +1228,6 @@ export class ERR_STREAM_UNSHIFT_AFTER_END_EVENT extends NodeError {
 
   constructor() {
     super("stream.unshift() after end event");
-    this.name = "Error";
   }
 }
 
@@ -1258,7 +1239,6 @@ export class ERR_STREAM_UNABLE_TO_PIPE extends NodeError {
 
   constructor() {
     super("Cannot pipe to a closed or destroyed stream");
-    this.name = "Error";
   }
 }
 
@@ -1271,7 +1251,6 @@ export class ERR_BROTLI_INVALID_PARAM extends NodeRangeError {
 
   constructor(parameter: unknown) {
     super(`${parameter} is not a valid Brotli parameter`);
-    this.name = "RangeError";
   }
 }
 
@@ -1284,7 +1263,6 @@ export class ERR_ZSTD_INVALID_PARAM extends NodeRangeError {
 
   constructor(parameter: unknown) {
     super(`${parameter} is not a valid zstd parameter`);
-    this.name = "RangeError";
   }
 }
 
@@ -1297,7 +1275,6 @@ export class ERR_SOCKET_CLOSED extends NodeError {
 
   constructor() {
     super("Socket is closed");
-    this.name = "Error";
   }
 }
 
@@ -1310,7 +1287,6 @@ export class ERR_SOCKET_CLOSED_BEFORE_CONNECTION extends NodeError {
 
   constructor() {
     super("Socket closed before the connection was established");
-    this.name = "Error";
   }
 }
 
@@ -1323,7 +1299,6 @@ export class ERR_SOCKET_HANDLE_ADOPTED extends NodeError {
 
   constructor() {
     super("The bound socket has already been adopted by a server or socket");
-    this.name = "Error";
   }
 }
 
@@ -1336,7 +1311,6 @@ export class ERR_INVALID_HANDLE_TYPE extends NodeTypeError {
 
   constructor() {
     super("This handle type cannot be sent");
-    this.name = "TypeError";
   }
 }
 
@@ -1349,7 +1323,6 @@ export class ERR_IP_BLOCKED extends NodeError {
 
   constructor(address: string) {
     super(`IP(${address}) is blocked by net.BlockList`);
-    this.name = "Error";
   }
 }
 
@@ -1362,7 +1335,6 @@ export class ERR_HTTP_HEADERS_SENT extends NodeError {
 
   constructor(action: string) {
     super(`Cannot ${action} headers after they are sent to the client`);
-    this.name = "Error";
   }
 }
 
@@ -1375,7 +1347,6 @@ export class ERR_HTTP_BODY_NOT_ALLOWED extends NodeError {
 
   constructor() {
     super("Adding content for this request method or response status is not allowed.");
-    this.name = "Error";
   }
 }
 
@@ -1390,7 +1361,6 @@ export class ERR_HTTP_CONTENT_LENGTH_MISMATCH extends NodeError {
     super(
       `Response body's content-length of ${actual} byte(s) does not match the content-length of ${expected} byte(s) set in header`,
     );
-    this.name = "Error";
   }
 }
 
@@ -1403,7 +1373,6 @@ export class ERR_HTTP_TRAILER_INVALID extends NodeError {
 
   constructor() {
     super("Trailers are invalid with this transfer encoding");
-    this.name = "Error";
   }
 }
 
@@ -1425,7 +1394,6 @@ export class ERR_HTTP_INVALID_STATUS_CODE extends NodeRangeError {
 
   constructor(statusCode: unknown) {
     super(`Invalid status code: ${formatInvalidStatusCode(statusCode)}`);
-    this.name = "RangeError";
   }
 }
 
@@ -1438,7 +1406,6 @@ export class ERR_HTTP_INVALID_HEADER_VALUE extends NodeTypeError {
 
   constructor(value: unknown, name: string) {
     super(`Invalid value "${String(value)}" for header "${name}"`);
-    this.name = "TypeError";
   }
 }
 
@@ -1451,7 +1418,6 @@ export class ERR_HTTP_SOCKET_ASSIGNED extends NodeError {
 
   constructor() {
     super("ServerResponse has an already assigned socket");
-    this.name = "Error";
   }
 }
 
@@ -1464,7 +1430,6 @@ export class ERR_HTTP_SOCKET_ENCODING extends NodeError {
 
   constructor() {
     super("Changing the socket encoding is not allowed per RFC7230 Section 3.");
-    this.name = "Error";
   }
 }
 
@@ -1477,7 +1442,6 @@ export class ERR_PARSE_ARGS_INVALID_OPTION_VALUE extends NodeTypeError {
 
   constructor(message: string) {
     super(message);
-    this.name = "TypeError";
   }
 }
 
@@ -1490,7 +1454,6 @@ export class ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL extends NodeTypeError {
 
   constructor(value: string) {
     super(`Unexpected argument '${value}'. This command does not take positional arguments`);
-    this.name = "TypeError";
   }
 }
 
@@ -1507,7 +1470,6 @@ export class ERR_PARSE_ARGS_UNKNOWN_OPTION extends NodeTypeError {
         `of the command after '--', as in '-- ${JSON.stringify(option)}`
       : "";
     super(`Unknown option '${option}'${positionalHint}`);
-    this.name = "TypeError";
   }
 }
 
@@ -1517,7 +1479,6 @@ export class ERR_PROXY_INVALID_CONFIG extends NodeError {
 
   constructor(message: string) {
     super(message);
-    this.name = "Error";
   }
 }
 
@@ -1534,7 +1495,6 @@ export class ERR_INVALID_CHAR extends NodeTypeError {
         ? `Invalid character in ${name}`
         : `Invalid character in ${name} ["${field}"]`,
     );
-    this.name = "TypeError";
   }
 }
 
@@ -1547,7 +1507,6 @@ export class ERR_UNESCAPED_CHARACTERS extends NodeTypeError {
 
   constructor(name: string) {
     super(`${name} contains unescaped characters`);
-    this.name = "TypeError";
   }
 }
 
@@ -1566,7 +1525,6 @@ export class ERR_INVALID_HTTP_TOKEN extends NodeTypeError {
 
   constructor(what: string, token: string) {
     super(`${what} must be a valid HTTP token ["${token}"]`);
-    this.name = "TypeError";
   }
 }
 
@@ -1578,7 +1536,6 @@ export class ERR_INVALID_THIS extends NodeTypeError {
 
   constructor(type: string) {
     super(`Value of "this" must be of type ${type}`);
-    this.name = "TypeError";
   }
 }
 
@@ -1591,7 +1548,6 @@ export class ERR_INVALID_TUPLE extends NodeTypeError {
 
   constructor(name: string, reason: string) {
     super(`Each ${name} must be ${reason}`);
-    this.name = "TypeError";
   }
 }
 
@@ -1608,7 +1564,6 @@ export class ERR_BUFFER_OUT_OF_BOUNDS extends NodeRangeError {
         ? "Attempt to access memory outside buffer bounds"
         : `"${name}" is outside of buffer bounds`,
     );
-    this.name = "RangeError";
   }
 }
 
@@ -1621,7 +1576,6 @@ export class ERR_INVALID_BUFFER_SIZE extends NodeRangeError {
 
   constructor(unit: string) {
     super(`Buffer size must be a multiple of ${unit}`);
-    this.name = "RangeError";
   }
 }
 
@@ -1634,7 +1588,6 @@ export class ERR_BUFFER_TOO_LARGE extends NodeRangeError {
 
   constructor(maximum: number) {
     super(`Cannot create a Buffer larger than ${maximum} bytes`);
-    this.name = "RangeError";
   }
 }
 
@@ -1647,7 +1600,6 @@ export class ERR_TRAILING_JUNK_AFTER_STREAM_END extends NodeTypeError {
 
   constructor() {
     super("Trailing junk found after the end of the compressed stream");
-    this.name = "TypeError";
   }
 }
 
@@ -1667,7 +1619,6 @@ export class ERR_ASYNC_CALLBACK extends NodeTypeError {
 
   constructor(name: string) {
     super(`${name} must be a function`);
-    this.name = "TypeError";
   }
 }
 
@@ -1680,7 +1631,6 @@ export class ERR_ASYNC_TYPE extends NodeTypeError {
 
   constructor(type: unknown) {
     super(`Invalid name for async "type": ${String(type)}`);
-    this.name = "TypeError";
   }
 }
 
@@ -1699,7 +1649,6 @@ export class ERR_INVALID_ASYNC_ID extends NodeRangeError {
 
   constructor(name: string, value: unknown) {
     super(`Invalid ${name} value: ${String(value)}`);
-    this.name = "RangeError";
   }
 }
 
@@ -1717,7 +1666,6 @@ export class ERR_USE_AFTER_CLOSE extends NodeError {
 
   constructor(name: string) {
     super(`${name} was closed`);
-    this.name = "Error";
   }
 }
 
@@ -1738,7 +1686,6 @@ export class ERR_SOCKET_ALREADY_BOUND extends NodeError {
 
   constructor() {
     super("Socket is already bound");
-    this.name = "Error";
   }
 }
 
@@ -1751,7 +1698,6 @@ export class ERR_SOCKET_BAD_BUFFER_SIZE extends NodeTypeError {
 
   constructor() {
     super("Buffer size must be a positive integer");
-    this.name = "TypeError";
   }
 }
 
@@ -1764,7 +1710,6 @@ export class ERR_SOCKET_DGRAM_IS_CONNECTED extends NodeError {
 
   constructor() {
     super("Already connected");
-    this.name = "Error";
   }
 }
 
@@ -1777,7 +1722,6 @@ export class ERR_SOCKET_DGRAM_NOT_CONNECTED extends NodeError {
 
   constructor() {
     super("Not connected");
-    this.name = "Error";
   }
 }
 
@@ -1790,7 +1734,6 @@ export class ERR_SOCKET_DGRAM_NOT_RUNNING extends NodeError {
 
   constructor() {
     super("Not running");
-    this.name = "Error";
   }
 }
 
@@ -1803,7 +1746,6 @@ export class ERR_SERVER_ALREADY_LISTEN extends NodeError {
 
   constructor() {
     super("Listen method has been called more than once without closing.");
-    this.name = "Error";
   }
 }
 
@@ -1816,7 +1758,6 @@ export class ERR_SOCKET_BAD_TYPE extends NodeTypeError {
 
   constructor() {
     super("Bad socket type specified. Valid types are: udp4, udp6");
-    this.name = "TypeError";
   }
 }
 
@@ -1838,7 +1779,6 @@ export class ERR_SOCKET_BAD_PORT extends NodeRangeError {
       `${name} should be ${allowZero ? ">=" : ">"} 0 and < 65536. ` +
         `Received ${inspectValue(port)}.`,
     );
-    this.name = "RangeError";
   }
 }
 
@@ -1851,7 +1791,6 @@ export class ERR_INVALID_IP_ADDRESS extends NodeTypeError {
 
   constructor(address: unknown) {
     super(`Invalid IP address: ${String(address)}`);
-    this.name = "TypeError";
   }
 }
 
@@ -1866,7 +1805,6 @@ export class ERR_INVALID_ADDRESS_FAMILY extends NodeRangeError {
 
   constructor(addressFamily: unknown, host: string, port: number) {
     super(`Invalid address family: ${String(addressFamily)} ${host}:${port}`);
-    this.name = "RangeError";
     this.host = host;
     this.port = port;
   }

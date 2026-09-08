@@ -8,6 +8,7 @@
 
 import {
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_TYPE_BINDING,
   ERR_INVALID_ARG_VALUE,
   ERR_UNKNOWN_ENCODING,
   ERR_OUT_OF_RANGE,
@@ -219,7 +220,10 @@ export function validateOwnerId(value: unknown, name: "uid" | "gid"): asserts va
 export function validateAccessMode(mode: unknown): number {
   if (mode === null || mode === undefined) return 0;
   if (typeof mode !== "number") {
-    throw new ERR_INVALID_ARG_TYPE("mode", "int32 or null/undefined", mode);
+    // Node's message, not node's template: `accessSync` passes `mode` straight
+    // to `binding.access`, so the text comes from C++ and reads
+    // `mode must be int32 or null/undefined`. See ERR_INVALID_ARG_TYPE_BINDING.
+    throw new ERR_INVALID_ARG_TYPE_BINDING("mode must be int32 or null/undefined");
   }
   if (!Number.isFinite(mode) || mode < 0 || mode > 7) {
     throw new ERR_OUT_OF_RANGE("mode", ">= 0 && <= 7", mode);
