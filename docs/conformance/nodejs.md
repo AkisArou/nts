@@ -2816,6 +2816,54 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## What actually stops the fifteen, measured rather than remembered
+
+The standing description of this axis was *"228 of 244 clang errors are one
+struct emitter writing `void` fields"*. That is historical. Profiled on the 11:16
+binary, every module built with `NTS_COMPILER` pinned:
+
+    120  no member named X in X
+     49  redefinition of X
+     12  incompatible pointer types
+     11  too many errors emitted, stopping now
+     10  static assertion: NtsObj_Frame is not the size nts computed
+      7  operand of type NtsValue where arithmetic or pointer type is required
+      6  conflicting types for X
+      6  static assertion expression is not an integral constant expression
+      4  NtsObj_DuplexOptions.signal is not where nts computed
+      4  NtsObj_Context is not the size nts computed
+
+**Twelve modules hit clang's twenty-error limit**, so their counts are floors and
+the totals above understate. Three do not:
+
+    async_hooks           2 errors
+    diagnostics_channel   2 errors
+    timers                4 errors
+
+### Two modules are one fixture from compiling
+
+`async_hooks`'s two errors are **the same call site**:
+
+    program.c:1900  void nts_node_enqueue_microtask(NtsObj_Ctor_TypeError *);
+    nts_node.h:50   void nts_node_enqueue_microtask(NtsHeader *callback);
+    program.c:5307  nts_node_enqueue_microtask(v17);   incompatible pointer
+
+That is `blockers/callback-binding` — the compiler names a closure type per
+program, so the one `.c` every module links against cannot spell it.
+`diagnostics_channel` is the same two with `NtsObj_Closure18`. `timers` is the
+same two plus an undeclared `Closure54__call` and one `NtsValue` arithmetic
+error.
+
+So the goal text's guess — *"async_hooks, diagnostics_channel and timers are one
+`NtsTask` struct mismatch each"* — was right about the **shape** and wrong about
+**which** mismatch. One closure-type mismatch each, not a struct.
+
+**Compiling is necessary and not sufficient.** Five modules already build and
+still export nothing or pass degenerately, so these two could land in
+`built-exports-nothing` like `querystring`. That is not knowable until the
+fixture is fixed, and claiming otherwise would be the third kind of error this
+ledger records.
+
 ## The compiled axis has not moved all day, and that is the finding
 
 Re-measured at 11:16 on the current binary, after the closure-merge fix, the
