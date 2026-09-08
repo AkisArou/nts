@@ -98,6 +98,46 @@ while IFS= read -r -d '' source; do
   shared_c+=("$source")
 done < <(find "$root/runtime/node/internal" -maxdepth 1 -name '*.c' -print0)
 
+# And every *other* module's C, because a module's TypeScript imports other
+# modules' TypeScript and inherits their `declare function`s with it.
+#
+# `dgram` imports `net`, so its program calls `nts_net_default_auto_select_family`.
+# That binding has a complete C half -- `net/net.c:7` -- and `dgram.node` linked
+# without it, because this list was the module's own directory and `internal`.
+# The result compiled, linked, and **failed at load**:
+#
+#     undefined symbol: nts_net_default_auto_select_family
+#
+# A shared object resolves lazily, so nothing before `require()` says a word. It
+# was the only module in the corpus that built and could not be loaded, and it
+# looked like a defect in something already shipped.
+#
+# As an *archive*, not a list of objects. The linker pulls a member only when
+# something still undefined is in it, so a module gets exactly the other-module
+# C it actually calls -- `dgram` gets `net.c` and not `zlib.c`. Naming every
+# object instead would drag all of them in and need every module's libraries on
+# every link.
+sibling_dir="$work/sibling"
+rm -rf "$sibling_dir"
+mkdir -p "$sibling_dir"
+while IFS= read -r -d '' source; do
+  case "$source" in "$src"/*) continue ;; esac
+  object="$sibling_dir/$(printf '%s' "$source" | tr '/' '_').o"
+  # Best effort: a sibling whose own headers are not on this module's include
+  # path simply does not join the archive, and the link then fails on the symbol
+  # it would have provided -- which is the honest outcome and the same one as
+  # before this existed.
+  clang -std=c11 -O2 -D_GNU_SOURCE -fPIC "${binding_header_flags[@]}" \
+    -I"$napi" -I"$uv_include" -I"$(dirname "$source")" \
+    -I"$root/runtime/node/internal" -I"$root/runtime/c" \
+    -c "$source" -o "$object" > /dev/null 2>&1 || true
+done < <(find "$root/runtime/node" -mindepth 2 -maxdepth 2 -name '*.c' -print0)
+sibling_archive=()
+if ls "$sibling_dir"/*.o > /dev/null 2>&1; then
+  ar rcs "$sibling_dir/libsiblings.a" "$sibling_dir"/*.o
+  sibling_archive=("$sibling_dir/libsiblings.a")
+fi
+
 # `declare function` lowers to an ordinary external C call. The corresponding
 # prototypes are owned by the same binding triples as their definitions, so
 # make those headers visible to the generated translation unit as well as to
@@ -171,7 +211,7 @@ clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$out/$module.node" \
   "${generated_c[@]}" \
-  "${module_c[@]}" "${shared_c[@]}" \
+  "${module_c[@]}" "${shared_c[@]}" "${sibling_archive[@]}" \
   "${module_libraries[@]}" -luv -lm
 
 echo "$out/$module.node: $(stat -c%s "$out/$module.node") bytes"

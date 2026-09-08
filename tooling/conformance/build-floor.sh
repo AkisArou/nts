@@ -47,13 +47,27 @@ fi
 
 failures=0
 built=0
+out_dir=${NTS_CONFORMANCE_OUT:-$PWD/target/node}
 for module in $FLOOR; do
   printf '  %-22s ' "$module"
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
     timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
   if printf '%s' "$out" | grep -q 'bytes$'; then
-    echo "builds"
-    built=$((built + 1))
+    # Compiling is not loading, and the difference is not academic. `dgram`
+    # compiled, linked, and failed at `require()` with
+    # `undefined symbol: nts_net_default_auto_select_family` -- a binding whose C
+    # exists in `net/net.c` and was not being linked into a module that imports
+    # `net`'s TypeScript. A shared object resolves lazily, so nothing before the
+    # load says a word, and this floor called it a pass for a day.
+    if node -e 'require(process.argv[1])' "$out_dir/$module.node" > /dev/null 2>&1; then
+      echo "builds and loads"
+      built=$((built + 1))
+    else
+      echo "BUILDS BUT DOES NOT LOAD"
+      node -e 'require(process.argv[1])' "$out_dir/$module.node" 2>&1 |
+        head -1 | sed 's/^/                         /'
+      failures=$((failures + 1))
+    fi
     continue
   fi
   echo "REGRESSED -- was building on 2026-09-08 and no longer does"
