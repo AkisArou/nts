@@ -2879,6 +2879,41 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## A fix of mine that regressed two modules, caught in two minutes
+
+`process` reported three `call to undeclared function 'nts_str_to_lower_case'`.
+The function is defined in `runtime/c/nts_unicode.c` and declared in
+`nts_unicode.h`; that `.c` is already compiled and linked, so the definition was
+always there and only the prototype was not. `build.sh` force-includes
+`nts_node.h` and `shared.h` for exactly this reason, and `nts_unicode.h` is in
+`runtime/c` rather than `runtime/node`, so neither of its two globs found it.
+
+Adding it removed all three errors from `process`. It also **broke
+`string_decoder` and `url`**:
+
+    error: conflicting types for 'nts_str_to_lower_case'
+
+    nts_unicode.h  NtsString *nts_str_to_lower_case(const NtsString *s);
+    program.c      NtsString * nts_str_to_lower_case(NtsString *);
+
+A `const` qualifier apart, and the same shape as `callback-binding` and the
+`nts_process_emit_warning_object` regression earlier today: a hand-written
+header and an emitted prototype that disagree, invisible while nothing includes
+both.
+
+**`build-floor.sh` caught it on the run after the change**, named both modules
+and printed the conflicting line. Reverted; the floor is back to 9 of 9.
+
+That instrument was written this morning because the gate's `profile` step emits
+C and never compiles it, so a change breaking every module passes green. Its
+first real catch was **my own change, four hours later**, and the trade it
+caught is one I would have taken: three errors gone from a module that fails
+anyway, against two modules that build today and would have stopped.
+
+The underlying disagreement is real and is reported rather than worked around.
+Force-including the header is the right shape and cannot be done until the two
+prototypes agree.
+
 ## The interpreted axis, measured end to end rather than spot-checked
 
 All 22 modules, `check.sh <module> --ts`, run today:
