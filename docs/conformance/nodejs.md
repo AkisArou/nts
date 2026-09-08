@@ -2853,14 +2853,21 @@ In `os` it is precisely why `getPriority` and `setPriority` are missing.
     cpus               heterogeneous-tuple-return
     getPriority        narrowed-bigint, via ERR_OUT_OF_RANGE -> validateInt32
     setPriority        narrowed-bigint, same chain
-    constants          readConstants refused: `name`, which `an anonymous type`
-                       does not declare, and an erased value where a concrete
-                       representation is wanted
-    networkInterfaces  `name`, which `NetworkInterfaceMap` does not declare
+    constants          computed-member-write  (`table[name] = value`)
+    networkInterfaces  computed-member-write  (`result[name] = ...`)
     userInfo           `userInfoString`, a declaration outside every walk
+                       -- no fixture yet
+
+Named by fixture rather than by diagnostic text, which is the distinction that
+cost three days once already: `constants` reads as "`name`, which `an anonymous
+type` does not declare", and that sentence is a description of a grouped
+message rather than of anything that refuses. The thing that refuses is a
+computed member write, and there is a fixture for it.
 
 Four of the six failing test files come from `constants` and `priority` being
-absent, so this list is the whole of the gap between 4 of 7 and green.
+absent. **So `os` is not one fix from green — it is three**, on three separate
+blockers, and the earlier reading of it as the nearest module to finish was
+measuring distance in test files rather than in compiler work.
 
 **Attribution of a root to a shape is a guess and is printed as one.** The
 diagnostics say which function calls a refused one, but not which function
