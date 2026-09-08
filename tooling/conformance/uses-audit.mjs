@@ -2,23 +2,26 @@
 //
 //   node tooling/conformance/uses-audit.mjs
 //
-// A `uses` file names the other profile modules a module depends on. Nothing
-// had read one back, and one of them was already right about a bug that took an
-// afternoon to find: `dgram/uses` lists `net`, `dgram` calls
-// `nts_net_default_auto_select_family`, and `build.sh` linked neither `net`'s C
-// nor consulted this file. The addon compiled, linked, and failed at `require`.
+// **A `uses` file is a substitution list, not a dependency declaration**, and
+// the first version of this audit was built on the second reading.
 //
-// Two directions, and they mean different things:
+// `run-one.mjs` reads it and, for each entry, replaces node's implementation of
+// that module with **ours** when a test requires it. So a module a `uses` file
+// does *not* name is a deliberate choice: the test keeps node's real
+// implementation as a stable dependency, and only the subject is under test.
 //
-//   undeclared   the module imports something its `uses` does not name. That is
-//                the shape that cost the afternoon -- a dependency the build
-//                cannot know about.
-//   unimported   `uses` names something the module does not import directly.
-//                Often legitimate: a transitive dependency, or one reached
-//                through `internal`. Reported, not failed.
+// Reading it as a dependency list, this reported that eight of thirteen modules
+// "import something they do not declare" and I added the missing names. That
+// substituted our `util` into `http`'s tests and our `os` into `process`'s, and
+// **ten tests that had passed began to fail** -- `http` 404 to 398, `process`
+// 87 to 85. Reverted. The lists were right and the reading was wrong.
 //
-// Only the first is an error. Saying so is the point: a list that fails on its
-// looser half stops being maintained.
+// So the finding this file can honestly report is much narrower: an entry that
+// names a module or subpath which does not exist. That entry substitutes
+// nothing and hides that it substitutes nothing, which is the shape this
+// directory keeps finding. The relationship between a `uses` file and the
+// module's imports is **not** a thing to check: they answer different
+// questions.
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -71,15 +74,23 @@ for (const module of modules.sort()) {
   actual.delete(module);
   actual.delete("internal");
 
-  const missing = [...actual].filter((m) => !declared.has(m)).sort();
-  const extra = [...declared].filter((m) => !actual.has(m)).sort();
-  if (missing.length > 0) {
-    undeclared++;
-    console.log(`  UNDECLARED  ${module}: imports ${missing.join(", ")} and does not declare it`);
-  }
-  if (extra.length > 0) {
-    unimported++;
-    console.log(`  declares    ${module}: ${extra.join(", ")} -- not imported directly (transitive?)`);
+  void actual;
+  // The only check that means anything: does the entry name something that
+  // exists? An entry naming a module the profile does not have substitutes
+  // nothing, and a test that expected our implementation quietly gets node's.
+  const raw = readFileSync(path, "utf8").split("\n").map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("#"));
+  for (const entry of raw) {
+    const name = entry.split("/")[0];
+    if (!known.has(name)) {
+      undeclared++;
+      console.log(`  NO SUCH MODULE  ${module}/uses names \`${entry}\`, which is not a module here`);
+      continue;
+    }
+    if (!existsSync(join(NODE_DIR, name, "src"))) {
+      undeclared++;
+      console.log(`  NO SOURCE       ${module}/uses names \`${entry}\`, which has no src/`);
+    }
   }
 }
 
@@ -89,6 +100,10 @@ if (checked === 0) {
   console.log("  A clean result would be a statement about the glob.");
   process.exit(2);
 }
-console.log(`  ${checked} module(s) with a \`uses\` file; ${undeclared} importing something ` +
-  `undeclared, ${unimported} declaring something not imported directly`);
+void unimported;
+console.log(`  ${checked} module(s) with a \`uses\` file; ${undeclared} entr(ies) naming ` +
+  `something that does not exist`);
+console.log("  A `uses` entry substitutes our implementation for node's in that");
+console.log("  module's tests. What it does NOT name is deliberate, so this does");
+console.log("  not compare the list against the module's imports.");
 process.exitCode = undeclared > 0 ? 1 : 0;

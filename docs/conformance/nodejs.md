@@ -2879,6 +2879,50 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## A `uses` file is a substitution list, and I read it as a dependency list
+
+**The worst mistake of the day, and it is mine.** I wrote an audit on the
+premise that a `uses` file declares the modules a module depends on, found that
+eight of thirteen "import something they do not declare", and added the missing
+names.
+
+`run-one.mjs` reads that file and, for each entry, **replaces node's
+implementation of that module with ours** when a test requires it. A module a
+`uses` file does not name is a deliberate choice: the test keeps node's real
+implementation as a stable dependency so that only the subject is under test.
+
+Adding the names substituted our `util` into `http`'s tests and our `os` into
+`process`'s, and **ten tests that had passed began to fail**:
+
+    http     404 passed, 0 failed  ->  398 passed, 8 failed
+    process   87 passed, 0 failed  ->   85 passed, 2 failed
+
+Reverted; both are back. **The lists were right and my reading was wrong.**
+
+This is the fifth rule — *an instrument and the thing it measures can both be
+reasonable and still not be about the same object* — and I produced it by
+building an instrument for an object that does not exist. The audit was
+internally sound. Every finding it reported was true of the claim it was
+testing. The claim was not about `uses`.
+
+**What made it dangerous is that it was actionable.** The previous instrument
+faults today produced numbers I doubted and checked. This one produced a
+to-do list, and I did it. A correction is cheap when the wrong output is a
+count; it costs ten passing tests when the wrong output is a change.
+
+The audit now checks the only thing that means anything about these files: an
+entry naming a module or subpath that does not exist, which substitutes nothing
+and hides that it substitutes nothing. It says in its own output that it does
+not compare the list against the module's imports, so the next reader does not
+repeat the reasoning.
+
+### The part that was true
+
+`dgram/uses` names `net`, `dgram` calls `nts_net_default_auto_select_family`,
+and `build.sh` linked neither. That was a real bug and the file did hold the
+information — but as a side effect of what it is for, not as a declaration the
+build was meant to read. The archive fix stands on its own.
+
 ## The `uses` files knew about the `dgram` bug, and nothing read them
 
 A `uses` file names the other profile modules a module depends on. Thirteen
@@ -2888,6 +2932,12 @@ modules have one, and **nothing had ever read one back**.
 `build.sh` consulted neither the file nor `net`'s C, and the addon compiled,
 linked, and failed at `require`. **The declaration that would have prevented an
 afternoon's diagnosis was already in the tree, correct, and unread.**
+
+> **Superseded by the section above.** The "8 import something they do not
+> declare" reading is wrong: a `uses` file is a substitution list, and what it
+> omits is deliberate. Acting on it cost ten passing tests. Kept because the
+> `dgram` half is true and because the reasoning is worth seeing next to its
+> correction.
 
 Read back:
 
