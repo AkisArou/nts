@@ -26,9 +26,16 @@ lane has moved.
 | `generic-classes` | 1.13x | probed: no single cause, see below |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
+| `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
+| `number-format-double` | 1.09x | unprobed |
+| `module-closures` | 1.06x | unprobed |
+| `elementwise` | 1.03x | unprobed |
+| `upcast` | 1.07x -> **1.01x** | unsigned remainder |
 
 Won: `exceptions` 0.01x, `bigint` 0.19x, `awfy-permute` 0.71x, `mandelbrot`
-0.81x, `awfy-list` 0.93x, `awfy-nbody` 0.99x. Four AWFY rows under hand-written
+0.81x, `awfy-list` 0.93x, `objects` 0.96x, `awfy-nbody` 0.99x. `objects` read
+1.07x in the first sweep and that was one of the 32 rows measured while another
+session compiled -- re-measured quiet, it is a win. Four AWFY rows under hand-written
 Java, two at parity, two above.
 
 ## bytes/op, all 51 measured against Java
@@ -78,7 +85,9 @@ Each cost a measurement. The number in brackets is what the fix was worth.
 ## Open, and whose
 
 **Blocked on `narrow.rs`** (integer arithmetic held in `f64` slots): `node-utf8`
-62%, `symbol-keyed-map` 52%. The C lane emits the identical defect, so it is
+62%, `symbol-keyed-map` 52%, `array-from`'s cursor, and `array-methods` at 25%
+-- its `total` is an `f64` accumulator behind `| 0` where `ref.java` writes `int
+total`, which is the chain `narrow.rs`' own header names for `i64 -> i32`. The C lane emits the identical defect, so it is
 fixed once, upstream. Do not build a JVM-only half. When it lands, measure the
 rows *before* taking any residual -- `narrow.rs` records three earlier attempts
 that each read as zero because two changes moved together.
