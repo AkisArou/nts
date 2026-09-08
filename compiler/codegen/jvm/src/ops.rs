@@ -3906,14 +3906,13 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "a closure call with no receiver"));
                 };
                 let ty = self.ty(receiver).clone();
-                // A merged receiver is held as the interface every arm
-                // implements, so the call has to be `invokeinterface` on that
-                // rather than `invokevirtual` on whichever class the IR named.
-                // Dispatch is unchanged: `invokeinterface` resolves on the
+                // A merged receiver is held as the base every arm extends, so
+                // the call dispatches through that rather than through
+                // whichever arm the IR named. Still `invokevirtual`: the base
+                // declares the slot abstract, and dispatch resolves on the
                 // receiver's real class.
-                let merged = self.joined.get(&receiver).cloned();
-                let owner = match &merged {
-                    Some(interface) => interface.clone(),
+                let owner = match self.joined.get(&receiver) {
+                    Some(base) => base.clone(),
                     None => self.object_class(&ty)?,
                 };
                 let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
@@ -3944,11 +3943,7 @@ impl Emitter<'_> {
                 for &arg in args {
                     self.load(code, pool, arg)?;
                 }
-                if merged.is_some() {
-                    code.invoke_interface(origin, pool, &owner, &member, &descriptor);
-                } else {
-                    code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
-                }
+                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
                 // The declaration says what the *type* returns; the call
                 // site says what this call wants. `f?.(x)` in a statement asks
                 // for nothing from a closure declared to return a double, and
@@ -4008,10 +4003,11 @@ impl Emitter<'_> {
         // because both capture one `f64` at offset 0; a pair capturing
         // different shapes would read whatever is there.
         //
-        // So the direct call is not honoured. `invokeinterface` on the shape
-        // every arm implements is what "call this closure, whichever it is"
-        // actually means, and it is what the IR would have emitted had the
-        // merge been typed at the signature. The middle end owns that fix and
+        // So the direct call is not honoured. Dispatching through the base
+        // every arm extends is what "call this closure, whichever it is"
+        // means, and it is what the IR would have emitted had the merge been
+        // typed at the signature -- which is a type it already has, with the
+        // `call` slot already declared on it. The middle end owns that fix and
         // it is agreed; this is not it, and it must not be read as it -- when
         // the merge is typed correctly, `joined` finds nothing and this arm
         // stops firing on its own.
@@ -4019,7 +4015,7 @@ impl Emitter<'_> {
             .first()
             .filter(|_| crate::hierarchy::member_name(name) == "call")
             .and_then(|receiver| self.joined.get(receiver).cloned());
-        if let Some(interface) = merged {
+        if let Some(base) = merged {
             let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
                 return Err(refuse(
                     self.func,
@@ -4029,7 +4025,7 @@ impl Emitter<'_> {
             for &arg in args {
                 self.load(code, pool, arg)?;
             }
-            code.invoke_interface(origin, pool, &interface, "call", &descriptor);
+            code.invoke_virtual(origin, pool, &base, "call", &descriptor);
             let returns = descriptor.rsplit(')').next().unwrap_or("");
             if matches!(result, HirType::Void) {
                 let words = nts_jvm_emitter::descriptor::words(returns);
