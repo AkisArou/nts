@@ -4639,15 +4639,29 @@ path in the profile, checked across `ENOENT`, `EACCES`, `EEXIST`, `EISDIR`,
 `EINVAL`, `EPIPE` and `ECONNRESET`, plus platform, release and the two TTY
 probes. All agree.
 
-**308 declared, 38 compared** — counted as *distinct binding names*, which is
+**308 declared, 43 compared** — counted as *distinct binding names*, which is
 lower than the per-module figures add up to and is the honest total. The
 per-module sum was 50; it double-counted `nts_process_env`, which two probes
 exercise, and counted `os`'s seventeen published *module functions* as bindings
 when several of them are served by one `nts_os_static_information` call. A count
 of things measured has to be a count of distinct things.
 
-Alongside those 38, `os`'s published surface is differentiated against node at
+Alongside those 43, `os`'s published surface is differentiated against node at
 34,238 comparisons — a different kind of coverage over the same native half.
+
+**Two kinds of probe, and the second is how most of the remainder will have to be
+reached.** The first takes a path and answers an errno. The second has to
+*create* the resource it measures: `fs`'s descriptor bindings are reached by
+opening a file through `nts_fs_open`, using it, and closing it in one call, so
+nothing leaks when an assertion fails. `open`, `close`, `fsync`, `fdatasync` and
+`fstat` agree with node, including `EISDIR` for a directory opened write-only and
+`EBADF` for a descriptor that was never open. `net` and `dgram` will need the
+same shape around a socket.
+
+The count is derived from the `declare function` lines across `probes/`, so a
+declaration that is never called would inflate it. Two — `fchmod` and
+`ftruncate` — were written into the first descriptor probe and never exercised;
+they are removed rather than left to count as measured.
 
 Two facts about reachability that the declared counts do not show. **`dgram` has
 zero bindings reachable without a live socket** — all 21 take a handle — so
