@@ -2816,6 +2816,45 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `timers` is two fixtured blockers from compiling, and both are named
+
+The closest module on the axis, measured on the 14:18 probe binary. Its entire
+clang output is two errors:
+
+    program.c:1964  use of undeclared identifier 'Closure54__call'
+                    -> blockers/refused-callback-null-vtable
+    program.c:3684  operand of type 'NtsValue' where arithmetic is required
+                    -> blockers/erased-truthiness
+
+Nothing else. Both reproduce as fixtures, both are compiler-side, and the second
+one is:
+
+    clearImmediate(NtsValue v0)
+        v10 = v8->_onImmediate_;     // object | null | undefined
+        v47 = (bool)v10;
+
+### A rewrite that would be exactly equivalent, and is not being made
+
+`_onImmediate` is `object | null | undefined`, and **an object is always
+truthy** — so `if (x)` and `if (x !== null && x !== undefined)` cannot disagree
+here. The second spelling lowers today. One line would remove one of `timers`'
+two errors.
+
+It is not being made, for the same reason `readConstants` was not restructured
+and `assert`'s `header` field was not renamed. `erased-truthiness` is 8 sites in
+`stream`, 8 in `fs` and 3 each in `events` and `assert`; those are not all
+nullable-object tests and most cannot be rewritten this way. Spelling around it
+here buys one module a smaller error count and removes the pressure from a defect
+that has to be fixed centrally regardless.
+
+**Three such rewrites have now been declined and recorded** — this one,
+`readConstants`'s computed member write, and `assert`'s `header` field, which
+alone was 10 of that module's 20 errors. Each was legal, unobservable, and would
+have improved a number. That they are written down is the point: a reader who
+finds `if (x)` here and wonders why it was not spelled around has the answer,
+and the count in the ledger is the count of the profile rather than the count of
+what was convenient.
+
 ## `assert`'s twenty errors are five known shapes, and one was new
 
 Broken down rather than counted, on the 14:18 probe binary:
