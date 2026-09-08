@@ -712,6 +712,21 @@ The residual is real and unexplained: **1.103x** with the element type held
 equal, which is a smaller and better-posed question than the one this row had
 before.
 
+**The scope is exactly two arrays, and both are wrong the same way.** Across all
+51 bench emissions this lane declares only five bare array fields -- everything
+else is behind an `NtsArray*` wrapper because `arrays_can_grow` is
+whole-program. Three are `boolean[]`, and **both** of the remaining two are
+`double[]` where AWFY's own Java declares `int[]`:
+
+    nts.gen.Queens.queenRows    double[]   AWFY: int[]     58% of a losing row
+    nts.gen.Permute.v           double[]   AWFY: int[]     a row we win at 0.71x
+
+Zero `int[]` fields are emitted anywhere. So this is not a case that happened to
+be unlucky -- an integer-valued array *always* becomes a `double[]` here, and
+the two places it is visible as a bare array are the two places it can be
+priced. `awfy-permute` being a win makes it upside on a win rather than a second
+losing row, which is worth saying so the item is not oversold.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
