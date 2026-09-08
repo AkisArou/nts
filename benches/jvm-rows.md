@@ -29,7 +29,7 @@ not measured clean and should not be quoted.**
 | `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
-| `generic-classes` | 1.17x | no cause found: assembly comparable, `final` refuted |
+| `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
@@ -441,6 +441,42 @@ other reason and should come off this list.
   reference**, one keyword and one call site, leaving a natural Java program on
   both sides. A one-variable experiment on an artefact that already exists beats
   a two-variable one on an artefact you wrote to test it.
+
+### `generic-classes` has a cause at last, and our codegen is not it
+
+Carried the reference to our representation one variable at a time -- the
+technique that had just refuted `ACC_FINAL` -- and it landed on our number.
+
+    ref, one generic `Box<T>`, erased `Object` field, boxed values   ~1428 ns
+    ref, carried to our shape                                        ~1662 ns
+    ours                                                             ~1663 ns
+
+**1662 against 1663, which is 0.06%.** Hand-written Java making the same
+representational choices this backend makes is exactly as fast as what this
+backend emits. So the row's 1.17x contains **no codegen gap at all**, and the
+assembly comparison that found 194 instructions against 214 was right to find
+nothing.
+
+The carried reference is natural Java throughout, not a transcription of
+bytecode. Four variables moved, together: two monomorphised classes instead of
+one generic, primitive fields instead of an erased `Object`, no boxing, and a
+trivial constructor with the field written by a later call. `final` had already
+been shown to be none of it.
+
+**The finding is the uncomfortable one.** Monomorphising `Box<number>` and
+`Box<boolean>` into two classes with `int` and `boolean` fields is **slower on
+HotSpot than one erased class holding boxed values** -- and the erased version
+is the implementation this feature exists to reject. It allocates nothing
+either way, both sides scalar-replace, and the boxed one still wins by 16%.
+
+That is a representation decision, so it is `signatures::specialize`'s and the
+middle end's rather than this lane's, and it is worth more than one row: it
+questions an assumption the design rests on. Handed over.
+
+**Two variables are still bundled** and the goal says to separate them, so what
+this does *not* say is which of monomorphisation-into-two-classes or
+primitive-fields-instead-of-boxed costs the 16%. Splitting that is one more
+reference variant and is the obvious next measurement if anyone acts on it.
 
 ## Open, and whose
 
