@@ -3086,6 +3086,26 @@ table, and the program compiles.** No body was emitted because the function was
 refused, but the descriptor, the static instance and the call site were all
 emitted anyway.
 
+**And the compiler says so itself before emitting them.** The refusal is
+reported by name, once per closure:
+
+    timeout.ts:488    NTS1003 `Closure55#call` cannot be compiled because it
+                      calls `processTimers`, which was refused above
+    immediate.ts:211  NTS2009 `Closure54#call` cannot be emitted because it
+                      calls `processImmediate`, which this backend refused
+
+So this is not the emitter losing track of something. It has concluded that the
+body cannot exist, printed that conclusion — from the lowering in one case and
+from the backend in the other — and then written the descriptor, the static
+instance and the call site as though it had not. **The information needed to
+refuse at the point the closure is taken as a value was already in hand and
+already on stdout.**
+
+That also explains the asymmetry between the pair: `Closure55` was refused by
+the *lowering* and got no vtable at all, `Closure54` by the *backend* and got a
+vtable pointing at a function that was never written. Two paths to the same
+place, one of which compiles.
+
 The bisect: removing the `promises` import moved the closure number 54 -> 40 and
 kept the defect. Replacing `host.install(processTimers, processImmediate)` with
 two local arrows made it **disappear**. `processTimers` is refused at

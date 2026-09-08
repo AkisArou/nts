@@ -30,10 +30,30 @@
 // refused at `timeout.ts:286`; replacing the two drains with local arrows makes
 // the error disappear, which is what identified the trigger.
 //
-// The general statement: **a closure whose function was refused should refuse at
-// the point it is taken as a value**, not produce an object that cannot be
+// **The compiler says so itself, and emits the object anyway.** The refusal is
+// not silent -- it is reported by name:
+//
+//     drain.ts:3:21  NTS1003 `Closure0#call` cannot be compiled because it
+//                    calls `onTimers`, which was refused above
+//
+// and in `timers`, both halves of the pair:
+//
+//     timeout.ts:488    NTS1003 `Closure55#call` cannot be compiled because it
+//                       calls `processTimers`, which was refused above
+//     immediate.ts:211  NTS2009 `Closure54#call` cannot be emitted because it
+//                       calls `processImmediate`, which this backend refused
+//
+// So this is not a case of the emitter losing track of something. It has already
+// concluded that the closure's body cannot exist, has printed that conclusion,
+// and then writes the descriptor, the static instance and the call site as
+// though it had not. The two diagnostics even differ -- one from the lowering,
+// one from the backend -- and both are followed by the same emission.
+//
+// The general statement: **a closure whose `call` has been refused should refuse
+// at the point it is taken as a value**, not produce an object that cannot be
 // called. A descriptor with a null `methods` pointer is never correct and is
-// checkable at emission.
+// checkable at emission, and here the information needed to refuse was already
+// in hand.
 
 import { onTimers } from "./drain.ts";
 
