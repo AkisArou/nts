@@ -74,7 +74,22 @@ for module in $modules; do
   # an uncounted build, which is precisely the false negative the lane exists to
   # prevent. `--rc` on punycode emits 55 sites, so 0 is never legitimate here.
   program="$PWD/target/node/$module.build/program.c"
-  sites=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null || echo 0)
+  # `grep -c` prints `0` *and exits 1* when it matches nothing. Written
+  # `$(grep -c ... || echo 0)` that appends a second zero, so `sites` became the
+  # two-line string "0\n0", `[ "$sites" -eq 0 ]` failed with "integer expected",
+  # and the `if` took the else branch -- proceeding exactly as if the build had
+  # been counted.
+  #
+  # So this guard could never fire, and the case it could never fire on is the
+  # only one it exists for. The comment below describes a real incident: a green
+  # `punycode` row from a build with zero retain/release sites. The guard written
+  # in response has been dead since it was written, and it took the *control*
+  # run -- where every module legitimately has zero -- to show it, because that
+  # is the only situation in which the broken branch is ever reached.
+  sites=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null)
+  # A missing file makes `grep` print nothing at all, which is a third value this
+  # has to survive rather than a fourth way to fall through.
+  sites=${sites:-0}
   if [ "$sites" -eq 0 ]; then
     echo "NOT COUNTED -- built clean but emitted no retain/release; result would be meaningless"
     failures=$((failures + 1))
@@ -89,7 +104,8 @@ for module in $modules; do
   # the test run silently substitutes the artifact under test. That is how the
   # first punycode row came to disagree with its own build directory: the
   # directory was rewritten fifteen seconds after this lane wrote it.
-  after=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null || echo 0)
+  after=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null)
+  after=${after:-0}
   if [ "$after" -ne "$sites" ]; then
     echo "OVERWRITTEN mid-run ($sites -> $after sites) -- another session rebuilt it; rerun when quiet"
     failures=$((failures + 1))

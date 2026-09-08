@@ -2816,6 +2816,62 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The counted lane, run over every module, with its control
+
+Run 2026-09-08 from a worktree pinned at `46e1c9e5` so it could not be
+contaminated by the three sessions committing into the main checkout. It took
+**under four minutes**, not the forty the earlier estimate assumed — most
+modules fail to build quickly.
+
+Seven of twenty-two build under reference counting. The other fifteen fail to
+compile, which is the same set and the same errors as uncounted.
+
+    module           counted            uncounted (control)   rc sites
+    buffer           0 of 55            0 of 55               196 -> 0
+    os               4 pass, 4 fail     4 pass, 4 fail        229 -> 0
+    path             2 of 21            2 of 21                26 -> 0
+    punycode         2 of 2             2 of 2                 55 -> 0
+    querystring      0 of 8             0 of 8                214 -> 0
+    string_decoder   0 of 5             0 of 5                197 -> 0
+    url              0 of 52            0 of 52               454 -> 0
+
+**Every module gives an identical answer counted and uncounted.** Across 1,371
+retain/release sites and 196 test files, reference counting changes no observable
+behaviour — no invalid HIR, no wrong answer, no crash under poison. `punycode`
+additionally ran 140,224 differential comparisons against node over 20,000 random
+inputs with **0 divergences** while counted.
+
+The right-hand column is the reason to believe the left one. Without a control
+the counted run says only "these seven behave like this"; the interesting claim
+is the comparison, and a lane reporting one half reads as though it had measured
+both.
+
+### The guard that could never fire
+
+Running the control is what exposed it. `counted-lane.sh` refuses a build with
+zero retain/release sites, because a green row from an uncounted build is
+precisely the false negative it exists to prevent — and the comment above that
+guard records the incident that prompted it, a `punycode` 2 of 2 from a build
+with no counting in it.
+
+    sites=$(grep -cE 'nts_retain|nts_release' "$program" 2>/dev/null || echo 0)
+    if [ "$sites" -eq 0 ]; then
+
+`grep -c` prints `0` **and exits 1** when it matches nothing, so `|| echo 0`
+appends a second zero. `sites` becomes the two-line string `"0\n0"`, the `-eq`
+test fails with *integer expected*, and the `if` takes the else branch —
+proceeding exactly as though the build had been counted.
+
+So the guard has been dead since the day it was written, and it is dead
+*specifically* in the one case it exists for: zero is the only value that
+reaches the broken branch. Nothing in a normal run could reveal it, because a
+normal run never has zero. It took the control, where every module legitimately
+has zero, to make the branch reachable at all.
+
+Fixed, and then demonstrated: with counting disabled the lane now says
+`NOT COUNTED -- built clean but emitted no retain/release; result would be
+meaningless`, where before it printed two shell errors and carried on.
+
 ## Why `buffer` builds and then fails all 55 of its tests
 
 It builds — under reference counting too, 196 retain/release sites — and it
