@@ -67,17 +67,63 @@ run, two above.** `loop` at 0.75x is worth noting against its own history: it
 was 1.93x when this lane started and the cause was number specialization
 rather than codegen.
 
-## bytes/op, all 51 measured against Java
+## bytes/op, re-taken from the current tree
 
-`exceptions` 0 against **9,100,000** -- Java's `fillInStackTrace`, and the
-memory-axis twin of its 0.01x. `substrings` and `closures` 0. `bigint` 0.20x,
-`number-format-double` 0.43x. **24 cases allocate nothing on either side.**
+**Deterministic, so unlike the timings these are unaffected by a busy machine**
+-- `getThreadAllocatedBytes` counts bytes, not nanoseconds. Run by executing the
+emitted classes directly under `NTS_BENCH_ALLOC=1`; through the runner it fails
+as "measuring two different programs", because bytes/op replaces the checksum
+line the runner compares. 43 of the 51 cases have both halves built.
 
-Losses: `node-utf8` 1.43x, `array-from` and `array-predicates` 1.33x.
+**17 allocate nothing on either side**: `absences`, `accumulate`, `checksum`,
+`elementwise`, `erasure-unknown`, `fib`, `generic-classes`, `in-narrowing`,
+`instanceof`, `logical-assignment`, `loop`, `module-closures`, `objects`,
+`optional-chain`, `strings`, `symbol-keys`, `user-iterable`.
 
-Run allocation by executing the emitted classes directly under
-`NTS_BENCH_ALLOC=1`. Through the runner it fails as "measuring two different
-programs", because bytes/op replaces the checksum line the runner compares.
+**We allocate less on nine.** `closures` 0 against 16, `substrings` 0 against
+24,576, and `exceptions` **0 against 9,100,000** -- Java's `fillInStackTrace`,
+and the memory-axis twin of its 0.01x. Then `bigint` 0.20x,
+`erasure-stored-unknown` 0.29x, `number-format-double` 0.43x,
+`array-mutations` 0.58x, `case-convert` 0.88x, `symbol-keyed-map` 0.90x.
+
+**We allocate more on six**, and one of them is a different kind of finding:
+
+| row | ours | `ref.java` | |
+| --- | --- | --- | --- |
+| `arrays` | 272 | **0** | see below -- shared with C and LLVM |
+| `growth-grown` | 32,896 | 16,400 | 2.01x; the reference preallocates, answered below |
+| `node-utf8` | 98,472 | 65,568 | 1.50x; blocked with its timing |
+| `array-predicates` | 24,992 | 18,792 | 1.33x |
+| `array-from` | 8,280,864 | 6,232,944 | 1.33x |
+| `bytes` | 4,176 | 4,112 | 1.02x |
+
+`map-and-set`, `growth-fixed`, `upcast` and `pipeline` are equal to the byte.
+
+### `arrays`: the only row where we allocate and the reference allocates nothing
+
+272 bytes/op against **0**, and an allocation profile says `double[]` is 99.44%
+of it. The case declares its 32-element table *inside* the function:
+
+    export function convolve(seed: number): number {
+      const xs = [0, 37, 74, 10, ...];   // 32 doubles + header = 272 bytes
+
+and `ref.java` writes `private static final double[] XS`, so it allocates once
+at class init and we allocate per call. **Rule 4 says that is the reference
+doing different work** -- but it is also what a Java programmer writes, which is
+the standard `ref.java` is held to, and the hoist is one our compiler could
+make: the array's elements are all constants, it is never written, and it never
+escapes the function.
+
+**It is not this lane's, because all three backends do it.** The C emission
+calls `nts_array_new` per call and then fills the thirty-two elements one at a
+time -- so the shared cost is larger there than here, being 32 stores as well as
+the allocation. A constant array literal that is never mutated and never
+escapes could be a module-level constant in every lane, which is `hir::escape`
+and `hir::elements`' question rather than a backend's.
+
+Handed over with the number. The upside is bounded and worth saying so: this
+row is **1.03x** on time, so the hoist is worth at most 3% there, and the whole
+272 bytes/op on the other axis.
 
 ## Asked and answered -- do not spend a second evening on these
 
