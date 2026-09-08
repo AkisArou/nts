@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A real app, because a bare `app_process` is not one.
+
+     The framework copies the device's global proxy into `http.proxyHost` and
+     friends when an *application* process starts. `app_process` never runs that
+     path, so every proxy measurement taken through it is about
+     `DefaultProxySelector` reading properties nobody set. This exists to close
+     that gap: an installed, framework-started process that asks the same
+     question the provider asks. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="org.nts.proxyprobe">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application android:label="nts proxy probe">
+    <activity android:name=".ProbeActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

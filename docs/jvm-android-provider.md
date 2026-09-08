@@ -287,6 +287,46 @@ constant pool for them -- a list with one entry, and it says in its own doc that
 it is a list rather than a rule and cannot find the next one. The device suite
 can. `docs/records/0204`.
 
+## The system proxy, and the measurement that had to be an app
+
+`systemProxyFor` formats what `ProxySelector.getDefault().select(uri)` answers.
+Everything that answers depends on system properties **the framework sets when
+an application process starts** — and a bare `app_process`, which every other
+device measurement in this lane uses, never runs that path.
+
+That distinction produced a wrong conclusion before it produced a right one.
+Measuring through `app_process` with `http.nonProxyHosts` set by hand showed
+the selector honouring the bypass list, and I reported that Android excludes
+bypassed hosts itself. It is a fact about `DefaultProxySelector` and not about
+what a device gives it.
+
+`tooling/android/proxy-app.sh` installs a real APK and asks from inside it:
+
+    global_http_proxy_exclusion_list = localhost,127.0.0.1   (verified set)
+    http.proxyHost                   = proxy.test
+    http.nonProxyHosts               =                        (empty)
+    http://example.com/a             -> PROXY proxy.test:3128
+    http://127.0.0.1:8080/b          -> PROXY proxy.test:3128
+
+So on API 26 the framework propagates the proxy's **host and port** and not the
+**exclusion list**, and **a loopback request goes to the proxy**. Shared code
+cannot rely on the platform applying a bypass list; the no-proxy list applied
+above this seam is load-bearing rather than defensive.
+
+**One ordering trap, recorded because it cost two runs and nearly a wrong
+finding.** `settings put global http_proxy host:port` *clears*
+`global_http_proxy_exclusion_list`. Setting the list first and the proxy second
+leaves the list empty — and an empty list then reads as a platform behaviour
+rather than as a configuration mistake. The script sets the proxy first and
+asserts the list took before believing anything downstream of it.
+
+The check reports the bypass result rather than requiring it in one direction: a
+later Android that propagates the list would answer `DIRECT`, and that is an
+improvement rather than a regression. What it asserts is that the two halves
+agree — an empty `nonProxyHosts` with a bypassed loopback would mean the
+property is not what decides it, and everything above would be built on the
+wrong thing.
+
 ## The artifacts
 
 | | |
@@ -310,6 +350,7 @@ compiler against our house style.
     sh tooling/android/on-device.sh          # the same suites on ART, plus the R8-shrunk library
     sh tooling/android/barrier.sh            # does `volatile` reach the compiler and make a fence
     sh tooling/android/arm-barrier.sh        # the same question of the arm64 compiler
+    sh tooling/android/proxy-app.sh          # what a real app is told about the system proxy
     sh tooling/jvm/sabotage.sh <edit> <driver>   # prove one can fail, without breaking the tree
 
 Every Java driver reports a **check count** and every harness asserts the number
