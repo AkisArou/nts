@@ -34,11 +34,12 @@ import {
 import { forgivingBase64Decode } from "../../../../../runtime/web-platform/src/core/base64.ts";
 import { percentDecodeBytes } from "../../../../../runtime/web-platform/src/core/percent.ts";
 import {
+  member,
   numberText,
   quoteJSONString,
   resolveGap,
 } from "../../../../../runtime/web-platform/src/json/text.ts";
-import { arrayIndexOf } from "../../../../../runtime/web-platform/src/json/value.ts";
+import { arrayIndexOf, JsonValue } from "../../../../../runtime/web-platform/src/json/value.ts";
 
 /** dNSName matching, including the wildcard rules HTTP/2 coalescing depends on. */
 export function covers(presented: string, host: string): boolean {
@@ -131,4 +132,72 @@ export function jsonArrayIndex(key: string): number {
 
 export function jsonNumber(value: number): string {
   return numberText(value);
+}
+
+/** The indent unit for a string `space`, which takes the other arm of 25.5.4 steps 5-8. */
+export function jsonGapText(space: string): string {
+  return resolveGap(space);
+}
+
+/** One object member: a quoted key, a colon, and the gap's single space. */
+export function jsonMember(key: string, valueText: string, gap: string): string {
+  return member(key, valueText, gap);
+}
+
+/**
+ * A whole document serialized from the leaves, compiled.
+ *
+ * The graph traversal does not compile yet -- it carries a replacer, which is a call through a
+ * function-typed slot -- but serialization itself is the escaper, the number form and the
+ * separators, and all three do. This assembles an array of numbers the way 25.5.4.6 does, so
+ * the axis exercises JSON *output* rather than only the pieces it is made of.
+ */
+export function jsonNumberArray(values: readonly number[]): string {
+  let out = "[";
+  for (let at = 0; at < values.length; at++) {
+    if (at !== 0) out += ",";
+    out += numberText(values[at] as number);
+  }
+  return out + "]";
+}
+
+/** The same for an object of string values, which is where the escaper and the key order meet. */
+export function jsonStringObject(keys: readonly string[], values: readonly string[]): string {
+  let out = "{";
+  for (let at = 0; at < keys.length; at++) {
+    if (at !== 0) out += ",";
+    out += member(keys[at] as string, quoteJSONString(values[at] as string), "");
+  }
+  return out + "}";
+}
+
+/**
+ * The erased graph's scalar constructors, round-tripped.
+ *
+ * `JsonValue.objectValue` is the one static that does not compile -- it orders array-index keys
+ * with a comparator sort -- so this covers the seven that do, which is the graph a compiled
+ * target actually builds.
+ */
+export function jsonScalarKind(which: number): string {
+  if (which === 0) return JsonValue.nullValue(0, 0).kind;
+  if (which === 1) return JsonValue.booleanValue(true, 0, 0).kind;
+  if (which === 2) return JsonValue.numberValue(1.5, 0, 0).kind;
+  if (which === 3) return JsonValue.stringValue("x", 0, 0).kind;
+  if (which === 4) return JsonValue.rawValue("1e999").kind;
+  return JsonValue.holeValue().kind;
+}
+
+export function jsonScalarNumber(value: number): number {
+  return JsonValue.numberValue(value, 0, 0).number;
+}
+
+export function jsonScalarText(value: string): string {
+  return JsonValue.stringValue(value, 0, 0).text;
+}
+
+/** An array node's length, which is the graph's only container that compiles. */
+export function jsonArrayLength(count: number): number {
+  const items: JsonValue[] = [];
+  for (let at = 0; at < count; at++) items.push(JsonValue.numberValue(at, 0, 0));
+  return JsonValue.arrayValue(items, 0, 0).items.length;
 }

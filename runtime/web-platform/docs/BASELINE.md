@@ -7074,3 +7074,36 @@ with them.
 
 881/881 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 206 of 210 on
 jvm, c and llvm.
+
+## The compiled axis, grown with the JSON that compiles
+
+The axis carried four JSON leaves. It now carries the whole of what compiles: the text layer
+(`quoteJSONString`, `numberText`, `resolveGap`, `member`), the erased graph's seven scalar
+constructors and its array node, `arrayIndexOf`, and two assembled documents -- an array of
+numbers and an object of escaped strings, built the way 25.5.4.6 and 25.5.4.5 build them.
+
+That last pair matters more than its size. The graph traversal does not compile, because it
+carries a replacer and that is a call through a function-typed slot; but *serialization* is the
+escaper, the number form and the separators, and all three do. So the axis now exercises JSON
+output rather than only the pieces output is made of.
+
+**138 of 142 cases to 253 of 322, agreeing on jvm, c and llvm.** The one `NTS1001` still standing
+is `JsonValue.objectValue`'s comparator sort, which is reported and left visible.
+
+### The sabotage that was the wrong instrument, and what replaced it
+
+Mutating `numberText` and re-running the axis reported "agreed on every case" -- twice, for two
+different reasons, and both readings were worthless.
+
+The first mutation used `Object.is`, which is not lowered, so the function was simply refused
+and its cases skipped. That is the failure mode the runner already guards against for the host
+suite: a green result taken from a run that measured nothing.
+
+The second reason is the important one and it is structural. **`nts check` compares the compiled
+program against node running the same source.** A mutation to that source moves both sides
+identically, so no source sabotage can ever make this axis disagree. It is an instrument for the
+backend, not for the code.
+
+The control that does mean something is whether the cases are being run at all: removing the
+JSON probes takes the axis from 253 of 322 back to 138 of 142. The 115 cases in between are the
+evidence, and "agreed on every case" over them is the claim.
