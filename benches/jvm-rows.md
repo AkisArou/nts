@@ -793,10 +793,20 @@ The file said the next instrument for this row was the assembly. It is, and it
 produced a contradiction rather than an answer -- which is worth more than
 another dead hypothesis, because it rules out the whole family of them.
 
-**Per operation, with the count fixed so there is no calibration to vary:**
+**Per operation, with the count fixed so there is no calibration to vary --
+and the first version of this number was wrong.** At N=2000 it read +37%; run
+again it read **-5%**, then **+104%**, on the same two programs. Fixing the
+operation count removes the *harness's* calibration and leaves the JIT's: below
+a few thousand operations, compilation is a large and variable share of the
+total, and the N-versus-2N subtraction only cancels a constant. At N=50,000,
+three rounds:
 
-    ours   596,248 instructions an operation
-    ref    435,131                            +37%
+    ours   371,008   383,310   375,821     median 375,821   spread 3.3%
+    ref    295,051   300,902   278,397     median 295,051   spread 8%
+
+**+27%**, and that one is stable. The 37% is withdrawn; the direction survived
+and the magnitude did not, which is the third time tonight a number has
+survived being checked in direction only.
 
 Time is +20.6%, so our IPC is *better* and we simply execute more. Prediction
 and memory are both excluded: branch misses 3% apart, cache misses 5%.
@@ -813,7 +823,12 @@ and memory are both excluded: branch misses 3% apart, cache misses 5%.
 is 52% of our profile, 97 bytecodes against 40, and C2 compiles both to the same
 thing. **The merge really is free, and this is the third instrument to say so.**
 
-**And 6% of code cannot produce 37% of instructions.** Something executes more
+**And per-call work is identical too**, which narrows it further:
+
+    getRowColumn   3 bounds-check branches, 3 loads, on BOTH sides
+    placeQueen     13 jae, 6 movzbl, 32 callq, on BOTH sides
+
+**So 6% of code cannot produce 27% of instructions.** Something executes more
 often rather than being bigger, and I have not found it. What is excluded:
 `setRowColumn` is 1.59x the samples at equal operation counts but exists only
 inlined, so its cost is inside `placeQueen`'s 6%; the entry points are the same
