@@ -7,6 +7,20 @@
 //     [number[], number[]]   ->  NtsArray *        homogeneous
 //     [string[], number[]]   ->  NtsObj_Tuple7 *   heterogeneous
 //
+// **`Tuple7` is a per-program serial, and that is deliberate.** An unrelated
+// change that renumbers tuples makes this fixture print `FIXED` when nothing
+// was fixed -- read a `Tuple7` -> `Tuple8` shift as renumbering, not as a fix,
+// and re-point the expectation.
+//
+// The obvious repair is to assert the absence of the fixed form instead
+// (`lacks-c NtsArray * nts_probe_heterogeneous`, which is absent today, checked).
+// It is not an improvement. That form keeps holding if the fix takes any shape
+// other than `NtsArray *`, and a blocker that quietly goes on reporting
+// `reproduces` after it is fixed is the failure this directory spent a day on --
+// five `emits-c` fixtures were in that state at once. A serial that false-alarms
+// is loud and gets checked; a wrong absence is silent and does not. Prefer the
+// loud direction when the two trade off.
+//
 // Every array-returning C function in `runtime/node` returns `NtsArray *`, so
 // the second row is unimplementable: the C is correct, the declaration is
 // correct, and clang rejects the pair with `conflicting types`.
