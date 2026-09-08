@@ -14,6 +14,7 @@ import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { RequestInit } from "../fetch/request.ts";
 import type { Response } from "../fetch/response.ts";
 import { parseMIMEType } from "../forms/mime.ts";
+import { eventTargetDispatchTrusted, eventTargetSetErrorReporter, eventTargetSetHandler } from "../core/events.ts";
 
 export interface EventSourceInit {
   withCredentials?: boolean;
@@ -255,7 +256,7 @@ export class EventSource extends EventTarget {
     // environment and cannot be substituted by a surplus argument.
     const context = currentWebPlatformRuntime();
     super();
-    this.setErrorReporter((error) => context.scheduler.reportError(error));
+    this[eventTargetSetErrorReporter]((error) => context.scheduler.reportError(error));
     try {
       this.url = context.urls.parse(input, context.baseURL).href;
     } catch {
@@ -280,7 +281,7 @@ export class EventSource extends EventTarget {
   }
 
   set onopen(callback: ((this: EventSource, event: Event) => void) | null) {
-    this.setHandler(this, this.openHandler, "open", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.openHandler, "open", callback, (_event): _event is Event => true);
   }
 
   get onmessage(): ((this: EventSource, event: MessageEvent<string>) => void) | null {
@@ -288,7 +289,7 @@ export class EventSource extends EventTarget {
   }
 
   set onmessage(callback: ((this: EventSource, event: MessageEvent<string>) => void) | null) {
-    this.setHandler(this, this.messageHandler, "message", callback, isMessageEvent);
+    this[eventTargetSetHandler](this, this.messageHandler, "message", callback, isMessageEvent);
   }
 
   get onerror(): ((this: EventSource, event: Event) => void) | null {
@@ -296,7 +297,7 @@ export class EventSource extends EventTarget {
   }
 
   set onerror(callback: ((this: EventSource, event: Event) => void) | null) {
-    this.setHandler(this, this.errorHandler, "error", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.errorHandler, "error", callback, (_event): _event is Event => true);
   }
 
   close(): void {
@@ -358,7 +359,7 @@ export class EventSource extends EventTarget {
       await this.queueTask(() => {
         if (this.state === EventSource.CLOSED) return;
         this.state = EventSource.OPEN;
-        this.dispatchTrustedEvent(new Event("open"));
+        this[eventTargetDispatchTrusted](new Event("open"));
       });
       if (this.state === EventSource.CLOSED) return "fatal";
       await this.consume(response, origin);
@@ -382,7 +383,7 @@ export class EventSource extends EventTarget {
         dispatchParsedEvent: async (event) => {
           await this.queueTask(() => {
             if (this.state === EventSource.CLOSED) return;
-            this.dispatchTrustedEvent(
+            this[eventTargetDispatchTrusted](
               new MessageEvent<string>(event.type, {
                 data: event.data,
                 lastEventId: event.lastEventId,
@@ -422,7 +423,7 @@ export class EventSource extends EventTarget {
     await this.queueTask(() => {
       if (this.state === EventSource.CLOSED) return;
       this.state = EventSource.CONNECTING;
-      this.dispatchTrustedEvent(new Event("error"));
+      this[eventTargetDispatchTrusted](new Event("error"));
     });
     if (this.state === EventSource.CLOSED) return false;
 
@@ -442,7 +443,7 @@ export class EventSource extends EventTarget {
       if (this.state === EventSource.CLOSED) return;
       this.state = EventSource.CLOSED;
       this.unregister();
-      this.dispatchTrustedEvent(new Event("error"));
+      this[eventTargetDispatchTrusted](new Event("error"));
     });
   }
 

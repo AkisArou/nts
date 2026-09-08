@@ -471,6 +471,20 @@ function isEventListenerSignal(signal: unknown): signal is AbortSignalOperations
 }
 
 /** Non-tree EventTarget; deliberately not a DOM propagation implementation. */
+/**
+ * Keys for the members subclasses need and the standard does not define.
+ *
+ * `protected` is a compile-time notion: it leaves an ordinary method on the prototype, where
+ * Web IDL says an interface prototype carries the interface's members and nothing else.
+ * Symbols keep them reachable from `AbortSignal`, `EventSource` and `WebSocket` while taking
+ * them off the enumerable surface. Never re-exported from the public barrel.
+ */
+export const eventTargetDispatchTrusted: unique symbol = Symbol("EventTarget dispatch trusted");
+export const eventTargetSetHandler: unique symbol = Symbol("EventTarget set handler");
+export const eventTargetSetListenerObserver: unique symbol = Symbol("EventTarget set listener observer");
+export const eventTargetSetErrorReporter: unique symbol = Symbol("EventTarget set error reporter");
+export const eventTargetReportError: unique symbol = Symbol("EventTarget report error");
+
 export class EventTarget {
   private readonly listeners: ListenerRecord[] = [];
   private listenerObserver: ListenerObserver | null = null;
@@ -525,7 +539,7 @@ export class EventTarget {
   }
 
   #retireWeaklyHeld(listener: ListenerRecord): void {
-    this.removeRecord(listener);
+    this.#removeRecord(listener);
   }
 
   addEventListener(
@@ -583,7 +597,7 @@ export class EventTarget {
     this.listeners.push(listener);
     this.listenerObserver?.(convertedType, true);
     if (signal !== undefined) {
-      listener.unsubscribeAbort = signal[abortSignalSubscribe](() => this.removeRecord(listener));
+      listener.unsubscribeAbort = signal[abortSignalSubscribe](() => this.#removeRecord(listener));
     }
   }
 
@@ -608,7 +622,7 @@ export class EventTarget {
         item.callback === convertedCallback &&
         item.capture === capture
       ) {
-        this.removeRecord(item);
+        this.#removeRecord(item);
         return;
       }
     }
@@ -624,7 +638,7 @@ export class EventTarget {
   }
 
   /** Provider-created events are trusted; script-dispatched events are not. */
-  protected dispatchTrustedEvent(event: Event): boolean {
+  protected [eventTargetDispatchTrusted](event: Event): boolean {
     return this.#dispatch(event, true);
   }
 
@@ -648,10 +662,10 @@ export class EventTarget {
           // liveness of the resource is decided here rather than trusting that the
           // registry has already run.
           if (item.weakResource !== null && item.weakResource.deref() === undefined) {
-            this.removeRecord(item);
+            this.#removeRecord(item);
             continue;
           }
-          if (item.once) this.removeRecord(item);
+          if (item.once) this.#removeRecord(item);
           event.setPassiveListener(item.passive);
           try {
             if (isEventListener(item.callback)) {
@@ -664,7 +678,7 @@ export class EventTarget {
               handleEvent.call(item.callback, event);
             }
           } catch (error) {
-            this.reportError(error);
+            this[eventTargetReportError](error);
           } finally {
             event.setPassiveListener(false);
           }
@@ -673,13 +687,13 @@ export class EventTarget {
     } finally {
       event.end();
       this.dispatchDepth--;
-      if (this.dispatchDepth === 0) this.compactListeners();
+      if (this.dispatchDepth === 0) this.#compactListeners();
     }
     return !event.defaultPrevented;
   }
 
   /** Property handlers occupy their registration position, just like ordinary listeners. */
-  protected setHandler<Target extends EventTarget, E extends Event>(
+  protected [eventTargetSetHandler]<Target extends EventTarget, E extends Event>(
     target: Target,
     slot: EventHandlerSlot<Target, E>,
     type: string,
@@ -699,21 +713,21 @@ export class EventTarget {
   }
 
   /** Lets a specialized EventTarget account for the lifetime of its listeners. */
-  protected setListenerObserver(observer: ListenerObserver): void {
+  protected [eventTargetSetListenerObserver](observer: ListenerObserver): void {
     this.listenerObserver = observer;
   }
 
   /** Binds provider exception reporting without changing the public constructor. */
-  protected setErrorReporter(reporter: (error: unknown) => void): void {
+  protected [eventTargetSetErrorReporter](reporter: (error: unknown) => void): void {
     this.errorReporter = reporter;
   }
 
   /** Reports an exception through the owning provider. */
-  protected reportError(error: unknown): void {
+  protected [eventTargetReportError](error: unknown): void {
     this.errorReporter(error);
   }
 
-  private removeRecord(listener: ListenerRecord): void {
+  #removeRecord(listener: ListenerRecord): void {
     if (listener.removed) return;
     listener.removed = true;
     if (listener.weakResource !== null) {
@@ -724,10 +738,10 @@ export class EventTarget {
     listener.unsubscribeAbort = null;
     unsubscribe?.();
     this.listenerObserver?.(listener.type, false);
-    if (this.dispatchDepth === 0) this.compactListeners();
+    if (this.dispatchDepth === 0) this.#compactListeners();
   }
 
-  private compactListeners(): void {
+  #compactListeners(): void {
     let write = 0;
     for (let read = 0; read < this.listeners.length; read++) {
       const listener = this.listeners[read];
@@ -739,6 +753,16 @@ export class EventTarget {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes. Safe now: the members subclasses need are symbol-keyed and
+    // the two used only here are private identifiers, so `getOwnPropertyNames` reaches
+    // nothing but the interface's own members.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "EventTarget",
       writable: false,

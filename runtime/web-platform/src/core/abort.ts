@@ -7,6 +7,7 @@ import { Event, EventTarget } from "./events.ts";
 import { abortError, DOMException } from "./errors.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import { requireArguments, toEnforceRangeUnsignedLongLong } from "./webidl.ts";
+import { eventTargetDispatchTrusted, eventTargetReportError, eventTargetSetErrorReporter, eventTargetSetHandler, eventTargetSetListenerObserver } from "./events.ts";
 
 interface AbortAlgorithm {
   callback: () => void;
@@ -45,7 +46,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
     }
     super();
     if (errorReporter !== undefined) {
-      this.setErrorReporter(errorReporter);
+      this[eventTargetSetErrorReporter](errorReporter);
     }
   }
 
@@ -54,7 +55,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
   }
 
   set onabort(callback: ((this: AbortSignal, event: Event) => void) | null) {
-    this.setHandler(this, this.abortHandler, "abort", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.abortHandler, "abort", callback, (_event): _event is Event => true);
   }
 
   get aborted(): boolean {
@@ -75,7 +76,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       try {
         callback();
       } catch (error) {
-        this.reportError(error);
+        this[eventTargetReportError](error);
       }
       return doNothing;
     }
@@ -135,7 +136,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
         }
       }
     }
-    result.setListenerObserver((type, added) => result.#observeListener(type, added));
+    result[eventTargetSetListenerObserver]((type, added) => result.#observeListener(type, added));
     return result;
   }
 
@@ -187,7 +188,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
           try {
             algorithm.callback();
           } catch (error) {
-            this.reportError(error);
+            this[eventTargetReportError](error);
           }
         }
         algorithm.previous = null;
@@ -199,7 +200,7 @@ export class AbortSignal extends EventTarget implements AbortSignalOperations {
       this.abortAlgorithmCount = 0;
       this.#updateSourceRetention();
     }
-    this.dispatchTrustedEvent(new Event("abort"));
+    this[eventTargetDispatchTrusted](new Event("abort"));
   }
 
   #removeAlgorithm(algorithm: AbortAlgorithm): void {

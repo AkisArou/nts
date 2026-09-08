@@ -146,6 +146,7 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
  */
 const FULLY_CONFORMANT = [
   "AbortSignal",
+  "EventTarget",
   "Headers",
   "TextDecoder",
   "TextDecoderStream",

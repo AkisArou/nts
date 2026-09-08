@@ -74,15 +74,6 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "stopped",
     "stoppedBeforeTarget",
   ],
-  EventTarget: [
-    "compactListeners",
-    "dispatchTrustedEvent",
-    "removeRecord",
-    "reportError",
-    "setErrorReporter",
-    "setHandler",
-    "setListenerObserver",
-  ],
   ReadableStream: [
     "attach",
     "attachBYOB",
@@ -127,7 +118,7 @@ suite("the non-standard prototype surface is exactly what is written down", () =
 suite("no other interface has grown one", () => {
   // The table above only lists interfaces that already deviate. This catches a *new*
   // deviation on an interface that is currently clean, which the table alone cannot.
-  const clean = ["AbortSignal", "Blob", "File", "FormData", "URLSearchParams", "TextEncoder", "MessageEvent",
+  const clean = ["AbortSignal", "EventTarget", "Blob", "File", "FormData", "URLSearchParams", "TextEncoder", "MessageEvent",
     "CloseEvent", "DOMException", "AbortController", "WritableStream", "TransformStream"];
   const grown = [];
   for (const name of clean) {
@@ -142,7 +133,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 37);
+  assert.equal(total, 30);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {

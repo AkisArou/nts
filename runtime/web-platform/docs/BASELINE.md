@@ -6316,3 +6316,30 @@ removed rather than quietly outliving its reason.
 passed, and it would have passed forever. Caught by asking why a brand-new test was green.
 
 816/816 → 818/818 host, upstream unchanged at 2,566 of 2,574.
+
+## `EventTarget`, and the reflective check asked for in advance this time
+
+`EventTarget`'s seven internals are gone from its prototype: `removeRecord` and
+`compactListeners` are private identifiers, since they are used nowhere but inside the class;
+the five `protected` ones are symbol-keyed, because `AbortSignal`, `EventSource` and
+`WebSocket` genuinely need them. **Seven fully conformant interfaces**, surface 63 → **30**.
+
+That is the third access modifier and the same lesson: `protected`, like `private`, is a
+compile-time notion that leaves an ordinary method on the prototype.
+
+**The reflective-use check was run before the rename this time, not after it.** Zero string
+occurrences of any of the seven names anywhere in `runtime/web-platform` or `runtime/node`,
+and zero uses in the Node lane at all. That took one command and it is the step whose absence
+cost a broken `addEventListener` on the previous slice. `EventTarget` sits upstream of twelve
+of that lane's twenty-two modules, so guessing was not an option.
+
+**And `reportError` was conflated exactly as predicted.** `Scheduler` has one too, and the
+mechanical pass converted `scheduler.reportError(...)` to the `EventTarget` symbol. `tsc`
+caught it — a symbol key on a type that does not have it is an error — but it is worth
+recording that the failure mode of a name-based pass is *silent on reflective uses and loud
+on conflated ones*, and only the second half is free.
+
+Frontier unchanged. 819/819 host, upstream unchanged at 2,566 of 2,574.
+
+What remains is `ReadableStream`'s seventeen, `Event`'s seven and `WebSocket`'s six. The
+streams set is still the hard one and still needs a type-aware pass.

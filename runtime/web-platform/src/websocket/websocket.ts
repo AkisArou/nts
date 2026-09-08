@@ -19,6 +19,10 @@ import type {
   WebSocketSession,
   WebSocketTransport,
 } from "./transport.ts";
+import {
+  eventTargetSetErrorReporter,
+  eventTargetSetHandler,
+} from "../core/events.ts";
 
 export type WebSocketData = string | Blob | ArrayBuffer;
 
@@ -85,7 +89,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onopen(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this.setHandler(this, this.openHandler, "open", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.openHandler, "open", callback, (_event): _event is Event => true);
   }
 
   get onerror(): ((this: WebSocket, event: Event) => void) | null {
@@ -93,7 +97,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onerror(callback: ((this: WebSocket, event: Event) => void) | null) {
-    this.setHandler(this, this.errorHandler, "error", callback, (_event): _event is Event => true);
+    this[eventTargetSetHandler](this, this.errorHandler, "error", callback, (_event): _event is Event => true);
   }
 
   get onmessage(): ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null {
@@ -101,7 +105,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onmessage(callback: ((this: WebSocket, event: MessageEvent<WebSocketData>) => void) | null) {
-    this.setHandler(this, this.messageHandler, "message", callback, isSocketMessageEvent);
+    this[eventTargetSetHandler](this, this.messageHandler, "message", callback, isSocketMessageEvent);
   }
 
   get onclose(): ((this: WebSocket, event: CloseEvent) => void) | null {
@@ -109,7 +113,7 @@ export class WebSocket extends EventTarget {
   }
 
   set onclose(callback: ((this: WebSocket, event: CloseEvent) => void) | null) {
-    this.setHandler(
+    this[eventTargetSetHandler](
       this,
       this.closeHandler,
       "close",
@@ -143,7 +147,7 @@ export class WebSocket extends EventTarget {
         ? supplied
         : currentWebPlatformRuntime();
     super();
-    this.setErrorReporter((error) => context.scheduler.reportError(error));
+    this[eventTargetSetErrorReporter]((error) => context.scheduler.reportError(error));
     this.context = context;
     if (
       context.maxBufferedAmount !== undefined &&
