@@ -47,6 +47,6 @@ NtsString *nts_zlib_last_error_message(void);
 NtsString *nts_zlib_last_error_code(void);
 
 double nts_zlib_vernum(void);
-double nts_crc32(NtsArray *input, double initial);
+double nts_crc32(NtsView *input, double initial);
 
 #endif

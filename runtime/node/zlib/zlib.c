@@ -1301,10 +1301,26 @@ NtsString *nts_zlib_last_error_code(void) {
   return nts_zlib_string(nts_zlib_global_code);
 }
 
-double nts_crc32(NtsArray *input, double initial) {
+/* Takes the view its `declare function` says it takes.
+ *
+ * `zlib/src/native.d.ts` declares `nts_crc32(input: Uint8Array, ...)`, which
+ * lowers to `NtsView *`, and this took `NtsArray *`. Those are different
+ * structs, so the emitted C did not compile -- but `zlib` does not compile for
+ * other reasons, and the interpreted lane's stand-in is
+ * `zlib.crc32(Buffer.from(input), ...)`, which is node's own. So nothing could
+ * see it: the one lane that runs cannot disagree with node, and the one that
+ * would object never got this far.
+ *
+ * Found by `tooling/conformance/binding-probe.sh`, which builds an addon around
+ * a few of a module's bindings without compiling the module. `crc32` is the only
+ * binding in the profile declared to take a `Uint8Array`, and no C binding
+ * anywhere took an `NtsView *` before this one. */
+double nts_crc32(NtsView *input, double initial) {
   uint32_t value = nts_zlib_to_uint32(initial);
-  size_t remaining = input == NULL ? 0 : input->header.length;
-  const uint8_t *bytes = input == NULL ? NULL : NTS_ITEMS(input, uint8_t);
+  if (input == NULL || input->buffer == NULL) return (double)value;
+  size_t remaining = (size_t)nts_view_byte_length(input);
+  const uint8_t *bytes =
+      (const uint8_t *)input->buffer->bytes + input->byte_offset;
   while (remaining != 0) {
     uInt length = remaining > UINT_MAX ? UINT_MAX : (uInt)remaining;
     value = (uint32_t)crc32(value, bytes, length);
