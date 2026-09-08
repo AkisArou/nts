@@ -96,10 +96,13 @@ for test_c in runtime/node/*/test/*.c; do
   # undefined is in it, so `process.o` stays out until a test actually needs
   # it -- at which point failing to link is the correct answer rather than a
   # harness artefact.
-  shared_lib=""
-  if [ "$module" != "internal" ]; then
-    shared_lib="$work/libnodeinternal.a"
-  fi
+  shared_lib="$work/libnodeinternal.a"
+  # `internal` is a module directory too, and its own C is already in that
+  # archive. Naming the objects as well would be a duplicate-symbol pile -- and
+  # naming them *instead* would drag in `process.c` and its Node-API calls, which
+  # is the very thing the archive exists to avoid. So it links only the archive
+  # and lets the linker decide which members it needs.
+  [ "$module" = "internal" ] && module_c=""
 
   # The same libraries `build.sh` links that module against. Duplicated rather
   # than factored out, because `build.sh` is running in other sessions right now
