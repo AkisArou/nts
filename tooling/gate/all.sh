@@ -521,7 +521,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 123 "through the LLVM backend, counting" ); }
+  backend_examples 124 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -532,7 +532,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 123 "through the LLVM backend" ); }
+  backend_examples 124 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -600,7 +600,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   backend_examples 123 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
-  grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C" \
+  grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
     "$root/target/suite-report.txt"
   # `invalid HIR` must be zero: a rejected SSA form on arbitrary input is a bug
   # however well the hand-written tests do.
@@ -632,6 +632,24 @@ corpus() {
     echo "  ^ uncompilable C rose from $known to $now"
     return 1
   fi
+
+  # `unverifiable class` must be zero, and it is the only row here that reports
+  # a lie about a *type*. The suite has counted it since it was added and no
+  # step asserted on it -- the same gap `uncompilable C` had, where a row that
+  # is printed but not checked is a number nobody reads.
+  #
+  # It earns its own assertion rather than sharing one because it fails
+  # differently: C and LLVM compile a merged layout, an erased-singleton scan
+  # and an unerase to `{}` without complaint, and the checked-cast backend is
+  # the only instrument that sees any of them. A zero here is a claim the other
+  # two rows cannot make.
+  #
+  # It reads zero when no JDK is present, which is not the same as verified.
+  # `examine` skips the check entirely in that case, so this row is a floor on
+  # a machine that can answer and silent on one that cannot -- and the `jvm`
+  # step below is what refuses to run at all without one.
+  bad=$(awk '/unverifiable class/ { print $NF + 0 }' "$root/target/suite-report.txt")
+  [ "${bad:-1}" = "0" ] || { echo "  ^ unverifiable class must be zero"; return 1; }
 }
 
 # The frontend is not cargo's, but it lives in cargo's directory -- so

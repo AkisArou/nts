@@ -1960,6 +1960,7 @@ nothing fails loudly when they are.
 | ✅ | a hash table — open addressing, linear probing, tombstones, power-of-two slots; `Map` and `Set` are built on it, and `Object`'s enumeration statics turned out not to need one |
 | ✗ | a regular-expression engine |
 | ◐ | **a time value** — `nts_date_new`, `nts_date_value` and the `TimeClip` normalisation, three entry points and a `double`. No **clock** and no **calendar**: a wall clock is a capability this runtime does not have, and the field extraction that would need one is §2's `Date` rows. The JVM runtime carries the same three, and `examples/dates` agrees with node on 174 cases through it. This row read ✗ while `nts_time_clip` was in `runtime/c` — the second false row found in this file today, and found by looking rather than by anything that runs |
+| ✗ | **a call-stack depth limit.** Unbounded recursion is `SIGSEGV` here where node throws a catchable `RangeError`, so it is a *wrong answer* rather than a missing feature: `try { down(1000000) } catch (e) { e instanceof RangeError }` returns `-1` on node and exit 139 on this lane, with the `catch` never entered. Measured, not inferred — the same file both ways. There is no cheap answer: a depth counter is a load, an increment and a branch on **every call**, which is the hot path this project exists to keep, and a guard page tells the process rather than the program. So this is stated rather than scheduled, and what it costs is that a program which recurses off the end of a genuine input dies instead of reporting |
 | ✗ | shared memory and an agent model — the threading primitives above are the runtime's own task posting, and `Atomics` needs more than they provide |
 | ∅ | a property map, a prototype chain, a metaobject protocol — §13 |
 
@@ -1967,6 +1968,26 @@ nothing fails loudly when they are.
 
 Every row here is refused, and none of them is a backlog item. They are one
 decision made once, and it is the decision the whole compiler is built on.
+
+### What that buys a test suite, which is not obvious
+
+A row here is **assertable**. A test may pin a divergence that this section
+declares, and may not pin one the implementation merely happens to produce --
+and the difference between the two is exactly whether it is written down as
+intended.
+
+The node lane found the rule by having both cases in one survey.
+`Buffer.from({ valueOf: () => "zz" })` coerces on node and throws here, and so
+does the `Symbol.toPrimitive` form: both are this section being applied, so both
+are asserted. `cpSync` rejecting a `Buffer` path is a defect nobody chose, so
+asserting it would pin a bug -- a test that **passes here and fails against
+node**, which is backwards, and which would then have to be deleted by whoever
+fixed it.
+
+The pinned rows also carry a notification: if this section ever admits
+`ToPrimitive`, those two tests fail and say so. That is the right way round. A
+suite that asserts declared decisions gets louder when a decision changes; a
+suite that asserts behaviour gets quieter when a bug is fixed.
 
 ### The metaobject protocol
 
@@ -2006,6 +2027,32 @@ always strict, so none of this can reach the compiler:
 `with`, sloppy mode, `arguments`, legacy octal, Annex B, `escape`/`unescape`,
 `String.prototype.substr` and the HTML-wrapper methods, `Date.prototype.getYear`,
 `RegExp.prototype.compile`, `Object.prototype.__defineGetter__` and friends.
+
+### An out-of-bounds read is a refusal here and `undefined` on a host
+
+`TABLE[code]` where `TABLE` has 256 entries and `code` is `0xD800` **aborts**:
+
+    index 55296 is outside [0, 256)
+
+Node answers `undefined`. That is the array model doing what §13 says it does —
+an array is storage rather than a property map, so there is no slot to read and
+nothing for `undefined` to come out of — and the differential reports it as the
+divergence it is: "an index its `!` promised was in range and was not; node
+answers `undefined` there".
+
+It is here because of **how it hides**, which is a hazard for every line of
+shared TypeScript rather than a fact about arrays. A table lookup written as
+"read past the end and test the result for `undefined`" is an ordinary host
+idiom, it passes every host test, and it is a hard abort the moment the same
+source is compiled. The `web-platform` lane found it by a benchmark aborting —
+its first `unicodeEscape` table read past its end for exactly one input, the
+one that reaches the function from above the table — and every host test of that
+same code passed.
+
+So a lane that runs its source on a host and calls that coverage has not
+checked this, and cannot. The instrument that sees it is the differential, or a
+compiled benchmark with a checksum; the ordinary suite is silent, and silent
+here reads exactly like correct.
 
 ### Deferred rather than rejected
 

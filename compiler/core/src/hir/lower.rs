@@ -2775,6 +2775,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     }
 
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
+    declare_unfilled_signatures(&hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module);
@@ -3110,6 +3111,182 @@ fn declare_interface_methods(hierarchy: &Hierarchy, program: &mut Program) {
     // Sorted, so one compiler on one input emits them in one order.
     declare.sort_by(|a, b| a.name.cmp(&b.name));
     program.funcs.extend(declare);
+}
+
+/// The declaration a closure call implies: its shape, and no body.
+///
+/// Split out of [`declare_unfilled_signatures`] for length. `None` when an
+/// argument names no value, which leaves the signature undeclared and the
+/// backend's refusal standing rather than declaring a shorter function than the
+/// call performs.
+fn signature_shell(
+    func: &Func,
+    name: String,
+    base: TypeId,
+    call: &Op,
+    args: &[ValueId],
+) -> Option<Func> {
+    let origin = Origin::generated(
+        call.origin.location,
+        nts_semantic_schema::GeneratedReason::ClosureLowering,
+    );
+    let mut shell = Func {
+        name,
+        params: Vec::new(),
+        return_type: call.ty.clone(),
+        values: Vec::new(),
+        // A declaration is its signature: the parameters are value ops because
+        // those *are* the signature in this IR, and the single block says there
+        // is nothing else.
+        blocks: vec![Block {
+            params: Vec::new(),
+            ops: Vec::new(),
+            terminator: Terminator::Unreachable,
+        }],
+        origin: origin.clone(),
+        exported: false,
+        initializes_receiver: false,
+        abstract_declaration: true,
+        async_result: None,
+        frame: None,
+    };
+    for (index, arg) in args.iter().enumerate() {
+        let ty = if index == 0 {
+            HirType::Managed(ManagedType::Object(base))
+        } else {
+            func.values.get(arg.0 as usize)?.ty.clone()
+        };
+        shell.values.push(Op {
+            kind: OpKind::Param(u32::try_from(index).unwrap_or(u32::MAX)),
+            ty: ty.clone(),
+            origin: origin.clone(),
+        });
+        shell.params.push(Param {
+            name: format!("v{index}"),
+            ty,
+            origin: origin.clone(),
+            shape: ParamShape::Ordinary,
+            known: Facts::TOP,
+        });
+    }
+    Some(shell)
+}
+
+/// Declare `call` on a signature layout that no closure in this program fills.
+///
+/// [`relate_closures_to_signatures`] walks *closures*, so a signature acquires
+/// its abstract declaration from an implementer. A signature with no
+/// implementer gets nothing -- and one exists whenever a program reads a
+/// closure out of a container it did not populate. `materialize_within` is what
+/// makes those programs get this far: it gives `Map<string, Weigh>` a layout
+/// for `Weigh` because the signature mentions it, and nothing constructs one.
+///
+/// The result was a layout that lies about itself, which is the standing
+/// hazard with an empty shape. The C and LLVM backends did not notice: a
+/// closure call dispatches through the *receiver's* descriptor, so the static
+/// layout's table is never read and the emitted code is correct. The JVM has to
+/// name a method and a descriptor at the call, reads the static layout, finds
+/// nothing, and refuses -- which is the third backend doing the job it is kept
+/// for, since the first two compiled a shape with a hole in it and said nothing.
+///
+/// # The signature comes from the call
+///
+/// Not from the checker. [`Callee::Closure`] already says why that is the right
+/// source -- "the signature is built from the call itself, which knows the
+/// argument types and the result type exactly" -- and it is the same principle
+/// the other two declarers apply when they take a signature from an
+/// implementer: a descriptor that has to agree with something is checkable,
+/// and one synthesized here would be a third opinion nothing else holds.
+///
+/// Where two call sites disagree the signature is left undeclared and the
+/// backend's refusal stands. Two calls through one signature that disagree
+/// about its shape is a fact worth refusing over, not one to pick a winner in.
+fn declare_unfilled_signatures(hierarchy: &Hierarchy, program: &mut Program) {
+    let Some(slot) = hierarchy.closure_slot.map(|slot| slot as usize) else {
+        return;
+    };
+    // Layout index to the shell built for it, and to whether every call agreed.
+    let mut found: Vec<(usize, Func, bool)> = Vec::new();
+    for func in &program.funcs {
+        // Live ops only. A `ValueId` is an index, so a pass that removes a call
+        // from the control flow leaves it in `values` -- and a declaration
+        // synthesized for a call nothing performs is a function the program
+        // does not need and `verify` would have to account for.
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .filter_map(|id| func.values.get(id.0 as usize))
+        {
+            let OpKind::Call {
+                callee: Callee::Closure { slot: at },
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            if *at as usize != slot {
+                continue;
+            }
+            let Some(receiver) = args.first() else {
+                continue;
+            };
+            let Some(HirType::Managed(ManagedType::Object(ty))) =
+                func.values.get(receiver.0 as usize).map(|op| op.ty.clone())
+            else {
+                continue;
+            };
+            let Some(at) = program.layouts.iter().position(|l| l.types.contains(&ty)) else {
+                continue;
+            };
+            if program.layouts[at]
+                .methods
+                .get(slot)
+                .is_some_and(Option::is_some)
+            {
+                continue;
+            }
+            // The layout's own id, not the receiver's. A signature the program
+            // wrote and the type the checker inferred for an arrow are two ids
+            // over one signature, and only the layout's is one any backend can
+            // resolve a class from -- the same reasoning
+            // `relate_closures_to_signatures` gives for its `base`.
+            let Some(&base) = program.layouts[at].types.first() else {
+                continue;
+            };
+            let name = format!("{}#call", program.layouts[at].name);
+            let Some(shell) = signature_shell(func, name, base, op, args) else {
+                continue;
+            };
+            match found.iter_mut().find(|(layout, _, _)| *layout == at) {
+                Some((_, first, agreed)) => {
+                    *agreed = *agreed
+                        && first.return_type == shell.return_type
+                        && first.params.len() == shell.params.len()
+                        && first
+                            .params
+                            .iter()
+                            .zip(&shell.params)
+                            .all(|(a, b)| a.ty == b.ty);
+                }
+                None => found.push((at, shell, true)),
+            }
+        }
+    }
+    // Sorted, so one compiler on one input emits them in one order.
+    found.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+    for (at, shell, agreed) in found {
+        if !agreed {
+            continue;
+        }
+        let table = hierarchy.table_size();
+        if program.layouts[at].methods.len() < table {
+            program.layouts[at].methods.resize(table, None);
+        }
+        program.layouts[at].methods[slot] = Some(shell.name.clone());
+        program.funcs.push(shell);
+    }
 }
 
 fn relate_closures_to_signatures(
@@ -5185,7 +5362,11 @@ impl<'a> FuncBuilder<'a> {
     /// Every layout a type needs, not only its own.
     ///
     /// An array of objects needs one for its element as much as for itself, and
-    /// the layout it is missing belongs to a type no *function* mentioned.
+    /// the layout it is missing belongs to a type no *function* mentioned. A
+    /// `Map<string, Step>` and a `Set<Step>` are the same case one level in:
+    /// `table.get(name)` hands back a `Step`, and until this walked into them
+    /// the only way a signature type acquired a layout was by being the
+    /// element of an array.
     ///
     /// Through *containers* and not through an object's fields. Recursing into
     /// fields as well demanded a layout for every field type whether or not
@@ -5210,12 +5391,26 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Object(object)) => {
                 self.layout_of(at, *object)?;
             }
-            HirType::Managed(ManagedType::Array(element)) => {
-                self.materialize_within(at, element, depth + 1)?;
-            }
-            HirType::Managed(ManagedType::Promise(payload)) => {
+            // One payload each, and one arm: an array's element, a promise's
+            // settled value and a set's member are the same question asked of
+            // three containers.
+            HirType::Managed(
+                ManagedType::Array(payload)
+                | ManagedType::Promise(payload)
+                | ManagedType::Set(payload),
+            ) => {
                 self.materialize_within(at, payload, depth + 1)?;
             }
+            // Two, and both of them read: `Map<string, Step>` hands a `Step`
+            // back from `get` and compares the key on the way in.
+            HirType::Managed(ManagedType::Map(key, value)) => {
+                self.materialize_within(at, key, depth + 1)?;
+                self.materialize_within(at, value, depth + 1)?;
+            }
+            // Not `View`, which carries an element and is nonetheless not a
+            // case here: every one comes from `builtin::typed_array_element`
+            // or is refused by `element_kind`, and both answer with an `Int`
+            // or a `Float`. An arm for it would be a line that cannot run.
             _ => {}
         }
         Ok(())
@@ -6185,6 +6380,16 @@ impl<'a> FuncBuilder<'a> {
                 &format!("an `unknown` narrowed to {want:?}, which it cannot be read back as"),
             ));
         }
+        // An unerase is where an erased value acquires a class, so this is one
+        // of the places a layout has to exist and nothing else asks for one.
+        // `materialize` covers a function's *signature* types, and a value read
+        // out of a container is named by no signature: a local
+        // `Map<string, Step>` refused with `NTS2006 an object type with no
+        // layout` at `steps.get`, where the same map at module scope did not,
+        // because a module global's type is represented and a local's is not.
+        // Same repair as the closure-call path a few thousand lines down, at
+        // the other end of the same question.
+        self.materialize(id, &want)?;
         let origin = self.origin(id);
         Ok(self.push(OpKind::Unerase { value }, want, origin))
     }

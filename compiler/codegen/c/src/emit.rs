@@ -1633,7 +1633,20 @@ fn layout_of<'a>(
         ));
     };
     program.layout(*id).ok_or_else(|| {
-        Diagnostic::error("NTS2006", "an object type with no layout", origin.location)
+        // Naming the type, because the message alone is not an identifier.
+        // 199 of these in the node profile carried nothing at all, so every one
+        // was indistinguishable from every other in any output -- 199 rows a
+        // reader cannot group, cannot count by cause, and cannot tell has moved.
+        //
+        // The id rather than a name: this backend holds a `Program`, and a
+        // program that has no layout for a type has no name for it either.
+        // `nts types` and `nts layouts` both print the id, so it is the handle
+        // that resolves.
+        Diagnostic::error(
+            "NTS2006",
+            format!("an object type with no layout: type {}", id.0),
+            origin.location,
+        )
     })
 }
 

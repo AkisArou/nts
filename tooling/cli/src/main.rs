@@ -444,8 +444,36 @@ fn print_public_api(program: &hir::Program) {
     }
 }
 
+/// Where the frontend binary is.
+///
+/// `NTS_TSGO` first, then the one this repository builds, and only then the
+/// bare name through `PATH`. The bare name was the whole of it, in ten places,
+/// and it is the worst of the three defaults: it reaches an asdf shim on this
+/// machine, which fails; on a machine with some other `tsgo` installed it
+/// **succeeds**, against an unpinned frontend, which is quietly wrong rather
+/// than loudly broken.
+///
+/// Every gate script exports `NTS_TSGO`, so nothing in the gate ever saw it --
+/// `all.sh` carries a note about `0 of 128` from exactly this cause, and a
+/// two-binary measurement here reported zero diagnostics from both binaries,
+/// which reads like a perfect result and was 22 modules failing at the
+/// frontend.
+///
+/// [`tsgo::locate`] already answers this question and was called in one place.
+/// Its own doc says why it exists: a suite run with the variable unset "is
+/// green whatever it would have found". The same sentence is true of every
+/// command here.
+///
+/// The bare name is kept as the last resort rather than removed, for a checkout
+/// that has not run the bootstrap and a `tsgo` the user installed themselves.
+fn frontend_binary() -> String {
+    std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
+        tsgo::locate().map_or_else(|| "tsgo".to_owned(), |path| path.to_string())
+    })
+}
+
 fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     if snapshot.has_errors() {
@@ -538,7 +566,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
 }
 
 fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     if snapshot.has_errors() {
@@ -614,7 +642,7 @@ fn render_bound(value: f64) -> String {
 /// validates the `tsgo --api` transport decision, and a gate nobody can run is
 /// not a gate.
 fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::new(tsgo_binary);
     if decompose {
         source = source.with_decomposition(Budget::DEFAULT);
@@ -733,7 +761,7 @@ fn list_sites(
 fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
     use nts_core::erasure::{Checker, Declaration, Verdict};
 
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     let erasure = nts_core::erasure::classify(&snapshot);
@@ -837,7 +865,7 @@ fn dump_erasure(tsconfig: &Utf8Path, per_site: bool) -> Result<()> {
 /// not TypeScript's, and every constant in `syntax.rs` was read off real output
 /// rather than taken from a table. This is the tool that reads them off.
 fn dump_modules(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
 
@@ -994,7 +1022,7 @@ fn requested_entry() -> Vec<String> {
 }
 
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
     let mut source = TsgoApi::for_compilation(tsgo_binary);
@@ -1455,7 +1483,7 @@ const fn render_bin(op: BinOp) -> &'static str {
 
 /// Every type the frontend resolved, as the schema records it.
 fn print_types(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     for (index, record) in snapshot.types.iter().enumerate() {
@@ -1586,7 +1614,7 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) ->
 /// Prints rather than writes: the slice it renders is scalar, so there is no
 /// runtime to place beside it yet and a file would suggest otherwise.
 fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
@@ -1627,7 +1655,7 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
 /// Without it nothing is written, because a class file is bytes and printing
 /// them to a terminal helps nobody -- `--text` is what to read instead.
 fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
@@ -1681,7 +1709,7 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
 }
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
-    let tsgo_binary = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
