@@ -4607,7 +4607,29 @@ validate C and only two modules reach it:
 | `timers` | 8 | 0 |
 | everything else | 14 | 0 |
 
-**308 declared, 17 compared.** `punycode` is green and contributes nothing to
+**308 declared, 25 compared** — and the second figure moved without a single
+module compiling. `tooling/conformance/binding-probe.sh` builds an addon around a
+few of a module's bindings by linking a handful of TypeScript declarations
+against the module's real `.c`. A binding does not need its module; it needs its
+own C, the shared runtime, and something that calls it.
+
+Eight of `fs`'s bindings, exercised against node in a module that does not build:
+
+    access missing      -2   ENOENT      agrees
+    access existing      0               agrees
+    access empty        -2   ENOENT      agrees
+    chmod missing       -2   ENOENT      agrees
+    rmdir missing       -2   ENOENT      agrees
+    rmdir on a file    -13   EACCES      agrees
+    mkdir existing     -17   EEXIST      agrees
+    realpath           /etc/hostname     agrees
+
+**Its first run found `blockers/libc-name-collision`**, which is the most
+dangerous defect in this document: an exported function whose name is also a
+libc symbol is silently replaced by libc's, with no refusal, no clang error, and
+plausible return values. `fs` exports fourteen such names.
+
+**308 declared, 25 compared.** `punycode` is green and contributes nothing to
 this column, because it has no native half — it is string algorithms, which is
 part of why it was the first module to pass and why passing it said less about
 the C than the row implied.
