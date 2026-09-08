@@ -800,6 +800,42 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "fs-last.ts",
+    module: "fs",
+    checks(m) {
+      const fsm = require("node:fs");
+      const dir = mkdtempSync(join(tmpdir(), "nts-last-"));
+      const out = [];
+      try {
+        writeFileSync(join(dir, "alpha"), "0123456789");
+        fsm.mkdirSync(join(dir, "beta"));
+        const nodeRows = fsm.readdirSync(dir, { withFileTypes: true })
+          .map((d) => `${d.isDirectory() ? 2 : d.isSymbolicLink() ? 3 : 1}:${d.name}`)
+          .sort().join("|");
+        const sorted = (v) => v.split("|").filter(Boolean).sort().join("|");
+        out.push({ label: "scandir_bytes rows", mine: sorted(m.probeScandirBytes(dir)), theirs: nodeRows });
+        for (const batch of [1, 32]) {
+          out.push({ label: `opendir_bytes batch=${batch}`, mine: sorted(m.probeOpendirBytesWalk(dir, batch)), theirs: nodeRows });
+        }
+        let enoent = 0;
+        try { fsm.opendirSync(join(dir, "nope")); } catch (e) { enoent = e.errno; }
+        out.push({ label: "opendir_bytes missing", mine: m.probeOpendirBytesMissing(join(dir, "nope")), theirs: enoent });
+        const f = join(dir, "alpha");
+        out.push({ label: "read_bigint agrees at 0", mine: m.probeReadBigIntAgrees(f, 4, 0), theirs: true });
+        out.push({ label: "read_bigint agrees at 4", mine: m.probeReadBigIntAgrees(f, 3, 4), theirs: true });
+        out.push({ label: "read_bigint reads at 4", mine: m.probeReadBigIntAt(f, 3, 4), theirs: "456" });
+        // A position past 2^53 must read nothing rather than wrap to a small
+        // offset. If the bigint were truncated through a double this returns
+        // the head of the file, which is the failure the binding exists to
+        // avoid and the only one this probe can actually stage.
+        out.push({ label: "position past 2^53 reads none", mine: m.probeReadBigIntHugePosition(f), theirs: 0 });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
