@@ -200,6 +200,38 @@ pub(crate) enum Placed {
     Stored,
 }
 
+/// The values an emission holds as something other than their declared
+/// representation.
+///
+/// Decided together and **before any slot is assigned**, because each of these
+/// is read twice -- once by the pass that decides it and once by the slot type
+/// that has to agree with it. Two answers to one of them is a disagreement the
+/// verifier finds, at load, on whichever program happened to exercise it.
+struct Held {
+    /// Erased values a bare `java/lang/Object` can carry; see `unbox`.
+    unboxed: rustc_hash::FxHashSet<ValueId>,
+    /// String accumulators held as a `StringBuilder`; see `builder`.
+    accumulated: rustc_hash::FxHashSet<ValueId>,
+    /// Index helpers whose answer every use converts to an integer; see `intcall`.
+    narrowed: rustc_hash::FxHashSet<ValueId>,
+    /// Block parameters merging closures of differing classes; see `closures`.
+    joined: FxHashMap<ValueId, String>,
+    /// `i32` values held in a `double` slot on this target; see `widen`.
+    widened: rustc_hash::FxHashSet<ValueId>,
+    widened_fields: rustc_hash::FxHashSet<(String, String)>,
+}
+
+fn held_values(program: &Program, func: &Func, plan: &crate::widen::Plan) -> Held {
+    Held {
+        unboxed: crate::unbox::unboxable(func),
+        accumulated: crate::builder::accumulators(func),
+        narrowed: crate::intcall::narrowed(func),
+        joined: crate::closures::joined(program, func),
+        widened: plan.values_in(func),
+        widened_fields: plan.fields().clone(),
+    }
+}
+
 #[derive(Debug)]
 pub struct Emitter<'a> {
     pub(crate) program: &'a Program,
@@ -221,6 +253,9 @@ pub struct Emitter<'a> {
     pub(crate) narrowed: rustc_hash::FxHashSet<ValueId>,
     /// `i32` values held in a `double` slot on this target; see `widen`.
     pub(crate) widened: rustc_hash::FxHashSet<ValueId>,
+    /// Block parameters merging closures of differing classes, and the
+    /// interface each is declared as; see `closures`.
+    pub(crate) joined: FxHashMap<ValueId, String>,
     /// `(declaring class, field name)` for fields held as a `double`.
     pub(crate) widened_fields: rustc_hash::FxHashSet<(String, String)>,
     /// Scratch for a parallel-copy cycle, one per `(temp, kind)` actually used.
@@ -249,19 +284,8 @@ impl<'a> Emitter<'a> {
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
-        // Erased values a bare `java/lang/Object` can carry; see `unbox`.
-        // Computed before slots so the decision and the slot type cannot
-        // disagree -- there is one answer and both read it.
-        let unboxed = crate::unbox::unboxable(func);
-        // String accumulators held as a `StringBuilder`; see `builder`. Beside
-        // the others and before slots for the same reason: one answer, read by
-        // the decision and by the slot type alike.
-        let accumulated = crate::builder::accumulators(func);
-        // Index helpers whose answer every use converts to an integer; see
-        // `intcall`. Beside the others and before slots, for the same reason.
-        let narrowed = crate::intcall::narrowed(func);
-        let widened = plan.values_in(func);
-        let widened_fields = plan.fields().clone();
+        let Held { unboxed, accumulated, narrowed, joined, widened, widened_fields } =
+            held_values(program, func, plan);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
@@ -305,6 +329,7 @@ impl<'a> Emitter<'a> {
             let held = crate::unbox::held_as(&unboxed, value)
                 .or_else(|| crate::intcall::held_as(&narrowed, value))
                 .or_else(|| crate::builder::held_as(&accumulated, value))
+                .or_else(|| crate::closures::held_as(&joined, value))
                 .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double));
             let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
                 return Err(refuse(
@@ -365,6 +390,7 @@ impl<'a> Emitter<'a> {
             unboxed,
             accumulated,
             narrowed,
+            joined,
             widened,
             widened_fields,
             temps: FxHashMap::default(),

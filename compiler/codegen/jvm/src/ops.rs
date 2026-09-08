@@ -1488,6 +1488,15 @@ impl Emitter<'_> {
     /// stackmap frames` names a slot index and a bytecode offset; this names
     /// the two classes.
     fn assignable(&self, from: ValueId, to: ValueId) -> Result<(), Diagnostic> {
+        // A block parameter that merges closures of differing classes is
+        // declared as the interface all of them implement, and JVMS 4.10.1.2
+        // makes a class assignable to any interface without checking. So there
+        // is nothing here to refuse: the destination is not either closure's
+        // class, whatever the IR calls it. `closures` says why the IR calls it
+        // one of them.
+        if self.joined.contains_key(&to) {
+            return Ok(());
+        }
         let (source, target) = (self.ty(from).clone(), self.ty(to).clone());
         self.assignable_types(&source, &target)
     }
@@ -3897,7 +3906,16 @@ impl Emitter<'_> {
                     return Err(refuse(self.func, "a closure call with no receiver"));
                 };
                 let ty = self.ty(receiver).clone();
-                let owner = self.object_class(&ty)?;
+                // A merged receiver is held as the interface every arm
+                // implements, so the call has to be `invokeinterface` on that
+                // rather than `invokevirtual` on whichever class the IR named.
+                // Dispatch is unchanged: `invokeinterface` resolves on the
+                // receiver's real class.
+                let merged = self.joined.get(&receiver).cloned();
+                let owner = match &merged {
+                    Some(interface) => interface.clone(),
+                    None => self.object_class(&ty)?,
+                };
                 let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
                     return Err(refuse(self.func, "a closure call on something that is not an object"));
                 };
@@ -3926,7 +3944,11 @@ impl Emitter<'_> {
                 for &arg in args {
                     self.load(code, pool, arg)?;
                 }
-                code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+                if merged.is_some() {
+                    code.invoke_interface(origin, pool, &owner, &member, &descriptor);
+                } else {
+                    code.invoke_virtual(origin, pool, &owner, &member, &descriptor);
+                }
                 // The declaration says what the *type* returns; the call
                 // site says what this call wants. `f?.(x)` in a statement asks
                 // for nothing from a closure declared to return a double, and
@@ -3964,6 +3986,61 @@ impl Emitter<'_> {
         let Some(target) = self.program.funcs.iter().find(|func| func.name == name) else {
             return Err(refuse(self.func, &format!("a call to `{name}`, which is not in this program")));
         };
+        // **A direct call to one closure's body, on a receiver that is not
+        // necessarily that closure.**
+        //
+        // `devirtualize_closures` reads the receiver's declared type and turns
+        // the call into a direct one. Where the receiver is a block parameter
+        // merging two closures, that declared type is one of the two arms --
+        // see `closures` -- so the direct call names one body and gets it wrong
+        // whenever the other arm arrived.
+        //
+        // This is not a JVM problem being worked around. It is a **wrong
+        // answer on the native lanes today**: for
+        //
+        //     let f: Mapper = (v) => v + k;
+        //     if (pick) { f = (v) => v * k; }
+        //     return f(5);
+        //
+        // node says 8 for `pick = false` and both C and LLVM say 15, because a
+        // pointer cast makes calling the other closure's body with this
+        // closure's receiver execute rather than fail. It survives only
+        // because both capture one `f64` at offset 0; a pair capturing
+        // different shapes would read whatever is there.
+        //
+        // So the direct call is not honoured. `invokeinterface` on the shape
+        // every arm implements is what "call this closure, whichever it is"
+        // actually means, and it is what the IR would have emitted had the
+        // merge been typed at the signature. The middle end owns that fix and
+        // it is agreed; this is not it, and it must not be read as it -- when
+        // the merge is typed correctly, `joined` finds nothing and this arm
+        // stops firing on its own.
+        let merged = args
+            .first()
+            .filter(|_| crate::hierarchy::member_name(name) == "call")
+            .and_then(|receiver| self.joined.get(receiver).cloned());
+        if let Some(interface) = merged {
+            let Some(descriptor) = crate::instance_descriptor(self.program, target) else {
+                return Err(refuse(
+                    self.func,
+                    &format!("a closure call to `{name}`, whose signature has no representation"),
+                ));
+            };
+            for &arg in args {
+                self.load(code, pool, arg)?;
+            }
+            code.invoke_interface(origin, pool, &interface, "call", &descriptor);
+            let returns = descriptor.rsplit(')').next().unwrap_or("");
+            if matches!(result, HirType::Void) {
+                let words = nts_jvm_emitter::descriptor::words(returns);
+                if words > 0 {
+                    code.pop(origin, words);
+                }
+                return Ok(Placed::Stored);
+            }
+            self.narrow_result(code, pool, result, returns, origin)?;
+            return Ok(Placed::OnStack);
+        }
         // An abstract declaration has no static body -- it is `ACC_ABSTRACT`
         // with no `Code` on its class, reached only through `Callee::Virtual`.
         // A *direct* call to one would emit `invokestatic` at a name this

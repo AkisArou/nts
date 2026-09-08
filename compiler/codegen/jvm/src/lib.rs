@@ -40,6 +40,7 @@
 //! erased is refused **by name**. A backend that emits something for every
 //! input is a backend nobody can trust the output of.
 
+pub mod closures;
 mod intcall;
 mod builder;
 pub mod body;
@@ -229,8 +230,18 @@ pub fn emit(program: &Program) -> Emitted {
     }
 
     let mut classes = Vec::new();
+    // The interfaces a merged closure slot is declared as, computed once: a
+    // class file is emitted once, so a closure that merges in one function has
+    // to declare the interface everywhere it is used.
+    let merged = closures::required(program);
+    for (name, descriptor) in &merged {
+        match closure_interface(program, name, descriptor) {
+            Ok(class) => classes.push(class),
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
     for layout in &program.layouts {
-        match object_class(program, layout, &plan) {
+        match object_class(program, layout, &plan, &merged) {
             Ok(Some(class)) => classes.push(class),
             Ok(None) => {}
             Err(diagnostic) => diagnostics.push(diagnostic),
@@ -319,10 +330,39 @@ fn declare_fields(
     Ok(())
 }
 
+/// One generated interface, standing for a closure call shape.
+///
+/// Nothing but the abstract method: it exists so a slot has something to be
+/// declared as, and JVMS 4.10.1.2 makes storing any class into it free. See
+/// `closures` for why an interface rather than an abstract class.
+fn closure_interface(
+    program: &Program,
+    name: &str,
+    descriptor: &str,
+) -> Result<Class, Diagnostic> {
+    let mut builder = ClassBuilder::new(name.to_owned(), "java/lang/Object".to_owned());
+    builder.access = access::PUBLIC | access::INTERFACE | access::ABSTRACT;
+    builder.source_file = Some("nts".to_owned());
+    builder.methods.push(nts_jvm_emitter::class::Method {
+        access: access::PUBLIC | access::ABSTRACT,
+        name: "call".to_owned(),
+        descriptor: descriptor.to_owned(),
+        body: None,
+    });
+    builder.build(Pool::new()).map_err(|error| {
+        Diagnostic::error(
+            "NTS4004",
+            format!("`{name}` could not be written: {error}"),
+            program_origin(program).location,
+        )
+    })
+}
+
 fn object_class(
     program: &Program,
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
+    merged: &[(String, String)],
 ) -> Result<Option<Class>, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
@@ -381,6 +421,16 @@ fn object_class(
     // interface implementation is checked at the call, not at load.
     for interface in callback_interfaces(program, layout) {
         builder.interfaces.push(interface.to_owned());
+    }
+    // And the generated interface for its call shape, where some slot in this
+    // program is declared as it. Only where one is: an interface no slot names
+    // is bytes with no meaning, and a closure declaring one that was never
+    // emitted is a `NoClassDefFoundError` at load.
+    if let Some(descriptor) = closures::call_descriptor(program, layout) {
+        let wanted = closures::interface_name(&descriptor);
+        if merged.iter().any(|(name, _)| name == &wanted) && !builder.interfaces.contains(&wanted) {
+            builder.interfaces.push(wanted);
+        }
     }
     // A tuple is laid out as a struct -- `[number, string]` has fields of
     // different types and cannot be a JVM array -- and the language calls it an
