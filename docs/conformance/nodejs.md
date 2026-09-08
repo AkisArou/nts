@@ -2879,6 +2879,47 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The two modules that do not compile are two causes, both known
+
+Measured through **`tooling/conformance/build.sh`** on the 15:39 binary — naming
+the instrument because measuring these two the other way is what produced the
+last correction in this document. A bare `clang -fsyntax-only` after `emit-c`
+has none of the force-include flags and reports every binding a module reaches
+as an implicit declaration.
+
+    fs        1 error
+    process  11 errors
+
+**`fs` is one error**, and it is the one the compiler lane predicted and still
+believes: `v2 = v0->callback` in `Closure59__call`, a captured field declared
+erased and read back as `NtsObj_Fn675__3 *`.
+
+**`process`'s eleven are two causes.**
+
+    8  nts_str_to_lower_case   3 undeclared + 5 that follow from it
+    3  redefinition of 'version', 'platform', 'environment'
+
+The five `incompatible integer to pointer conversion assigning to 'NtsString *'
+from 'int'` are **not a separate defect**: an implicitly declared function
+returns `int` in C, so every assignment of its result to a pointer is an error
+downstream of the missing prototype. Counting them apart would have made this
+module look five problems worse than it is.
+
+The prototype half is the `const` mismatch — `nts_unicode.h` says
+`const NtsString *`, the emitter writes `NtsString *`, and force-including the
+header to fix the declaration breaks two other modules on the conflict. The
+compiler lane has that, with a better shape than the one-line version: have the
+generated table cover every runtime header the build force-includes and emit no
+prototype for a name it already declares.
+
+The redefinitions are a **global** colliding with a name a C header already
+holds — the `field-named-header` shape one namespace over, where the guard
+covers function names and not globals.
+
+So: twenty of twenty-two compile, and the two that do not are one error and two
+causes between them, all three of which are named and none of which is this
+lane's.
+
 ## The chain in `determineSpecificType`, five links deep and still moving
 
 `internal/errors.ts`'s `determineSpecificType` is a `switch (typeof value)` in
