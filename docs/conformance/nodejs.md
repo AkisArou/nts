@@ -4992,14 +4992,28 @@ twenty-one `fs.promises` functions rejected a Buffer path too** — `chmod`,
 `chown`, `utimes`, `unlink`, `mkdir`, `rmdir`, `copyFile`, `rename`, `link`,
 `readlink` and `rm`.
 
-Seven are fixed: the ones that route straight to a single `_async` binding.
-`mkdir`, `rmdir` and `rm` are recursive composites and `readlink` has to answer
-bytes as well; those four remain, and the promises test **omits them rather than
-asserting their current behaviour** — for the reason immediately below.
+**All eleven are fixed.** Four of them — `mkdir`, `rmdir`, `rm` and `readlink` —
+were set aside in the first pass as recursive composites needing byte-aware
+directory walking. Reading them instead of assuming showed the recursion lives
+**in the binding**: `nts_fs_mkdir_async` already takes a `recursive` flag and
+`nts_fs_rm_async` already takes `recursive`, `force`, `maxRetries` and
+`retryDelay`. Four functions written off as a day's work were a one-line dispatch
+each.
+
+So **twenty-four public `fs` functions rejected a Buffer path** in total,
+thirteen synchronous and eleven asynchronous, and twenty-three are fixed. Only
+`cpSync` remains.
 
 The async family has no C at all — the entire asynchronous half of `fs` is
 stand-in only — so the byte variants are declarations and stand-ins matching
-their string twins. That keeps the pair consistent rather than leaving one
+their string twins.
+
+**And the stand-ins caught a mistake of mine.** The seven I wrote by hand used
+`(e) => cb(e ? e.errno : 0)`, where the seam's convention is `relay`, which routes
+through `codeOf` and normalises a *positive* errno to negative. Node's `fs` errors
+are negative on Linux, so it would have worked here and diverged on a platform
+where they are not — a defect that passes every test on the machine that has it.
+All seven go through `relay` now, like every other stand-in in the file. That keeps the pair consistent rather than leaving one
 spelling of the same call working and the other not.
 
 The test also asserts the **errno survives the byte route**, not only the success
