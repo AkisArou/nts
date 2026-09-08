@@ -1225,6 +1225,22 @@ NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s,
                                       const NtsString *needle);
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
+/* `Number(s)`: ECMAScript StringToNumber, which is not `strtod`.
+ *
+ * C accepts `inf`, `nan` and hexadecimal floats that JavaScript does not, and
+ * JavaScript accepts `0b`, `0o` and a leading `.` that C does not. An empty or
+ * all-whitespace string is +0, and anything that is not a complete literal is
+ * NaN -- there is no prefix parse here, which is what separates this from
+ * `parseFloat`. */
+double nts_str_to_number(const NtsString *s);
+
+/* `Number(v)` on an erased value: ToNumber over the tags a value carries.
+ *
+ * A reference answers NaN, which is right for a plain object and not the whole
+ * rule -- ToNumber of an object is ToPrimitive, and `Number([5])` is 5. The
+ * lowering emits this only where the checker's type admits no object. */
+NTS_READS_ONLY double nts_value_to_number(NtsValue value);
+
 NtsString *nts_str_trim(const NtsString *s);
 /* `padStart` and `padEnd`. The pad is never empty here: an omitted one is the
  * single space the specification gives it, supplied by the lowering so that
@@ -1663,6 +1679,13 @@ NTS_READS_ONLY bool nts_is_array(NtsValue value);
  * The kind arrives as a `double` for the same reason every other numeric
  * argument in this header does: the lowering has one numeric representation to
  * hand and converting at the boundary is one place rather than every call. */
+/* `ArrayBuffer.isView(x)`: any typed array or a `DataView`.
+ *
+ * The one question those two answer together -- `instanceof` separates them and
+ * this does not -- so it compares two descriptors rather than testing a kind.
+ */
+NTS_READS_ONLY bool nts_value_is_view(NtsValue value);
+
 NTS_READS_ONLY bool nts_is_view_kind(NtsValue value, double kind);
 
 /* `value instanceof ArrayBuffer`.

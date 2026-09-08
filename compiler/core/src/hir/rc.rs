@@ -98,6 +98,9 @@ pub struct Report {
 pub fn insert(program: &mut Program) -> Report {
     let mut report = Report::default();
     let layouts = program.layouts.clone();
+    // The *declared* type of each global, which is not the type of whatever is
+    // stored into it -- see `load_slot`.
+    let globals: Vec<HirType> = program.globals.iter().map(|held| held.ty.clone()).collect();
     let summaries = own::summarize(program, &layouts);
     for func in &mut program.funcs {
         // Nothing an inert function does can invalidate a borrow, so nothing in
@@ -105,7 +108,7 @@ pub fn insert(program: &mut Program) -> Report {
         let one = if own::inert(func) {
             count_only_returns(func, &layouts, &summaries)
         } else {
-            insert_into(func, &layouts, &summaries)
+            insert_into(func, Declared { layouts: &layouts, globals: &globals }, &summaries)
         };
         report.retains += one.retains;
         report.releases += one.releases;
@@ -167,7 +170,8 @@ fn count_only_returns(func: &mut Func, layouts: &[Layout], summaries: &own::Summ
 // separating them puts three sets through a signature to keep two halves of one
 // rule apart.
 #[allow(clippy::too_many_lines)]
-fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) -> Report {
+fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summaries) -> Report {
+    let layouts = declared.layouts;
     let mut report = Report::default();
     // Read before the blocks are taken out below, because `own::analyze` needs
     // them and an edge still has to ask what its successor receives.
@@ -189,7 +193,7 @@ fn insert_into(func: &mut Func, layouts: &[Layout], summaries: &own::Summaries) 
         let at = BlockId(u32::try_from(index).unwrap_or(0));
         let Counted { mut ops, moved } = count_ops(
             func,
-            layouts,
+            declared,
             at,
             &block.ops,
             &block.terminator,
@@ -339,13 +343,14 @@ fn edges_of(terminator: &super::Terminator) -> Vec<(BlockId, Vec<ValueId>)> {
 /// One block's operations, with counting inserted around them.
 fn count_ops(
     func: &mut Func,
-    layouts: &[Layout],
+    declared: Declared<'_>,
     at: BlockId,
     original: &[ValueId],
     terminator: &super::Terminator,
     settled: &Settled<'_>,
     report: &mut Report,
 ) -> Counted {
+    let layouts = declared.layouts;
     let Settled { map, live } = settled;
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
@@ -469,7 +474,7 @@ fn count_ops(
             let previous = if map.settles(*value) || map.initializes(*value) {
                 None
             } else {
-                load_slot(func, &mut ops, &kind)
+                load_slot(func, declared, &mut ops, &kind)
             };
             // Storing is a hand-off like any other, so it can be a move: if the
             // value dies in this block it will be released at the end of it, and
@@ -574,6 +579,36 @@ struct Counted {
     moved: rustc_hash::FxHashSet<ValueId>,
 }
 
+/// What the *program* declares, as opposed to what a function computed.
+///
+/// The two travel together because they answer one question — the type of a
+/// slot — for the three kinds of storage there are. Bundled rather than passed
+/// side by side so that adding the second did not give `count_ops` an eighth
+/// parameter.
+#[derive(Clone, Copy)]
+struct Declared<'a> {
+    layouts: &'a [Layout],
+    /// The declared type of each global, by index in `Program::globals`.
+    globals: &'a [HirType],
+}
+
+/// The type a layout declares for one of its fields.
+///
+/// `None` where the object's type has no layout here, which leaves the caller
+/// with the stored value's type -- the old answer, and right whenever the store
+/// is not an upcast.
+fn field_declared(layouts: &[Layout], object: &HirType, field: u32) -> Option<HirType> {
+    let HirType::Managed(ManagedType::Object(ty)) = object else {
+        return None;
+    };
+    layouts
+        .iter()
+        .find(|layout| layout.types.contains(ty))?
+        .fields
+        .get(field as usize)
+        .map(|held| held.ty.clone())
+}
+
 /// Read what a slot holds, so that the store about to overwrite it can give up
 /// the reference it was keeping.
 ///
@@ -585,7 +620,28 @@ struct Counted {
 /// and the same index. If the index is out of range the load traps where the
 /// store would have, which is the same program. If bounds elimination can prove
 /// the store safe, it proves the load safe by the same facts.
-fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<ValueId> {
+fn load_slot(
+    func: &mut Func,
+    declared: Declared<'_>,
+    ops: &mut Vec<ValueId>,
+    store: &OpKind,
+) -> Option<ValueId> {
+    // The type of the *slot*, not of the value about to go into it.
+    //
+    // They differ exactly when the store is an upcast, which is ordinary: a
+    // `WritableLike` global holding a `StandardStream`, an `Entry[]` holding an
+    // `Extended`. Taking the stored value's type gave the load a type the
+    // storage does not have, and the C backend wrote it out:
+    //
+    //     static NtsObj_WritableLike * stdout = 0;
+    //     NtsObj_StandardStream * v1506;
+    //     v1506 = stdout;                       /* error */
+    //
+    // Uncounted builds of the same five modules compile, because nothing reads
+    // the slot back there -- the save-temporary is the only construct that
+    // does. `assert`, `console`, `fs`, `readline` and `util`, found by the node
+    // lane running the counted lane over every building module for the first
+    // time.
     let (kind, ty, origin) = match store {
         OpKind::FieldSet {
             object,
@@ -596,7 +652,8 @@ fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<
                 object: *object,
                 field: *field,
             },
-            func.values[value.0 as usize].ty.clone(),
+            field_declared(declared.layouts, &func.values[object.0 as usize].ty, *field)
+                .unwrap_or_else(|| func.values[value.0 as usize].ty.clone()),
             func.values[value.0 as usize].origin.clone(),
         ),
         // A global is never "initializing": `module#init` writes over the
@@ -607,7 +664,11 @@ fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<
         // defined to do nothing.
         OpKind::GlobalSet { global, value } => (
             OpKind::GlobalGet(*global),
-            func.values[value.0 as usize].ty.clone(),
+            declared
+                .globals
+                .get(*global as usize)
+                .cloned()
+                .unwrap_or_else(|| func.values[value.0 as usize].ty.clone()),
             func.values[value.0 as usize].origin.clone(),
         ),
         OpKind::ArraySet {
@@ -621,7 +682,12 @@ fn load_slot(func: &mut Func, ops: &mut Vec<ValueId>, store: &OpKind) -> Option<
                 index: *index,
                 checked: *checked,
             },
-            func.values[value.0 as usize].ty.clone(),
+            match &func.values[array.0 as usize].ty {
+                HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) => {
+                    (**element).clone()
+                }
+                _ => func.values[value.0 as usize].ty.clone(),
+            },
             func.values[value.0 as usize].origin.clone(),
         ),
         _ => return None,

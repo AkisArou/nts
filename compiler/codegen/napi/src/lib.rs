@@ -22,7 +22,7 @@
 //! again here, because two spellings of one name is how a linker finds out the
 //! two disagree.
 
-use nts_codegen_c::c_identifier;
+use nts_codegen_c::{c_global, c_identifier};
 use std::fmt::Write as _;
 
 use nts_core::hir::{self, HirType, ManagedType};
@@ -1189,6 +1189,7 @@ fn report_unrepresentable_exports(
 fn declare_value_exports(
     values: &[(&hir::Global, &str, Cross)],
     layouts: &[hir::Layout],
+    functions: &[String],
 ) -> String {
     let mut out = String::new();
     for (global, _, _) in values {
@@ -1196,7 +1197,7 @@ fn declare_value_exports(
             out,
             "extern {} {};",
             c_type(&global.ty, layouts),
-            c_identifier(&global.name)
+            c_global(&global.name, functions.iter().map(String::as_str))
         );
     }
     if !values.is_empty() {
@@ -1209,10 +1210,13 @@ fn declare_value_exports(
 /// whole of it: a deferred global holds its zero until module evaluation
 /// assigns it, and for a reference that zero is a null pointer rather than a
 /// default.
-fn publish_value_exports(values: &[(&hir::Global, &str, Cross)]) -> String {
+fn publish_value_exports(
+    values: &[(&hir::Global, &str, Cross)],
+    functions: &[String],
+) -> String {
     let mut out = String::new();
     for (global, publish, crossing) in values {
-        let symbol = c_identifier(&global.name);
+        let symbol = c_global(&global.name, functions.iter().map(String::as_str));
         let key = c_string_literal(publish);
         let make = match crossing {
             Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
@@ -1331,7 +1335,9 @@ pub fn emit(program: &hir::Program) -> Addon {
     }
 
     let values = value_exports(program);
-    out.push_str(&declare_value_exports(&values, &program.layouts));
+    let functions: Vec<String> =
+        program.funcs.iter().map(|func| func.name.clone()).collect();
+    out.push_str(&declare_value_exports(&values, &program.layouts, &functions));
 
     out.push_str("NAPI_MODULE_INIT() {\n");
     // Run the module's own top-level code before anything can call into it.
@@ -1379,7 +1385,7 @@ pub fn emit(program: &hir::Program) -> Addon {
         );
     }
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
-    out.push_str(&publish_value_exports(&values));
+    out.push_str(&publish_value_exports(&values, &functions));
     out.push_str("    return exports;\n}\n");
 
     report_unrepresentable_exports(program, &wrapped, &mut skipped);

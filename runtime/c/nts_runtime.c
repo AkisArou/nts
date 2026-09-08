@@ -3490,6 +3490,215 @@ static NtsString *nts_str_trimmed(const NtsString *s, bool start, bool end) {
   return nts_str_slice(s, (double)from, (double)to);
 }
 
+/* `Number(s)`, which the specification calls StringToNumber.
+ *
+ * Not `strtod` on the whole string, which is the obvious implementation and the
+ * wrong one. C accepts three spellings JavaScript does not -- `inf`, `nan` and
+ * a hexadecimal *float* with a `p` exponent -- and JavaScript accepts three C
+ * does not, `0b`, `0o` and a bare leading `.` with no digit before it. So the
+ * grammar is checked here and `strtod` is asked only about a span this has
+ * already decided is a decimal literal, where it is exactly right: correctly
+ * rounded, which a hand-rolled accumulate-and-scale is not.
+ *
+ * Whitespace is `nts_str_is_space`, the same predicate `trim` uses, because
+ * StrWhiteSpace and TrimString's are the same set. An empty or all-space string
+ * is +0 rather than NaN -- `Number("")` is 0 and `Number(" ")` is 0, which is
+ * the case people are surprised by and the one node agrees with.
+ *
+ * Anything outside ASCII is NaN without further reading: no numeric literal has
+ * a code unit above 0x7F, so a single one settles the whole string. That is
+ * also what keeps the copy below a byte copy rather than a transcoding.
+ */
+static bool nts_number_span_is_decimal(const char *text, size_t length) {
+  size_t at = 0;
+  if (at < length && (text[at] == '+' || text[at] == '-')) {
+    at++;
+  }
+  size_t before = at;
+  while (at < length && text[at] >= '0' && text[at] <= '9') {
+    at++;
+  }
+  size_t integral = at - before;
+  size_t fractional = 0;
+  if (at < length && text[at] == '.') {
+    at++;
+    size_t start = at;
+    while (at < length && text[at] >= '0' && text[at] <= '9') {
+      at++;
+    }
+    fractional = at - start;
+  }
+  /* `.` alone, `+.` and `-` are not literals. One digit somewhere is the whole
+   * requirement, and it may be on either side of the point: `1.`, `.5` and `1`
+   * are all numbers and `.` is not. */
+  if (integral == 0 && fractional == 0) {
+    return false;
+  }
+  if (at < length && (text[at] == 'e' || text[at] == 'E')) {
+    at++;
+    if (at < length && (text[at] == '+' || text[at] == '-')) {
+      at++;
+    }
+    size_t start = at;
+    while (at < length && text[at] >= '0' && text[at] <= '9') {
+      at++;
+    }
+    if (at == start) {
+      return false;
+    }
+  }
+  return at == length;
+}
+
+/* A radix literal: `0x`, `0o`, `0b` and their capitals.
+ *
+ * Unsigned by grammar -- `-0x10` is NaN in JavaScript, not -16 -- so the sign
+ * is not consumed before this is asked. Accumulated in `double` rather than an
+ * integer type because the specification's answer for a literal past 2^53 is
+ * the rounded double, and an integer accumulator would wrap instead. */
+static bool nts_number_radix(const char *text, size_t length, double *out) {
+  if (length < 3 || text[0] != '0') {
+    return false;
+  }
+  double radix;
+  switch (text[1]) {
+  case 'x':
+  case 'X':
+    radix = 16.0;
+    break;
+  case 'o':
+  case 'O':
+    radix = 8.0;
+    break;
+  case 'b':
+  case 'B':
+    radix = 2.0;
+    break;
+  default:
+    return false;
+  }
+  double value = 0.0;
+  for (size_t at = 2; at < length; at++) {
+    char unit = text[at];
+    double digit;
+    if (unit >= '0' && unit <= '9') {
+      digit = (double)(unit - '0');
+    } else if (unit >= 'a' && unit <= 'f') {
+      digit = (double)(unit - 'a') + 10.0;
+    } else if (unit >= 'A' && unit <= 'F') {
+      digit = (double)(unit - 'A') + 10.0;
+    } else {
+      return false;
+    }
+    if (digit >= radix) {
+      return false;
+    }
+    value = value * radix + digit;
+  }
+  *out = value;
+  return true;
+}
+
+/* `Number(v)` on an erased value: ECMAScript ToNumber over the tags a value can
+ * carry.
+ *
+ * Four of the five are the specification verbatim -- a number is itself, a
+ * boolean is 1 or 0, `null` is +0, `undefined` is NaN -- and a string is
+ * StringToNumber, which is `nts_str_to_number` above rather than a second
+ * parser.
+ *
+ * A **reference** answers NaN, and that is the one arm that is not the whole
+ * rule. ToNumber of an object is ToPrimitive first, which runs `valueOf` and
+ * `toString` off a prototype chain: `Number([])` is 0 and `Number([5])` is 5,
+ * neither of which this can produce. So the lowering only emits this call where
+ * the checker's type admits no object -- `typeof v === "string" || typeof v ===
+ * "boolean"` is the shape that reaches it -- and the arm is here because a tag
+ * switch with a hole is worse than one with an answer that cannot be reached.
+ * NaN is also what the specification gives for a plain `{}`, so the unreachable
+ * case is at least not a surprising number. */
+double nts_value_to_number(NtsValue value) {
+  switch (nts_value_tag(value)) {
+  case NTS_TAG_NUMBER:
+    return nts_value_number(value);
+  case NTS_TAG_BOOLEAN:
+    return nts_value_boolean(value) ? 1.0 : 0.0;
+  case NTS_TAG_STRING:
+    return nts_str_to_number((const NtsString *)nts_value_reference(value));
+  case NTS_TAG_NULL:
+    return 0.0;
+  default:
+    return (double)NAN;
+  }
+}
+
+double nts_str_to_number(const NtsString *s) {
+  if (s == NULL) {
+    return 0.0;
+  }
+  uint32_t from = 0;
+  uint32_t to = s->length;
+  while (from < to && nts_str_is_space(nts_unit(s, from))) {
+    from++;
+  }
+  while (to > from && nts_str_is_space(nts_unit(s, to - 1))) {
+    to--;
+  }
+  if (from == to) {
+    return 0.0;
+  }
+
+  size_t length = (size_t)(to - from);
+  /* Long enough for every literal a program writes and short enough to sit in
+   * a frame. Past it the value is decided by the leading significant digits and
+   * the exponent, and neither survives truncation -- so it is a heap copy
+   * rather than a silently wrong answer. `malloc` directly rather than
+   * `nts_alloc`, because this is scratch that never becomes an object and does
+   * not want a header, a descriptor or a place in the collector's accounting.
+   */
+  char inline_buffer[256];
+  char *text = inline_buffer;
+  char *owned = NULL;
+  if (length + 1u > sizeof inline_buffer) {
+    owned = (char *)malloc(length + 1u);
+    if (owned == NULL) {
+      return (double)NAN;
+    }
+    text = owned;
+  }
+  for (size_t at = 0; at < length; at++) {
+    uint32_t unit = nts_unit(s, from + (uint32_t)at);
+    if (unit > 0x7Fu) {
+      free(owned);
+      return (double)NAN;
+    }
+    text[at] = (char)unit;
+  }
+  text[length] = '\0';
+
+  double answer;
+  const char *body = text;
+  size_t remaining = length;
+  bool negative = false;
+  if (remaining > 0 && (body[0] == '+' || body[0] == '-')) {
+    negative = body[0] == '-';
+    body++;
+    remaining--;
+  }
+  /* `Infinity` with an optional sign, and nothing else spelled with letters. */
+  if (remaining == 8 && memcmp(body, "Infinity", 8) == 0) {
+    answer = negative ? -INFINITY : INFINITY;
+  } else if (nts_number_radix(text, length, &answer)) {
+    /* Whole string, sign included: a radix literal cannot carry one. */
+  } else if (nts_number_span_is_decimal(text, length)) {
+    answer = strtod(text, NULL);
+  } else {
+    answer = (double)NAN;
+  }
+
+  free(owned);
+  return answer;
+}
+
 NtsString *nts_str_trim(const NtsString *s) {
   return nts_str_trimmed(s, true, true);
 }
@@ -4540,6 +4749,30 @@ static const NtsDescriptor nts_desc_view = {
 /* Beside the descriptor it compares against, rather than with the other
  * `nts_is_*` helpers: a file-scope `static const` has no forward declaration
  * here, so the test has to sit below the thing it tests for. */
+/* `ArrayBuffer.isView(x)`.
+ *
+ * True for every typed array *and* for a `DataView`, which is the one place
+ * those two are one answer -- `instanceof` separates them and this does not.
+ * So it is two descriptor comparisons rather than a kind test: `nts_desc_view`
+ * covers the nine typed arrays, which share a struct and differ in how their
+ * bytes are read, and `nts_desc_dataview` is the tenth thing the predicate is
+ * true of.
+ *
+ * Not `nts_is_view_kind` with a wildcard, because there is no kind that means
+ * "any" and inventing one would put a value in the `kind` field that no view
+ * has. */
+bool nts_value_is_view(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  if (object == NULL) {
+    return false;
+  }
+  return object->descriptor == &nts_desc_view ||
+         object->descriptor == &nts_desc_dataview;
+}
+
 bool nts_is_view_kind(NtsValue value, double kind) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
     return false;

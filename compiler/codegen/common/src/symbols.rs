@@ -355,6 +355,40 @@ pub fn c_member(name: &str) -> String {
     }
 }
 
+/// The C spelling of a module-scope *global*, given the function names the
+/// program also emits.
+///
+/// A third namespace, and the third time this has come up. `c_identifier`
+/// answers the linker's question and `c_member` answers a struct's; this one
+/// answers C's file scope, where a program's own functions and its own globals
+/// share one space that TypeScript keeps apart. `process` declares a function
+/// `version()` and a module-scope `const version`, which is ordinary and which
+/// C reads as:
+///
+/// ```text
+/// NtsString * version(void);            /* the function */
+/// static NtsString * version = 0;       /* the global   */
+/// error: redefinition of 'version' as different kind of symbol
+/// ```
+///
+/// Three of them in that module -- `version`, `platform`, `environment` -- and
+/// the same underscore rule as the other two, for the same reason: reversible
+/// by inspection.
+///
+/// The *function* keeps the plain name rather than the global, because a
+/// function name can be an exported linkage symbol that something outside links
+/// against, and a global is reached through the wrapper this compiler generates.
+/// Renaming the half that has no external contract is the cheaper half.
+#[must_use]
+pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) -> String {
+    let spelled = c_identifier(name);
+    if functions.any(|function| c_identifier(function) == spelled) {
+        format!("{spelled}_")
+    } else {
+        spelled
+    }
+}
+
 /// What a name becomes on the JVM.
 ///
 /// # A second rule, deliberately beside the first

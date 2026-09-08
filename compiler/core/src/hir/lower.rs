@@ -3497,14 +3497,34 @@ fn relate_closures_to_signatures(
         let Some(key) = signature_key(snapshot, ty) else {
             continue;
         };
+        // Any layout but *this closure's own*, which is not the same exclusion
+        // as any id but this closure's type id.
+        //
+        // For an arrow they coincide, which is why the second was written and
+        // why it stood: the arrow's inferred type is one id and the slot's
+        // declared type is another, so excluding the id excluded the closure
+        // and left the signature.
+        //
+        // For a named function used as a value they do not. `{ doubled }` has
+        // one id for both -- the declaration *is* the written type -- so
+        // excluding the id excluded the answer, and the closure got no base.
+        // It looked like it worked, because a *second* function of the same
+        // signature puts a second id in the signature's layout and the
+        // exclusion then passes over it. One entry failed and two entries
+        // passed, and the JVM said so as `Type 'Closure0' is not assignable to
+        // 'Fn2__2'` at class load -- two unrelated final classes where the
+        // field descriptor named the base.
+        //
+        // So the question is asked of the layout rather than of the id.
         let matching: Vec<usize> = program
             .layouts
             .iter()
             .enumerate()
-            .filter(|(_, layout)| {
-                layout.types.iter().any(|&other| {
-                    other != ty && signature_key(snapshot, other).is_some_and(|found| found == key)
-                })
+            .filter(|(index, layout)| {
+                *index != at
+                    && layout.types.iter().any(|&other| {
+                        signature_key(snapshot, other).is_some_and(|found| found == key)
+                    })
             })
             .map(|(at, _)| at)
             .collect();
@@ -6620,6 +6640,28 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(id);
             return Ok(self.push(OpKind::ConstInt(0), HirType::BigInt, origin));
         }
+        // Narrowed to `never`, which is the checker saying this code cannot run.
+        //
+        // Refused here until now, and the reason given was real: `never` is
+        // assignable to everything, so an erased value returned from this
+        // flowed into a multiplication typed `f64` and the backend cast a
+        // struct to a double. But that is a fact about the *use*, and refusing
+        // at the read refuses every use including the ones that are fine.
+        //
+        // Handed back unchanged instead. A consumer that wants a representation
+        // asks `coerce` for one and gets `an erased value where a concrete
+        // representation is wanted` -- the same refusal, at the site that
+        // actually cannot be compiled, naming the operation rather than the
+        // narrowing. A consumer that wants `unknown` needs nothing and gets it.
+        //
+        // `string_decoder` is the shape: `write(buf: ArrayBufferView | string)`
+        // guards with `typeof buf === "string"` and then with
+        // `!ArrayBuffer.isView(buf)`, which the checker knows is false -- so the
+        // throw branch is `never`, and all it does with the value is hand it to
+        // `ERR_INVALID_ARG_TYPE`, whose parameter is `unknown`.
+        if want == HirType::Never {
+            return Ok(value);
+        }
         if !readable_back(&want) {
             return Err(self.unsupported(
                 id,
@@ -9720,6 +9762,15 @@ impl<'a> FuncBuilder<'a> {
 
         match (global.as_str(), name.as_str(), arguments) {
             ("Array", "isArray", [argument]) => Some(self.decide_is_array(id, *argument)),
+            // `ArrayBuffer.isView(x)`, which is the same question asked of a
+            // different family and answered the same way: from the type where
+            // the type knows, and from the descriptor where it does not.
+            //
+            // It is the one question a typed array and a `DataView` answer
+            // together -- `instanceof` separates them and this does not -- so
+            // the runtime side compares two descriptors rather than testing a
+            // kind. `AnyView` is true by construction: it *is* the union.
+            ("ArrayBuffer", "isView", [argument]) => Some(self.decide_is_view(id, *argument)),
             // `Array.from(xs)` where `xs` is already an array is a copy, which
             // is what `[...xs]` is and what `slice` already does. Twelve of the
             // twenty-two `Array.from` calls in `runtime/node` take one
@@ -10275,6 +10326,77 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// `Array.isArray(x)`, from the checker's type rather than the machine one.
+    /// Whether the checker's type for this node admits only primitives that
+    /// carry their own value -- no object, no array, nothing with a prototype.
+    ///
+    /// The licence for `nts_value_to_number`, and it has to be the type rather
+    /// than the tag: the tag is a run-time fact and this is a claim about every
+    /// value that can arrive. A union of `string` and `boolean` qualifies; a
+    /// union with `object` in it does not, because `ToNumber` of one is
+    /// `ToPrimitive` and this compiler has no prototype chain to run.
+    fn only_primitives(&self, at: NodeId) -> bool {
+        let Some(&ty) = self.snapshot.node_types.get(&at) else {
+            return false;
+        };
+        let primitive = |snapshot: &SemanticSnapshot, id: TypeId| {
+            matches!(
+                snapshot.types.get(id.0 as usize).map(|record| &record.kind),
+                Some(
+                    TypeKind::Number
+                        | TypeKind::String
+                        | TypeKind::Boolean
+                        | TypeKind::Null
+                        | TypeKind::Undefined
+                        // A literal is its base type narrowed to one value, and
+                        // `"7"` is as much a string as `string` is.
+                        | TypeKind::Literal(_)
+                )
+            )
+        };
+        match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Union(members)) => {
+                members.iter().all(|member| primitive(self.snapshot, *member))
+            }
+            _ => primitive(self.snapshot, ty),
+        }
+    }
+
+    /// `ArrayBuffer.isView(x)`: any typed array or a `DataView`.
+    ///
+    /// The sibling of [`FuncBuilder::decide_is_array`] and decided the same
+    /// way, from the *representation* rather than from the syntax. A `View`, a
+    /// `DataView` and an `AnyView` are true; every other representation is
+    /// false; an erased value is a descriptor comparison at run time.
+    ///
+    /// Deciding it from `HirType` rather than from `TypeKind` as `isArray`
+    /// does, because this family is exactly what `ManagedType` distinguishes
+    /// and the schema's kinds do not: `Uint8Array` and `Float64Array` are two
+    /// object types there and one answer here. `AnyView` is the case that makes
+    /// the point -- the declaration says only `ArrayBufferView`, which is
+    /// precisely the set this predicate is true of.
+    fn decide_is_view(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
+        let subject = self.lower_expression(argument)?;
+        let origin = self.origin(id);
+        let answer = match &self.values[subject.0 as usize].ty {
+            HirType::Managed(
+                ManagedType::View(_) | ManagedType::AnyView | ManagedType::DataView,
+            ) => true,
+            // Open, so the descriptor decides. An `unknown` holding a
+            // `Uint8Array` is the shape `string_decoder` guards its input with,
+            // and it is the whole reason this is not a constant.
+            HirType::Erased => {
+                return Ok(self.call_runtime(
+                    "nts_value_is_view",
+                    vec![subject],
+                    HirType::Bool,
+                    &origin,
+                ));
+            }
+            _ => false,
+        };
+        Ok(self.push(OpKind::ConstBool(answer), HirType::Bool, origin))
+    }
+
     fn decide_is_array(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         let subject = self.lower_expression(argument)?;
         let ty = self
@@ -20363,6 +20485,39 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Bool | HirType::BigInt => {
                     Ok(self.push(OpKind::Convert(value), HirType::NUMBER, origin))
                 }
+                // An erased value whose type admits no object, which is
+                // `typeof v === "string" || typeof v === "boolean"` -- a union
+                // of two primitives, so the value keeps its tag and the tag is
+                // what decides. `nts_value_to_number` is ToNumber over the tags
+                // and reuses the string parse below rather than repeating it.
+                //
+                // Guarded on the *type* rather than emitted for any erased
+                // value, because ToNumber of an object is ToPrimitive: it runs
+                // `valueOf` and `toString` off a prototype chain, and
+                // `Number([5])` is 5. Nothing here can produce that, so a value
+                // that might be one is refused instead of answered wrongly.
+                HirType::Erased if self.only_primitives(*argument) => Ok(self.call_runtime(
+                    "nts_value_to_number",
+                    vec![value],
+                    HirType::NUMBER,
+                    &origin,
+                )),
+                // A string, which is a *parse* and not a conversion: the
+                // specification's StringToNumber trims, accepts three radix
+                // prefixes C does not and rejects three spellings C does, and
+                // answers NaN for anything that is not a complete literal.
+                // `nts_str_to_number` is that grammar; `strtod` is asked only
+                // about a span it has already decided is decimal.
+                //
+                // The whole JSON parser is behind this one arm: `numberValueOf`
+                // reads `Number(source.slice(start, end))`, and `readValue` and
+                // `parseJsonText` are behind that.
+                HirType::Managed(ManagedType::String) => Ok(self.call_runtime(
+                    "nts_str_to_number",
+                    vec![value],
+                    HirType::NUMBER,
+                    &origin,
+                )),
                 _ => Err(self.unsupported(id, "a conversion to number from this type")),
             });
         }

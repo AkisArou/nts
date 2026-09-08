@@ -13,7 +13,7 @@
 //! a function touching a managed type is refused. RFC §4.1 again: the failure has
 //! to be visible.
 
-pub use nts_codegen_common::symbols::c_identifier;
+pub use nts_codegen_common::symbols::{c_global, c_identifier};
 use nts_codegen_common::symbols::c_member;
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::{
@@ -243,6 +243,12 @@ struct Context<'a> {
 pub struct Emitted {
     pub writer: CodeWriter,
     pub diagnostics: Vec<Diagnostic>,
+    /// Whether the program calls something `nts_unicode.h` declares.
+    ///
+    /// Decided from the HIR because the `#include` has to be written before the
+    /// body exists, and kept beside the text scan below rather than replacing
+    /// it -- see [`Emitted::needs_unicode`].
+    pub(crate) unicode: bool,
 }
 
 impl Emitted {
@@ -253,14 +259,23 @@ impl Emitted {
 
     /// Whether this program needs the Unicode tables beside it.
     ///
-    /// Asked of the emitted text rather than of the HIR, because the text is
-    /// what gets compiled: a helper the lowering emits by some route this
-    /// forgot to enumerate still appears here, and the failure mode of getting
-    /// it wrong is a link error rather than a wrong answer.
+    /// Two answers, and both are kept. The text scan is the original and its
+    /// reason still holds: the text is what gets compiled, so a helper the
+    /// lowering emits by some route nobody enumerated still appears here, and
+    /// the failure mode of missing one is a link error rather than a wrong
+    /// answer.
+    ///
+    /// What it cannot do is decide the `#include`, which is written before
+    /// there is any text to scan. So the HIR is asked as well -- does any call
+    /// name something the header declares -- and the two are or'd. The scan
+    /// catching something the walk missed writes the files without the include,
+    /// which is the state this had before and still links.
     #[must_use]
     pub fn needs_unicode(&self) -> bool {
         let source = self.writer.text();
-        source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
+        self.unicode
+            || source.contains("nts_str_to_lower_case")
+            || source.contains("nts_str_to_upper_case")
     }
 
     /// The files to write beside `program.c`, this program's set.
@@ -346,11 +361,13 @@ fn drop_orphaned_bodies(
 pub fn emit(program: &Program) -> Emitted {
     let mut writer = CodeWriter::new();
     let mut diagnostics = Vec::new();
+    let unicode = uses_unicode(program);
 
     let Some(first) = program.funcs.first() else {
         return Emitted {
             writer,
             diagnostics,
+            unicode,
         };
     };
     let origin = first.origin.clone();
@@ -437,6 +454,23 @@ pub fn emit(program: &Program) -> Emitted {
     // The runtime, and nothing else -- notably not <stdlib.h>, which declares
     // `div`, a name a TypeScript program is entitled to use.
     writer.line(&origin, format!("#include \"{RUNTIME_HEADER_NAME}\""));
+    // The Unicode header, where the program reaches one of its helpers.
+    //
+    // Its helpers are declared there and defined in `nts_unicode.c`, which is
+    // already compiled and linked -- only the prototype was ever missing. The
+    // emitter used to supply one from the *call's* argument types, which
+    // differed from the header by a `const` and made the two impossible to see
+    // at once: `conflicting types for 'nts_str_to_lower_case'` the moment
+    // anything included both.
+    //
+    // Including it here rather than force-including it at the build is what
+    // makes the file self-describing: a generated translation unit names the
+    // headers it needs, and every caller of `emit-c` gets the same answer
+    // without a flag. `runtime/node/build.sh` had to revert exactly that flag
+    // because of the conflict, and now needs no flag at all.
+    if unicode {
+        writer.line(&origin, format!("#include \"{UNICODE_HEADER_NAME}\""));
+    }
     emit_object_types(&mut writer, &origin, program, &mut diagnostics);
 
     // Forward declarations, so a call does not depend on definition order — and
@@ -475,6 +509,7 @@ pub fn emit(program: &Program) -> Emitted {
     Emitted {
         writer,
         diagnostics,
+        unicode,
     }
 }
 
@@ -554,12 +589,75 @@ fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
 ///
 /// A whole-word search, so `nts_str_slice` does not count as a declaration of
 /// `nts_str_slice_into`.
+/// Whether the program calls anything `nts_unicode.h` declares.
+///
+/// Over the HIR rather than the emitted text, because this decides the
+/// `#include` and that line is written first. `Emitted::needs_unicode` keeps
+/// the text scan beside it for what this cannot see.
+fn uses_unicode(program: &Program) -> bool {
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
+                if declares_the_name(UNICODE_HEADER, name))
+        })
+    })
+}
+
 fn runtime_declares(name: &str) -> bool {
-    RUNTIME_HEADER.match_indices(name).any(|(at, _)| {
-        let before = RUNTIME_HEADER[..at].chars().next_back();
-        let after = RUNTIME_HEADER[at + name.len()..].chars().next();
+    // Every header the build force-includes, not only the main one.
+    //
+    // A prototype is emitted from the *call's* argument types, because for an
+    // arbitrary `declare function` that is all there is. Where a header already
+    // declares the name, the header is the one declaration and this must emit
+    // none -- and asking only `nts_runtime.h` meant `nts_unicode.h`'s helpers
+    // got a second, generated one:
+    //
+    //     nts_unicode.h  NtsString *nts_str_to_lower_case(const NtsString *s);
+    //     program.c      NtsString * nts_str_to_lower_case(NtsString *);
+    //
+    // A `const` apart, invisible while nothing included both, and
+    // `conflicting types` the moment `build.sh` force-included the header so
+    // that `process` could reach three declared-and-defined helpers. The node
+    // lane reverted that change rather than take a module's three errors at the
+    // cost of two modules that build.
+    //
+    // Listed rather than derived because the set is small and each entry is a
+    // decision: these are the headers a generated translation unit is compiled
+    // against, and a header it is *not* compiled against must still get a
+    // prototype or the call will not link.
+    [RUNTIME_HEADER, UNICODE_HEADER, GRISU_HEADER]
+        .iter()
+        .any(|header| declares_the_name(header, name))
+}
+
+/// Whether a header declares exactly this name, on a word boundary, as a
+/// function.
+///
+/// Three conditions and each one is load-bearing.
+///
+/// **A word boundary**, because substring alone answers yes for `nts_str_at`
+/// inside `nts_str_at_into`, which is a different helper with a different
+/// signature.
+///
+/// **Followed by `(`**, because a header is mostly prose and a name that
+/// appears in a comment is not a declaration.
+///
+/// **Prefixed `nts_`**, because these headers are searched for names taken from
+/// the *program*, and a program may name anything. `declare function f(...)` in
+/// TypeScript is an ambient function called `f`, and a bare `f` occurs in any
+/// large C file -- so the search concluded a header had declared it, emitted no
+/// prototype, and produced `call to undeclared function 'f'`. The corpus found
+/// that within an hour of the search widening from one header to three; on one
+/// header it had been latent for as long as this existed.
+fn declares_the_name(header: &str, name: &str) -> bool {
+    if !name.starts_with("nts_") {
+        return false;
+    }
+    header.match_indices(name).any(|(at, _)| {
+        let before = header[..at].chars().next_back();
+        let rest = &header[at + name.len()..];
         let boundary = |c: Option<char>| !c.is_some_and(|c| c.is_alphanumeric() || c == '_');
-        boundary(before) && boundary(after)
+        boundary(before) && rest.trim_start().starts_with('(')
     })
 }
 
@@ -1176,10 +1274,10 @@ fn virtual_signature(
 
 /// The C name of a module-scope variable.
 fn global_name(program: &Program, global: u32) -> String {
-    program
-        .globals
-        .get(global as usize)
-        .map_or_else(|| format!("nts_global_{global}"), |g| c_identifier(&g.name))
+    program.globals.get(global as usize).map_or_else(
+        || format!("nts_global_{global}"),
+        |g| c_global(&g.name, program.funcs.iter().map(|func| func.name.as_str())),
+    )
 }
 
 /// Module-scope variables, as file-scope storage.
@@ -1269,7 +1367,7 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
             &global.origin,
             format!(
                 "{visibility}{ty} {} = {};",
-                c_identifier(&global.name),
+                c_global(&global.name, program.funcs.iter().map(|f| f.name.as_str())),
                 match global.ty {
                     HirType::Bool => (global.initial != 0.0).to_string(),
                     // A global's `initial` is one `f64`, which cannot spell a
@@ -2049,6 +2147,20 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
             ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_),
         ) => format!("{}->header.length", value_name(value)),
         _ => format!("{}->length", value_name(value)),
+    }
+}
+
+/// The element type an array or view holds, as an `HirType`.
+///
+/// [`element_type`] answers the same question in C, which is what the store
+/// needs to *write*; this is what it needs to *compare*, because two managed
+/// types can differ and share a spelling only by accident.
+fn element_declared(array: &HirType) -> Option<HirType> {
+    match array {
+        HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) => {
+            Some((**element).clone())
+        }
+        _ => None,
     }
 }
 
@@ -3188,8 +3300,26 @@ fn managed_op(
             )?;
             let slot = index_expression(func, *array, *index, *checked);
             let items = items_macro(&func.values[array.0 as usize].ty);
+            // The third storage this family needs and the third time it has
+            // been found by a program rather than by looking: an argument gets
+            // the cast at the call, a global gets it at the store, and an
+            // element did not get it anywhere. `const entries: Entry[] = [...,
+            // derived, ...]` is the plainest way anyone fills an array of a
+            // base, and it emitted `NTS_ITEMS(v6, NtsObj_Entry *)[i] = v1;`
+            // with `v1` an `NtsObj_Extended *`.
+            //
+            // Only an upcast is reachable -- the checker settled assignability
+            // long before this -- and base-first layout makes one free: the
+            // same address, with the base's fields at the base's offsets.
+            let stored_ty = &func.values[stored.0 as usize].ty;
+            let cast = match element_declared(&func.values[array.0 as usize].ty) {
+                Some(declared) if declared != *stored_ty && declared.is_managed() => {
+                    format!("({element})")
+                }
+                _ => String::new(),
+            };
             format!(
-                "{items}({}, {element})[{slot}] = {};",
+                "{items}({}, {element})[{slot}] = {cast}{};",
                 value_name(*array),
                 value_name(*stored)
             )
