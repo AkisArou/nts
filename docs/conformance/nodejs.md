@@ -2816,6 +2816,44 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The `void` struct fields are gone, measured over the whole corpus
+
+The standing description of this axis is *"228 of 244 clang errors are one
+struct emitter writing `void` fields"*, with three WHATWG Streams dictionaries
+as the evidence:
+
+    struct NtsObj_Type1880 { NtsHeader header;
+        void abort; void close; void start; void type; void write; };
+
+`blockers/void-struct-fields` stages that shape as the plan described it — a
+generic interface of optional callbacks over its own type parameter — and **it
+does not reproduce**.
+
+**The first version of that claim was made on the wrong sample**, and the error
+is worth recording because it is the same one twice in one day. It searched the
+seven modules that *build*; the `void` fields were reported from modules that do
+not. Redone over all twenty-two — every `program.c` `emit-c` produced, 24MB of
+generated C:
+
+    assert 0   async_hooks 0   buffer 0     console 0    dgram 0
+    diagnostics_channel 0      events 0     fs 0         http 0
+    net 0      os 0            path 0       process 0    punycode 0
+    querystring 0              readline 0   stream 0     string_decoder 0
+    timers 0   url 0           util 0       zlib 0
+
+Zero, including `fs` at 2.2MB and every module that pulls in WHATWG Streams.
+What the shape produces now is a clean refusal, `a parameter of unrepresentable
+type (Sink)` — a diagnostic rather than invalid C.
+
+So the fixture is a **regression guard**, and it cannot honestly be anything
+else. `emits-c` cannot state this, because correct output has no `void` field
+either and such an expectation would pass for the wrong reason forever; and a
+fixture that manufactured a reproduction would report a fixed compiler as broken
+from now on. The blocker that remains under this shape is a different one and is
+open: a generic interface of optional callbacks is still unrepresentable as a
+parameter, and that is what the historical sentence should be replaced with
+wherever it still appears.
+
 ## A second blind spot, in `shape.mjs` rather than `bindings.node.mjs`
 
 The stand-in blind spot is well recorded here: 64 of 332 stand-ins delegate to
