@@ -4577,6 +4577,26 @@ That is the sharpest form of "a measurement on one axis is a claim about that
 axis only" this project has produced, because here the second axis is not merely
 unmeasured — the first one is *constructed so that it cannot fail*.
 
+**One of the seventy-eight is now measured.** `os`'s addon loads, so its
+seventeen published names can be compared against node's own `os`:
+
+    34,238 comparisons over 2,000 generated environments and 14 fixed
+    0 divergences, 0 property failures
+
+The corpus takes an *environment* as its input rather than a string, because the
+defect it was written for was in which variable was consulted rather than in what
+was done with the value. Controlled by reverting `tmpdir` to the libuv chain and
+rebuilding: it reports `tmpdir(["", "", "/temp"])` giving `/tmp` against node's
+`/temp` immediately, and returns to zero when the fix is restored.
+
+**The corpus is marked `addonOnly`, and that flag is the honest part.** Adding it
+put `os` into `differential-ts.mjs --all`, which the sweep runs — and on that lane
+every one of those calls resolves to node's own `os` through the stand-ins. It
+would have compared node against node and reported zero divergences for ever: a
+green row that cannot fail, introduced by the corpus written to expose exactly
+that. The TypeScript lane skips it out loud, because a missing row and a passing
+row look identical in a summary.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
