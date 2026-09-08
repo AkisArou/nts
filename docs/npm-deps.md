@@ -223,6 +223,13 @@ measurement. `nts deps` measures the right one — a real project, driven by wha
 its program imports — and `tooling/npm-survey/corpus.ts` builds the project to
 point it at: all 458 packages installed flat, a program importing all 96 roots.
 
+**A built corpus rather than a checked-out application, because this repository
+has no application to measure.** `nts deps` was pointed at every project in the
+tree first: `examples/library` has one dependency and it is a workspace sibling,
+`tooling/config` has none, and `runtime/node` and `runtime/web-platform` have no
+`package.json` at all. That is what a compiler's own tree looks like, and it is
+why the number below had to be manufactured before it could be measured.
+
     packages the program reaches      141   (of 458 installed)
     acquired                           15   10.6%
 
