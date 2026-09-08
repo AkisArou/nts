@@ -28,7 +28,7 @@ lane has moved.
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
 | `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | 1.09x | 55% our Grisu port vs the JDK's own formatter |
-| `module-closures` | 1.06x | no single cause -- needs `hsdis` |
+| `module-closures` | 1.06x | closure ABI is `(D)D` where the reference's is `(I)I` |
 | `elementwise` | 1.03x | at its floor: both lanes vectorise |
 | `upcast` | 1.07x -> **1.01x** | unsigned remainder |
 
@@ -169,8 +169,18 @@ has 2 `f64` block parameters and 6 `f64` adds. Counting `f64` block parameters
 and adds in the prepared IR is a five-second check that reclassified two rows I
 had sent to the assembler.
 
-`generic-classes`, `module-closures` and `elementwise` have **zero** `f64` block
-parameters and no `i64` ones, so those three are genuinely about emitted code.
+`generic-classes`, `module-closures` and `elementwise` have zero `f64` *block
+parameters*, which is what I counted -- and for `module-closures` that was the
+wrong thing to count. Its closure **signature** is
+`Closure0$call:(Lnts/gen/Closure0;D)D`, taking and returning a double with a
+`d2i` at every call site, where the reference declares `interface IntFn { int
+apply(int); }`. Our closure bodies compile to 54 bytes against the reference's
+13 and 12. So it is the narrowing family at the closure ABI rather than in a
+loop counter, and `signatures::specialize` is where a `number` parameter every
+caller passes an integer to would be narrowed. **Seven rows now rest on one
+upstream cause.**
+
+That leaves two rows genuinely about emitted code.
 `hsdis` is built at `~/Projects/hsdis/build/linux-amd64/hsdis-amd64.so` and
 loads with `LD_LIBRARY_PATH` plus `-XX:+PrintAssembly`.
 
