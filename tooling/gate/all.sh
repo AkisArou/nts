@@ -439,23 +439,58 @@ backend_examples() {
       invalid|unsupported) exit 0 ;;
     esac
     out=$("${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
-    if [ $? -ne 0 ]; then
-      echo "no $n"
-    elif [ "${out#*nothing to check}" != "$out" ]; then
-      # Nothing for the differential to drive, so it exits 0 without comparing
-      # an answer -- and would count as agreement in either backend. Six do.
-      echo "bare $n"
-    else
-      echo "ok $n"
+    if [ $? -eq 0 ]; then
+      if [ "${out#*nothing to check}" != "$out" ]; then
+        # Nothing for the differential to drive, so it exits 0 without comparing
+        # an answer -- and would count as agreement in either backend. Six do.
+        echo "bare $n"
+      else
+        echo "ok $n"
+      fi
+      exit 0
     fi
+    # **A non-zero exit is not the same claim as "the backend disagrees",** and
+    # reading it as one is how this step produced its two worst reports. `nts
+    # check` says which of the things happened; the step was asking a coarser
+    # question than the tool answers.
+    case "$out" in
+      *"disagree between the compiled program and node"*) echo "no $n" ;;
+      *"the backend declined"*)                           echo "no $n" ;;
+      *"the compiled program aborted"*)                   echo "no $n" ;;
+      *"does not typecheck"*)                             echo "no $n" ;;
+      *"refusing to proceed"*)                            echo "no $n" ;;
+      *"invalid HIR"*)                                    echo "no $n" ;;
+      *)
+        # Something that is not an answer about the backend at all: the
+        # compiler never ran, or died for a reason of its own. The first line
+        # of what it said goes with the name, because a bare list of names is
+        # what sent one session hunting jar timestamps for ten minutes.
+        why=$(printf "%s" "$out" | grep -v "^$" | head -1 | cut -c1-90)
+        printf "unmeasured %s\t%s\n" "$n" "$why"
+        ;;
+    esac
   ' _ > "$results"
   passed=$(grep -c '^ok ' "$results" || true)
   bare=$(grep -c '^bare ' "$results" || true)
-  total=$(($(grep -c . "$results" || true) - bare))
+  unmeasured=$(grep -c '^unmeasured ' "$results" || true)
+  total=$((passed + $(grep -c '^no ' "$results" || true)))
   behind=$(awk '/^no /{printf " %s", $2}' "$results")
-  rm -f "$results"
   printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
   [ "$bare" -gt 0 ] && printf '  %s compared nothing\n' "$bare"
+  if [ "$unmeasured" -gt 0 ]; then
+    # **Not counted against the floor, and the step fails anyway.** A case that
+    # could not be run is not evidence in either direction, and scoring it as a
+    # regression is how sixty-six contiguous plausible names appeared once and
+    # `0 of 128` appeared another time -- the second because `NTS_TSGO` was
+    # unset and the compiler never started, which read as every example
+    # disagreeing at once.
+    printf '  %s could not be measured, so the floor below says nothing:\n' "$unmeasured"
+    awk -F'\t' '/^unmeasured /{ sub(/^unmeasured /, "", $1); printf "    %-24s %s\n", $1, $2 }' \
+      "$results"
+    rm -f "$results"
+    return 1
+  fi
+  rm -f "$results"
   # The names, whenever there are any -- not only when the floor is breached.
   #
   # The floor answers "did we regress"; the names answer "against what", and
