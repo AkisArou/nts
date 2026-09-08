@@ -93,6 +93,26 @@ Each cost a measurement. The number in brackets is what the fix was worth.
 
 ## Open, and whose
 
+**Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
+matters when reading a row that does not move.
+
+*The range relation*, a fact about a value inside a function: a loop counter
+bounded by something with no constant bound widens to infinity, so `width_of`
+refuses the class and it stays `f64`. `node-utf8`'s `outputIndex`, `array-from`'s
+cursor, `awfy-sieve`, `awfy-queens`, `array-methods`.
+
+*Signature narrowing*, a decision about a **type across the whole program**:
+`module-closures`' `Closure0$call:(...D)D`. `specialize` refuses to narrow a
+parameter that a dispatch table names, because every closure of a signature
+shares the slot and every call site spells it -- so narrowing one body means
+narrowing the signature, and every implementation and caller must agree at once.
+No range relation reaches it. Same motive, different machinery.
+
+`queenRows` emitted `[D` is a third home for the same motive -- `hir::elements`
+and an array's element type -- which makes it a representation in **four**
+places: a counter, a signature, an array element, and a helper's argument.
+Only one of them is a loop.
+
 **Blocked on `narrow.rs`** (integer arithmetic held in `f64` slots): `node-utf8`
 62%, `symbol-keyed-map` 52%, `array-from`'s cursor, and `array-methods` at 25%
 -- its `total` is an `f64` accumulator behind `| 0` where `ref.java` writes `int
