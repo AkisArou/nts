@@ -37,6 +37,13 @@ pub struct LockedPackage {
     /// it.
     pub digest: String,
     pub files: usize,
+    /// Specifier -> the vendor-relative file it resolves to.
+    ///
+    /// Recorded so a settled run can rebuild the `paths` without recovering
+    /// anything. Recovery means indexing every source map in a package, which
+    /// on a large closure is most of what a no-op acquisition costs.
+    #[serde(default)]
+    pub mapped: BTreeMap<String, String>,
 }
 
 pub const LOCK_VERSION: u32 = 1;

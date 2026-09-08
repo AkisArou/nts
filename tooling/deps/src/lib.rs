@@ -485,6 +485,77 @@ fn attribute(
     }
 }
 
+/// What a previous run already worked out about this package.
+///
+/// Recovery indexes every source map a package ships, and on a settled tree
+/// that is most of what a *no-op* acquisition costs — 3.6s of 141 packages,
+/// against 0.8s of actual checking. Both answers are memoised, and the second
+/// matters more: the packages with nothing to recover are the overwhelming
+/// majority, and re-examining one costs exactly as much as examining it did.
+///
+/// The identity is name, version, and the directory it was read from. A package
+/// rewritten in place under an unchanged version is not noticed, which is the
+/// contract a lockfile already has.
+fn remembered(
+    installed: &resolve::Installed,
+    traced: Option<&Vec<(String, Utf8PathBuf)>>,
+    package_root: &Utf8Path,
+    patterns: &[String],
+    pass: &Pass<'_>,
+    lock: &mut Lock,
+    paths: &mut BTreeMap<String, Vec<String>>,
+) -> Option<PackageReport> {
+    let locked = pass.previous.packages.get(&installed.name)?;
+    if locked.version != installed.version || locked.source != installed.dir.as_str() {
+        return None;
+    }
+
+    // Carried forward in both branches, or the lock loses these entries on
+    // every second run and no acquisition ever reports itself unchanged.
+    let recovered = !locked.mapped.is_empty();
+    if recovered && !package_root.is_dir() {
+        // The memo must not stand in for source that is no longer there.
+        return None;
+    }
+    if !recovered && locked.files != 0 {
+        return None;
+    }
+    lock.packages.insert(installed.name.clone(), locked.clone());
+
+    let mapped: Vec<(String, Utf8PathBuf)> = locked
+        .mapped
+        .iter()
+        .map(|(specifier, at)| (specifier.clone(), package_root.join(at)))
+        .collect();
+    for (specifier, at) in &mapped {
+        paths.insert(specifier.clone(), vec![relative(pass.project, at)]);
+    }
+
+    let imported = if recovered {
+        mapped.iter().map(|(name, _)| name.clone()).collect()
+    } else {
+        traced
+            .map(|specifiers| specifiers.iter().map(|(name, _)| name.clone()).collect())
+            .unwrap_or_default()
+    };
+
+    Some(PackageReport {
+        name: installed.name.clone(),
+        version: installed.version.clone(),
+        origin: Origin::Registry,
+        route: Route::Recorded {
+            description: locked.route.clone(),
+            recovered,
+        },
+        depth: installed.depth,
+        imported,
+        mapped,
+        files: locked.files,
+        patterns: patterns.to_vec(),
+        complaints: Vec::new(),
+    })
+}
+
 /// What every package in one pass shares.
 struct Pass<'a> {
     project: &'a Utf8Path,
@@ -522,16 +593,30 @@ fn acquire_package(
         return Ok((report, 0));
     }
 
-    let recovery = match traced {
-        Some(specifiers) => recover::recover_resolved(installed, specifiers),
-        None => recover::recover(installed, &entry_points),
-    };
-    let route = recovery.headline();
     // The version is in the directory name so two versions of one package can
     // coexist, and so that looking at the vendor tree answers "which version am
     // I compiling" without opening anything.
     let slug = format!("{}@{}", installed.name, installed.version);
     let package_root = pass.vendor_root.join(emit::package_dir(&slug));
+
+    // Nothing to recover when the lock already describes this package and its
+    // vendor tree is still there. Recovery indexes every source map in a
+    // package, and on a 141-package closure that was most of what a *no-op*
+    // acquisition cost -- 3.6s, against 0.8s of actual checking.
+    //
+    // The identity is name, version and the directory it was read from. A
+    // package rewritten in place under an unchanged version is not detected,
+    // which is the same contract a lockfile has; deleting `.nts/vendor` is the
+    // way out.
+    if let Some(report) = remembered(installed, traced, &package_root, &patterns, pass, lock, paths) {
+        return Ok((report, 0));
+    }
+
+    let recovery = match traced {
+        Some(specifiers) => recover::recover_resolved(installed, specifiers),
+        None => recover::recover(installed, &entry_points),
+    };
+    let route = recovery.headline();
     let digest = emit::digest(&recovery.files);
 
     let mapped: Vec<(String, Utf8PathBuf)> = recovery
@@ -557,6 +642,22 @@ fn acquire_package(
         }
     }
 
+    if !recovery.any_recovered() {
+        // The memo above reads this back. `mapped` empty and `files` zero is
+        // what marks it a refusal rather than an acquisition.
+        lock.packages.insert(
+            installed.name.clone(),
+            LockedPackage {
+                version: installed.version.clone(),
+                source: installed.dir.to_string(),
+                route: route.describe(),
+                digest: String::new(),
+                files: 0,
+                mapped: BTreeMap::new(),
+            },
+        );
+    }
+
     if recovery.any_recovered() {
         for (specifier, at) in &mapped {
             paths.insert(specifier.clone(), vec![relative(pass.project, at)]);
@@ -569,6 +670,15 @@ fn acquire_package(
                 route: route.describe(),
                 digest,
                 files: recovery.files.len(),
+                mapped: mapped
+                    .iter()
+                    .filter_map(|(specifier, at)| {
+                        Some((
+                            specifier.clone(),
+                            at.strip_prefix(&package_root).ok()?.to_string(),
+                        ))
+                    })
+                    .collect(),
             },
         );
     }

@@ -540,3 +540,58 @@ fn an_installed_dependency_and_a_builtin_are_not_unbuildable() {
         .expect("in the closure");
     assert!(package.acquired(), "route was {:?}", package.route);
 }
+
+/// A package that could not be acquired is remembered, and re-examining one is
+/// most of what a no-op run used to cost: recovery indexes every source map a
+/// package ships, and the packages with nothing to recover are the
+/// overwhelming majority — 127 of 141 in the measured corpus.
+///
+/// The memo has to survive a round trip. It did not: the refusal was read back
+/// and then not carried into the new lock, so every second run lost it and no
+/// acquisition ever reported itself unchanged.
+#[test]
+fn a_refusal_is_remembered_across_runs() {
+    let root = fixture("memo");
+    let first = acquire(&root);
+    let refused_first = first.packages.iter().filter(|p| !p.acquired()).count();
+    assert!(refused_first > 0, "the fixture has packages with nothing to recover");
+
+    let second = acquire(&root);
+    assert!(second.unchanged, "a settled run has nothing to do");
+    assert_eq!(
+        second.packages.iter().filter(|p| !p.acquired()).count(),
+        refused_first,
+        "and still reports every refusal, from the lock rather than by re-examining"
+    );
+    for package in second.packages.iter().filter(|p| !p.acquired()) {
+        assert!(
+            !package.route.describe().is_empty(),
+            "a remembered refusal still says why: {}",
+            package.name
+        );
+    }
+
+    // The third run reads a lock the second one wrote, which is the round trip
+    // the second assertion above could not see.
+    let third = acquire(&root);
+    assert!(third.unchanged);
+    assert_eq!(third.acquired(), first.acquired());
+}
+
+/// Deleting the vendor tree re-acquires, memo or not.
+#[test]
+fn a_missing_vendor_tree_is_recovered_again() {
+    let root = fixture("vendor-gone");
+    acquire(&root);
+    let vendored = root.join(".nts/vendor/mapped@2.0.0");
+    assert!(vendored.is_dir());
+
+    std::fs::remove_dir_all(&vendored).unwrap();
+    let after = acquire(&root);
+
+    assert!(
+        vendored.join("src/index.ts").is_file(),
+        "the memo must not stand in for source that is no longer there"
+    );
+    assert!(after.packages.iter().any(|p| p.name == "mapped" && p.acquired()));
+}

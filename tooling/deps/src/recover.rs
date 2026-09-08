@@ -31,6 +31,9 @@ pub enum Route {
     JavaScriptOnly,
     /// The entry the manifest names is not in the installed package.
     EntryMissing,
+    /// Not recovered this run: the lock already described it and its vendor
+    /// tree is intact, so the route is the one a previous run recorded.
+    Recorded { description: String, recovered: bool },
     /// The source was recovered and cannot be built: it imports something the
     /// package does not install. Almost always a `paths` alias from the
     /// package's own tsconfig, which is not published — `drizzle-orm` writes
@@ -40,8 +43,13 @@ pub enum Route {
 
 impl Route {
     #[must_use]
+    /// Whether source was obtained. `Recorded` carries a previous run's answer
+    /// and takes its truth from `recovered`, which the lock stores alongside.
     pub const fn recovered(&self) -> bool {
-        matches!(self, Self::ShippedTypeScript | Self::SourceMap)
+        matches!(
+            self,
+            Self::ShippedTypeScript | Self::SourceMap | Self::Recorded { recovered: true, .. }
+        )
     }
 
     #[must_use]
@@ -58,6 +66,7 @@ impl Route {
             ),
             Self::JavaScriptOnly => "published JavaScript only".to_owned(),
             Self::EntryMissing => "the entry its package.json names is not installed".to_owned(),
+            Self::Recorded { description, .. } => description.clone(),
             Self::SourceNeedsUnpublishedConfig { specifier } => format!(
                 "its source imports `{specifier}`, which the package does not install — \
                  a path alias from a tsconfig it did not publish"
@@ -101,7 +110,9 @@ impl Recovery {
     pub fn headline(&self) -> Route {
         let rank = |route: &Route| match route {
             Route::ShippedTypeScript => 0,
-            Route::SourceMap => 1,
+            // A recorded route was a recovery when it was first computed, so
+            // it ranks where a recovery ranks.
+            Route::SourceMap | Route::Recorded { .. } => 1,
             Route::MapIncomplete { .. } => 2,
             Route::MapAmbiguous { .. } => 3,
             Route::MapOfJavaScript => 4,
