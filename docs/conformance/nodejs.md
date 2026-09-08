@@ -2879,6 +2879,36 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The axis on the gated commit, as three numbers
+
+`445ea94b`, gate green on all three backends. Measured from a worktree pinned at
+this lane's HEAD, through `build.sh`, binary copied to scratch:
+
+    builds      20 of 22        fs and process are the two
+    load        20 of 20        dgram fixed; it was the only one that did not
+    pass        1 of 22         punycode, 3 of 3
+
+Reported as three because they are three different claims and collapsing them is
+how "twenty modules compile" gets heard as progress on an axis that measures
+passing. Only `punycode` has zero failures. `os` is 4 passed / 5 failed and
+`path` is 2 passed / 19 failed; neither is green and neither is close in the way
+a test count suggests.
+
+**And the summary line I first wrote for this said `passing: 3`.** It counted
+modules with *any* passes rather than modules with *no failures* — `punycode`,
+`os`, `path`. One `grep -c` on the wrong predicate, in the same run where the
+point being made was that three numbers must not be collapsed into one. Caught
+by recomputing it per module before writing it down, which is the only reason
+this section does not say three.
+
+### The failure counts went up, and that is the tests working
+
+`os` 4 failed to 5, `assert` 11 to 12, `stream` 249 to 254. Fifteen
+export-surface tests were added today and each fails against an addon that does
+not publish its surface. That is the intended reading: a module publishing 3 of
+15 exports should fail a test that says so, rather than only failing the
+scattered files that happen to touch an absent name.
+
 ## The `export-class` arm split: no module moves on classes alone
 
 Measured on `445ea94b`, separating the two arms of *is not a function this
