@@ -173,6 +173,38 @@ away. It is 1.26ms and 5.7x. Under-predicting is worth recording because the pro
 how much of the cost was *avoidable* -- it named `nts_collect_cycles` and `nts_array_new` as
 large, and a profile never says what a different architecture would not do at all.
 
+## Two more shapes of the same serializer, and one of them is a trap
+
+The typed row's profile says the largest remaining cost is string lifetime, not character work:
+`nts_str_raw` 15.78%, `nts_release` 7.75%, `nts_free` 5.38%, `nts_each_reference` 3.63% -- about
+32% allocating, counting and freeing short-lived strings -- against `quoteJSONString` at 18.45%
+and `nts_grisu` at 8.56%. Every level builds its own string and hands it up.
+
+**Threading the accumulator through helpers is 50x slower, and that is the important result.**
+`appendRow(out, row)` returning the buffer looks like the obvious fix. `out = f(out, x)` has two
+live references while `f` runs -- the caller's local and the parameter -- so `nts_str_append`'s
+`reserved == 1` test fails and **every append copies the whole buffer.** LLVM measured 62.81ms
+against 1.25ms; the arithmetic agrees, since 2,000 appends averaging 267KB is about 534MB of
+memcpy and that is ~53ms at 10GB/s. The harness rejected the row outright for a backend
+disparity, which is the sanity check working.
+
+**The consequence is a constraint on code the compiler has not written yet.** A generated
+serializer for a known type must emit *one flat function per boundary*, never a call tree that
+passes the accumulator. The natural-looking factoring is the catastrophic one, and nothing but a
+measurement says so.
+
+**Inlining is worth 17.5% and needs no compiler change.** Keeping every append in one function so
+the accumulator never crosses a parameter takes 1.26ms to **1.04ms** -- 1.42x off node's native
+`JSON.stringify` becomes **1.18x**, and 2.77x off bun's becomes 2.29x. It removes the row, tags
+and meta intermediates; it cannot remove the per-field ones, because `quoteJSONString` and
+`numberText` still return strings that are allocated, copied in and freed.
+
+**Hosts and an AOT target want opposite code shapes.** bun runs the *factored* version at 1.02ms
+and the inlined one at 1.47ms -- it prefers small functions its JIT can specialize. Our compiled
+C goes the other way, 1.26 to 1.04. node is flat, 0.885 to 0.822. A single source cannot be
+optimal for both, which is worth knowing before any row here is read as a verdict on the code
+rather than on the target.
+
 **What is left is a compiler gap and it is now the smaller half.** 1.26ms compiled against 0.860
 for the same TypeScript on node is 1.47x, which is the ordinary codegen distance this lane
 already measures on every other row -- not a representation problem.
