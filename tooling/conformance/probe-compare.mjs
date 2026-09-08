@@ -867,6 +867,66 @@ const PROBES = [
       ];
     },
   },
+  {
+    file: "fs-bytes-family.ts",
+    module: "fs",
+    // The eleven byte-path bindings this lane wrote, measured rather than
+    // trusted. Adding them took standin-blindspot from 1 to 11: each has a
+    // stand-in that delegates to node and `fs` does not compile, so the moment
+    // they existed nothing in the tree could report them wrong. Writing a
+    // binding and leaving it unmeasured is worse than not writing it, because
+    // the count of things that work goes up either way.
+    checks(m) {
+      const fsm = require("node:fs");
+      const dir = mkdtempSync(join(tmpdir(), "nts-bf-"));
+      const f = join(dir, "f");
+      const g = join(dir, "g");
+      const out = [];
+      try {
+        writeFileSync(f, "hello");
+        const d2 = join(dir, "d2");
+        out.push({ label: "mkdir_bytes", mine: m.probeMkdir(d2, 0o755), theirs: 0 });
+        out.push({ label: "mkdir made a directory", mine: statSync(d2).isDirectory(), theirs: true });
+        out.push({ label: "rmdir_bytes", mine: m.probeRmdir(d2), theirs: 0 });
+        out.push({ label: "rmdir removed it", mine: existsSync(d2), theirs: false });
+        out.push({ label: "chmod_bytes sets mode", mine: m.probeChmod(f, 0o640), theirs: 0o640 });
+        out.push({ label: "chown_bytes -1 -1", mine: m.probeChown(f), theirs: 0 });
+        out.push({ label: "utimes_bytes sets mtime", mine: m.probeUtimes(f, 1000, 2000), theirs: 2000000 });
+        writeFileSync(g, "x");
+        out.push({ label: "rename_bytes", mine: m.probeRename(g, `${g}2`), theirs: 0 });
+        out.push({ label: "rename moved it", mine: existsSync(`${g}2`) && !existsSync(g), theirs: true });
+        rmSync(`${g}2`);
+        out.push({ label: "copyfile_bytes", mine: m.probeCopyfile(f, g), theirs: 0 });
+        out.push({ label: "copyfile copied", mine: readFileSync(g, "utf8"), theirs: "hello" });
+        rmSync(g);
+        out.push({ label: "link_bytes", mine: m.probeLink(f, g), theirs: 0 });
+        out.push({ label: "link shares inode", mine: statSync(g).ino === statSync(f).ino, theirs: true });
+        rmSync(g);
+        writeFileSync(g, "x");
+        out.push({ label: "unlink_bytes", mine: m.probeUnlink(g), theirs: 0 });
+        out.push({ label: "unlink removed it", mine: existsSync(g), theirs: false });
+        const l = join(dir, "l");
+        fsm.symlinkSync("f", l);
+        out.push({ label: "readlink_bytes", mine: m.probeReadlink(l), theirs: "f" });
+        // lutimes must move the link and leave the target: checked from both
+        // sides, because a probe aimed at a regular file would pass for an
+        // implementation that followed the link.
+        out.push({ label: "lutimes_bytes link only", mine: m.probeLutimes(l, f, 5000), theirs: "5000000:false" });
+        // And the failure paths, which is where an errno goes wrong.
+        const nx = join(dir, "absent");
+        const errnoOf = (thunk) => { try { thunk(); return 0; } catch (e) { return e.errno; } };
+        const expected = [
+          errnoOf(() => fsm.unlinkSync(nx)), errnoOf(() => fsm.rmdirSync(nx)),
+          errnoOf(() => fsm.chmodSync(nx, 0o644)), errnoOf(() => fsm.chownSync(nx, -1, -1)),
+          errnoOf(() => fsm.utimesSync(nx, 0, 0)),
+        ].join(":");
+        out.push({ label: "missing-path errnos", mine: m.probeMissingErrnos(nx), theirs: expected });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
