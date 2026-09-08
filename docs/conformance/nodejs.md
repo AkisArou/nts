@@ -4559,6 +4559,14 @@ that call straight into node's own implementation — `os.hostname()`,
 every one is a place where the C could diverge from node and the interpreted
 lane would report nothing.
 
+**And the shape fix that exposed it applies to exactly one module, which was
+also measured rather than assumed.** `buffer` and `url` crash at load in their
+shapes for the same reason `os` did — a dereference of an export the addon does
+not publish. Degrading them would gain nothing: `buffer` publishes only
+`kMaxLength`, and `url`'s `URL` class is not published at all, so every test in
+both needs a name that is missing rather than a shape that survives. `os` was the
+only module where a tolerant shape had 17 real functions behind it.
+
 So the honest statement about the green axis is narrower than it has been
 written here: **1,807 of 1,807 validates this profile's TypeScript. It does not
 validate the C bindings at all.** Those are checked only by the compiled lane,
