@@ -32,12 +32,28 @@ export interface UVError extends Error {
 
 /** Static representation of Node's Error-with-libuv-fields shape. */
 class UVExceptionError extends Error implements UVError {
+  // Node's `fs` errors are a plain `new Error(...)` with fields attached, so
+  // `err.constructor` is `Error` and `err.constructor.name` is `"Error"`. This
+  // is a subclass, which reports itself. The same override is used by the
+  // `ERR_*` classes in `internal/errors.ts` for the same reason.
+  //
+  // `Object.getPrototypeOf(err) === Error.prototype` still differs and is not
+  // reachable from here without giving up the class: node's really is an
+  // `Error`. That one is recorded in the ledger rather than papered over.
+  override get ["constructor"](): unknown {
+    return Error;
+  }
+
   code: string;
   errno: number;
   syscall: string;
   path?: string;
-  dest?: string;
-  filename?: string;
+  // `dest` and `filename` are deliberately *not* declared here. With
+  // `useDefineForClassFields` an optional field declaration is emitted as an own
+  // property set to `undefined`, so declaring it put `filename` into
+  // `Object.keys` on every error node builds without one. It stays on the
+  // `UVError` interface, which is what `fs/src/watchers.ts` needs in order to
+  // attach it to an error it has already caught.
 
   constructor(
     message: string,
@@ -45,15 +61,21 @@ class UVExceptionError extends Error implements UVError {
     errno: number,
     syscall: string,
     path?: string,
-    dest?: string,
   ) {
     super(message);
     this.code = code;
     this.errno = errno;
     this.syscall = syscall;
-    this.path = path;
-    this.dest = dest;
-    this.filename = undefined;
+    // Assigned only when present. Node builds these errors by attaching the
+    // fields it has, so a single-path failure has exactly `code`, `errno`,
+    // `path` and `syscall` as own keys -- assigning `undefined` instead creates
+    // an own enumerable property that node does not have, and that is visible
+    // through `Object.keys`, spread, `JSON.stringify` and `util.inspect`.
+    //
+    // `filename` was assigned `undefined` here and is never read anywhere: only
+    // `fs/src/watchers.ts` sets it, on errors it has already caught. It is gone
+    // rather than made conditional.
+    if (path !== undefined) this.path = path;
   }
 }
 
@@ -73,7 +95,12 @@ export function uvException(
     message += ` -> '${dest}'`;
   }
 
-  return new UVExceptionError(message, name, code, syscall, path, dest);
+  const error: UVError = new UVExceptionError(message, name, code, syscall, path);
+  // Attached rather than declared, for the same reason `filename` is: a field
+  // declaration becomes an own property whether or not it holds anything, and
+  // node's single-path errors have exactly `code`, `errno`, `path`, `syscall`.
+  if (dest !== undefined) error.dest = dest;
+  return error;
 }
 
 /**

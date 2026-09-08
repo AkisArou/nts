@@ -481,7 +481,16 @@ export function opendirSync(
   const handle = typeof validatedPath === "string"
     ? nts_fs_opendir(validatedPath)
     : nts_fs_opendir_bytes(bytePathForBinding(validatedPath));
-  if (handle === 0) throw uvException(-nts_errno(), "opendir", displayPath);
+  // No path, deliberately. Node's **synchronous** `opendir` error carries none
+  // -- not in the message and not as a property; its own keys are exactly
+  // `code`, `errno`, `syscall`. Its *asynchronous* and *promises* forms do carry
+  // it, on the same failure, for the same directory. That asymmetry is node's
+  // and nothing in its suite pins it, so it was found by comparing error shapes
+  // across every `fs` call rather than by reading anything.
+  //
+  // Matched rather than improved: a path here would be more useful and would be
+  // a divergence, and this profile's job is to be node.
+  if (handle === 0) throw uvException(-nts_errno(), "opendir");
   return new Dir(
     handle,
     displayPath,
