@@ -2816,6 +2816,37 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `narrowed-bigint` may be dead code rather than a missing representation
+
+Not yet established, and recorded here as a hypothesis with the thing that would
+refute it named, because acting on it is a decision in another lane.
+
+The compiler lane sized this as the largest of three fixes: a bigint is
+`__int128`, an `NtsValue` payload is a pointer or a double, so erasing one needs
+a heap box and a tag that does not exist.
+
+**That last clause runs the other way too.** There are eight tags —
+`UNDEFINED`, `BOOLEAN`, `NUMBER`, `STRING`, `FUNCTION`, `SYMBOL`, `OBJECT`,
+`NULL` — and none is a bigint. An `unknown` *is* an `NtsValue`. So no `unknown`
+can hold a bigint, and `typeof value === "bigint"` where `value: unknown` is
+**provably false rather than unrepresentable**. If that holds, the branch is
+unreachable and the fix is to lower it as dead, with no new tag and no box.
+
+The rule has to be narrow and appears to be: narrowing an **erased** value to
+bigint is statically false. A value whose static type is already `bigint` is a
+real `__int128` and works today — `nts_hrtime_ns` returns one, and
+`nts_bigint_as_intn` takes one. This is not "bigint is unsupported".
+
+Both blocked sites fit: `determineSpecificType(value: unknown)` interpolates
+`${value}n` into an error message, and `ERR_OUT_OF_RANGE`'s constructor compares
+an `unknown` against `2n ** 32n`. Neither can be reached with a bigint in hand.
+
+**What would refute it:** a Node-API wrapper that accepts a JavaScript BigInt
+from a caller and hands it in as an erased value. That would need a tag to do
+it, and there isn't one, so the expectation is that it already refuses or
+coerces — but that is a check in the compiler lane's code, not this one's, and
+the hypothesis is worth nothing until somebody runs it.
+
 ## A prediction, written down before the fix so it can be wrong
 
 Measured 2026-09-08, the same modules on both lanes:
