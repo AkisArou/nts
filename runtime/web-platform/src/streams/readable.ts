@@ -643,17 +643,7 @@ export class ReadableStream<T> {
     }
     const byteState = this.#byteState;
     if (byteState !== null) {
-      // The byte path still settles through a promise of its own, so a chunk read from a byte
-      // stream is still observable to a replaced `Object.prototype.then`. `then-interception`
-      // uses a default stream and does not reach here; saying so is better than implying this
-      // closed a hole it did not.
-      void byteState.readDefault().then(
-        (result) => {
-          if (result.done) request.close();
-          else request.chunk(result.value as T);
-        },
-        (reason: unknown) => request.error(reason),
-      );
+      byteState.readDefault(request as ReadRequest<unknown>);
       return;
     }
     const entry = this.#queue.dequeue();
@@ -1247,7 +1237,7 @@ class PullIntoDescriptor {
   readonly elementSize: number;
   readonly viewKind: ByteViewKind;
   readerKind: PullIntoReaderKind;
-  defaultResult: PromiseWithResolvers<ReadResult<unknown>> | null;
+  defaultResult: ReadRequest<unknown> | null;
   byobResult: PromiseWithResolvers<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> | null;
 
   constructor(
@@ -1259,7 +1249,7 @@ class PullIntoDescriptor {
     elementSize: number,
     viewKind: ByteViewKind,
     readerKind: PullIntoReaderKind,
-    defaultResult: PromiseWithResolvers<ReadResult<unknown>> | null,
+    defaultResult: ReadRequest<unknown> | null,
     byobResult: PromiseWithResolvers<ReadableStreamBYOBReadResult<ReadableStreamBYOBView>> | null,
   ) {
     this.buffer = buffer;
@@ -1621,7 +1611,7 @@ class ReadableByteStreamState {
   readonly #autoAllocateChunkSize: number | undefined;
   readonly #queue = new Fifo<ByteQueueEntry>();
   #queueTotalSize = 0;
-  readonly #defaultReads = new Fifo<PromiseWithResolvers<ReadResult<unknown>>>();
+  readonly #defaultReads = new Fifo<ReadRequest<unknown>>();
   readonly #pullIntos = new Fifo<PullIntoDescriptor>();
   #currentBYOBRequest: ReadableStreamBYOBRequest | null = null;
   #closeRequested = false;
@@ -1703,14 +1693,22 @@ class ReadableByteStreamState {
     return this.#currentBYOBRequest;
   }
 
-  readDefault(): Promise<ReadResult<unknown>> {
+/**
+   * The default read on a byte stream, as a read request.
+   *
+   * This used to return a promise, and was the last place a chunk reached its caller by being
+   * the *resolution value* of one -- so a byte stream's chunks stayed observable to a replaced
+   * `Object.prototype.then` after the default path stopped being. `then-interception.any.js`
+   * only covers default streams, so nothing upstream said so; `test/streams-then.test.ts` does.
+   */
+  readDefault(request: ReadRequest<unknown>): void {
     if (this.#queueTotalSize > 0) {
-      return Promise.resolve({ done: false, value: this.#dequeueChunk() });
+      request.chunk(this.#dequeueChunk());
+      return;
     }
-    const result = Promise.withResolvers<ReadResult<unknown>>();
     const autoAllocateChunkSize = this.#autoAllocateChunkSize;
     if (autoAllocateChunkSize === undefined) {
-      this.#defaultReads.enqueue(result);
+      this.#defaultReads.enqueue(request);
     } else {
       this.#pullIntos.enqueue(
         new PullIntoDescriptor(
@@ -1722,13 +1720,12 @@ class ReadableByteStreamState {
           1,
           "uint8",
           "default",
-          result,
+          request,
           null,
         ),
       );
     }
     this.#maybePull();
-    return result.promise;
   }
 
   readInto(
@@ -1810,10 +1807,7 @@ class ReadableByteStreamState {
           this.#pullIntos.dequeue();
           const result = currentPullInto.defaultResult;
           currentPullInto.defaultResult = null;
-          result?.resolve({
-            done: false,
-            value: new Uint8Array(transferred, byteOffset, byteLength),
-          });
+          result?.chunk(new Uint8Array(transferred, byteOffset, byteLength));
           this.#maybePull();
           return;
         }
@@ -1821,10 +1815,7 @@ class ReadableByteStreamState {
         this.#pullIntos.dequeue();
         const result = pendingPullInto.defaultResult;
         pendingPullInto.defaultResult = null;
-        result?.resolve({
-          done: false,
-          value: new Uint8Array(transferred, byteOffset, byteLength),
-        });
+        result?.chunk(new Uint8Array(transferred, byteOffset, byteLength));
         this.#maybePull();
         return;
       }
@@ -1832,10 +1823,7 @@ class ReadableByteStreamState {
 
     const defaultRead = this.#defaultReads.dequeue();
     if (defaultRead !== undefined && this.#pullIntos.empty) {
-      defaultRead.resolve({
-        done: false,
-        value: new Uint8Array(transferred, byteOffset, byteLength),
-      });
+      defaultRead.chunk(new Uint8Array(transferred, byteOffset, byteLength));
     } else {
       if (defaultRead !== undefined) this.#defaultReads.enqueue(defaultRead);
       this.#enqueueChunk(transferred, byteOffset, byteLength);
@@ -1921,7 +1909,7 @@ class ReadableByteStreamState {
   }
 
   releaseDefault(error: unknown): void {
-    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.reject(error);
+    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.error(error);
     this.#releasePullIntos("default", error);
   }
 
@@ -1932,7 +1920,7 @@ class ReadableByteStreamState {
   finish(settleReads: boolean): void {
     this.#clearAlgorithms();
     while (!this.#defaultReads.empty) {
-      this.#defaultReads.dequeue()?.resolve({ done: true, value: undefined });
+      this.#defaultReads.dequeue()?.close();
     }
 
     const retained = new Fifo<PullIntoDescriptor>();
@@ -1940,7 +1928,7 @@ class ReadableByteStreamState {
       const descriptor = this.#pullIntos.dequeue();
       if (descriptor === undefined) break;
       if (descriptor.readerKind === "default") {
-        descriptor.defaultResult?.resolve({ done: true, value: undefined });
+        descriptor.defaultResult?.close();
         descriptor.defaultResult = null;
         if (!settleReads) retained.enqueue(descriptor);
       } else if (settleReads && descriptor.readerKind === "byob") {
@@ -1961,10 +1949,10 @@ class ReadableByteStreamState {
     this.#queue.reset();
     this.#queueTotalSize = 0;
     this.#invalidateBYOBRequest();
-    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.reject(error);
+    while (!this.#defaultReads.empty) this.#defaultReads.dequeue()?.error(error);
     while (!this.#pullIntos.empty) {
       const descriptor = this.#pullIntos.dequeue();
-      descriptor?.defaultResult?.reject(error);
+      descriptor?.defaultResult?.error(error);
       descriptor?.byobResult?.reject(error);
     }
   }
@@ -2065,7 +2053,7 @@ class ReadableByteStreamState {
 
   #processDefaultReads(): void {
     while (this.#queueTotalSize > 0 && !this.#defaultReads.empty) {
-      this.#defaultReads.dequeue()?.resolve({ done: false, value: this.#dequeueChunk() });
+      this.#defaultReads.dequeue()?.chunk(this.#dequeueChunk());
     }
   }
 
@@ -2078,11 +2066,11 @@ class ReadableByteStreamState {
       descriptor.byteOffset,
       byteLength,
     );
-    descriptor.defaultResult?.resolve(
-      done && byteLength === 0
-        ? { done: true, value: undefined }
-        : { done: false, value: new Uint8Array(transferred, descriptor.byteOffset, byteLength) },
-    );
+    const defaultRequest = descriptor.defaultResult;
+    if (defaultRequest !== null) {
+      if (done && byteLength === 0) defaultRequest.close();
+      else defaultRequest.chunk(new Uint8Array(transferred, descriptor.byteOffset, byteLength));
+    }
     descriptor.byobResult?.resolve({ done, value: view });
     descriptor.defaultResult = null;
     descriptor.byobResult = null;
@@ -2118,7 +2106,7 @@ class ReadableByteStreamState {
       const descriptor = this.#pullIntos.dequeue();
       if (descriptor === undefined) break;
       if (descriptor.readerKind === readerKind) {
-        descriptor.defaultResult?.reject(error);
+        descriptor.defaultResult?.error(error);
         descriptor.byobResult?.reject(error);
         descriptor.defaultResult = null;
         descriptor.byobResult = null;

@@ -7360,7 +7360,23 @@ resolution value is `undefined`, not an Object, and nothing is looked up on it -
 chunk out of a `ChunkSlot` they own. That is a smaller change than rewriting four loops into
 callbacks and has the same observable behaviour.
 
-**One hole is left open and named.** A byte stream's default read still settles through
-`byteState.readDefault()`, which is a promise resolved with a result object, so a chunk read from
-a byte stream is still observable. `then-interception` uses a default stream and does not reach
-it. Saying so is better than implying this closed a hole it did not.
+**The hole that was left open is closed, and it was real.** A byte stream's default read still
+settled through `byteState.readDefault()`, a promise resolved with a result object, so byte
+chunks stayed observable after default chunks stopped being. Upstream cannot see this --
+`then-interception.any.js` uses a default stream -- so it was written down as a named gap and
+then reproduced: a byte stream piped with `Object.prototype.then` replaced showed **1
+interception against the default stream's 0**. `readDefault` now takes a read request too, and
+`#defaultReads` and `PullIntoDescriptor.defaultResult` hold requests rather than resolvers.
+
+`test/streams-then.test.ts` covers what upstream does not: piping and teeing for **both** stream
+types, and two assertions in the other direction so the file cannot be satisfied by weakening
+what it protects. The public `read()` must still resolve with an ordinary object whose prototype
+is `Object.prototype` -- that is 25.5 -- and async iteration **is** observable, because 27.1.2
+requires `next()` to fulfil with an ordinary `IteratorResult`. Neither is a gap and both are
+pinned so nobody "fixes" them into violations.
+
+**The test was wrong twice before it was right**, and both mistakes were the subject of the file
+looking back at it. `Promise.all` resolves with an *array*, which is an ordinary object, so
+awaiting one performs the very `Get` for `then` being measured and the harness reported its own
+interception as the stream's. And the first version asserted async iteration was unobservable,
+which the standard forbids. Three failures, neither of them the implementation's.

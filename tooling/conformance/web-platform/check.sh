@@ -85,6 +85,7 @@ node --expose-gc \
   runtime/web-platform/test/server-handshake.test.ts \
   runtime/web-platform/test/snapshot-agent.test.ts \
   runtime/web-platform/test/spill.test.ts \
+  runtime/web-platform/test/streams-then.test.ts \
   runtime/web-platform/test/textdecoder-differential.test.ts \
   runtime/web-platform/test/trailers.test.ts \
   runtime/web-platform/test/tunnel.test.ts \
