@@ -2879,6 +2879,44 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The skip lists, read back for the first time
+
+429 `not-applicable` entries across the profile. A skip removes a file from a
+denominator, so **every percentage in this document is computed without them** —
+including the 1,832 of 1,832 above. Each carries a reason, each was read by a
+person when it was written, and nothing had ever read them back.
+
+    429 entries; 0 without a reason, 0 naming a file the suite does not have
+
+Three ways an entry can be wrong, and the middle is the dangerous one:
+
+    no reason   a bare filename, so the skip is unjustified
+    stale       names a file the pinned suite does not have, so it excludes
+                nothing and hides that it excludes nothing
+    unclaimed   names a file the module's pattern never matches, so the skip
+                is inert for a different reason
+
+`skip-audit.mjs` checks the first two and is wired into the sweep. The third
+needs the pattern machinery and is not covered.
+
+### The audit's own first answer was 61 false findings
+
+Checking `test/parallel` alone reported **61 stale entries**. The modules name
+files in `client-proxy`, `pseudo-tty` and other suites, and an entry may carry a
+directory prefix of its own. Sixty-one wrong findings, every one shaped exactly
+like a real one, from an instrument that assumed the shape of the thing it was
+measuring.
+
+**That is the second time today that fault appeared inside a tool written to
+check for it** — `shape-blindspot.mjs` had three false-alarm classes before its
+zero meant anything, and this had one worth sixty-one rows. The rule holds in
+the mirror: an instrument that reports a count must report the size of what it
+examined, and an instrument that reports *findings* must be shown to produce
+none on a clean input before its findings are read.
+
+Controlled both ways: a planted bare filename reports `NO REASON`, a planted
+nonexistent file reports `STALE`, and removing them returns the run to zero.
+
 ## The two modules that do not compile are two causes, both known
 
 Measured through **`tooling/conformance/build.sh`** on the 15:39 binary — naming
