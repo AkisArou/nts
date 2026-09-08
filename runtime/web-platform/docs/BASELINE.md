@@ -6605,3 +6605,28 @@ declared writable, caught by the descriptor assertion.
 Naming the mutated file is better than relying on the fallback, because "something under this
 lane changed" and "the thing I meant changed" are different claims and only the second is the
 one a sabotage is making.
+
+## Re-measured on a compiler 76 commits newer, and nothing moved
+
+The Node lane landed two upstream fixes worth re-checking against — a required member typed
+exactly `undefined` no longer emitting a C field of type `void`, and the closure call slot
+being published — so this lane's numbers were taken again on a binary built from a tree **76
+commits** past the one they were pinned to.
+
+**Identical.** 1,428 primaries, 318 cascades, zero `NTS1004`, zero `NTS4xxx`, zero invalid HIR.
+Compiled axis unchanged at 138 of 142 across thirteen functions on three backends.
+
+That is worth recording precisely because it is a null result. The pinned-binary discipline
+exists because this lane once measured 1,296 and 1,299 primaries for identical source on two
+different binaries — so every number in this ledger carries an implicit question about how
+much of it is compiler churn. For this stretch the answer is none: the figures describe the
+shared source and not the compiler underneath it.
+
+**And the `{}` narrowing still declines**, checked directly rather than assumed from the
+frontier being unchanged: `unknown` minus both nullish values is still `NTS2006` on c and
+`NTS4001` on jvm. So `core/webidl.ts` still cannot join the compiled axis, and the seven Web
+IDL numeric conversions — the most demanding arithmetic available to it — remain out of reach
+behind one unrelated function in the same module.
+
+No binary was built for this. `target/release/nts` was already fresher than the pin, so a
+private copy of it was taken rather than starting a build in a tree three sessions share.
