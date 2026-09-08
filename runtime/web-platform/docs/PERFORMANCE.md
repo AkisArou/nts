@@ -173,6 +173,46 @@ away. It is 1.26ms and 5.7x. Under-predicting is worth recording because the pro
 how much of the cost was *avoidable* -- it named `nts_collect_cycles` and `nts_array_new` as
 large, and a profile never says what a different architecture would not do at all.
 
+## Faster than node's built-in `JSON.stringify`
+
+Four shapes of the same serializer, same document, byte-identical output every time. The last one
+is ahead of node.
+
+| route | nts C | vs node native | vs bun native |
+| --- | ---: | ---: | ---: |
+| graph, via `JsonValue` | 7.20ms | 9.1x behind | 21x behind |
+| typed, factored | 1.26ms | 1.59x | 3.7x |
+| typed, inlined | 0.99ms | 1.25x | 2.9x |
+| **typed, inlined, escape append fused** | **0.707ms** | **0.89x -- ahead** | 2.07x |
+
+The last row and the native numbers were taken in one window on an idle machine -- node 0.793ms,
+bun 0.341ms -- because the natives move by 10% between sessions and a ratio built across two
+windows is not a ratio. **10.2x from the first shape to the last, with no compiler change at all.**
+
+**The fusion was worth 1.41x on its own**, 0.988ms to 0.707ms, against an estimate of 18%. What
+it removes is the per-field intermediate: `out += quoteJSONString(x)` allocates the quoted
+string, copies it into the accumulator and frees it, about twenty thousand times per
+serialization. Fused, a string needing no escape becomes three in-place appends into a buffer
+already at refcount 1, and allocates nothing.
+
+**The classification was not duplicated to get it.** `firstEscapeIndex` came *out* of
+`quoteJSONString`, which now calls it for its own fast path, so Table 78 and the 25.5.4.3
+surrogate rule are still written exactly once; `quoteFromIndex` takes the index the scan already
+found, so the escaping path scans less than it used to rather than more. Writing a second
+"does this need escaping" loop beside the first would have been the obvious way and is the
+duplication this lane has refused twice.
+
+**What this row is and is not.** It is what a *generated* serializer for a statically known type
+would do, written by hand to size the design before anyone builds it. It is not what ships today:
+`JSON.stringify` is still refused in compiled user code, and the shipped path still builds the
+erased graph. The number says the design is worth building, not that it is built.
+
+The comparison with node is fair in the sense that matters -- same user code, same document, each
+platform doing what it would actually do -- and unfair in one that should be stated: ours is
+monomorphic for a known shape, node's must handle any object, look for `toJSON`, enumerate
+properties and dispatch on runtime kinds. That difference *is* the advantage, and it is one a
+dynamic engine cannot take.
+
 ## Two more shapes of the same serializer, and one of them is a trap
 
 The typed row's profile says the largest remaining cost is string lifetime, not character work:

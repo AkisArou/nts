@@ -84,10 +84,50 @@ function unicodeEscape(unit: number): string {
  * That is the other half of the parser preserving one, and it is what makes the pair
  * round-trip instead of collapsing to U+FFFD.
  */
-export function quoteJSONString(value: string): string {
-  let out = '"';
-  let plainFrom = 0;
+/**
+ * The index of the first code unit needing an escape, or -1 when none does.
+ *
+ * Split out of {@link quoteJSONString} so that **one** classification serves two callers.
+ * `quoteJSONString` uses it for its own fast path; a serializer that owns an accumulator uses
+ * it to decide whether it can append the string as it stands. Table 78 and the 25.5.4.3
+ * surrogate rule are expressed once and only here.
+ *
+ * The surrogate arm is why this cannot be a per-unit predicate: a lead followed by a trail is
+ * one code point and is emitted as it stands, so deciding whether a lead needs escaping means
+ * looking at the unit after it.
+ */
+export function firstEscapeIndex(value: string): number {
   for (let at = 0; at < value.length; at++) {
+    const unit = value.charCodeAt(at);
+    if (
+      unit > BACKSLASH ||
+      (unit >= SPACE && unit !== QUOTE && unit !== BACKSLASH)
+    ) {
+      if (unit < LEAD_SURROGATE_START || unit > TRAIL_SURROGATE_END) continue;
+      if (unit <= 0xdbff && at + 1 < value.length) {
+        const next = value.charCodeAt(at + 1);
+        if (next >= 0xdc00 && next <= TRAIL_SURROGATE_END) {
+          at++;
+          continue;
+        }
+      }
+      return at;
+    }
+    return at;
+  }
+  return -1;
+}
+
+/**
+ * The quoted form, told where the first escape is so it does not look for it again.
+ *
+ * Exported for a serializer that has already called {@link firstEscapeIndex} and found a
+ * non-negative answer; going back through `quoteJSONString` would rescan the prefix.
+ */
+export function quoteFromIndex(value: string, from: number): string {
+  let out = '"' + value.slice(0, from);
+  let plainFrom = from;
+  for (let at = from; at < value.length; at++) {
     const unit = value.charCodeAt(at);
     // The common case is a character that needs nothing, so runs are copied in one slice
     // rather than one character at a time.
@@ -120,12 +160,15 @@ export function quoteJSONString(value: string): string {
     else if (unit === FORM_FEED) out += "\\f";
     else out += unicodeEscape(unit);
   }
-  // Nothing was escaped. `plainFrom` only moves in the two branches that also append to `out`,
-  // so `plainFrom === 0` means `out` is still the opening quote and the slice would copy the
-  // whole string to produce exactly what `value` already is. That is the common case: most
-  // strings in most documents contain nothing Table 78 or 25.5.4.3 has anything to say about.
-  if (plainFrom === 0) return '"' + value + '"';
   return out + value.slice(plainFrom) + '"';
+}
+
+export function quoteJSONString(value: string): string {
+  const first = firstEscapeIndex(value);
+  // Nothing needs escaping, which is the common case: most strings in most documents contain
+  // nothing Table 78 or 25.5.4.3 has anything to say about.
+  if (first < 0) return '"' + value + '"';
+  return quoteFromIndex(value, first);
 }
 
 /**
