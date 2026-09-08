@@ -135,6 +135,68 @@ step() {
   printf '  %ss\n' "$(($(date +%s) - started))"
 }
 
+# Steps that share nothing but the binary, run at once.
+#
+# The gate was 53 minutes and its shape was a sum: `profile` then `sweep` then
+# five backend lanes then `memory`, each waiting for the last. They contend for
+# nothing -- each writes under its own `target/` path and reads `nts` read-only
+# -- so the sum was a choice rather than a constraint, and the wall time is the
+# longest of them rather than the total.
+#
+# Output is captured and replayed in order, not interleaved. A gate that is fast
+# and unreadable has traded one complaint for another, and the failure line has
+# to sit under the step that produced it.
+#
+# `jobs` is lowered for the group. Each step is already parallel inside, so
+# eight steps at eight jobs is sixty-four processes on thirty-two cores -- and
+# the cap exists to keep the *frontend* from dying in Go's collector, which is a
+# limit on total concurrency rather than per-step concurrency.
+concurrently() {
+  # The command each name runs. `step` takes it as arguments; here it has to be
+  # looked up, because the group is a list of names.
+  cmd_profile="profile";           cmd_sweep="sweep"
+  cmd_llvm="llvm";                 cmd_llvm_rc="llvm_rc"
+  cmd_jvm="jvm";                   cmd_memory="./tooling/memory/run.sh"
+  cmd_examples="./tooling/gate/gate.sh"
+  cmd_rc="./tooling/gate/rc.sh"
+  cmd_bench_agree="./tooling/gate/bench-agree.sh"
+  running=""
+  chosen=""
+  for name in "$@"; do
+    case " ${NTS_GATE_STEPS-} " in
+      "  ") ;;
+      *" $name "*) ;;
+      *) continue ;;
+    esac
+    chosen="$chosen $name"
+    (
+      started=$(date +%s)
+      slot=$(printf '%s' "$name" | tr '-' '_')
+      eval "run=\$cmd_$slot"
+      if $run > "$root/target/gate-step-$name.out" 2>&1; then
+        rm -f "$root/target/gate-step-$name.failed"
+      else
+        : > "$root/target/gate-step-$name.failed"
+      fi
+      printf '%s' "$(($(date +%s) - started))" > "$root/target/gate-step-$name.time"
+    ) &
+    running="$running $!"
+  done
+  for pid in $running; do wait "$pid"; done
+  bad=0
+  for name in $chosen; do
+    printf '\n\033[1m%s\033[0m\n' "$name"
+    cat "$root/target/gate-step-$name.out"
+    printf '  %ss\n' "$(cat "$root/target/gate-step-$name.time" 2>/dev/null || echo '?')"
+    if [ -f "$root/target/gate-step-$name.failed" ]; then
+      printf '\033[31mFAILED\033[0m: %s\n' "$name"
+      rm -f "$root/target/gate-step-$name.failed"
+      bad=1
+    fi
+  done
+  [ "$bad" -eq 0 ] || exit 1
+}
+
 lint() { cargo clippy --workspace --all-targets 2>&1 | grep -E '^(warning|error)' && return 1; return 0; }
 # The C half of the same question. A whole-file reformat once arrived mixed
 # into an unrelated change, which is what an editor formatting on save does to
@@ -227,8 +289,15 @@ tests() {
 # somebody thought to write down. This covers what nobody did, and it found the
 # last of those four the first time it ran.
 sweep() {
-  ./tooling/sweep/run.sh 2>&1 | grep -E "checked|agreed|disagree|not emitted" | sed 's/^/  /'
-  ./tooling/sweep/run.sh >/dev/null 2>&1
+  # Once, not twice. This ran the whole sweep to summarise it and then ran it
+  # *again* to get an exit status, because a pipeline's status is the last
+  # command's -- so the step cost double what it measured. Captured instead, and
+  # the status taken from the run that produced the text, which is also the only
+  # way the two can be talking about the same run.
+  out=$(./tooling/sweep/run.sh 2>&1)
+  status=$?
+  printf '%s\n' "$out" | grep -E "checked|agreed|disagree|not emitted" | sed 's/^/  /'
+  return $status
 }
 
 # The node profile, emitted but not built.
@@ -269,16 +338,30 @@ profile() {
   # does, and it is lowered when a feature earns it -- the same bargain as the
   # example floors, which is why the message says which direction to edit.
   refusals=0
-  crashed=$(for m in "$root"/runtime/node/*/tsconfig.json; do
-              out=$(./target/release/nts emit-c "$m" --out "$root/target/gate-profile" \
-                      --napi 2>&1)
-              refusals=$((refusals + $(printf '%s' "$out" | grep -c 'NTS1001')))
-              printf '%s' "$refusals" > "$root/target/gate-profile/.refusals"
-              if printf '%s' "$out" | grep -q "panicked at"; then
-                basename "$(dirname "$m")"
-              fi
-            done)
-  refusals=$(cat "$root/target/gate-profile/.refusals" 2>/dev/null || echo 0)
+  # In parallel, and each module into its *own* directory.
+  #
+  # This was a serial `for` loop writing every module into one `--out`, which is
+  # both the slowest step in the gate -- 411 seconds of 999, more than the five
+  # backend example lanes put together -- and a race waiting for the day someone
+  # parallelised it without noticing the shared path.
+  #
+  # Each module reports into a file named after it, and the sum is taken
+  # afterwards: a shell variable cannot be accumulated across processes, and a
+  # single shared counter file is the same race one level down.
+  work="$root/target/gate-profile"
+  rm -rf "$work"
+  mkdir -p "$work"
+  ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+    m=$1
+    name=$(basename "$(dirname "$m")")
+    out=$("'"$root"'/target/release/nts" emit-c "$m" \
+            --out "'"$work"'/$name" --napi 2>&1)
+    printf "%s" "$out" | grep -c "NTS1001" > "'"$work"'/$name.refusals"
+    printf "%s" "$out" | grep -q "panicked at" && echo "$name" > "'"$work"'/$name.crashed"
+    exit 0
+  ' _
+  refusals=$(cat "$work"/*.refusals 2>/dev/null | awk '{s+=$1} END {print s+0}')
+  crashed=$(cat "$work"/*.crashed 2>/dev/null)
   printf '  %s modules emitted, %s refusal(s)\n' \
     "$(ls -d "$root"/runtime/node/*/tsconfig.json | wc -l)" "$refusals"
   # The ceiling. Lower it when a feature earns it -- and raise it when the
@@ -371,11 +454,20 @@ profile() {
     echo "  no runtime/node modules found -- this step checked nothing"
     return 1
   fi
-  invalid=$(for m in "$root"/runtime/node/*/tsconfig.json; do
-              if ./target/release/nts hir "$m" 2>&1 | grep -q "does NOT verify"; then
-                basename "$(dirname "$m")"
-              fi
-            done | sort | tr '\n' ' ')
+  # In parallel, like the emit above and for the same reason: this was the other
+  # serial loop in the slowest step, and twenty-two `nts hir` runs one after
+  # another is twenty-two times a wait nobody needs to take.
+  #
+  # Sorted afterwards rather than relying on the order they finish in, because
+  # the name list is compared against `known_invalid` and a set written in a
+  # different order is a different string.
+  invalid=$(ls -d "$root"/runtime/node/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+      m=$1
+      if "'"$root"'/target/release/nts" hir "$m" 2>&1 | grep -q "does NOT verify"; then
+        basename "$(dirname "$m")"
+      fi
+      exit 0
+    ' _ | sort | tr '\n' ' ')
   # Guarded, because `printf '%s\n'` with no arguments still prints a newline
   # -- so an empty list compared as " " against an empty result and the step
   # failed on the run that emptied it.
@@ -750,17 +842,17 @@ step "records" records
 step "primitives" tooling/primitives/check.py
 step "tests"   tests
 step "corpus"  corpus
-step "profile"  profile
-step "sweep"    sweep
-step "llvm"    llvm
-step "llvm-rc" llvm_rc
-step "jvm"     jvm
 # Every benchmark case, compiled by both backends and not run. `corpus` proves
 # arbitrary input compiles and `examples` proves the examples agree with node;
 # nothing covered `benches/cases`, so a code generation bug that only showed up
 # there arrived through a twenty-five minute benchmark run instead of here. One
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
+
+# Everything left, at once. `benches` is above because `bench-agree` runs the
+# cases it compiles; nothing else here depends on anything else here.
+jobs=$(( jobs > 4 ? 4 : jobs ))
+concurrently profile sweep llvm llvm-rc jvm bench-agree examples rc memory
 # And the same fifty cases *run*, against node, on the hostile pool. `benches`
 # above compiles them and says so -- "Nothing runs" -- `examples` runs the
 # examples, and `nts-bench` runs each case with one seed and compares a
@@ -768,20 +860,16 @@ step "benches"  ./tooling/gate/benches.sh
 # gap held a wrong answer: `absences` at pool value 2147483647, where a `u32`
 # in an `int` slot took the sign of a dividend that has none. Two minutes at
 # eight ways; see the script's header.
-step "bench-agree" ./tooling/gate/bench-agree.sh
-step "examples" ./tooling/gate/gate.sh
 # Last, and the most expensive step by some way -- about four minutes, against
 # two for everything before it. It is here rather than skipped because until it
 # existed nothing ran the retains and releases the compiler emits at all, and it
 # found a wrong answer the first time it was pointed at the examples. Set
 # NTS_GATE_JOBS to dial the parallelism.
-step "rc"       ./tooling/gate/rc.sh
 # Cheap -- seconds -- and it answers a question no other step asks: not whether
 # the counting is *right*, which `rc` covers, but how much of it there is. It
 # fails on a leak, on a changed answer, and on a count below the argument
 # written down beside it. It caught a collector bug that leaked one link out of
 # every list built head first while every count balanced perfectly.
-step "memory"   ./tooling/memory/run.sh
 
 printf '\n\033[32mgreen\033[0m\n'
 
