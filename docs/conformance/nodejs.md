@@ -4949,6 +4949,41 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Ninety-six encoding spellings, and the one that disagreed
+
+Node normalises encodings in one place and hands the same canonical value to
+every consumer, so upstream a test that an alias works in one call *is* a test
+that it works in all of them. Here each call reaches its own path — `readFile`
+decodes through `requireTextEncoding`, `readdir` and `readlink` through
+`normalizeFileResultEncoding`, `realpath` through `encodeFileName` — and they can
+disagree with each other and with node independently.
+
+Twenty-four spellings across four calls. **Ninety-five of ninety-six matched, and
+the one that did not is a wrong error code:**
+
+    readFile/buffer  node: THROW:ERR_UNKNOWN_ENCODING   was: ERR_INVALID_ARG_VALUE
+    readFile/BUFFER  node: THROW:ERR_INVALID_ARG_VALUE   agreed
+
+`"buffer"` is a valid *option* value for `readdir`, `readlink` and `realpath`,
+which all answer Buffers for it — so node's option validation lets it through and
+`readFile` fails later, at `Buffer.prototype.toString("buffer")`, with a
+different code. **Exactly the lowercase spelling**: `"BUFFER"` and `"Buffer"`
+fail node's earlier validation and get the generic error. That was checked
+against node for all three, because a case-insensitive compare here would be
+wrong in the direction that looks more correct.
+
+### The fix landed in a function where it could never run
+
+`normalizeFileResultEncoding` and `requireTextEncoding` end with the same four
+lines. Replacing the first match put the new branch in the first of them, where
+`"buffer"` returns two lines earlier and the code is unreachable. **The test still
+failed, which is the only reason I looked again** — a passing test after that
+edit would have shipped a fix that does nothing, in a file that reads as though
+it works.
+
+Every expected value in `encoding-aliases-static.js` was read off node rather
+than written from the documentation. `fs` is 342 of 342.
+
 ## Thirteen `fs` functions rejected a Buffer path
 
 **Node accepts a Buffer wherever it accepts a string path**, and a POSIX filename
