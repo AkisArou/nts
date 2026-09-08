@@ -69,6 +69,17 @@ exists for what node's parser does not do -- `context.source`, `rawJSON`, exact 
 `toPlainValue` walks it into plain JavaScript values: 19.445ms becomes 23.681ms, so the second
 pass is 22%. Without a reviver the graph is a pure intermediate and could be skipped entirely.
 
+**Skipping the graph is worth 2.8x on that path, and that is measured, not assumed.** A
+throwaway one-pass parser -- recursive, no spec-exact errors, no source spans, written only to
+bound the answer -- parses the same document to the same checksum in **8.450ms** against 23.681ms.
+It lands 1.8x off node's native parser where the current route is 5.0x off. A real one would be
+explicit-stack and would owe the specification a great deal that this one skips, so the true
+number is smaller; it is not smaller than the difference between 2.8x and nothing.
+
+The design question that comes with it is drift: a second parser is a second place for a spec bug.
+The answer this project already uses is differential testing against the canonical one over the
+whole upstream corpus, which is the same discipline as running against node.
+
 **node's own parser is 5.6x off the hardware.** That is the headroom that makes the goal
 plausible at all: beating node does not require beating simdjson, it requires closing 4x with
 compiled code, and the `json-scan` result shows what one codegen fix is worth.
