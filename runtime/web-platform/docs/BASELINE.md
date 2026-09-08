@@ -6630,3 +6630,30 @@ behind one unrelated function in the same module.
 
 No binary was built for this. `target/release/nts` was already fresher than the pin, so a
 private copy of it was taken rather than starting a build in a tree three sessions share.
+
+## The host suite runs the TypeScript source, and one hazard class disappears with it
+
+Sixty-three test files were `.mjs` importing the build output under
+`node_modules/.tsbuild/host/`. They are `.ts` now, importing
+`runtime/web-platform/src/**` directly, which node runs under type stripping.
+
+**The reason is not convenience.** A test that reads a built emit can be run against the
+*previous* emit whenever a change fails to type-check — and this lane had three readings
+spoiled by exactly that in one day: a sabotage scored against a stale build, a fixture filter
+selecting nothing, and a failed patch reported as a survivor. `sabotage-run.sh` grew a refusal
+for each. Importing source removes the first of those entirely: a mutation is always the code
+that runs, because there is no second copy.
+
+`erasableSyntaxOnly: true` was already set in `tsconfig.base.json` — the flag whose whole
+purpose is to keep TypeScript strippable — so the project had already made the choice that
+allows this. Nothing in the suite needed rewriting beyond import specifiers.
+
+**Type checking is not lost and was never there.** The conformance `tsconfig.json` includes
+`./*.ts`, not `./test/**/*.ts`, so the test directory sits outside the program exactly as the
+`.mjs` files did. `check.sh` runs `tsc` over the *source* as its own step, which is where that
+guarantee lives. Pulling `test/**` into the program is a separate decision with a separate
+cost, and it is not made here.
+
+Verified rather than assumed: 831 of 831 host tests pass, the upstream corpus is unchanged at
+2,768 of 2,776, and a sabotage still fails the suite while the no-mutation control is still
+refused.

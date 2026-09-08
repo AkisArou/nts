@@ -17,10 +17,15 @@
 #   3. The whole output is read. This used to stop at fourteen lines, which is fine until
 #      a suite has more tests than that and the sabotage breaks one near the end.
 #
-# usage: sabotage-run.sh <label> <test-file> [<mutated-source> ...]
+# usage: sabotage-run.sh <label> <test-file> [<mutated-source>[=<pristine-copy>] ...]
 #
 # With no <mutated-source>, any modification under this lane's source counts. Naming the
 # file is better: it distinguishes "something changed" from "the thing I meant changed".
+#
+# **A file git does not track needs its pristine copy naming**, as `path=copy`. `git diff` is
+# silent about an untracked file whether or not it was mutated, so the check that works for
+# established source is vacuous for a new module — which is exactly where new work happens.
+# Every sabotage loop already keeps a pristine copy to restore from; this is that copy.
 set -eu
 cd /home/akisarou/Projects/nts
 
@@ -30,11 +35,33 @@ shift 2
 
 if [ "$#" -gt 0 ]; then
   for source in "$@"; do
-    if git diff --quiet -- "$source"; then
-      echo "sabotage-run: REFUSING -- $source is unchanged, so the mutation did not apply." >&2
-      echo "  A patch that failed to match reports a survivor against untouched source." >&2
-      exit 1
-    fi
+    case "$source" in
+      *=*)
+        path=${source%%=*}
+        pristine=${source#*=}
+        if [ ! -f "$pristine" ]; then
+          echo "sabotage-run: REFUSING -- no pristine copy at $pristine to compare against." >&2
+          exit 1
+        fi
+        if cmp -s "$path" "$pristine"; then
+          echo "sabotage-run: REFUSING -- $path is byte-identical to $pristine," >&2
+          echo "  so the mutation did not apply." >&2
+          exit 1
+        fi
+        ;;
+      *)
+        if ! git ls-files --error-unmatch -- "$source" >/dev/null 2>&1; then
+          echo "sabotage-run: REFUSING -- $source is untracked, so \`git diff\` cannot see a" >&2
+          echo "  mutation in it. Pass it as $source=<pristine-copy> instead." >&2
+          exit 1
+        fi
+        if git diff --quiet -- "$source"; then
+          echo "sabotage-run: REFUSING -- $source is unchanged, so the mutation did not apply." >&2
+          echo "  A patch that failed to match reports a survivor against untouched source." >&2
+          exit 1
+        fi
+        ;;
+    esac
   done
 elif git diff --quiet -- runtime/web-platform/src; then
   echo "sabotage-run: REFUSING -- no source under runtime/web-platform/src is modified." >&2
@@ -50,5 +77,5 @@ if [ -n "$out" ]; then
 fi
 
 echo "--- $label ---"
-shim=./tooling/conformance/web-platform/node_modules/.tsbuild/host/tooling/conformance/web-platform/environment-shim.js
+shim=./tooling/conformance/web-platform/environment-shim.ts
 node --expose-gc --import "$shim" --test "$test_file" 2>&1 | grep -E "^✖|ℹ (tests|pass|fail)"
