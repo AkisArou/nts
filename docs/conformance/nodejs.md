@@ -2854,12 +2854,33 @@ in `stream`, 3 in `fs`.
 body — the symbol occurs exactly once in the whole file. Three sibling closures
 get all three artefacts.
 
-**Two hypotheses were tried and both were wrong.** A closure inside a refused
-function still gets its body; a closure taken as a value gets its body too — that
-second attempt is what produced `closure-as-function-value` instead. So this is
-recorded with the evidence from the real module and *without* a minimal
-reproduction, which is the honest state rather than a fixture that reproduces
-something else and is labelled as this.
+**And its sibling is worse, because it compiles.** The two closures are the
+arguments to one call — `nts_timers_install(Closure55, Closure54)` in
+`module__init`, which is `host.install(processTimers, processImmediate)`:
+
+    Closure54  vtable references Closure54__call, which does not exist  -> clang error
+    Closure55  descriptor's method table is 0                           -> compiles
+
+    nts_desc_NtsObj_Closure55 = { ..., 0, 0, "Closure55", 0u, 0 };
+    nts_desc_NtsObj_Closure20 = { ..., 0, nts_vtable_NtsObj_Closure20, "Closure20", 0u, 0 };
+
+`Closure55` has **no method table at all**. `runtime/node/timers/timers.c` calls
+a drain as `callback->descriptor->methods[nts_closure_call_slot]`, so that is a
+null dereference on the first timer that fires. The compile error is the *safe*
+half of this pair: it stops. The other one loads.
+
+**Three hypotheses were tried and all were wrong.** A closure inside a refused
+function still gets its body. A closure taken as a value gets its body too —
+that attempt is what produced `closure-as-function-value` instead, so the wrong
+guess earned its keep. And an imported top-level function passed as a callback
+emits correctly: both closures get vtables and `__call` bodies, and clang
+accepts it.
+
+So this is recorded with the evidence from the real module and **without** a
+minimal reproduction, which is the honest state rather than a fixture that
+reproduces something else under this name.
+
+
 
 ## `duplicate-type-name` worked completely, and nothing newly builds
 
