@@ -70,6 +70,15 @@ Each cost a measurement. The number in brackets is what the fix was worth.
 - **Scalarising `NtsValue`.** **[Not needed.]** C2 scalar-replaces it: 0.00
   bytes/op with five sites still in the bytecode. Ship boxed. `erasure-unknown`
   is the control if narrowing changes anything.
+- **Inlining the constructor body into `<init>`**, instead of a trivial
+  `<init>()V` followed by a static `$constructor` call. The plan deferred this
+  from the start -- "gated on whether the JIT is shown to care" -- and
+  `generic-classes` looked like the evidence, since we emit four calls per
+  iteration where Java's `new Box<>(v)` emits two. **[0.99x. It does not
+  care.]** Priced on a hand-written pair, twice: 2.17 vs 2.14 us, and 2.15 vs
+  2.13. C2 inlines both forms equally. So the question the plan left open is
+  answered, and the answer is not to do it -- which also keeps `readonly` out of
+  `ACC_FINAL` and this backend out of the verifier's `uninitializedThis` corner.
 - **The growable-array wrapper's per-access allocation.** **[There is none.]**
   `growth-grown` reads 2.01x on bytes/op because it pushes 2048 times and
   `ref.java` preallocates -- the reference not growing, not our wrapper costing.
@@ -177,7 +186,9 @@ Two of the three are now answered by an assembly diff:
   8), which is C2 unrolling its loop and not ours. Re-measured quiet, twice, to
   rule out the contaminated sweep: **1.13x / 1.21x**, so it is real. Why the
   loop is not counted is the open question and it is the only row where fewer
-  instructions are the problem. All
+  instructions are the problem. **Not** the split constructor: that was the
+  obvious suspect, since we emit four calls an iteration where the reference
+  emits two, and it prices at 0.99x -- see the list above. All
 three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
 bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
 `ifnull`.
