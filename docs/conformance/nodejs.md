@@ -4732,6 +4732,48 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## 125 of 308 bindings have no C at all
+
+The compiled axis is not only blocked by compiler defects. **Of 308 declared
+native bindings, 183 have a C implementation and 125 do not** — they exist as
+`declare function` in TypeScript and as a stand-in in `bindings.node.mjs`, and
+nowhere else.
+
+| module | declared | in C | no C |
+| --- | ---: | ---: | ---: |
+| `fs` | 133 | 73 | **60** |
+| `process` | 55 | 47 | 8 |
+| `net` | 30 | 2 | **28** |
+| `dgram` | 21 | 0 | **21** |
+| `zlib` | 20 | 20 | 0 |
+| `os` | 18 | 18 | 0 |
+| `util` | 10 | 10 | 0 |
+| `timers` | 8 | 1 | **7** |
+| `assert` | 1 | 0 | 1 |
+| the rest | 12 | 12 | 0 |
+| **total** | **308** | **183** | **125** |
+
+`runtime/node/dgram/` contains **no `.c` file whatsoever**. `runtime/node/timers/`
+contains none either. Verified by hand on a sample: `nts_udp_new`,
+`nts_net_address_text`, `nts_net_set_keepalive`, `nts_timers_schedule` and
+`nts_fs_lutimes_async` each have a stand-in and no C.
+
+**So "fifteen modules do not compile" understates it.** Compiling is necessary
+and not sufficient: `dgram` would fail to *link* with 21 undefined symbols, `net`
+with 28, `fs` with 60. Every compiler fix in `blockers/` is upstream of a module
+that still has to be finished afterwards.
+
+**Why this was invisible is the same reason as everything else in this section.**
+The interpreted lane runs against the stand-ins, so a binding with no C is
+indistinguishable from one with a correct C — both answer correctly, and the
+1,807 passing files say nothing about which. The compiled lane would say so
+immediately, and reaches two modules.
+
+It also changes what the counted lane's "did not build" rows mean. Those modules
+are not fifteen instances of one distance from the goal: `os` and `zlib` have
+complete native halves waiting on the compiler, and `dgram` has no native half at
+all.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
