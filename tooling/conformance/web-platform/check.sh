@@ -37,6 +37,7 @@ node --expose-gc \
   tooling/conformance/web-platform/test/idl-internal-surface.test.ts \
   tooling/conformance/web-platform/test/durable-cookie-jar.test.ts \
   tooling/conformance/web-platform/test/json-parse.test.ts \
+  tooling/conformance/web-platform/test/json-plain.test.ts \
   tooling/conformance/web-platform/test/json-stringify.test.ts \
   tooling/conformance/web-platform/test/json-surface.test.ts \
   tooling/conformance/web-platform/test/identity.test.ts \

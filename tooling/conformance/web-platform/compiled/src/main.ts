@@ -33,6 +33,12 @@ import {
 } from "../../../../../runtime/web-platform/src/core/utf8.ts";
 import { forgivingBase64Decode } from "../../../../../runtime/web-platform/src/core/base64.ts";
 import { percentDecodeBytes } from "../../../../../runtime/web-platform/src/core/percent.ts";
+import {
+  numberText,
+  quoteJSONString,
+  resolveGap,
+} from "../../../../../runtime/web-platform/src/json/text.ts";
+import { arrayIndexOf } from "../../../../../runtime/web-platform/src/json/value.ts";
 
 /** dNSName matching, including the wildcard rules HTTP/2 coalescing depends on. */
 export function covers(presented: string, host: string): boolean {
@@ -108,4 +114,21 @@ export function utf8RoundTrip(value: string): string {
   const bytes = new Uint8Array(utf8Length(value));
   utf8Write(bytes, value, 0, bytes.length);
   return utf8Decode(bytes, 0, bytes.length);
+}
+
+/** Probe: the JSON serializer's leaves. */
+export function jsonQuote(value: string): string {
+  return quoteJSONString(value);
+}
+
+export function jsonGap(space: number): string {
+  return resolveGap(space);
+}
+
+export function jsonArrayIndex(key: string): number {
+  return arrayIndexOf(key);
+}
+
+export function jsonNumber(value: number): string {
+  return numberText(value);
 }

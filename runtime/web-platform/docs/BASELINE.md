@@ -6851,3 +6851,128 @@ unrepresentable type that already stops the parser, and it stays visible.
 
 Frontier 1,437 to 1,438 primaries. 850/850 host, upstream unchanged at 2,768 of 2,776.
 Five sabotages, all caught.
+
+## Repointing the three host-`JSON` call sites, and what upstream demanded back
+
+The functional hole: `Response.json()`, the `Response.json` static and `cookies/durable-jar.ts`
+called the host `JSON`, which does not exist on a compiled target. **There are now zero
+`JSON.parse` / `JSON.stringify` / `JSON.rawJSON` / `JSON.isRawJSON` calls anywhere in
+`runtime/web-platform/src`** -- every remaining textual hit is a comment.
+
+### The upstream fixtures decide the shape, and they rule the graph out
+
+Before editing, the pinned fixtures were read rather than assumed, and
+`fetch/api/response/response-static-json.any.js` settles the question that had been open:
+
+```js
+const response = Response.json({ foo: "bar" });
+const data = await response.json();
+assert_equals(data.foo, "bar");
+```
+
+and, for the static, `Response.json(Symbol("foo"))` must throw `TypeError`, a circular argument
+must throw `TypeError`, a throwing getter must propagate *its own* error class, and three
+surrogate cases are asserted as exact byte arrays.
+
+So **both directions of this boundary take arbitrary ECMAScript values, not the erased graph**.
+`data.foo` is ordinary property access; cycle detection, `toJSON` and a throwing getter are all
+operations on an arbitrary object. There is no reading of the graph that satisfies them, and
+the goal forbids modified upstream fixtures -- correctly, since the fixture is right about what
+the platform does.
+
+That is not a reason to leave the host parser in place. It means the missing piece was the rest
+of clause 25.5.4 -- the arbitrary-value entry point deliberately deferred when the graph
+serializer was written -- and it is now `json/plain.ts`: `SerializeJSONProperty` (25.5.4.2) with
+`toJSON`, replacer, property list, boxed-primitive unwrapping, `[[IsRawJSON]]`, BigInt refusal
+and cycle detection, plus `toPlainValue` for the parse direction. Both traversals carry an
+explicit work stack, like the other two.
+
+### The seam is six refusals, and they are exactly the predicted ones
+
+`plain.ts` is the only host-only part of the JSON implementation, and the frontier says so
+precisely. Its six primaries are, in order:
+
+| line | refusal |
+| --- | --- |
+| 42 | `Object.prototype` (the realm-safe boxed-primitive tag) |
+| 73 | a method `call` with no declaration in the hierarchy (`toJSON.call`) |
+| 129 | an `Object` static over something that is not an object (`Object.keys`) |
+| 162 | a property the type does not declare (the `{"": value}` wrapper of 25.5.4 step 12) |
+| 224 | `indexOf` on a typed array (the open-container stack) |
+| 274 | `Object.defineProperty` (`CreateDataPropertyOrThrow`) |
+
+Every one of them is arbitrary-object surface -- "arbitrary ordinary-object property maps",
+which §9 keeps out of HIR by design. Nothing here is a gap to be closed by a compiler feature
+request; it is the boundary the plan already names, and the answer is direct typed
+materialization. **That proposal goes to MainClaude rather than being worked around here.**
+Everything `plain.ts` is built from -- the escaper, the number form, the indent rules, the
+grammar -- is the shared code the compiled targets already run.
+
+### A backend decline costs the whole module, so the leaves moved out
+
+Putting the serializer on the compiled axis worked on C and LLVM and **the JVM declined the
+entire module**: `NTS4001 a closure call through a slot its type declares nothing for (in
+stringifyJsonValue)`. A frontend refusal takes one function; a backend decline takes everything
+in the file with it, so one optional `replacer` parameter costs every other function in
+`stringify.ts` its compiled axis.
+
+The leaves are now `json/text.ts` -- `quoteJSONString`, `unicodeEscape`, `numberText`,
+`resolveGap`, `member` -- and the split is a real boundary rather than a concession: it is
+exactly the part of serialization that is a pure function of its input and takes no callback.
+`stringify.ts` and `plain.ts` both import from it, and `stringify.ts` re-exports so callers keep
+one import site.
+
+**The compiled axis went from 138 of 142 cases to 206 of 210, agreeing on every case on all
+three backends.** One `NTS1001` stands: the `Array.prototype.sort` with a comparator inside
+`JsonValue.objectValue`, which `arrayIndexOf`'s module brings along. It is left visible because
+it names a real gap.
+
+### The cookie jar, and a test gap the sabotage found
+
+`encodeSnapshot` and `loadAll` now build and read a `JsonValue` field by field. Written out by
+hand rather than reflected over, which is direct typed materialization done manually for one
+type: the field names are checked at compile time, and a field added to `StoredCookie` without a
+line in both directions fails to type-check rather than vanishing.
+
+The kind checks in `cookieFromJson` are the `typeof` half of `validStoredCookieShape` moved to
+where the kinds are; the semantic half -- path begins with a solidus, `persistent` agrees with
+`expiryTime`, index in range -- still runs on the assembled record, so nothing checked before is
+checked less now.
+
+**A sabotage swapping `hostOnly` and `secure` in the writer passed the entire suite.** The gap
+was real and pre-existing: the only round-trip test asserted `loaded[0].value` and nothing else,
+which was safe while `JSON.stringify(cookies)` reflected over the record -- reflection cannot
+put one field's value under another field's name -- and is not safe now that the mapping is
+written out. Three tests were added: a full-fidelity round trip over three cookies whose boolean
+patterns differ pairwise, an assertion on the **exact snapshot text** (a writer and reader that
+swap the same two fields agree with each other, so only the bytes catch it), and per-field
+corruption and omission.
+
+A second sabotage -- a wrong-kinded `expiryTime` degrading to `null` -- survived because
+`validStoredCookieShape`'s `persistent === (expiryTime !== null)` cross-check caught it
+downstream. It stops catching it the moment `persistent` is `false` too, so
+`{expiryTime: "never", persistent: false}` joined the corruption list: the record would have
+loaded as a session cookie, silently discarding an expiry the server set.
+
+### Evidence
+
+Fifteen sabotages: five on the jar, seven on the bridge, three on the fetch repoint. All fail
+now. **Two initially survived and each named a real gap** -- the field-mapping one above, and a
+bridge sabotage moving boxed-primitive unwrapping ahead of the replacer, which no test observed
+because no replacer fixture held a boxed primitive. 25.5.4.2 fixes the order as step 2 `toJSON`,
+step 3 replacer, step 4 unwrap; two shapes now pin it, and a seventh sabotage swapping `toJSON`
+with the replacer fails too.
+
+A third sabotage was withdrawn rather than recorded: removing the cycle check still threw
+`TypeError`, just at depth 100000, so it proved nothing. Replaced with one that throws a
+`RangeError`, which the fixture's `assert_throws_js(TypeError, ...)` catches.
+
+The three fetch sabotages are the ones that answer "did the repoint change anything the corpus
+measures" -- the suite came back green with the same numbers as before it, which is also what a
+repoint that silently did nothing produces. Breaking the cycle error class, the symbol path and
+the materialization each fail `fetch/api/response/` (113 → 112, 112 and 106).
+
+876/876 host, up from 850. **Upstream unchanged at 2,768 of 2,776 applicable**; the repoint cost
+nothing there. Compiled axis 138 → 206 of 210 on jvm, c and llvm, agreeing on every case.
+Frontier 1,438 → 1,444 primaries and 322 → 325 cascades, all six of the new primaries in
+`plain.ts` and named above. Measured with one pinned binary, `925269398951a132`, on both sides.

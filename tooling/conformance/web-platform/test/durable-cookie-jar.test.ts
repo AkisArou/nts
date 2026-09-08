@@ -260,3 +260,131 @@ suite("the namespace and key are configurable and actually used", async (t, stor
   );
   assert.deepEqual(await store.list("cookies", none()), []);
 });
+
+async function readRaw(store) {
+  const bytes = await store.read("cookies", "jar", none());
+  return bytes === null ? null : new TextDecoder().decode(bytes);
+}
+
+// Every field, not just the one that motivated the round trip above.
+//
+// That test asserts `loaded[0].value` alone, which was enough while the snapshot was written
+// by reflecting over the record: `JSON.stringify(cookies)` cannot put one field's value under
+// another field's name. The writer now names all thirteen fields by hand, so it can -- and a
+// sabotage that swapped `hostOnly` with `secure` in the writer passed the entire suite. Every
+// value below is distinct within its type so that any transposition changes the result, and
+// the booleans are carried across three cookies whose patterns differ pairwise, since two of
+// them sharing a value would hide a swap of exactly those two.
+const ROUND_TRIP = [
+  {
+    name: "sid",
+    value: "café-ÿ",
+    expiryTime: 4102444800000,
+    domain: "example.test",
+    path: "/a",
+    creationTime: 11,
+    lastAccessTime: 22,
+    creationIndex: 0,
+    persistent: true,
+    hostOnly: true,
+    secure: false,
+    httpOnly: false,
+    sameSite: "Default",
+  },
+  {
+    name: "pref",
+    value: "dark",
+    expiryTime: null,
+    domain: "sub.example.test",
+    path: "/b/c",
+    creationTime: 33,
+    lastAccessTime: 44,
+    creationIndex: 1,
+    persistent: false,
+    hostOnly: false,
+    secure: true,
+    httpOnly: false,
+    sameSite: "Strict",
+  },
+  {
+    name: "tok",
+    value: "",
+    expiryTime: 1700000000123,
+    domain: "other.test",
+    path: "/",
+    creationTime: 55,
+    lastAccessTime: 66,
+    creationIndex: 2,
+    persistent: true,
+    hostOnly: false,
+    secure: false,
+    httpOnly: true,
+    sameSite: "None",
+  },
+];
+
+suite("every field of every cookie survives the round trip unchanged", async (t, store) => {
+  const jarStore = new DurableCookieJarStore(store, none());
+  await jarStore.saveAll(ROUND_TRIP);
+  assert.deepEqual(await jarStore.loadAll(), ROUND_TRIP);
+});
+
+suite("the snapshot on disk holds the field names it claims to", async (t, store) => {
+  // A writer and a reader that swap the same two fields agree with each other, so the round
+  // trip above cannot see it -- but the bytes are wrong, and a jar written by one version and
+  // read by another would carry the values across swapped. Asserting the text is what pins
+  // the format rather than the pair's internal consistency.
+  const jarStore = new DurableCookieJarStore(store, none());
+  await jarStore.saveAll([ROUND_TRIP[0]]);
+  assert.equal(
+    await readRaw(store),
+    '[{"name":"sid","value":"café-ÿ","expiryTime":4102444800000,' +
+      '"domain":"example.test","path":"/a","creationTime":11,"lastAccessTime":22,' +
+      '"creationIndex":0,"persistent":true,"hostOnly":true,"secure":false,' +
+      '"httpOnly":false,"sameSite":"Default"}]',
+  );
+});
+
+suite("a field of the wrong kind is unreadable rather than coerced", async (t, store) => {
+  // The reader checks each field's kind, and these are the coercions a reader written with
+  // `String(x)` or `Number(x)` would silently accept: a number where a name goes, a string
+  // where a timestamp goes, a string where a flag goes, and a sameSite outside the four.
+  const base = ROUND_TRIP[0];
+  const corruptions = [
+    { name: 7 },
+    { value: null },
+    { creationTime: "11" },
+    { secure: "false" },
+    { sameSite: "Lax " },
+    { expiryTime: "4102444800000" },
+    { path: 1 },
+    // The pair that a kind check alone catches and a cross-check alone does not. If a
+    // wrong-kinded expiry degraded to `null` instead of being refused, `persistent` and
+    // `expiryTime` would still agree with each other -- both saying "session cookie" -- and
+    // the record would load as one, silently dropping an expiry the server had set.
+    { expiryTime: "never", persistent: false },
+    { expiryTime: true, persistent: false },
+  ];
+  for (const patch of corruptions) {
+    await writeRaw(store, JSON.stringify([{ ...base, ...patch }]));
+    await assert.rejects(
+      () => new DurableCookieJarStore(store, none()).loadAll(),
+      (error) => error instanceof CookieJarStoreError,
+      `accepted ${JSON.stringify(patch)}`,
+    );
+  }
+});
+
+suite("a missing field is unreadable rather than defaulted", async (t, store) => {
+  const base = ROUND_TRIP[0];
+  for (const field of Object.keys(base)) {
+    const entry = { ...base };
+    delete entry[field];
+    await writeRaw(store, JSON.stringify([entry]));
+    await assert.rejects(
+      () => new DurableCookieJarStore(store, none()).loadAll(),
+      (error) => error instanceof CookieJarStoreError,
+      `accepted a snapshot with no ${field}`,
+    );
+  }
+});

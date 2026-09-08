@@ -8,6 +8,7 @@ import type { RandomSource, URLParser } from "../provider/primitives.ts";
 import { currentWebPlatformRuntime } from "../provider/environment.ts";
 import type { ReadableStream } from "../streams/readable.ts";
 import { Blob } from "../file/blob.ts";
+import { stringifyPlain } from "../json/plain.ts";
 import { Body, BodyState, convertBodyInit } from "./body.ts";
 import type { BodyInit, BodyPolicy } from "./body.ts";
 import { Headers } from "./headers.ts";
@@ -193,7 +194,11 @@ export class Response extends Body {
   static json(data: unknown, init: ResponseInit = {}): Response {
     // Web IDL converts the complete init dictionary before the JSON algorithm.
     const convertedInit = convertResponseInit(init);
-    const text = JSON.stringify(data);
+    // WebIDL "serialize a JavaScript value to JSON bytes": `JSON.stringify` and then a
+    // `TypeError` if the result is undefined, which is how a symbol or a bare `undefined`
+    // becomes an exception rather than an empty body. The shared serializer, for the reason
+    // `json()` uses the shared parser.
+    const text = stringifyPlain(data);
     if (text === undefined) throw new TypeError("Value is not JSON serializable");
     const headers = convertedInit.headers ?? new Headers();
     if (!headers.has("content-type")) headers.set("content-type", "application/json");

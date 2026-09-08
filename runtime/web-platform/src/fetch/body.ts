@@ -7,6 +7,8 @@ import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
+import { parseJsonText } from "../json/parse.ts";
+import { toPlainValue } from "../json/plain.ts";
 import type { RandomSource } from "../provider/primitives.ts";
 import {
   ReadableStream,
@@ -243,8 +245,15 @@ export abstract class Body {
   }
 
   async json(): Promise<unknown> {
-    const value: unknown = JSON.parse(await this.text());
-    return value;
+    // The shared implementation rather than the host's, because there is no host `JSON` on a
+    // compiled target -- which made this method the functional hole that the JSON work exists
+    // to close. `parse a JSON string` in the Fetch specification is `JSON.parse` with no
+    // reviver, so the graph is materialized straight into ordinary values.
+    //
+    // The materialization is the host-only step. At a typed boundary -- `await r.json() as T`
+    // -- the compiler generates a parser that builds `T` directly and this generic path is not
+    // reached; see the note at the head of `json/plain.ts`.
+    return toPlainValue(parseJsonText(await this.text()));
   }
 
   async blob(): Promise<Blob> {
