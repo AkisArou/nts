@@ -4949,6 +4949,44 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Eighty-three error classes each carried a key node does not have
+
+Node builds every `ERR_*` from a single factory in `lib/internal/errors.js`, so
+upstream `constructor`, `name`, `code`, the prototype chain and the own-key set
+cannot disagree **between two error types**. This profile has roughly a hundred
+separate classes, and they can.
+
+    Object.keys(err)   was: code,name
+                      node: code
+
+`this.name = "TypeError"` inside a class extending `TypeError` is redundant — the
+name is already there through the prototype — but assigning it makes it an *own*
+property. Eighty-three assignments, all saying what the base already said,
+visible through spread, `JSON.stringify` and `util.inspect` on every error this
+profile throws.
+
+**Removed structurally rather than case by case**: an assignment goes only when
+the class's base chain already yields that exact name. Three survive it —
+`AbortError` and `SystemError` genuinely differ from their base, and node makes
+those own too. Node's `ERR_FS_EISDIR` was checked specifically rather than
+assumed, and it does have an own `name` of `"SystemError"`.
+
+### The message node writes in C++
+
+`fs.accessSync("/tmp", "x")` answers **`mode must be int32 or null/undefined`** —
+no quoted name, no `The ... argument` prefix, no `Received` suffix — because
+`accessSync` hands `mode` straight to `binding.access`. The `code` is still
+`ERR_INVALID_ARG_TYPE`.
+
+That cannot be produced through the template and **should not be**: the template
+is correct about every case node builds in JavaScript, and bending it to fit one
+C++ message would make it wrong about the other ninety-nine.
+`ERR_INVALID_ARG_TYPE_BINDING` exists for the handful node writes in C++, so
+matching node here did not mean weakening the thing that is right.
+
+A change in `internal/errors.ts` reaches every module, so `util`, `assert`,
+`stream` and `events` were re-run rather than assumed. All unchanged.
+
 ## The shape of every `fs` error, which was wrong in three ways
 
 Node builds these in one C++ helper, so upstream `code`, `errno`, `syscall`,
