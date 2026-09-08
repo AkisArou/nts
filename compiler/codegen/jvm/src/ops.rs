@@ -768,11 +768,41 @@ fn view_helper(
     subject: Option<&HirType>,
     result: &HirType,
 ) -> Option<(&'static str, &'static str, String)> {
+    // A subject whose kind the declaration did not state resolves on
+    // `NtsAnyView` instead, and only for the three properties both kinds have.
+    // **Not `NtsView`**, which is what every other view helper names: a
+    // `DataView` extends `NtsAnyView` directly and not `NtsView`, so naming the
+    // typed-array base would verify and then fail at run time on exactly the
+    // half of the union that motivated the type.
+    if matches!(subject, Some(HirType::Managed(ManagedType::AnyView))) {
+        return any_view_external(name);
+    }
     let of = |ty: &HirType| match ty {
         HirType::Managed(ManagedType::View(element)) => types::view_class(element),
         _ => None,
     };
     view_external(name, subject.and_then(of).or_else(|| of(result))?)
+}
+
+/// The helpers an `ArrayBufferView` can reach, which are the three properties
+/// the specification's union declares and nothing else.
+///
+/// `length` is absent on purpose: it is measured in *elements* and a `DataView`
+/// has none, which is why `NtsAnyView` does not carry it either. A program that
+/// wants it has to discriminate first, and `instanceof` is how -- which the
+/// middle end now spells as `Erase`/`Unerase` back to the concrete view, so the
+/// element accessors come back with it.
+///
+/// Anything else returns `None` and is refused by name, which keeps the list of
+/// what this union supports in one place rather than spread across arms.
+fn any_view_external(name: &str) -> Option<(&'static str, &'static str, String)> {
+    let any = types::ANY_VIEW;
+    Some(match name {
+        "nts_view_byte_length" => (any, "byteLength", format!("(L{any};)D")),
+        "nts_view_byte_offset" => (any, "byteOffset", format!("(L{any};)D")),
+        "nts_view_buffer" => (any, "buffer", format!("(L{any};)L{};", types::BUFFER)),
+        _ => return None,
+    })
 }
 
 /// The accessor that reads an element, and what it answers in.

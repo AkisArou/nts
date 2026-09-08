@@ -400,12 +400,23 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // point at. Resizability is a field.
         HirType::Managed(ManagedType::Buffer) => nts_jvm_emitter::descriptor::object(BUFFER),
         HirType::Managed(ManagedType::DataView) => nts_jvm_emitter::descriptor::object(VIEW),
-        // A view whose element type the declaration does not name. `NtsViewU8`
-        // and `NtsViewF64` are different classes here, so there is no one
-        // descriptor that covers both -- and `Ljava/lang/Object;` would compile
-        // and then fail the verifier at the first use, which is the trade the
-        // `AnyView` arms exist to avoid. Refused by name; see `describe`.
-        HirType::Managed(ManagedType::AnyView) => return None,
+        // A view whose element type the declaration does not name, which is
+        // the one class that *is* the union: `NtsViewU8` and `NtsViewF64` are
+        // different classes, and both reach `NtsAnyView` through `NtsView`,
+        // while `NtsDataView` extends it directly. So the descriptor exists
+        // and `Ljava/lang/Object;` -- which would have compiled and failed the
+        // verifier at the first use -- is not needed.
+        //
+        // **Passing a concrete view where this is declared costs nothing.**
+        // Reference assignment on the JVM is covariant, so a `NtsViewU8` goes
+        // into a parameter or field of this type with no `checkcast` and no
+        // conversion, which is the same fact `examples/upcast-to-base` turns
+        // on. The middle end spells the round trip back out as
+        // `Erase`/`Unerase` because both are one `NtsView *` on the other
+        // lanes; here both are one reference and the pair is equally free.
+        HirType::Managed(ManagedType::AnyView) => {
+            nts_jvm_emitter::descriptor::object(ANY_VIEW)
+        }
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
@@ -436,11 +447,11 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::Set(_)
             | ManagedType::Promise(_),
         ) => Kind::Ref,
-        // Not `Kind::Ref`: an `ArrayBufferView` has no class this backend can
-        // name, so answering `Ref` would carry it to `vtype` and refuse there
-        // with a less useful message. `None` is a refusal by name -- see
-        // `describe`.
-        HirType::Managed(ManagedType::AnyView) => return None,
+        // `Ref` now that there is a class to name. It was `None` on the
+        // argument that answering `Ref` would carry the type to `vtype` and
+        // refuse there with a worse message -- true while nothing could be
+        // spelled, and the reason to fill these three arms together.
+        HirType::Managed(ManagedType::AnyView) => Kind::Ref,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
         // no narrower computational type on this machine.
@@ -504,11 +515,11 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
             HirType::Managed(ManagedType::Buffer) => VType::Object(BUFFER.to_owned()),
             HirType::Managed(ManagedType::DataView) => VType::Object(VIEW.to_owned()),
-            // Unreachable, because `kind` refuses one before this is asked --
-            // and spelled rather than left to a wildcard, so that the day
-            // `kind` learns to answer `Ref` for it this is a compile error
-            // instead of a `VerifyError`.
-            HirType::Managed(ManagedType::AnyView) => return None,
+            // The day `kind` learned to answer `Ref` for it, which the arm
+            // above anticipated. A frame naming `NtsAnyView` for a slot
+            // holding a `NtsViewU8` verifies, because the verifier accepts a
+            // subclass where a superclass is named.
+            HirType::Managed(ManagedType::AnyView) => VType::Object(ANY_VIEW.to_owned()),
             // **No catch-all**, and the missing one here cost a day of the wrong
             // diagnosis. `descriptor` says of its own last arm that every
             // `ManagedType` is spelled out so adding a variant upstream is a
@@ -543,14 +554,13 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),
-        // The refusal string this backend uses everywhere an `ArrayBufferView`
-        // reaches it, written once so `grep -c` counts the arms that are left
-        // to fill in. The C and LLVM lanes represent one as an `NtsView *` whose
-        // element kind the descriptor carries; nothing here reads a descriptor
-        // at run time yet, so a view with no element type has no class to name.
-        HirType::Managed(ManagedType::AnyView) => {
-            "an ArrayBufferView with no element type".to_owned()
-        }
+        // Was the refusal string, written once so `grep -c` counted the arms
+        // left to fill in; the count is zero and this is a description again.
+        // `NtsAnyView` is what the C and LLVM lanes spell as an `NtsView *`
+        // whose element kind the descriptor carries -- one class here, and the
+        // element type recovered by `instanceof` rather than by reading a
+        // descriptor at run time.
+        HirType::Managed(ManagedType::AnyView) => "an array buffer view".to_owned(),
         // The element, for the reason the array arm below gives: the refusals
         // this most needs to be readable are the three element types the
         // runtime has and the middle end has not, and "a typed array" three

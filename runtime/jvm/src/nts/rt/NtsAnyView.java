@@ -16,10 +16,25 @@ package nts.rt;
  *
  * <h2>What is here and what is deliberately not</h2>
  *
- * The three fields and nothing else. `length` is a typed array's and is
- * measured in elements; `byteLength` differs between the two -- a typed array's
- * is `count * width` and a `DataView`'s is bytes directly -- and a base that
- * declared either would be declaring a method one subclass has to fight.
+ * The three fields, and one abstract method. `length` is a typed array's and
+ * is measured in elements, so it stays there. `byteLength` differs between the
+ * two -- a typed array's is `count * width` and a `DataView`'s is bytes
+ * directly -- and this said a base declaring either would be declaring a method
+ * one subclass has to fight.
+ *
+ * **That is true of a concrete method and not of an abstract one.** The
+ * situation it anticipated has arrived: `bytesIn(view: ArrayBufferView)` reads
+ * `byteLength` off the union, so *something* has to answer, and an abstract
+ * declaration lets each subclass answer correctly rather than making one of
+ * them wrong. Neither fights it; both already had the arithmetic as a static.
+ *
+ * The cost is a virtual call, and the note below about interfaces is why that
+ * is affordable here and would not be for the fields: `byteLength` is a
+ * property read, once per expression, where record 0182's 0.177 ns against
+ * 0.924 ns is about *indexing*. The concrete paths are untouched -- a
+ * `Uint8Array` whose type is known still reaches `NtsView.byteLength` as a
+ * monomorphic static, and only a value whose kind the program did not state
+ * pays the dispatch.
  *
  * `shift` stays on {@link NtsView} for the reason its own note gives: it is
  * `log2` of an element width, a `DataView` has no element width at all, and
@@ -52,4 +67,15 @@ public abstract class NtsAnyView {
 
     /** Where the window starts, in bytes. */
     public static double byteOffset(NtsAnyView view) { return view.offset; }
+
+    /**
+     * How many bytes the window spans, answered by the kind that knows.
+     *
+     * <p>Abstract because the two kinds compute it differently and both
+     * already have the arithmetic; this only routes to it.
+     */
+    public abstract double byteLength();
+
+    /** The same, as the static shape the emitted call sites use. */
+    public static double byteLength(NtsAnyView view) { return view.byteLength(); }
 }

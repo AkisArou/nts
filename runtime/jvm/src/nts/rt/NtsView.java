@@ -173,6 +173,9 @@ public abstract class NtsView extends NtsAnyView {
     public static NtsBuffer buffer(NtsView view) { return view.buffer; }
     public static double byteOffset(NtsView view) { return view.offset; }
 
+    /** {@link NtsAnyView#byteLength()}, delegating to the static below. */
+    @Override public double byteLength() { return byteLength(this); }
+
     public static double length(NtsView view) { return count(view); }
 
     public static double byteLength(NtsView view) { return (long) count(view) * view.width(); }

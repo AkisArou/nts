@@ -61,6 +61,9 @@ public final class NtsDataView extends NtsAnyView {
     public static NtsBuffer buffer(NtsDataView view) { return view.buffer; }
     public static double byteOffset(NtsDataView view) { return view.offset; }
 
+    /** {@link NtsAnyView#byteLength()}, delegating to the static below. */
+    @Override public double byteLength() { return byteLength(this); }
+
     public static double byteLength(NtsDataView view) {
         NtsBuffer.alive(view.buffer);
         return length(view);
