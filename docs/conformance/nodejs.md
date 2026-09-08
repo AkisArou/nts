@@ -2879,6 +2879,50 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## Eleven modules started compiling and not one gained a passing test
+
+Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
+`a6713613`. The compiler lane landed six fixes; five of them closed fixtures
+filed from this lane.
+
+    build floor: 9 of 9 still build, 0 regressed, 11 newly building
+
+**Twenty of twenty-two modules compile.** Only `fs` and `process` do not. That
+is the single largest movement this axis has had.
+
+And the axis is **still 1 of 22**:
+
+    module                exports   result
+    punycode                   6    3 of 3          <- green
+    os                        17    4 pass, 4 fail
+    path                       4    2 of 22
+    async_hooks               13    0 of 116
+    readline                   7    0 of 25
+    buffer                     3    0 of 56
+    http                       2    0 of 409
+    net                        2    0 of 154
+    timers                     2    0 of 56
+    util                       2    0 of 24
+    assert console diagnostics_channel events querystring
+    stream string_decoder url zlib          0 exports, 0 passed
+    dgram                  load failed
+    fs  process             do not build
+
+**Nine of the eleven that newly compile publish nothing at all.** Not one module
+gained a passing test.
+
+This is the caveat that has been attached to every reach number in this document
+— *compiling is necessary and not sufficient* — demonstrated at a scale that
+leaves no room to argue with it. Eleven modules crossed the threshold in one
+step, and the axis did not move.
+
+It also retires a way of talking about this axis. "Fifteen modules do not
+compile, and that is two bugs rather than fifteen" was true, and fixing those
+bugs was worth doing, and it bought **zero** green modules. The next number to
+watch is not how many compile; it is **how many publish their exports**, which
+is what `sweep.mjs`'s `absent:` line was extended to report for every module
+rather than only green ones.
+
 ## A fix of mine that regressed two modules, caught in two minutes
 
 `process` reported three `call to undeclared function 'nts_str_to_lower_case'`.
