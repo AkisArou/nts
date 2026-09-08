@@ -132,6 +132,11 @@ for (const name of names) {
   // only statement that captures it is "program.c does not contain this yet",
   // and it flips to needing-a-person on the day it does -- which is the correct
   // loud outcome, the same as `FIXED`.
+  // A fifth form, for a defect that is a *count* rather than a presence: the
+  // same struct defined twice, which clang rejects as a redefinition. `emits-c`
+  // cannot state it, because one definition is what a correct compiler emits and
+  // the fixture would pass after the fix.
+  const duplicatesC = /^duplicates-c\s+(.+)$/.exec(wanted);
   const lacksC = /^lacks-c\s+(.+)$/.exec(wanted);
   const emitsC = /^emits-c\s+(.+)$/.exec(wanted);
   // And a fourth: a blocker visible only in the *wrapper*. `emits-addon` reads
@@ -146,7 +151,10 @@ for (const name of names) {
   // subject does not exist is the thing this whole directory is against, and it
   // was in the first draft of the form written to catch exactly that.
   const program = readEmitted(output, "program.c");
-  const holds = lacksC !== null
+  const occurrences = (haystack, needle) => haystack.split(needle).length - 1;
+  const holds = duplicatesC !== null
+    ? occurrences(program, duplicatesC[1]) > 1
+    : lacksC !== null
     ? program.length > 0 && !program.includes(lacksC[1])
     : emitsC !== null
     ? program.includes(emitsC[1])
@@ -170,7 +178,9 @@ for (const name of names) {
     continue;
   }
   unexpected++;
-  if (lacksC !== null) {
+  if (duplicatesC !== null) {
+    console.log(`  FIXED       ${name}: emitted once now, not twice. Expected duplicates of:`);
+  } else if (lacksC !== null) {
     console.log(`  FIXED       ${name}: the backend now emits it. Expected absence of:`);
   } else if (emitsC !== null || emitsAddon !== null) {
     console.log(`  FIXED       ${name}: no longer emits it. Expected:`);
