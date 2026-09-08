@@ -21,8 +21,8 @@ lane has moved.
 | `array-predicates` | 1.74x | probed: the reference preallocates, see below |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
-| `awfy-sieve` | 1.25x | probed: no single cause, see below |
-| `awfy-queens` | 1.24x | probed: no single cause, see below |
+| `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
+| `awfy-queens` | 1.24x | partly narrowing -- 2 f64 block params, 6 f64 adds |
 | `generic-classes` | 1.13x | probed: no single cause, see below |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
@@ -147,11 +147,25 @@ JDK's own formatter, the Giulietti algorithm since 19. Being within nine percent
 of it with a portable Grisu port is near the floor for this shape; closing it
 means a better Grisu, not a better backend.
 
-**Probed, no single cause.** `awfy-sieve` (`Sieve$sieve` 70%), `awfy-queens`
-(`getRowColumn` 52%), `generic-classes` (`work$whole`, entirely inlined),
-`module-closures` (`work$whole` + `Closure0$call` + `drive$Closure0`, all
-generated) and `elementwise` (`Program.scale`, 100% of one generated method)
-are all dominated by *generated code* with no runtime helper standing out. All
+**Probed, no single cause -- three rows, not five.** I had `awfy-sieve` and
+`awfy-queens` here and both are the narrowing family, which a profile could not
+show and the IR says in one line. `Sieve#sieve#whole` carries
+
+    b1(%5: f64, %7: i64):
+      %16 = add %5, %32 : f64
+
+-- a counter in a double *and* an index in a long where `i32` would do, the
+second being what `narrow.rs`'s existing `i64 -> i32` pass is for. `awfy-queens`
+has 2 `f64` block parameters and 6 `f64` adds. Counting `f64` block parameters
+and adds in the prepared IR is a five-second check that reclassified two rows I
+had sent to the assembler.
+
+`generic-classes` (`work$whole`, entirely inlined), `module-closures`
+(`work$whole` + `Closure0$call` + `drive$Closure0`) and `elementwise`
+(`Program.scale`, 100% of one method) have **zero** `f64` block parameters and
+no `i64` ones; `elementwise`'s two `f64` adds are float arithmetic doing its
+job. Those three are dominated by *generated code* with no runtime helper
+standing out. All
 three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
 bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
 `ifnull`.
