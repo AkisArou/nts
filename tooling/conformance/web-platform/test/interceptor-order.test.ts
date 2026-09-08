@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Interceptor order, as claims with their own controls.
 //
 // The plan asks for "explicit ordering and ownership". Composition order was defined --
@@ -24,33 +18,46 @@ import {
   RetryInterceptor,
   TransportError,
 } from "../../../../runtime/web-platform/src/index.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { Scheduler } from "../../../../runtime/web-platform/src/provider/primitives.ts";
+import { createHostNodePrimitives } from "../node-primitives.ts";
+import { must } from "./harness.ts";
+import type { RetryOptions } from "../../../../runtime/web-platform/src/dispatch/retry.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 
-class ImmediateScheduler {
-  delays = [];
-  errors = [];
+class ImmediateScheduler implements Scheduler {
+  readonly delays: number[] = [];
+  readonly errors: unknown[] = [];
 
-  enqueue(task) {
+  enqueue(task: () => void): void {
     queueMicrotask(task);
   }
 
-  delay(milliseconds, task) {
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
     this.delays.push(milliseconds);
     queueMicrotask(task);
     return { cancel() {} };
   }
 
-  reportError(error) {
+  reportError(error: unknown): void {
     this.errors.push(error);
   }
 }
 
-function request(overrides = {}) {
+const urls = createHostNodePrimitives().urls;
+
+function request(overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
-    url: { href: "https://order.test/resource" },
+    // A parsed record rather than a `{ href }` stub: `TransportRequest.url` is a `URLRecord`,
+    // and a stub satisfied nothing but the one field this file happened to read.
+    url: urls.parse("https://order.test/resource"),
     method: "GET",
     headers: [],
     body: null,
@@ -61,12 +68,12 @@ function request(overrides = {}) {
 }
 
 /** Answers each status in turn, then 200 for ever. Counts what it was asked. */
-function scripted(statuses) {
-  const attempts = [];
+function scripted(statuses: readonly number[]): FetchTransport & { attempts: TransportRequest[] } {
+  const attempts: TransportRequest[] = [];
   let index = 0;
   return {
     attempts,
-    async dispatch(value) {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       attempts.push(value);
       const status = statuses[index++];
       if (status === undefined || status === 200) {
@@ -87,7 +94,7 @@ function scripted(statuses) {
   };
 }
 
-const retrying = (options = {}) =>
+const retrying = (options: Partial<RetryOptions> = {}): RetryInterceptor =>
   new RetryInterceptor({
     scheduler: new ImmediateScheduler(),
     maxRetries: options.maxRetries ?? 3,
@@ -123,7 +130,7 @@ suite("response-error outside authentication lets a challenge be answered", asyn
   assert.equal(response.status, 200);
   assert.equal(inner.attempts.length, 2);
   assert.equal(
-    inner.attempts[1].headers.some(([name]) => name === "authorization"),
+    must(inner.attempts[1], "the request was retried").headers.some(([name]) => name === "authorization"),
     true,
   );
 

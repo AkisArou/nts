@@ -37,8 +37,8 @@ async function origin(t: TestContext, body: string = BODY): Promise<string> {
     response.end(body);
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
-  t.after(() => new Promise((resolve) => server.close(resolve)));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
   // `address()` is a union with a pipe path and `null`; a TCP listener that has emitted
   // `listening` is always the object form, and narrowing says so rather than assuming it.
   const address = server.address();
@@ -63,7 +63,7 @@ function runtimeWithoutDigest(t: TestContext): WebPlatformRuntime {
 }
 
 function because(pattern: RegExp): (error: unknown) => boolean {
-  return (error) => {
+  return (error: unknown) => {
     assert.match(causeText(error), pattern);
     return true;
   };

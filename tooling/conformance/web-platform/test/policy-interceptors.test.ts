@@ -84,7 +84,7 @@ test("ResponseErrorInterceptor consumes text errors and exposes stable metadata"
         });
       },
     }),
-    (error) =>
+    (error: unknown) =>
       error instanceof ResponseError &&
       error.code === "UND_ERR_RESPONSE" &&
       error.statusCode === 404 &&
@@ -106,7 +106,7 @@ test("ResponseErrorInterceptor preserves binary error bodies as bytes", async ()
         });
       },
     }),
-    (error) =>
+    (error: unknown) =>
       error instanceof ResponseError &&
       error.body instanceof Uint8Array &&
       new TextDecoder().decode(error.body) === "raw",
@@ -135,7 +135,7 @@ test("declared over-limit bodies are rejected and canceled before collection", a
   });
   const checked = assert.rejects(
     pending,
-    (error) =>
+    (error: unknown) =>
       error instanceof ResponseExceededMaxSizeError &&
       error.maximumBytes === 3 &&
       error.receivedBytes === 4,
@@ -164,7 +164,7 @@ test("unsafe-integer Content-Length is conservatively over the bound", async () 
         });
       },
     }),
-    (error) =>
+    (error: unknown) =>
       error instanceof ResponseExceededMaxSizeError &&
       error.maximumBytes === Number.MAX_SAFE_INTEGER &&
       error.receivedBytes === Number.POSITIVE_INFINITY,
@@ -231,7 +231,7 @@ test("body read failures retain exact identity instead of becoming policy errors
         return Promise.resolve({ status: 200, statusText: "", headers: [], body: source });
       },
     }),
-    (error) => error === failure,
+    (error: unknown) => error === failure,
   );
 });
 
@@ -252,6 +252,6 @@ test("abort during body consumption cancels with the exact reason", async () => 
   await Promise.resolve();
   const reason = new Error("stop dumping");
   controller.abort(reason);
-  await assert.rejects(pending, (error) => error === reason);
+  await assert.rejects(pending, (error: unknown) => error === reason);
   assert.deepEqual(cancellations, [reason]);
 });

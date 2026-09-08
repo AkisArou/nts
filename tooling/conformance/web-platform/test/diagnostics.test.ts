@@ -62,7 +62,7 @@ function diagnostics(options: Partial<DiagnosticsInterceptorOptions> = {}): {
       delay() {
         return { cancel() {} };
       },
-      reportError: (error) => reported.push(error),
+      reportError: (error: unknown) => reported.push(error),
     },
     ...options,
   });
@@ -283,7 +283,7 @@ test("dispatch failures preserve exact identity for async and synchronous transp
         return Promise.reject(asyncFailure);
       },
     }),
-    (error) => error === asyncFailure,
+    (error: unknown) => error === asyncFailure,
   );
   const asyncError = eventAt(asyncState.events, 1, "request:error");
   assert.equal(asyncError.phase, "dispatch");
@@ -298,7 +298,7 @@ test("dispatch failures preserve exact identity for async and synchronous transp
           throw syncFailure;
         },
       }),
-    (error) => error === syncFailure,
+    (error: unknown) => error === syncFailure,
   );
   assert.equal(eventAt(syncState.events, 1, "request:error").error, syncFailure);
 });
@@ -314,7 +314,7 @@ test("trailer rejection is observed without replacing the public promise", async
     },
   });
   assert.equal(returned.trailers, trailers);
-  await assert.rejects(returned.trailers, (error) => error === failure);
+  await assert.rejects(returned.trailers, (error: unknown) => error === failure);
   await Promise.resolve();
   const trailerError = eventAt(state.events, 2, "request:error");
   assert.equal(trailerError.phase, "trailers");

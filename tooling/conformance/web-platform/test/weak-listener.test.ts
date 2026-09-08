@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // A listener whose lifetime is bounded by a caller-supplied resource. Node's
 // `util.aborted(signal, resource)` needs this: when the resource is collected the
 // wait must stop being answered, so the promise stays pending forever rather than
@@ -25,17 +19,33 @@ import {
   addInternalEventListener,
   addWeaklyHeldEventListener,
 } from "../../../../runtime/web-platform/src/core/events.ts";
+import type { ListenerOptions } from "../../../../runtime/web-platform/src/core/events.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
-const tick = () => new Promise((resolve) => setImmediate(resolve));
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
 
-async function collectWeakReference(reference) {
+/**
+ * Listener options carrying a key the interface does not declare.
+ *
+ * Each use below is a forgery attempt and the attempt is the test: script must not be able to
+ * ask for a weakly held listener, or for one that resists `stopImmediatePropagation`, by
+ * passing a property that looks like the internal one. Widened once and by name, so a reader
+ * sees a deliberate violation rather than a silenced error.
+ */
+function forgedOptions(options: Record<string, unknown>): ListenerOptions {
+  return options as ListenerOptions;
+}
+
+async function collectWeakReference(reference: WeakRef<object>): Promise<boolean> {
   assert.equal(typeof globalThis.gc, "function", "the conformance runner must expose GC");
   for (let attempt = 0; attempt < 100; attempt++) {
     await tick();
-    globalThis.gc();
+    // Asserted present above; this reads it back through that check rather than assuming.
+    const collect = globalThis.gc;
+    assert.equal(typeof collect, "function", "the conformance runner must expose GC");
+    collect?.();
     await tick();
     if (reference.deref() === undefined) return true;
   }
@@ -45,7 +55,7 @@ async function collectWeakReference(reference) {
 suite("a weakly held listener runs while its resource is alive", () => {
   const target = new EventTarget();
   const resource = {};
-  const seen = [];
+  const seen: string[] = [];
   addWeaklyHeldEventListener(target, "abort", (event) => seen.push(event.type), resource);
 
   target.dispatchEvent(new Event("abort"));
@@ -54,7 +64,7 @@ suite("a weakly held listener runs while its resource is alive", () => {
 
   // `once` still retires the listener after one delivery.
   const onceTarget = new EventTarget();
-  const onceSeen = [];
+  const onceSeen: number[] = [];
   addWeaklyHeldEventListener(onceTarget, "abort", () => onceSeen.push(1), resource, {
     once: true,
   });
@@ -72,7 +82,7 @@ suite("a weakly held listener runs while its resource is alive", () => {
 // `Promise.withResolvers()`. A callback that captured the resource itself would keep
 // it alive through the listener, which is a property of any strongly held callback
 // rather than of this seam.
-function registerWeakly(target, callback, once = true) {
+function registerWeakly(target: EventTarget, callback: () => void, once = true): WeakRef<object> {
   const resource = {};
   addWeaklyHeldEventListener(target, "abort", callback, resource, { once });
   return new WeakRef(resource);
@@ -99,7 +109,7 @@ suite("a collected resource retires the listener before it can be called", async
 
 suite("an ordinary listener on the same signal is unaffected by collection", async () => {
   const controller = new AbortController();
-  const order = [];
+  const order: string[] = [];
   const weak = () => order.push("weak");
   const reference = registerWeakly(controller.signal, weak);
   controller.signal.addEventListener("abort", () => order.push("strong"), { once: true });
@@ -112,17 +122,17 @@ suite("an ordinary listener on the same signal is unaffected by collection", asy
 
 suite("the weakly held seam is not reachable from the public Web API", () => {
   const target = new EventTarget();
-  const seen = [];
+  const seen: string[] = [];
   const resource = {};
 
   // A dictionary member cannot request weak retention: this registers an ordinary
   // strong listener, and the surplus members are ignored.
-  target.addEventListener("abort", () => seen.push("ordinary"), {
+  target.addEventListener("abort", () => seen.push("ordinary"), forgedOptions({
     once: true,
     weakResource: resource,
     resource,
     weak: resource,
-  });
+  }));
   target.dispatchEvent(new Event("abort"));
   assert.deepEqual(seen, ["ordinary"]);
 
@@ -147,7 +157,7 @@ suite("the weakly held seam is not reachable from the public Web API", () => {
 
 suite("a weakly held listener follows the public duplicate and removal rules", () => {
   const target = new EventTarget();
-  const seen = [];
+  const seen: number[] = [];
   const resource = {};
   const callback = () => seen.push(1);
 
@@ -168,11 +178,11 @@ suite("a weakly held listener follows the public duplicate and removal rules", (
 
 suite("an internal listener can resist stopImmediatePropagation", () => {
   const target = new EventTarget();
-  const order = [];
+  const order: string[] = [];
 
   // Registration order matters: the resisting listener is registered last, so without
   // the option it would be the one hidden by the stop.
-  target.addEventListener("abort", (event) => {
+  target.addEventListener("abort", (event: Event) => {
     order.push("script");
     event.stopImmediatePropagation();
   });
@@ -188,8 +198,8 @@ suite("an internal listener can resist stopImmediatePropagation", () => {
 
 suite("an internal listener without the option is silenced like any other", () => {
   const target = new EventTarget();
-  const order = [];
-  target.addEventListener("abort", (event) => {
+  const order: string[] = [];
+  target.addEventListener("abort", (event: Event) => {
     order.push("script");
     event.stopImmediatePropagation();
   });
@@ -200,17 +210,17 @@ suite("an internal listener without the option is silenced like any other", () =
 
 suite("stopImmediatePropagation is not observable through the public API", () => {
   const target = new EventTarget();
-  const order = [];
+  const order: string[] = [];
   // No dictionary member requests resistance: a surplus member is inert, and the
   // listener is silenced exactly as it would be without it.
-  target.addEventListener("abort", (event) => {
+  target.addEventListener("abort", (event: Event) => {
     order.push("script");
     event.stopImmediatePropagation();
   });
-  target.addEventListener("abort", () => order.push("forged"), {
+  target.addEventListener("abort", () => order.push("forged"), forgedOptions({
     resistStopPropagation: true,
     kResistStopPropagation: true,
-  });
+  }));
   target.dispatchEvent(new Event("abort"));
   assert.deepEqual(order, ["script"]);
   const resistNames = Object.getOwnPropertyNames(EventTarget.prototype).filter((name) =>
@@ -221,8 +231,8 @@ suite("stopImmediatePropagation is not observable through the public API", () =>
 
 suite("resisting and weak holding compose", async () => {
   const controller = new AbortController();
-  const order = [];
-  controller.signal.addEventListener("abort", (event) => {
+  const order: string[] = [];
+  controller.signal.addEventListener("abort", (event: Event) => {
     order.push("script");
     event.stopImmediatePropagation();
   });
@@ -245,7 +255,7 @@ suite("resisting and weak holding compose", async () => {
   assert.equal(typeof live, "object");
 });
 
-function registerResistingWeakly(target, callback) {
+function registerResistingWeakly(target: EventTarget, callback: () => void): WeakRef<object> {
   const resource = {};
   addWeaklyHeldEventListener(target, "abort", callback, resource, {
     once: true,

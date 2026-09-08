@@ -27,7 +27,7 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 // reason lives on the cause chain. That is the specified behaviour and it is also why
 // a refused path never puts a filesystem detail into the message script sees.
 function because(pattern: RegExp): (error: unknown) => boolean {
-  return (error) => {
+  return (error: unknown) => {
     assert.ok(error instanceof Error, "fetch rejects with an Error");
     assert.equal(error.name, "TypeError");
     assert.equal(error.message, "Network request failed");

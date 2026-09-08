@@ -250,7 +250,7 @@ suite("proxied TLS reports its negotiation through the same contract", async (t)
         downstream.pipe(upstream);
         upstream.pipe(downstream);
       });
-      upstream.once("error", (error) => downstream.destroy(error));
+      upstream.once("error", (error: Error) => downstream.destroy(error));
     };
     downstream.on("data", readHead);
   });

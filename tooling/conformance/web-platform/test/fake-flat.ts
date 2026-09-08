@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // One in-memory `FlatDurableStore`, shared by everything that needs a provider.
 //
 // Three copies of this appeared within two slices, which is how a fake stops being one
@@ -13,28 +7,48 @@
 import assert from "node:assert/strict";
 
 const encoder = new TextEncoder();
-const at = (namespace, key) => `${namespace} ${key}`;
+const at = (namespace: string, key: string): string => `${namespace} ${key}`;
 
 /** Decimal digits then NUL, as the record encoding writes them. */
-function pushNumber(out, value) {
+function pushNumber(out: number[], value: number): void {
   for (const code of String(value)) out.push(code.charCodeAt(0));
   out.push(0);
 }
 
-export class FakeFlat {
-  constructor() {
-    this.values = new Map();
-    this.writes = new Map();
-    this.sources = new Map();
-    this.live = new Set();
-    this.next = 1;
-    this.clock = 1000;
-    this.closed = false;
-    this.reads = 0;
-    this.lists = 0;
-  }
+/** One stored value, with the modification counter the listing reports. */
+interface FakeRecord {
+  readonly key: string;
+  readonly namespace: string;
+  readonly bytes: Uint8Array;
+  readonly modified: number;
+}
 
-  open(namespace, key) {
+/** An open write, accumulating chunks until it is committed or discarded. */
+interface FakeWrite {
+  readonly namespace: string;
+  readonly key: string;
+  readonly chunks: Uint8Array[];
+}
+
+/** An open source, reading a window of one record. */
+interface FakeSource {
+  readonly bytes: Uint8Array;
+  position: number;
+  readonly end: number;
+}
+
+export class FakeFlat {
+  readonly values = new Map<string, FakeRecord>();
+  readonly writes = new Map<number, FakeWrite>();
+  readonly sources = new Map<number, FakeSource>();
+  readonly live = new Set<string>();
+  next = 1;
+  clock = 1000;
+  closed = false;
+  reads = 0;
+  lists = 0;
+
+  open(namespace: string, key: string): number {
     if (this.live.has(at(namespace, key))) return -1;
     this.live.add(at(namespace, key));
     const handle = this.next++;
@@ -42,14 +56,14 @@ export class FakeFlat {
     return handle;
   }
 
-  append(handle, from) {
+  append(handle: number, from: Uint8Array): void {
     const write = this.writes.get(handle);
     assert.ok(write, "append on a handle the adapter did not open");
     // Copied, because the caller owns the view it handed down.
     write.chunks.push(from.slice());
   }
 
-  commit(handle) {
+  commit(handle: number): void {
     const write = this.writes.get(handle);
     assert.ok(write, "commit on a handle the adapter did not open");
     let total = 0;
@@ -70,14 +84,14 @@ export class FakeFlat {
     this.live.delete(at(write.namespace, write.key));
   }
 
-  discard(handle) {
+  discard(handle: number): void {
     const write = this.writes.get(handle);
     if (write === undefined) return;
     this.writes.delete(handle);
     this.live.delete(at(write.namespace, write.key));
   }
 
-  read(namespace, key, into) {
+  read(namespace: string, key: string, into: Uint8Array): number {
     this.reads++;
     const record = this.values.get(at(namespace, key));
     if (record === undefined) return -1;
@@ -85,13 +99,13 @@ export class FakeFlat {
     return record.bytes.length;
   }
 
-  remove(namespace, key) {
+  remove(namespace: string, key: string): boolean {
     return this.values.delete(at(namespace, key));
   }
 
-  list(namespace, into) {
+  list(namespace: string, into: Uint8Array): number {
     this.lists++;
-    const out = [];
+    const out: number[] = [];
     for (const record of this.values.values()) {
       if (record.namespace !== namespace) continue;
       const key = encoder.encode(record.key);
@@ -105,7 +119,7 @@ export class FakeFlat {
     return bytes.length;
   }
 
-  size(namespace) {
+  size(namespace: string): number {
     let total = 0;
     for (const record of this.values.values()) {
       if (record.namespace === namespace) total += record.bytes.length;
@@ -113,7 +127,7 @@ export class FakeFlat {
     return total;
   }
 
-  sourceOpen(namespace, key, start, length) {
+  sourceOpen(namespace: string, key: string, start: number, length: number): number {
     const record = this.values.get(at(namespace, key));
     if (record === undefined) return -1;
     const handle = this.next++;
@@ -125,7 +139,7 @@ export class FakeFlat {
     return handle;
   }
 
-  sourceRead(handle, into) {
+  sourceRead(handle: number, into: Uint8Array): number {
     const source = this.sources.get(handle);
     assert.ok(source, "sourceRead on a handle the adapter did not open");
     if (source.position >= source.end) return -1;
@@ -135,16 +149,16 @@ export class FakeFlat {
     return count;
   }
 
-  sourceClose(handle) {
+  sourceClose(handle: number): void {
     this.sources.delete(handle);
   }
 
-  sourceSize(namespace, key) {
+  sourceSize(namespace: string, key: string): number {
     const record = this.values.get(at(namespace, key));
     return record === undefined ? -1 : record.bytes.length;
   }
 
-  close() {
+  close(): void {
     this.closed = true;
   }
 }

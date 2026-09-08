@@ -56,3 +56,40 @@ export function messageData(event: Event): unknown {
   assert.ok(event instanceof MessageEvent, "expected a MessageEvent");
   return event.data;
 }
+
+/**
+ * A value the API declares as optional, asserted present.
+ *
+ * Reaching for this rather than a non-null assertion is the difference between a check and a
+ * claim: a store that returned nothing now fails with the sentence the caller wrote, at the
+ * line that expected the value, instead of as a property read on `null` further down.
+ */
+export function must<T>(value: T | null | undefined, what: string): T {
+  assert.ok(value !== null && value !== undefined, what);
+  return value;
+}
+
+/**
+ * A member of a module namespace or of `globalThis`, looked up by a runtime name.
+ *
+ * The one thing in this suite TypeScript cannot express: neither declares an index signature,
+ * and the names come from tables the tests iterate. The read is widened to `unknown` rather
+ * than to `any`, so a caller still has to say what it expects and gets no free property access
+ * out of it.
+ */
+export function memberNamed(scope: object, name: string): unknown {
+  return (scope as Record<string, unknown>)[name];
+}
+
+/**
+ * The prototype of a constructor looked up by a runtime name, or `undefined`.
+ *
+ * Every step out of {@link memberNamed} is checked -- that the value is callable, and that its
+ * `prototype` is an object -- so nothing is asserted that was not tested.
+ */
+export function prototypeNamed(scope: object, name: string): object | undefined {
+  const found = memberNamed(scope, name);
+  if (typeof found !== "function") return undefined;
+  const proto: unknown = (found as { prototype?: unknown }).prototype;
+  return typeof proto === "object" && proto !== null ? proto : undefined;
+}

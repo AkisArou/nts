@@ -152,7 +152,7 @@ suite("the loop serves a real WebSocket client over a real socket", async (t) =>
     onSession: (result, head) => {
       if (result.accepted) sessions.push({ session: result.session, target: head.target });
     },
-    onError: (error) => errors.push(error),
+    onError: (error: unknown) => errors.push(error),
   });
   t.after(async () => {
     controller.abort();
@@ -205,7 +205,7 @@ suite("a connection that is not an upgrade is refused without stopping the loop"
   const controller = new AbortController();
   const errors = [];
   const loop = serveWebSocketUpgrades(listener, server, controller.signal, {
-    onError: (error) => errors.push(error),
+    onError: (error: unknown) => errors.push(error),
   });
   t.after(async () => {
     controller.abort();

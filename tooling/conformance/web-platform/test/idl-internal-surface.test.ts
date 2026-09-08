@@ -27,6 +27,7 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 
 import * as api from "../../../../runtime/web-platform/src/index.ts";
+import { prototypeNamed } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -65,21 +66,6 @@ const INTERNAL_PROTOTYPE_MEMBERS: Readonly<Record<string, readonly string[]>> = 
 const ORACLE_OMITS: Readonly<Record<string, readonly string[]>> = {
   CustomEvent: ["initCustomEvent"],
 };
-
-/**
- * The prototype of a constructor looked up by a runtime name, or `undefined`.
- *
- * Indexing a module namespace or `globalThis` with a string is the one thing here TypeScript
- * cannot express, since neither declares an index signature -- so the read is widened to
- * `unknown` and every step out of it is checked: that the value is callable, and that its
- * `prototype` is an object. Nothing is asserted that was not tested.
- */
-function prototypeNamed(scope: object, name: string): object | undefined {
-  const found: unknown = (scope as Record<string, unknown>)[name];
-  if (typeof found !== "function") return undefined;
-  const proto: unknown = (found as { prototype?: unknown }).prototype;
-  return typeof proto === "object" && proto !== null ? proto : undefined;
-}
 
 function internalMembers(name: string): string[] {
   const ours = prototypeNamed(api, name);

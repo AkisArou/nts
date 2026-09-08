@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,8 +8,20 @@ import {
   Client,
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodePrimitives } from "../node-primitives.ts";
+import type { OriginDispatcher } from "../../../../runtime/web-platform/src/dispatch/agent.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { AbortSignal } from "../../../../runtime/web-platform/src/index.ts";
+import { must } from "./harness.ts";
 
-function request(origin, path = "/", signal = new AbortController().signal) {
+function request(
+  origin: string,
+  path = "/",
+  signal: AbortSignal = new AbortController().signal,
+): TransportRequest {
   const primitives = createHostNodePrimitives();
   return {
     url: primitives.urls.parse(origin + path),
@@ -27,18 +33,21 @@ function request(origin, path = "/", signal = new AbortController().signal) {
   };
 }
 
-class FakeDispatcher {
-  constructor(origin) {
+class FakeDispatcher implements OriginDispatcher {
+  readonly origin: string;
+  idle = true;
+  readonly requests: TransportRequest[] = [];
+  closeCalls = 0;
+  readonly destroyReasons: unknown[] = [];
+  /** Set by a test that wants `close()` to stay pending until it decides otherwise. */
+  closeGate: PromiseWithResolvers<void> | null = null;
+  stats = { connections: 1, pending: 0, running: 0 };
+
+  constructor(origin: string) {
     this.origin = origin;
-    this.idle = true;
-    this.requests = [];
-    this.closeCalls = 0;
-    this.destroyReasons = [];
-    this.closeGate = null;
-    this.stats = { connections: 1, pending: 0, running: 0 };
   }
 
-  dispatch(value) {
+  dispatch(value: TransportRequest): Promise<TransportResponse> {
     this.requests.push(value);
     return Promise.resolve({
       status: 200,
@@ -48,19 +57,32 @@ class FakeDispatcher {
     });
   }
 
-  close() {
+  close(): Promise<void> {
     this.closeCalls++;
     return this.closeGate?.promise ?? Promise.resolve();
   }
 
-  destroy(reason) {
+  destroy(reason?: unknown): Promise<void> {
     this.destroyReasons.push(reason);
     return Promise.resolve();
   }
 }
 
+/**
+ * The dispatcher the agent created at `index`, asserted present.
+ *
+ * The tests index this list right after asserting how long it is, so the element is there --
+ * saying so once beats a non-null assertion at each of the eight sites, and a run where the
+ * agent created fewer than expected now fails with that sentence.
+ */
+function createdAt(state: { created: FakeDispatcher[] }, index: number): FakeDispatcher {
+  const dispatcher = state.created[index];
+  assert.ok(dispatcher !== undefined, `the agent did not create a dispatcher at ${index}`);
+  return dispatcher;
+}
+
 function agent(options = {}) {
-  const created = [];
+  const created: FakeDispatcher[] = [];
   const value = new Agent({
     factory: {
       create(origin) {
@@ -83,7 +105,7 @@ test("Agent lazily creates and reuses one dispatcher per canonical origin", asyn
   assert.equal(two.statusText, "https://one.test");
   assert.equal(three.statusText, "http://two.test");
   assert.equal(state.created.length, 2);
-  assert.equal(state.created[0].requests.length, 2);
+  assert.equal(createdAt(state, 0).requests.length, 2);
   assert.deepEqual(state.agent.stats, {
     origins: 2,
     idleOrigins: 2,
@@ -117,8 +139,8 @@ test("bounded Agent evicts the least-recently-used idle origin and awaits close"
   await state.agent.dispatch(request("https://old.test"));
   await state.agent.dispatch(request("https://recent.test"));
   await state.agent.dispatch(request("https://old.test"));
-  const recent = state.created[1];
-  recent.closeGate = Promise.withResolvers();
+  const recent = createdAt(state, 1);
+  recent.closeGate = Promise.withResolvers<void>();
   const pending = state.agent.dispatch(request("https://new.test"));
   await Promise.resolve();
   assert.equal(recent.closeCalls, 1);
@@ -137,44 +159,44 @@ test("a failed eviction close restores the old origin and preserves the bound", 
   const state = agent({ maximumOrigins: 1 });
   await state.agent.dispatch(request("https://old.test"));
   const failure = new Error("close failed");
-  state.created[0].closeGate = Promise.withResolvers();
+  createdAt(state, 0).closeGate = Promise.withResolvers<void>();
   const pending = state.agent.dispatch(request("https://new.test"));
   await Promise.resolve();
-  state.created[0].closeGate.reject(failure);
-  await assert.rejects(pending, (error) => error === failure);
+  must(createdAt(state, 0).closeGate, "the gate was just installed").reject(failure);
+  await assert.rejects(pending, (error: unknown) => error === failure);
   assert.equal(state.created.length, 1);
   assert.equal(state.agent.stats.origins, 1);
-  assert.equal(state.agent.stats.entries[0].origin, "https://old.test");
+  assert.equal(must(state.agent.stats.entries[0], "the agent kept one entry").origin, "https://old.test");
   assert.equal(state.agent.stats.evicted, 0);
 });
 
 test("origin pressure never evicts a dispatcher with live work", async () => {
   const state = agent({ maximumOrigins: 1 });
   await state.agent.dispatch(request("https://busy.test"));
-  state.created[0].idle = false;
+  createdAt(state, 0).idle = false;
   await assert.rejects(
     state.agent.dispatch(request("https://blocked.test")),
-    (error) =>
+    (error: unknown) =>
       error instanceof AgentOriginLimitError &&
       error.code === "UND_ERR_MAX_ORIGINS_REACHED" &&
       error.maximumOrigins === 1,
   );
   assert.equal(state.created.length, 1);
-  assert.equal(state.created[0].closeCalls, 0);
+  assert.equal(createdAt(state, 0).closeCalls, 0);
 });
 
 test("an abort during serialized eviction does not create the replacement", async () => {
   const state = agent({ maximumOrigins: 1 });
   await state.agent.dispatch(request("https://old.test"));
-  const closeGate = Promise.withResolvers();
-  state.created[0].closeGate = closeGate;
+  const closeGate = Promise.withResolvers<void>();
+  createdAt(state, 0).closeGate = closeGate;
   const controller = new AbortController();
   const failure = new Error("stop waiting");
   const pending = state.agent.dispatch(request("https://new.test", "/", controller.signal));
   await Promise.resolve();
   controller.abort(failure);
   closeGate.resolve();
-  await assert.rejects(pending, (error) => error === failure);
+  await assert.rejects(pending, (error: unknown) => error === failure);
   assert.equal(state.created.length, 1);
   assert.equal(state.agent.stats.origins, 0);
 });
@@ -182,13 +204,13 @@ test("an abort during serialized eviction does not create the replacement", asyn
 test("the origin-creation queue has explicit bounded backpressure", async () => {
   const state = agent({ maximumOrigins: 1, maximumPendingOrigins: 1 });
   await state.agent.dispatch(request("https://old.test"));
-  const closeGate = Promise.withResolvers();
-  state.created[0].closeGate = closeGate;
+  const closeGate = Promise.withResolvers<void>();
+  createdAt(state, 0).closeGate = closeGate;
   const first = state.agent.dispatch(request("https://one.test"));
   await Promise.resolve();
   await assert.rejects(
     state.agent.dispatch(request("https://two.test")),
-    (error) =>
+    (error: unknown) =>
       error instanceof AgentPendingLimitError &&
       error.code === "UND_ERR_AGENT_QUEUE_FULL" &&
       error.maximumPendingOrigins === 1,
@@ -207,7 +229,7 @@ test("concurrent first requests serialize origin creation without duplicates", a
     state.agent.dispatch(request("https://same.test", "/three")),
   ]);
   assert.equal(state.created.length, 1);
-  assert.equal(state.created[0].requests.length, 3);
+  assert.equal(createdAt(state, 0).requests.length, 3);
 });
 
 test("Agent close is graceful, idempotent, and rejects new dispatch", async () => {
@@ -271,7 +293,7 @@ test("factory and synchronous dispatcher errors retain exact identity", async ()
       },
     },
   });
-  await assert.rejects(broken.dispatch(request("https://factory.test")), (error) => {
+  await assert.rejects(broken.dispatch(request("https://factory.test")), (error: unknown) => {
     return error === factoryFailure;
   });
 
@@ -281,7 +303,7 @@ test("factory and synchronous dispatcher errors retain exact identity", async ()
     throw dispatchFailure;
   };
   const client = new Client("https://client.test", dispatcher);
-  await assert.rejects(client.dispatch(request("https://client.test")), (error) => {
+  await assert.rejects(client.dispatch(request("https://client.test")), (error: unknown) => {
     return error === dispatchFailure;
   });
 });

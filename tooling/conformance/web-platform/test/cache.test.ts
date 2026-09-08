@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -19,6 +13,19 @@ import {
   parseHTTPDate,
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type { FetchTransport } from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import { must } from "./harness.ts";
+import type { HeaderEntry } from "../../../../runtime/web-platform/src/fetch/headers.ts";
+import type {
+  TransportRequest,
+  TransportResponse,
+} from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { HttpCacheStore } from "../../../../runtime/web-platform/src/cache/store.ts";
+import type {
+  HttpCacheDiagnostics,
+  HttpCacheType,
+} from "../../../../runtime/web-platform/src/cache/http-cache.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 
 const bootstrapRuntime = createHostNodeWebPlatform();
 
@@ -215,10 +222,10 @@ test("request freshness constraints and response revalidation rules compose", ()
   );
 });
 
-function body(text) {
+function body(text: string): ReadableStream<Uint8Array> {
   const bytes = new globalThis.TextEncoder().encode(text);
   let sent = false;
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (sent) controller.close();
       else {
@@ -229,14 +236,25 @@ function body(text) {
   });
 }
 
-function header(entries, name) {
+function header(entries: readonly HeaderEntry[], name: string): string | null {
   for (const [entryName, value] of entries) {
     if (entryName.toLowerCase() === name) return value;
   }
   return null;
 }
 
-function cacheRuntime(transport, now, options = {}) {
+/** What a test may override when it builds a caching runtime. */
+interface CacheRuntimeOptions {
+  readonly store?: HttpCacheStore;
+  readonly type?: HttpCacheType;
+  readonly diagnostics?: HttpCacheDiagnostics;
+}
+
+function cacheRuntime(
+  transport: FetchTransport,
+  now: { value: number },
+  options: CacheRuntimeOptions = {},
+): WebPlatformRuntime {
   const store = options.store ?? new MemoryHttpCacheStore();
   const httpCache = new HttpCache({
     store,
@@ -251,8 +269,8 @@ function cacheRuntime(transport, now, options = {}) {
 test("Fetch reuses fresh complete responses and emits a corrected Age", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       return {
         status: 200,
@@ -277,8 +295,8 @@ test("Fetch reuses fresh complete responses and emits a corrected Age", async ()
 test("Vary keeps independent variants and matches normalized request whitespace", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       const language = header(request.headers, "accept-language") ?? "none";
       return {
@@ -318,8 +336,8 @@ test("stale entries revalidate with ETag and retain their body after 304", async
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
   let conditional = null;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       conditional = header(request.headers, "if-none-match");
       if (conditional !== null) {
@@ -359,9 +377,9 @@ test("stale entries revalidate with ETag and retain their body after 304", async
 test("Fetch cache modes distinguish reload, no-store, force-cache and only-if-cached", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const seen = [];
-  const transport = {
-    async dispatch(request) {
+  const seen: { cacheControl: string | null; pragma: string | null }[] = [];
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       seen.push({
         cacheControl: header(request.headers, "cache-control"),
@@ -405,10 +423,13 @@ test("Fetch cache modes distinguish reload, no-store, force-cache and only-if-ca
       cache: "only-if-cached",
       mode: "same-origin",
     }),
-    (error) =>
+    (error: unknown) =>
       error instanceof TypeError &&
       error.message === "Network request failed" &&
-      error.cause?.message.includes("only-if-cached"),
+      // The cause is `unknown`; only its message matters here and it is read defensively.
+      String((error.cause as { message?: unknown } | undefined)?.message ?? "").includes(
+        "only-if-cached",
+      ),
   );
   assert.equal(calls, 4);
 });
@@ -416,8 +437,8 @@ test("Fetch cache modes distinguish reload, no-store, force-cache and only-if-ca
 test("request no-store and exact Pragma no-cache directives control reuse", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       return {
         status: 200,
@@ -449,8 +470,8 @@ test("request no-store and exact Pragma no-cache directives control reuse", asyn
 test("cancelled response bodies never publish an incomplete cache entry", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       let chunk = 0;
       return {
@@ -469,7 +490,7 @@ test("cancelled response bodies never publish an incomplete cache entry", async 
   };
   const runtime = cacheRuntime(transport, now);
   const first = await runtime.fetch("https://cache.test/incomplete");
-  const reader = first.body.getReader();
+  const reader = must(first.body, "the response carries a body").getReader();
   assert.deepEqual((await reader.read()).value, new Uint8Array([1]));
   await reader.cancel("stop");
   assert.deepEqual(
@@ -483,8 +504,8 @@ test("unsafe successful methods invalidate the target URI", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let gets = 0;
   let postStatus = 500;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       if (request.method === "POST") {
         return {
           status: postStatus,
@@ -515,8 +536,8 @@ test("unsafe successful methods invalidate the target URI", async () => {
 test("unsafe responses invalidate same-origin Location targets but never cross origins", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   const calls = new Map();
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       if (request.method === "POST") {
         if (request.url.pathname === "/target") {
           return {
@@ -576,14 +597,14 @@ test("unsafe responses invalidate same-origin Location targets but never cross o
 
 test("invalidation store failures are diagnostic and do not replace the network response", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
-  const errors = [];
+  const errors: unknown[] = [];
   class FailingDeleteStore extends MemoryHttpCacheStore {
-    async delete() {
+    override async delete(): Promise<void> {
       throw new TypeError("persistent store unavailable");
     }
   }
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       return {
         status: 200,
         statusText: "OK",
@@ -594,7 +615,7 @@ test("invalidation store failures are diagnostic and do not replace the network 
   };
   const runtime = cacheRuntime(transport, now, {
     store: new FailingDeleteStore(),
-    diagnostics: { storeError: (error) => errors.push(error) },
+    diagnostics: { storeError: (error: unknown) => errors.push(error) },
   });
   assert.equal(
     await (
@@ -607,10 +628,10 @@ test("invalidation store failures are diagnostic and do not replace the network 
 
 test("bounded store refusal and store failures never fail the network response", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
-  const errors = [];
+  const errors: unknown[] = [];
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       return {
         status: 200,
@@ -637,8 +658,8 @@ test("bounded store refusal and store failures never fail the network response",
 test("stale-if-error serves only inside its window and only for defined failures", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       if (calls === 2) throw new TypeError("offline");
       if (calls === 3) {
@@ -676,8 +697,8 @@ test("stale-if-error serves only inside its window and only for defined failures
 test("stale-while-revalidate returns immediately and commits one background refresh", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       if (header(request.headers, "if-none-match") !== null) {
         return {
@@ -716,8 +737,8 @@ test("stale-while-revalidate returns immediately and commits one background refr
 test("stale-while-revalidate coalesces each Vary variant independently", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       const language = header(request.headers, "accept-language") ?? "none";
       const conditional = header(request.headers, "if-none-match");
@@ -737,7 +758,7 @@ test("stale-while-revalidate coalesces each Vary variant independently", async (
     },
   };
   const runtime = cacheRuntime(transport, now);
-  const fetchLanguage = async (language) =>
+  const fetchLanguage = async (language: string): Promise<string> =>
     (
       await runtime.fetch("https://cache.test/swr-vary", {
         headers: { "accept-language": language },
@@ -758,8 +779,8 @@ test("stale-while-revalidate coalesces each Vary variant independently", async (
 test("shared cache strips qualified private/no-cache fields and Set-Cookie", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       calls++;
       return {
         status: 200,
@@ -789,15 +810,17 @@ test("shared cache strips qualified private/no-cache fields and Set-Cookie", asy
 test("Vary star is never stored and HEAD can reuse a complete GET entry", async () => {
   const now = { value: Date.UTC(2026, 0, 1) };
   let calls = 0;
-  const transport = {
-    async dispatch(request) {
+  const transport: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       calls++;
       return {
         status: 200,
         statusText: "OK",
         headers: [
           ["cache-control", "max-age=60"],
-          ...(request.url.pathname === "/star" ? [["vary", "*"]] : []),
+          // Annotated, because a bare two-element array widens to `string[]` and a header
+          // entry is a fixed pair.
+          ...(request.url.pathname === "/star" ? ([["vary", "*"]] as HeaderEntry[]) : []),
         ],
         body: request.method === "HEAD" ? null : body(`body-${calls}`),
       };

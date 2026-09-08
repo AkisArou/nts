@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // HTTP/1 trailers reach the caller.
 //
 // They were parsed, checked for forbidden framing names, and discarded. Every consumer
@@ -25,14 +19,20 @@ import {
   createHostNodePrimitives,
   hostNodeURLs,
 } from "../node-primitives.ts";
+import { portOf } from "./harness.ts";
+import type { Socket } from "node:net";
+import { must } from "./harness.ts";
+import type { TransportRequest } from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { DispatchDiagnosticEvent } from "../../../../runtime/web-platform/src/dispatch/diagnostics.ts";
+import type { ReadableStream } from "../../../../runtime/web-platform/src/streams/readable.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 const CRLF = String.fromCharCode(13, 10);
 
-async function rawServer(t, responseText) {
-  const sockets = new Set();
+async function rawServer(t: TestContext, responseText: string): Promise<number> {
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -49,15 +49,15 @@ async function rawServer(t, responseText) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return server.address().port;
+  return portOf(server);
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(url: string, overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -69,10 +69,10 @@ function transportRequest(url, overrides = {}) {
   };
 }
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (stream === null) return "";
   const reader = stream.getReader();
-  const parts = [];
+  const parts: Uint8Array[] = [];
   try {
     while (true) {
       const result = await reader.read();
@@ -85,7 +85,7 @@ async function consume(stream) {
   return Buffer.concat(parts).toString();
 }
 
-function makeTransport(t) {
+function makeTransport(t: TestContext): Http1Transport {
   const primitives = createHostNodePrimitives();
   const transport = new Http1Transport(new HostNodeSocketConnector(), primitives.scheduler, {});
   t.after(() => transport.close());
@@ -93,7 +93,7 @@ function makeTransport(t) {
 }
 
 /** A chunked body followed by a trailer section. */
-function chunked(body, trailerLines) {
+function chunked(body: string, trailerLines: readonly string[]): string {
   let text = "HTTP/1.1 200 OK" + CRLF;
   text += "transfer-encoding: chunked" + CRLF;
   text += "trailer: x-checksum" + CRLF;
@@ -122,7 +122,7 @@ suite("trailers settle only once the body has ended", async (t) => {
   const response = await transport.dispatch(transportRequest(`http://127.0.0.1:${port}/`));
 
   let settled = false;
-  response.trailers.then(
+  must(response.trailers, "a chunked response carries trailers").then(
     () => {
       settled = true;
     },
@@ -173,7 +173,7 @@ suite("a forbidden framing trailer is still refused", async (t) => {
   const transport = makeTransport(t);
   const response = await transport.dispatch(transportRequest(`http://127.0.0.1:${port}/`));
   await assert.rejects(consume(response.body), /Forbidden framing trailer/);
-  await assert.rejects(response.trailers, /Forbidden framing trailer/);
+  await assert.rejects(must(response.trailers, "a chunked response carries trailers"), /Forbidden framing trailer/);
 });
 
 suite("a truncated body rejects the trailers rather than leaving them pending", async (t) => {
@@ -193,15 +193,15 @@ suite("a truncated body rejects the trailers rather than leaving them pending", 
   const response = await transport.dispatch(transportRequest(`http://127.0.0.1:${port}/`));
   await assert.rejects(consume(response.body));
   // A caller awaiting trailers learns the body failed instead of waiting forever.
-  await assert.rejects(response.trailers);
+  await assert.rejects(must(response.trailers, "a chunked response carries trailers"));
 });
 
 suite("cancelling the body rejects the trailers", async (t) => {
   const port = await rawServer(t, chunked("payload", ["x-checksum: abc"]));
   const transport = makeTransport(t);
   const response = await transport.dispatch(transportRequest(`http://127.0.0.1:${port}/`));
-  await response.body.cancel(new Error("caller lost interest"));
-  await assert.rejects(response.trailers);
+  await must(response.body, "a chunked response carries a body").cancel(new Error("caller lost interest"));
+  await assert.rejects(must(response.trailers, "a chunked response carries trailers"));
 });
 
 suite("trailer consumers see real trailers, not only fixtures", async (t) => {
@@ -212,7 +212,7 @@ suite("trailer consumers see real trailers, not only fixtures", async (t) => {
     t,
     chunked("payload", ["x-checksum: abc123", "authorization: Bearer secret"]),
   );
-  const events = [];
+  const events: DispatchDiagnosticEvent[] = [];
   const interceptor = new DiagnosticsInterceptor({
     observer: { publish: (event) => events.push(event) },
     scheduler: {
@@ -232,15 +232,20 @@ suite("trailer consumers see real trailers, not only fixtures", async (t) => {
   // The observation settles after the body, so give it its turn.
   for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
 
-  const trailerEvents = events.filter((event) => event.type === "response:trailers");
+  const trailerEvents = events.filter(
+    (event): event is Extract<DispatchDiagnosticEvent, { type: "response:trailers" }> =>
+      event.type === "response:trailers",
+  );
   assert.equal(trailerEvents.length, 1, "a real response must publish its trailers once");
+  const trailerEvent = trailerEvents[0];
+  assert.ok(trailerEvent !== undefined, "the trailer event was published");
   assert.deepEqual(
-    trailerEvents[0].headers.find(([name]) => name === "x-checksum"),
+    trailerEvent.headers.find(([name]) => name === "x-checksum"),
     ["x-checksum", "abc123"],
   );
   // Redaction applies to trailers exactly as it does to headers. A credential does not
   // become publishable by arriving after the body.
-  const authorization = trailerEvents[0].headers.find(([name]) => name === "authorization");
-  assert.notEqual(authorization, undefined, "the field is reported");
+  const authorization = trailerEvent.headers.find(([name]) => name === "authorization");
+  assert.ok(authorization !== undefined, "the field is reported");
   assert.notEqual(authorization[1], "Bearer secret", "but never its value");
 });

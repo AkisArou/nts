@@ -114,7 +114,7 @@ suite("a failing task is reported and does not abandon the run", () => {
 
   // A supplied reporter takes over entirely.
   const reported = [];
-  const routed = new VirtualScheduler({ reportError: (error) => reported.push(error) });
+  const routed = new VirtualScheduler({ reportError: (error: unknown) => reported.push(error) });
   routed.enqueue(() => {
     throw new Error("routed");
   });

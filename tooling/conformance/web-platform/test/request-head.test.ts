@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Reading an inbound HTTP/1 request head.
 //
 // The mirror of the response reader, and until now the only implementation of it in
@@ -19,6 +13,8 @@ import {
   defaultHeadLimits,
   readRequestHead,
 } from "../../../../runtime/web-platform/src/provider.ts";
+import type { ByteConnection } from "../../../../runtime/web-platform/src/provider/primitives.ts";
+import type { HeadLimits, RequestHead } from "../../../../runtime/web-platform/src/http1/parser.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -27,21 +23,21 @@ const CRLF = String.fromCharCode(13, 10);
 const encoder = new TextEncoder();
 
 /** A ByteConnection over a fixed script, one chunk at a time. */
-function connectionOf(text, chunkSize = 64) {
+function connectionOf(text: string, chunkSize = 64): ByteConnection {
   const bytes = encoder.encode(text);
   let offset = 0;
   return {
     get closed() {
       return offset >= bytes.length;
     },
-    async read(maxBytes) {
+    async read(maxBytes: number): Promise<Uint8Array | null> {
       if (offset >= bytes.length) return null;
       const take = Math.min(maxBytes, chunkSize, bytes.length - offset);
       const chunk = bytes.subarray(offset, offset + take);
       offset += take;
       return chunk;
     },
-    async write(data) {
+    async write(data: Uint8Array): Promise<number> {
       return data.length;
     },
     close() {
@@ -50,10 +46,16 @@ function connectionOf(text, chunkSize = 64) {
   };
 }
 
-const read = (text, limits = defaultHeadLimits, chunkSize) =>
+// `chunkSize` is optional rather than merely defaulted-past: it sits after a parameter with a
+// default, so leaving it bare made it *required* and every one-argument call a type error.
+const read = (
+  text: string,
+  limits: HeadLimits = defaultHeadLimits,
+  chunkSize?: number,
+): Promise<RequestHead> =>
   readRequestHead(new BufferedReader(connectionOf(text, chunkSize)), limits);
 
-const request = (line, headers = []) =>
+const request = (line: string, headers: readonly string[] = []): string =>
   [line, ...headers, "", ""].join(CRLF);
 
 suite("a request line and its fields are read", async () => {
@@ -119,7 +121,7 @@ suite("a malformed request line is refused", async () => {
     "GET /path http/1.1",
   ];
   for (const line of malformed) {
-    await assert.rejects(() => read(request(line)), undefined, line);
+    await assert.rejects(() => read(request(line)), line);
   }
 });
 
@@ -127,7 +129,7 @@ suite("a method that is not a token is refused", async () => {
   // Written as escapes rather than the bytes themselves: a case a reader cannot see
   // is a case nobody can check, and several of these were invisible in the first draft.
   for (const method of ["GE T", "GET/", 'GE"T', "GET\u0080", "GET\u0000"]) {
-    await assert.rejects(() => read(request(`${method} / HTTP/1.1`)), undefined, method);
+    await assert.rejects(() => read(request(`${method} / HTTP/1.1`)), method);
   }
 });
 
@@ -135,19 +137,20 @@ suite("a target outside visible ASCII is refused", async () => {
   // Written as escapes rather than the bytes themselves: a case a reader cannot see
   // is a case nobody can check, and several of these were invisible in the first draft.
   for (const target of ["/a\u0000b", "/a\u007fb", "/\u00e9", "/a b", "/a\u0080"]) {
-    await assert.rejects(() => read(request(`GET ${target} HTTP/1.1`)), undefined, target);
+    await assert.rejects(() => read(request(`GET ${target} HTTP/1.1`)), target);
   }
 });
 
 suite("header limits are enforced", async () => {
-  const many = [];
+  const many: string[] = [];
   for (let index = 0; index < 200; index++) many.push(`x-${index}: v`);
   await assert.rejects(
-    () => read(request("GET / HTTP/1.1", many), { maxHeaderBytes: 65536, maxHeaders: 8 }),
+    () => read(request("GET / HTTP/1.1", many), { ...defaultHeadLimits, maxHeaderBytes: 65536, maxHeaders: 8 }),
     { name: "LimitError" },
   );
   await assert.rejects(
     () => read(request("GET / HTTP/1.1", ["x-long: " + "v".repeat(500)]), {
+      ...defaultHeadLimits,
       maxHeaderBytes: 128,
       maxHeaders: 64,
     }),

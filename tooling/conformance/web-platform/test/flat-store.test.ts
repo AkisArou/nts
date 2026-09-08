@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The flat-to-DurableByteStore adapter, exercised against a fake provider.
 //
 // This is the shared half of the storage seam. A provider gives twelve synchronous
@@ -23,6 +17,9 @@ import type { TestContext } from "node:test";
 import { AbortController } from "../../../../runtime/web-platform/src/index.ts";
 import { durableStoreFromFlat } from "../../../../runtime/web-platform/src/provider.ts";
 import { FakeFlat } from "./fake-flat.ts";
+import { must } from "./harness.ts";
+import type { DurableByteStore } from "../../../../runtime/web-platform/src/provider.ts";
+import type { AbortSignal } from "../../../../runtime/web-platform/src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -36,7 +33,13 @@ function adapted() {
   return { flat, store: durableStoreFromFlat(flat) };
 }
 
-async function put(target, namespace, key, bytes, signal = none()) {
+async function put(
+  target: DurableByteStore,
+  namespace: string,
+  key: string,
+  bytes: Uint8Array,
+  signal: AbortSignal = none(),
+): Promise<void> {
   const write = await target.write(namespace, key, signal);
   await write.append(bytes);
   await write.commit();
@@ -51,7 +54,7 @@ suite("a value written through the adapter reads back whole and by range", async
     "hello durable world",
   );
 
-  const source = await store.source("cache", "greeting", none());
+  const source = must(await store.source("cache", "greeting", none()), "the key that was just written has a source");
   assert.equal(source.size, 19);
   const reader = source.open(6, 7);
   assert.equal(decoder.decode(await reader.read(64)), "durable");
@@ -67,7 +70,7 @@ suite("a value larger than the first fill buffer reads back whole", async () => 
   for (let index = 0; index < payload.length; index++) payload[index] = index % 251;
   await put(store, "cache", "big", payload);
 
-  const read = await store.read("cache", "big", none());
+  const read = must(await store.read("cache", "big", none()), "the key that was just written reads back");
   assert.equal(read.length, 9001);
   assert.deepEqual(read, payload);
   assert.equal(flat.reads, 2, "the retry is one further call, not a search");
@@ -127,12 +130,13 @@ suite("each ranged read owns its chunk", async () => {
   const { store } = adapted();
   await put(store, "cache", "stream", encoder.encode("first-second-"));
 
-  const source = await store.source("cache", "stream", none());
+  const source = must(await store.source("cache", "stream", none()), "the key that was just written has a source");
   const reader = source.open(0, 13);
   // The reader transfers ownership of what it returns, so a consumer may hold two
   // chunks at once. A buffer reused across calls would rewrite the first one here.
-  const first = await reader.read(6);
-  const second = await reader.read(7);
+  // `read` returns nothing once the range is exhausted; both of these are inside it.
+  const first = must(await reader.read(6), "the first six bytes of the range");
+  const second = must(await reader.read(7), "the next seven bytes of the range");
   assert.equal(decoder.decode(first), "first-");
   assert.equal(decoder.decode(second), "second-");
   assert.notEqual(first.buffer, second.buffer, "chunks may not share a buffer");
@@ -143,7 +147,7 @@ suite("a reader opened before a delete keeps reading", async () => {
   const { store } = adapted();
   await put(store, "cache", "doomed", encoder.encode("bytes that outlive their key"));
 
-  const source = await store.source("cache", "doomed", none());
+  const source = must(await store.source("cache", "doomed", none()), "the key that was just written has a source");
   assert.equal(source.size, 28);
   const reader = source.open(0, source.size);
   assert.equal(decoder.decode(await reader.read(6)), "bytes ");
@@ -243,7 +247,7 @@ suite("a settled write refuses further appends and repeats are no-ops", async ()
 suite("a closed reader stays closed and closing twice is a no-op", async () => {
   const { store } = adapted();
   await put(store, "cache", "readable", encoder.encode("bytes"));
-  const source = await store.source("cache", "readable", none());
+  const source = must(await store.source("cache", "readable", none()), "the key that was just written has a source");
   const reader = source.open(0, 5);
   await reader.close();
   await reader.close();

@@ -179,7 +179,7 @@ suite("the enforced fields do change what happens", async (t) => {
   // asserted in the integrity suite.
   await assert.rejects(
     api.fetch(url, { integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }),
-    (error) => {
+    (error: unknown) => {
       assert.ok(error instanceof TypeError);
       assert.match(error.message, /cannot verify it/);
       return true;

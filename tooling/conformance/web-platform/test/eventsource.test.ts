@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -19,12 +13,19 @@ import {
   EventStreamParser,
   readEventSourcePolicy,
 } from "../../../../runtime/web-platform/src/eventsource/event-source.ts";
+import type { FetchTransport } from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { HeaderEntry } from "../../../../runtime/web-platform/src/fetch/headers.ts";
+import type {
+  TransportRequest,
+  TransportResponse,
+} from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { EventSourceInit } from "../../../../runtime/web-platform/src/eventsource/event-source.ts";
 
 const encoder = new TextEncoder();
-const tick = () => new Promise((resolve) => setImmediate(resolve));
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
 
-function streamOf(...chunks) {
-  return new ReadableStream({
+function streamOf(...chunks: readonly string[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
       controller.close();
@@ -32,19 +33,23 @@ function streamOf(...chunks) {
   });
 }
 
-function response(body, contentType = "text/event-stream; charset=utf-8", status = 200) {
+function response(
+  body: ReadableStream<Uint8Array> | null,
+  contentType = "text/event-stream; charset=utf-8",
+  status = 200,
+): TransportResponse {
   return {
     status,
     statusText: status === 200 ? "OK" : "No Content",
-    headers: [["content-type", contentType]],
+    headers: [["content-type", contentType]] as HeaderEntry[],
     body,
   };
 }
 
 test("event-stream parser handles every line ending, fields, retry and incomplete EOF", async () => {
-  const events = [];
-  const ids = [];
-  const retries = [];
+  const events: unknown[] = [];
+  const ids: unknown[] = [];
+  const retries: unknown[] = [];
   const parser = new EventStreamParser(
     {
       async dispatchParsedEvent(event) {
@@ -95,9 +100,9 @@ test("event-stream parser enforces independent line and event limits", async () 
 });
 
 test("EventSource streams messages, reconnects with Last-Event-ID and fails on 204", async (t) => {
-  const requests = [];
-  const secondRequest = Promise.withResolvers();
-  const transport = {
+  const requests: TransportRequest[] = [];
+  const secondRequest = Promise.withResolvers<void>();
+  const transport: FetchTransport = {
     async dispatch(request) {
       requests.push(request);
       if (requests.length === 1) {
@@ -116,29 +121,35 @@ test("EventSource streams messages, reconnects with Last-Event-ID and fails on 2
   });
   t.after(() => runtime.close());
 
-  const source = new EventSource("feed", { withCredentials: 1 });
+  // `withCredentials` is a boolean in the IDL; a number is offered deliberately, because the
+  // conversion is what the assertion below checks.
+  const source = new EventSource("feed", { withCredentials: 1 } as unknown as EventSourceInit);
   assert.equal(source.url, "https://events.example/base/feed");
   assert.equal(source.withCredentials, true);
-  assert.equal(source.readyState, EventSource.CONNECTING);
+  // Read into a local first: `assert.equal` from `node:assert/strict` is an assertion
+  // signature, so asserting on the property directly narrows it to `0` for the rest of the
+  // function -- and the later wait for `CLOSED` then reads as a comparison that cannot hold.
+  const initialState: number = source.readyState;
+  assert.equal(initialState, EventSource.CONNECTING);
   assert.deepEqual(
     [source.CONNECTING, source.OPEN, source.CLOSED],
     [EventSource.CONNECTING, EventSource.OPEN, EventSource.CLOSED],
   );
 
-  const log = [];
-  const message = Promise.withResolvers();
+  const log: string[] = [];
+  const message = Promise.withResolvers<void>();
   source.onopen = function (event) {
     assert.equal(this, source);
     assert.ok(event instanceof Event);
-    assert.equal(event.isTrusted, true);
+    assert.equal((event as { isTrusted?: unknown }).isTrusted, true);
     log.push("open");
   };
-  source.addEventListener("custom", (event) => {
+  source.addEventListener("custom", (event: Event) => {
     assert.ok(event instanceof MessageEvent);
     assert.equal(event.data, "first\nsecond");
     assert.equal(event.lastEventId, "7");
     assert.equal(event.origin, "https://events.example");
-    assert.equal(event.isTrusted, true);
+    assert.equal((event as { isTrusted?: unknown }).isTrusted, true);
     log.push("custom");
     message.resolve();
   });
@@ -153,17 +164,19 @@ test("EventSource streams messages, reconnects with Last-Event-ID and fails on 2
 
   assert.deepEqual(log, ["open", "custom", "retry", "fatal"]);
   assert.equal(requests.length, 2);
-  assert.equal(requests[0].headers.find(([name]) => name === "accept")?.[1], "text/event-stream");
+  const [firstRequest, secondAttempt] = requests;
+  assert.ok(firstRequest !== undefined && secondAttempt !== undefined, "both attempts ran");
+  assert.equal(firstRequest.headers.find(([name]) => name === "accept")?.[1], "text/event-stream");
   assert.equal(
-    requests[0].headers.find(([name]) => name === "last-event-id"),
+    firstRequest.headers.find(([name]) => name === "last-event-id"),
     undefined,
   );
-  assert.equal(requests[1].headers.find(([name]) => name === "last-event-id")?.[1], "7");
+  assert.equal(secondAttempt.headers.find(([name]) => name === "last-event-id")?.[1], "7");
 });
 
 test("EventSource close aborts transport and cancels a pending reconnect", async (t) => {
   let attempts = 0;
-  const firstError = Promise.withResolvers();
+  const firstError = Promise.withResolvers<void>();
   const transport = {
     async dispatch() {
       attempts++;
@@ -210,15 +223,15 @@ test("EventSource conversion and fatal response behavior are deterministic", asy
     },
   });
   t.after(() => runtime.close());
-  assert.throws(() => new EventSource(), TypeError);
+  assert.throws(() => new (EventSource as unknown as new () => unknown)(), TypeError);
   assert.throws(
     () => new EventSource("http://[invalid"),
-    (error) => error.name === "SyntaxError",
+    (error: unknown) => error instanceof Error && error.name === "SyntaxError",
   );
-  assert.throws(() => new EventSource("feed", 1), TypeError);
+  assert.throws(() => new EventSource("feed", 1 as unknown as EventSourceInit), TypeError);
 
   const source = new EventSource("feed");
-  const failed = Promise.withResolvers();
+  const failed = Promise.withResolvers<Event>();
   source.onerror = (event) => failed.resolve(event);
   const event = await failed.promise;
   assert.ok(event instanceof Event);
