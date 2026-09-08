@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // A WebSocket client whose connection comes from the HTTP dispatch stack.
 //
 // The tunnel seam landed with only its own tests as consumers, which is the shape this
@@ -35,6 +29,16 @@ import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { connect, createServer } from "node:net";
 
 import { websocketServer } from "./websocket-echo-server.ts";
+import type { Socket } from "node:net";
+import { causeText, messageData, must, portOf } from "./harness.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type { ByteConnection } from "../src/provider/primitives.ts";
+import type { WebSocketHandshake } from "../src/websocket/transport.ts";
+import type { Event } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -43,7 +47,10 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const none = () => new AbortController().signal;
 
-function transportOf(t, fetchTransport) {
+function transportOf(
+  t: TestContext,
+  fetchTransport?: FetchTransport,
+): DispatchedWebSocketTransport {
   const scheduler = new HostNodeScheduler(() => {});
   const transport =
     fetchTransport ?? new Http1Transport(new HostNodeSocketConnector(), scheduler, {});
@@ -52,7 +59,7 @@ function transportOf(t, fetchTransport) {
   return websockets;
 }
 
-function handshake(port, protocols = []) {
+function handshake(port: number, protocols: readonly string[] = []): WebSocketHandshake {
   return {
     url: hostNodeURLs.parse(`http://127.0.0.1:${port}/socket`),
     protocols,
@@ -83,9 +90,9 @@ suite("a dispatched client round-trips text and binary with a real server", asyn
 });
 
 /** A server that answers the upgrade with an ordinary HTTP response. */
-async function decliningServer(t) {
+async function decliningServer(t: TestContext): Promise<number> {
   const CRLF = String.fromCharCode(13, 10);
-  const sockets = new Set();
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -100,12 +107,12 @@ async function decliningServer(t) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return server.address().port;
+  return portOf(server);
 }
 
 suite("a real server that declines is reported, not mistaken for a socket", async (t) => {
@@ -117,7 +124,7 @@ suite("a real server that declines is reported, not mistaken for a socket", asyn
 
   await assert.rejects(
     () => websockets.connect(handshake(port, []), none()),
-    (error) => /did not yield a connection \(status 426\)/.test(String(error?.message)),
+    (error: unknown) => /did not yield a connection \(status 426\)/.test(causeText(error)),
   );
 });
 
@@ -133,24 +140,33 @@ suite("a transport that cannot surrender its socket is refused, not assumed", as
 
   await assert.rejects(
     () => websockets.connect(handshake(1, []), none()),
-    (error) => /did not yield a connection/.test(String(error?.message)),
+    (error: unknown) => /did not yield a connection/.test(causeText(error)),
   );
 });
 
 suite("a bad Sec-WebSocket-Accept closes the connection it was handed", async (t) => {
-  let handed = null;
-  const lying = {
-    async dispatch(request) {
+  // Recorded into an array rather than a `let`: the only assignment is inside the dispatch, and
+  // control-flow analysis cannot see that it ran.
+  const handed: { closed: boolean }[] = [];
+  const lying: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       assert.equal(request.acceptTunnel, true);
       assert.equal(request.upgradeProtocol, "websocket");
-      handed = {
-        closed: false,
+      // A closed flag behind a getter, because `ByteConnection.closed` is readonly: the
+      // literal declared it as a mutable field and assigned through `this`, which the
+      // interface does not permit and which only worked because nothing checked.
+      let closed = false;
+      const connection: ByteConnection = {
+        get closed(): boolean {
+          return closed;
+        },
         read: async () => null,
         write: async () => 0,
-        close() {
-          this.closed = true;
+        close(): void {
+          closed = true;
         },
       };
+      handed.push(connection);
       return {
         status: 101,
         statusText: "Switching Protocols",
@@ -160,7 +176,7 @@ suite("a bad Sec-WebSocket-Accept closes the connection it was handed", async (t
           ["sec-websocket-accept", "obviously-wrong"],
         ],
         body: null,
-        connection: handed,
+        connection,
       };
     },
   };
@@ -168,21 +184,24 @@ suite("a bad Sec-WebSocket-Accept closes the connection it was handed", async (t
 
   await assert.rejects(() => websockets.connect(handshake(1, []), none()));
   // The connection became ours the moment it was handed over; nothing else will close it.
-  assert.equal(handed.closed, true);
+  assert.equal(must(handed[0], "the transport handed a connection over").closed, true);
 });
 
 suite("the handshake headers the server needs are the ones sent", async (t) => {
-  let sent = null;
-  const capturing = {
-    async dispatch(request) {
-      sent = request;
+  const sent: TransportRequest[] = [];
+  const capturing: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
+      sent.push(request);
       return { status: 200, statusText: "OK", headers: [], body: null };
     },
   };
   const websockets = transportOf(t, capturing);
   await assert.rejects(() => websockets.connect(handshake(1, ["a", "b"]), none()));
 
-  const names = new Map(sent.headers.map(([name, value]) => [name, value]));
+  const capturedRequest = must(sent[0], "the transport dispatched the handshake");
+  const names = new Map<string, string>(
+    capturedRequest.headers.map(([name, value]) => [name, value]),
+  );
   assert.equal(names.get("sec-websocket-version"), "13");
   assert.equal(names.get("sec-websocket-protocol"), "a, b");
   assert.equal(names.get("origin"), "http://127.0.0.1");
@@ -190,7 +209,7 @@ suite("the handshake headers the server needs are the ones sent", async (t) => {
   // Framing headers stay the transport's: the protocol is named by the field.
   assert.equal(names.has("connection"), false);
   assert.equal(names.has("upgrade"), false);
-  assert.equal(sent.upgradeProtocol, "websocket");
+  assert.equal(capturedRequest.upgradeProtocol, "websocket");
 });
 
 suite("closing the transport aborts the sessions it opened", async (t) => {
@@ -237,10 +256,10 @@ suite("an already-aborted signal never reaches the transport", async (t) => {
  * Small on purpose: everything interesting happens on the client side, and a proxy that
  * does more would make it harder to tell whose behaviour a failure belonged to.
  */
-async function connectProxy(t) {
+async function connectProxy(t: TestContext) {
   const CRLF = String.fromCharCode(13, 10);
-  const seen = { targets: [] };
-  const sockets = new Set();
+  const seen: { targets: string[] } = { targets: [] };
+  const sockets = new Set<Socket>();
   const server = createServer((client) => {
     sockets.add(client);
     client.on("error", () => {});
@@ -265,12 +284,12 @@ async function connectProxy(t) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return { port: server.address().port, seen };
+  return { port: portOf(server), seen };
 }
 
 suite("a WebSocket reaches its server through a CONNECT proxy", async (t) => {
@@ -324,7 +343,7 @@ suite("the public WebSocket API works over a dispatched transport", async (t) =>
   assert.equal(socket.protocol, "chat");
 
   const echoed = new Promise((resolve) => {
-    socket.addEventListener("message", (event) => resolve(event.data));
+    socket.addEventListener("message", (event: Event) => resolve(messageData(event)));
   });
   socket.send("public surface");
   assert.equal(await echoed, "public surface");

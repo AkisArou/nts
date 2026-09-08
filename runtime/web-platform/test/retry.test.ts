@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,10 +14,22 @@ import {
 } from "../src/index.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
 import { WebPlatformRuntime } from "../src/provider.ts";
+import { must } from "./harness.ts";
+import type { FetchInterceptor } from "../src/dispatch/interceptor.ts";
+import type { RetryDecision } from "../src/dispatch/retry.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type {
+  PlatformPrimitives,
+  Scheduler,
+} from "../src/provider/primitives.ts";
 
-function stream(value, cancel) {
+function stream(value: string, cancel?: (reason?: unknown) => void): ReadableStream<Uint8Array> {
   const bytes = new TextEncoder().encode(value);
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(bytes);
       controller.close();
@@ -32,9 +38,12 @@ function stream(value, cancel) {
   });
 }
 
-function cancelableStream(value, cancel) {
+function cancelableStream(
+  value: string,
+  cancel?: (reason?: unknown) => void,
+): ReadableStream<Uint8Array> {
   const bytes = new TextEncoder().encode(value);
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(bytes);
     },
@@ -42,10 +51,11 @@ function cancelableStream(value, cancel) {
   });
 }
 
-async function consume(body) {
+async function consume(body: ReadableStream<Uint8Array> | null): Promise<string> {
   if (body === null) return "";
   const reader = body.getReader();
-  const chunks = [];
+  // Bytes rather than chunks: the loop spreads each chunk into this.
+  const chunks: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -58,7 +68,10 @@ async function consume(body) {
   return new TextDecoder().decode(Uint8Array.from(chunks));
 }
 
-function request(primitives, overrides = {}) {
+function request(
+  primitives: PlatformPrimitives,
+  overrides: Partial<TransportRequest> = {},
+): TransportRequest {
   return {
     url: primitives.urls.parse("https://retry.test/resource"),
     method: "GET",
@@ -70,15 +83,22 @@ function request(primitives, overrides = {}) {
   };
 }
 
-class ImmediateScheduler {
-  delays = [];
-  errors = [];
+/** A delay this scheduler was asked for, and whether it is still due to fire. */
+interface HeldTimer {
+  readonly milliseconds: number;
+  readonly task: () => void;
+  active: boolean;
+}
 
-  enqueue(task) {
+class ImmediateScheduler implements Scheduler {
+  readonly delays: number[] = [];
+  readonly errors: unknown[] = [];
+
+  enqueue(task: () => void): void {
     queueMicrotask(task);
   }
 
-  delay(milliseconds, task) {
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
     const timer = { active: true };
     this.delays.push(milliseconds);
     queueMicrotask(() => {
@@ -93,16 +113,16 @@ class ImmediateScheduler {
     };
   }
 
-  reportError(error) {
+  reportError(error: unknown): void {
     this.errors.push(error);
   }
 }
 
 class HeldScheduler extends ImmediateScheduler {
-  timers = [];
+  readonly timers: HeldTimer[] = [];
 
-  delay(milliseconds, task) {
-    const timer = { milliseconds, task, active: true };
+  override delay(milliseconds: number, task: () => void): { cancel(): void } {
+    const timer: HeldTimer = { milliseconds, task, active: true };
     this.delays.push(milliseconds);
     this.timers.push(timer);
     return {
@@ -115,10 +135,10 @@ class HeldScheduler extends ImmediateScheduler {
 
 test("composeFetchTransport has explicit outer-to-inner request ordering", async () => {
   const primitives = createHostNodePrimitives();
-  const events = [];
-  function interceptor(name) {
+  const events: string[] = [];
+  function interceptor(name: string): FetchInterceptor {
     return {
-      async dispatch(value, next) {
+      async dispatch(value: TransportRequest, next: FetchTransport): Promise<TransportResponse> {
         events.push(name + ":request");
         const response = await next.dispatch(value);
         events.push(name + ":response");
@@ -148,7 +168,7 @@ test("composeFetchTransport has explicit outer-to-inner request ordering", async
 test("RetryAgent retries typed network failures with fresh replayable bodies", async () => {
   const primitives = createHostNodePrimitives();
   const scheduler = new ImmediateScheduler();
-  const attempts = [];
+  const attempts: string[] = [];
   let opened = 0;
   const source = {
     length: 7,
@@ -159,7 +179,7 @@ test("RetryAgent retries typed network failures with fresh replayable bodies", a
   };
   const agent = new RetryAgent(
     {
-      async dispatch(value) {
+      async dispatch(value: TransportRequest): Promise<TransportResponse> {
         attempts.push(await consume(value.body));
         if (attempts.length < 3) throw new TransportError("ECONNRESET", "reset");
         return { status: 200, statusText: "", headers: [], body: stream("done") };
@@ -188,10 +208,10 @@ test("RetryAgent retries typed network failures with fresh replayable bodies", a
 
 test("Fetch carries Blob-backed body replayability to the retry transport", async () => {
   const primitives = createHostNodePrimitives();
-  const bodies = [];
+  const bodies: string[] = [];
   const retry = new RetryAgent(
     {
-      async dispatch(value) {
+      async dispatch(value: TransportRequest): Promise<TransportResponse> {
         bodies.push(await consume(value.body));
         if (bodies.length === 1) throw new TransportError("ECONNRESET", "reset");
         return { status: 200, statusText: "OK", headers: [], body: stream("accepted") };
@@ -212,7 +232,7 @@ test("Fetch carries Blob-backed body replayability to the retry transport", asyn
 test("Retry-After controls status retries and canceled attempts return their body", async () => {
   const primitives = createHostNodePrimitives();
   const scheduler = new ImmediateScheduler();
-  const cancellations = [];
+  const cancellations: unknown[] = [];
   let attempts = 0;
   const agent = new RetryAgent(
     {
@@ -236,15 +256,17 @@ test("Retry-After controls status retries and canceled attempts return their bod
   assert.equal(attempts, 2);
   assert.deepEqual(scheduler.delays, [1000]);
   assert.equal(cancellations.length, 1);
-  assert.equal(cancellations[0].name, "RetryCancellation");
+  const cancellation = cancellations[0];
+  assert.ok(cancellation instanceof Error, "the cancellation is an Error");
+  assert.equal(cancellation.name, "RetryCancellation");
 });
 
 test("status exhaustion either throws a stable error or returns the final response", async () => {
   const primitives = createHostNodePrimitives();
   const throwingScheduler = new ImmediateScheduler();
-  const cancellations = [];
-  const transport = {
-    dispatch() {
+  const cancellations: unknown[] = [];
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       return Promise.resolve({
         status: 429,
         statusText: "Slow down",
@@ -260,7 +282,7 @@ test("status exhaustion either throws a stable error or returns the final respon
   });
   await assert.rejects(
     throwing.dispatch(request(primitives)),
-    (error) =>
+    (error: unknown) =>
       error instanceof RetryExhaustedError &&
       error.code === "UND_ERR_REQ_RETRY" &&
       error.statusCode === 429 &&
@@ -299,7 +321,7 @@ test("one-shot and inconsistent request bodies are never guessed replayable", as
   const scheduler = new ImmediateScheduler();
   let attempts = 0;
   const transport = {
-    async dispatch(value) {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       attempts++;
       await consume(value.body);
       throw new TransportError("EPIPE", "broken pipe");
@@ -377,17 +399,17 @@ test("abort during backoff rejects with the exact abort reason", async () => {
   while (scheduler.timers.length === 0) await Promise.resolve();
   const reason = new Error("stop retrying");
   controller.abort(reason);
-  await assert.rejects(pending, (error) => error === reason);
+  await assert.rejects(pending, (error: unknown) => error === reason);
   assert.equal(attempts, 1);
-  assert.equal(scheduler.timers[0].active, false);
+  assert.equal(must(scheduler.timers[0], "the retry armed a timer").active, false);
 });
 
 test("abort while deciding a response retry cancels that response with the exact reason", async () => {
   const primitives = createHostNodePrimitives();
   const scheduler = new ImmediateScheduler();
   const controller = new AbortController();
-  const decision = Promise.withResolvers();
-  const cancellations = [];
+  const decision = Promise.withResolvers<RetryDecision>();
+  const cancellations: unknown[] = [];
   const agent = new RetryAgent(
     {
       dispatch() {
@@ -409,7 +431,7 @@ test("abort while deciding a response retry cancels that response with the exact
   const reason = new Error("stop during policy");
   controller.abort(reason);
   decision.resolve({ retry: false });
-  await assert.rejects(pending, (error) => error === reason);
+  await assert.rejects(pending, (error: unknown) => error === reason);
   assert.deepEqual(cancellations, [reason]);
 });
 
@@ -453,7 +475,7 @@ test("ineligible methods and untyped failures are not retried by default", async
     { scheduler },
   );
   await assert.rejects(agent.dispatch(request(primitives, { method: "POST" })), /reset/);
-  await assert.rejects(agent.dispatch(request(primitives)), (error) => error === raw);
+  await assert.rejects(agent.dispatch(request(primitives)), (error: unknown) => error === raw);
   assert.equal(attempts, 2);
   assert.deepEqual(scheduler.delays, []);
 });

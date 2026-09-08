@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Protocol switches: `101` upgrades and `CONNECT` tunnels, over a real socket.
 //
 // The last slice recorded `connect` and `upgrade` as absent because `FetchTransport`
@@ -28,6 +22,15 @@ import {
   createHostNodePrimitives,
   hostNodeURLs,
 } from "../host/node-primitives.ts";
+import type { Socket } from "node:net";
+import { causeText, must, portOf } from "./harness.ts";
+import type { ByteConnection } from "../src/provider/primitives.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type { ReadableStream } from "../src/streams/readable.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -42,8 +45,8 @@ const decoder = new TextDecoder();
  * The echo is what makes a tunnel testable: after the switch the socket is no longer
  * speaking HTTP, and the only way to show the caller really owns it is to use it.
  */
-async function rawServer(t, responseText, seen = []) {
-  const sockets = new Set();
+async function rawServer(t: TestContext, responseText: string, seen: string[] = []) {
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -63,22 +66,22 @@ async function rawServer(t, responseText, seen = []) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return server.address().port;
+  return portOf(server);
 }
 
-function makeTransport(t) {
+function makeTransport(t: TestContext): Http1Transport {
   const primitives = createHostNodePrimitives();
   const transport = new Http1Transport(new HostNodeSocketConnector(), primitives.scheduler, {});
   t.after(() => transport.close?.());
   return transport;
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(url: string, overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -90,7 +93,7 @@ function transportRequest(url, overrides = {}) {
   };
 }
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null) {
   if (stream === null || stream === undefined) return "";
   const reader = stream.getReader();
   const parts = [];
@@ -107,8 +110,8 @@ async function consume(stream) {
 }
 
 /** Reads until `count` bytes have arrived, so a test never depends on chunk boundaries. */
-async function readExactly(connection, count) {
-  const parts = [];
+async function readExactly(connection: ByteConnection, count: number): Promise<string> {
+  const parts: Uint8Array[] = [];
   let total = 0;
   while (total < count) {
     const chunk = await connection.read(65536);
@@ -150,8 +153,8 @@ suite("a 101 hands back the connection, and the bytes behind the head are not lo
   assert.equal(response.status, 101);
   assert.equal(response.body, null, "a switch has no body; what follows is not HTTP");
   assert.notEqual(response.connection, undefined);
-  assert.equal(await readExactly(response.connection, 14), "already spoken");
-  response.connection.close();
+  assert.equal(await readExactly(must(response.connection, "the tunnel handed a connection over"), 14), "already spoken");
+  must(response.connection, "the tunnel handed a connection over").close();
 });
 
 suite("the caller can use the connection it was handed", async (t) => {
@@ -163,13 +166,13 @@ suite("the caller can use the connection it was handed", async (t) => {
   );
   assert.notEqual(response.connection, undefined);
 
-  await response.connection.write(encoder.encode("hello tunnel"));
-  assert.equal(await readExactly(response.connection, 12), "HELLO TUNNEL");
-  response.connection.close();
+  await must(response.connection, "the tunnel handed a connection over").write(encoder.encode("hello tunnel"));
+  assert.equal(await readExactly(must(response.connection, "the tunnel handed a connection over"), 12), "HELLO TUNNEL");
+  must(response.connection, "the tunnel handed a connection over").close();
 });
 
 suite("the upgrade request actually asks, on the wire", async (t) => {
-  const heads = [];
+  const heads: string[] = [];
   const port = await rawServer(t, SWITCH, heads);
   const transport = makeTransport(t);
 
@@ -182,9 +185,9 @@ suite("the upgrade request actually asks, on the wire", async (t) => {
     }),
   );
   assert.equal(response.status, 101);
-  response.connection.close();
+  must(response.connection, "the tunnel handed a connection over").close();
 
-  const head = heads[0].toLowerCase();
+  const head = must(heads[0], "the server recorded the request head").toLowerCase();
   assert.ok(head.includes("upgrade: websocket" + CRLF), `no upgrade header in: ${heads[0]}`);
   assert.ok(head.includes("connection: upgrade" + CRLF), `no connection header in: ${heads[0]}`);
 });
@@ -240,7 +243,7 @@ suite("without asking, a 101 is still an error", async (t) => {
   // Fetch never asks, which is why `101` remains an error there.
   await assert.rejects(
     () => transport.dispatch(transportRequest(`http://127.0.0.1:${port}/upgrade`)),
-    (error) => /upgrade/i.test(String(error?.message)),
+    (error: unknown) => /upgrade/i.test(causeText(error)),
   );
 });
 
@@ -253,9 +256,9 @@ suite("a CONNECT answered 2xx is a tunnel", async (t) => {
   );
   assert.equal(response.status, 200);
   assert.notEqual(response.connection, undefined);
-  await response.connection.write(encoder.encode("tunnelled"));
-  assert.equal(await readExactly(response.connection, 9), "TUNNELLED");
-  response.connection.close();
+  await must(response.connection, "the tunnel handed a connection over").write(encoder.encode("tunnelled"));
+  assert.equal(await readExactly(must(response.connection, "the tunnel handed a connection over"), 9), "TUNNELLED");
+  must(response.connection, "the tunnel handed a connection over").close();
 });
 
 suite("a CONNECT that is refused is an ordinary response", async (t) => {
@@ -281,7 +284,7 @@ suite("a tunnelled connection is neither closed nor left occupying a pool slot",
     transportRequest(`http://127.0.0.1:${port}/one`, { acceptTunnel: true }),
   );
   assert.notEqual(first.connection, undefined);
-  assert.equal(first.connection.closed, false, "detaching must not close it");
+  assert.equal(must(first.connection, "the tunnel handed a connection over").closed, false, "detaching must not close it");
 
   // A second request to the same origin, while the first connection is still held. If
   // the tunnel had been released back to the pool, this would be handed a socket that
@@ -290,14 +293,14 @@ suite("a tunnelled connection is neither closed nor left occupying a pool slot",
     transportRequest(`http://127.0.0.1:${port}/two`, { acceptTunnel: true }),
   );
   assert.equal(second.status, 101);
-  assert.notEqual(second.connection, second.connection === undefined ? 0 : undefined);
+  assert.notEqual(second.connection, undefined);
   assert.notEqual(second.connection, first.connection, "a fresh connection, not the tunnel");
 
   // And the first is still usable, which a pooled-and-reused socket would not be.
-  await first.connection.write(encoder.encode("still mine"));
-  assert.equal(await readExactly(first.connection, 10), "STILL MINE");
-  first.connection.close();
-  second.connection.close();
+  await must(first.connection, "the tunnel handed a connection over").write(encoder.encode("still mine"));
+  assert.equal(await readExactly(must(first.connection, "the tunnel handed a connection over"), 10), "STILL MINE");
+  must(first.connection, "the tunnel handed a connection over").close();
+  must(second.connection, "the tunnel handed a connection over").close();
 });
 
 suite("connect and upgrade report a switch, and report when there was not one", async () => {
@@ -309,9 +312,9 @@ suite("connect and upgrade report a switch, and report when there was not one", 
       this.closed = true;
     },
   };
-  const seen = [];
-  const switching = {
-    async dispatch(request) {
+  const seen: TransportRequest[] = [];
+  const switching: FetchTransport = {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       seen.push(request);
       return {
         status: request.method === "CONNECT" ? 200 : 101,
@@ -328,16 +331,16 @@ suite("connect and upgrade report a switch, and report when there was not one", 
   assert.equal(tunnel.tunnelled, true);
   assert.equal(tunnel.status, 200);
   assert.equal(tunnel.connection, handed);
-  assert.equal(seen[0].method, "CONNECT", "connect names its own method");
-  assert.equal(seen[0].acceptTunnel, true);
+  assert.equal(must(seen[0], "the transport saw that many requests").method, "CONNECT", "connect names its own method");
+  assert.equal(must(seen[0], "the transport saw that many requests").acceptTunnel, true);
 
   const upgraded = await operations.upgrade(
     transportRequest("http://ops.test/", { method: "GET" }),
   );
   assert.equal(upgraded.tunnelled, true);
   assert.equal(upgraded.status, 101);
-  assert.equal(seen[1].method, "GET", "upgrade keeps the caller's method");
-  assert.equal(seen[1].acceptTunnel, true);
+  assert.equal(must(seen[1], "the transport saw that many requests").method, "GET", "upgrade keeps the caller's method");
+  assert.equal(must(seen[1], "the transport saw that many requests").acceptTunnel, true);
 });
 
 suite("a transport that cannot surrender its socket is reported, not pretended", async () => {

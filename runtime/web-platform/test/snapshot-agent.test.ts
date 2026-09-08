@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -17,8 +11,23 @@ import {
   TextEncoder,
 } from "../src/index.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { must } from "./harness.ts";
+import type {
+  SnapshotData,
+  SnapshotStore,
+} from "../src/mock/snapshot-agent.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type {
+  PlatformPrimitives,
+  Scheduler,
+} from "../src/provider/primitives.ts";
 
-function stream(...chunks) {
+function stream(...chunks: readonly (readonly number[])[]): ReadableStream<Uint8Array> {
   return new ReadableStream({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(Uint8Array.from(chunk));
@@ -27,11 +36,15 @@ function stream(...chunks) {
   });
 }
 
-function textStream(value) {
+function textStream(value: string): ReadableStream<Uint8Array> {
   return stream([...new TextEncoder().encode(value)]);
 }
 
-function request(primitives, url, overrides = {}) {
+function request(
+  primitives: PlatformPrimitives,
+  url: string,
+  overrides: Partial<TransportRequest> = {},
+): TransportRequest {
   return {
     url: primitives.urls.parse(url),
     method: "GET",
@@ -43,10 +56,10 @@ function request(primitives, url, overrides = {}) {
   };
 }
 
-async function consume(body) {
+async function consume(body: ReadableStream<Uint8Array> | null): Promise<Uint8Array> {
   if (body === null) return new Uint8Array(0);
   const reader = body.getReader();
-  const bytes = [];
+  const bytes: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -59,7 +72,7 @@ async function consume(body) {
   return Uint8Array.from(bytes);
 }
 
-async function text(body) {
+async function text(body: ReadableStream<Uint8Array> | null): Promise<string> {
   return new TextDecoder().decode(await consume(body));
 }
 
@@ -68,10 +81,10 @@ function matchingOptions() {
     matchHeaders: ["x-stable"],
     ignoreHeaders: ["x-volatile"],
     excludeHeaders: ["authorization", "set-cookie"],
-    normalizeQuery(query) {
+    normalizeQuery(query: string): string {
       return query.replace(/nonce=[^&]*/g, "nonce=<redacted>");
     },
-    normalizeBody(body) {
+    normalizeBody(body: Uint8Array | null): Uint8Array | null {
       if (body === null) return null;
       const normalized = new TextDecoder().decode(body).replace(/[0-9]+/g, "<number>");
       return new TextEncoder().encode(normalized);
@@ -80,16 +93,23 @@ function matchingOptions() {
   };
 }
 
-class ManualScheduler {
-  timers = [];
-  reported = [];
+/** A delay this scheduler was asked for, and whether it is still due to fire. */
+interface HeldTimer {
+  readonly milliseconds: number;
+  readonly task: () => void;
+  active: boolean;
+}
 
-  enqueue(task) {
+class ManualScheduler implements Scheduler {
+  readonly timers: HeldTimer[] = [];
+  readonly reported: unknown[] = [];
+
+  enqueue(task: () => void): void {
     queueMicrotask(task);
   }
 
-  delay(milliseconds, task) {
-    const timer = { milliseconds, task, active: true };
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
+    const timer: HeldTimer = { milliseconds, task, active: true };
     this.timers.push(timer);
     return {
       cancel() {
@@ -98,7 +118,7 @@ class ManualScheduler {
     };
   }
 
-  reportError(error) {
+  reportError(error: unknown): void {
     this.reported.push(error);
   }
 
@@ -114,10 +134,11 @@ class ManualScheduler {
 test("SnapshotAgent records, redacts and replays sequential responses deterministically", async () => {
   const primitives = createHostNodePrimitives();
   const store = new MemorySnapshotStore();
-  const seen = [];
+  // What the fallback recorded: the URL, headers and body it saw -- not the request itself.
+  const seen: { url: string; headers: readonly HeaderEntry[]; body: string }[] = [];
   let sequence = 0;
-  const fallback = {
-    async dispatch(value) {
+  const fallback: FetchTransport = {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       sequence++;
       seen.push({
         url: value.url.href,
@@ -163,19 +184,20 @@ test("SnapshotAgent records, redacts and replays sequential responses determinis
     assert.equal(new Headers(response.headers).get("set-cookie"), "secret=response");
   }
   assert.equal(seen.length, 2);
-  assert.equal(seen[0].body, "event=123");
-  assert.equal(new Headers(seen[0].headers).get("authorization"), "Bearer one");
+  assert.equal(must(seen[0], "the fallback saw that many requests").body, "event=123");
+  assert.equal(new Headers(must(seen[0], "the fallback saw that many requests").headers).get("authorization"), "Bearer one");
   await record.close();
 
   const stored = await store.loadAll();
   assert.equal(stored.length, 1);
-  assert.equal(stored[0].responses.length, 2);
-  assert.equal(stored[0].recordedAtMilliseconds, 42);
-  assert.equal(stored[0].request.url, "https://snapshot.test/item?nonce=<redacted>");
-  assert.equal(new TextDecoder().decode(stored[0].request.body), "event=<number>");
-  assert.equal(new Headers(stored[0].request.headers).has("authorization"), false);
-  assert.equal(new Headers(stored[0].responses[0].headers).has("set-cookie"), false);
-  assert.equal(new Headers(stored[0].responses[0].trailers).has("set-cookie"), false);
+  const entry = must(stored[0], "the store kept the snapshot it recorded");
+  assert.equal(entry.responses.length, 2);
+  assert.equal(entry.recordedAtMilliseconds, 42);
+  assert.equal(entry.request.url, "https://snapshot.test/item?nonce=<redacted>");
+  assert.equal(new TextDecoder().decode(must(entry.request.body, "the recorded request has a body")), "event=<number>");
+  assert.equal(new Headers(entry.request.headers).has("authorization"), false);
+  assert.equal(new Headers(must(entry.responses[0], "the snapshot holds that response").headers).has("set-cookie"), false);
+  assert.equal(new Headers(must(entry.responses[0], "the snapshot holds that response").trailers).has("set-cookie"), false);
 
   const playback = new SnapshotAgent(primitives.scheduler, {
     ...matchingOptions(),
@@ -198,9 +220,9 @@ test("SnapshotAgent records, redacts and replays sequential responses determinis
     assert.equal(await text(response.body), expected);
     assert.equal(new Headers(response.headers).has("set-cookie"), false);
   }
-  assert.equal(playback.getRecorder().getSnapshots()[0].callCount, 3);
+  assert.equal(must(playback.getRecorder().getSnapshots()[0], "the recorder kept one snapshot").callCount, 3);
   playback.resetCallCounts();
-  assert.equal(playback.getRecorder().getSnapshots()[0].callCount, 0);
+  assert.equal(must(playback.getRecorder().getSnapshots()[0], "the recorder kept one snapshot").callCount, 0);
   await assert.rejects(
     playback.dispatch(
       request(primitives, "https://snapshot.test/item?nonce=new", {
@@ -210,21 +232,21 @@ test("SnapshotAgent records, redacts and replays sequential responses determinis
         bodyLength: 9,
       }),
     ),
-    (error) =>
+    (error: unknown) =>
       error instanceof SnapshotNotFoundError &&
       error.code === "UND_SNAPSHOT_NOT_FOUND" &&
       error.message === "No snapshot found for POST https://snapshot.test/item?nonce=<redacted>",
   );
   await playback.close();
-  assert.equal((await store.loadAll())[0].callCount, 0);
+  assert.equal(must((await store.loadAll())[0], "the store kept one snapshot").callCount, 0);
 });
 
 test("SnapshotAgent update replays hits and records misses", async () => {
   const primitives = createHostNodePrimitives();
   const store = new MemorySnapshotStore();
   let liveCalls = 0;
-  const fallback = {
-    dispatch(value) {
+  const fallback: FetchTransport = {
+    dispatch(value: TransportRequest): Promise<TransportResponse> {
       liveCalls++;
       return Promise.resolve({
         status: 200,
@@ -279,7 +301,7 @@ test("excluded URLs pass through without loading, capturing or recording", async
     store,
     excludeURLs: ["passthrough.test"],
     fallback: {
-      async dispatch(value) {
+      async dispatch(value: TransportRequest): Promise<TransportResponse> {
         received = await text(value.body);
         return { status: 204, statusText: "", headers: [], body: null };
       },
@@ -300,13 +322,14 @@ test("excluded URLs pass through without loading, capturing or recording", async
 test("response capture has an exact byte boundary and cancels an oversized body", async () => {
   const primitives = createHostNodePrimitives();
   const store = new MemorySnapshotStore();
-  let cancelledWith;
+  // Captured from inside the cancel handler, so it says what it will hold.
+  let cancelledWith: unknown;
   const agent = new SnapshotAgent(primitives.scheduler, {
     mode: "record",
     store,
     maxResponseBodyBytes: 3,
     fallback: {
-      dispatch(value) {
+      dispatch(value: TransportRequest): Promise<TransportResponse> {
         if (value.url.pathname === "/exact") {
           return Promise.resolve({
             status: 200,
@@ -342,9 +365,10 @@ test("response capture has an exact byte boundary and cancels an oversized body"
   );
   await assert.rejects(
     agent.dispatch(request(primitives, "https://limit.test/large")),
-    (error) => error?.name === "LimitError",
+    (error: unknown) => error instanceof Error && error.name === "LimitError",
   );
-  assert.equal(cancelledWith?.name, "LimitError");
+  assert.ok(cancelledWith instanceof Error, "the read was cancelled with an Error");
+  assert.equal(cancelledWith.name, "LimitError");
   assert.equal(agent.getRecorder().size(), 1);
   await agent.close();
 });
@@ -370,15 +394,15 @@ test("snapshot store keys and bounds are validated before playback", async () =>
 
 test("snapshot saves are serialized so an older write cannot replace a newer one", async () => {
   const primitives = createHostNodePrimitives();
-  const firstStarted = Promise.withResolvers();
-  const releaseFirst = Promise.withResolvers();
-  const lengths = [];
-  let stored = [];
-  const store = {
+  const firstStarted = Promise.withResolvers<void>();
+  const releaseFirst = Promise.withResolvers<void>();
+  const lengths: number[] = [];
+  let stored: readonly SnapshotData[] = [];
+  const store: SnapshotStore = {
     loadAll() {
       return Promise.resolve(stored);
     },
-    async replaceAll(snapshots) {
+    async replaceAll(snapshots: readonly SnapshotData[]) {
       lengths.push(snapshots.length);
       if (lengths.length === 1) {
         firstStarted.resolve();
@@ -414,12 +438,12 @@ test("auto flush uses the injected scheduler and persistent store", async () => 
   const primitives = createHostNodePrimitives();
   const scheduler = new ManualScheduler();
   const store = new MemorySnapshotStore();
-  const saved = Promise.withResolvers();
+  const saved = Promise.withResolvers<void>();
   const observedStore = {
     loadAll() {
       return store.loadAll();
     },
-    async replaceAll(snapshots) {
+    async replaceAll(snapshots: readonly SnapshotData[]) {
       await store.replaceAll(snapshots);
       saved.resolve();
     },
@@ -438,7 +462,7 @@ test("auto flush uses the injected scheduler and persistent store", async () => 
   await agent.dispatch(request(primitives, "https://flush.test/"));
   assert.equal((await store.loadAll()).length, 0);
   assert.equal(scheduler.timers.length, 1);
-  assert.equal(scheduler.timers[0].milliseconds, 25);
+  assert.equal(must(scheduler.timers[0], "the agent armed a flush timer").milliseconds, 25);
   scheduler.runTimers();
   await saved.promise;
   await Promise.resolve();
@@ -455,7 +479,7 @@ test("snapshot count eviction is bounded and deterministic", async () => {
     store,
     maxSnapshots: 2,
     fallback: {
-      dispatch(value) {
+      dispatch(value: TransportRequest): Promise<TransportResponse> {
         return Promise.resolve({
           status: 200,
           statusText: "",

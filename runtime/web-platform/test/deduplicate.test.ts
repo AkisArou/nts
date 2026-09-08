@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -15,8 +9,14 @@ import {
   TextEncoder,
 } from "../src/index.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { must } from "./harness.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
 
-function request(path = "/resource", overrides = {}) {
+function request(path = "/resource", overrides: Partial<TransportRequest> = {}): TransportRequest {
   const primitives = createHostNodePrimitives();
   return {
     url: primitives.urls.parse("https://deduplicate.test" + path),
@@ -29,7 +29,10 @@ function request(path = "/resource", overrides = {}) {
   };
 }
 
-function body(chunks, onCancel = () => {}) {
+function body(
+  chunks: readonly string[],
+  onCancel: (reason?: unknown) => void = () => {},
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let index = 0;
   return new ReadableStream(
@@ -45,10 +48,10 @@ function body(chunks, onCancel = () => {}) {
   );
 }
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (stream === null) return "";
   const reader = stream.getReader();
-  const bytes = [];
+  const bytes: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -63,10 +66,10 @@ async function consume(stream) {
 
 test("concurrent identical requests share one dispatch and independent bodies", async () => {
   const interceptor = new DeduplicationInterceptor();
-  const deferred = Promise.withResolvers();
+  const deferred = Promise.withResolvers<TransportResponse>();
   let dispatches = 0;
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
       return deferred.promise;
     },
@@ -96,11 +99,11 @@ test("concurrent identical requests share one dispatch and independent bodies", 
 test("different paths and hostile header boundaries never collide", async () => {
   const interceptor = new DeduplicationInterceptor();
   let dispatches = 0;
-  const pending = [];
-  const transport = {
-    dispatch() {
+  const pending: PromiseWithResolvers<TransportResponse>[] = [];
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
-      const result = Promise.withResolvers();
+      const result = Promise.withResolvers<TransportResponse>();
       pending.push(result);
       return result.promise;
     },
@@ -127,9 +130,9 @@ test("different paths and hostile header boundaries never collide", async () => 
 test("excluded headers may share while skipped headers always bypass", async () => {
   const excluded = new DeduplicationInterceptor({ excludeHeaderNames: ["x-trace"] });
   let excludedDispatches = 0;
-  const deferred = Promise.withResolvers();
-  const transport = {
-    dispatch() {
+  const deferred = Promise.withResolvers<TransportResponse>();
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       excludedDispatches++;
       return deferred.promise;
     },
@@ -160,16 +163,16 @@ test("excluded headers may share while skipped headers always bypass", async () 
 test("a subscriber abort does not cancel the shared request for another subscriber", async () => {
   const interceptor = new DeduplicationInterceptor();
   const firstController = new AbortController();
-  const cancellations = [];
+  const cancellations: unknown[] = [];
   let dispatches = 0;
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
       return Promise.resolve({
         status: 200,
         statusText: "",
         headers: [],
-        body: body(["still", "-available"], (reason) => cancellations.push(reason)),
+        body: body(["still", "-available"], (reason?: unknown) => cancellations.push(reason)),
       });
     },
   };
@@ -179,7 +182,10 @@ test("a subscriber abort does not cancel the shared request for another subscrib
   ]);
   const reason = new Error("first subscriber stopped");
   firstController.abort(reason);
-  await assert.rejects(first.body.getReader().read(), (error) => error === reason);
+  await assert.rejects(
+    must(first.body, "the response carries a body").getReader().read(),
+    (error: unknown) => error === reason,
+  );
   assert.equal(await consume(second.body), "still-available");
   assert.equal(dispatches, 1);
   assert.deepEqual(cancellations, []);
@@ -188,10 +194,10 @@ test("a subscriber abort does not cancel the shared request for another subscrib
 test("a subscriber may abort before headers without aborting another subscriber", async () => {
   const interceptor = new DeduplicationInterceptor();
   const firstController = new AbortController();
-  const deferred = Promise.withResolvers();
+  const deferred = Promise.withResolvers<TransportResponse>();
   let dispatches = 0;
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
       return deferred.promise;
     },
@@ -204,26 +210,26 @@ test("a subscriber may abort before headers without aborting another subscriber"
   const reason = new Error("stop before headers");
   firstController.abort(reason);
   deferred.resolve({ status: 200, statusText: "", headers: [], body: body(["second"]) });
-  await assert.rejects(first, (error) => error === reason);
+  await assert.rejects(first, (error: unknown) => error === reason);
   assert.equal(await consume((await second).body), "second");
   assert.equal(dispatches, 1);
 });
 
 test("the last subscriber cancellation cancels upstream with exact identity", async () => {
   const interceptor = new DeduplicationInterceptor();
-  const cancellations = [];
+  const cancellations: unknown[] = [];
   const response = await interceptor.dispatch(request("/last"), {
     dispatch() {
       return Promise.resolve({
         status: 200,
         statusText: "",
         headers: [],
-        body: body(["unused"], (reason) => cancellations.push(reason)),
+        body: body(["unused"], (reason?: unknown) => cancellations.push(reason)),
       });
     },
   });
   const reason = new Error("no subscribers remain");
-  await response.body.cancel(reason);
+  await must(response.body, "the response carries a body").cancel(reason);
   assert.deepEqual(cancellations, [reason]);
 });
 
@@ -233,8 +239,8 @@ test("slow subscribers fail at their own bound without stopping fast subscribers
     maximumTotalBufferedBytes: 4,
   });
   let dispatches = 0;
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
       return Promise.resolve({
         status: 200,
@@ -249,7 +255,7 @@ test("slow subscribers fail at their own bound without stopping fast subscribers
     interceptor.dispatch(request("/bounded"), transport),
   ]);
   assert.equal(await consume(fast.body), "aabbcc");
-  await assert.rejects(slow.body.getReader().read(), DeduplicationBufferError);
+  await assert.rejects(must(slow.body, "the response carries a body").getReader().read(), DeduplicationBufferError);
   assert.equal(dispatches, 1);
 });
 
@@ -258,8 +264,8 @@ test("the shared buffer budget retires only the subscriber that cannot reserve",
     maximumBufferedBytesPerSubscriber: 8,
     maximumTotalBufferedBytes: 2,
   });
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       return Promise.resolve({
         status: 200,
         statusText: "",
@@ -276,8 +282,8 @@ test("the shared buffer budget retires only the subscriber that cannot reserve",
   assert.equal(await consume(fast.body), "aa");
   assert.equal(await consume(firstSlow.body), "aa");
   await assert.rejects(
-    secondSlow.body.getReader().read(),
-    (error) =>
+    must(secondSlow.body, "the response carries a body").getReader().read(),
+    (error: unknown) =>
       error instanceof DeduplicationBufferError &&
       error.scope === "total" &&
       error.maximumBytes === 2,
@@ -286,12 +292,12 @@ test("the shared buffer budget retires only the subscriber that cannot reserve",
 
 test("subscriber and pending-request bounds fall back to independent dispatch", async () => {
   const bySubscriber = new DeduplicationInterceptor({ maximumSubscribersPerRequest: 2 });
-  const subscriberPending = [];
+  const subscriberPending: PromiseWithResolvers<TransportResponse>[] = [];
   let subscriberDispatches = 0;
   const subscriberTransport = {
     dispatch() {
       subscriberDispatches++;
-      const result = Promise.withResolvers();
+      const result = Promise.withResolvers<TransportResponse>();
       subscriberPending.push(result);
       return result.promise;
     },
@@ -309,12 +315,12 @@ test("subscriber and pending-request bounds fall back to independent dispatch", 
   assert.equal(subscriberDispatches, 2);
 
   const byPending = new DeduplicationInterceptor({ maximumPendingRequests: 1 });
-  const requestPending = [];
+  const requestPending: PromiseWithResolvers<TransportResponse>[] = [];
   let pendingDispatches = 0;
   const pendingTransport = {
     dispatch() {
       pendingDispatches++;
-      const result = Promise.withResolvers();
+      const result = Promise.withResolvers<TransportResponse>();
       requestPending.push(result);
       return result.promise;
     },
@@ -334,8 +340,8 @@ test("subscriber and pending-request bounds fall back to independent dispatch", 
 test("requests arriving after response data starts dispatch independently", async () => {
   const interceptor = new DeduplicationInterceptor();
   let dispatches = 0;
-  const transport = {
-    dispatch() {
+  const transport: FetchTransport = {
+    dispatch(): Promise<TransportResponse> {
       dispatches++;
       return Promise.resolve({
         status: 200,
@@ -346,7 +352,7 @@ test("requests arriving after response data starts dispatch independently", asyn
     },
   };
   const first = await interceptor.dispatch(request("/late"), transport);
-  const reader = first.body.getReader();
+  const reader = must(first.body, "the response carries a body").getReader();
   const firstChunk = await reader.read();
   assert.equal(new TextDecoder().decode(firstChunk.value), "response-1");
   const second = await interceptor.dispatch(request("/late"), transport);
@@ -357,7 +363,7 @@ test("requests arriving after response data starts dispatch independently", asyn
 
 test("an upstream failure rejects every subscriber with the same identity", async () => {
   const interceptor = new DeduplicationInterceptor();
-  const deferred = Promise.withResolvers();
+  const deferred = Promise.withResolvers<TransportResponse>();
   const transport = { dispatch: () => deferred.promise };
   const first = interceptor.dispatch(request("/failure"), transport);
   const second = interceptor.dispatch(request("/failure"), transport);

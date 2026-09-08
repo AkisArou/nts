@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Spill-to-disk: the plan's "large payloads are not forced into RAM" row.
 //
 // The byte store's second consumer, and the first to use its ranged-read side. What
@@ -23,6 +17,10 @@ import {
 import { durableStoreFromFlat } from "../src/provider.ts";
 import { HostNodeDurableStore } from "../host/node-runtime.ts";
 import { FakeFlat } from "./fake-flat.ts";
+import type { TestContext } from "node:test";
+import { must } from "./harness.ts";
+import type { DurableByteStore } from "../src/provider.ts";
+import type { AbortSignal } from "../src/index.ts";
 
 const encoder = new TextEncoder();
 const none = () => new AbortController().signal;
@@ -30,7 +28,7 @@ const none = () => new AbortController().signal;
 const BACKENDS = [
   {
     name: "host filesystem",
-    make(t) {
+    make(t: TestContext): DurableByteStore {
       const root = mkdtempSync(join(tmpdir(), "nts-spill-"));
       t.after(() => rmSync(root, { recursive: true, force: true }));
       return new HostNodeDurableStore({ root });
@@ -45,9 +43,21 @@ const BACKENDS = [
 ];
 
 /** A stream of `count` chunks of `size` bytes, each filled with its own index. */
-function chunkedStream(count, size, hooks = {}) {
+/** What a test may observe or provoke while the stream is being read. */
+interface StreamHooks {
+  readonly failAt?: number;
+  readonly failure?: unknown;
+  readonly onChunk?: (index: number) => void;
+  readonly onCancel?: (reason?: unknown) => void;
+}
+
+function chunkedStream(
+  count: number,
+  size: number,
+  hooks: StreamHooks = {},
+): ReadableStream<Uint8Array> {
   let index = 0;
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (index >= count) {
         controller.close();
@@ -61,13 +71,13 @@ function chunkedStream(count, size, hooks = {}) {
       controller.enqueue(new Uint8Array(size).fill(index % 251));
       index++;
     },
-    cancel(reason) {
+    cancel(reason?: unknown) {
       hooks.onCancel?.(reason);
     },
   });
 }
 
-function expectedBytes(count, size) {
+function expectedBytes(count: number, size: number): Uint8Array {
   const out = new Uint8Array(count * size);
   for (let index = 0; index < count; index++) {
     out.fill(index % 251, index * size, (index + 1) * size);
@@ -76,23 +86,27 @@ function expectedBytes(count, size) {
 }
 
 /** Records what actually reached the store, so "streamed" can be more than a comment. */
-function recording(store) {
-  const appends = [];
-  const settled = [];
+function recording(store: DurableByteStore): {
+  appends: number[];
+  settled: string[];
+  store: DurableByteStore;
+} {
+  const appends: number[] = [];
+  const settled: string[] = [];
   return {
     appends,
     settled,
     store: {
-      read: (...args) => store.read(...args),
-      source: (...args) => store.source(...args),
-      delete: (...args) => store.delete(...args),
-      list: (...args) => store.list(...args),
-      size: (...args) => store.size(...args),
+      read: (...args: Parameters<DurableByteStore["read"]>) => store.read(...args),
+      source: (...args: Parameters<DurableByteStore["source"]>) => store.source(...args),
+      delete: (...args: Parameters<DurableByteStore["delete"]>) => store.delete(...args),
+      list: (...args: Parameters<DurableByteStore["list"]>) => store.list(...args),
+      size: (...args: Parameters<DurableByteStore["size"]>) => store.size(...args),
       close: () => store.close(),
-      async write(namespace, key, signal) {
+      async write(namespace: string, key: string, signal: AbortSignal) {
         const write = await store.write(namespace, key, signal);
         return {
-          async append(bytes) {
+          async append(bytes: Uint8Array) {
             appends.push(bytes.length);
             await write.append(bytes);
           },
@@ -111,7 +125,9 @@ function recording(store) {
 }
 
 for (const backend of BACKENDS) {
-  const suite = (name, fn) => test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+  const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+    test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+  };
 
   suite("a body under the threshold never reaches the store", async (t) => {
     const bytes = backend.make(t);
@@ -194,11 +210,13 @@ for (const backend of BACKENDS) {
       memoryThresholdBytes: 128,
       maxBytes: 512,
     });
-    let cancelled;
+    // Captured from inside the cancel hook, so it says what it will hold.
+    let cancelled: unknown;
     const stream = chunkedStream(16, 256, { onCancel: (reason) => (cancelled = reason) });
 
     await assert.rejects(() => area.spill(stream, none()), { name: "LimitError" });
-    assert.equal(cancelled?.name, "LimitError", "the producer is told to stop");
+    assert.ok(cancelled instanceof Error, "the producer was cancelled with an Error");
+    assert.equal(cancelled.name, "LimitError", "the producer is told to stop");
     assert.deepEqual(await bytes.list("spill", none()), []);
     // An empty namespace is not proof the write went away: an uncommitted write is
     // invisible to `list` and still holds its key. The discard has to be observed.
@@ -210,7 +228,8 @@ for (const backend of BACKENDS) {
     const area = await DurableSpillArea.open(bytes, { memoryThresholdBytes: 128 });
     const controller = new AbortController();
     const reason = new Error("the caller gave up");
-    let cancelled;
+    // Captured from inside the cancel hook, so it says what it will hold.
+    let cancelled: unknown;
     const stream = chunkedStream(16, 256, {
       onChunk: (index) => {
         if (index === 4) controller.abort(reason);

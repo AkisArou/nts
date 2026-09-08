@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The Undici-shaped dispatcher operations: request, stream, pipeline.
 //
 // Not a parity claim. No Undici revision is pinned in this repository, so an API ledger
@@ -26,6 +20,15 @@ import {
   TextEncoder,
   WritableStream,
 } from "../src/index.ts";
+import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { must } from "./harness.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
+import type { DispatchInfo } from "../src/dispatch/operations.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -33,9 +36,12 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function request(overrides = {}) {
+const urls = createHostNodePrimitives().urls;
+
+function request(overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
-    url: { href: "https://ops.test/resource" },
+    // A parsed record rather than a `{ href }` stub: `TransportRequest.url` is a `URLRecord`.
+    url: urls.parse("https://ops.test/resource"),
     method: "GET",
     headers: [],
     body: null,
@@ -46,8 +52,27 @@ function request(overrides = {}) {
 }
 
 /** A transport whose response body is `chunks`, recording how it was cancelled. */
-function transportOf(chunks, options = {}) {
-  const state = { cancelled: undefined, cancelCount: 0, reads: 0 };
+/** What a test may vary about the stand-in transport. */
+interface TransportOptions {
+  readonly failWith?: unknown;
+  readonly status?: number;
+  readonly statusText?: string;
+  readonly headers?: readonly HeaderEntry[];
+  readonly trailers?: Promise<readonly HeaderEntry[]>;
+}
+
+/** How the response body was consumed, for a test to assert against afterwards. */
+interface TransportState {
+  cancelled: unknown;
+  cancelCount: number;
+  reads: number;
+}
+
+function transportOf(
+  chunks: readonly string[] | null,
+  options: TransportOptions = {},
+): FetchTransport & { state: TransportState } {
+  const state: TransportState = { cancelled: undefined, cancelCount: 0, reads: 0 };
   const transport = {
     state,
     async dispatch() {
@@ -56,7 +81,7 @@ function transportOf(chunks, options = {}) {
       const body =
         chunks === null
           ? null
-          : new ReadableStream({
+          : new ReadableStream<Uint8Array>({
               pull(controller) {
                 if (index >= chunks.length) {
                   controller.close();
@@ -65,7 +90,7 @@ function transportOf(chunks, options = {}) {
                 state.reads++;
                 controller.enqueue(encoder.encode(chunks[index++]));
               },
-              cancel(reason) {
+              cancel(reason?: unknown) {
                 state.cancelCount++;
                 state.cancelled = reason;
               },
@@ -82,11 +107,11 @@ function transportOf(chunks, options = {}) {
   return transport;
 }
 
-function collecting() {
-  const written = [];
+function collecting(): { written: string[]; stream: WritableStream<Uint8Array> } {
+  const written: string[] = [];
   return {
     written,
-    stream: new WritableStream({
+    stream: new WritableStream<Uint8Array>({
       write(chunk) {
         written.push(decoder.decode(chunk));
       },
@@ -94,9 +119,10 @@ function collecting() {
   };
 }
 
-async function readAll(stream) {
-  const reader = stream.getReader();
-  const parts = [];
+async function readAll(stream: ReadableStream<Uint8Array> | null): Promise<string> {
+  const reader = must(stream, "the response carries a body").getReader();
+  // Decoded per chunk, so these are strings.
+  const parts: string[] = [];
   try {
     for (;;) {
       const item = await reader.read();
@@ -151,19 +177,21 @@ suite("a body past maxBytes is refused and the response is cancelled", async () 
     name: "ResponseExceededMaxSizeError",
   });
   assert.equal(transport.state.cancelCount, 1, "the producer is told to stop");
-  assert.equal(transport.state.cancelled?.name, "ResponseExceededMaxSizeError");
+  const cancelled = transport.state.cancelled;
+  assert.ok(cancelled instanceof Error, "the producer was cancelled with an Error");
+  assert.equal(cancelled.name, "ResponseExceededMaxSizeError");
 });
 
 suite("an abort while buffering rejects with the exact reason", async () => {
   const controller = new AbortController();
   const reason = new Error("the caller gave up");
-  const transport = {
-    async dispatch() {
+  const transport: FetchTransport = {
+    async dispatch(): Promise<TransportResponse> {
       return {
         status: 200,
         statusText: "OK",
         headers: [],
-        body: new ReadableStream({
+        body: new ReadableStream<Uint8Array>({
           pull(streamController) {
             controller.abort(reason);
             streamController.enqueue(encoder.encode("a chunk"));
@@ -185,15 +213,15 @@ suite("stream writes the body into the factory's destination in order", async ()
   });
   const operations = new DispatcherOperations(transport);
   const sink = collecting();
-  const seen = [];
+  const seen: DispatchInfo[] = [];
 
-  const result = await operations.stream(request(), (info) => {
+  const result = await operations.stream(request(), (info: DispatchInfo) => {
     seen.push(info);
     return sink.stream;
   });
 
   assert.equal(seen.length, 1, "the factory is called exactly once");
-  assert.equal(seen[0].status, 200);
+  assert.equal(must(seen[0], "the factory was called once").status, 200);
   assert.deepEqual(sink.written, ["one ", "two ", "three"]);
   assert.deepEqual(result.trailers, [["x-end", "yes"]]);
 });
@@ -201,7 +229,7 @@ suite("stream writes the body into the factory's destination in order", async ()
 suite("the factory chooses a destination before anything is written to it", async () => {
   const transport = transportOf(["first", "second"]);
   const operations = new DispatcherOperations(transport);
-  const order = [];
+  const order: string[] = [];
 
   // Not "no chunk was pulled": a stream fills its queue on construction, so the body
   // has already been read from before any operation touches it. What this operation
@@ -275,8 +303,8 @@ suite("pipeline yields what the handler produces", async () => {
 
   const out = operations.pipeline(request(), (info, body) => {
     assert.equal(info.status, 200);
-    const reader = body.getReader();
-    return new ReadableStream({
+    const reader = must(body, "the response carries a body").getReader();
+    return new ReadableStream<Uint8Array>({
       async pull(controller) {
         const item = await reader.read();
         if (item.done) {
@@ -319,8 +347,8 @@ suite("cancelling the pipeline cancels what the handler was reading", async () =
   let handlerCancelled;
 
   const out = operations.pipeline(request(), (_info, body) => {
-    const reader = body.getReader();
-    return new ReadableStream({
+    const reader = must(body, "the response carries a body").getReader();
+    return new ReadableStream<Uint8Array>({
       async pull(controller) {
         const item = await reader.read();
         if (item.done) controller.close();
@@ -344,11 +372,11 @@ suite("cancelling the pipeline cancels what the handler was reading", async () =
 });
 
 suite("a cancel that arrives before the dispatch settles is not lost", async () => {
-  const released = Promise.withResolvers();
+  const released = Promise.withResolvers<void>();
   const transport = transportOf(["a", "b"]);
   const slow = {
     state: transport.state,
-    async dispatch(value) {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       await released.promise;
       return transport.dispatch(value);
     },
@@ -357,8 +385,8 @@ suite("a cancel that arrives before the dispatch settles is not lost", async () 
   let handlerCancelled;
 
   const out = operations.pipeline(request(), (_info, body) => {
-    const reader = body.getReader();
-    return new ReadableStream({
+    const reader = must(body, "the response carries a body").getReader();
+    return new ReadableStream<Uint8Array>({
       async pull(controller) {
         const item = await reader.read();
         if (item.done) controller.close();

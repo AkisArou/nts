@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The engine is chosen from what TLS actually negotiated, on the connection that was
 // already established for it. Nothing reconnects to change engines, and nothing infers
 // a protocol from a URL scheme or from request intent.
@@ -31,12 +25,21 @@ import {
   hostNodeURLs,
 } from "../host/node-primitives.ts";
 import { tlsFixture } from "./tls-fixture.ts";
+import type { Socket } from "node:net";
+import { must, portOf } from "./harness.ts";
+import type {
+  ConnectAddress,
+  SocketConnector,
+} from "../src/provider/primitives.ts";
+import type { AbortSignal } from "../src/index.ts";
+import type { TransportRequest } from "../src/fetch/transport.ts";
+import type { ReadableStream } from "../src/streams/readable.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null) {
   if (stream === null) return "";
   const reader = stream.getReader();
   const parts = [];
@@ -52,7 +55,7 @@ async function consume(stream) {
   return Buffer.concat(parts).toString();
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(url: string, overrides = {}) {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -69,30 +72,37 @@ function transportRequest(url, overrides = {}) {
  * endpoint. The logical hostname stays `target.test` so TLS identity, SNI and the
  * certificate check are still exercised against the name rather than the address.
  */
-function resolvingToLoopback(base) {
+function resolvingToLoopback(
+  base: SocketConnector,
+): SocketConnector & { opened: { negotiated: boolean; alpn: readonly string[] | undefined }[] } {
   // Counting here rather than in the server's accept handler is deliberate: the server
   // observes its side of a handshake after the client observes its own, so a count read
   // from the server races and would pass while a second connection was still in flight.
-  const opened = [];
+  // What each connect was asked for: which entry point, and the protocols it offered.
+  const opened: { negotiated: boolean; alpn: readonly string[] | undefined }[] = [];
   return {
     opened,
     reportsNegotiatedProtocol: base.reportsNegotiatedProtocol,
-    connect(address, signal) {
+    connect(address: ConnectAddress, signal: AbortSignal) {
       opened.push({ negotiated: false, alpn: address.alpnProtocols });
       return base.connect({ ...address, resolvedAddress: "127.0.0.1" }, signal);
     },
-    connectNegotiated(address, signal) {
+    connectNegotiated(address: ConnectAddress, signal: AbortSignal) {
       opened.push({ negotiated: true, alpn: address.alpnProtocols });
-      return base.connectNegotiated({ ...address, resolvedAddress: "127.0.0.1" }, signal);
+      const negotiate = base.connectNegotiated;
+      assert.ok(negotiate !== undefined, "the wrapped connector negotiates");
+      return negotiate.call(base, { ...address, resolvedAddress: "127.0.0.1" }, signal);
     },
   };
 }
 
 /** A TLS server that speaks h2 or HTTP/1.1 according to what ALPN selected. */
-async function originServer(t, alpnProtocols) {
+async function originServer(t: TestContext, alpnProtocols: readonly string[]) {
   const fixture = tlsFixture();
-  const connections = [];
-  const sockets = new Set();
+  // `alpnProtocol` is `string | false | null`: false when none was offered, null before the
+  // handshake settles.
+  const connections: (string | false | null)[] = [];
+  const sockets = new Set<Socket>();
   const h2 = http2.createServer();
   h2.on("stream", (stream) => {
     stream.respond({ ":status": 200, "content-type": "text/plain" });
@@ -114,12 +124,12 @@ async function originServer(t, alpnProtocols) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return { fixture, port: server.address().port, connections };
+  return { fixture, port: portOf(server), connections };
 }
 
 suite(
@@ -149,8 +159,9 @@ suite(
     // was the negotiating one, and it offered both protocols. The engine therefore
     // runs on the connection the decision was made on, not on a replacement.
     assert.equal(connector.opened.length, 1);
-    assert.equal(connector.opened[0].negotiated, true);
-    assert.deepEqual(connector.opened[0].alpn, ["h2", "http/1.1"]);
+    const firstOpen = must(connector.opened[0], "the connector opened one connection");
+    assert.equal(firstOpen.negotiated, true);
+    assert.deepEqual(firstOpen.alpn, ["h2", "http/1.1"]);
     // The server agrees, once it has had the chance to record its side.
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.deepEqual(connections, ["h2"]);
@@ -217,7 +228,7 @@ suite("a cleartext origin is HTTP/1.1 and never guesses prior-knowledge h2", asy
   const primitives = createHostNodePrimitives();
   let connects = 0;
   const connector = {
-    connect(address, signal) {
+    connect(address: ConnectAddress, signal: AbortSignal) {
       connects += 1;
       // Cleartext must not negotiate, so nothing may be offered here.
       assert.equal(address.alpnProtocols, undefined);
@@ -255,26 +266,26 @@ suite("ProtocolMismatchError names both protocols", () => {
 });
 
 /** A real HTTP CONNECT proxy that tunnels to the loopback origin. */
-async function connectProxy(t, originPort) {
-  const tunnels = [];
-  const sockets = new Set();
+async function connectProxy(t: TestContext, originPort: number) {
+  const tunnels: string[] = [];
+  const sockets = new Set<Socket>();
   const proxy = createServer((downstream) => {
     sockets.add(downstream);
     downstream.on("error", () => {});
     downstream.on("close", () => sockets.delete(downstream));
     let request = "";
-    const readHead = (chunk) => {
+    const readHead = (chunk: Buffer): void => {
       request += chunk.toString("latin1");
       if (!request.includes("\r\n\r\n")) return;
       downstream.off("data", readHead);
-      tunnels.push(request.split("\r\n")[0]);
+      tunnels.push(must(request.split("\r\n")[0], "a CONNECT head begins with a request line"));
       const upstream = tcpConnect({ host: "127.0.0.1", port: originPort });
       upstream.once("connect", () => {
         downstream.write("HTTP/1.1 200 Connection Established\r\n\r\n");
         downstream.pipe(upstream);
         upstream.pipe(downstream);
       });
-      upstream.once("error", (error) => downstream.destroy(error));
+      upstream.once("error", (error: Error) => downstream.destroy(error));
     };
     downstream.on("data", readHead);
   });
@@ -282,15 +293,15 @@ async function connectProxy(t, originPort) {
   await new Promise((resolve) => proxy.once("listening", resolve));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => proxy.close(resolve));
+    return new Promise<void>((resolve) => proxy.close(() => resolve()));
   });
-  return { port: proxy.address().port, tunnels };
+  return { port: portOf(proxy), tunnels };
 }
 
 /** A real SOCKS5 proxy: no authentication, CONNECT by domain name. */
-async function socksProxy(t, originPort) {
-  const targets = [];
-  const sockets = new Set();
+async function socksProxy(t: TestContext, originPort: number) {
+  const targets: string[] = [];
+  const sockets = new Set<Socket>();
   const proxy = createServer((downstream) => {
     sockets.add(downstream);
     downstream.on("error", () => {});
@@ -301,16 +312,18 @@ async function socksProxy(t, originPort) {
       buffered = Buffer.concat([buffered, chunk]);
       if (stage === "greeting") {
         if (buffered.length < 2) return;
+        // Guarded by the length check above, but read out so the index is checked once.
         const count = buffered[1];
-        if (buffered.length < 2 + count) return;
+        if (count === undefined || buffered.length < 2 + count) return;
         buffered = buffered.subarray(2 + count);
         stage = "request";
         downstream.write(Buffer.from([5, 0]));
       }
       if (stage === "request") {
         if (buffered.length < 5) return;
+        // Guarded by the length check above, but read out so the index is checked once.
         const length = buffered[4];
-        if (buffered.length < 7 + length) return;
+        if (length === undefined || buffered.length < 7 + length) return;
         const host = buffered.subarray(5, 5 + length).toString("latin1");
         const port = buffered.readUInt16BE(5 + length);
         targets.push(`${host}:${port}`);
@@ -324,7 +337,7 @@ async function socksProxy(t, originPort) {
           downstream.pipe(upstream);
           upstream.pipe(downstream);
         });
-        upstream.once("error", (error) => downstream.destroy(error));
+        upstream.once("error", (error: Error) => downstream.destroy(error));
       }
     });
   });
@@ -332,9 +345,9 @@ async function socksProxy(t, originPort) {
   await new Promise((resolve) => proxy.once("listening", resolve));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => proxy.close(resolve));
+    return new Promise<void>((resolve) => proxy.close(() => resolve()));
   });
-  return { port: proxy.address().port, targets };
+  return { port: portOf(proxy), targets };
 }
 
 suite("selection works through an HTTP CONNECT tunnel", async (t) => {
