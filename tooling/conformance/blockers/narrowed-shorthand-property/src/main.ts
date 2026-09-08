@@ -18,6 +18,14 @@
 // representation the backend has declined to support: a backend that could not
 // put a narrowed value in an object would refuse both.
 //
+// **`shorthand-naming-a-function` is this same defect with a different value in
+// it.** Shorthand properties are not resolved to their binding, and the message
+// depends only on what the name refers to: a narrowed local reads "an erased
+// value where a concrete representation is wanted", a module-scope function
+// reads "a shorthand naming nothing in scope". Two fixtures rather than one,
+// because a fix covering one value kind and not the other would leave the other
+// reproducing with nothing to say so.
+//
 // **What it costs.** `os` publishes 17 of node's 23 exports. Two of the six
 // missing ones are here, and both use shorthand because node's own code does:
 // `cpus` assembles a `CpuInfo` from seven guarded values (`main.ts:306`) and
