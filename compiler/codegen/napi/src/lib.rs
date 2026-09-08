@@ -57,6 +57,15 @@ enum Cross {
     /// A record, by index into the program's layouts. Crosses as a plain
     /// JavaScript object of its fields.
     Object(usize),
+    /// A typed array. Crosses **outward only**, as a copy, for the reason
+    /// [`Cross::Numbers`] is copied: a handle would hand out this heap's
+    /// storage and make ownership a question both sides answer. Copying does
+    /// not ask it.
+    ///
+    /// Inbound is the direction that cannot be copied into, because the storage
+    /// would have to be allocated here -- the same asymmetry [`Cross::Object`]
+    /// has, and refused in the same place with the same words.
+    Bytes,
     Void,
 }
 
@@ -86,17 +95,25 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // buffer that both sides may resize or detach is a lifetime question
         // rather than a marshalling one. Refused until that is answered, not
         // because it is hard to convert.
-        // A view's bytes could cross, but who owns them afterwards is the
-        // same unanswered lifetime question the buffer's are.
         HirType::Managed(
             ManagedType::Buffer
             | ManagedType::DataView
-            | ManagedType::View(_)
             // And one whose element the declaration did not name, for the same
             // unanswered question plus a second: the wrapper would have to
             // decide what to hand back without knowing the width.
             | ManagedType::AnyView,
         ) => None,
+        // A view crosses outward, as a copy. The lifetime question the buffer
+        // is still refused over is a question about a *shared* block; a copy
+        // does not share one, so it does not have to answer it. Inbound stays
+        // refused, where the storage would have to be allocated on this side.
+        //
+        // This is not a `string_decoder` accommodation. 66 signatures across
+        // nine of node's modules return a view, and `buffer`, `stream`, `fs`
+        // and `zlib` are largely made of them -- so it is a boundary primitive
+        // that four large modules cannot cross without, and the narrow version
+        // of it would have been the same work at a worse scope.
+        HirType::Managed(ManagedType::View(_)) => Some(Cross::Bytes),
         // A `number[]` crosses as a copy. `Param::shape` carries `Rest` now, so
         // the reason this used to refuse -- that HIR did not distinguish
         // `...args: number[]` from `args: number[]`, and treating both as rest
@@ -500,6 +517,63 @@ static napi_status nts_to_napi_numbers(napi_env env, const NtsArray *array,
     return napi_ok;
 }
 
+/* A typed array as a JavaScript one, copied, for the reason the numbers above
+ * are copied. Outward only: an inbound view would need storage allocated on
+ * this side, which is the half `cross` still refuses.
+ *
+ * **A `u8` view becomes a node `Buffer`, not a `Uint8Array`.** `Buffer` erases
+ * to `view<u8>` in lowering and the runtime kind is `NTS_ELEMENT_U8` either
+ * way, so nothing here can tell node's own return type from a bare
+ * `Uint8Array`. `Buffer` is a `Uint8Array` subclass, so guessing it keeps
+ * `instanceof Uint8Array` true and keeps `.equals`, `.readUInt32BE` and the
+ * rest of node's surface; guessing the other way loses them and passes nothing
+ * extra. On a boundary that exists to talk to node, that is the direction to be
+ * wrong in.
+ *
+ * The kind comes from the *value* rather than the type, which is why this works
+ * at all: HIR erases the element for `Buffer`, and `NtsView` carries it. */
+static napi_status nts_to_napi_view(napi_env env, const NtsView *view,
+                                    napi_value *out) {
+    if (view == NULL) return napi_get_undefined(env, out);
+
+    /* A detached view is length zero, and `bytes` is NULL once the block is
+     * gone -- so the source pointer is never handed to `memcpy` or to N-API
+     * as null with a length that would make reading it legal. */
+    size_t bytes = (size_t)nts_view_byte_length(view);
+    static const unsigned char nothing = 0;
+    const unsigned char *from =
+        bytes == 0 ? &nothing : view->buffer->bytes + view->byte_offset;
+
+    if (view->kind == NTS_ELEMENT_U8) {
+        void *into = NULL;
+        return napi_create_buffer_copy(env, bytes, from, &into, out);
+    }
+
+    napi_typedarray_type kind;
+    switch (view->kind) {
+        case NTS_ELEMENT_I8: kind = napi_int8_array; break;
+        case NTS_ELEMENT_U8_CLAMPED: kind = napi_uint8_clamped_array; break;
+        case NTS_ELEMENT_I16: kind = napi_int16_array; break;
+        case NTS_ELEMENT_U16: kind = napi_uint16_array; break;
+        case NTS_ELEMENT_I32: kind = napi_int32_array; break;
+        case NTS_ELEMENT_U32: kind = napi_uint32_array; break;
+        case NTS_ELEMENT_F32: kind = napi_float32_array; break;
+        case NTS_ELEMENT_F64: kind = napi_float64_array; break;
+        /* Every kind the runtime defines is named above, so this is a kind the
+         * runtime grew without telling the boundary. Failing is right: the
+         * alternative is handing back the wrong width silently. */
+        default: return napi_generic_failure;
+    }
+
+    void *into = NULL;
+    napi_value buffer = NULL;
+    napi_status status = napi_create_arraybuffer(env, bytes, &into, &buffer);
+    if (status != napi_ok) return status;
+    if (bytes > 0) memcpy(into, from, bytes);
+    return napi_create_typedarray(env, kind, (size_t)nts_view_length(view),
+                                  buffer, 0, out);
+}
+
 /* Raise what compiled code threw as a catchable JavaScript exception.
  *
  * A compiled program's own `try` is fully lowered, so this is reached only at
@@ -647,7 +721,8 @@ fn crossings_of(
         .iter()
         .zip(&crossings)
         .find_map(|(parameter, crossing)| {
-            matches!(crossing, Cross::Object(_) | Cross::Void).then_some(parameter)
+            matches!(crossing, Cross::Object(_) | Cross::Bytes | Cross::Void)
+                .then_some(parameter)
         })
     {
         return Err(Skipped {
@@ -799,6 +874,7 @@ fn declare_argument(
         Cross::Bool => format!("    bool {name} = false;\n"),
         Cross::Str => format!("    NtsString *{name} = NULL;\n"),
         Cross::Numbers => format!("    NtsArray *{name} = NULL;\n"),
+        Cross::Bytes => format!("    NtsView *{name} = NULL;\n"),
         Cross::Object(_) | Cross::Void => String::new(),
     }
 }
@@ -835,8 +911,9 @@ fn unmarshal(
         // An object argument would have to be *allocated*, and allocation needs
         // the layout's descriptor, which `program.c` keeps to itself. Reading a
         // returned object needs no descriptor, which is why one direction works
-        // and the other is refused in `cross`.
-        Cross::Object(_) | Cross::Void => String::new(),
+        // and the other is refused in `cross`. A view is the same story with
+        // bytes in place of fields.
+        Cross::Object(_) | Cross::Bytes | Cross::Void => String::new(),
     }
 }
 
@@ -919,6 +996,18 @@ fn marshal(
             }
             text.push_str(
                 "    if (!nts_napi_check(env, result_status, \"could not create a string\")) goto nts_napi_cleanup;\n",
+            );
+            text
+        }
+        Cross::Bytes => {
+            let mut text = format!(
+                "    NtsView *result = {call};\n{after_call}    napi_status result_status = nts_to_napi_view(env, result, &out);\n"
+            );
+            if release_result {
+                text.push_str("    nts_release((NtsHeader *)result);\n");
+            }
+            text.push_str(
+                "    if (!nts_napi_check(env, result_status, \"could not create a typed array\")) goto nts_napi_cleanup;\n",
             );
             text
         }
@@ -1223,6 +1312,7 @@ fn publish_value_exports(
             Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
             Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
             Cross::Numbers => format!("nts_to_napi_numbers(env, {symbol}, &value)"),
+            Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
             // `value_exports` refuses these, so reaching one is a bug in it
             // rather than a shape to handle here.
             Cross::Object(_) | Cross::Void => continue,

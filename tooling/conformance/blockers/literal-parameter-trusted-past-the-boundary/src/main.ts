@@ -1,4 +1,16 @@
-// expect: differential walk disagrees
+// expect: emit-c --napi -> emits-addon double result = walk(a0);
+//
+// The expectation is the *absence* of a check, stated as the presence of the
+// unchecked call. `rounds: 64` emits the wrapper `rounds: number` would --
+// `napi_get_value_double` into an unconstrained `double`, then straight into
+// `walk(a0)` -- so the declared literal reaches the body having been promised
+// and never tested.
+//
+// It said `differential walk disagrees` first, which is not a form this harness
+// runs: an expectation without an `emit-c --napi ->` prefix is checked against
+// `hir`, which found the function lowering perfectly well and reported the
+// fixture FIXED. A fixture that cannot fail is worse than no fixture, and this
+// one spent a day claiming a defect was repaired.
 //
 // A declared *literal* numeric type is trusted by the body and not enforced at
 // the entry, so a caller outside TypeScript gets a wrong number rather than an
