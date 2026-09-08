@@ -2879,6 +2879,44 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## A sixth hollow fixture, and the property it named was the wrong one
+
+`refused-callback-null-vtable` reported `reproduces` on the gated commit. It is
+fixed.
+
+It expected `emits-c 0u, 0u, 0, 0, "Closure0"` — the null method table — and
+**that string is still emitted**. What changed is that nothing reaches it. On the
+gated build, `timers` has exactly two closures with a null slot, `Closure54` and
+`Closure55`, and **neither is referenced by address**; the two addresses the
+program does take belong to `Closure20`, which has a real vtable.
+
+**A null `methods` pointer on an unreferenced static is harmless. A null
+`methods` pointer the host can call through is a crash on the first
+invocation.** The expectation named the pointer and not the reachability, so it
+could not tell those apart — and reachability is the entire defect.
+
+It is now `lacks-c &nts_fnval_NtsObj_Closure0`: the closure's address is never
+taken.
+
+**Two wrong expectations for one fixture inside an hour**, both of the same kind.
+The first replacement was `lacks-c nts_install(`, which fails against a correct
+program because the *declaration* `void nts_install(NtsHeader *);` contains that
+text. A string that does not mean what the property means, twice.
+
+### And the fixture was never a faithful reproduction
+
+Checked against the 15:39 binary as well: **the call was never emitted there
+either.** So this fixture reproduced the *symptom* — a descriptor with a null
+slot — without ever reproducing the *condition* that makes it a bug. It looked
+like a minimal reproduction of the `timers` defect and was a minimal
+reproduction of something harmless standing next to it.
+
+That is the sixth fixture of mine to report a fixed defect, and the first where
+the fault was in the reduction rather than in the expectation. The reduction was
+built by taking the smallest program that produced the error text I had seen,
+which is the wrong stopping rule: the smallest program that produces the *text*
+is not the smallest program that has the *defect*.
+
 ## The axis on the gated commit, as three numbers
 
 `445ea94b`, gate green on all three backends. Measured from a worktree pinned at
