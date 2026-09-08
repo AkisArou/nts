@@ -57,6 +57,28 @@ compiled program against node running the same TypeScript, which only works
 while the program still resolves its dependencies the ordinary way. Rewriting
 the developer's resolution would break the oracle, and the editor with it.
 
+## What a build pays
+
+| | 141-package closure | 4-package monorepo |
+|---|---:|---:|
+| first run | 2.6 s, 4 checker passes | 0.03 s |
+| every run after | **0.35 s, 1 pass** | 0.03 s |
+
+The gap between those rows is the whole point. Resolution is taken from the
+program as it stands, and a dependency's own dependencies are invisible until
+its source is in the program — so discovery is a fixpoint, and walking it from
+empty meant every build relearned a graph the last one had already written down.
+The lock records what each specifier resolved to and what each package turned
+out to be, including the packages with **nothing** to recover, which are the
+overwhelming majority and cost exactly as much to re-examine as to examine.
+
+None of that can hide a change: a seed admits only packages whose recorded
+source is still on disk, a newly imported package grows the set and costs a
+second pass, and a vendor tree that has gone missing is recovered again whatever
+the lock says. The identity is name, version and the directory it was read from
+— a package rewritten in place under an unchanged version is not noticed, which
+is the contract a lockfile already has.
+
 ## Where the specifiers come from
 
 Not from here. tsgo resolves the program this compiler compiles, so its answer
