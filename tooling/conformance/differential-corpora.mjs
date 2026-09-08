@@ -55,6 +55,92 @@ function unicodeWord(rnd, maxLength = 12) {
 // Worth recording rather than leaving as an absence: the first version of that
 // corpus reported 1,839 divergences, and every one of them was the stub.
 export const CORPORA = {
+  // `os` is almost entirely C bindings, and until now nothing compared any of
+  // them to node. The interpreted lane cannot: its stand-ins call node's own
+  // `os.hostname()`, `os.tmpdir()` and so on, so that lane agrees with node by
+  // construction whatever the C does. This corpus is the first thing that asks.
+  //
+  // It exists because `os.tmpdir()` was found disagreeing with node the day the
+  // module first loaded as an addon -- libuv stops at the first environment
+  // variable that is *present*, node at the first *non-empty* one. That bug had
+  // been in the C since the binding was written and no instrument could see it.
+  // So the input here is an environment rather than a string: the defect was in
+  // which variable was consulted, not in what was done with the value.
+  os: {
+    fixed: [
+      ["/tmpdir", "/tmp", "/temp"],
+      ["", "/tmp", "/temp"],
+      ["", "", "/temp"],
+      ["", "", ""],
+      ["/tmpdir/", "", ""],
+      ["/tmpdir\\", "", ""],
+      ["/", "", ""],
+      ["//", "", ""],
+      [undefined, "/tmp", "/temp"],
+      [undefined, undefined, "/temp"],
+      [undefined, undefined, undefined],
+      ["/a b/c", "", ""],
+      ["/ünïcode", "", ""],
+      ["relative/path", "", ""],
+    ],
+    input: (rnd) => {
+      const pick = () => {
+        const n = rnd() % 5;
+        if (n === 0) return undefined;
+        if (n === 1) return "";
+        if (n === 2) return "/t" + (rnd() % 100).toString();
+        if (n === 3) return "/t" + (rnd() % 100).toString() + "/";
+        return "/";
+      };
+      return [pick(), pick(), pick()];
+    },
+    calls: [
+      {
+        label: "tmpdir",
+        // The environment is the input, so it is applied before each call and
+        // both sides see the same one. `delete` rather than `= ""`, because an
+        // absent variable and an empty one are exactly the distinction the
+        // original defect turned on.
+        call: (os, env) => {
+          const names = ["TMPDIR", "TMP", "TEMP"];
+          for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            if (env[i] === undefined) delete process.env[name];
+            else process.env[name] = env[i];
+          }
+          return os.tmpdir();
+        },
+      },
+      // The stable system values. These cannot differ between two calls on one
+      // machine, so any disagreement is the binding rather than the world.
+      { label: "hostname", call: (os) => os.hostname() },
+      { label: "type", call: (os) => os.type() },
+      { label: "release", call: (os) => os.release() },
+      { label: "version", call: (os) => os.version() },
+      { label: "machine", call: (os) => os.machine() },
+      { label: "arch", call: (os) => os.arch() },
+      { label: "platform", call: (os) => os.platform() },
+      { label: "endianness", call: (os) => os.endianness() },
+      { label: "homedir", call: (os) => os.homedir() },
+      { label: "totalmem", call: (os) => os.totalmem() },
+      { label: "availableParallelism", call: (os) => os.availableParallelism() },
+      { label: "EOL", call: (os) => os.EOL },
+      { label: "devNull", call: (os) => os.devNull },
+      // `freemem`, `uptime` and `loadavg` move between calls, so their *values*
+      // cannot be compared. Their shapes can, and a binding returning the wrong
+      // type or an error is what would actually break.
+      { label: "freemem:shape", call: (os) => typeof os.freemem() },
+      { label: "uptime:shape", call: (os) => typeof os.uptime() },
+      {
+        label: "loadavg:shape",
+        call: (os) => {
+          const v = os.loadavg();
+          return `${Array.isArray(v)}:${v.length}:${typeof v[0]}`;
+        },
+      },
+    ],
+  },
+
   punycode: {
     fixed: [
       "", "a", "abc", "-", "--", "xn--", "0", "z", " ", "  ", "\t", "\n",
