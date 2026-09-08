@@ -2816,6 +2816,40 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Every module, every cone: one shape reaches all of them
+
+`cascade-reach.mjs` run over all 22 modules on the 11:30 binary. Refusal shapes
+ranked by how many modules they head a cone in, with the missing exports those
+cones contain:
+
+    21 modules,  24 exports   an `unknown` narrowed to BigInt
+    13 modules,   3 exports   `toString` on a number
+    13 modules,   1 export    a conversion to string from this type
+    13 modules,   0 exports   a module-scope variable of unrepresentable type
+    11 modules,   0 exports   a rest parameter whose element type has no representation
+    10 modules,   2 exports   a method without a body
+    10 modules,   0 exports   a rest parameter of unrepresentable type
+     8 modules,   0 exports   `length` of something without one
+
+**`narrowed-bigint` heads a cone in twenty-one of twenty-one.** Not the largest
+by a margin worth arguing over — the next shape reaches thirteen. It is in
+`internal/errors.ts`, which every module imports, and it is the head of the
+chain `validateString` -> `ERR_INVALID_ARG_TYPE` -> `determineSpecificType` that
+sits under every argument check in the profile.
+
+The export counts are floors for the reason recorded above, and they are
+*conservative in a second way here*: a module that does not reach the wrapper
+stage at all contributes no "missing export" lines, so the fifteen that fail to
+compile contribute zero to that column while being just as blocked.
+
+`toString` on a number at thirteen modules is `blockers/number-tostring-radix`,
+already filed.
+
+This is the argument for the hypothesis in the next section mattering more than
+its size suggests: if narrowing an erased value to bigint turns out to be
+statically false rather than unrepresentable, then the cheapest available fix is
+also the one with the widest reach in the entire profile.
+
 ## `narrowed-bigint` may be dead code rather than a missing representation
 
 Not yet established, and recorded here as a hypothesis with the thing that would
