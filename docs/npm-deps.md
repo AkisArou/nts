@@ -1,252 +1,286 @@
-**Build a source-acquisition layer in front of your compiler:** use shipped TypeScript first, extract embedded source-map contents second, and fetch a version-pinned repository checkout third. For packages that need special handling, maintain explicit source recipes.
+# npm dependencies — what is actually there
 
-There is no general npm option that retrieves the original TypeScript. npm distributes the files chosen by the publisher, and those files need not include the original implementation sources. ([npm Docs][1])
+This file used to be an unmeasured argument: it described where a compiler
+might look for a package's original TypeScript, in a plausible order, and
+recommended building a source-acquisition layer in front of the compiler.
 
-All the approaches below preserve your requirement: **you compile TypeScript implementations, rather than falling back to executing the package’s JavaScript.**
+The routes it named are real and are kept below. What it never did was count
+anything, and the counting changes the conclusion. **Source acquisition is not
+the binding constraint.** It is a small problem sitting in front of a much
+larger one, and building the elaborate version of it first would be building
+the wrong thing carefully.
 
-## 1. Check source maps—not just `.ts` files
+Everything numeric here comes from [`tooling/npm-survey`](../tooling/npm-survey/),
+measured at `80ad7468` against the registry on 2026-09-08. Re-run it before
+acting on any digit.
 
-This is the most useful additional place to look.
+---
 
-A package might ship:
+## The sample
 
-```text
-dist/index.js
-dist/index.js.map
-dist/index.d.ts
-```
+96 packages chosen to look like what a TypeScript application imports — HTTP
+servers, validators, ORMs, date and string utilities, loggers, parsers, crypto
+— resolved to their full runtime dependency closure:
 
-Although there is no separate implementation `.ts` file, `index.js.map` may contain the original TypeScript in its **`sourcesContent`** field. TypeScript’s `inlineSources` compiler option explicitly embeds the original `.ts` contents this way. ([typescriptlang.org][2])
+    96 roots  →  458 packages
 
-For example, inside a source map you might find:
+    depth 0   96      depth 3   45
+    depth 1  200      depth 4    7
+    depth 2  107      depth 5    3
 
-```json
-{
-  "version": 3,
-  "sources": ["../src/add.ts"],
-  "sourcesContent": ["export function add(a: number, b: number): number { return a + b; }\n"],
-  "names": [],
-  "mappings": ""
+    285 of 458 have no dependencies of their own
+    60 of the 96 roots pull nothing at all
+    the largest closures: express 69, fastify 45, archiver 33, winston 30
+
+That second half matters more than it looks. The ecosystem is mostly leaves —
+small, dependency-free packages — with a few roots that drag in dozens. A
+dependency story that works only for leaves already covers most of the graph by
+count, and none of `express`.
+
+---
+
+## 1. Can the implementation be recovered at all?
+
+The question has to be asked about the package's **declared entry point**, not
+about whether a `.ts` file exists somewhere in the tarball. Asking the loose
+version inflates the answer badly: a first pass counted 48 packages as shipping
+TypeScript, and the majority were shipping `index.test-d.ts` — `tsd` type tests
+— with no implementation source at all. `rfdc` "ships TypeScript": 273 bytes of
+type assertions.
+
+Asked properly — does the file that `exports`/`main`/`module` names have a
+recoverable implementation:
+
+| route                                                                    | packages | share |
+| ------------------------------------------------------------------------ | -------: | ----: |
+| `js-only` — nothing to recover                                           |      399 | 87.1% |
+| `entry-map-ts` — the entry's source map carries its TypeScript           |       25 |  5.5% |
+| `map-incomplete` — a map exists, `sourcesContent` has holes              |       21 |  4.6% |
+| `ts-present-entry-not-covered` — TypeScript ships, but not for the entry |        9 |  2.0% |
+| `map-js-origin` — the map's sources are JavaScript                       |        3 |  0.7% |
+| `entry-ts` — `exports` names a `.ts` directly                            |    **1** |  0.2% |
+
+    recoverable for the package itself:      26 of 458   5.7%
+    recoverable across its whole subtree:    22 of 458   4.8%
+    of the 96 roots, whole-subtree:          11
+
+The eleven: `zod`, `drizzle-orm`, `immer`, `minimatch`, `ts-pattern`,
+`class-transformer`, `cookie`, `tar`, `marked`, `lru-cache`, `mitt`.
+
+Two details worth keeping.
+
+**The source-map route is the only one that works, and one package uses the
+cooperative one.** The original draft proposed a custom `exports` condition as
+the clean path for willing authors. Exactly one package in 458 points `exports`
+at TypeScript. Source maps carry five times as much recoverable source as
+deliberate publication does, and they carry it by accident.
+
+**`map-incomplete` is nearly as large as `entry-map-ts`.** 21 packages ship a
+map whose `sourcesContent` is partly `null`. Half a module graph is not a
+buildable package, and treating a partial recovery as a success is how a
+source-acquisition layer starts lying.
+
+### The git route, and why it is thinner than it sounds
+
+The draft's second route was fetching the repository at the release revision.
+The affordances for doing that safely:
+
+    repository field present:              458 of 458   100%
+    gitHead present:                         9 of 458     2%
+    npm provenance attestation present:     57 of 458    12%
+
+So for 86% of packages there is a repository URL and nothing that pins which
+commit produced the artifact. Resolving a version tag and hoping is not a
+source-to-artifact correspondence, and the draft was right to say so. The route
+is real; it is a per-package recipe with a human in it, not an automatic tier.
+
+---
+
+## 2. The second gate is the wall
+
+Recovering the source answers the first question. The second is whether this
+compiler can compile it, and that is where the ecosystem actually stops.
+
+All 26 recovered packages were vendored out as ordinary source and handed to
+`nts check`:
+
+| outcome                          | packages |
+| -------------------------------- | -------: |
+| did not typecheck                |       19 |
+| typechecked, refused constructs  |        6 |
+| typechecked, no refusal reported |        1 |
+
+**Most of those 19 are the harness's fault, not the package's.** The error codes
+say so: `TS2307` is a missing dependency the survey did not vendor, `TS2591` is
+a missing ambient `process`/`Buffer`, `TS2503` a missing `@types` namespace,
+`TS7006` an implicit `any` under a `strict` the package never asked for. Only
+`TS1294` — `erasableSyntaxOnly` — is this compiler's profile talking. Separating
+those four causes is unfinished work, and until it is done **19 is not a
+language verdict and must not be quoted as one.**
+
+### What the six that reached the lowerer refuse
+
+This is the part worth reading, because it is nothing like what a syntactic
+scan predicts:
+
+| package           | refusals | what they are                                                 |
+| ----------------- | -------: | ------------------------------------------------------------- |
+| `yallist`         |       27 | `Iterable` and `Node` parameters, `yield` outside a generator |
+| `brace-expansion` |       22 | a name from an enclosing scope, `Math.random`, `instanceof`   |
+| `cookie`          |       12 | regular expression literals ×5, `new` of type `any`           |
+| `content-type`    |        8 | regular expression literals ×4                                |
+| `balanced-match`  |        9 | a name from an enclosing scope, `instanceof`                  |
+
+Regular expressions, closure capture from an enclosing scope, `Math.random`,
+`instanceof`, iterables. **None of these is npm infrastructure.** They are
+ordinary compiler reach, and they are the same queue
+[`docs/conformance/typescript.md`](conformance/typescript.md) §15 already keeps.
+The regex rows in particular are an independent argument for the direction
+already recorded in `docs/icu-i18n.md`.
+
+### The one that reported no refusal did not compile
+
+`mitt` came back clean. It came back clean because **nothing called it** — the
+compiler pruned the module and never walked it. Pointed at by a program that
+actually uses it, three separate refusals appear:
+
+    mitt<Events>()          → an omitted argument for a parameter with
+                              nowhere to put `undefined`
+    mitt<Events>(new Map()) → a `new` of unrepresentable type (`Map<any, any>`)
+    the returned object     → a method declaration in an object literal
+
+This is the same trap §14 of the conformance doc records catching twice: a
+count of what lowers is meaningless over functions nothing reaches. **Every
+per-package number above is a lower bound**, and any future instrument has to
+measure from a use site rather than from a package in isolation.
+
+### What a syntactic probe says, for calibration
+
+Over the 26 recovered packages, a textual scan for constructs §13 refuses:
+
+    free of every probe                          4
+    would be, if `any` were representable       10
+    ...plus ambient globals bound               11
+    ...plus enum/namespace lowered              13
+    blocked by the object model regardless      13
+
+The last row is the honest half. Thirteen of twenty-six use `Proxy`,
+`Object.defineProperty`, prototype mutation or a well-known `Symbol` protocol.
+Those are §13 refusals — not backlog, not reachable by working harder. For
+those packages the package's own source is permanently the wrong input, whatever
+the acquisition layer manages to fetch.
+
+The first row is the useful half: **`any` alone more than doubles the clean
+set**, and [`docs/any-unknown.md`](any-unknown.md) already holds the design
+contract for it, unimplemented. npm reach and `any` representation are the same
+work.
+
+---
+
+## 3. One line decides all of this today
+
+`compiler/frontend-ts/src/tsgo/mod.rs:1408`, `compiled_files`:
+
+```rust
+if metadata.is_default_library || metadata.is_from_external_library {
+    continue;
 }
 ```
 
-Here, you already have the implementation source. Extracting it is not decompilation; it is reading an embedded copy.
-
-Your scanner should inspect external source-map files and inline source maps referenced by `sourceMappingURL` comments. An inline map can be a data URL embedded in the generated JavaScript, so merely reading the `.js` file as data may be necessary. You do not need to execute it. Source maps can also contain sections with nested maps. ([TC39][3])
-
-The important distinction is:
-
-| What the map contains                                     | What you can recover                                     |
-| --------------------------------------------------------- | -------------------------------------------------------- |
-| `sources` plus non-null `sourcesContent`                  | Embedded source text for those entries.                  |
-| Only `sources` and `mappings`                             | Locations and mappings, **not** the missing source text. |
-| A mixture of strings and null entries in `sourcesContent` | Only some of the source files.                           |
-
-The source-map specification makes `sourcesContent` optional and permits null entries. Also, the source text may be JavaScript rather than TypeScript; inspect what you actually recovered. ([TC39][3])
-
-**Do not equate recovering some source files with recovering a buildable package.** Your importer must still check that all referenced implementation files, required type declarations, configuration, and assets are available.
-
-For implementation, I would load recovered sources into a package-scoped virtual filesystem. Do not blindly write filenames from a map onto disk: normalize paths, prevent traversal outside the extraction root, and detect conflicting contents for the same logical path.
-
-## 2. Fetch the repository at the package’s release revision
-
-When the published archive does not contain enough source, use the package’s repository metadata.
-
-For an initial manual inspection, replacing the example with an exact package version:
-
-```bash
-PACKAGE='some-package@1.2.3'
-
-# Inspect metadata for precisely this published version.
-npm view "$PACKAGE" repository gitHead dist --json
-
-# Fetch its published archive without running package lifecycle scripts.
-npm pack "$PACKAGE" --ignore-scripts
-```
-
-`npm view` supports selecting metadata fields, and `npm pack` fetches a package archive. The `--ignore-scripts` option disables package scripts. These are inspection commands; they do not imply that your compiled application needs an npm or JavaScript runtime. ([npm Docs][4])
-
-There are three useful pieces of release information.
-
-**Repository URL and package directory.** `repository.url` identifies the repository; `repository.directory` can identify the package’s location inside a monorepo. Retain access to the repository root as well, because your source recipe may need shared files outside that directory. ([npm Docs][1])
-
-**`gitHead`, when present.** npm’s publishing metadata preparation can populate this from the Git HEAD. It is a useful candidate commit, but it is not a guaranteed or authenticated source-to-artifact correspondence. The implementation reads the revision, not a complete snapshot of the publishing working tree.
-
-**Provenance, when available.** npm provenance exposes the source commit and build workflow associated with a publication. This gives you stronger release-origin information than guessing a tag. It still does not replace checking that you have all the inputs needed for your own compilation. ([npm Docs][5])
-
-My resolution policy would be: use verified provenance where available, otherwise investigate `gitHead`, otherwise resolve a release tag and record the resulting full commit ID. **Never silently use the repository’s current default branch for a pinned npm version.**
-
-Also, fetch the repository directly rather than assuming this is sufficient:
-
-```bash
-npm install github:owner/repository
-```
-
-Installing a Git dependency through npm can involve building and packing the repository. That is not the same operation as obtaining an untouched source checkout, and it may again produce a distribution with the sources excluded. ([npm Docs][1])
-
-### A checkout is not necessarily the complete release input
-
-For your importer, explicitly consider cases such as generated `.ts` files, release-time constants, custom transforms, shared monorepo configuration, or modifications made during publishing.
-
-For a difficult package, I would record these requirements in a source recipe rather than continually guessing from directory names. Comparing public declarations and running compatibility tests can help validate a recipe, but matching the `.d.ts` surface alone does not establish equivalent behavior.
-
-## 3. Maintain explicit source recipes for packages
-
-This is the part I would make a first-class feature of your compiler tooling.
-
-Instead of teaching the compiler that every npm package follows a layout such as `dist/index.js → src/index.ts`, maintain mappings for exact package versions.
-
-For example, a **proposed format for your tool**, not an existing npm standard:
-
-```json
-{
-  "package": "some-package@1.2.3",
-  "source": {
-    "kind": "git",
-    "repository": "https://github.com/example/project.git",
-    "commit": "<full-commit-id>",
-    "directory": "packages/some-package"
-  },
-  "entrypoints": {
-    ".": "src/index.ts",
-    "./utilities": "src/utilities/index.ts"
-  },
-  "tsconfig": "tsconfig.build.json",
-  "patches": []
-}
-```
-
-That gives you a place to represent source acquisition, public entry points, configuration, generated inputs, and compatibility patches without modifying your HIR or LLVM backend.
-
-It also lets users provide local overrides:
-
-```text
-npm package some-package@1.2.3
-    → use ./vendor/some-package/
-    → compile src/index.ts
-```
-
-For reproducibility, record both the npm artifact identity and the source identity. npm lockfiles already record resolved package locations and artifact integrity; your source lock should additionally record the selected source revision or source-content hash, recipe version, and patch hashes. A hash for the npm tarball does not, by itself, pin a separately downloaded source tree. ([npm Docs][6])
-
-### Separate type resolution from implementation resolution
-
-This distinction matters particularly for your compiler.
-
-A normal TypeScript resolution result can be a declaration file. `.d.ts` files describe types and values without supplying their implementations; they are useful for checking calls, but not for generating the corresponding function bodies. ([TypeScript][7])
-
-I would model the two questions explicitly:
-
-```text
-resolveTypes("some-package")
-    → declarations or types from implementation source
-
-resolveImplementation("some-package")
-    → actual TypeScript implementation entry point
-```
-
-Do not stop implementation resolution just because TypeScript successfully found `dist/index.d.ts`.
-
-Also, do not reject an import simply because its text ends in `.js`:
-
-```ts
-import { helper } from "./helper.js";
-```
-
-TypeScript deliberately supports resolving that specifier to `helper.ts`. Your source resolver needs equivalent extension-substitution behavior where appropriate. This is different from guessing that arbitrary `dist` paths correspond to `src` paths. ([TypeScript][8])
-
-## 4. Give package authors a clean way to support your compiler
-
-For cooperative upstream projects, explicit source publication is much better than reconstruction.
-
-Authors can include their source directory in the npm archive and expose a compiler-specific entry through conditional exports. npm’s `files` field controls archive inclusion, while package exports support custom conditions. ([npm Docs][1])
-
-For example:
-
-```json
-{
-  "files": ["src", "dist", "tsconfig.json"],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "mycompiler": "./src/index.ts",
-      "default": "./dist/index.js"
-    }
-  }
-}
-```
-
-Here, `mycompiler` is a convention you define, not a built-in npm condition. Your **implementation resolver** selects that branch rather than treating the `types` branch as executable code.
-
-I would define the contract more strongly than “this package contains `.ts` files”:
-
-> The compiler-specific entry point, together with the published files and declared source dependencies, forms a complete source input compatible with the compiler’s documented language and runtime profile.
-
-That leaves room for an upstream package to expose a slightly different, native-compatible implementation when its default implementation requires unsupported runtime behavior.
-
-### Consider native JSR support as a complementary source channel
-
-JSR’s native registry API serves versioned JavaScript/TypeScript source files and package metadata, including exports and file checksums. That can be a useful additional input format for your compiler. ([JSR][9])
-
-Use its native source API rather than assuming its npm compatibility distribution preserves the original TS: the npm compatibility layer transpiles TypeScript to JavaScript. This helps with packages published on JSR; it does not automatically supply sources for arbitrary npm packages or establish equivalence between separately published versions. ([JSR][10])
-
-## 5. Enforce your TS-only requirement across the runtime dependency graph
-
-There are two independent gates:
-
-```text
-Can I obtain the implementation source?
-                    ↓
-Can my compiler and runtime support that implementation?
-```
-
-Original TypeScript solves the first question, not automatically the second. TypeScript’s type system deliberately permits some unsound behavior, so passing ordinary TS type checking is not a proof that a program satisfies stricter assumptions your native lowering might make. ([TypeScript][11])
-
-Your compatibility check should therefore decide what to implement or reject: runtime code generation, unsupported object operations, host APIs, module-loading patterns, and any other behavior outside your supported profile. None of this necessarily requires a JavaScript interpreter; it requires an explicit semantic contract.
-
-Apply that check to **every reachable runtime dependency**, not merely the top-level package:
-
-```text
-application.ts
-  └─ package-a: TS source available
-       └─ package-b: TS source available
-            └─ package-c: only an unsupported JS implementation
-```
-
-In that example, `package-a` is not yet usable just because its own source is TypeScript.
-
-Type-only dependencies are different: declarations can be sufficient when no runtime implementation is needed. Likewise, a declaration can describe a native implementation you deliberately supply—but the declaration does not create that implementation or define its native calling convention for you. ([TypeScript][7])
-
-For genuinely unavailable sources, your choices are to obtain them from the publisher, maintain a compatible TypeScript port or replacement, or report the dependency as unsupported. **`.js` plus `.d.ts` is not a lossless representation of the original TypeScript.** Inferring types or reconstructing an implementation is a different project from retrieving the original source.
-
-## What I would implement first
-
-I would keep your existing compiler pipeline intact and add this in front:
-
-```text
-Resolve exact npm dependency versions
-    ↓
-Acquire sources:
-  shipped TS → embedded source-map contents → pinned repository recipe
-    ↓
-Resolve implementation entry points and source dependencies
-    ↓
-Validate completeness and compiler/runtime compatibility
-    ↓
-TS → HIR → LLVM IR → native code
-```
-
-Start with a small, tested set of packages and explicit overrides. Add automatic source-map extraction and repository discovery to reduce the work of creating those recipes, but require a complete, pinned source input before compiling.
-
-**The practical solution is a source resolver plus a compatibility/ports layer—not a JavaScript fallback, and not a general attempt to reverse transpilation.**
-
-[1]: https://docs.npmjs.com/cli/v12/configuring-npm/package-json/ "package.json | npm Docs"
-[2]: https://www.typescriptlang.org/tsconfig/inlineSources.html "TypeScript: TSConfig Option: inlineSources"
-[3]: https://tc39.es/ecma426/ "Source map format specification"
-[4]: https://docs.npmjs.com/cli/v12/commands/npm-view/ "npm-view | npm Docs"
-[5]: https://docs.npmjs.com/viewing-package-provenance/ "Viewing package provenance | npm Docs"
-[6]: https://docs.npmjs.com/cli/v12/configuring-npm/package-lock-json/ "package-lock.json | npm Docs"
-[7]: https://www.typescriptlang.org/docs/handbook/2/type-declarations.html "TypeScript: Documentation - Type Declarations"
-[8]: https://www.typescriptlang.org/docs/handbook/modules/reference.html "TypeScript: Documentation - Modules - Reference"
-[9]: https://jsr.io/docs/api "API - Docs - JSR"
-[10]: https://jsr.io/docs/npm-compatibility?utm_source=chatgpt.com "npm compatibility - Docs - JSR"
-[11]: https://www.typescriptlang.org/docs/handbook/type-compatibility.html "TypeScript: Documentation - Type Compatibility"
+Anything TypeScript resolved out of `node_modules` is dropped before lowering.
+Measured three ways:
+
+- A package under `node_modules` whose `exports` names a `.ts` file — resolution
+  succeeds, with a Package ID, and the file never becomes a module.
+- The same package pointed at by `paths` — still dropped. The discriminator is
+  the file, not the route.
+- The identical source copied _outside_ `node_modules` — becomes a module and
+  lowers.
+
+The boundary is deliberate and the comment beside it says why. What is not
+deliberate is the diagnostic a program gets when it crosses:
+
+    refused: NTS1001 `invariant`, a builtin this compiler does not
+             provide is not supported by this lowering yet
+
+`invariant` is not a builtin. It is `tiny-invariant`, whose implementation was
+excluded from the program. A reader of that message goes looking in
+`hir::builtin` for a missing standard-library name and finds nothing, because
+nothing is missing there. **The first thing to fix in this area is the sentence,
+not the boundary.**
+
+`rootDir` is the other structural constraint, found the same way: a dependency
+materialised outside the app's `rootDir` fails with `TS6059` before the compiler
+sees it. Whatever acquires sources has to write them _inside_ the program.
+
+---
+
+## 4. What the numbers argue for
+
+**The elaborate acquisition pipeline is not the first thing to build.** Its
+ceiling is 5.7% of a realistic closure, and most of that 5.7% then hits refusals
+that have nothing to do with npm. Three tiers of fetching, provenance
+verification and recipe formats would be careful work spent on the smaller half
+of the problem.
+
+**A package's implementation is not the only way to satisfy it.** What an
+application needs is the behaviour behind a package's public type surface, and
+the `.d.ts` — the one artifact npm distributes reliably — _is_ that surface. The
+Node profile already runs this playbook: `runtime/node` is 22 modules of
+TypeScript written against node's contract, tested with node's own suite, with
+each native operation a single `declare function`. Nothing about it is specific
+to `node:*`.
+
+So a dependency has more than two outcomes, and which one applies is a per
+package fact worth measuring rather than assuming:
+
+1. **compile its own TypeScript** — when recoverable and when it lowers;
+2. **bind its contract to a native implementation** — right answer anyway for
+   anything that is a thin wrapper over platform capability;
+3. **a portable TypeScript port** in-tree, checked against the package's own
+   published `.d.ts` for surface and its own test suite for behaviour;
+4. **refuse by name**, with the reason and the route that would change it.
+
+**And the instrument comes before the feature.** Every number in this file was
+produced by a throwaway harness that had to be written before anything could be
+argued. That harness belongs in the tree, pointed at a real project, printing
+the closure with a route and a reason per package — the same way `nts modules`,
+`nts erasure` and `nts layouts` exist to make a question answerable before
+anything depends on the answer.
+
+The plan is [`npm-deps-plan.md`](npm-deps-plan.md).
+
+---
+
+## Appendix: the routes, as the original draft named them
+
+Kept because the taxonomy is right even where the weighting was wrong.
+
+**Shipped TypeScript.** A package including its `src` in the archive. Measured
+at ~2% of packages, and one package in 458 exposes it through `exports`.
+
+**Embedded source-map content.** `sourcesContent` in an external `.js.map` or an
+inline `data:` URL, which `inlineSources` populates with the original `.ts`.
+Extraction is reading an embedded copy, not decompilation. This is the only
+route that carries meaningful volume. Maps may be sectioned; `sourcesContent`
+entries may be `null`; the recovered text may be JavaScript rather than
+TypeScript. Load recovered files into a package-scoped virtual filesystem,
+normalise paths, refuse traversal outside the extraction root, and detect
+conflicting contents for one logical path.
+
+**A pinned repository checkout.** `repository.url` plus `repository.directory`
+for monorepos; `gitHead` when present; npm provenance when available. Never the
+default branch for a pinned version. Measured: 100% / 2% / 12%.
+
+**Explicit per-package recipes.** For packages that need generated files,
+release-time constants, or a custom transform, record the requirement rather
+than re-guessing it from directory names.
+
+**Type resolution is not implementation resolution.** `resolveTypes` and
+`resolveImplementation` are different questions, and finding `dist/index.d.ts`
+must not stop the second. An import written `./helper.js` may resolve to
+`helper.ts`, and a source resolver needs the same extension substitution.
+
+**Both gates apply to every reachable dependency**, not just the top level. A
+package whose own source is TypeScript is not usable if something below it is
+not — which is the difference between 5.7% and 4.8% above.

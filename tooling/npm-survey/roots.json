@@ -1,0 +1,12 @@
+[
+ "express","fastify","hono","koa","zod","valibot","yup","ajv","lodash","date-fns",
+ "nanoid","uuid","ms","chalk","commander","debug","picocolors","drizzle-orm","pg","ioredis",
+ "immer","zustand","rxjs","clsx","js-yaml","fast-xml-parser","qs","semver","minimatch","picomatch",
+ "jose","jsonwebtoken","axios","undici","got","p-limit","dotenv","cross-fetch","superstruct","remeda",
+ "ts-pattern","effect","neverthrow","class-transformer","reflect-metadata","node-fetch","form-data","mime","cookie","bcryptjs",
+ "xstate","valtio","nanostores","radash","es-toolkit","type-fest","tslib","graphql","dataloader","kysely",
+ "postgres","better-sqlite3","sharp","pino","winston","yargs","meow","zx","execa","globby",
+ "fs-extra","tar","adm-zip","archiver","cheerio","marked","markdown-it","highlight.js","prismjs","dayjs",
+ "luxon","big.js","decimal.js","mathjs","seedrandom","fuse.js","lru-cache","node-cache","eventemitter3","mitt",
+ "tiny-invariant","deepmerge","fast-deep-equal","object-hash","stable-hash","crypto-js"
+]
