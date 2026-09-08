@@ -473,10 +473,33 @@ That is a representation decision, so it is `signatures::specialize`'s and the
 middle end's rather than this lane's, and it is worth more than one row: it
 questions an assumption the design rests on. Handed over.
 
-**Two variables are still bundled** and the goal says to separate them, so what
-this does *not* say is which of monomorphisation-into-two-classes or
-primitive-fields-instead-of-boxed costs the 16%. Splitting that is one more
-reference variant and is the obvious next measurement if anyone acts on it.
+**Separated, because rule 6 says so and it took one more variant.** A middle
+reference with *two* classes whose fields are still erased `Object` holding
+boxed values isolates the two halves:
+
+    A  one generic class, boxed field        ~1386 ns
+    B  two classes, boxed fields             ~1390 ns
+    C  two classes, primitive fields         ~1641 ns
+       ours                                  ~1641 ns
+
+**Monomorphising into two classes costs nothing** -- A and B are 0.3% apart.
+**The primitive field is the entire gap.** Confirmed at six samples each with
+identical checksums and ranges that do not overlap:
+
+    B  min 1384.3   median 1387.4   max 1394.0
+    C  min 1620.8   median 1643.9   max 1670.8
+
+**18.5%, and the mechanism is not allocation.** All three read **0.00
+bytes/op**, so C2 scalar-replaces the box in every variant, including the one
+holding a boxed `Integer`. So this is not "the boxed version allocates and we
+do not"; both vanish, and the one that vanishes into an `Object` field is
+faster than the one that vanishes into an `int` field.
+
+That is counterintuitive enough to be worth stating narrowly: **one program,
+one shape, one JDK.** What it does establish for this row is complete -- the
+cost is the field's representation, monomorphisation is free, and our codegen
+for the representation we chose is at parity with hand-written Java making the
+same choice.
 
 ## Open, and whose
 
