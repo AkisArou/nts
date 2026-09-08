@@ -23,9 +23,24 @@
  * discipline, a task run once gives its reference back by running, and anything
  * posted rather than re-armed wants `false`. A microtask runs once.
  *
- * DO NOT RUN THE THREE MODULES ON THIS YET. The middle argument is a slot index
- * into the callback descriptor's method table, and the runtime calls straight
- * through it:
+ * THIS FILE DOES NOT COMPILE, AND THE SLOT IS THE SECOND PROBLEM. The compiler
+ * emits the prototype for a `declare function` taking a callback as a
+ * *program-specific* closure struct:
+ *
+ *     program.c:1864  void nts_node_enqueue_microtask(NtsObj_Closure20 *);
+ *     this file       void nts_node_enqueue_microtask(NtsHeader *callback)
+ *     error: conflicting types for 'nts_node_enqueue_microtask'
+ *
+ * The number is per program -- `timers` gets 20, `diagnostics_channel` gets 18 --
+ * so a `.c` compiled against every module cannot spell it, and no other spelling
+ * is compatible. `blockers/callback-binding` has the reduction. It went unseen
+ * because `timers` had not been built since the rename: the counted lane's
+ * hardcoded list of seven modules did not include it, and running the lane over
+ * all twenty-two is what surfaced it.
+ *
+ * The slot below is the problem *after* that one. The middle argument is a slot
+ * index into the callback descriptor's method table, and the runtime calls
+ * straight through it:
  *
  *     ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback)
  *
