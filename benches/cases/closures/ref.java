@@ -4,13 +4,20 @@
 //
 // **The lambda is `invokedynamic` and this backend emits none.** That is not an
 // oversight to be matched: `runtime_jar.rs` asserts zero `invokedynamic` across
-// the jar because `LambdaMetafactory` needs API 26 on Android, and a closure
-// here is a class extending a per-descriptor `Fn$` base with a `private static
-// final INSTANCE`, so that `f === f` holds. The reference should still be the
-// lambda, because that is what a person writes and because the comparison is
-// worth nothing if the reference adopts our constraints. If this row loses, it
-// loses to `LambdaMetafactory`, and the record should say so rather than the
+// the jar, and a closure here is a class extending the signature's own layout
+// -- `Layout.base`, which the IR states -- with a `private static final
+// INSTANCE`, so that `f === f` holds. The reference should still be the lambda,
+// because that is what a person writes and because the comparison is worth
+// nothing if the reference adopts our constraints. If this row loses, it loses
+// to `LambdaMetafactory`, and the record should say so rather than the
 // reference hiding it.
+//
+// (Two details in that sentence were true when it was written and are not now.
+// The base was briefly a generated per-descriptor `Fn$` interface, which turned
+// out to duplicate the `Layout.base` the IR already carried and was removed.
+// And the ratchet's reason is no longer the Android floor: `invoke-custom`
+// needs API 26 and the floor is 29, so what it catches now is a lambda reaching
+// the runtime -- `runtime_jar.rs` says which.)
 //
 // `int` arithmetic throughout, and it is exact rather than approximate. The
 // TypeScript multiplies in f64 and then `| 0`, and for `x < 4096` the true
