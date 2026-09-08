@@ -556,6 +556,24 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // And how many bindings no lane can currently disagree with node about: a
+  // stand-in that delegates to node's own implementation cannot disagree with
+  // it, and the compiled lane only speaks for a module that builds. This is a
+  // queue rather than a gate, and it should go down.
+  {
+    const blind = spawnSync(
+      process.execPath,
+      [join(HERE, "standin-blindspot.mjs")],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const summary = `${blind.stdout ?? ""}`
+      .split("\n")
+      .filter((l) => l.includes("no lane can disagree"))
+      .join("")
+      .trim();
+    if (summary !== "") console.log(`unmeasurable bindings: ${summary}`);
+  }
+
   // The differential, for the same reason and at a fraction of its full size.
   // Node's tests are a fixed set of inputs a human chose; this asks node the
   // questions nobody wrote down, and it has found three real bugs -- a
