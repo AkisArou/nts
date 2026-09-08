@@ -66,4 +66,23 @@ NtsString *nts_process_exec_path(void);
  * and nothing in them for a collector to trace. */
 extern const NtsDescriptor nts_node_desc_double;
 
+/* An array of erased values -- a `(string | number)[]`, and anything else whose
+ * elements are not all one kind.
+ *
+ * The same reason as the one above: a program that needs one emits
+ * `static const NtsDescriptor nts_desc_NtsValue` into `program.c`, and a
+ * binding is a separate translation unit.
+ *
+ * `erased` rather than `references` is the whole of it. For an array the
+ * reference map is binary -- every element is a pointer or none is -- and an
+ * `NtsValue` is a pointer only when its tag says so. `erased` is the field that
+ * says "check the tag", so a collector reads each element instead of assuming.
+ * Setting `references` here instead would hand the collector a sixteen-byte
+ * tagged struct to dereference.
+ *
+ * `nts_udp_address` is the first binding in this tree that needs one: it
+ * answers `[address, family, port]` or `[errno]`, and the module discriminates
+ * with `typeof`. */
+extern const NtsDescriptor nts_node_desc_value;
+
 #endif
