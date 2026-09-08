@@ -2886,8 +2886,54 @@ From there it is three calls, and the last one refuses:
 `ERR_INVALID_ARG_TYPE` cannot build its message without rendering the offending
 value, and rendering a control character means a hex escape. **So no module can
 validate an argument, and validating an argument is the first thing every one of
-node's entry points does.** The fifteen are not fifteen independent compiler
-gaps; a large share of them are one shared front door.
+node's entry points does.**
+
+### The front door has fourteen locks, not one
+
+That paragraph originally ended "the fifteen are not fifteen independent compiler
+gaps; a large share of them are one shared front door", and the second half of
+that was measured afterwards and came back worse.
+`tooling/conformance/blocker-reach.mjs` runs `hir` over every module, normalises
+each refusal to its *shape*, and counts distinct modules stopped. **Fourteen
+shapes reach all twenty-one modules**, not one:
+
+    reach  own  shape
+       21   11  an erased value where a concrete representation is wanted
+       21   10  X, a global member with no definition here
+       21    9  X on a union, whose members lay their fields out differently
+       21    9  a conversion to number from this type
+       21    7  X of something without one
+       21    5  an X against something this compiler has no class for
+       21    5  `toString` on a number
+       21    5  a conversion to string from this type
+       21    4  an X narrowed to BigInt
+       21    4  X on a typed array
+       21    4  a base X of unrepresentable type
+       21    3  a regular expression literal
+       21    1  a parameter of unrepresentable type (a union of X | undefined)
+       21    0  an X with options
+       20   11  a method X with no declaration in the hierarchy
+
+So the radix `toString` is **necessary and nowhere near sufficient**, and
+`path.normalize` needs all fourteen cleared rather than that one. The claim that
+survives is the shape of the problem — these are shared rather than per-module,
+and they sit on `internal/errors.ts` and `internal/validators.ts`, which
+everything imports. The claim that did not survive is that one of them was the
+door.
+
+**Read the table as a necessity ordering, not a sufficiency one.** A shape at 21
+must be fixed for any module to clear the front door; fixing it alone clears
+nothing. The number that would predict a module going green is "modules for which
+this is the *last* remaining shape", and today that is zero for all fourteen.
+
+**Reach is also not cost.** `computed-member-write` blocks a great deal and is a
+representation decision worth a week; something blocking two modules may be an
+afternoon. Cost-if-unfixed is not value-per-hour — a mistake this lane already
+made once and wrote into that fixture, and a table sorted by reach quietly
+re-makes it unless the caution travels with it.
+
+The `own` column is the better one for choosing work: it counts modules where the
+shape appears in the module's *own* source rather than in something it imports.
 
 **The control was run rather than assumed**, because the claim was nearly
 recorded without it: argument-less `code.toString()` lowers clean —
