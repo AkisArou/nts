@@ -305,6 +305,41 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "os-full.ts",
+    module: "os",
+    checks(m) {
+      const os = require("node:os");
+      const info = os.userInfo();
+      const out = [
+        { label: "homedir", mine: m.probeHomedir(), theirs: os.homedir() },
+        { label: "totalmem", mine: m.probeTotalmem(), theirs: os.totalmem() },
+        { label: "availableParallelism", mine: m.probeParallelism(), theirs: os.availableParallelism() },
+        { label: "getPriority(0)", mine: m.probeGetPriority(0), theirs: os.getPriority(0) },
+        { label: "userInfo uid", mine: m.probeUserUid(), theirs: info.uid },
+        { label: "userInfo gid", mine: m.probeUserGid(), theirs: info.gid },
+        { label: "username first byte", mine: m.probeUsernameFirstByte(), theirs: info.username.charCodeAt(0) },
+        { label: "loadavg length", mine: m.probeLoadavgShape(), theirs: `${os.loadavg().length}:true:true:true` },
+        { label: "loadavg[0]", mine: m.probeLoadavgFirst(), theirs: os.loadavg()[0] },
+        // The binding's column order, not node's documented one -- type,
+        // version, release, machine, arch, platform, endianness.
+        {
+          label: "static information",
+          mine: m.probeStaticJoined(),
+          theirs: [os.type(), os.version(), os.release(), os.machine(), os.arch(), os.platform(), os.endianness()].join("|"),
+        },
+      ];
+      // Two figures that move between the two calls, so magnitude is what is
+      // comparable and a tighter check would fail for a reason that is not a
+      // defect.
+      const up = m.probeUptime(), nup = os.uptime();
+      out.push({ label: "uptime within 5s", mine: Math.abs(up - nup) < 5, theirs: true, detail: `${up} vs ${nup}` });
+      const free = m.probeFreemem(), nfree = os.freemem();
+      out.push({ label: "freemem within 10%", mine: Math.abs(free - nfree) < nfree * 0.1, theirs: true, detail: `${free} vs ${nfree}` });
+      out.push({ label: "udp reuseaddr > 0", mine: m.probeUdpReuseaddr() > 0, theirs: true });
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
