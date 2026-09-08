@@ -234,8 +234,51 @@ const STRING: &[&str] = &[
     "rindex",
 ];
 
+/// What `<unistd.h>`, `<fcntl.h>`, `<sys/stat.h>` and `<sys/socket.h>` declare.
+///
+/// The list that was missing, and its absence was a **silent wrong answer**
+/// rather than a build error. `runtime/node/fs` exports `access`, and the
+/// generated addon called `access(a0, a1)`, which is POSIX `access(2)`: a
+/// module header pulled `<unistd.h>` in, the call
+/// bound to libc's declaration, and an `NtsString *` went where a `const char *`
+/// was expected. The Node lane measured it with the control that settles it --
+/// the same binding exported as `probeAccess` answers `-2`, `0`, `-2` and
+/// agrees with node, and as `access` answers `0` for every input. The binding
+/// was right; the emitted C was calling a different function.
+///
+/// Nothing caught it and nothing could: no refusal, no clang error, the addon
+/// links and loads and returns plausible numbers. It is the worst shape a
+/// defect takes here, and it was waiting in the modules with the most native
+/// surface -- `fs` has 133 bindings behind these names, and `net` and `dgram`
+/// have `connect`, `listen`, `bind`, `send` and `socket`.
+///
+/// Names rather than headers, because the rule is about what a *linker* can
+/// confuse. A TypeScript program is entitled to export `open`, and appending an
+/// underscore is what it has always cost to say so -- the same rule `div` and
+/// `strlen` already live under, reversible by inspection.
+const POSIX: &[&str] = &[
+    // <unistd.h>
+    "access", "alarm", "chdir", "chown", "close", "dup", "dup2", "execl", "execv", "execve",
+    "_exit", "fchdir", "fchown", "fork", "fsync", "ftruncate", "getcwd", "getegid", "geteuid",
+    "getgid", "getgroups", "gethostname", "getlogin", "getpgid", "getpgrp", "getpid", "getppid",
+    "getuid", "isatty", "lchown", "link", "lseek", "pause", "pipe", "pread", "pwrite", "read",
+    "readlink", "rmdir", "setgid", "setpgid", "setsid", "setuid", "sleep", "symlink", "sync",
+    "truncate", "ttyname", "unlink", "usleep", "write",
+    // <fcntl.h> and <sys/stat.h>
+    "creat", "fchmod", "fcntl", "fstat", "lstat", "mkdir", "mkfifo", "mknod", "open", "openat",
+    "stat", "umask",
+    // <sys/socket.h> and <netdb.h>
+    "accept", "bind", "connect", "getpeername", "getsockname", "getsockopt", "listen", "recv",
+    "recvfrom", "send", "sendto", "setsockopt", "shutdown", "socket", "socketpair",
+    // <stdlib.h> and <stdio.h>, the ones a program plausibly exports
+    "abort", "atexit", "exit", "getenv", "putenv", "setenv", "unsetenv", "system", "rename",
+    "remove", "printf", "fprintf", "sprintf", "snprintf", "puts", "fopen", "fclose", "fread",
+    "fwrite", "fseek", "ftell", "rewind", "clearerr", "random", "srandom", "time", "clock",
+];
+
 fn collides_with_a_header(name: &str) -> bool {
-    if MATH.contains(&name) || TYPES.contains(&name) || STRING.contains(&name) {
+    if MATH.contains(&name) || TYPES.contains(&name) || STRING.contains(&name) || POSIX.contains(&name)
+    {
         return true;
     }
     // `powf` and `powl` are the same declaration in another width.
@@ -348,5 +391,39 @@ mod jvm_tests {
     #[test]
     fn a_class_is_packaged_where_nothing_platform_can_collide() {
         assert_eq!(jvm_class_name("Point"), "nts/gen/Point");
+    }
+
+    /// A name libc also declares is escaped, and the failure it prevents is a
+    /// wrong answer rather than a build error.
+    ///
+    /// `runtime/node/fs` exports `access`. The generated addon emitted
+    /// `access(a0, a1)`, a module header pulled `<unistd.h>` in, and the call
+    /// bound to POSIX `access(2)` -- an `NtsString *` where a `const char *`
+    /// belongs. No refusal, no clang error, the addon links and loads and
+    /// returns plausible numbers. The control that settles it is renaming the
+    /// export: the same binding as `probeAccess` agrees with node, as `access`
+    /// it answers 0 for every input.
+    #[test]
+    fn a_name_libc_declares_cannot_become_the_emitted_symbol() {
+        for name in [
+            "access", "open", "read", "write", "close", "link", "unlink", "rename", "stat",
+            "truncate", "mkdir", "rmdir", "connect", "listen", "bind", "send", "socket", "exit",
+            "time",
+        ] {
+            assert_eq!(
+                c_identifier(name),
+                format!("{name}_"),
+                "`{name}` is declared by a header this compiler's output includes",
+            );
+        }
+    }
+
+    /// And a name that merely *looks* like one is left alone, because the rule
+    /// is about what a linker can confuse rather than about how a name reads.
+    #[test]
+    fn a_name_no_header_declares_is_left_alone() {
+        for name in ["probeAccess", "openFile", "readable", "socketPath", "timestamp"] {
+            assert_eq!(c_identifier(name), name);
+        }
     }
 }

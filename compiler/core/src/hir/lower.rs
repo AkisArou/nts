@@ -4806,6 +4806,41 @@ impl<'a> FuncBuilder<'a> {
     }
 
 
+    /// The import a name came in through, when it came in through one.
+    ///
+    /// This is what tells a missing *builtin* apart from a name whose package
+    /// has no implementation in the program, and the schema states the
+    /// discriminator: `SymbolRecord::declarations` is "empty for a symbol
+    /// declared outside the decoded file set". A `lib.d.ts` builtin has none.
+    /// An imported name declares at its own import specifier, which is decoded
+    /// because this program wrote it -- even though what it names is not.
+    ///
+    /// Returns the `ImportDeclaration` rather than the module specifier's text:
+    /// a string literal's text lives in the extended section of the wire format
+    /// and only template literals are decoded from it, so `text` is `None`
+    /// here. The node is enough for what the message needs, and `nts deps` has
+    /// already named the package.
+    fn imported_from(&self, callee: NodeId) -> Option<NodeId> {
+        use nts_semantic_schema::{NodeKind, syntax};
+
+        let symbol = self.node(callee).symbol?;
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let mut at = *record.declarations.first()?;
+        // Up to the enclosing import: specifier, list, named imports, clause,
+        // declaration. Bounded, so a malformed parent chain cannot spin.
+        for _ in 0..8 {
+            let node = self.snapshot.nodes.get(at.0 as usize)?;
+            if matches!(
+                node.kind,
+                NodeKind::Syntax(syntax::IMPORT_DECLARATION | syntax::EXPORT_DECLARATION)
+            ) {
+                return Some(at);
+            }
+            at = node.parent?;
+        }
+        None
+    }
+
     fn node(&self, id: NodeId) -> &'a nts_semantic_schema::NodeRecord {
         &self.snapshot.nodes[id.0 as usize]
     }
@@ -19229,10 +19264,25 @@ impl<'a> FuncBuilder<'a> {
             return provided;
         }
         if target.callee.is_none() {
-            return Err(self.unsupported(
-                id,
-                &format!("`{name}`, a builtin this compiler does not provide"),
-            ));
+            // Two different failures wore one sentence. A name the checker
+            // resolved to no declaration is either a builtin this compiler has
+            // not implemented, or a name from a package whose implementation is
+            // not in this program -- and the second is far commoner now that
+            // dependencies are acquired, because a package that publishes only
+            // generated JavaScript has nothing to acquire. Reporting it as a
+            // missing builtin sends its reader to `hir::builtin`, where nothing
+            // is missing.
+            //
+            // The location stays on the call. Pointing at the import instead
+            // reads better and attributes the failure to a node outside the
+            // function being walked, which costs the *caller* its own
+            // diagnostic: `run` came back as "a declaration outside every walk".
+            let message = if self.imported_from(callee_node).is_some() {
+                format!("`{name}`, an imported name whose implementation is not in this program")
+            } else {
+                format!("`{name}`, a builtin this compiler does not provide")
+            };
+            return Err(self.unsupported(id, &message));
         }
         let callee = if defined {
             Callee::Direct(name)

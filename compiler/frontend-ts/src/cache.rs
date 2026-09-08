@@ -45,6 +45,15 @@ struct Entry {
     read: Vec<(String, u128)>,
     /// The `.ts` files under the project, so an addition is not invisible.
     listing: Vec<String>,
+    /// The tsconfig and everything it `extends`, hashed in `read` beside the
+    /// sources. See [`config_chain`].
+    ///
+    /// Recorded separately as well, and the redundancy is the point: an entry
+    /// written before this existed has no such field, `postcard` refuses it,
+    /// and it is recomputed rather than trusted. Without that, every cache on
+    /// every machine would keep answering from entries that never checked a
+    /// configuration -- which is the bug, surviving its own fix.
+    configs: Vec<String>,
     snapshot: SemanticSnapshot,
 }
 
@@ -71,6 +80,7 @@ pub fn snapshot<S: SemanticSource>(
         && entry.schema == SCHEMA_VERSION
         && entry.tool == tool
         && entry.listing == listing
+        && entry.configs == config_chain(tsconfig)
         && entry.read.iter().all(|(file, seen)| {
             std::fs::read(file).is_ok_and(|bytes| hash_of(&bytes) == *seen)
         })
@@ -79,23 +89,29 @@ pub fn snapshot<S: SemanticSource>(
     }
 
     let snapshot = source.snapshot(tsconfig)?;
+    let configs = config_chain(tsconfig);
+    let wanted = snapshot.sources.len() + configs.len();
+    let recorded = configs.clone();
     let read: Vec<(String, u128)> = snapshot
         .sources
         .iter()
-        .filter_map(|file| {
-            let bytes = std::fs::read(&file.display_path).ok()?;
-            Some((file.display_path.as_str().to_owned(), hash_of(&bytes)))
+        .map(|file| file.display_path.as_str().to_owned())
+        .chain(configs)
+        .filter_map(|path| {
+            let bytes = std::fs::read(&path).ok()?;
+            Some((path, hash_of(&bytes)))
         })
         .collect();
     // Only when every file it read could be hashed. One that could not is a
     // dependency the entry would not be able to check, and an entry that cannot
     // check itself is worse than no entry.
-    if read.len() == snapshot.sources.len() {
+    if read.len() == wanted {
         let entry = Entry {
             schema: SCHEMA_VERSION,
             tool: tool.to_owned(),
             read,
             listing,
+            configs: recorded,
             snapshot: snapshot.clone(),
         };
         if let Ok(bytes) = postcard::to_allocvec(&entry) {
@@ -120,6 +136,64 @@ fn cache_dir() -> Option<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(std::env::temp_dir())
         .ok()
         .map(|dir| dir.join("nts-snapshots"))
+}
+
+/// The tsconfig and everything it `extends`, so a change to one invalidates.
+///
+/// The entry checked every `.ts` the snapshot read and **not the configuration
+/// that decided which they were**. A tsconfig is not a source file, so it was
+/// in neither `read` nor `listing`, and the key is the config's *path* -- which
+/// does not move when its contents do. Changing only `rootDir` and re-running
+/// returned the previous answer: a `TS6059` about a directory the config no
+/// longer had.
+///
+/// That is the worst shape a caching bug takes. A slow cache annoys someone
+/// into looking; a stale entry is a plausible answer to a question nobody asked,
+/// and the npm lane was running with `NTS_NO_SNAPSHOT_CACHE=1` permanently
+/// rather than trust it.
+///
+/// Textual rather than parsed, and deliberately: a tsconfig is JSONC, so a
+/// parser has to accept comments and trailing commas to be right about a file
+/// this only needs one field from -- and being wrong about the field means
+/// *missing* a config, which is the failure being fixed. Anything this cannot
+/// resolve is simply not added, and an unhashable entry already makes the whole
+/// entry unwritable above.
+fn config_chain(tsconfig: &Utf8Path) -> Vec<String> {
+    let mut chain = Vec::new();
+    let mut at = Some(tsconfig.to_owned());
+    // A config chain is two or three deep in practice. The bound is against a
+    // cycle rather than a limit anyone should reach.
+    for _ in 0..8 {
+        let Some(path) = at.take() else { break };
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            break;
+        };
+        if !chain.contains(&path.as_str().to_owned()) {
+            chain.push(path.as_str().to_owned());
+        }
+        at = extends_of(&text).and_then(|named| {
+            let parent = path.parent()?;
+            let joined = parent.join(&named);
+            // `extends` names a file, a file without its extension, or a
+            // package. Only the first two are resolved here; a package's
+            // config lives under `node_modules` and is not something a project
+            // edits between runs, which is the case this exists for.
+            [joined.clone(), Utf8PathBuf::from(format!("{joined}.json"))]
+                .into_iter()
+                .find(|candidate| candidate.is_file())
+        });
+    }
+    chain
+}
+
+/// The value of a top-level `"extends"`, if the text has one.
+fn extends_of(text: &str) -> Option<String> {
+    let at = text.find("\"extends\"")?;
+    let rest = &text[at + "\"extends\"".len()..];
+    let open = rest.find('"')?;
+    let after = &rest[open + 1..];
+    let close = after.find('"')?;
+    Some(after[..close].to_owned())
 }
 
 fn hash_of(bytes: &[u8]) -> u128 {
