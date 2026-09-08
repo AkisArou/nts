@@ -224,45 +224,139 @@ class Scanner {
    * `Infinity`, which `JSON.stringify` then writes back as `null`.
    */
   readNumber(): number {
+    const end = scanNumber(this.source, this.at, this.length);
+    if (end < 0) {
+      // The scan reports *which* rule the text broke; the message is chosen here because that is
+      // where the position and the offending token are.
+      this.at = numberFailurePosition(this.source, this.at, this.length);
+      if (end === NUMBER_NO_INTEGER_DIGIT) throw this.fail(`Unexpected token ${this.describe()}`);
+      if (end === NUMBER_NO_DIGIT_AFTER_MINUS) throw this.fail("No number after minus sign");
+      if (end === NUMBER_UNTERMINATED_FRACTION) throw this.fail("Unterminated fractional number");
+      throw this.fail("Exponent part is missing a number");
+    }
     const start = this.at;
-    const negative = this.peek() === MINUS;
-    if (negative) this.at++;
-    const intStart = this.at;
-    // Accumulated while the digits are scanned, so an integer costs no substring. Exact only
-    // while it stays inside the integers a double represents without rounding, which is what
-    // the digit count below bounds; anything longer, or carrying a fraction or an exponent,
-    // falls through to the slice.
-    let integer = 0;
-    if (this.peek() === ZERO) {
-      this.at++;
-    } else {
-      if (!isDigit(this.peek())) throw this.fail(`Unexpected token ${this.describe()}`);
-      while (isDigit(this.peek())) {
-        integer = integer * 10 + (this.source.charCodeAt(this.at) - ZERO);
-        this.at++;
-      }
-    }
-    if (this.at === intStart) throw this.fail("No number after minus sign");
-    const digits = this.at - intStart;
-    if (this.peek() !== DOT && this.peek() !== LOWER_E && this.peek() !== UPPER_E && digits <= 15) {
-      // `-0` is a number JSON can write and `-integer` gives it, which `Number("-0")` also does.
-      return negative ? -integer : integer;
-    }
-    if (this.peek() === DOT) {
-      this.at++;
-      if (!isDigit(this.peek())) throw this.fail("Unterminated fractional number");
-      while (isDigit(this.peek())) this.at++;
-    }
-    const exponent = this.peek();
-    if (exponent === LOWER_E || exponent === UPPER_E) {
-      this.at++;
-      const sign = this.peek();
-      if (sign === PLUS || sign === MINUS) this.at++;
-      if (!isDigit(this.peek())) throw this.fail("Exponent part is missing a number");
-      while (isDigit(this.peek())) this.at++;
-    }
-    return Number(this.source.slice(start, this.at));
+    this.at = end;
+    return numberValueOf(this.source, start, end);
   }
+}
+
+// Why the number scan is three functions rather than one.
+//
+// `readNumber` used to do all of it, and could not be compiled: it raises `SyntaxError`, which
+// is not a representable type in this lowering yet, so the whole function was refused and with
+// it the hottest loop in the parser. The scan and the conversion are pure computation over a
+// string and an index, and neither of them needs to raise anything -- so they are separated out
+// and only the choosing of a message is left in the method.
+//
+// This is the same boundary `json/text.ts` draws for the serializer, and it is a real one rather
+// than a shape forced by the compiler: a scanner that reports where it stopped and why is
+// independently testable and independently measurable, which is how it reached the compiled
+// axis and the bench table. That it also routes around a refusal is true and is not the
+// justification; the refusal is reported and MainClaude has it.
+
+/** The first digit of the integer part was missing. */
+const NUMBER_NO_INTEGER_DIGIT = -1;
+/** A minus sign with nothing after it. Unreachable through `peek`, kept for the grammar's sake. */
+const NUMBER_NO_DIGIT_AFTER_MINUS = -2;
+/** A decimal point with no digit after it. */
+const NUMBER_UNTERMINATED_FRACTION = -3;
+/** An `e` with no digit after it, sign or not. */
+const NUMBER_NO_EXPONENT_DIGIT = -4;
+
+/** The digit count past which an accumulated integer may already have rounded. */
+const EXACT_INTEGER_DIGITS = 15;
+
+function codeAt(source: string, at: number, length: number): number {
+  return at < length ? source.charCodeAt(at) : -1;
+}
+
+/**
+ * ECMA-404's number grammar, scanned.
+ *
+ * Returns the index one past the number, or one of the negative codes above. Pure: it reads a
+ * string and returns a number, which is why it compiles where `readNumber` does not.
+ */
+export function scanNumber(source: string, from: number, length: number): number {
+  let at = from;
+  if (codeAt(source, at, length) === MINUS) at++;
+  const intStart = at;
+  if (codeAt(source, at, length) === ZERO) {
+    at++;
+  } else {
+    if (!isDigit(codeAt(source, at, length))) return NUMBER_NO_INTEGER_DIGIT;
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  if (at === intStart) return NUMBER_NO_DIGIT_AFTER_MINUS;
+  if (codeAt(source, at, length) === DOT) {
+    at++;
+    if (!isDigit(codeAt(source, at, length))) return NUMBER_UNTERMINATED_FRACTION;
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  const exponent = codeAt(source, at, length);
+  if (exponent === LOWER_E || exponent === UPPER_E) {
+    at++;
+    const sign = codeAt(source, at, length);
+    if (sign === PLUS || sign === MINUS) at++;
+    if (!isDigit(codeAt(source, at, length))) return NUMBER_NO_EXPONENT_DIGIT;
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  return at;
+}
+
+/**
+ * Where a failed scan stopped, so the message can name the offending token.
+ *
+ * Re-walked rather than returned alongside the code, because a scan that succeeds -- which is
+ * every scan in a well-formed document -- would otherwise pay for a second return value it never
+ * reads. The failing path is allowed to be slow.
+ */
+function numberFailurePosition(source: string, from: number, length: number): number {
+  let at = from;
+  if (codeAt(source, at, length) === MINUS) at++;
+  if (codeAt(source, at, length) === ZERO) {
+    at++;
+  } else {
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  if (codeAt(source, at, length) === DOT) {
+    at++;
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  const exponent = codeAt(source, at, length);
+  if (exponent === LOWER_E || exponent === UPPER_E) {
+    at++;
+    const sign = codeAt(source, at, length);
+    if (sign === PLUS || sign === MINUS) at++;
+    while (isDigit(codeAt(source, at, length))) at++;
+  }
+  return at;
+}
+
+/**
+ * The value of a scanned number.
+ *
+ * An integer short enough to be exact is accumulated from its digits, which costs no substring;
+ * `Number` on a slice is the fallback and is what 25.5.2 means in every other case. Pure, for
+ * the same reason `scanNumber` is.
+ */
+export function numberValueOf(source: string, start: number, end: number): number {
+  const negative = source.charCodeAt(start) === MINUS;
+  const intStart = negative ? start + 1 : start;
+  let at = intStart;
+  let integer = 0;
+  while (at < end) {
+    const code = source.charCodeAt(at);
+    if (!isDigit(code)) break;
+    integer = integer * 10 + (code - ZERO);
+    at++;
+  }
+  // Only when the digits are the whole number and there are few enough of them to be exact.
+  // `-0` is a number JSON can write, and negating an accumulated zero gives it, which is what
+  // `Number("-0")` gives too.
+  if (at === end && at - intStart <= EXACT_INTEGER_DIGITS) {
+    return negative ? -integer : integer;
+  }
+  return Number(source.slice(start, end));
 }
 
 function isDigit(code: number): boolean {

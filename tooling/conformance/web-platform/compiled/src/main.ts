@@ -40,6 +40,7 @@ import {
   resolveGap,
 } from "../../../../../runtime/web-platform/src/json/text.ts";
 import { arrayIndexOf, JsonValue } from "../../../../../runtime/web-platform/src/json/value.ts";
+import { scanNumber } from "../../../../../runtime/web-platform/src/json/parse.ts";
 
 /** dNSName matching, including the wildcard rules HTTP/2 coalescing depends on. */
 export function covers(presented: string, host: string): boolean {
@@ -200,4 +201,23 @@ export function jsonArrayLength(count: number): number {
   const items: JsonValue[] = [];
   for (let at = 0; at < count; at++) items.push(JsonValue.numberValue(at, 0, 0));
   return JsonValue.arrayValue(items, 0, 0).items.length;
+}
+
+/**
+ * The parser's number scan, which is the first piece of the parse half to reach this axis.
+ *
+ * ECMA-404's number grammar over a string and an index, returning where the number ends or a
+ * negative code for the rule it broke. It is the hottest loop in the parser -- 9.8% of a
+ * parse-heavy host profile -- and it compiles because it raises nothing. What it hands its value
+ * to does not: `Number(text)` is still refused, which is the second gap reported to MainClaude
+ * and the reason the *whole* parser has no column here yet.
+ */
+export function jsonScanNumber(text: string): number {
+  return scanNumber(text, 0, text.length);
+}
+
+/** The same over an offset, so a case starting mid-string is covered too. */
+export function jsonScanNumberAt(text: string, from: number): number {
+  const at = from < 0 ? 0 : from > text.length ? text.length : from;
+  return scanNumber(text, at, text.length);
 }

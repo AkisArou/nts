@@ -7200,3 +7200,50 @@ only caller never passes a unit in the range the mistake covers. `.length` canno
 the table it is the length of.
 
 884/884 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 253 of 322.
+
+## The parse half reaches the axis, by separating the scan from the raising
+
+`readNumber` could not be compiled and neither could anything that called it: it raises
+`SyntaxError`, which is not representable, so the hottest loop in the parser -- 9.8% of a
+parse-heavy profile -- had no compiled column and no bench row.
+
+The scan and the conversion are pure. A string and an index in, a number out; nothing about
+either needs to raise. So `scanNumber` walks ECMA-404's grammar and returns where the number ends
+or a negative code for the rule it broke, `numberValueOf` turns a span into a value, and the
+method keeps only the part that chooses a message -- which is where the position and the
+offending token are, and therefore where it belongs anyway.
+
+This is the boundary `json/text.ts` already draws for the serializer, and it is a real one: a
+scanner that reports where it stopped and why is independently testable and independently
+measurable. That it also routes around a refusal is true, and is not the justification.
+
+**The frontier went up by one, which is the result.** `numberValueOf` ends in `Number(text)`, a
+conversion that is also unrepresentable, and it had been hiding behind the refusal above it. The
+lane went 1,444 primaries to 1,445 -- exactly the movement predicted when this was probed
+earlier, and a frontier moving forward rather than a regression. It is the second gap reported.
+
+**Axis 253 of 322 to 278 of 361**, agreeing on jvm, c and llvm.
+
+### Both halves are in the bench table now
+
+| case | nts C | nts JVM | nts f64 | node | bun | nts/node |
+| --- | --- | --- | --- | --- | --- | --- |
+| `json-serialize` | 15.27us | 18.46us | 18.12us | 12.89us | 7.39us | 1.17x |
+| `json-scan` | 4.33us | 3.54us | 4.39us | 3.09us | 3.55us | 1.33x |
+
+The `nts f64` column decomposes them differently and that is the useful part. On serialization it
+costs 1.20x, so specialization is doing real work there -- it formats numbers. On the scan it
+costs nothing at all (4.39 against 4.33), because the scan is character reads and comparisons
+rather than arithmetic. Two JSON rows, two different answers to what the analysis is worth.
+
+The JVM is also the fastest lane on the scan and the slowest on serialization, which is the
+shape of a JIT given a tight integer loop versus a string builder.
+
+### One sabotage survived, correctly
+
+Forcing `negative` to `false` in `numberValueOf` changed nothing: the integer accumulator then
+stops at the minus sign, `at` never reaches `end`, and the slice fallback returns the same value
+-- including `-0`, which `Number("-0")` also gives. It is a performance change wearing a
+correctness change's clothes, and no correctness test should be able to tell them apart.
+
+884/884 host, upstream unchanged at 2,768 of 2,776.
