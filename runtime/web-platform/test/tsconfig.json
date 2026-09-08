@@ -1,0 +1,12 @@
+{
+  "//": "An editor opening a file here needs a project to resolve it against; without one it falls back to defaults and reports errors that no gate does. This is that project. It is not part of `check.sh`, which type-checks the *source* and the host provider through `tooling/conformance/web-platform/tsconfig.json`; nothing here is emitted.",
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "../../..",
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["./**/*.ts", "../host/**/*.ts", "../src/**/*.ts"]
+}

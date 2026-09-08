@@ -12,5 +12,9 @@
     "noEmitOnError": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["../../../runtime/web-platform/src/**/*.ts", "./*.ts"]
+  "include": [
+    "../../../runtime/web-platform/src/**/*.ts",
+    "../../../runtime/web-platform/host/**/*.ts",
+    "./*.ts"
+  ]
 }

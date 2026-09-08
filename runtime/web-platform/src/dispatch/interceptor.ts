@@ -25,7 +25,7 @@ class InterceptorTransport implements FetchTransport {
  *
  * **Which order to put them in is not free, and three of the constraints are
  * demonstrable rather than stylistic.** Each is a test in
- * `tooling/conformance/web-platform/test/interceptor-order.test.mjs`, which runs both
+ * `runtime/web-platform/test/interceptor-order.test.ts`, which runs both
  * arrangements and asserts that the wrong one misbehaves — so these are claims with
  * their own controls rather than advice.
  *

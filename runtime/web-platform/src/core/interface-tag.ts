@@ -27,7 +27,7 @@
 // instead of at the bottom of the file.
 //
 // **What keeps thirty-five copies of the descriptor honest** is
-// `tooling/conformance/web-platform/test/webidl-surface.test.mjs`, which asserts the exact
+// `runtime/web-platform/test/webidl-surface.test.ts`, which asserts the exact
 // descriptor and the exact length for every interface in one table. That table is the single
 // source of truth the helper was going to be; drift fails it.
 //

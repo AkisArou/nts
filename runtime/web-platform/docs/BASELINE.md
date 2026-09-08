@@ -7049,3 +7049,28 @@ was to have a baseline rather than to chase one.
 
 880/880 host, upstream unchanged at 2,768 of 2,776, compiled axis 206 of 210 agreeing on jvm, c
 and llvm. One pinned binary, `925269398951a132`, on both sides of every reading.
+
+## The suite moved to the runtime it tests
+
+`test/**` and the Node host provider now live under `runtime/web-platform/`; the conformance
+harness stays in `tooling/conformance/web-platform/`. The split is what each part is: a test of
+the runtime belongs with the runtime, and the upstream-fixture machinery -- `test-upstream.mjs`,
+`check.sh`, `unrouted.mjs`, the compiled axis -- is tooling.
+
+The host provider moved with the tests rather than being left behind, because the alternative
+was fifty-two imports reaching from `runtime/` back into `tooling/`. It is a host
+implementation of the platform's provider interfaces, so `runtime/web-platform/host/` is where
+it belongs whether or not the tests are what pulled it there.
+
+`environment-shim.ts` moved with it for a reason that only appeared when the tree was
+type-checked: `node-runtime.ts` imports it for its side effect, so it is part of the provider
+and not part of the harness. A move that had left it behind would have compiled everywhere the
+shim was preloaded by hand and failed only where it was not.
+
+Type-checking coverage did not change. `tooling/conformance/web-platform/tsconfig.json` is
+still the project `check.sh` runs and still the one with node types; its `include` now names
+`runtime/web-platform/host/**` alongside the source. The editor project for the tests moved
+with them.
+
+881/881 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 206 of 210 on
+jvm, c and llvm.

@@ -77,5 +77,5 @@ if [ -n "$out" ]; then
 fi
 
 echo "--- $label ---"
-shim=./tooling/conformance/web-platform/environment-shim.ts
+shim=./runtime/web-platform/host/environment-shim.ts
 node --expose-gc --import "$shim" --test "$test_file" 2>&1 | grep -E "^✖|ℹ (tests|pass|fail)"
