@@ -341,7 +341,9 @@ both of them cut in this project's favour.
 
 # What is built already
 
-**Steps 1, 3, 4 and 5 of the goal are done; step 2 is the main lane's.** `tooling/deps` (`nts deps`) acquires,
+**All five steps are answered.** Four are this lane's and done; step 2 belongs
+to `compiler/**`, which this lane does not edit — it was written, verified and
+handed over, and the main lane has taken it. `tooling/deps` (`nts deps`) acquires,
 and `project()` in the CLI acquires before returning a config — so every command
 that builds a program does it, and there is no second command to know about.
 Resolution comes from tsgo rather than from an `exports` walk of our own.
@@ -358,7 +360,10 @@ Resolution comes from tsgo rather than from an `exports` walk of our own.
     checked 29 cases across 1 function(s)
     agreed on every case
 
-37 tests, workspace clippy clean, ~35 ms for the whole monorepo, idempotent.
+45 tests, workspace clippy clean, idempotent. A build pays 0.35 s on a
+141-package closure and 0.03 s on a small monorepo once the lock has settled —
+see [`tooling/deps/README.md`](../tooling/deps/README.md) for why the first run
+costs more and why the difference is the design rather than a cache.
 
 **Monorepos were broken in the most basic way and are the largest thing this
 fixed.** `packages/app` importing `packages/lib` resolves through a
