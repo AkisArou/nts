@@ -8903,6 +8903,31 @@ reachability cannot weaken, because zero is zero. Elsewhere it is 2–7% of that
 module's primary refusals. So the fix is worth making and is not worth
 sequencing work behind, and those are different questions about the same fixture.
 
+### It landed in `ac27dac4`, and the table held
+
+Measured against the committed binary: builds and loads are unchanged, no module
+went green, and the residual column is now simply the total. The prediction the
+table made was the narrow one and it was right.
+
+What the cone-wide table could **not** show, and what makes the change worth
+having had, is the same fix measured against a module's *own* source:
+
+    string_decoder, own-source refusals    445ea94b  4
+                                           ac27dac4  1
+
+Three of its four were `ArrayBufferView`. The survivor is `ArrayBuffer.isView`,
+a different missing global. So over a whole cone this fix is 2–7% and moves
+nothing; over the source of the module it was written for it is three of four.
+**Both sentences are true and they are not interchangeable**, and the table above
+was built to answer the first question while being quoted against the second.
+
+`arraybufferview-parameter` is a guard now. One case did not survive the split:
+a value narrowed to `AnyView` by excluding the other arm of a union with `typeof`
+still cannot be read back, while `instanceof`, `=== undefined` and the plain
+parameter all can. That is `blockers/anyview-readback-after-typeof`, and its
+three controls are the content — without them the diagnostic reads as "AnyView
+cannot be read back", which is false.
+
 ### The controls, which are the reason the table is publishable
 
 A refusal count has been wrong here twice, so each of these was run rather than
