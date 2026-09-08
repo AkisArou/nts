@@ -7146,3 +7146,57 @@ Three sabotages, all caught: the bound one digit too generous, the sign dropped,
 path taken for fractions.
 
 884/884 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 253 of 322.
+
+## Profiling the compiled binary, which disagreed with the host about everything
+
+`perf` on `target/bench/json-serialize.nts` -- the compiled serializer, not the host one --
+put the costs somewhere the host profile never suggested:
+
+| symbol | share |
+| --- | --- |
+| `nts_each_reference` | 20.1% |
+| `quoteJSONString` | 18.6% |
+| `nts_str_raw` | 11.5% |
+| `unicodeEscape` | 10.9% |
+
+A fifth of it is reference-counting traffic, and `unicodeEscape` -- which does not appear in the
+host profile at all -- is a tenth.
+
+### Reference counting is not the tax it looks like
+
+The obvious reading is that a fifth of the program is reclamation overhead and removing it is
+the win. The harness can answer that directly, because the provider is a per-case declaration:
+the same program under `NoGc`, which never frees, is **40.68us against 17.78us**. Not freeing is
+2.3x *slower*, because the working set stops fitting and the run pays page faults instead.
+
+So the traffic is buying more than it costs, and the question is not how to remove it but what
+generates it.
+
+### What generates it, and the 256 strings that answer
+
+`unicodeEscape` composed each escape from four `charAt` calls and four concatenations -- eight
+temporary strings per escaped character, every one of them refcounted. Every escape below
+U+0100 is now a table built once at module load, which is one index and no allocation. That is
+the range that matters: 25.5.4.3 sends every control character there, and a control character is
+the only thing most documents ever escape.
+
+**15.27us from 17.78us; 1.17x slower than node, from 1.31x.** Same corpus, unpaired surrogate
+included.
+
+### The bug that only the compiled lane could find
+
+The first spelling read the table and tested the result for `undefined`, which is what a host
+does for an out-of-range index. **A compiled target refuses instead**, and the benchmark aborted:
+`index 55296 is outside [0, 256)`. 55296 is U+D800 -- the lone surrogate, the one input that
+reaches `unicodeEscape` from above the table.
+
+That is the same divergence `nts check` reports as "an index its `!` promised was in range and
+was not; node answers `undefined` there". Relying on the `undefined` is a host-only assumption,
+and it had been written into shared source that passes every host test.
+
+The bound is `SHORT_ESCAPES.length` rather than a numeric literal, and that is not cosmetic
+either: a sabotage moving a numeric bound one past the table survived every test, because the
+only caller never passes a unit in the range the mistake covers. `.length` cannot disagree with
+the table it is the length of.
+
+884/884 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 253 of 322.

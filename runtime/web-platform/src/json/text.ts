@@ -25,12 +25,44 @@ const TRAIL_SURROGATE_END = 0xdfff;
 const HEX = "0123456789abcdef";
 
 /**
+ * Every escape below U+0100, whole, built once.
+ *
+ * This is the range that matters: 25.5.4.3 sends every control character here, and a control
+ * character is the only thing most documents ever escape. Composing one costs four `charAt`
+ * calls and four concatenations -- eight temporary strings per character -- and a profile of the
+ * compiled serializer put `unicodeEscape` at 10.9% with the reference-counting traffic those
+ * temporaries generate at 20% on top of it. A lookup is one index and no allocation.
+ *
+ * Two hundred and fifty-six strings, built at module load. Above the range the composed form
+ * still runs, because a table over all sixty-five thousand code units would be the wrong trade.
+ */
+const SHORT_ESCAPES: string[] = buildShortEscapes();
+
+function buildShortEscapes(): string[] {
+  const out: string[] = [];
+  for (let unit = 0; unit < 0x100; unit++) {
+    out.push("\\u00" + HEX.charAt((unit >> 4) & 0xf) + HEX.charAt(unit & 0xf));
+  }
+  return out;
+}
+
+/**
  * 25.5.4.4: a code unit as `\uXXXX`, lowercase and padded to four digits.
  *
  * Built from a table rather than `toString(16)` plus padding, because this is the inner loop
  * for any string carrying control characters or lone surrogates.
  */
 function unicodeEscape(unit: number): string {
+  // Bounded against the table's own length, which is the only spelling that is correct on both
+  // targets and cannot drift.
+  //
+  // Reading past the end and testing the result for `undefined` works on a host and **refuses on
+  // a compiled one**: an out-of-range index is a hard failure there, not `undefined`, which the
+  // benchmark found by aborting with `index 55296 is outside [0, 256)` -- 55296 being U+D800, a
+  // lone surrogate, the one input that reaches here from above the table. A separate numeric
+  // bound would work on both but is a second constant that has to agree with the table, and a
+  // sabotage moving it one past the end survived every test. `.length` is not a second constant.
+  if (unit < SHORT_ESCAPES.length) return SHORT_ESCAPES[unit] as string;
   return (
     "\\u" +
     (HEX.charAt((unit >> 12) & 0xf) +
