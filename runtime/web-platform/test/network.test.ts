@@ -1,10 +1,16 @@
-// @ts-nocheck -- 120 errors remain, and they are ordinary annotation work.
+// Typed. The `@ts-nocheck` this carried said the remaining 120 errors were "ordinary annotation
+// work", and most of them were -- but six were annotations that were *wrong* rather than absent,
+// which a file-wide escape hatch cannot tell apart from a file that is merely unfinished:
 //
-// The server harness, the WebSocket peer parser, the frame builder, the zlib helpers and most
-// accumulators are typed. What is left is the long tail: per-test handler callbacks, a few
-// `possibly undefined` index reads, and the response-body narrowings. Nothing here is a
-// decision -- it is unfinished, and this says so rather than letting the `.ts` extension imply
-// a guarantee the file does not have.
+//   `entered: string | undefined`      held a resolve function
+//   `delivered: string[]`              held numbers
+//   `canceled: string[]`               held numbers
+//   `seen: string[]`                   held `PeerFrame`s and was read as `x.payload`
+//   `wireMessages: string[]`           held `Buffer`s
+//   `received: string[]`               held `Uint8Array`s
+//
+// Three deliberate IDL violations remain and carry `@ts-expect-error` with the reason, which is
+// the difference between a file that is unfinished and a file that means it.
 // Adapted from the verified external delivery after removing its synthetic realm API.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -49,6 +55,17 @@ import {
 // so a test reaches them the same way the runtime does.
 import { kStreamDisturbed } from "../src/streams/readable.ts";
 import type { TestContext } from "node:test";
+import type { DeflateRaw, InflateRaw } from "node:zlib";
+import type {
+  SocketIncoming,
+  SocketMessage,
+  WebSocketSession,
+} from "../src/websocket/transport.ts";
+// The platform's own event classes, not the DOM globals: `MessageEvent` here is generic over
+// `WebSocketData` and `CloseEvent` carries `wasClean`, so a test reaching for the ambient ones
+// would assert against a different type than the code produces.
+import type { CloseEvent, MessageEvent } from "../src/core/events.ts";
+import type { WebSocketData } from "../src/websocket/websocket.ts";
 import { jsonObject, must, portOf } from "./harness.ts";
 import type { WebPlatformRuntime } from "../src/provider.ts";
 import type { WebPlatformOptions } from "../src/provider.ts";
@@ -174,7 +191,7 @@ suite("Incremental chunked upload and response with trailers", async (t) => {
   });
   const api = runtime(t);
   let index = 0;
-  const body = new ReadableStream(
+  const body = new ReadableStream<Uint8Array>(
     {
       pull(c) {
         if (index === 3) c.close();
@@ -309,7 +326,7 @@ suite("Early response interrupts an upload awaiting a producer", async (t) => {
   });
   const api = runtime(t);
   let cancelled = false;
-  const body = new ReadableStream(
+  const body = new ReadableStream<Uint8Array>(
     {
       pull() {
         return new Promise(() => {});
@@ -344,7 +361,7 @@ for (const [coding, compress] of [
   ["gzip", gzipSync],
   ["deflate", deflateSync],
   ["br", brotliCompressSync],
-])
+] as readonly (readonly [string, (input: Buffer) => Buffer])[])
   suite("Native compression primitive: " + coding, async (t) => {
     const bytes = compress(Buffer.from("streamed content ".repeat(1000)));
     const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -359,7 +376,7 @@ for (const [coding, compress] of [
 suite("Advertised content codings match the provider and preserve caller policy", async (t) => {
   const observed: string[] = [];
   const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
-    observed.push(req.headers["accept-encoding"]);
+    observed.push(req.headers["accept-encoding"] as string);
     res.end("ok");
   });
   const api = runtime(t);
@@ -418,9 +435,9 @@ suite("HTTP deflate accepts zlib-wrapped and interoperable raw streams", async (
 });
 suite("Content decoders reject corrupt checksums and coded payloads", async (t) => {
   const corruptGzip = gzipSync(Buffer.from("checksum"));
-  corruptGzip[corruptGzip.length - 1] ^= 1;
+  corruptGzip[corruptGzip.length - 1] = (corruptGzip[corruptGzip.length - 1] as number) ^ 1;
   const corruptDeflate = deflateSync(Buffer.from("adler"));
-  corruptDeflate[corruptDeflate.length - 1] ^= 1;
+  corruptDeflate[corruptDeflate.length - 1] = (corruptDeflate[corruptDeflate.length - 1] as number) ^ 1;
   const brotli = brotliCompressSync(Buffer.from("brotli"));
   const corruptBrotli = brotli.subarray(0, brotli.length - 1);
   const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -586,9 +603,15 @@ for (const [name, wire, headError] of [
     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nContent-Length: 1\r\n\r\n",
     false,
   ],
-])
+] as readonly (readonly [string, string, boolean])[])
   suite("Reject malformed HTTP: " + name, async (t) => {
-    const s = await server(t, (socket: net.Socket) => socket.once("data", () => socket.end(wire)), true);
+    const s = await server(
+      t,
+      (socket: net.Socket) => {
+        socket.once("data", () => socket.end(wire));
+      },
+      true,
+    );
     const api = runtime(t);
     if (headError) await assert.rejects(api.fetch(s.url));
     else await assert.rejects((await api.fetch(s.url)).text());
@@ -653,13 +676,13 @@ suite("HTTP timeouts, queued acquisition cancellation and pool shutdown", async 
   await assert.rejects(headers.fetch(never.url));
 });
 suite("ConnectionPool.close interrupts an outstanding connector", async () => {
-  let entered: string | undefined;
+  let entered: (() => void) | undefined;
   const ready = new Promise<void>((resolve) => (entered = resolve));
   let aborted = false;
   const pool = new ConnectionPool(
     {
       connect(_address, signal) {
-        entered();
+        entered?.();
         return new Promise((_r, reject) =>
           signal[abortSignalSubscribe](() => {
             aborted = true;
@@ -690,7 +713,7 @@ suite("ConnectionPool removes canceled waiters without disturbing FIFO order", a
       return Promise.resolve(null);
     }
 
-    write(data) {
+    write(data: Uint8Array) {
       return Promise.resolve(data.length);
     }
 
@@ -707,9 +730,9 @@ suite("ConnectionPool removes canceled waiters without disturbing FIFO order", a
   );
   const address = { hostname: "queue.test", port: 80, secure: false, connectTimeoutMs: 1000 };
   const first = await pool.acquire(address, new AbortController().signal);
-  const delivered: string[] = [];
-  const canceled: string[] = [];
-  const controllers = [];
+  const delivered: number[] = [];
+  const canceled: number[] = [];
+  const controllers: AbortController[] = [];
   const pending = [];
 
   for (let index = 0; index < 2050; index++) {
@@ -733,12 +756,12 @@ suite("ConnectionPool removes canceled waiters without disturbing FIFO order", a
     /Connection pool queue is full/,
   );
 
-  const expectedDelivered = [];
-  const expectedCanceled = [];
+  const expectedDelivered: number[] = [];
+  const expectedCanceled: number[] = [];
   for (let index = 0; index < controllers.length; index++) {
     if (index % 3 === 1) {
       expectedCanceled.push(index);
-      controllers[index].abort(index);
+      (controllers[index] as AbortController).abort(index);
     } else expectedDelivered.push(index);
   }
   assert.equal(pool.stats.pending, expectedDelivered.length);
@@ -753,8 +776,8 @@ suite("ConnectionPool removes canceled waiters without disturbing FIFO order", a
 });
 
 suite("ConnectionPool skips a waiter blocked by its origin cap", async () => {
-  const connections = [];
-  const connectedOrigins = [];
+  const connections: { closed: boolean }[] = [];
+  const connectedOrigins: string[] = [];
   const pool = new ConnectionPool(
     {
       connect(address) {
@@ -762,7 +785,7 @@ suite("ConnectionPool skips a waiter blocked by its origin cap", async () => {
         const connection = {
           closed: false,
           read: () => Promise.resolve(null),
-          write: (data) => Promise.resolve(data.length),
+          write: (data: Uint8Array) => Promise.resolve(data.length),
           close() {
             this.closed = true;
           },
@@ -864,7 +887,7 @@ function peerParser(socket: net.Socket, onFrame: (frame: PeerFrame) => void): vo
   });
 }
 
-function zlibMessage(transform: zlib.Gzip | zlib.Gunzip, input: Uint8Array): Promise<Buffer> {
+function zlibMessage(transform: DeflateRaw | InflateRaw, input: Uint8Array): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     const accept = (chunk: Buffer): number => chunks.push(Buffer.from(chunk));
@@ -875,7 +898,7 @@ function zlibMessage(transform: zlib.Gzip | zlib.Gunzip, input: Uint8Array): Pro
     };
     transform.on("data", accept);
     transform.once("error", fail);
-    transform.write(input, (writeError) => {
+    transform.write(input, (writeError: Error | null | undefined) => {
       if (writeError) {
         fail(writeError);
         return;
@@ -889,12 +912,12 @@ function zlibMessage(transform: zlib.Gzip | zlib.Gunzip, input: Uint8Array): Pro
   });
 }
 
-function stripDeflateTail(bytes) {
+function stripDeflateTail(bytes: Buffer): Buffer {
   assert.deepEqual(bytes.subarray(bytes.length - 4), Buffer.from([0, 0, 255, 255]));
   return bytes.subarray(0, bytes.length - 4);
 }
 
-function deflateMessage(bytes, windowBits = 15) {
+function deflateMessage(bytes: Buffer, windowBits = 15): Buffer {
   return stripDeflateTail(
     deflateRawSync(bytes, {
       finishFlush: zlibConstants.Z_SYNC_FLUSH,
@@ -904,13 +927,17 @@ function deflateMessage(bytes, windowBits = 15) {
   );
 }
 
-function inflateMessage(bytes, windowBits = 15) {
+function inflateMessage(bytes: Buffer, windowBits = 15): Buffer {
   return inflateRawSync(Buffer.concat([bytes, Buffer.from([0, 0, 255, 255])]), {
     finishFlush: zlibConstants.Z_SYNC_FLUSH,
     windowBits,
   });
 }
-async function websocketServer(t, onOpen, { badAccept = false, extra = "", secure = false } = {}) {
+async function websocketServer(
+  t: TestContext,
+  onOpen: (socket: net.Socket, req: http.IncomingMessage) => void,
+  { badAccept = false, extra = "", secure = false } = {},
+) {
   const s = await server(
     t,
     (_req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -944,49 +971,49 @@ function wsEvents(ws: WebSocket) {
       resolve();
     }),
   );
-  const closed = new Promise<void>((resolve) =>
-    ws.addEventListener("close", (event: Event) => {
+  const closed = new Promise<CloseEvent>((resolve) =>
+    ws.addEventListener("close", (event) => {
       log.push("close");
-      resolve(event);
+      resolve(event as unknown as CloseEvent);
     }),
   );
   ws.addEventListener("error", () => log.push("error"));
   return { opened, closed, log };
 }
 
-class ControlledWebSocketSession {
+class ControlledWebSocketSession implements WebSocketSession {
   protocol = "chat";
   extensions = "";
   nextCalls = 0;
-  sent = [];
-  closes = [];
+  sent: SocketMessage[] = [];
+  closes: { code: number | null; reason: string }[] = [];
   aborted = false;
-  incoming = [];
-  reads = [];
-  sendWait = null;
+  incoming: SocketIncoming[] = [];
+  reads: PromiseWithResolvers<SocketIncoming>[] = [];
+  sendWait: PromiseWithResolvers<void> | null = null;
 
-  next() {
+  next(): Promise<SocketIncoming> {
     this.nextCalls++;
     const queued = this.incoming.shift();
     if (queued !== undefined) return Promise.resolve(queued);
-    const result = Promise.withResolvers();
+    const result = Promise.withResolvers<SocketIncoming>();
     this.reads.push(result);
     return result.promise;
   }
 
-  push(value) {
+  push(value: SocketIncoming): void {
     if (value.kind === "close") this.sendWait?.reject(new Error("peer closed during send"));
     const read = this.reads.shift();
     if (read === undefined) this.incoming.push(value);
     else read.resolve(value);
   }
 
-  send(message) {
+  send(message: SocketMessage): Promise<void> {
     this.sent.push(message);
     return this.sendWait?.promise ?? Promise.resolve();
   }
 
-  close(code, reason) {
+  close(code: number | null, reason: string): Promise<void> {
     this.closes.push({ code, reason });
     return Promise.resolve();
   }
@@ -998,7 +1025,7 @@ class ControlledWebSocketSession {
   }
 }
 
-function controlledWebSocketRuntime(t, session = new ControlledWebSocketSession()) {
+function controlledWebSocketRuntime(t: TestContext, session = new ControlledWebSocketSession()) {
   let connects = 0;
   const api = runtime(t, {
     webSocketTransport: {
@@ -1019,11 +1046,13 @@ function controlledWebSocketRuntime(t, session = new ControlledWebSocketSession(
 
 suite("WebSocketError applies close dictionary conversion and validation", (t) => {
   runtime(t);
+  // @ts-expect-error -- a missing required argument is what this asserts on.
   assert.throws(() => new WebSocketStream(), TypeError);
   assert.throws(
     () => new WebSocketStream("invalid:"),
-    (error: unknown) => error.name === "SyntaxError",
+    (error: unknown) => (error as Error).name === "SyntaxError",
   );
+  // @ts-expect-error -- `true` where a dictionary goes is what this asserts on.
   assert.throws(() => new WebSocketStream("ws://example.test", true), TypeError);
   assert.throws(() => new WebSocketStream("ws://example.test", { protocols: "chat" }), TypeError);
 
@@ -1041,12 +1070,12 @@ suite("WebSocketError applies close dictionary conversion and validation", (t) =
   for (const closeCode of [999, 1001, 2999, 5000]) {
     assert.throws(
       () => new WebSocketError("", { closeCode }),
-      (error: unknown) => error.name === "InvalidAccessError",
+      (error: unknown) => (error as Error).name === "InvalidAccessError",
     );
   }
   assert.throws(
     () => new WebSocketError("", { reason: "🔌".repeat(32) }),
-    (error: unknown) => error.name === "SyntaxError",
+    (error: unknown) => (error as Error).name === "SyntaxError",
   );
 });
 
@@ -1138,6 +1167,7 @@ suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => 
   const publicClose = controlledWebSocketRuntime(t);
   const publicStream = new WebSocketStream("ws://example.test/public-close");
   await publicStream.opened;
+  // @ts-expect-error -- `true` where a dictionary goes is what this asserts on.
   assert.throws(() => publicStream.close(true), TypeError);
   publicStream.close({ reason: "because" });
   assert.deepEqual(publicClose.session.closes, [{ code: 1000, reason: "because" }]);
@@ -1198,7 +1228,7 @@ suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => 
   assert.deepEqual(await remoteInfo.readable.getReader().read(), { done: true, value: undefined });
   await assert.rejects(
     remoteInfo.writable.getWriter().ready,
-    (error: unknown) => error.name === "InvalidStateError",
+    (error: unknown) => (error as Error).name === "InvalidStateError",
   );
 
   const unwritten = controlledWebSocketRuntime(t);
@@ -1260,7 +1290,7 @@ suite("WebSocketStream failure identity, handshake abort, and runtime ownership"
   assert.equal(never.connects, 0, "a pre-aborted stream must not invoke the transport");
 
   const duringAbort = new AbortController();
-  const connection = Promise.withResolvers();
+  const connection = Promise.withResolvers<WebSocketSession>();
   runtime(t, {
     webSocketTransport: {
       connect(_handshake, signal) {
@@ -1382,7 +1412,7 @@ suite("permessage-deflate preserves context across fragmented messages", async (
   let messageNumber = 0;
   let opcode = 0;
   let compressed = false;
-  let parts = [];
+  let parts: Buffer[] = [];
   let pong = false;
 
   const s = await websocketServer(
@@ -1457,8 +1487,8 @@ suite("permessage-deflate preserves context across fragmented messages", async (
 
 suite("permessage-deflate resets negotiated contexts and bounds inflation", async (t) => {
   const original = "no context takeover ".repeat(20);
-  const wireMessages: string[] = [];
-  let parts = [];
+  const wireMessages: Buffer[] = [];
+  let parts: Buffer[] = [];
   let compressed = false;
   const s = await websocketServer(
     t,
@@ -1502,13 +1532,13 @@ suite("permessage-deflate resets negotiated contexts and bounds inflation", asyn
   );
   await writer.write("");
   assert.deepEqual(await reader.read(), { done: false, value: "" });
-  assert.equal(wireMessages[2].length <= 1, true, "empty compression adds no data payload");
+  assert.equal((wireMessages[2] as Buffer).length <= 1, true, "empty compression adds no data payload");
   const closing = writer.close();
   await stream.closed;
   await closing;
 
   let closeCode = 0;
-  const receivedClose = Promise.withResolvers();
+  const receivedClose = Promise.withResolvers<void>();
   const bomb = await websocketServer(
     t,
     (socket: net.Socket) => {
@@ -1535,7 +1565,7 @@ suite("permessage-deflate resets negotiated contexts and bounds inflation", asyn
 for (const [name, payload, expectedCode] of [
   ["invalid DEFLATE", Buffer.from([255]), 1002],
   ["invalid decompressed UTF-8", deflateMessage(Buffer.from([255])), 1007],
-]) {
+] as readonly (readonly [string, Buffer, number])[]) {
   suite("permessage-deflate rejects " + name, async (t) => {
     const closeCode = Promise.withResolvers();
     const s = await websocketServer(
@@ -1575,7 +1605,7 @@ suite("WebSocket masked sends, independent echo, subprotocol, clean close", asyn
   assert.throws(() => ws.send("early"));
   await e.opened;
   assert.equal(ws.protocol, "chat");
-  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<MessageEvent<WebSocketData>>((resolve) => (ws.onmessage = resolve));
   ws.send("hello 💙");
   assert.equal(ws.bufferedAmount, 10);
   assert.equal((await message).data, "hello 💙");
@@ -1600,9 +1630,9 @@ suite("WebSocket applies Web IDL conversion before public close validation", asy
 
   assert.throws(
     () => ws.close(4999.5),
-    (error: unknown) => error.name === "InvalidAccessError",
+    (error: unknown) => (error as Error).name === "InvalidAccessError",
   );
-  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<MessageEvent<WebSocketData>>((resolve) => (ws.onmessage = resolve));
   ws.send("\ud800");
   assert.equal((await message).data, "\ufffd");
 
@@ -1613,11 +1643,11 @@ suite("WebSocket applies Web IDL conversion before public close validation", asy
   assert.equal(closed.wasClean, true);
 });
 suite("WebSocket fragmented UTF-8 with interleaved ping and pong", async (t) => {
-  let pong;
-  const pongReceived = new Promise<void>((resolve) => (pong = resolve));
+  let pong: ((text: string) => void) | undefined;
+  const pongReceived = new Promise<string>((resolve) => (pong = resolve));
   const s = await websocketServer(t, (socket: net.Socket) => {
     peerParser(socket, (f: PeerFrame) => {
-      if (f.opcode === 10) pong(f.payload.toString());
+      if (f.opcode === 10) pong?.(f.payload.toString());
       if (f.opcode === 8) socket.end(frame(8, f.payload));
     });
     const bytes = Buffer.from("€💙");
@@ -1632,16 +1662,16 @@ suite("WebSocket fragmented UTF-8 with interleaved ping and pong", async (t) => 
   const api = runtime(t);
   const ws = api.createWebSocket(s.url);
   const e = wsEvents(ws);
-  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<MessageEvent<WebSocketData>>((resolve) => (ws.onmessage = resolve));
   assert.equal((await message).data, "€💙");
   assert.equal(await pongReceived, "ping");
   ws.close(1000);
   await e.closed;
 });
 suite("WebSocket binary snapshots, ordered sends, application send fragmentation", async (t) => {
-  const seen: string[] = [];
-  let done;
-  const all = new Promise((r) => (done = r));
+  const seen: PeerFrame[] = [];
+  let done: (() => void) | undefined;
+  const all = new Promise<void>((r) => (done = r));
   const s = await websocketServer(t, (socket: net.Socket) =>
     peerParser(socket, (f: PeerFrame) => {
       if (f.opcode === 8) {
@@ -1651,7 +1681,7 @@ suite("WebSocket binary snapshots, ordered sends, application send fragmentation
       seen.push(f);
       if (f.fin) {
         socket.write(frame(2, Buffer.concat(seen.map((x) => x.payload))));
-        done();
+        done?.();
       }
     }),
   );
@@ -1660,12 +1690,12 @@ suite("WebSocket binary snapshots, ordered sends, application send fragmentation
   ws.binaryType = "arraybuffer";
   const e = wsEvents(ws);
   await e.opened;
-  const msg = new Promise((r) => (ws.onmessage = r));
+  const msg = new Promise<MessageEvent<WebSocketData>>((r) => (ws.onmessage = r));
   const input = Uint8Array.of(1, 2, 3, 4, 5);
   ws.send(input);
   input.fill(9);
   await all;
-  assert.deepEqual(new Uint8Array((await msg).data), Uint8Array.of(1, 2, 3, 4, 5));
+  assert.deepEqual(new Uint8Array((await msg).data as ArrayBuffer), Uint8Array.of(1, 2, 3, 4, 5));
   assert.deepEqual(
     seen.map((x) => [x.opcode, x.fin]),
     [
@@ -1678,7 +1708,7 @@ suite("WebSocket binary snapshots, ordered sends, application send fragmentation
   await e.closed;
 });
 suite("WebSocket snapshots the exact byte range of every ArrayBufferView", async (t) => {
-  let parts = [];
+  let parts: Buffer[] = [];
   const s = await websocketServer(t, (socket: net.Socket) =>
     peerParser(socket, (incoming: PeerFrame) => {
       if (incoming.opcode === 8) {
@@ -1695,10 +1725,10 @@ suite("WebSocket snapshots the exact byte range of every ArrayBufferView", async
   ws.binaryType = "arraybuffer";
   const events = wsEvents(ws);
   await events.opened;
-  const received: string[] = [];
+  const received: Uint8Array[] = [];
   const complete = new Promise<void>((resolve) => {
     ws.onmessage = (event) => {
-      received.push(new Uint8Array(event.data));
+      received.push(new Uint8Array(event.data as ArrayBuffer));
       if (received.length === 2) resolve();
     };
   });
@@ -1721,7 +1751,7 @@ for (const [name, options] of [
   ["invalid accept", { badAccept: true }],
   ["unsolicited extension", { extra: "Sec-WebSocket-Extensions: permessage-deflate\r\n" }],
   ["unsolicited protocol", { extra: "Sec-WebSocket-Protocol: other\r\n" }],
-])
+] as readonly (readonly [string, { badAccept?: boolean; extra?: string }])[])
   suite("WebSocket rejects " + name, async (t) => {
     const s = await websocketServer(t, () => {}, options);
     const api = runtime(t, name === "unsolicited extension" ? { webSocketDeflate: null } : {});
@@ -1746,14 +1776,19 @@ for (const [name, wire, expected, limits] of [
     1009,
     { maxFragments: 2 },
   ],
-])
+] as readonly (readonly [
+  string,
+  Buffer,
+  number,
+  { maxMessageBytes?: number; maxFragments?: number },
+])[])
   suite("WebSocket protocol failure: " + name, async (t) => {
-    let closeCode;
-    const received = new Promise<void>((resolve) => (closeCode = resolve));
+    let closeCode: ((code: number) => void) | undefined;
+    const received = new Promise<number>((resolve) => (closeCode = resolve));
     const s = await websocketServer(t, (socket: net.Socket) => {
       peerParser(socket, (f: PeerFrame) => {
         if (f.opcode === 8) {
-          closeCode(f.payload.readUInt16BE());
+          closeCode?.(f.payload.readUInt16BE());
           socket.end(frame(8, f.payload));
         }
       });
@@ -1814,7 +1849,7 @@ suite("TLS: HTTPS and WSS trust validation, custom root and hostname mismatch", 
 
 suite("EventSource reconnects through the real HTTP transport", async (t) => {
   let requests = 0;
-  const headers: string[] = [];
+  const headers: http.IncomingHttpHeaders[] = [];
   const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     requests++;
     headers.push(req.headers);
@@ -1830,8 +1865,8 @@ suite("EventSource reconnects through the real HTTP transport", async (t) => {
   });
   const api = runtime(t, { eventSource: { initialReconnectDelayMs: 60_000 } });
   const source = new EventSource(s.url + "/events");
-  const message = Promise.withResolvers();
-  const failed = Promise.withResolvers();
+  const message = Promise.withResolvers<MessageEvent<string>>();
+  const failed = Promise.withResolvers<void>();
   source.onmessage = (event) => message.resolve(event);
   source.onerror = () => {
     if (source.readyState === EventSource.CLOSED) failed.resolve();
@@ -1842,8 +1877,8 @@ suite("EventSource reconnects through the real HTTP transport", async (t) => {
   assert.equal(event.data, "Καλημέρα");
   assert.equal(event.lastEventId, "live-1");
   assert.equal(event.origin, s.url);
-  assert.equal(headers[0].accept, "text/event-stream");
-  assert.equal(headers[0]["last-event-id"], undefined);
-  assert.equal(headers[1]["last-event-id"], "live-1");
+  assert.equal((headers[0] as http.IncomingHttpHeaders).accept, "text/event-stream");
+  assert.equal((headers[0] as http.IncomingHttpHeaders)["last-event-id"], undefined);
+  assert.equal((headers[1] as http.IncomingHttpHeaders)["last-event-id"], "live-1");
   assert.equal(api.http1.pool.stats.idle, 1);
 });
