@@ -51,6 +51,15 @@ let failed = false;
 
 for (const name of modules) {
   const corpus = CORPORA[name];
+  // A corpus whose module is implemented in C behind stand-ins that call node
+  // cannot be run on this lane: it would compare node with node. Skipped out
+  // loud rather than silently, because a missing row and a passing row look the
+  // same in a summary and only one of them is honest.
+  if (corpus !== undefined && corpus.addonOnly === true) {
+    console.log(`  ${name}: skipped on this lane -- its bindings stand in as node here;`);
+    console.log(`      run differential-addon.mjs against the built addon instead`);
+    continue;
+  }
   if (corpus === undefined) {
     console.error(`no corpus for ${name}; add one to differential-corpora.mjs`);
     process.exit(2);

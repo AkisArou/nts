@@ -67,6 +67,13 @@ export const CORPORA = {
   // So the input here is an environment rather than a string: the defect was in
   // which variable was consulted, not in what was done with the value.
   os: {
+    // **Addon-only, and this flag is the whole reason the corpus is honest.**
+    // On the interpreted lane every one of these calls resolves to node's own
+    // `os` through the binding stand-ins, so a TypeScript-lane run would compare
+    // node against node and report zero divergences for ever. That is a green
+    // number that cannot fail -- exactly what this corpus was written to expose
+    // elsewhere -- so `differential-ts.mjs` skips it and says why.
+    addonOnly: true,
     fixed: [
       ["/tmpdir", "/tmp", "/temp"],
       ["", "/tmp", "/temp"],
