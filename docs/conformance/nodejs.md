@@ -4949,6 +4949,33 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Two surfaces that came back clean, which is also a result
+
+**`console`, 21 cases, 0 divergences.** Node formats through one
+`util.formatWithOptions` and indents through one group-depth counter, so upstream
+`group` + `log` + `groupEnd` cannot disagree with `count` about how a line is
+prefixed. Here they are separate methods on a class keeping its own depth. The
+boundaries all hold: `groupEnd` called more times than `group` does not go
+negative, a multi-line string inside a group gets the indent on *every* line,
+`%s` with more arguments than placeholders and with fewer, a literal `100%` with
+no specifier after it, `console.table` given a primitive and given a non-array,
+and `countReset` on a counter that was never started (which warns and continues).
+
+**`readline`, 15 cases, 0 divergences.** Node splits in one place with one
+buffered remainder, so upstream a CRLF arriving in two chunks and one arriving in
+one cannot take different paths. Here the buffering is TypeScript, and every case
+is a chance for the remainder to be dropped, doubled or mis-joined: a CRLF split
+across two chunks **and across three**, a lone CR at end of input, CR-only
+endings, a BOM that must survive into the first line, a NUL inside a line, no
+trailing newline at all, and an entirely empty input that emits *nothing* rather
+than one empty line.
+
+A survey that finds nothing is worth the same as one that finds something,
+provided it could have failed — and both of these are built so a plausible
+mis-implementation fails. The `readline` one in particular splits the same CRLF
+three different ways precisely because a buffer that handles two chunks can still
+lose the middle one.
+
 ## An ordering divergence, recorded rather than pinned
 
 **Node runs all expired timers, then the immediate, and it is stable across five
