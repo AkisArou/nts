@@ -194,6 +194,18 @@ for (const name of names) {
   // reasons that have nothing to do with what they were filed for -- `takes
   // unknown`, `returns Promise<f64[]>`, the export-class arm. Requiring both
   // would keep them red for someone else's blocker.
+  // **All three were controlled on the day they were written**, by pointing
+  // each at something false and checking it said so:
+  //
+  //   once-c    `once-c NtsHeader header;` on duplicate-type-name
+  //             -> REGRESSED, "emitted 3 time(s), not once"
+  //   compiles  added to rc-widened-global-save, which does not compile under
+  //             --rc -> REGRESSED, with the clang error quoted
+  //   lowers    added to weakref-property, which still refuses
+  //             -> REGRESSED, "something refuses again"
+  //
+  // A guard form that has never been seen to fail is worth as little as a
+  // fixture that has never been seen to reproduce.
   const compiles = /^compiles$/.test(wanted);
   const onceC = /^once-c\s+(.+)$/.exec(wanted);
   const lowersOnly = /^lowers$/.test(wanted);
