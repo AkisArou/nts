@@ -51,6 +51,22 @@ FLOOR="assert async_hooks buffer console dgram diagnostics_channel events http n
 # compiler fix away.
 BLOCKED="fs process"
 
+# Bindings that are declared, reached, and have no C anywhere. Measured with
+# `nm -D` on the built artifacts 2026-09-09. Every one of these would abort the
+# process on first call; they are pinned so the set cannot widen unnoticed, not
+# because any of them is acceptable.
+#
+# `nts_async_context_get` is the one that cannot simply be written: it returns
+# an object, so its prototype names a per-program struct that no shared
+# translation unit can spell. See
+# `blockers/binding-returns-program-type`. The other two in that trio take
+# rather than return and are ordinary missing C.
+KNOWN_UNRESOLVED="nts_async_context_get nts_async_context_set nts_on_collected
+nts_net_get_tos nts_net_read_start nts_net_ref nts_net_server_ref
+nts_net_set_keepalive nts_net_set_no_delay nts_net_set_tos
+nts_os_homedir nts_os_hostname nts_os_tmpdir nts_os_uptime
+nts_str_to_lower_case nts_udp_recv_stop nts_udp_ref"
+
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 if [ ! -x "$compiler" ]; then
   echo "  no compiler at $compiler; the compiler lane builds it" >&2
@@ -72,8 +88,46 @@ for module in $FLOOR; do
     # `net`'s TypeScript. A shared object resolves lazily, so nothing before the
     # load says a word, and this floor called it a pass for a day.
     if node -e 'require(process.argv[1])' "$out_dir/$module.node" > /dev/null 2>&1; then
-      echo "builds and loads"
-      built=$((built + 1))
+      # Loading is a weaker statement than it reads, and this line used to be
+      # the whole of it.
+      #
+      # A shared object binds lazily: an undefined function symbol is not an
+      # error until something calls it, so an addon whose bindings have no C
+      # anywhere still initialises and still prints "builds and loads". On
+      # 2026-09-09, `nm -D` said **14 of the 20** were in that state --
+      # `nts_async_context_get`, `nts_async_context_set` and `nts_on_collected`
+      # in every one of them, plus seven `nts_net_*` in `net`, `http` and
+      # `dgram`, and five more in `process`. Each would abort on first call.
+      #
+      # `punycode` is the only module with **zero** undefined symbols, and it is
+      # the only module that passes its tests as a compiled addon. That is not a
+      # coincidence worth much on its own, and it is the kind of corroboration
+      # that makes a new check believable on the day it is added.
+      #
+      # Controlled by removing one symbol from the pinned set: `timers`, `net`
+      # and `process` all reported `UNPINNED: nts_on_collected`, and `punycode`
+      # stayed clean.
+      #
+      # Reported rather than failed, and pinned rather than counted, for the
+      # same reason the ABSENT lists in the surface tests are: a number that
+      # nobody wrote down can grow one at a time and never look like a change.
+      # KNOWN_UNRESOLVED is the set as measured; anything outside it is loud.
+      unresolved=$(nm -D --undefined-only "$out_dir/$module.node" 2>/dev/null |
+        grep -oE '\bnts_[a-z0-9_]+' | sort -u)
+      novel=$(comm -23 <(printf '%s\n' "$unresolved" | grep -v '^$' | sort) \
+                       <(printf '%s\n' $KNOWN_UNRESOLVED | sort))
+      count=$(printf '%s\n' "$unresolved" | grep -c . )
+      if [ -n "$novel" ]; then
+        echo "loads with UNPINNED undefined symbol(s) -- would abort on first call"
+        printf '%s\n' "$novel" | sed 's/^/                         /'
+        failures=$((failures + 1))
+      elif [ "${count:-0}" -gt 0 ]; then
+        echo "builds and loads  [$count undefined, all pinned]"
+        built=$((built + 1))
+      else
+        echo "builds and loads"
+        built=$((built + 1))
+      fi
     else
       echo "BUILDS BUT DOES NOT LOAD"
       node -e 'require(process.argv[1])' "$out_dir/$module.node" 2>&1 |
