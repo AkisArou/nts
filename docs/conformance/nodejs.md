@@ -2816,6 +2816,46 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## A second blind spot, in `shape.mjs` rather than `bindings.node.mjs`
+
+The stand-in blind spot is well recorded here: 64 of 332 stand-ins delegate to
+node's own implementation, so no lane can disagree with node about them. **The
+shape shims have the same failure and it had not been looked for.**
+
+`path/shape.mjs` built the object node's tests see with
+
+    pathVariant(exports, "/", ":")
+
+and used those two literals for `sep` and `delimiter`. The module exports both.
+So every test that read `path.sep` was reading a constant *the harness*
+supplied, and the value under test never reached the object being tested.
+
+Demonstrated in both directions, on the interpreted lane:
+
+    module exports sep = "\\", old shim   21 of 21 passed, 0 failed
+    module exports sep = "\\", new shim    3 failed
+
+`posix.ts` could have shipped a backslash and node's entire suite would have
+agreed with node. Fixed by reading both from the module, with **no fallback** —
+a module that does not export `sep` should fail loudly rather than be handed the
+right answer by its own harness.
+
+### And one that cannot be fixed, now labelled instead
+
+`url/shape.mjs` installs three `Symbol.toStringTag` values. That is a different
+act from the enumerability shaping beside it: enumerability is a descriptor on
+members the module really defines, while a `toStringTag` is a member the
+compiled module does not define at all, because there is no `Symbol.toStringTag`
+in this lowering. `Object.prototype.toString.call(new URL(...))` reads
+`"[object URL]"` because the shim says so — and would read it for any object
+handed to `shape`.
+
+There is no other way to produce it today and node's tests read it, so it stays;
+but it is now named in the file as evidence about the shim rather than about the
+artifact. **A survey of every `shape.mjs` for values it supplies rather than
+passes through belongs on this list**, and `url` and `path` are the only two
+found so far by grep — which is a weaker instrument than the question deserves.
+
 ## `punycode` was already whole, and nothing said so
 
 It has been carried as "green and incomplete — `version` absent". Measured on

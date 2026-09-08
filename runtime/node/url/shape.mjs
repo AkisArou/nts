@@ -82,6 +82,22 @@ function shapeWhatwgClasses(URL, URLSearchParams) {
     "toString",
   ]);
 
+  // The three `Symbol.toStringTag` values below are a different act from the
+  // enumerability shaping above, and the difference is worth stating because a
+  // reader will not see it.
+  //
+  // Enumerability is a *descriptor* on members the module really defines: the
+  // boundary changes how they are described, not whether they exist. A
+  // `toStringTag` is a member the compiled module does not define **at all** --
+  // there is no `Symbol.toStringTag` in this lowering -- so
+  // `Object.prototype.toString.call(new URL(...))` reads `"[object URL]"`
+  // because this file says so, and would read it for any object handed to
+  // `shape`, including one with no URL behaviour whatever.
+  //
+  // So a test asserting the tag is evidence about this shim and not about the
+  // artifact, in the same way `path.sep` was until it was fixed. It is left in
+  // place because there is no other way to produce it today and node's tests
+  // read it, but it is named here so nobody counts it as a passing behaviour.
   Object.defineProperty(URL.prototype, Symbol.toStringTag, {
     configurable: true,
     value: "URL",
