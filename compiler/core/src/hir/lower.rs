@@ -6185,6 +6185,22 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The emitted name of the class this identifier names, where it is
+    /// qualified.
+    ///
+    /// Reads the same map [`Self::class_name_for`] reads, keyed by the same
+    /// node, so a call site and a definition cannot disagree about a name.
+    fn qualified_class_name(&self, identifier: NodeId) -> Option<String> {
+        let symbol = self.node(identifier).symbol?;
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let at = record
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::CLASS_DECLARATION))?;
+        self.qualified.get(&at).cloned()
+    }
+
     /// What a member of this class is named for, in the emitted program.
     ///
     /// A `static` member has no receiver, and TypeScript forbids it from
@@ -16199,11 +16215,22 @@ impl<'a> FuncBuilder<'a> {
             }
             return Ok(object);
         };
-        let owner = self
-            .hierarchy
-            .name
-            .get(&declaring)
-            .cloned()
+        // The same qualification the *definition* side already applies.
+        // `class_name_for` names a member `Frame@a#constructor` whenever the
+        // class name is declared in more than one file -- its own comment says
+        // why, because `dgram` and `net` both export a `Socket`. This named the
+        // callee from the **source text of the identifier**, which is `Frame`,
+        // so the call matched no function at all and `drop_callers_of_refused`
+        // dropped the caller as calling something refused. Nothing was refused.
+        //
+        // Only where the class written at `new` is the one declaring the
+        // constructor. Where it is inherited the definition is named for the
+        // base, and this identifier is the derived class: qualifying by it
+        // would swap one wrong name for another.
+        let owner = Some(declaring)
+            .filter(|declaring| *declaring == type_id)
+            .and_then(|_| self.qualified_class_name(callee))
+            .or_else(|| self.hierarchy.name.get(&declaring).cloned())
             .unwrap_or(class);
 
         let mut args = vec![object];
