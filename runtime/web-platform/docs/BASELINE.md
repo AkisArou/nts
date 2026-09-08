@@ -6657,3 +6657,73 @@ cost, and it is not made here.
 Verified rather than assumed: 831 of 831 host tests pass, the upstream corpus is unchanged at
 2,768 of 2,776, and a sabotage still fails the suite while the no-mutation control is still
 refused.
+
+## The JSON parser, and the three refusals that stop it compiling
+
+The first slice of the canonical JSON implementation: the erased tagged graph and a parser
+that produces it. `JSON.parse`'s public surface, the reviver, and the stringifier are not here
+yet.
+
+ECMA-262 clause 25.5 is pinned at `runtime/web-platform/third_party/ecma262/json-25.5.txt`
+with its source hash, so a cited step can be checked without a network round trip and a later
+editorial change is a visible diff. The retrieved edition already carries `JSON.rawJSON`,
+`JSON.isRawJSON`, `ParseJSON`, the JSON Parse Record and the source-text-aware
+`InternalizeJSONProperty` — *json-parse-with-source* is merged, so it is one pinned source
+rather than a base text plus a proposal.
+
+**No recursion.** The plan requires an explicit work stack so that a provider's thread stack
+cannot choose observable behaviour; a test parses 100,000 nested arrays, which a
+recursive-descent parser cannot survive on any of the three targets.
+
+**Key order is `OrdinaryOwnPropertyKeys`**, not insertion order: canonical array-index names
+first in ascending numeric order, then the rest as they arrived. `"01"`, `"-1"`, `"1.5"` and
+`"4294967295"` stay in the string bucket; `"4294967294"` is 2^32 - 2 and does not. A repeated
+key takes the later value and keeps the earlier position.
+
+**A lone surrogate survives.** `"\ud800"` parses to that code unit rather than U+FFFD, checked
+by code unit rather than by a comparison two replacement characters would also pass.
+
+### The corpus that does the work is the invalid one
+
+Forty-seven inputs that JavaScript accepts and JSON does not — `NaN`, `Infinity`, `+1`, `01`,
+`.5`, `5.`, `0x10`, `1_000`, `{a:1}`, `{'a':1}`, trailing commas, comments, and the three
+space-like characters that are not JSON whitespace. Each is asserted to throw **and** asserted
+that node throws for it too, which is the control: without the second half the suite only says
+the parser is strict, and a parser that rejected everything would pass.
+
+Five sabotages, all caught. The first attempt at them was **refused five times by
+`sabotage-run.sh`** — and the refusal was right for a reason I had not built for: `git diff` is
+silent about an untracked file whether or not it was mutated, so the guard hardened yesterday
+was vacuous for a new module, which is exactly where new work happens. It takes `path=pristine`
+now, and both refusals are verified.
+
+**And one test failure was mine, not the parser's.** `{"__proto__":1}` disagreed with node
+because the test helper built objects with assignment; 25.5.2 builds them with
+`CreateDataPropertyOrThrow`, and `out["__proto__"] = v` sets a prototype and creates no own
+property. That case is in the corpus for exactly this reason and it earned its place on the
+first run.
+
+### It does not compile yet, and the three reasons are worth reporting
+
+Nine primary refusals, measured against a baseline on the same pinned binary:
+
+- **`new SyntaxError(...)` is unrepresentable** — eight of the nine, as `a call result of
+  unrepresentable type` and `a function returning SyntaxError`. `JSON.parse` cannot throw the
+  error the specification requires. An earlier draft declared `JsonSyntaxError extends
+  SyntaxError`, which is refused as well; that class was an invention of mine and dropping it
+  for a plain `SyntaxError` is a correction rather than a concession — the refusal is
+  unaffected either way.
+- **`Array.prototype.sort` with a comparator is refused** — the ninth. Used once, to order
+  index keys numerically. Left in place: hand-rolling a sort to dodge the diagnostic is the
+  workaround this lane does not make.
+- **`Number(string)` is refused**, and it is *latent* rather than counted. `readNumber` is
+  already refused at its first `this.fail(...)` call, so lowering never reaches the conversion.
+  A probe confirms it: adding one reachable `Number(text)` moves the frontier by exactly one.
+  **It will surface the moment `SyntaxError` is fixed**, so the count is expected to rise
+  rather than fall on that repair.
+
+Two things were changed rather than reported, because both are corrections: the plain
+`SyntaxError` above, and matching literal words by code unit instead of `startsWith(word, at)`,
+which is the more natural spelling in a scanner and avoids substring semantics entirely.
+
+831/831 host, upstream unchanged at 2,768 of 2,776, frontier 1,428 to 1,437 primaries.

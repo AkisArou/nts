@@ -1,0 +1,896 @@
+id=sec-json-object>
+
+25.5 The JSON Object
+
+
+The JSON object:
+
+
+
+ * is %JSON%.
+
+ * is the initial value of the "JSON" property of the global object.
+
+ * is an ordinary object.
+
+ * contains two functions, parse and stringify, that are used to parse and construct JSON texts.
+
+ * has a [[Prototype]] internal slot whose value is %Object.prototype%.
+
+ * does not have a [[Construct]] internal method; it cannot be used as a constructor with the new operator.
+
+ * does not have a [[Call]] internal method; it cannot be invoked as a function.
+
+
+The JSON Data Interchange Format is defined in ECMA-404. The JSON interchange format used in this specification is exactly that described by ECMA-404. Conforming implementations of JSON.parse and JSON.stringify must support the exact interchange format described in ECMA-404 without any deletions or extensions to the format.
+
+
+
+
+25.5.1 JSON.isRawJSON ( obj )
+
+
+This function performs the following steps when called:
+
+
+
+ * If obj is an Object and obj has an [[IsRawJSON]] internal slot, return true.
+ * Return false.
+
+
+
+
+
+25.5.2 JSON.parse ( text [ , reviver ] )
+
+
+This function parses a JSON text (a JSON-formatted String) and produces an ECMAScript language value. The JSON format represents literals, arrays, and objects with a syntax similar to the syntax for ECMAScript literals, Array Initializers, and Object Initializers. After parsing, JSON objects are realized as ECMAScript objects. JSON arrays are realized as ECMAScript Array instances. JSON strings, numbers, booleans, and null are realized as ECMAScript Strings, Numbers, Booleans, and null.
+
+
+The optional reviver parameter is a function that can filter and transform the results. For each value produced by the parse, reviver is called with three arguments (the associated property key, the value, and a context object). If the property is unmodified and its value is primitive, the provided context object has a "source" property containing source text of the corresponding Parse Node. If the call returns undefined, the property is deleted. Otherwise, the property is redefined to use the return value.
+
+
+
+ * Let jsonString be ? ToString(text).
+ * Let parseResult be ? ParseJSON(jsonString).
+ * Let unfiltered be parseResult.[[Value]].
+ * If IsCallable(reviver) is false, return unfiltered.
+ * Let root be OrdinaryObjectCreate(%Object.prototype%).
+ * Let rootName be the empty String.
+ * Perform ! CreateDataPropertyOrThrow(root, rootName, unfiltered).
+ * Let snapshot be CreateJSONParseRecord(parseResult.[[ParseNode]], rootName, unfiltered).
+ * Return ? InternalizeJSONProperty(root, rootName, reviver, snapshot).
+
+The "length" property of this function is 2𝔽.
+
+
+
+
+25.5.2.1 ParseJSON ( text )
+
+
+The abstract operation ParseJSON takes argument text (a String) and returns either a normal completion containing a Record with fields [[ParseNode]] (a Parse Node) and [[Value]] (an ECMAScript language value), or a throw completion. It performs the following steps when called:
+
+
+
+ * If StringToCodePoints(text) is not a valid JSON text as specified in ECMA-404, throw a SyntaxError exception.
+ * Let scriptString be the string-concatenation of "(", text, and ");".
+ * Let script be ParseText(scriptString, Script).
+ * NOTE: The early error rules defined in 13.2.5.1 have special handling for the above invocation of ParseText.
+ * Assert: script is a Parse Node.
+ * Let result be ! Evaluation of script.
+ * NOTE: The PropertyDefinitionEvaluation semantics defined in 13.2.5.6 have special handling for the above evaluation.
+ * Assert: result is either a String, a Number, a Boolean, an Object that is defined by either an ArrayLiteral or an ObjectLiteral, or null.
+ * Return the Record { [[ParseNode]]: script, [[Value]]: result }.
+
+It is not permitted for a conforming implementation of JSON.parse to extend the JSON grammars. If an implementation wishes to support a modified or extended JSON interchange format it must do so by defining a different parse function.
+
+ Note 1
+
+Valid JSON text is a subset of the ECMAScript PrimaryExpression syntax. Step 1 verifies that jsonString conforms to that subset, and step 8 asserts that evaluation returns a value of an appropriate type.
+
+
+However, because 13.2.5.6 behaves differently during ParseJSON, the same source text can produce different results when evaluated as a PrimaryExpression rather than as JSON. Furthermore, the Early Error for duplicate "__proto__" properties in object literals, which likewise does not apply during ParseJSON, means that not all texts accepted by ParseJSON are valid as a PrimaryExpression, despite matching the grammar.
+
+
+ Note 2
+
+In the case where there are duplicate name Strings within an object, lexically preceding values for the same key shall be overwritten.
+
+
+
+
+
+
+
+25.5.2.2 JSON Parse Record
+
+
+A JSON Parse Record is a Record used to describe the initial state of a value parsed from JSON text.
+
+
+JSON Parse Records have the fields listed in Table 76.
+
+
+Table 76: JSON Parse Record Fields
+
+
+
+
+ Field Name
+ Value
+ Meaning
+
+
+
+
+ | [[ParseNode]]
+ | a Parse Node
+ | The context Parse Node.
+
+
+
+
+ | [[Key]]
+ | a property name
+ | The property name with which [[Value]] is associated.
+
+
+
+
+ | [[Value]]
+ | an ECMAScript language value
+ | The value produced by evaluation of [[ParseNode]].
+
+
+
+
+ | [[Elements]]
+ | a List of JSON Parse Records
+ | If [[Value]] is an Array, this contains the JSON Parse Records corresponding with the elements of [[Value]]. Otherwise, this is an empty List.
+
+
+
+
+ | [[Entries]]
+ | a List of JSON Parse Records
+ | If [[Value]] is a non-Array Object, this contains the JSON Parse Records corresponding with the entries of [[Value]]. Otherwise, this is an empty List.
+
+
+
+
+
+
+
+
+
+
+
+25.5.2.3 CreateJSONParseRecord ( parseNode, key, value )
+
+
+The abstract operation CreateJSONParseRecord takes arguments parseNode (a Parse Node), key (a property name), and value (an ECMAScript language value) and returns a JSON Parse Record. It recursively combines a parseNode parsed from JSON text and the value produced by its evaluation. It performs the following steps when called:
+
+
+
+ * Let typedValueNode be ShallowestContainedJSONValue(parseNode).
+ * Assert: typedValueNode is not empty.
+ * Let elements be a new empty List.
+ * Let entries be a new empty List.
+ * If value is an Object, then
+ * Let isArray be ! IsArray(value).
+ * If isArray is true, then
+ * Assert: typedValueNode is an ArrayLiteral Parse Node.
+ * Let contentNodes be the JSONArrayLiteralContentNodes of typedValueNode.
+ * Let length be the number of elements in contentNodes.
+ * Let valueLength be ! LengthOfArrayLike(value).
+ * Assert: valueLength is length.
+ * Let index be 0.
+ * Repeat, while index < length,
+ * Let propertyName be ! ToString(𝔽(index)).
+ * Let elementParseRecord be CreateJSONParseRecord(contentNodes[index], propertyName, ! Get(value, propertyName)).
+ * Append elementParseRecord to elements.
+ * Set index to index + 1.
+ * Else,
+ * Assert: typedValueNode is an ObjectLiteral Parse Node.
+ * Let propertyNodes be the PropertyDefinitionNodes of typedValueNode.
+ * NOTE: Because value was produced from JSON text and has not been modified, all of its property keys are Strings and will be exhaustively enumerated.
+ * Let keys be ! EnumerableOwnProperties(value, key).
+ * For each String propertyKey of keys, do
+ * NOTE: In the case of JSON text specifying multiple name/value pairs with the same name for a single object (such as {"a":"lost","a":"kept"}), the value for the corresponding property of the resulting ECMAScript object is specified by the last pair with that name.
+ * Let propertyDefinition be empty.
+ * For each Parse Node propertyNode of propertyNodes, do
+ * Let propertyName be the PropName of propertyNode.
+ * If propertyName is propertyKey, set propertyDefinition to propertyNode.
+ * Assert: propertyDefinition is
+ PropertyDefinition :
+ PropertyName
+ :
+ AssignmentExpression
+
+
+.
+ * Let propertyValueNode be the AssignmentExpression of propertyDefinition.
+ * Let entryParseRecord be CreateJSONParseRecord(propertyValueNode, propertyKey, ! Get(value, propertyKey)).
+ * Append entryParseRecord to entries.
+ * Else,
+ * Assert: typedValueNode is neither an ArrayLiteral Parse Node nor an ObjectLiteral Parse Node.
+ * Return the JSON Parse Record { [[ParseNode]]: typedValueNode, [[Key]]: key, [[Value]]: value, [[Elements]]: elements, [[Entries]]: entries }.
+
+
+
+
+
+25.5.2.4 InternalizeJSONProperty ( holder, name, reviver, parseRecord )
+
+
+The abstract operation InternalizeJSONProperty takes arguments holder (an Object), name (a String), reviver (a function object), and parseRecord (a JSON Parse Record or empty) and returns either a normal completion containing an ECMAScript language value or a throw completion.
+
+ Note
+
+This algorithm intentionally does not throw an exception if either [[Delete]] or CreateDataProperty return false.
+
+
+
+It performs the following steps when called:
+
+
+
+ * Let value be ? Get(holder, name).
+ * Let context be OrdinaryObjectCreate(%Object.prototype%).
+ * If parseRecord is a JSON Parse Record and SameValue(parseRecord.[[Value]], value) is true, then
+ * If value is not an Object, then
+ * Let parseNode be parseRecord.[[ParseNode]].
+ * Assert: parseNode is neither an ArrayLiteral Parse Node nor an ObjectLiteral Parse Node.
+ * Let sourceText be the source text matched by parseNode.
+ * Perform ! CreateDataPropertyOrThrow(context, "source", CodePointsToString(sourceText)).
+ * Let elementRecords be parseRecord.[[Elements]].
+ * Let entryRecords be parseRecord.[[Entries]].
+ * Else,
+ * Let elementRecords be a new empty List.
+ * Let entryRecords be a new empty List.
+ * If value is an Object, then
+ * Let isArray be ? IsArray(value).
+ * If isArray is true, then
+ * Let elementRecordsLength be the number of elements in elementRecords.
+ * Let length be ? LengthOfArrayLike(value).
+ * Let index be 0.
+ * Repeat, while index < length,
+ * Let propertyKey be ! ToString(𝔽(index)).
+ * If index < elementRecordsLength, let elementRecord be elementRecords[index]; else let elementRecord be empty.
+ * Let newElement be ? InternalizeJSONProperty(value, propertyKey, reviver, elementRecord).
+ * If newElement is undefined, then
+ * Perform ? value.[[Delete]](propertyKey).
+ * Else,
+ * Perform ? CreateDataProperty(value, propertyKey, newElement).
+ * Set index to index + 1.
+ * Else,
+ * Let keys be ? EnumerableOwnProperties(value, key).
+ * For each String propertyKey of keys, do
+ * If there exists an element entry of entryRecords such that entry.[[Key]] is propertyKey, let entryRecord be entry; else let entryRecord be empty.
+ * Let newElement be ? InternalizeJSONProperty(value, propertyKey, reviver, entryRecord).
+ * If newElement is undefined, then
+ * Perform ? value.[[Delete]](propertyKey).
+ * Else,
+ * Perform ? CreateDataProperty(value, propertyKey, newElement).
+ * Return ? Call(reviver, holder, « name, value, context »).
+
+
+
+
+
+25.5.2.5 Static Semantics: ShallowestContainedJSONValue ( root )
+
+
+The abstract operation ShallowestContainedJSONValue takes argument root (a Parse Node) and returns a Parse Node or empty. It performs a breadth-first search of the parse tree rooted at root, and returns the first node that is an instance of a nonterminal corresponding to a JSON value, or empty if there is no such node. It performs the following steps when called:
+
+
+
+ * Let activeFunc be the active function object.
+ * Assert: activeFunc is a JSON.parse built-in function object (see JSON.parse).
+ * Let types be « NullLiteral, BooleanLiteral, NumericLiteral, StringLiteral, ArrayLiteral, ObjectLiteral, UnaryExpression ».
+ * Let unaryExpr be empty.
+ * Let queue be « root ».
+ * Repeat, while queue is not empty,
+ * Let candidate be the first element of queue.
+ * Remove the first element from queue.
+ * Let queuedChildren be false.
+ * For each nonterminal type of types, do
+ * If candidate is an instance of type, then
+ * NOTE: In the JSON grammar, a number token may represent a negative value. In ECMAScript, negation is represented as a unary operation in which a UnaryExpression parses to a - followed by a derived UnaryExpression.
+ * If type is UnaryExpression, then
+ * If the parent of candidate is not a UnaryExpression Parse Node, set unaryExpr to candidate.
+ * Else if type is NumericLiteral, then
+ * Assert: candidate is contained within unaryExpr.
+ * Return unaryExpr.
+ * Else,
+ * Return candidate.
+ * If queuedChildren is false, candidate is an instance of a nonterminal, and candidate Contains type is true, then
+ * Let children be a List containing each child node of candidate, in order.
+ * Set queue to the list-concatenation of queue and children.
+ * Set queuedChildren to true.
+ * Return empty.
+
+
+
+
+
+25.5.2.6 Static Semantics: JSONArrayLiteralContentNodes
+
+
+The syntax-directed operation JSONArrayLiteralContentNodes takes no arguments and returns a List of Parse Nodes. It is defined piecewise over the following productions:
+
+
+ ArrayLiteral :
+ [
+ Elisionopt
+ ]
+
+
+ [
+ ElementList
+ ]
+
+
+ [
+ ElementList
+ ,
+ Elisionopt
+ ]
+
+
+
+
+ * Assert: Elision is not present.
+ * If ElementList is not present, return a new empty List.
+ * Return the JSONArrayLiteralContentNodes of ElementList.
+
+
+ ElementList :
+ Elisionopt
+ AssignmentExpression
+
+
+
+
+ * Assert: Elision is not present.
+ * Return « AssignmentExpression ».
+
+
+ ElementList :
+ ElementList
+ ,
+ Elisionopt
+ AssignmentExpression
+
+
+
+
+ * Assert: Elision is not present.
+ * Let elements be the JSONArrayLiteralContentNodes of the derived ElementList.
+ * Return the list-concatenation of elements and « AssignmentExpression ».
+
+
+ ElementList :
+ Elisionopt
+ SpreadElement
+
+
+ ElementList
+ ,
+ Elisionopt
+ SpreadElement
+
+
+
+
+ * NOTE: JSON text as specified in ECMA-404 does not include SpreadElement.
+ * Assert: This step is never reached.
+
+
+
+
+
+
+
+25.5.3 JSON.rawJSON ( text )
+
+
+This function returns an object representing raw JSON text of a string, number, boolean, or null value.
+
+
+
+ * Let jsonString be ? ToString(text).
+ * If jsonString is the empty String, throw a SyntaxError exception.
+ * If the first code unit of jsonString is not either an ASCII lowercase letter code unit (0x0061 through 0x007A, inclusive), an ASCII digit code unit (0x0030 through 0x0039, inclusive), 0x0022 (QUOTATION MARK), or 0x002D (HYPHEN-MINUS), throw a SyntaxError exception.
+ * If the last code unit of jsonString is not either an ASCII lowercase letter code unit (0x0061 through 0x007A, inclusive), an ASCII digit code unit (0x0030 through 0x0039, inclusive), or 0x0022 (QUOTATION MARK), throw a SyntaxError exception.
+ * Let parseResult be ? ParseJSON(jsonString).
+ * Assert: parseResult.[[Value]] is either a String, a Number, a Boolean, or null.
+ * Let internalSlotsList be « [[IsRawJSON]] ».
+ * Let obj be OrdinaryObjectCreate(null, internalSlotsList).
+ * Perform ! CreateDataPropertyOrThrow(obj, "rawJSON", jsonString).
+ * Perform ! SetIntegrityLevel(obj, frozen).
+ * Return obj.
+
+
+
+
+
+25.5.4 JSON.stringify ( value [ , replacer [ , space ] ] )
+
+
+This function returns a String in UTF-16 encoded JSON format representing an ECMAScript language value, or undefined. It can take three parameters. The value parameter is an ECMAScript language value, which is usually an object or array, although it can also be a String, Boolean, Number or null. The optional replacer parameter is either a function that alters the way objects and arrays are stringified, or an array of Strings and Numbers that acts as an inclusion list for selecting the object properties that will be stringified. The optional space parameter is a String or Number that allows the result to have white space injected into it to improve human readability.
+
+
+It performs the following steps when called:
+
+
+
+ * Let stack be a new empty List.
+ * Let indent be the empty String.
+ * Let propertyList be undefined.
+ * Let replacerFunc be undefined.
+ * If replacer is an Object, then
+ * If IsCallable(replacer) is true, then
+ * Set replacerFunc to replacer.
+ * Else,
+ * Let isArray be ? IsArray(replacer).
+ * If isArray is true, then
+ * Set propertyList to a new empty List.
+ * Let length be ? LengthOfArrayLike(replacer).
+ * Let k be 0.
+ * Repeat, while k < length,
+ * Let propertyKey be ! ToString(𝔽(k)).
+ * Let propertyValue be ? Get(replacer, propertyKey).
+ * Let item be undefined.
+ * If propertyValue is a String, then
+ * Set item to propertyValue.
+ * Else if propertyValue is a Number, then
+ * Set item to ! ToString(propertyValue).
+ * Else if propertyValue is an Object, then
+ * If propertyValue has a [[StringData]] or [[NumberData]] internal slot, set item to ? ToString(propertyValue).
+ * If item is not undefined and propertyList does not contain item, then
+ * Append item to propertyList.
+ * Set k to k + 1.
+ * If space is an Object, then
+ * If space has a [[NumberData]] internal slot, then
+ * Set space to ? ToNumber(space).
+ * Else if space has a [[StringData]] internal slot, then
+ * Set space to ? ToString(space).
+ * If space is a Number, then
+ * Let spaceMV be ! ToIntegerOrInfinity(space).
+ * Set spaceMV to min(10, spaceMV).
+ * If spaceMV < 1, let gap be the empty String; else let gap be the String value containing spaceMV occurrences of the code unit 0x0020 (SPACE).
+ * Else if space is a String, then
+ * If the length of space ≤ 10, let gap be space; else let gap be the substring of space from 0 to 10.
+ * Else,
+ * Let gap be the empty String.
+ * Let wrapper be OrdinaryObjectCreate(%Object.prototype%).
+ * Perform ! CreateDataPropertyOrThrow(wrapper, the empty String, value).
+ * Let state be the JSON Serialization Record { [[ReplacerFunction]]: replacerFunc, [[Stack]]: stack, [[Indent]]: indent, [[Gap]]: gap, [[PropertyList]]: propertyList }.
+ * Return ? SerializeJSONProperty(state, the empty String, wrapper).
+
+The "length" property of this function is 3𝔽.
+
+ Note 1
+
+JSON structures are allowed to be nested to any depth, but they must be acyclic. If value is or contains a cyclic structure, then this function must throw a TypeError exception. This is an example of a value that cannot be stringified:
+
+
+a = [];
+a[0] = a;
+my_text = JSON.stringify(a); // This must throw a TypeError.
+
+
+ Note 2
+
+Symbolic primitive values are rendered as follows:
+
+
+
+ *
+ The null value is rendered in JSON text as the String value "null".
+
+
+ *
+ The undefined value is not rendered.
+
+
+ *
+ The true value is rendered in JSON text as the String value "true".
+
+
+ *
+ The false value is rendered in JSON text as the String value "false".
+
+
+
+ Note 3
+
+String values are wrapped in QUOTATION MARK (") code units. The code units " and \ are escaped with \ prefixes. Control characters code units are replaced with escape sequences \uHHHH, or with the shorter forms, \b (BACKSPACE), \f (FORM FEED), \n (LINE FEED), \r (CARRIAGE RETURN), \t (CHARACTER TABULATION).
+
+
+ Note 4
+
+Finite numbers are stringified as if by calling ToString(number). NaN and Infinity regardless of sign are represented as the String value "null".
+
+
+ Note 5
+
+Values that do not have a JSON representation (such as undefined and functions) do not produce a String. Instead they produce the undefined value. In arrays these values are represented as the String value "null". In objects an unrepresentable value causes the property to be excluded from stringification.
+
+
+ Note 6
+
+An object is rendered as U+007B (LEFT CURLY BRACKET) followed by zero or more properties, separated with a U+002C (COMMA), closed with a U+007D (RIGHT CURLY BRACKET). A property is a quoted String representing the property name, a U+003A (COLON), and then the stringified property value. An array is rendered as an opening U+005B (LEFT SQUARE BRACKET) followed by zero or more values, separated with a U+002C (COMMA), closed with a U+005D (RIGHT SQUARE BRACKET).
+
+
+
+
+
+
+25.5.4.1 JSON Serialization Record
+
+
+A JSON Serialization Record is a Record used to enable serialization to the JSON format.
+
+
+JSON Serialization Records have the fields listed in Table 77.
+
+
+Table 77: JSON Serialization Record Fields
+
+
+
+
+
+ Field Name
+ Value
+ Meaning
+
+
+
+
+
+ | [[ReplacerFunction]]
+ | a function object or undefined
+ | A function that can supply replacement values for object properties (from JSON.stringify's replacer parameter).
+
+
+
+
+ | [[PropertyList]]
+ | either a List of Strings or undefined
+ | The names of properties to include when serializing a non-array object (from JSON.stringify's replacer parameter).
+
+
+
+
+ | [[Gap]]
+ | a String
+ | The unit of indentation (from JSON.stringify's space parameter).
+
+
+
+
+ | [[Stack]]
+ | a List of Objects
+ | The set of nested objects that are in the process of being serialized. Used to detect cyclic structures.
+
+
+
+
+ | [[Indent]]
+ | a String
+ | The current indentation.
+
+
+
+
+
+
+
+
+
+
+
+25.5.4.2 SerializeJSONProperty ( state, key, holder )
+
+
+The abstract operation SerializeJSONProperty takes arguments state (a JSON Serialization Record), key (a String), and holder (an Object) and returns either a normal completion containing either a String or undefined, or a throw completion. It performs the following steps when called:
+
+
+
+ * Let value be ? Get(holder, key).
+ * If value is an Object or value is a BigInt, then
+ * Let toJSON be ? GetV(value, "toJSON").
+ * If IsCallable(toJSON) is true, then
+ * Set value to ? Call(toJSON, value, « key »).
+ * If state.[[ReplacerFunction]] is not undefined, then
+ * Set value to ? Call(state.[[ReplacerFunction]], holder, « key, value »).
+ * If value is an Object, then
+ * If value has an [[IsRawJSON]] internal slot, then
+ * Let rawJSON be ! Get(value, "rawJSON").
+ * Assert: rawJSON is a String.
+ * Return rawJSON.
+ * If value has a [[NumberData]] internal slot, then
+ * Set value to ? ToNumber(value).
+ * Else if value has a [[StringData]] internal slot, then
+ * Set value to ? ToString(value).
+ * Else if value has a [[BooleanData]] internal slot, then
+ * Set value to value.[[BooleanData]].
+ * Else if value has a [[BigIntData]] internal slot, then
+ * Set value to value.[[BigIntData]].
+ * If value is null, return "null".
+ * If value is true, return "true".
+ * If value is false, return "false".
+ * If value is a String, return QuoteJSONString(value).
+ * If value is a Number, then
+ * If value is finite, return ! ToString(value).
+ * Return "null".
+ * If value is a BigInt, throw a TypeError exception.
+ * If value is an Object and IsCallable(value) is false, then
+ * Let isArray be ? IsArray(value).
+ * If isArray is true, then
+ * Return ? SerializeJSONArray(state, value).
+ * Return ? SerializeJSONObject(state, value).
+ * Return undefined.
+
+
+
+
+
+25.5.4.3 QuoteJSONString ( value )
+
+
+The abstract operation QuoteJSONString takes argument value (a String) and returns a String. It wraps value in 0x0022 (QUOTATION MARK) code units and escapes certain other code units within it. This operation interprets value as a sequence of UTF-16 encoded code points, as described in 6.1.4. It performs the following steps when called:
+
+
+
+ * Let product be the String value consisting solely of the code unit 0x0022 (QUOTATION MARK).
+ * For each code point codePoint of StringToCodePoints(value), do
+ * If codePoint is listed in the “Code Point” column of Table 78, then
+ * Set product to the string-concatenation of product and the escape sequence for codePoint as specified in the “Escape Sequence” column of the corresponding row.
+ * Else if codePoint has a numeric value less than 0x0020 (SPACE) or codePoint has the same numeric value as a leading surrogate or trailing surrogate, then
+ * Let unit be the code unit whose numeric value is the numeric value of codePoint.
+ * Set product to the string-concatenation of product and UnicodeEscape(unit).
+ * Else,
+ * Set product to the string-concatenation of product and UTF16EncodeCodePoint(codePoint).
+ * Set product to the string-concatenation of product and the code unit 0x0022 (QUOTATION MARK).
+ * Return product.
+
+Table 78: JSON Single Character Escape Sequences
+
+
+
+
+
+
+ Code Point
+
+
+ Unicode Character Name
+
+
+ Escape Sequence
+
+
+
+
+
+
+ |
+ U+0008
+
+ |
+ BACKSPACE
+
+ |
+ \b
+
+
+
+
+
+ |
+ U+0009
+
+ |
+ CHARACTER TABULATION
+
+ |
+ \t
+
+
+
+
+
+ |
+ U+000A
+
+ |
+ LINE FEED (LF)
+
+ |
+ \n
+
+
+
+
+
+ |
+ U+000C
+
+ |
+ FORM FEED (FF)
+
+ |
+ \f
+
+
+
+
+
+ |
+ U+000D
+
+ |
+ CARRIAGE RETURN (CR)
+
+ |
+ \r
+
+
+
+
+
+ |
+ U+0022
+
+ |
+ QUOTATION MARK
+
+ |
+ \"
+
+
+
+
+
+ |
+ U+005C
+
+ |
+ REVERSE SOLIDUS
+
+ |
+ \\
+
+
+
+
+
+
+
+
+
+
+
+
+25.5.4.4 UnicodeEscape ( codeUnit )
+
+
+The abstract operation UnicodeEscape takes argument codeUnit (a code unit) and returns a String. It represents codeUnit as a Unicode escape sequence. It performs the following steps when called:
+
+
+
+ * Let n be the numeric value of codeUnit.
+ * Assert: n ≤ 0xFFFF.
+ * Let hex be the String representation of n, formatted as a lowercase hexadecimal number.
+ * Return the string-concatenation of the code unit 0x005C (REVERSE SOLIDUS), "u", and StringPad(hex, 4, "0", start).
+
+
+
+
+
+25.5.4.5 SerializeJSONObject ( state, value )
+
+
+The abstract operation SerializeJSONObject takes arguments state (a JSON Serialization Record) and value (an Object) and returns either a normal completion containing a String or a throw completion. It serializes an object. It performs the following steps when called:
+
+
+
+ * If state.[[Stack]] contains value, throw a TypeError exception because the structure is cyclical.
+ * Append value to state.[[Stack]].
+ * Let stepBack be state.[[Indent]].
+ * Set state.[[Indent]] to the string-concatenation of state.[[Indent]] and state.[[Gap]].
+ * If state.[[PropertyList]] is not undefined, then
+ * Let keys be state.[[PropertyList]].
+ * Else,
+ * Let keys be ? EnumerableOwnProperties(value, key).
+ * Let partial be a new empty List.
+ * For each element propertyKey of keys, do
+ * Let stringP be ? SerializeJSONProperty(state, propertyKey, value).
+ * If stringP is not undefined, then
+ * Let member be QuoteJSONString(propertyKey).
+ * Set member to the string-concatenation of member and ":".
+ * If state.[[Gap]] is not the empty String, then
+ * Set member to the string-concatenation of member and the code unit 0x0020 (SPACE).
+ * Set member to the string-concatenation of member and stringP.
+ * Append member to partial.
+ * If partial is empty, then
+ * Let final be "{}".
+ * Else,
+ * If state.[[Gap]] is the empty String, then
+ * Let properties be the String value formed by concatenating all the element Strings of partial with each adjacent pair of Strings separated with the code unit 0x002C (COMMA). A comma is not inserted either before the first String or after the last String.
+ * Let final be the string-concatenation of "{", properties, and "}".
+ * Else,
+ * Let separator be the string-concatenation of the code unit 0x002C (COMMA), the code unit 0x000A (LINE FEED), and state.[[Indent]].
+ * Let properties be the String value formed by concatenating all the element Strings of partial with each adjacent pair of Strings separated with separator. The separator String is not inserted either before the first String or after the last String.
+ * Let final be the string-concatenation of "{", the code unit 0x000A (LINE FEED), state.[[Indent]], properties, the code unit 0x000A (LINE FEED), stepBack, and "}".
+ * Remove the last element of state.[[Stack]].
+ * Set state.[[Indent]] to stepBack.
+ * Return final.
+
+
+
+
+
+25.5.4.6 SerializeJSONArray ( state, value )
+
+
+The abstract operation SerializeJSONArray takes arguments state (a JSON Serialization Record) and value (an Object) and returns either a normal completion containing a String or a throw completion. It serializes an array. It performs the following steps when called:
+
+
+
+ * If state.[[Stack]] contains value, throw a TypeError exception because the structure is cyclical.
+ * Append value to state.[[Stack]].
+ * Let stepBack be state.[[Indent]].
+ * Set state.[[Indent]] to the string-concatenation of state.[[Indent]] and state.[[Gap]].
+ * Let partial be a new empty List.
+ * Let length be ? LengthOfArrayLike(value).
+ * Let index be 0.
+ * Repeat, while index < length,
+ * Let stringP be ? SerializeJSONProperty(state, ! ToString(𝔽(index)), value).
+ * If stringP is undefined, then
+ * Append "null" to partial.
+ * Else,
+ * Append stringP to partial.
+ * Set index to index + 1.
+ * If partial is empty, then
+ * Let final be "[]".
+ * Else,
+ * If state.[[Gap]] is the empty String, then
+ * Let properties be the String value formed by concatenating all the element Strings of partial with each adjacent pair of Strings separated with the code unit 0x002C (COMMA). A comma is not inserted either before the first String or after the last String.
+ * Let final be the string-concatenation of "[", properties, and "]".
+ * Else,
+ * Let separator be the string-concatenation of the code unit 0x002C (COMMA), the code unit 0x000A (LINE FEED), and state.[[Indent]].
+ * Let properties be the String value formed by concatenating all the element Strings of partial with each adjacent pair of Strings separated with separator. The separator String is not inserted either before the first String or after the last String.
+ * Let final be the string-concatenation of "[", the code unit 0x000A (LINE FEED), state.[[Indent]], properties, the code unit 0x000A (LINE FEED), stepBack, and "]".
+ * Remove the last element of state.[[Stack]].
+ * Set state.[[Indent]] to stepBack.
+ * Return final.
+ Note
+
+The representation of arrays includes only the elements in the interval from +0𝔽 (inclusive) to array.length (exclusive). Properties whose keys are not array indices are excluded from the stringification. An array is stringified as an opening LEFT SQUARE BRACKET, elements separated by COMMA, and a closing RIGHT SQUARE BRACKET.
+
+
+
+
+
+
+
+
+
+25.5.5 JSON [ %Symbol.toStringTag% ]
+
+
+The initial value of the %Symbol.toStringTag% property is the String value "JSON".
+
+
+This property has the attributes { [[Writable]]: false, [[Enumerable]]: false, [[Configurable]]: true }.
+
+
+
+
+
