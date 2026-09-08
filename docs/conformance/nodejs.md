@@ -2816,6 +2816,34 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## A floor for compilation, because nothing was checking it
+
+Emitting C and compiling it are different claims, and only one was being made.
+The gate's `profile` step emits for all twenty-two modules and never runs a
+compiler over any of it, so **a change that breaks the compilation of every node
+module passes the gate green**. That is not hypothetical: it happened today, and
+was caught by rebuilding everything for an unrelated measurement. That is luck.
+
+`tooling/conformance/build-floor.sh` replaces the luck, and it is checked in
+**both** directions:
+
+    9 of 9 still build, 0 regressed, 0 newly building
+
+A name in `FLOOR` that stops building is a regression. A name in `BLOCKED` that
+starts building is reported by name — because that is the half that rots. A
+known-to-fail list nobody updates becomes a list nobody reads, and a module that
+started building is then invisible; the same failure as a `-Werror` suppression
+outliving its cause. Newly-building does not fail the run: the right response is
+to move the name and record why, not to hold the run red until somebody does.
+
+Controlled by reintroducing the exact prototype regression in a worktree copy —
+three modules report `REGRESSED` and name the conflicting prototype and its
+file.
+
+It lives in this lane rather than the gate deliberately. Twenty-two modules
+through clang is a serialised twenty-minute resource that three sessions queue
+on, and lengthening it is not this lane's to do.
+
 ## Twelve of the thirteen that do not build are stopped by one shape
 
 Measured on the gate binary, every module built from a pinned tree. Nine build
