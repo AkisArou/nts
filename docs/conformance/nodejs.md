@@ -4493,6 +4493,42 @@ across the Node-API boundary wants this, which puts it above `export-class` on
 value even though `export-class` unblocks more module *names*: a published class
 with uncallable methods is worth nothing.
 
+## It is a stack, not a count
+
+This document, and the working goal built from it, said that fifteen modules do
+not compile and **that is two bugs rather than fifteen** — 228 of 244 clang
+errors being one struct emitter writing `void` fields, plus three modules with an
+`NtsTask` mismatch. That was an accurate reading of what was visible. It is the
+wrong *shape* of claim, and the measurement that showed it is worth recording.
+
+The `void` fields are fixed. A required member typed `undefined` takes storage
+now, `util`'s emitted C has zero bare `void` members where it had enough for 228
+errors, and the same rule covers tuple elements. **The counted lane over all
+twenty-two modules then reported the same seven building and the same fifteen
+not.** Zero modules moved.
+
+What was underneath, in the same files:
+
+| blocker | where it surfaced |
+| --- | --- |
+| a property named `header` duplicating the object header | `assert` |
+| two same-named interfaces emitting one struct name | `console` (`Context`), `fs` (`Blob`) |
+| a callback binding's parameter type being per-program | `events`, `timers` |
+
+Each was masked by a louder error earlier in the same translation unit. Fixing
+the top of the stack revealed the next layer rather than clearing the modules.
+
+**So the count was never counting what it appeared to.** "228 of 244 errors are
+one bug" is true and does not mean "fixing one bug clears 228 errors' worth of
+modules" — it means one bug was loud enough to hide the others. A clang error
+count measures *what the compiler reached first*, and a translation unit stops
+being informative after its first few failures.
+
+The honest inventory is the fixture directory, and it is twenty-one entries. Not
+"fifteen modules, N bugs" — that number has been revised three times today and
+each revision looked like progress while being a fact about how much was
+visible.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
