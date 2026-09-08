@@ -45,7 +45,7 @@ suite("the indent argument matches node for every gap it accepts", () => {
   for (const space of gaps) {
     for (const text of shapes) {
       const expected = JSON.stringify(JSON.parse(text), null, space);
-      const actual = stringifyJsonValue(parseJsonText(text), resolveGap(space));
+      const actual = stringifyJsonValue(parseJsonText(text), { gap: resolveGap(space) });
       assert.equal(actual, expected, `${JSON.stringify(text)} with space ${JSON.stringify(space)}`);
     }
   }
@@ -113,10 +113,10 @@ suite("an indented container puts its closing bracket at the outer indent", () =
   // before each member. Getting that backwards produces output that still parses, which is
   // why it is asserted against exact text rather than by re-parsing.
   assert.equal(
-    stringifyJsonValue(parseJsonText('{"a":[1,{"b":2}]}'), resolveGap(2)),
+    stringifyJsonValue(parseJsonText('{"a":[1,{"b":2}]}'), { gap: resolveGap(2) }),
     '{\n  "a": [\n    1,\n    {\n      "b": 2\n    }\n  ]\n}',
   );
-  assert.equal(stringifyJsonValue(parseJsonText('{"a":{}}'), resolveGap(2)), '{\n  "a": {}\n}');
+  assert.equal(stringifyJsonValue(parseJsonText('{"a":{}}'), { gap: resolveGap(2) }), '{\n  "a": {}\n}');
 });
 
 function escapeAll(value: string): string {

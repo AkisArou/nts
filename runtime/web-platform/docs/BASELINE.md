@@ -6796,3 +6796,58 @@ copies of "valid JSON" drift and the drift is invisible -- a case dropped from o
 passes in the other.
 
 838/838 host, upstream unchanged at 2,768 of 2,776.
+
+## The public `JSON` surface: reviver, replacer, and the raw-JSON pair
+
+`JSON.parse` with its reviver and `context.source` (25.5.2, 25.5.2.4), `JSON.stringify` with
+its replacer, property list and `space` (25.5.4), and `JSON.rawJSON` / `JSON.isRawJSON`
+(25.5.3, 25.5.1).
+
+A reviver here receives and returns a `JsonValue`, which is what the plan's erased graph
+means: a generic result that can be "carried, narrowed, validated, reviver-transformed and
+stringified" without ordinary-object property maps in HIR. `toJSON` is deliberately **not**
+part of this entry point -- it is a method looked up on an arbitrary object, which has no
+meaning over a graph, and it belongs to the typed boundary where the compiler can see the
+object.
+
+### The two things a reviver is easy to get plausibly wrong
+
+Both are compared against node as a recorded sequence rather than by outcome, because a
+reviver that visits the right values in the wrong order transforms most documents identically.
+
+**Order.** Children are offered before their parent, so by the time a reviver sees an object
+its members have already been through it. A sabotage reversing the child order fails three
+tests.
+
+**Which values carry a `source`.** 25.5.2.4 reaches that branch only for a non-Object, so an
+array or object never carries one -- its source text is not meaningful once its children may
+have been replaced. Recording the pairs on both sides catches a missing source on a primitive
+*and* a source invented for a container; the second is its own sabotage.
+
+### Deleting an array element leaves a hole
+
+25.5.2.4 uses `[[Delete]]`, which does not shorten an array. `JSON.parse("[1,2,3]", drop)`
+still has three elements and serializes as `[1,null,3]`; an implementation that spliced the
+element out produces `[1,3]`, a different document that passes any test checking only the
+surviving values. The graph grew a `hole` kind to represent it -- not `null`, because a hole
+reads as absent where `null` reads as the null value, and only their serialized forms coincide.
+
+`raw` is the other new kind: a `JSON.rawJSON` fragment, emitted verbatim, which is how
+`1e999` survives serialization instead of being re-formatted.
+
+### Two refusals removed by writing better TypeScript, one left standing
+
+`jsonStringify` first took `Omit<JsonSerializeOptions, "gap"> & { space }`, and **an
+intersection in a parameter position is not lowered yet**. The explicit interface is the
+clearer declaration regardless, so that is a correction rather than a concession.
+
+It then built its argument with a conditional object spread, and **a spread assignment in an
+object literal is not lowered yet** either. The spread existed only to satisfy
+`exactOptionalPropertyTypes`; declaring the options as explicitly optional answers that
+better and removes the cleverness.
+
+What is left is one more `new SyntaxError`, from `JSON.rawJSON`'s validation -- the same
+unrepresentable type that already stops the parser, and it stays visible.
+
+Frontier 1,437 to 1,438 primaries. 850/850 host, upstream unchanged at 2,768 of 2,776.
+Five sabotages, all caught.

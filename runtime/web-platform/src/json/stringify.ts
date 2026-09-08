@@ -111,17 +111,37 @@ function numberText(value: number): string {
 class Frame {
   readonly node: JsonValue;
   readonly indent: string;
+  /** The object keys this frame will emit, after any inclusion list is applied. */
+  readonly keys: readonly string[];
+  /** Parallel to {@link keys}. */
+  readonly values: readonly JsonValue[];
   readonly parts: string[] = [];
   index = 0;
+  /** The key this container occupies in its parent, needed when it finishes. */
+  parentKey = "";
 
-  constructor(node: JsonValue, indent: string) {
+  constructor(
+    node: JsonValue,
+    indent: string,
+    entries: { keys: readonly string[]; values: readonly JsonValue[] },
+  ) {
     this.node = node;
     this.indent = indent;
+    this.keys = entries.keys;
+    this.values = entries.values;
   }
 }
 
 function scalarText(node: JsonValue): string {
   switch (node.kind) {
+    case "hole":
+      // A deleted array element. 25.5.4.6 writes `null` for an element whose serialization is
+      // undefined, and a hole reads as undefined.
+      return "null";
+    case "raw":
+      // 25.5.4.2: a value with `[[IsRawJSON]]` returns its `rawJSON` text unchanged. It was
+      // validated by 25.5.3 before the node existed, so there is nothing to re-check here.
+      return node.text;
     case "null":
       return "null";
     case "boolean":
@@ -156,30 +176,85 @@ function member(key: string, valueText: string, gap: string): string {
 }
 
 /**
+ * How a value is transformed on its way out.
+ *
+ * 25.5.4.2 applies the replacer to **every** value including the root, whose key is the empty
+ * string, so a replacer can omit the whole document. `propertyList` is 25.5.4's array form of
+ * the same argument: an inclusion list, applied to objects only, in the order the list gives
+ * rather than the order the object has.
+ */
+export interface JsonSerializeOptions {
+  /** The already-resolved indent unit; see {@link resolveGap}. */
+  readonly gap?: string | undefined;
+  /** Returns `undefined` to omit the value, which an array renders as `null` and an object skips. */
+  readonly replacer?: ((key: string, value: JsonValue) => JsonValue | undefined) | undefined;
+  /** An inclusion list for object keys. Absent means every own key, in the object's order. */
+  readonly propertyList?: readonly string[] | undefined;
+}
+
+/** The keys an object contributes, and the value each one holds. */
+function objectEntries(
+  node: JsonValue,
+  propertyList: readonly string[] | undefined,
+): { keys: readonly string[]; values: readonly JsonValue[] } {
+  if (propertyList === undefined) return { keys: node.keys, values: node.values };
+  // 25.5.4.5 walks `state.[[PropertyList]]` rather than the object, so the list decides both
+  // which keys appear and what order they appear in. A key the object does not have
+  // contributes nothing, and a key the list repeats was already deduplicated when the list
+  // was built.
+  const keys: string[] = [];
+  const values: JsonValue[] = [];
+  for (const key of propertyList) {
+    const at = node.keys.indexOf(key);
+    if (at < 0) continue;
+    keys.push(key);
+    values.push(node.values[at] as JsonValue);
+  }
+  return { keys, values };
+}
+
+/**
  * Serialize a graph node.
  *
- * `gap` is the already-resolved indent unit — 25.5.4 turns a number into that many spaces
- * capped at ten, and a string into its first ten characters, before serialization begins.
+ * Returns `undefined` when the root is omitted, which is what `JSON.stringify` returns for a
+ * value a replacer discarded.
  */
-export function stringifyJsonValue(value: JsonValue, gap = ""): string {
-  if (value.kind !== "array" && value.kind !== "object") return scalarText(value);
+export function stringifyJsonValue(
+  value: JsonValue,
+  options: JsonSerializeOptions = {},
+): string | undefined {
+  const gap = options.gap ?? "";
+  const replacer = options.replacer;
+  const propertyList = options.propertyList;
 
-  const frames: Frame[] = [new Frame(value, "")];
+  const root = replacer === undefined ? value : replacer("", value);
+  if (root === undefined) return undefined;
+  if (root.kind !== "array" && root.kind !== "object") return scalarText(root);
+
+  const frames: Frame[] = [new Frame(root, "", objectEntries(root, propertyList))];
   for (;;) {
     const frame = frames[frames.length - 1] as Frame;
-    const node = frame.node;
-    const isArray = node.kind === "array";
-    const count = isArray ? node.items.length : node.values.length;
+    const isArray = frame.node.kind === "array";
+    const count = isArray ? frame.node.items.length : frame.keys.length;
 
     if (frame.index < count) {
-      const child = (isArray ? node.items[frame.index] : node.values[frame.index]) as JsonValue;
+      const key = isArray ? String(frame.index) : (frame.keys[frame.index] as string);
+      const original = (isArray ? frame.node.items[frame.index] : frame.values[frame.index]) as JsonValue;
+      const child = replacer === undefined ? original : replacer(key, original);
+      frame.index++;
+      if (child === undefined) {
+        // 25.5.4.6: an omitted array element is `null`; 25.5.4.5 skips an omitted member.
+        if (isArray) frame.parts.push("null");
+        continue;
+      }
       if (child.kind === "array" || child.kind === "object") {
-        frames.push(new Frame(child, frame.indent + gap));
+        frames.push(new Frame(child, frame.indent + gap, objectEntries(child, propertyList)));
+        // The parent's key for this container is needed when it finishes; the frame records it.
+        (frames[frames.length - 1] as Frame).parentKey = key;
         continue;
       }
       const text = scalarText(child);
-      frame.parts.push(isArray ? text : member(node.keys[frame.index] as string, text, gap));
-      frame.index++;
+      frame.parts.push(isArray ? text : member(key, text, gap));
       continue;
     }
 
@@ -187,13 +262,9 @@ export function stringifyJsonValue(value: JsonValue, gap = ""): string {
     frames.pop();
     if (frames.length === 0) return finished;
     const parent = frames[frames.length - 1] as Frame;
-    const parentNode = parent.node;
-    if (parentNode.kind === "array") {
-      parent.parts.push(finished);
-    } else {
-      parent.parts.push(member(parentNode.keys[parent.index] as string, finished, gap));
-    }
-    parent.index++;
+    parent.parts.push(
+      parent.node.kind === "array" ? finished : member(frame.parentKey, finished, gap),
+    );
   }
 }
 

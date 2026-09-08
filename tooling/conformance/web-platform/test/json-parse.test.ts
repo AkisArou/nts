@@ -22,63 +22,11 @@ import test from "node:test";
 
 import { parseJsonText } from "../../../../runtime/web-platform/src/json/parse.ts";
 import type { JsonValue } from "../../../../runtime/web-platform/src/json/value.ts";
-import { INVALID, VALID } from "./json-corpus.ts";
+import { INVALID, keyOrder, must, plain, VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {
   test(name, { timeout: 15000 }, fn);
 };
-
-/**
- * An indexed read that is known to be in range.
- *
- * `noUncheckedIndexedAccess` types every index as `T | undefined`, which is right in general
- * and noise in a test that has just asserted the length. Narrowing here keeps the assertions
- * about JSON rather than about the index.
- */
-function must<T>(value: T | undefined): T {
-  assert.notEqual(value, undefined);
-  return value as T;
-}
-
-/** The erased graph as an ordinary value, so it can be compared with node's parse result. */
-function plain(node: JsonValue): unknown {
-  switch (node.kind) {
-    case "null":
-      return null;
-    case "boolean":
-      return node.boolean;
-    case "number":
-      return node.number;
-    case "string":
-      return node.text;
-    case "array":
-      return node.items.map(plain);
-    default: {
-      const out = {};
-      for (let at = 0; at < node.keys.length; at++) {
-        // `defineProperty`, not assignment. 25.5.2 builds objects with
-        // `CreateDataPropertyOrThrow`, and the difference is observable at exactly one key:
-        // `out["__proto__"] = v` sets the prototype and creates no own property, so a plain
-        // assignment here silently disagreed with node for `{"__proto__":1}` — the case that
-        // is in the corpus for this reason.
-        Object.defineProperty(out, must(node.keys[at]), {
-          value: plain(must(node.values[at])),
-          writable: true,
-          enumerable: true,
-          configurable: true,
-        });
-      }
-      return out;
-    }
-  }
-}
-
-/** Key order is observable and `deepStrictEqual` does not check it, so walk it separately. */
-function keyOrder(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(keyOrder);
-  if (value === null || typeof value !== "object") return null;
-  return { keys: Object.keys(value), children: Object.values(value).map(keyOrder) };
-}
 
 suite("valid JSON agrees with node on value and on key order", () => {
   for (const text of VALID) {

@@ -1,7 +1,12 @@
-// The shared JSON corpora.
+import assert from "node:assert/strict";
+
+import type { JsonValue } from "../../../../runtime/web-platform/src/json/value.ts";
+
+// The shared JSON corpora, and the helpers that read a graph.
 //
 // One list, imported by every JSON test, because two copies of "valid JSON" drift and the
-// drift is invisible: a case dropped from one file still passes in the other.
+// drift is invisible: a case dropped from one file still passes in the other. The helpers are
+// here for the same reason -- `plain` in two files is two chances to get `__proto__` wrong.
 //
 // Every control character and space-like character is a `\u` escape. These are exactly the
 // cases where the byte is the point, and a raw one is unreadable in a diff.
@@ -140,3 +145,76 @@ export const INVALID: readonly string[] = [
   "1//c",
 ];
 
+
+/**
+ * An indexed read that is known to be in range.
+ *
+ * `noUncheckedIndexedAccess` types every index as `T | undefined`, which is right in general
+ * and noise in a test that has just asserted the length.
+ */
+export function must<T>(value: T | undefined): T {
+  assert.notEqual(value, undefined);
+  return value as T;
+}
+
+/**
+ * The erased graph as an ordinary value, so it can be compared with node's parse result.
+ *
+ * Properties are defined, not assigned. 25.5.2 builds objects with `CreateDataPropertyOrThrow`,
+ * and the difference is observable at exactly one key: `out["__proto__"] = v` sets the
+ * prototype and creates no own property. A plain assignment here disagreed with node for
+ * `{"__proto__":1}` on the first run.
+ *
+ * A `hole` becomes a genuine array hole, which is what a reviver's deletion produces.
+ */
+export function plain(node: JsonValue): unknown {
+  switch (node.kind) {
+    case "null":
+      return null;
+    case "boolean":
+      return node.boolean;
+    case "number":
+      return node.number;
+    case "string":
+    case "raw":
+      return node.text;
+    case "hole":
+      return undefined;
+    case "array": {
+      const out: unknown[] = [];
+      out.length = node.items.length;
+      for (let at = 0; at < node.items.length; at++) {
+        const item = must(node.items[at]);
+        if (item.kind !== "hole") out[at] = plain(item);
+      }
+      return out;
+    }
+    default: {
+      const out: Record<string, unknown> = {};
+      for (let at = 0; at < node.keys.length; at++) {
+        Object.defineProperty(out, must(node.keys[at]), {
+          value: plain(must(node.values[at])),
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      }
+      return out;
+    }
+  }
+}
+
+/**
+ * The key order of a value, as a comparable shape.
+ *
+ * `deepStrictEqual` does not compare key order, and key order is observable — `Object.keys`,
+ * `for...in` and `JSON.stringify` all follow it — so it is walked separately.
+ */
+export function keyOrder(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(keyOrder);
+  if (value === null || typeof value !== "object") return null;
+  return {
+    keys: Object.keys(value),
+    children: Object.values(value).map(keyOrder),
+  };
+}

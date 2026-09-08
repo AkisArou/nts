@@ -14,8 +14,24 @@
 // The spec text this is written against is pinned at
 // `runtime/web-platform/third_party/ecma262/json-25.5.txt`.
 
-/** The six JSON value kinds. A string discriminant, which lowers; a union of shapes does not. */
-export type JsonKind = "null" | "boolean" | "number" | "string" | "array" | "object";
+/**
+ * The JSON value kinds. A string discriminant, which lowers; a union of shapes does not.
+ *
+ * Two of these are not parse results. `raw` is what `JSON.rawJSON` (25.5.3) produces: a
+ * pre-validated fragment that `SerializeJSONProperty` returns verbatim, carried in
+ * {@link JsonValue.text}. `hole` is an array element a reviver deleted — 25.5.2.4 uses
+ * `[[Delete]]`, which leaves a hole rather than shortening the array, and a hole reads as
+ * absent and serializes as `null`.
+ */
+export type JsonKind =
+  | "null"
+  | "boolean"
+  | "number"
+  | "string"
+  | "array"
+  | "object"
+  | "raw"
+  | "hole";
 
 /**
  * Whether `key` is a canonical array index, and which one.
@@ -111,6 +127,27 @@ export class JsonValue {
 
   static stringValue(value: string, start: number, end: number): JsonValue {
     return new JsonValue("string", start, end, false, 0, value, [], [], []);
+  }
+
+  /**
+   * A pre-validated JSON fragment, emitted verbatim by the serializer.
+   *
+   * 25.5.3 validates the text before the object exists, so a `raw` node is by construction
+   * already valid JSON denoting a string, number, boolean or null.
+   */
+  static rawValue(text: string): JsonValue {
+    return new JsonValue("raw", 0, text.length, false, 0, text, [], [], []);
+  }
+
+  /**
+   * An array element that a reviver deleted.
+   *
+   * Not `null`: a hole reads as absent where a `null` reads as the null value, and only the
+   * serialized forms coincide. Splicing the element out instead would shorten the array and
+   * produce a different document.
+   */
+  static holeValue(): JsonValue {
+    return new JsonValue("hole", 0, 0, false, 0, "", [], [], []);
   }
 
   static arrayValue(items: readonly JsonValue[], start: number, end: number): JsonValue {
