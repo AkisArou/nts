@@ -4949,6 +4949,45 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## What the interpreted lane structurally cannot see
+
+**Check this list before filing anything found on that lane.** It is a predicate,
+not a caveat: each entry is a question the lane is incapable of answering, so a
+"divergence" in one of these categories is the instrument speaking, not the
+module.
+
+The lane runs this profile's *source* on node, against node. That makes it a
+hybrid, and every boundary between "ours" and "node's" is a place the two can be
+silently swapped.
+
+**1. Any binding whose stand-in delegates.** 54 of them call node's own
+implementation — `globalThis.nts_os_tmpdir = () => os.tmpdir()`. That lane agrees
+with node by construction whatever the C says. Reached instead by
+`binding-probe.sh`, which builds an addon around a binding *without* compiling
+its module; 53 of the 54 are covered that way, and `standin-blindspot.mjs` counts
+the rest.
+
+**2. `Buffer` identity for any value a module computes itself.** There are two
+`Buffer` classes at run time — node's and this profile's — and which one a value
+carries depends on whether it came from module code or from a delegating
+stand-in. `Buffer.isBuffer` in a test is *node's*. So "is this a Buffer" is not
+answerable on that lane for anything a module built. See the section below.
+
+**3. Anything platform-conditioned.** The lane compares two implementations on
+*this* machine. A defect that is correct on the only platform anyone runs — a
+positive errno normalised to negative, an endianness assumption, a pointer that
+is not 8 bytes — is invisible to it, to sabotage, to the counted lane and to the
+probes. The only thing that catches those is a convention applied uniformly, and
+a wrapper that enforces the convention beats a rule people follow.
+
+**4. Object identity through `deepStrictEqual`.** Not a lane property but an
+assertion-library one, and it compounds with 2: a class instance and a plain
+object with the same fields compare equal, so a test meaning "the right class
+came back" means "the right fields came back". Use `instanceof`, which works.
+
+Each of these was found by investigating something as a defect first. The list
+exists so the next one is cheaper.
+
 ## Two `Buffer` classes in one process — and the cause, found after recording the wrong one
 
 `os.userInfo({ encoding: "buffer" })` answers values that fail
