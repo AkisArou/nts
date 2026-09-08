@@ -7247,3 +7247,46 @@ stops at the minus sign, `at` never reaches `end`, and the slice fallback return
 correctness change's clothes, and no correctness test should be able to tell them apart.
 
 884/884 host, upstream unchanged at 2,768 of 2,776.
+
+## A correction: serialization is not allocation-bound, and the pair proves it
+
+`json-build-append` and `json-build-join` produce the identical document from the identical
+input and differ in exactly one thing: whether the members are appended to an accumulator or
+collected and joined. Both are ordinary TypeScript and a reviewer would accept either. They
+return the same checksum, so any comparison between them is controlled by construction.
+
+| | blocks | bytes | nts C | node | bun |
+| --- | --- | --- | --- | --- | --- |
+| append | 278 | 99,632 | 21.17us | 15.69us | 9.69us |
+| join | 22,557 | 1,763,392 | 20.78us | 22.43us | 14.56us |
+
+**Eighty-one times the allocations, eighteen times the bytes, and no difference in time.**
+
+That contradicts what was written here earlier -- that serialization is allocation-bound and
+allocation is the lever. It was inferred from a profile showing `nts_each_reference` at 20%,
+without a counterfactual, which is the error this ledger has now made twice: a profile ranks
+costs and does not say what removing one would save. The pair is the counterfactual, and
+allocation volume is very nearly free in this runtime.
+
+### What the hosts are doing that we are not
+
+The hosts are *not* indifferent. node runs append 1.43x faster than join and bun 1.50x faster,
+because V8 and JavaScriptCore represent a concatenation as a rope and flatten it later, so `+=`
+in a loop barely allocates. `NtsString` is flat and copies.
+
+The consequence for reading any benchmark here: **a case written with `+=` flatters a host**, and
+`json-serialize` is written that way. On the join spelling **nts is 0.95x of node -- faster** --
+and 1.46x of bun.
+
+### What the lever actually is
+
+`quoteJSONString` is 26.98% of `append` and 36.62% of `join`. The assembly strategy is a
+sideshow; the escaper is the program. Its inner loop is one `charCodeAt` per character, and that
+is `static inline` -- not call overhead -- expanding to a bounds check, a test of `NTS_TWO_BYTE`,
+a load, and a conversion to `double`, with the comparisons then in floating point.
+
+The representation test is per character. A host specializes the loop for narrow or wide once
+and then loads. That is the shape of the remaining gap, it is in the scan loop, and it is the
+condition the goal names for proposing a compiler intrinsic rather than working around it.
+
+884/884 host, upstream unchanged at 2,768 of 2,776.
