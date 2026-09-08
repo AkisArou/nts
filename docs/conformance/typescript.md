@@ -1989,6 +1989,27 @@ The pinned rows also carry a notification: if this section ever admits
 suite that asserts declared decisions gets louder when a decision changes; a
 suite that asserts behaviour gets quieter when a bug is fixed.
 
+### And a row here can reach the instrument doing the asserting
+
+The sharpest consequence found so far is not in a module. Node's
+`deepStrictEqual` compares **prototypes**, and a comparator in a language with
+no prototype chain cannot:
+
+    Buffer.from([1])       vs  new Uint8Array([1])   node: differ   here: equal
+    Object.create(null)    vs  {}                    node: differ   here: equal
+    new (class { x = 1 })()  vs  { x: 1 }            node: differ   here: equal
+
+Those three are this section applied, so they are assertable rows. What is not
+obvious is what they imply about **every other test that uses the comparator**:
+an assertion meaning "the right class came back" actually means "the right
+fields came back". A test that a call returns a `Stats` rather than an object
+literal with the same fields does not check that.
+
+It does not invalidate a suite — field values are still compared exactly, and
+most assertions are genuinely about values. But it is a limit to know *before*
+relying on it, and the workaround has to be named where the limit is:
+`instanceof` does work, so a test whose point is object identity uses that.
+
 ### The metaobject protocol
 
 An object in this compiler is a flat C struct: a header of
