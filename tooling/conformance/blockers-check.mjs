@@ -93,7 +93,15 @@ for (const name of names) {
   // A wrapper-signature limit is invisible to `hir`, which is itself a thing
   // worth not forgetting: `f64[]` lowers cleanly and fails at the boundary, so
   // checking it the usual way reports "nothing refused" and says nothing.
-  const viaEmit = expected.includes("emit-c");
+  // Any expectation asserted against an emitted *file* has to be run through
+  // `emit-c`, whether or not it spells the command out. Writing `emits-c X`
+  // without the `emit-c --napi ->` prefix ran `hir` instead, wrote no
+  // `program.c`, found nothing in the empty string, and reported **FIXED** --
+  // a confident all-clear for a blocker that was fully present. A false
+  // "reproduces" wastes an hour; a false "FIXED" gets a fixture deleted.
+  const fileForm = /^(?:emit-c\b[^>]*->\s*)?(emits-c|emits-addon|lacks-c|duplicates-c)\b/
+    .test(expected);
+  const viaEmit = expected.includes("emit-c") || fileForm;
   const output = viaEmit
     ? run(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blk-")), "--napi"])
     : run(["hir", tsconfig]);
@@ -151,6 +159,14 @@ for (const name of names) {
   // subject does not exist is the thing this whole directory is against, and it
   // was in the first draft of the form written to catch exactly that.
   const program = readEmitted(output, "program.c");
+  // And if it still came back empty, say so instead of concluding anything. An
+  // absent file is not evidence about its contents in either direction.
+  if (fileForm && program.length === 0) {
+    unexpected++;
+    console.log(`  NO OUTPUT   ${name}: emit-c wrote no program.c, so the expectation could not be`);
+    console.log(`                evaluated either way. Expected: ${expected}`);
+    continue;
+  }
   const occurrences = (haystack, needle) => haystack.split(needle).length - 1;
   const holds = duplicatesC !== null
     ? occurrences(program, duplicatesC[1]) > 1
