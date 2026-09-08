@@ -14,6 +14,28 @@
 // this benchmark closing the gap is the evidence -- which is a better test of
 // the optimisation than any assertion about it.
 //
+// # It landed, and this case has stopped measuring what it was built to measure
+//
+// Measured on the JVM lane, 2026-09-08:
+//
+//     bytes/op   erasure-stored-unknown  16016.00   NtsValue in bytecode: 0
+//     bytes/op   erasure-stored-typed    16016.00   NtsValue in bytecode: 0
+//     jvm/Java   erasure-stored-unknown  0.96x      68.29 us against 71.07 us
+//
+// The gap has closed, and the two halves of the evidence agree. Identical
+// allocation -- 16016 bytes is one 2000-element `double[]`, header included,
+// and *nothing else* -- and **no `NtsValue` reference in the emitted class file
+// at all**. So the sixteen-byte tagged element this file describes is not what
+// runs; specialization proved nothing but numbers reach the array and gave it
+// a `double[]`.
+//
+// Which means this row is now a measurement of an array allocation that both
+// halves make equally, and says nothing about erasure. Left in place because a
+// case that has closed is still the ratchet that would notice it reopening --
+// but read as "erasure in memory is free" it would be quietly wrong, because
+// there is no erasure in it. `erasure-unknown` is the pair that still carries
+// `NtsValue` into bytecode, and it is the one to read for what erasure costs.
+//
 // Written with index assignment because `push` on an `unknown[]` is refused,
 // and it is `unknown[]` rather than a ternary because a conditional whose arms
 // have different types takes the *union* as its own type before anything
