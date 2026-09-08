@@ -4949,6 +4949,45 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## 440 StringDecoder cases, and a claim that did not follow
+
+The compiler lane found that a **lone surrogate literal compiles to three
+U+FFFD** — `"\ud800".length` is 3 where node says 1 — and flagged
+`string_decoder` and `util` as downstream, since both are full of surrogate
+handling.
+
+**They are not, and the reason is worth keeping.** `grep` for `\ud8xx` and
+`\udcxx` literals across all of `runtime/node`: **zero**. Not one lone-surrogate
+literal in the profile. The defect is in the *type record* — a literal resolved
+by the frontend — and the surrogate handling in these modules is **computed at
+run time**. "Full of surrogate handling" is true; "therefore this defect reaches
+it" does not follow. Same shape as reading `recursive` in a signature and
+inferring a directory walk.
+
+So the computed half was measured rather than reasoned about: **7 encodings × 8
+inputs × every split point = 440 cases, 0 divergences.**
+
+Splitting a multi-byte sequence across two `write()` calls is the entire reason
+`StringDecoder` exists, and node has **three test files** for it. They are good
+files and three cannot cover that surface — upstream there is no reason to,
+because the decoder is one piece of C++ that either holds partial state correctly
+or does not. Here it is TypeScript with its own buffering.
+
+The cases a hand-written test does not think to write, all covered:
+
+- a split landing **inside a four-byte sequence** that is a surrogate pair in
+  UTF-16
+- a lone `0x80` continuation with no lead byte
+- an overlong `C0 80`
+- the boundaries at offset `0` and at `length`, where the decoder is handed an
+  empty chunk
+
+Every expected value was read off node rather than derived. For the malformed
+inputs there is no specification answer to derive: U+FFFD substitution counts and
+placement are what node does, and matching node is the goal.
+
+`string_decoder` is 4 of 4, up from 3.
+
 ## Ninety-six encoding spellings, and the one that disagreed
 
 Node normalises encodings in one place and hands the same canonical value to

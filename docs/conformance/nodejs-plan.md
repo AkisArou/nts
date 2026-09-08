@@ -29,8 +29,8 @@ sentence, which will go stale.
 
 ## The situation in one paragraph
 
-Two axes move independently. **TypeScript-on-node: 1,812 of 1,812 across 22
-modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by five tests written
+Two axes move independently. **TypeScript-on-node: 1,813 of 1,813 across 22
+modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by six tests written
 against seams node's own suite cannot reach — see the byte-path and encoding
 sections of the ledger. The sweep that measured it reported `util` at 23 of 24;
 `util` run alone is 24 of 24 three times over, and the machine was loaded, so
