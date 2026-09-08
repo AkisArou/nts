@@ -4824,7 +4824,7 @@ path in the profile, checked across `ENOENT`, `EACCES`, `EEXIST`, `EISDIR`,
 `EINVAL`, `EPIPE` and `ECONNRESET`, plus platform, release and the two TTY
 probes. All agree.
 
-**309 declared, 123 compared** — counted as *distinct binding names*, which is
+**309 declared, 169 compared** — counted as *distinct binding names*, which is
 lower than the per-module figures add up to and is the honest total.
 
 **And re-runnable, which for most of a day they were not.**
@@ -4833,7 +4833,7 @@ terminal, so "43 bindings compared to node" was a claim about one afternoon
 rather than a check anything could repeat. A binding that regressed the next
 morning would still have been reported as compared and green.
 `tooling/conformance/probe-compare.mjs` rebuilds every probe and re-asserts every
-expectation — **15 probes, 195 comparisons, 0 divergences** — and `--self-test`
+expectation — **21 probes, 266 comparisons, 0 divergences** — and `--self-test`
 injects one wrong expectation into a real binding call, so the harness is known
 to be able to fail rather than assumed to.
 

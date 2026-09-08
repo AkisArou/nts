@@ -43,7 +43,7 @@ gave two different answers and the first had never looked in `runtime/c`. `dgram
 compiling is necessary and not sufficient — `dgram` would fail to *link* whatever
 the compiler does.
 
-Of the 177 that link, **123 have been compared against node** — 15 probes, 195
+Of the 177 that link, **169 have been compared against node** — 21 probes, 266
 comparisons, 0 divergences, all re-runnable through
 `tooling/conformance/probe-compare.mjs`. The interpreted lane cannot make that
 comparison: 54 of its stand-ins call node's own implementation, so that lane
