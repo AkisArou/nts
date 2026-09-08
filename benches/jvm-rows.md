@@ -17,7 +17,7 @@ lane has moved.
 | --- | --- | --- |
 | `node-utf8` | 6.86x | blocked: 62% is `toInt32`, `narrow.rs` owns it |
 | `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
-| `array-from` | 2.14x | real gap: rule 4 checked and does NOT excuse it |
+| `array-from` | 2.14x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.74x | probed: the reference preallocates, see below |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
@@ -150,6 +150,39 @@ like the reference doing less work. It is doing **more** -- unboxing into a
 `keys-into-array` helper rather than two calls and index arithmetic per element.
 The obstacle is that the loop is the *lowering's*, not the runtime's, so the
 helper needs someone to call it.
+
+**Now priced, and it is the largest number this lane has measured. 5.9x on the
+operation, and the bulk form beats the reference by 2.3x.** A prototype
+`NtsMap.keysIntoArray(map, out)` -- one loop over `keys[head..used]`, skipping
+nulls, writing `key.num` into `out.items` -- against the walk `work$whole`
+actually emits, both arms building the same `NtsArrayD`, 2000 rounds of 256
+elements, run twice with identical checksums:
+
+    walkArray   `of(size)` then next/keyAt/set per element   2,086,435 / 2,088,315 ns
+    bulkArray   one `keysIntoArray` call                       358,671 /   347,256 ns
+    toArray     `ref.java`'s HashSet.toArray()                 815,826 /   799,874 ns
+
+So the set half goes from **2.56x the reference to 0.44x**. The profile agrees
+about where it sits: `keyAt` 28.7%, `NtsArrayD.set` 9.0%, `next` 5.2% -- 43% of
+our profile against the reference's 25% in `keysToArray` plus `toArray`.
+
+**And the ask upstream is smaller than it looks, because half of it is already
+there.** `Array.from(xs)` over an *array* lowers to a single bulk
+`NtsArrayD.slice`. Only the *set* source walks. So this is not new machinery, it
+is the source kind that did not get the treatment the other one has.
+
+Why the walk costs 5.9x, since a bulk loop and a cursor loop do the same reads:
+`next` re-derives its position from an absolute cursor every call
+(`absolute <= base ? head : max(head, absolute - base)`), the cursor is a
+`double` so each element pays a `d2i` and an `i2d`, `keyAt` repeats the same
+derivation and bounds test, and the key is reached through an `NtsValue`
+pointer. The bulk loop increments an `int` and reads the array.
+
+**Blocked on the lowering, and worth more than anything left in this lane.**
+Priced, not built -- the prototype is a scratch copy of `runtime/jvm/src`, and
+`runtime/jvm/nts-runtime.jar` is untouched. It also cannot be taken in the
+backend: recognising this loop as an idiom is a fragile pattern match over
+emitted code, and the honest place for it is where `slice` already is.
 
 **And there is a second, independent fix, measured: the cursor is a `double`.**
 The emitted walk is `next(map, D) -> D` and `keyAt(map, D)`, so every element
