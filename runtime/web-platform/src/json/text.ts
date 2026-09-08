@@ -96,14 +96,18 @@ function unicodeEscape(unit: number): string {
  * one code point and is emitted as it stands, so deciding whether a lead needs escaping means
  * looking at the unit after it.
  */
-export function firstEscapeIndex(value: string): number {
-  for (let at = 0; at < value.length; at++) {
+export function firstEscapeIndex(value: string, from: number): number {
+  for (let at = from; at < value.length; at++) {
     const unit = value.charCodeAt(at);
+    // The common case is a character that needs nothing.
     if (
       unit > BACKSLASH ||
       (unit >= SPACE && unit !== QUOTE && unit !== BACKSLASH)
     ) {
       if (unit < LEAD_SURROGATE_START || unit > TRAIL_SURROGATE_END) continue;
+      // A well-formed pair is one code point and is emitted as it stands; only an unpaired
+      // half is escaped. This is the reason the answer cannot be a per-unit predicate: whether
+      // a lead needs escaping depends on the unit after it.
       if (unit <= 0xdbff && at + 1 < value.length) {
         const next = value.charCodeAt(at + 1);
         if (next >= 0xdc00 && next <= TRAIL_SURROGATE_END) {
@@ -121,36 +125,24 @@ export function firstEscapeIndex(value: string): number {
 /**
  * The quoted form, told where the first escape is so it does not look for it again.
  *
- * Exported for a serializer that has already called {@link firstEscapeIndex} and found a
- * non-negative answer; going back through `quoteJSONString` would rescan the prefix.
+ * **Every subsequent escape is found by {@link firstEscapeIndex} too**, which is why the scan
+ * is not written here a second time. An earlier version of this function carried its own copy
+ * of the classification and the surrogate rule -- identical code, in a file whose whole argument
+ * is that those rules are written once -- and it was wrong for exactly one commit.
+ *
+ * Successive calls resume where the last stopped, so the string is still scanned once end to
+ * end however many escapes it contains.
  */
 export function quoteFromIndex(value: string, from: number): string {
-  let out = '"' + value.slice(0, from);
-  let plainFrom = from;
-  for (let at = from; at < value.length; at++) {
-    const unit = value.charCodeAt(at);
-    // The common case is a character that needs nothing, so runs are copied in one slice
-    // rather than one character at a time.
-    if (
-      unit > BACKSLASH ||
-      (unit >= SPACE && unit !== QUOTE && unit !== BACKSLASH)
-    ) {
-      if (unit < LEAD_SURROGATE_START || unit > TRAIL_SURROGATE_END) continue;
-      // A well-formed pair is one code point and is emitted as it stands; only an unpaired
-      // half is escaped.
-      if (unit <= 0xdbff && at + 1 < value.length) {
-        const next = value.charCodeAt(at + 1);
-        if (next >= 0xdc00 && next <= TRAIL_SURROGATE_END) {
-          at++;
-          continue;
-        }
-      }
-      out += value.slice(plainFrom, at) + unicodeEscape(unit);
-      plainFrom = at + 1;
-      continue;
-    }
+  let out = '"';
+  let plainFrom = 0;
+  let at = from;
+  while (at >= 0) {
     out += value.slice(plainFrom, at);
     plainFrom = at + 1;
+    const unit = value.charCodeAt(at);
+    // Table 78, and `UnicodeEscape` for everything else that reaches here: a control character
+    // below `SPACE`, or an unpaired surrogate.
     if (unit === QUOTE) out += '\\"';
     else if (unit === BACKSLASH) out += "\\\\";
     else if (unit === LINE_FEED) out += "\\n";
@@ -159,12 +151,13 @@ export function quoteFromIndex(value: string, from: number): string {
     else if (unit === BACKSPACE) out += "\\b";
     else if (unit === FORM_FEED) out += "\\f";
     else out += unicodeEscape(unit);
+    at = firstEscapeIndex(value, plainFrom);
   }
   return out + value.slice(plainFrom) + '"';
 }
 
 export function quoteJSONString(value: string): string {
-  const first = firstEscapeIndex(value);
+  const first = firstEscapeIndex(value, 0);
   // Nothing needs escaping, which is the common case: most strings in most documents contain
   // nothing Table 78 or 25.5.4.3 has anything to say about.
   if (first < 0) return '"' + value + '"';

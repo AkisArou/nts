@@ -137,7 +137,7 @@ function serializeDocument(doc: Document): string {
     if (at !== 0) out += ",";
     const row = rows[at] as Row;
     out += '{"id":';
-    escapeAt = firstEscapeIndex(row.id);
+    escapeAt = firstEscapeIndex(row.id, 0);
     if (escapeAt < 0) {
       out += '"';
       out += row.id;
@@ -146,7 +146,7 @@ function serializeDocument(doc: Document): string {
       out += quoteFromIndex(row.id, escapeAt);
     }
     out += ',"name":';
-    escapeAt = firstEscapeIndex(row.name);
+    escapeAt = firstEscapeIndex(row.name, 0);
     if (escapeAt < 0) {
       out += '"';
       out += row.name;
@@ -155,7 +155,7 @@ function serializeDocument(doc: Document): string {
       out += quoteFromIndex(row.name, escapeAt);
     }
     out += ',"email":';
-    escapeAt = firstEscapeIndex(row.email);
+    escapeAt = firstEscapeIndex(row.email, 0);
     if (escapeAt < 0) {
       out += '"';
       out += row.email;
@@ -164,7 +164,7 @@ function serializeDocument(doc: Document): string {
       out += quoteFromIndex(row.email, escapeAt);
     }
     out += ',"created":';
-    escapeAt = firstEscapeIndex(row.created);
+    escapeAt = firstEscapeIndex(row.created, 0);
     if (escapeAt < 0) {
       out += '"';
       out += row.created;
@@ -183,7 +183,7 @@ function serializeDocument(doc: Document): string {
     if (note === null) {
       out += "null";
     } else {
-      escapeAt = firstEscapeIndex(note);
+      escapeAt = firstEscapeIndex(note, 0);
       if (escapeAt < 0) {
         out += '"';
         out += note;
@@ -197,7 +197,7 @@ function serializeDocument(doc: Document): string {
     for (let tag = 0; tag < tags.length; tag++) {
       if (tag !== 0) out += ",";
       const value = tags[tag] as string;
-      escapeAt = firstEscapeIndex(value);
+      escapeAt = firstEscapeIndex(value, 0);
       if (escapeAt < 0) {
         out += '"';
         out += value;
@@ -210,7 +210,7 @@ function serializeDocument(doc: Document): string {
     const meta = row.meta;
     out += numberText(meta.level);
     out += ',"path":';
-    escapeAt = firstEscapeIndex(meta.path);
+    escapeAt = firstEscapeIndex(meta.path, 0);
     if (escapeAt < 0) {
       out += '"';
       out += meta.path;

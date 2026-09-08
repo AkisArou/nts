@@ -183,9 +183,9 @@ is ahead of node.
 | graph, via `JsonValue` | 7.20ms | 9.1x behind | 21x behind |
 | typed, factored | 1.26ms | 1.59x | 3.7x |
 | typed, inlined | 0.99ms | 1.25x | 2.9x |
-| **typed, inlined, escape append fused** | **0.707ms** | **0.89x -- ahead** | 2.07x |
+| **typed, inlined, escape append fused** | **0.691ms** | **0.88x -- ahead** | 2.03x |
 
-The last row and the native numbers were taken in one window on an idle machine -- node 0.793ms,
+The last row and the native numbers were taken in one window on an idle machine -- node 0.783ms,
 bun 0.341ms -- because the natives move by 10% between sessions and a ratio built across two
 windows is not a ratio. **10.2x from the first shape to the last, with no compiler change at all.**
 
@@ -195,12 +195,21 @@ string, copies it into the accumulator and frees it, about twenty thousand times
 serialization. Fused, a string needing no escape becomes three in-place appends into a buffer
 already at refcount 1, and allocates nothing.
 
-**The classification was not duplicated to get it.** `firstEscapeIndex` came *out* of
-`quoteJSONString`, which now calls it for its own fast path, so Table 78 and the 25.5.4.3
-surrogate rule are still written exactly once; `quoteFromIndex` takes the index the scan already
-found, so the escaping path scans less than it used to rather than more. Writing a second
-"does this need escaping" loop beside the first would have been the obvious way and is the
-duplication this lane has refused twice.
+**The classification is written once -- after a commit in which it was not, and I said it was.**
+`firstEscapeIndex` came *out* of `quoteJSONString`, and the first version left `quoteFromIndex`
+carrying its own copy of the same test and the same surrogate rule while the commit message
+claimed both were written exactly once. Before that refactor the logic appeared once; after it,
+twice. **The duplication this file argues against, introduced by the change that congratulated
+itself on avoiding it**, and found by someone asking whether the fusion clashed with anything
+rather than by any test.
+
+The fix is that `quoteFromIndex` finds every subsequent escape through `firstEscapeIndex` too,
+resuming where the last call stopped, so the string is still scanned once end to end.
+`grep -c` on the classification test and on the surrogate rule each answer 1.
+
+**It cost nothing.** 691us against 707us for the duplicated version, which is noise in the
+favourable direction. That is worth stating plainly: the honest shape and the fast shape were the
+same shape, and the argument for duplicating was never a measurement.
 
 **What this row is and is not.** It is what a *generated* serializer for a statically known type
 would do, written by hand to size the design before anyone builds it. It is not what ships today:
