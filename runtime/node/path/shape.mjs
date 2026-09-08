@@ -9,8 +9,8 @@
 // It adds shape and no behaviour: nothing here answers a question the
 // implementation cannot.
 export function shape(exports) {
-  const posix = pathVariant(exports, "/", ":");
-  const win32 = exports.win32 ? pathVariant(exports.win32, "\\", ";") : undefined;
+  const posix = pathVariant(exports);
+  const win32 = exports.win32 ? pathVariant(exports.win32) : undefined;
 
   // These final four assignments follow `lib/path.js`'s CommonJS insertion
   // order. In particular `win32` precedes the self-referential `posix` key,
@@ -26,8 +26,22 @@ export function shape(exports) {
   return posix;
 }
 
-/** The documented operations in the order Node installs them. */
-function pathVariant(exports, sep, delimiter) {
+/** The documented operations in the order Node installs them.
+ *
+ * `sep` and `delimiter` come from the module, not from this file.
+ *
+ * They were literals here -- `pathVariant(exports, "/", ":")` -- and the module
+ * exports both, so every test that read `path.sep` was reading a constant
+ * *this shim* supplied. `posix.ts` could have said `sep = "\\"` and nothing in
+ * node's suite could have failed: the value under test never reached the
+ * object the tests see. That is the `bindings.node.mjs` blind spot in a
+ * different file, and it is worse here because a shape shim is supposed to add
+ * shape and no behaviour.
+ *
+ * No fallback to a literal. A module that does not export `sep` should fail
+ * loudly rather than be handed the right answer by its own harness. */
+function pathVariant(exports) {
+  const { sep, delimiter } = exports;
   return {
     resolve: exports.resolve,
     normalize: exports.normalize,
