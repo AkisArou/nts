@@ -4949,39 +4949,46 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
-## Two `Buffer` classes in one process — an open divergence
+## Two `Buffer` classes in one process — and the cause, found after recording the wrong one
 
 `os.userInfo({ encoding: "buffer" })` answers values that fail
 `Buffer.isBuffer`. In the **same process**, `fs.readFileSync` answers values that
 pass. Their `.constructor` objects are different objects with the same name.
 
-    os.userInfo username   Buffer.isBuffer -> false   ctor name "Buffer"
-    fs.readFileSync        Buffer.isBuffer -> true    ctor name "Buffer"
-    same-ctor              false
+**The first version of this section said the cause was unknown and implied `os`
+was resolving to a second copy of the module. That was wrong**, and one more
+probe settled it — printing the two constructors:
 
-What has been ruled out:
+    os.userInfo's Buffer   class Buffer extends Uint8Array { stat...   <- this profile's
+    globalThis.Buffer      function Buffer(arg, encodingOrOffset, l    <- node's own
 
-- **Not the global.** `globalThis.Buffer === require("node:buffer").Buffer` is
-  `true`, and `Buffer.isBuffer(Buffer.from("x"))` is `true`.
-- **Not the import spelling.** `os` and `fs` both write
-  `import { Buffer } from "../../buffer/src/main.ts"`, character for character.
-- **Not the module under test.** `os` is wrong under `--module os` *and* under
-  `--module fs`, so it is not the harness giving the module being tested its own
-  entry point.
-- **Not a stale build artifact.** `os/node_modules/.tsbuild` holds a
-  `.tsbuildinfo` and no emitted JavaScript.
+They are not two copies of one class. They are **this profile's `Buffer` and
+node's**, and which one you get depends on where the value came from:
 
-So there are two instantiations of `buffer/src/main.ts` at run time and `os`
-resolves to the second one. The cause is not yet known.
+- **module code** constructs this profile's `Buffer` — `os/src/main.ts` does
+  `Buffer.from(bytes)` on its own imported class
+- **a stand-in** returns node's, because `fs`'s stand-ins delegate to node's real
+  `fs`, which answers host Buffers
 
-**It is asserted nowhere.** It is not a §13 decision, and pinning it would fix a
-defect in place — the `cpSync` rule. It is recorded here so that the next person
-to see `Buffer.isBuffer` return `false` for something that is plainly a Buffer
-has somewhere to start.
+`Buffer.isBuffer` in a test is node's, so it accepts the stand-in's output and
+rejects the module's.
 
-Worth noting what it would cost if it reached a user: any `instanceof Buffer`
-check on an `os` result is `false`, and `deepStrictEqual` cannot see the
-difference either — the two limits compound.
+**So it is an interpreted-lane artifact, not a defect in `os`.** In a compiled
+build there is one `Buffer` — this profile's — and `isBuffer` is this profile's
+too, so the question does not arise. Which also means the interpreted lane
+*cannot* check `Buffer` identity for any value a module computes itself: another
+entry for the list of things that lane is structurally unable to see, alongside
+the 54 delegating stand-ins.
+
+The four things ruled out before the answer arrived are kept because each was
+worth ruling out: it is not the global (`globalThis.Buffer ===
+require("node:buffer").Buffer`), not the import spelling (`os` and `fs` write it
+identically), not the module under test (`os` is wrong under `--module fs` too),
+and not a stale build artifact (`os/node_modules/.tsbuild` holds no JavaScript).
+
+**What it cost to get wrong**: one commit that recorded "cause not known" and
+implied a module-resolution bug. The probe that settled it was four lines and I
+wrote it after publishing rather than before.
 
 ## `deepStrictEqual` cannot see a prototype, and that weakens the suite
 
