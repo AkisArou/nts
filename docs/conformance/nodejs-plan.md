@@ -43,22 +43,27 @@ gave two different answers and the first had never looked in `runtime/c`. `dgram
 compiling is necessary and not sufficient — `dgram` would fail to *link* whatever
 the compiler does.
 
-Of the 183 that exist, **43 have been compared against node**, up from 0 at the
-start of the session. The interpreted lane cannot do that comparison: 78 of its
-binding stand-ins call node's own implementation, so that lane agrees with node
-by construction whatever the C does. `tooling/conformance/binding-probe.sh`
-builds an addon around a few of a module's bindings *without compiling the
-module*, which is how the other 43 were reached — including `fs`'s, in a module
-that does not build.
+Of the 177 that link, **123 have been compared against node** — 15 probes, 195
+comparisons, 0 divergences, all re-runnable through
+`tooling/conformance/probe-compare.mjs`. The interpreted lane cannot make that
+comparison: 54 of its stand-ins call node's own implementation, so that lane
+agrees with node by construction whatever the C does.
+`tooling/conformance/binding-probe.sh` builds an addon around a few of a module's
+bindings *without compiling the module*, which is how they were reached —
+including `fs`'s and `zlib`'s, in modules that do not build.
+
+**One binding is left that no instrument here can disagree with node about**:
+`nts_os_cpus`, blocked by `heterogeneous-tuple-return`. It started at 17.
 
     1 of 22 modules' compiled artifacts pass every applicable test.
 
     where they stop:
        15  c-did-not-compile
-        4  built-exports-nothing
+        3  built-exports-nothing
         1  built-exports-partial
         1  every-pass-hollow
-        1  green
+        1  partial            os, 4 of 7
+        1  green              punycode, 2 of 2
 
 That `1` is `punycode`, and it is a day old. This document was written when the
 number was zero and had never been anything else. The project exists to compile
