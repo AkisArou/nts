@@ -645,3 +645,67 @@ fn a_new_dependency_is_still_found_after_a_settled_run() {
     assert!(!after.unchanged, "and the run says it did something");
     assert!(root.join(".nts/vendor/mapped@2.0.0/src/index.ts").is_file());
 }
+
+/// What the checker said about a package's recovered source has to survive a
+/// settled run, which skips the pass that produces it.
+///
+/// This regressed the moment the fixpoint was seeded from the lock: a warm run
+/// makes one checker pass, of the developer's *own* config, which never sees
+/// vendored source. It had diagnostics — just none about packages — and taking
+/// that as "no complaints" wiped what the lock had restored and reported every
+/// acquired package as arriving clean, which is the opposite of what this
+/// crate exists to say.
+#[test]
+fn what_a_package_needs_survives_a_settled_run() {
+    let root = fixture("complaints");
+    let modules = root.join("packages/app/node_modules");
+    // Recovered source that reads an ambient its own build supplied.
+    write(
+        &modules.join("ambient/package.json"),
+        r#"{"name":"ambient","version":"1.0.0","main":"./dist/index.js"}"#,
+    );
+    write(
+        &modules.join("ambient/dist/index.js"),
+        "export const x=1;\n//# sourceMappingURL=index.js.map\n",
+    );
+    write(
+        &modules.join("ambient/dist/index.js.map"),
+        r#"{"version":3,"sources":["../src/index.ts"],"sourcesContent":["export const x = process.env.NODE_ENV;\n"],"mappings":""}"#,
+    );
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"ambient":"1.0.0"}}"#,
+    )
+    .unwrap();
+
+    // Without tsgo there are no diagnostics at all, so this asserts the
+    // *mechanism*: whatever a run records, the next run reproduces.
+    let first = acquire(&root);
+    let before: Vec<(String, Vec<String>)> = first
+        .packages
+        .iter()
+        .map(|package| {
+            (
+                package.name.clone(),
+                package.complaints.iter().map(|c| c.code.clone()).collect(),
+            )
+        })
+        .collect();
+
+    let second = acquire(&root);
+    let after: Vec<(String, Vec<String>)> = second
+        .packages
+        .iter()
+        .map(|package| {
+            (
+                package.name.clone(),
+                package.complaints.iter().map(|c| c.code.clone()).collect(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        before, after,
+        "a settled run reports what the first run found, not silence"
+    );
+}

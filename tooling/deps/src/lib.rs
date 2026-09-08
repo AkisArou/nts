@@ -378,6 +378,13 @@ pub fn acquire(
         // source just acquired can be built. Attributed from the previous
         // pass's trace, which is the newest one that saw the current tree.
         attribute(&mut acquisition, &complaints, &vendor_root);
+        // Into the lock, after attribution and after the pass wrote it. A
+        // settled run skips the checker pass that produces these, and a warm
+        // build that says nothing about an acquired package's source is saying
+        // the wrong thing about it.
+        if !options.dry_run {
+            record_complaints(&workspace_root, &acquisition)?;
+        }
         written_in_all += acquisition.files_written;
         for name in &acquisition.pruned {
             if !pruned_in_all.contains(name) {
@@ -478,6 +485,39 @@ fn work_list(
     queue
 }
 
+/// Put what the checker said about each package into the lock.
+///
+/// Written after the pass rather than during it, because attribution needs the
+/// whole package list and the lock is written per package. Cheap: it reads a
+/// small file, changes what moved, and writes only if anything did.
+fn record_complaints(workspace: &Utf8Path, acquisition: &Acquisition) -> Result<(), Error> {
+    let mut lock = emit::read_lock(workspace);
+    let mut changed = false;
+    for package in &acquisition.packages {
+        let Some(locked) = lock.packages.get_mut(&package.name) else {
+            continue;
+        };
+        let recorded: BTreeMap<String, (usize, String)> = package
+            .complaints
+            .iter()
+            .map(|complaint| {
+                (
+                    complaint.code.clone(),
+                    (complaint.count, complaint.example.clone()),
+                )
+            })
+            .collect();
+        if locked.complaints != recorded {
+            locked.complaints = recorded;
+            changed = true;
+        }
+    }
+    if changed {
+        emit::write_lock(workspace, &lock)?;
+    }
+    Ok(())
+}
+
 /// Attach the checker's complaints to the packages whose source they are about.
 ///
 /// Only the vendor tree: an error in the developer's own code is theirs, was
@@ -490,9 +530,6 @@ fn attribute(
     diagnostics: &[resolution::Diagnostic],
     vendor_root: &Utf8Path,
 ) {
-    for package in &mut acquisition.packages {
-        package.complaints.clear();
-    }
     // The vendor directory's own name, matched inside the path rather than as a
     // prefix: tsgo reports a file relative to *its* working directory, so an
     // absolute prefix does not match and every complaint was silently dropped.
@@ -502,6 +539,22 @@ fn attribute(
             .file_name()
             .map_or_else(|| ".nts/vendor".to_owned(), ToOwned::to_owned)
     );
+
+    // Nothing is cleared unless this pass has something to say about the vendor
+    // tree. A settled run makes one checker pass, of the developer's own
+    // config, which never sees vendored source -- so it has diagnostics, none
+    // of them about packages, and taking that as "no complaints" wiped what the
+    // lock had just restored and reported every acquired package as arriving
+    // clean.
+    if !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.file.as_str().contains(&marker))
+    {
+        return;
+    }
+    for package in &mut acquisition.packages {
+        package.complaints.clear();
+    }
     for diagnostic in diagnostics {
         let path = diagnostic.file.as_str();
         let Some(at) = path.rfind(&marker) else {
@@ -578,6 +631,8 @@ fn record(
                 files: 0,
                 mapped: BTreeMap::new(),
                 resolved,
+                // A refused package has no recovered source to complain about.
+                complaints: BTreeMap::new(),
             },
         );
         return;
@@ -601,6 +656,8 @@ fn record(
                 })
                 .collect(),
             resolved,
+            // Filled in after attribution, which needs the whole package list.
+            complaints: BTreeMap::new(),
         },
     );
 }
@@ -672,7 +729,21 @@ fn remembered(
         mapped,
         files: locked.files,
         patterns: patterns.to_vec(),
-        complaints: Vec::new(),
+        // Restored in the same order a fresh attribution produces: commonest
+        // first, so the report reads the same warm as cold.
+        complaints: {
+            let mut restored: Vec<Complaint> = locked
+                .complaints
+                .iter()
+                .map(|(code, (count, example))| Complaint {
+                    code: code.clone(),
+                    count: *count,
+                    example: example.clone(),
+                })
+                .collect();
+            restored.sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
+            restored
+        },
     })
 }
 

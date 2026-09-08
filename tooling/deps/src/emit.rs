@@ -53,6 +53,14 @@ pub struct LockedPackage {
     /// passes to learn what the lock already said.
     #[serde(default)]
     pub resolved: BTreeMap<String, String>,
+    /// What the checker said about this package's recovered source, as
+    /// `code -> (count, example)`.
+    ///
+    /// Recorded because the pass that produces these is the one a settled run
+    /// skips. Without it, a warm build reported every acquired package as
+    /// arriving clean — which is the opposite of what this crate exists to say.
+    #[serde(default)]
+    pub complaints: BTreeMap<String, (usize, String)>,
 }
 
 pub const LOCK_VERSION: u32 = 1;
