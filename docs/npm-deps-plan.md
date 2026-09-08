@@ -430,10 +430,26 @@ and was there before acquisition — 23 of the corpus's, before and after.
 
 ## What it does not do yet
 
-**Step 2**, which needs `compiler/core/src/hir` and `compiler/frontend-ts`.
-Raised with the main lane rather than changed unilaterally; they have taken the
-wording and are pairing the schema bump with a snapshot-cache fix so the two
-invalidations become one.
+**Step 2**, which is in `compiler/core/src/hir` — the main lane's file, raised
+with them rather than changed unilaterally.
+
+**It needs no schema bump, and the claim that it did was wrong.** The lowerer
+cannot tell a `lib.d.ts` builtin from a name whose package was excluded *by
+looking at the declaration* — but it does not have to, because the schema
+already distinguishes them from the other side of the import.
+`SymbolRecord::declarations` says so itself:
+
+> Empty for a symbol declared outside the decoded file set, which is honest:
+> there is no node to point at.
+
+A builtin has none. An imported name declares at its **import specifier**, which
+is decoded because the program wrote it, and walking up its `parent` chain to the
+`ImportDeclaration` gives the module specifier's text. Every field involved is
+already in the snapshot. A complete patch and a repro are with the main lane.
+
+The half that *is* done: `nts deps` names the specifiers a program imports from
+each package it could not acquire, so a reader can connect the refusal to its
+cause before the lowerer does it for them.
 
 Two things the measurements say are not worth doing, recorded so they are not
 rediscovered as ideas:
