@@ -73,6 +73,7 @@ import {
 import {
   appendMkdtempSuffix,
   bytePathForBinding,
+  bothPathsAsBytes,
   displayBytePath,
   encodeFileBytes,
   encodeFileName,
@@ -286,6 +287,30 @@ declare function nts_fs_rm_async(
   callback: (errno: number) => void,
 ): void;
 declare function nts_fs_unlink_async(path: string, callback: (errno: number) => void): void;
+// The byte-path half of the async family. Node accepts a Buffer wherever it
+// accepts a string path; the sync half grew these first and the promises half
+// rejected eleven of twenty-one until it grew them too.
+declare function nts_fs_unlink_async_bytes(
+  path: number[], callback: (errno: number) => void,
+): void;
+declare function nts_fs_chmod_async_bytes(
+  path: number[], mode: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_chown_async_bytes(
+  path: number[], uid: number, gid: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_utimes_async_bytes(
+  path: number[], atime: number, mtime: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_rename_async_bytes(
+  from: number[], to: number[], callback: (errno: number) => void,
+): void;
+declare function nts_fs_copyfile_async_bytes(
+  from: number[], to: number[], flags: number, callback: (errno: number) => void,
+): void;
+declare function nts_fs_link_async_bytes(
+  from: number[], to: number[], callback: (errno: number) => void,
+): void;
 declare function nts_fs_rename_async(
   from: string, to: string, callback: (errno: number) => void,
 ): void;
@@ -1945,26 +1970,38 @@ function errorHasCode(error: unknown, code: string): boolean {
     "code" in error && error.code === code;
 }
 
-export function unlink(path: PathLike, callback?: Callback): void {
-  const validatedPath = getValidatedPath(path);
+export function unlink(path: BytePathLike, callback?: Callback): void {
+  const validatedPath = getValidatedBytePath(path);
   const request = asRequest(callback, "unlink");
-  nts_fs_unlink_async(validatedPath, settle(request, "unlink", validatedPath));
+  const display = displayBytePath(validatedPath);
+  if (typeof validatedPath === "string") {
+    nts_fs_unlink_async(validatedPath, settle(request, "unlink", display));
+    return;
+  }
+  nts_fs_unlink_async_bytes(validatedPath, settle(request, "unlink", display));
 }
 
-export function rename(from: PathLike, to: PathLike, callback?: Callback): void {
-  const validatedFrom = getValidatedPath(from, "oldPath");
-  const validatedTo = getValidatedPath(to, "newPath");
+export function rename(from: BytePathLike, to: BytePathLike, callback?: Callback): void {
+  const validatedFrom = getValidatedBytePath(from, "oldPath");
+  const validatedTo = getValidatedBytePath(to, "newPath");
   const request = asRequest(callback, "rename");
-  nts_fs_rename_async(
-    validatedFrom,
-    validatedTo,
-    settle(request, "rename", validatedFrom, validatedTo),
+  const done = settle(
+    request,
+    "rename",
+    displayBytePath(validatedFrom),
+    displayBytePath(validatedTo),
   );
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  if (asBytes === null) {
+    nts_fs_rename_async(validatedFrom as string, validatedTo as string, done);
+    return;
+  }
+  nts_fs_rename_async_bytes(asBytes[0], asBytes[1], done);
 }
 
 export function copyFile(
-  from: PathLike,
-  to: PathLike,
+  from: BytePathLike,
+  to: BytePathLike,
   flags: number | null | Callback,
   callback?: Callback,
 ): void {
@@ -1972,14 +2009,26 @@ export function copyFile(
     callback = flags;
     flags = 0;
   }
-  const validatedFrom = getValidatedPath(from, "src");
-  const validatedTo = getValidatedPath(to, "dest");
+  const validatedFrom = getValidatedBytePath(from, "src");
+  const validatedTo = getValidatedBytePath(to, "dest");
   const request = asRequest(callback, "copyFile");
+  const mode = validateAccessMode(flags);
+  const done = settle(
+    request,
+    "copyfile",
+    displayBytePath(validatedFrom),
+    displayBytePath(validatedTo),
+  );
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  if (asBytes !== null) {
+    nts_fs_copyfile_async_bytes(asBytes[0], asBytes[1], mode, done);
+    return;
+  }
   nts_fs_copyfile_async(
-    validatedFrom,
-    validatedTo,
-    validateAccessMode(flags),
-    settle(request, "copyfile", validatedFrom, validatedTo),
+    validatedFrom as string,
+    validatedTo as string,
+    mode,
+    done,
   );
 }
 
@@ -2488,15 +2537,22 @@ export function cp(
   );
 }
 
-export function link(from: PathLike, to: PathLike, callback?: Callback): void {
-  const validatedFrom = getValidatedPath(from, "existingPath");
-  const validatedTo = getValidatedPath(to, "newPath");
+export function link(from: BytePathLike, to: BytePathLike, callback?: Callback): void {
+  const validatedFrom = getValidatedBytePath(from, "existingPath");
+  const validatedTo = getValidatedBytePath(to, "newPath");
   const request = asRequest(callback, "link");
-  nts_fs_link_async(
-    validatedFrom,
-    validatedTo,
-    settle(request, "link", validatedFrom, validatedTo),
+  const done = settle(
+    request,
+    "link",
+    displayBytePath(validatedFrom),
+    displayBytePath(validatedTo),
   );
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  if (asBytes === null) {
+    nts_fs_link_async(validatedFrom as string, validatedTo as string, done);
+    return;
+  }
+  nts_fs_link_async_bytes(asBytes[0], asBytes[1], done);
 }
 
 export function symlink(
@@ -2733,28 +2789,29 @@ export function _realpathNative(
   );
 }
 
-export function chmod(path: PathLike, mode: number | string, callback?: Callback): void {
-  const validatedPath = getValidatedPath(path);
+export function chmod(path: BytePathLike, mode: number | string, callback?: Callback): void {
+  const validatedPath = getValidatedBytePath(path);
   const parsedMode = parseFileMode(mode, "mode");
   callback = asRequest(callback, "chmod");
-  nts_fs_chmod_async(
-    validatedPath,
-    parsedMode,
-    settle(callback, "chmod", validatedPath),
-  );
+  const done = settle(callback, "chmod", displayBytePath(validatedPath));
+  if (typeof validatedPath === "string") {
+    nts_fs_chmod_async(validatedPath, parsedMode, done);
+    return;
+  }
+  nts_fs_chmod_async_bytes(validatedPath, parsedMode, done);
 }
 
-export function chown(path: PathLike, uid: number, gid: number, callback?: Callback): void {
+export function chown(path: BytePathLike, uid: number, gid: number, callback?: Callback): void {
   callback = asRequest(callback, "chown");
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
   validateOwnerId(uid, "uid");
   validateOwnerId(gid, "gid");
-  nts_fs_chown_async(
-    validatedPath,
-    uid,
-    gid,
-    settle(callback, "chown", validatedPath),
-  );
+  const done = settle(callback, "chown", displayBytePath(validatedPath));
+  if (typeof validatedPath === "string") {
+    nts_fs_chown_async(validatedPath, uid, gid, done);
+    return;
+  }
+  nts_fs_chown_async_bytes(validatedPath, uid, gid, done);
 }
 
 export function lchown(
@@ -2827,19 +2884,21 @@ export function ftruncate(
 }
 
 export function utimes(
-  path: PathLike,
+  path: BytePathLike,
   atime: number | string | Date,
   mtime: number | string | Date,
   callback?: Callback,
 ): void {
   callback = asRequest(callback, "utimes");
-  const validatedPath = getValidatedPath(path);
-  nts_fs_utimes_async(
-    validatedPath,
-    toUnixTimestamp(atime, "atime"),
-    toUnixTimestamp(mtime, "mtime"),
-    settle(callback, "utime", validatedPath),
-  );
+  const validatedPath = getValidatedBytePath(path);
+  const at = toUnixTimestamp(atime, "atime");
+  const mt = toUnixTimestamp(mtime, "mtime");
+  const done = settle(callback, "utime", displayBytePath(validatedPath));
+  if (typeof validatedPath === "string") {
+    nts_fs_utimes_async(validatedPath, at, mt, done);
+    return;
+  }
+  nts_fs_utimes_async_bytes(validatedPath, at, mt, done);
 }
 
 export function lutimes(
