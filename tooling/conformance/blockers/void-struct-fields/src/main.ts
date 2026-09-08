@@ -17,11 +17,26 @@
 // `W`, so the struct was being laid out with no instantiation to resolve them
 // against. This file is that shape, staged as the plan described and never run.
 //
-// **Run on 2026-09-08 it does not reproduce.** No `void` field is emitted for
-// this or for anything else in the corpus -- the count across every module that
-// reaches `emit-c` is zero. What happens instead is a clean refusal,
-// `a parameter of unrepresentable type (Sink)`, which is a diagnostic rather
-// than invalid C.
+// **Run on 2026-09-08 it does not reproduce**, and the first version of that
+// claim was made on too small a sample. It rested on the seven modules that
+// *build*, which is exactly the wrong set: the `void` fields were reported from
+// modules that do not. Redone properly -- `emit-c` over all twenty-two, every
+// `program.c` that came out, 24MB of generated C:
+//
+//     assert 0   async_hooks 0   buffer 0    console 0    dgram 0
+//     diagnostics_channel 0      events 0    fs 0         http 0
+//     net 0      os 0            path 0      process 0    punycode 0
+//     querystring 0              readline 0  stream 0     string_decoder 0
+//     timers 0   url 0           util 0      zlib 0
+//
+// Zero across the corpus, including `fs` at 2.2MB and every module that pulls
+// in WHATWG Streams -- which is where the three dictionaries above came from.
+// What happens instead is a clean refusal, `a parameter of unrepresentable type
+// (Sink)`, which is a diagnostic rather than invalid C.
+//
+// So this cannot be made to reproduce without fabricating a defect that is not
+// there, and a fixture that manufactured one would be worse than none: it would
+// report a fixed compiler as broken forever.
 //
 // So the fixture asserts the *absence*. `emits-c` cannot state this: one
 // correct emission has no `void` field either, so an expectation phrased that

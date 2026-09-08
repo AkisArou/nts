@@ -283,6 +283,13 @@ rather than transcribed.**
   clean diagnostic, `a parameter of unrepresentable type (Sink)`, which is a
   refusal rather than invalid C.
 
+  Measured over **all twenty-two modules**, every `program.c` `emit-c`
+  produced, 24MB of generated C: zero `void` fields. The first version of this
+  claim searched only the seven that build, which is the wrong set — the fields
+  were reported from modules that do not. It cannot be made to reproduce
+  without fabricating a defect that is not there, and a fixture that
+  manufactured one would report a fixed compiler as broken forever.
+
   The guard asserts *absence*, because `emits-c` cannot state this: correct
   output has no `void` field either, so an expectation phrased that way would
   pass for the wrong reason forever. It carries a function that compiles, since
