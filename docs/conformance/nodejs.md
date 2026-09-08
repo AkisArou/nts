@@ -2816,6 +2816,38 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The counted lane again, over nine modules and on the current binary
+
+The earlier run covered the seven that built then. Nine build now, so it was
+re-run on the 14:18 probe binary from a tree pinned at `9b116611`:
+
+    module                counted                    rc sites
+    async_hooks           0 of 115                      148
+    buffer                0 of 55                       196
+    diagnostics_channel   0 of 32                       147
+    os                    4 passed, 4 failed            229
+    path                  2 of 22, 1 skipped             26
+    punycode              3 of 3                         55
+    querystring           0 of 7                        214
+    string_decoder        0 of 4                        197
+    url                   0 of 52                       454
+
+**1,766 retain/release sites, and every result is identical to the uncounted
+lane.** No invalid HIR, no `NOT COUNTED` row, no `OVERWRITTEN` row, no crash
+under poison. Reference counting still changes nothing observable.
+
+`punycode` additionally ran **140,224 differential comparisons** against node
+over 20,000 random inputs and 32 fixed, with **0 divergences and 0 property
+failures**, while counted — and it is 3 of 3 now rather than 2 of 2, because the
+export-surface test added today runs in that lane too.
+
+The three modules that were not in the earlier run — `async_hooks`,
+`diagnostics_channel` and `string_decoder` — are there because
+`callback-binding` and a prototype fix in `internal/nts_node.h` let them build.
+All three publish too little to pass anything, which is the same story the
+uncounted lane tells; the point of running them here is that counting does not
+add a failure to a module that had none of its own.
+
 ## Most `charCodeAt` calls in this profile take the truncating path
 
 The web-platform lane established that an index crossing a `number` **parameter**
