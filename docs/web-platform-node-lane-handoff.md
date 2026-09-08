@@ -75,8 +75,8 @@ binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
 - local Node-host/real-socket corpus **822/822**, zero skipped;
-- pinned upstream corpus **2,602 tests, 2,574 applicable, 2,566 passing, 8 failing** —
-  grown by 169 today and still the same eight long-standing structural failures;
+- pinned upstream corpus **2,817 tests, 2,776 applicable, 2,768 passing, 8 failing** —
+  grown by 384 today and still the same eight long-standing structural failures;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
   with the four declines being the out-of-range typed-array read reported to the compiler
   lane with a minimal reproduction;
@@ -194,14 +194,28 @@ one, and `CustomEvent.initCustomEvent` (declared legacy in `dom.idl`, unimplemen
 where these inherit them from a shared base class. Pinned in the direction it holds, so fixing
 it fails the test.
 
-**`idlharness` runs for `encoding` and is blocked elsewhere by a profile question.** The
-harness classifies its environment as a `Window`, a worker scope, or a plain realm. This
-runner answers "plain realm", which is true — and correct only for `[Exposed=*]` interfaces.
-`Blob` and `File` are `[Exposed=(Window,Worker)]`, so `FileAPI/idlharness` asserts they
-**must not exist**. Declaring a `DedicatedWorkerGlobalScope` would make it pass and would be
-a claim about the environment that is not true. **What this profile claims to be is a
-question for the governing plan and the repository owner**, not for a lane that would answer
-it in whichever direction turns a fixture green.
+**`idlharness` runs for `encoding` and `streams`**, and between them they found twenty-three
+real conformance defects that no behavioural test in either corpus could see: attribute and
+operation brand checks, constructor and method arities, `@@toStringTag` descriptors, interface
+constants in the wrong place, a static operation that was not enumerable, and — the largest
+group — **nine promise-returning operations and four promise-typed attributes that threw
+synchronously instead of rejecting.** Web IDL requires a promise-typed member to convert a
+thrown exception into a rejected promise; these were not `async`, so the brand-check throw
+escaped.
+
+`streams/idlharness` was blocked on `ReadableStream`'s internals and unblocked the moment they
+were symbol-keyed. It is **202 of 215**; the thirteen remaining are the cross-realm sandbox
+artifact, verified directly and marked.
+
+**`FileAPI/idlharness` cannot pass honestly and is deliberately unpinned.** idlharness
+classifies its environment as a `Window`, a worker scope, or a plain realm — and this runner
+answers "plain realm", which is true and correct only for `[Exposed=*]` interfaces. `Blob` and
+`File` are `[Exposed=(Window,Worker)]`, so the harness asserts they **must not exist**.
+Declaring a `DedicatedWorkerGlobalScope` would make it pass and would be a claim about the
+environment that is not true. **What this profile claims to be is a question for the governing
+plan and the repository owner**, not for a lane that would answer it in whichever direction
+turns a fixture green. `encoding` and `streams` are unaffected because their IDL is
+`[Exposed=*]` throughout.
 
 **Still open, and why.** The **public server module or package** is a repository-layout
 decision. The **Undici API ledger** still cannot be written honestly with nothing pinned.
