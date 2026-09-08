@@ -2816,6 +2816,59 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## A whole class of code here was verified by nothing at all
+
+Every node module's C is exercised only *through* its module, and fifteen of
+twenty-two modules do not compile. So on the morning of 2026-09-08 the position
+was: `zlib.c`'s seven changed signatures, `fs.c`'s eleven new `_bytes` bindings
+and `timers.c`'s entire handle policy had **never been executed by anything**.
+The ABI audit proves the *types* agree with the TypeScript. That is a different
+claim from the code working, and it is easy to read the first as the second.
+
+`tooling/conformance/c-tests.sh` runs `runtime/node/*/test/*.c`. Three files,
+33 checks, and they can run *before* the compiler is ready — which is where this
+lane spends most of its time.
+
+    fs       bytes   10 check(s) pass
+    timers   host    14 check(s) pass
+    zlib     bytes    9 check(s) pass
+
+Each was controlled by sabotage, and the controls are the point rather than the
+pass count. Twelve defects were introduced; **eleven were caught immediately and
+the twelfth found a real gap**, described below.
+
+### What these can ask that node's suite cannot
+
+Three of the checks are only possible because this profile has a seam where node
+has one piece of C++:
+
+- **An immediate must not leave the loop asleep.** `uv_backend_timeout` does not
+  consider check handles, so a `uv_check_t` alone means the loop blocks in poll
+  and a bare `setImmediate` never runs. Asserted by *asking* the loop its
+  intended timeout rather than by running it, because the failure is an
+  indefinite block and a blocked test reports nothing at all.
+- **An immediate may reschedule itself.** Stopping the check handle after the
+  drain rather than before disarms what the drain just armed: one immediate,
+  then silence.
+- **A path containing `0xff` is reachable only by bytes.** It has no string
+  spelling, Linux does not care, and it is the single case where a byte binding
+  that quietly went through a string loses. Node cannot have this bug, so node
+  has no test for it.
+
+### The control that found something
+
+Five sabotages of `timers.c`; four caught. The fifth — deleting the re-apply of
+ref state inside `schedule` — passed. Chasing it: `ensure_handles` unreferences
+all three handles at install, so that re-apply is what makes a plain
+`setTimeout` hold the process open. Every test called a `reset` helper that
+called `toggle_ref(true)` first and referenced the handle by hand, masking it.
+
+**The missing thing was an assertion, not a redundant line.** Two checks now run
+before any `toggle_ref`, and with them all six sabotages are caught including
+the check-handle twin. A suite that passes a broken implementation is the exact
+failure this document keeps a hollow column for, and it appeared inside the
+tooling built to find it — for the second time.
+
 ## What actually stops the fifteen, measured rather than remembered
 
 The standing description of this axis was *"228 of 244 clang errors are one
