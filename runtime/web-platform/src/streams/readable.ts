@@ -858,6 +858,34 @@ type AsyncIteratorRequest<T> =
     };
 
 class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
+  static {
+    // Web IDL 3.7.11: the async iterator prototype object for an asynchronously iterable
+    // declaration inherits from %AsyncIteratorPrototype% and carries exactly `next` and
+    // `return`, each a writable, enumerable, configurable data property.
+    //
+    // A class prototype is none of those things. Its [[Prototype]] is `Object.prototype`, its
+    // methods are non-enumerable, and it has an own `constructor` -- so
+    // `Object.getOwnPropertyNames` answered `constructor,next,return` where the specification
+    // says `next,return`. `async-iterator.any.js` asserts all three and this is what it was
+    // catching; it is a real defect and not the realm mismatch the `headers-basic` iterator
+    // checks turn out to be.
+    //
+    // %AsyncIteratorPrototype% has no global binding, so this expression is the only way to
+    // reach it. Once the chain is right, `[Symbol.asyncIterator]` returning `this` is inherited
+    // from it as well.
+    const asyncIteratorPrototype = Object.getPrototypeOf(
+      Object.getPrototypeOf(async function* (): AsyncGenerator<never, void, unknown> {}).prototype,
+    ) as object;
+    Object.setPrototypeOf(this.prototype, asyncIteratorPrototype);
+    delete (this.prototype as { constructor?: unknown }).constructor;
+    for (const key of ["next", "return"]) {
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
+  }
+
   #stream: ReadableStream<T> | null;
   #reader: ReadableStreamDefaultReader<T> | null;
   readonly #preventCancel: boolean;

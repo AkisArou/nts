@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { Headers, URLSearchParams } from "../src/index.ts";
+import { Headers, ReadableStream, URLSearchParams } from "../src/index.ts";
 
 // WebIDL 3.7.10: an interface with an `iterable<>` declaration has one *iterator prototype
 // object*, whose [[Prototype]] is %IteratorPrototype%, carrying `next` as a writable,
@@ -20,7 +20,7 @@ import { Headers, URLSearchParams } from "../src/index.ts";
 
 const ITERATOR_PROTOTYPE = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
 
-const suite = (name: string, fn: () => void): void => {
+const suite = (name: string, fn: () => void | Promise<void>): void => {
   void test(name, fn);
 };
 
@@ -105,5 +105,60 @@ suite("iteration observes mutation the way it did before", () => {
     seen.push(key);
     if (key === "a") headers.append("b", "2");
   }
+  assert.deepEqual(seen, ["a", "b"]);
+});
+
+// Web IDL 3.7.11, the asynchronous half of the same rule. `async-iterator.any.js` asserts it
+// upstream and fails on the same realm mismatch as `headers-basic`: it computes
+// %AsyncIteratorPrototype% from an `async function*` inside the vm context. Three of its four
+// claims about the shape are realm-independent and all three were failing for real reasons --
+// a class prototype inherits `Object.prototype`, carries an own `constructor`, and has
+// non-enumerable methods.
+const ASYNC_ITERATOR_PROTOTYPE = Object.getPrototypeOf(
+  Object.getPrototypeOf(async function* () {}).prototype,
+);
+
+suite("the ReadableStream async iterator has the Web IDL async iterator prototype", () => {
+  const iterator = new ReadableStream().values();
+  const prototype = Object.getPrototypeOf(iterator) as object;
+  assert.strictEqual(
+    Object.getPrototypeOf(prototype),
+    ASYNC_ITERATOR_PROTOTYPE,
+    "must inherit directly from %AsyncIteratorPrototype%",
+  );
+  assert.deepEqual(
+    Object.getOwnPropertyNames(prototype).sort(),
+    ["next", "return"],
+    "exactly `next` and `return`, so no own `constructor`",
+  );
+  for (const name of ["next", "return"] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+    assert.ok(descriptor, name);
+    assert.strictEqual(descriptor.enumerable, true, `${name} enumerable`);
+    assert.strictEqual(descriptor.configurable, true, `${name} configurable`);
+    assert.strictEqual(descriptor.writable, true, `${name} writable`);
+  }
+  const asIndexed = iterator as unknown as Record<string, { name: string; length: number }>;
+  assert.strictEqual(asIndexed["next"]?.name, "next");
+  assert.strictEqual(asIndexed["next"]?.length, 0);
+  assert.strictEqual(asIndexed["return"]?.name, "return");
+  assert.strictEqual(asIndexed["return"]?.length, 1);
+  assert.strictEqual(
+    (iterator as unknown as { throw?: unknown }).throw,
+    undefined,
+    "`throw` is not part of the declaration",
+  );
+});
+
+suite("reshaping the async iterator prototype did not stop it iterating", async () => {
+  const stream = new ReadableStream<string>({
+    start(controller) {
+      controller.enqueue("a");
+      controller.enqueue("b");
+      controller.close();
+    },
+  });
+  const seen: string[] = [];
+  for await (const chunk of stream) seen.push(chunk);
   assert.deepEqual(seen, ["a", "b"]);
 });
