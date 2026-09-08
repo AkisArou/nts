@@ -149,6 +149,7 @@ const FULLY_CONFORMANT = [
   "Blob",
   "ByteLengthQueuingStrategy",
   "CountQueuingStrategy",
+  "Event",
   "EventTarget",
   "File",
   "FormData",
@@ -158,6 +159,7 @@ const FULLY_CONFORMANT = [
   "TransformStream",
   "TransformStreamDefaultController",
   "URLSearchParams",
+  "WebSocket",
   "WritableStream",
   "WritableStreamDefaultController",
   "WritableStreamDefaultWriter",
@@ -202,7 +204,10 @@ suite("making them enumerable did not expose an internal", () => {
   for (const name of [...FULLY_CONFORMANT, ...MIXIN_INHERITED]) {
     const conformant = globalThis[name];
     if (typeof conformant !== "function") continue;
-    const theirs = new Set(Object.getOwnPropertyNames(conformant.prototype));
+    const theirs = new Set([
+      ...Object.getOwnPropertyNames(conformant.prototype),
+      ...(CONSTANTS_ON_PROTOTYPE[name] ?? []),
+    ]);
     const extra = Object.getOwnPropertyNames(api[name].prototype).filter(
       (key) => key !== "constructor" && !theirs.has(key),
     );
@@ -243,6 +248,30 @@ const HOST_EXTENSIONS = {
   File: ["textStream"],
 };
 
+/**
+ * Names this runtime has on a prototype that the oracle does not, and is right to have.
+ *
+ * Web IDL puts an interface's constants on **both** the interface object and the interface
+ * prototype object. Node keeps `Event`'s four on the constructor only, so comparing prototypes
+ * reports them as extras here. `interfaces/dom.idl` declares them as `const unsigned short`
+ * members of `Event`, which is the citation.
+ */
+const CONSTANTS_ON_PROTOTYPE = {
+  Event: ["NONE", "CAPTURING_PHASE", "AT_TARGET", "BUBBLING_PHASE"],
+};
+
+/**
+ * `[LegacyUnforgeable]` members, which belong on the **instance** and not the prototype.
+ *
+ * `Event.isTrusted` is the only one here. Node exposes it as a prototype accessor; this
+ * runtime defines it as a own, non-configurable accessor per instance, which is what the
+ * extended attribute requires and what the pinned `dom/events/Event-isTrusted.any.js`
+ * fixture asserts. So its absence from this prototype is the conformant answer.
+ */
+const LEGACY_UNFORGEABLE = {
+  Event: ["isTrusted"],
+};
+
 suite("every standard member is still reachable by its own name", () => {
   // The direction the extras check cannot see. `getOwnPropertyNames` skipping symbols is what
   // makes symbol-keying an internal invisible -- and it would make symbol-keying a *public*
@@ -252,9 +281,12 @@ suite("every standard member is still reachable by its own name", () => {
     const conformant = globalThis[name];
     if (typeof conformant !== "function") continue;
     const mine = new Set(Object.getOwnPropertyNames(api[name].prototype));
-    const extensions = new Set(HOST_EXTENSIONS[name] ?? []);
+    const excused = new Set([
+      ...(HOST_EXTENSIONS[name] ?? []),
+      ...(LEGACY_UNFORGEABLE[name] ?? []),
+    ]);
     for (const key of Object.getOwnPropertyNames(conformant.prototype)) {
-      if (key === "constructor" || extensions.has(key)) continue;
+      if (key === "constructor" || excused.has(key)) continue;
       if (!mine.has(key)) missing.push(`${name}.${key}`);
     }
   }
@@ -298,5 +330,33 @@ suite("the mixin deviation is exactly what it is claimed to be", () => {
       "function",
       `${name} must still reach the Body members by inheritance`,
     );
+  }
+});
+
+suite("a [LegacyUnforgeable] member is an own accessor, not a prototype one", () => {
+  // The reason `Event.isTrusted` is excused above, asserted rather than assumed. It has to be
+  // per-instance and non-configurable, which is what makes it unforgeable; a prototype
+  // accessor would be replaceable for every event at once.
+  const event = new api.Event("x");
+  const own = Object.getOwnPropertyDescriptor(event, "isTrusted");
+  assert.notEqual(own, undefined, "isTrusted must be an own property of the instance");
+  assert.equal(typeof own.get, "function");
+  assert.equal(own.configurable, false, "unforgeable means non-configurable");
+  assert.equal(
+    Object.getOwnPropertyDescriptor(api.Event.prototype, "isTrusted"),
+    undefined,
+    "and it must not also be on the prototype",
+  );
+});
+
+suite("interface constants are on the prototype as well as the interface object", () => {
+  for (const [name, constants] of Object.entries(CONSTANTS_ON_PROTOTYPE)) {
+    for (const key of constants) {
+      const descriptor = Object.getOwnPropertyDescriptor(api[name].prototype, key);
+      assert.notEqual(descriptor, undefined, `${name}.prototype.${key}`);
+      assert.equal(descriptor.writable, false, `${name}.${key} must not be writable`);
+      assert.equal(descriptor.configurable, false, `${name}.${key} must not be configurable`);
+      assert.equal(typeof api[name][key], "number", `${name}.${key} must also be on the class`);
+    }
   }
 });

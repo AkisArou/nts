@@ -46,16 +46,28 @@ interface PendingSend {
 
 const webSocketConstructorKey: unique symbol = Symbol("construct NTS WebSocket");
 
+/**
+ * How the runtime closes a socket it owns when the platform shuts down.
+ *
+ * Symbol-keyed: it is called from `provider/web-platform-runtime.ts` and is not a member of
+ * the `WebSocket` interface.
+ */
+export const webSocketCloseForRuntime: unique symbol = Symbol("WebSocket close for runtime");
+
 export class WebSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
-  readonly CONNECTING = 0;
-  readonly OPEN = 1;
-  readonly CLOSING = 2;
-  readonly CLOSED = 3;
-  readonly url: string;
+  // Web IDL puts constants on the interface object **and** the interface prototype object.
+  // Declared as instance fields these were neither: `WebSocket.prototype.CONNECTING` was
+  // undefined and every instance carried four own properties it should not have. Defined on
+  // the prototype in the static block below.
+  declare readonly CONNECTING: 0;
+  declare readonly OPEN: 1;
+  declare readonly CLOSING: 2;
+  declare readonly CLOSED: 3;
+  readonly #url: string;
   private state = 0;
   private amount = 0;
   private chosenProtocol = "";
@@ -157,10 +169,15 @@ export class WebSocket extends EventTarget {
     }
     const parsed = normalizeWebSocketURL(args[0], context);
     const offers = normalizeWebSocketProtocols(args[1] ?? []);
-    this.url = parsed.href;
+    this.#url = parsed.href;
     context.registerWebSocket(this);
     this.registered = true;
     this.#connect(parsed, offers).catch((error) => this.#fail(error));
+  }
+
+  /** `readonly attribute USVString url`, on the prototype as Web IDL requires. */
+  get url(): string {
+    return this.#url;
   }
 
   get readyState(): number {
@@ -296,7 +313,7 @@ export class WebSocket extends EventTarget {
       .then(() => this.session?.close(close.closeCode, close.reason))
       .catch((error) => this.#fail(error));
   }
-  /** @internal */ closeForRuntime(): void {
+  [webSocketCloseForRuntime](): void {
     if (this.state === this.CLOSED) return;
     this.controller.abort();
     this.session?.abort();
@@ -335,6 +352,30 @@ export class WebSocket extends EventTarget {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL constants: on the prototype, non-writable, enumerable, non-configurable.
+    for (const [name, value] of [
+      ["CONNECTING", 0],
+      ["OPEN", 1],
+      ["CLOSING", 2],
+      ["CLOSED", 3],
+    ] as const) {
+      Object.defineProperty(this.prototype, name, {
+        value,
+        writable: false,
+        enumerable: true,
+        configurable: false,
+      });
+    }
+    // Web IDL member attributes. Safe now: the dispatch algorithm's grip on this object and
+    // the subclass constructor helpers are symbol-keyed, so `getOwnPropertyNames` reaches
+    // only the interface's own members and its constants.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "WebSocket",
       writable: false,

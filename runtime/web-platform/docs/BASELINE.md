@@ -6419,3 +6419,50 @@ and the difference shows up exactly where an implementation has been useful enou
 extensions.
 
 820/820 host, upstream unchanged at 2,566 of 2,574, frontier unchanged at 1,407/337.
+
+## `Event` and `WebSocket` close, and the instrument found three more on the way
+
+`Event`'s seven internals and `WebSocket`'s last one are symbol-keyed. The non-standard
+prototype surface is 63 → **17, and all seventeen are `ReadableStream`.** Every other
+interface in this runtime is clean.
+
+The name-completeness assertion — written yesterday in response to the Node lane's report,
+and already responsible for retracting the `Request`/`Response` overclaim — found three more
+defects the moment these two were added to the strict list.
+
+**`WebSocket.url` was an instance field.** Web IDL says `readonly attribute USVString url`,
+which is a prototype accessor. `WebSocket.prototype.url` was `undefined` and `"url" in
+WebSocket.prototype` was `false`. It is a getter over a private field now, which brands it as
+a side effect.
+
+**`WebSocket`'s four constants were instance fields too**, so every socket carried four own
+properties it should not have and `WebSocket.prototype.CONNECTING` did not exist. Web IDL puts
+constants on the interface object **and** the interface prototype object.
+
+**And `Event`'s four constants were getters.** They read correctly and had the wrong shape —
+Web IDL constants are data properties, non-writable, enumerable and **non-configurable**. That
+is the identical accessor-for-data mistake as `@@toStringTag`, in the same file, found months
+apart by two different assertions.
+
+### Two places where node is not the standard, and this runtime is right
+
+Both surfaced as failures and both are recorded with a citation rather than an exclusion.
+
+**`Event.isTrusted` is absent from this prototype on purpose.** It is `[LegacyUnforgeable]`,
+so it belongs on the *instance* as an own non-configurable accessor — which is what makes it
+unforgeable, and what the pinned `dom/events/Event-isTrusted.any.js` asserts. Node exposes it
+as a prototype accessor. A test now asserts the own-accessor shape directly, so the excuse is
+checked rather than trusted.
+
+**`Event`'s constants are absent from node's prototype.** Node keeps them on the constructor
+only; `interfaces/dom.idl` declares them as `const unsigned short` members, which puts them on
+both.
+
+That is now **four** independent places where node is the best available oracle for interface
+shape and is not the standard: two answers for one byte sequence from `TextDecoder`, a `Blob`
+member the IDL does not define, constants missing from a prototype, and an unforgeable
+attribute in the wrong place. The pattern is not that node is unreliable — it is that the gap
+appears exactly where an implementation has been useful enough to grow, and that a differential
+against it has to carry a citation every time it disagrees.
+
+822/822 host, upstream unchanged at 2,566 of 2,574.

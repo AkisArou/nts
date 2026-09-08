@@ -65,15 +65,6 @@ const IDL_CONSTANTS = new Set([
  * change this table and the count below rather than passing silently.
  */
 const INTERNAL_PROTOTYPE_MEMBERS = {
-  Event: [
-    "applyConvertedEventInit",
-    "begin",
-    "end",
-    "initialize",
-    "setPassiveListener",
-    "stopped",
-    "stoppedBeforeTarget",
-  ],
   ReadableStream: [
     "attach",
     "attachBYOB",
@@ -93,10 +84,6 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "releaseBYOB",
     "requestClose",
   ],
-  // Only `closeForRuntime` remains: it is called from `provider/web-platform-runtime.ts`, so
-  // symbol-keying it means touching `provider/`, which is held while the Node lane's sweep
-  // runs. The other five were `private` and are private identifiers now.
-  WebSocket: ["closeForRuntime"],
 };
 
 function internalMembers(name) {
@@ -136,7 +123,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 25);
+  assert.equal(total, 17);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {

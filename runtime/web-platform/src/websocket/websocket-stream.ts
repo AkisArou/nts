@@ -22,6 +22,7 @@ import type {
   WebSocketTransport,
 } from "./transport.ts";
 import { abortSignalSubscribe } from "../core/abort.ts";
+import { webSocketCloseForRuntime } from "./websocket.ts";
 
 export type { WebSocketCloseInfo } from "./semantics.ts";
 
@@ -178,7 +179,7 @@ export class WebSocketStream {
     this.#beginClose(close, "public");
   }
 
-  /** @internal */ closeForRuntime(): void {
+  [webSocketCloseForRuntime](): void {
     if (this.#state === "closed") return;
     const error = createConnectionError("Web-platform runtime is closed", {
       closeCode: 1006,

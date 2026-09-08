@@ -54,6 +54,7 @@ import type {
   TlsUpgrader,
   URLRecord,
 } from "./primitives.ts";
+import { webSocketCloseForRuntime } from "../websocket/websocket.ts";
 
 export interface WebPlatformProxyOptions extends EnvironmentProxyOptions {
   /** TLS over an existing stream is required for CONNECT and SOCKS target security. */
@@ -313,9 +314,9 @@ export class WebPlatformRuntime
     const eventSources = this.eventSources.slice();
     for (const source of eventSources) source.close();
     const webSockets = this.webSockets.slice();
-    for (const socket of webSockets) socket.closeForRuntime();
+    for (const socket of webSockets) socket[webSocketCloseForRuntime]();
     const webSocketStreams = this.webSocketStreams.slice();
-    for (const stream of webSocketStreams) stream.closeForRuntime();
+    for (const stream of webSocketStreams) stream[webSocketCloseForRuntime]();
     this.blobURLs.close();
     this.ownedFetchProxy?.destroy();
     this.http1.close();
