@@ -47,6 +47,9 @@ const _: () = assert!(
 );
 
 /// The erased value: a tag beside a payload, mirroring the C struct.
+/// What a managed type with no layout is carried as; see `descriptor`.
+pub const OBJECT: &str = "java/lang/Object";
+
 pub const VALUE: &str = "nts/rt/NtsValue";
 pub const VALUE_DESCRIPTOR: &str = "Lnts/rt/NtsValue;";
 
@@ -268,9 +271,26 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         HirType::Int { .. } => "I".to_owned(),
         HirType::Float { bits: 32 } => "F".to_owned(),
         HirType::Float { .. } => "D".to_owned(),
-        HirType::Managed(ManagedType::Object(id)) => {
-            nts_jvm_emitter::descriptor::object(&class_name(program.layout(*id)?))
-        }
+        // **A type with no layout is `java/lang/Object` rather than a refusal**,
+        // and that is what the other two lanes already do: `hir::layouts` holds
+        // "every object type the program *uses*", so an absent one is a type
+        // nothing in this program materialises. C gives such a field an opaque
+        // pointer and LLVM gives it `ptr`; neither has to name a class, and
+        // this backend does, which is the whole of the difference.
+        //
+        // It is sound for the same reason it is necessary. Nothing can
+        // construct a value of a type with no layout, so such a field holds
+        // null or something that arrived from outside the compiled set, and
+        // there is no class the program could name to cast it to. Refusing
+        // instead declined five accessors in `tooling/config` -- ordinary
+        // TypeScript, `Config.workspace: Workspace`, where `Workspace` is an
+        // interface this program reads and never builds.
+        //
+        // The fallback is here rather than at the field, so every `getfield`,
+        // `putfield` and signature asks one question and gets one answer.
+        HirType::Managed(ManagedType::Object(id)) => nts_jvm_emitter::descriptor::object(
+            &program.layout(*id).map_or_else(|| OBJECT.to_owned(), class_name),
+        ),
         // UTF-16 code units with a compact one-byte/two-byte representation --
         // which is what `NtsString` implements by hand and what JavaScript's
         // string *is*. `length`, `charAt`, `substring` and `equals` are already
@@ -434,8 +454,10 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::View(element)) => {
                 VType::Object(view_class(element)?.to_owned())
             }
+            // The same fallback as `descriptor`, and it has to be the same or the
+            // frame and the field would disagree about a slot.
             HirType::Managed(ManagedType::Object(id)) => {
-                VType::Object(class_name(program.layout(*id)?))
+                VType::Object(program.layout(*id).map_or_else(|| OBJECT.to_owned(), class_name))
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
