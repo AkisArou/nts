@@ -2816,6 +2816,37 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Most `charCodeAt` calls in this profile take the truncating path
+
+The web-platform lane established that an index crossing a `number` **parameter**
+stops being an integer: a loop-local index is proved int32 and reaches
+`nts_str_char_code_at_int`, while a parameter is a double and reaches
+`nts_str_char_code_at`, which truncates through `ToIntegerOrInfinity` and
+compares twice in floating point — per character. Worth 46% on their scan row.
+
+Counted in the emitted C of every module that builds:
+
+    module            fast (int)   slow (double)
+    punycode               3            1
+    path                   2            0
+    os                     6           10
+    buffer                 6           10
+    string_decoder         6           10
+    querystring            6           13
+    url                   14           14
+
+**Five of seven take the slow path more often than the fast one.** The two that
+do not are `punycode` and `path` — and `punycode` is the one module on this axis
+that passes.
+
+Not acted on here. The cause is inference across a parameter boundary and the
+compiler lane has the general form; restructuring this profile's helpers to keep
+indices loop-local would be a per-site workaround for something better fixed
+once, which is the same judgement as the three declined rewrites above. Recorded
+because it is a measurement of *this* profile that nobody had taken, and because
+a module that compiles and is slow is a different problem from one that does not
+compile — this axis will reach the first kind eventually.
+
 ## `timers` is two fixtured blockers from compiling, and both are named
 
 The closest module on the axis, measured on the 14:18 probe binary. Its entire
