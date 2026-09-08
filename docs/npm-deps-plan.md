@@ -341,7 +341,7 @@ both of them cut in this project's favour.
 
 # What is built already
 
-**Steps 1 and 3 of the goal are done.** `tooling/deps` (`nts deps`) acquires,
+**Steps 1, 3, 4 and 5 of the goal are done; step 2 is the main lane's.** `tooling/deps` (`nts deps`) acquires,
 and `project()` in the CLI acquires before returning a config — so every command
 that builds a program does it, and there is no second command to know about.
 Resolution comes from tsgo rather than from an `exports` walk of our own.
@@ -413,11 +413,34 @@ keeps them, so `src/a/../b.ts` and `src/b.ts` were different keys for one file
 and the module walk revisited it once per path that reached it. `zod` took 90
 seconds and finished in 16 ms after normalising.
 
+## Acquired and buildable are different claims
+
+The report makes both. The pass that answers "where did this specifier go" is a
+typecheck, so its complaints were already being thrown away; they are kept now,
+attributed to the package whose recovered source they are about, and grouped by
+error code — forty instances of `Cannot find name 'process'` are one fact about
+a package's build environment rather than forty facts.
+
+    lru-cache  11.5.2   source map, 3 files
+        4 × TS2339: Property 'unref' does not exist on type 'number'.
+        3 × TS2552: Cannot find name 'process'. Did you mean 'PROCESS'?
+
+Only the vendor tree is reported. An error in the developer's own code is theirs
+and was there before acquisition — 23 of the corpus's, before and after.
+
 ## What it does not do yet
 
-Steps 2, 4 and 5 of the goal. The largest is step 2, which needs
-`compiler/core/src/hir` and `compiler/frontend-ts` — shared with the main lane,
-and raised with it rather than changed unilaterally.
+**Step 2**, which needs `compiler/core/src/hir` and `compiler/frontend-ts`.
+Raised with the main lane rather than changed unilaterally; they have taken the
+wording and are pairing the schema bump with a snapshot-cache fix so the two
+invalidations become one.
+
+Two things the measurements say are not worth doing, recorded so they are not
+rediscovered as ideas:
+
+- **A `postinstall` hook.** Recovery never touches the network, so there is
+  nothing to warm. See above.
+- **Supplying ambients.** They are host globals; see step 4.
 
 # The goal
 
@@ -502,10 +525,16 @@ Copy from here.
 >
 > 4. **Close what is left.**
 >
->    - **Ambient types travel with the source and are not acquired.** Recovered
->      code that reads `process.env` needs the ambient its own build supplied;
->      `tiny-invariant` fails on exactly this. Decide whether to acquire the
->      package's own type dependencies or to report the requirement.
+>    - ~~**Ambient types travel with the source and are not acquired.**~~
+>      **Decided: report, never supply.** 63 of a corpus's 212 remaining
+>      problems are an ambient the package's own build had — `process`,
+>      `Buffer`, a namespace — and `nts deps` now names them per package with
+>      the checker's own message. Acquisition will not add `types` for the
+>      developer, and the reason is not tidiness: these are *host globals*, and
+>      a program compiled to a native target may not have them. Source that
+>      needs `process` is source with a requirement, and satisfying it silently
+>      in a generated config would hide the requirement at exactly the moment it
+>      became relevant.
 >    - **`map-incomplete` is 21 of 458** — a map with `null` holes in
 >      `sourcesContent`. Currently refused, correctly. A pinned repository
 >      checkout is the only route that reaches these, and it is a per-package

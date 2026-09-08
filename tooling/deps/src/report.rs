@@ -129,10 +129,30 @@ fn notes(acquisition: &Acquisition, acquired: &[&PackageReport], out: &mut Strin
             .sum();
         let _ = write!(
             out,
-            "\n{} of {} acquired packages have {total} problem(s) in their recovered\nsource — most often an ambient their own build supplied. The source is real;\nit was written for a configuration this project does not have.\n",
+            "\n{} of {} acquired packages have {total} problem(s) in their recovered\nsource. The source is real; it was written for a configuration this project\ndoes not have.\n",
             unbuildable.len(),
             acquired.len(),
         );
+
+        // The commonest single cause, and the one worth naming separately
+        // because the fix is one line of the developer's own config.
+        let ambient: usize = unbuildable
+            .iter()
+            .flat_map(|package| &package.complaints)
+            .filter(|complaint| matches!(complaint.code.as_str(), "TS2591" | "TS2552" | "TS2503"))
+            .map(|complaint| complaint.count)
+            .sum();
+        if ambient > 0 {
+            let _ = write!(
+                out,
+                "\n{ambient} of those are an ambient the package's own build supplied — \
+                 `process`,\n`Buffer`, a namespace. Adding it to `types` in your tsconfig \
+                 fixes them.\n\nAcquisition will not add it for you: these are host globals, \
+                 and a program\ncompiled to a native target may not have them. Source that \
+                 needs `process` is\nsource with a requirement, and quietly satisfying it \
+                 here would hide that.\n"
+            );
+        }
     }
 
 }
