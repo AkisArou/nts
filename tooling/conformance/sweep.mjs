@@ -597,6 +597,28 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // The skip lists, read back. A skip removes a file from a denominator, so
+  // every percentage in the ledger is computed without it; the entries carry a
+  // reason each and were read by a person when written, and nothing had ever
+  // read them back.
+  {
+    const skips = spawnSync(process.execPath, [join(HERE, "skip-audit.mjs")], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120_000,
+    });
+    const text = `${skips.stdout ?? ""}${skips.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("skips: INSTRUMENT FAILURE -- nothing read; see skip-audit.mjs");
+    } else {
+      const summary = text.split("\n").filter((l) => l.includes("entr(ies)")).join("").trim();
+      if (summary !== "") console.log(`skips: ${summary}`);
+      for (const line of text.split("\n").filter((l) => /STALE|NO REASON/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+    }
+  }
+
   // A test that requires both `x` and `node:x` is comparing the module under
   // test with itself, because the harness substitutes it for both spellings.
   // One such test existed, asserted that node's `EventEmitter.prototype` names
