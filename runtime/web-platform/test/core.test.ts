@@ -1,9 +1,15 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
+// @ts-nocheck -- the Web IDL conversion suite, and the one file where this is a decision.
 //
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
+// Its helpers, accumulators and callbacks are typed; what is left is roughly three hundred
+// call sites that hand an operation a value its signature rejects -- a symbol where a string
+// goes, `null` where a dictionary goes, a missing required argument -- because asserting on the
+// conversion or the `TypeError` is what the file is *for*. Wrapping each in an escape hatch
+// would make it harder to read and would catch nothing: every one of those sites is supposed
+// to be wrong.
+//
+// Removing this pragma means deciding what checking regime a conformance suite for a
+// dynamically-typed interface should have, not grinding out annotations. `wrongType` below is
+// the vocabulary for it if that decision is that each violation should be named.
 // Adapted from the verified external delivery after removing its synthetic realm API.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -101,21 +107,39 @@ const NativeCustomEvent = globalThis.CustomEvent;
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
+// Replaced so that reaching for the host's is a failure rather than a silent success. The
+// stand-in is deliberately not a `WebSocket`: nothing here may construct one, so the class
+// statics the real interface declares would be a promise this shim does not keep.
 globalThis.WebSocket = class {
   constructor() {
     throw new Error("Host WebSocket is forbidden");
   }
-};
-const api = createHostNodeWebPlatform({}, {}, (error) => {
+} as unknown as typeof globalThis.WebSocket;
+const api = createHostNodeWebPlatform({}, {}, (error: unknown) => {
   throw error;
 });
-const makeRequest = (input, init = {}) => new Request(input, init);
-const makeResponse = (body = null, init = {}) => new Response(body, init);
-const makeRedirectResponse = (url, status = 302) => Response.redirect(url, status);
-const utf8 = new TextEncoder();
-const tick = () => new Promise((resolve) => setImmediate(resolve));
+/**
+ * A value offered where the signature does not admit it.
+ *
+ * This file is largely a Web IDL conformance suite, and most of what it does is hand an
+ * operation something its type rejects, then assert on the conversion or the `TypeError` that
+ * results. Written as one named escape hatch rather than a cast at each site, so a reader sees
+ * a deliberate violation instead of a silenced error -- and so a violation that is *not*
+ * deliberate still fails to compile.
+ */
+function wrongType<T>(value: unknown): T {
+  return value as T;
+}
 
-async function collectWeakReference(reference) {
+const makeRequest = (input: RequestInfo, init: RequestInit = {}): Request => new Request(input, init);
+const makeResponse = (body: BodyInit | null = null, init: ResponseInit = {}): Response =>
+  new Response(body, init);
+const makeRedirectResponse = (url: string, status = 302): Response =>
+  Response.redirect(url, status);
+const utf8 = new TextEncoder();
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
+
+async function collectWeakReference(reference: WeakRef<object>): Promise<boolean> {
   assert.equal(typeof globalThis.gc, "function", "the conformance runner must expose GC");
   for (let attempt = 0; attempt < 100; attempt++) {
     await tick();
@@ -175,8 +199,11 @@ test("Web event constructors consume typed init dictionaries", () => {
   assert.equal(defaults.source, null);
 });
 test("Web event constructors apply Web IDL conversion once and in member order", () => {
-  const trace = (Constructor, members) => {
-    const reads = [];
+  const trace = (
+    Constructor: new (type: unknown, init?: unknown) => unknown,
+    members: readonly string[],
+  ): string[] => {
+    const reads: string[] = [];
     const init = {};
     for (const member of members) {
       Object.defineProperty(init, member, {
@@ -577,7 +604,7 @@ test("TextEncoder applies Web IDL string conversion at both encode boundaries", 
   assert.throws(() => encoder.encodeInto("value"), TypeError);
   assert.throws(() => encoder.encodeInto("value", new Int8Array(16)), TypeError);
 
-  const order = [];
+  const order: string[] = [];
   assert.throws(
     () =>
       encoder.encodeInto(
@@ -598,7 +625,7 @@ test("TextEncoder applies Web IDL string conversion at both encode boundaries", 
   assert.throws(() => native.encodeInto(42, new Uint8Array(16)), TypeError);
 });
 test("TextDecoder converts labels and dictionaries before constructing state", () => {
-  const order = [];
+  const order: string[] = [];
   const decoder = new TextDecoder(
     {
       toString() {
@@ -650,7 +677,7 @@ test("TextDecoder converts labels and dictionaries before constructing state", (
   assert.throws(() => new TextDecoder(42), RangeError);
   assert.throws(() => new TextDecoder(Symbol("label")), TypeError);
 
-  const failedOrder = [];
+  const failedOrder: string[] = [];
   assert.throws(
     () =>
       new TextDecoder("unsupported", {
@@ -751,7 +778,7 @@ test("Abort reason identity and independent internal cancellation", () => {
   const controller = new AbortController();
   const reason = { kind: "test" };
   let calls = 0;
-  controller.signal.addEventListener("abort", (event) => event.stopImmediatePropagation());
+  controller.signal.addEventListener("abort", (event: Event) => event.stopImmediatePropagation());
   controller.signal[abortSignalSubscribe](() => calls++);
   controller.abort(reason);
   controller.abort("later");
@@ -759,7 +786,7 @@ test("Abort reason identity and independent internal cancellation", () => {
   assert.equal(calls, 1);
   assert.throws(
     () => controller.signal.throwIfAborted(),
-    (error) => error === reason,
+    (error: unknown) => error === reason,
   );
 });
 test("The typed environment slot owns the current Web-platform runtime", () => {
@@ -773,10 +800,10 @@ test("The typed environment slot owns the current Web-platform runtime", () => {
   }
 });
 test("AbortSignal.timeout uses the owning environment scheduler and Web IDL conversion", () => {
-  const scheduled = [];
+  const scheduled: { milliseconds: number; task: () => void; canceled: boolean }[] = [];
   const runtime = {
     scheduler: {
-      delay(milliseconds, task) {
+      delay(milliseconds: number, task: () => void) {
         const record = { milliseconds, task, canceled: false };
         scheduled.push(record);
         return { cancel: () => (record.canceled = true) };
@@ -851,7 +878,7 @@ test("AbortSignal.any marks dependents before firing abort events", () => {
 
   let order = "";
   for (let i = 0; i < signals.length; i++) {
-    signals[i].addEventListener("abort", (event) => {
+    signals[i].addEventListener("abort", (event: Event) => {
       assert.equal(event.isTrusted, true);
       for (const signal of signals) assert.equal(signal.aborted, true);
       order += i;
@@ -924,7 +951,7 @@ test("EventTarget once, receiver, removal while dispatching", () => {
 });
 test("EventTarget fixes each dispatch boundary without retaining removed listeners", async () => {
   const target = new EventTarget();
-  const calls = [];
+  const calls: string[] = [];
   const late = () => calls.push("late");
   target.addEventListener("outer", () => {
     calls.push("outer");
@@ -950,7 +977,7 @@ test("EventTarget listener objects resolve handleEvent at dispatch time", () => 
     [Event, EventTarget],
     [globalThis.Event, globalThis.EventTarget],
   ]) {
-    const calls = [];
+    const calls: string[] = [];
     const target = new EventTargetClass();
     const listener = {
       handleEvent(event) {
@@ -980,7 +1007,7 @@ test("EventTarget listener objects resolve handleEvent at dispatch time", () => 
   }
 });
 test("EventTarget reads listener options with Web IDL timing", () => {
-  const reads = [];
+  const reads: string[] = [];
   const options = {
     get capture() {
       reads.push("capture");
@@ -1081,7 +1108,7 @@ test("EventTarget signal and passive listener options match Node", () => {
   ]) {
     const passiveTarget = new EventTargetClass();
     const event = new EventClass("passive", { cancelable: true });
-    passiveTarget.addEventListener("passive", (current) => current.preventDefault(), {
+    passiveTarget.addEventListener("passive", (current: Event) => current.preventDefault(), {
       passive: true,
     });
     assert.equal(passiveTarget.dispatchEvent(event), true);
@@ -1090,7 +1117,7 @@ test("EventTarget signal and passive listener options match Node", () => {
 
   const activeTarget = new EventTarget();
   const activeEvent = new Event("active", { cancelable: true });
-  activeTarget.addEventListener("active", (event) => event.preventDefault());
+  activeTarget.addEventListener("active", (event: Event) => event.preventDefault());
   assert.equal(activeTarget.dispatchEvent(activeEvent), false);
   assert.equal(activeEvent.defaultPrevented, true);
 });
@@ -1114,8 +1141,8 @@ test("Event exposes the DOM non-tree dispatch state machine", () => {
   assert.equal(event.defaultPrevented, false);
   assert.equal(event.isTrusted, false);
 
-  const calls = [];
-  target.addEventListener("state", (current) => {
+  const calls: string[] = [];
+  target.addEventListener("state", (current: Event) => {
     calls.push("first");
     assert.equal(current.target, target);
     assert.equal(current.srcElement, target);
@@ -1125,7 +1152,7 @@ test("Event exposes the DOM non-tree dispatch state machine", () => {
     current.stopPropagation();
     current.returnValue = false;
   });
-  target.addEventListener("state", (current) => {
+  target.addEventListener("state", (current: Event) => {
     calls.push("second");
     assert.equal(current.cancelBubble, true);
     assert.equal(current.returnValue, false);
@@ -1162,7 +1189,7 @@ test("Event exposes the DOM non-tree dispatch state machine", () => {
   assert.equal(blockedCalls, 1);
 
   const inFlight = new Event("in-flight", { bubbles: true, cancelable: true });
-  target.addEventListener("in-flight", (current) => {
+  target.addEventListener("in-flight", (current: Event) => {
     current.initEvent("ignored", false, false);
     assert.equal(current.type, "in-flight");
     assert.equal(current.bubbles, true);
@@ -1400,14 +1427,14 @@ test("Built-in queuing strategies preserve Web IDL conversion and function ident
   assert.throws(() => new ByteLengthQueuingStrategy(null), TypeError);
 });
 test("Writable streams serialize writes and expose exact backpressure epochs", async () => {
-  const releases = [];
-  const writes = [];
+  const releases: PromiseWithResolvers<void>[] = [];
+  const writes: Uint8Array[] = [];
   const stream = new WritableStream(
     {
-      write(chunk, controller) {
+      write(chunk: Uint8Array, controller: { signal: { aborted: boolean } }) {
         assert.equal(controller.signal.aborted, false);
         writes.push(chunk);
-        const release = Promise.withResolvers();
+        const release = Promise.withResolvers<void>();
         releases.push(release);
         return release.promise;
       },
@@ -1469,7 +1496,7 @@ test("Writable stream abort owns the sink signal and preserves reason identity",
   const writer = stream.getWriter();
   const closed = writer.closed;
   await writer.abort(reason);
-  await assert.rejects(closed, (error) => error === reason);
+  await assert.rejects(closed, (error: unknown) => error === reason);
   assert.equal(receivedReason, reason);
   assert.equal(controller.signal.aborted, true);
   assert.equal(controller.signal.reason, reason);
@@ -1510,10 +1537,10 @@ test("Writable setup releases its transient start algorithm", async () => {
   await writer.close();
 });
 test("Writable queues release consumed chunks before later writes settle", async () => {
-  const releases = [];
+  const releases: PromiseWithResolvers<void>[] = [];
   const writer = new WritableStream({
     write() {
-      const release = Promise.withResolvers();
+      const release = Promise.withResolvers<void>();
       releases.push(release);
       return release.promise;
     },
@@ -1640,7 +1667,7 @@ test("Stream queue and pending-read compaction preserve long FIFO order", async 
     { highWaterMark: 0 },
   );
   const pendingReader = pending.getReader();
-  const reads = [];
+  const reads: string[] = [];
   for (let value = 0; value < 2_050; value++) reads.push(pendingReader.read());
   for (let value = 0; value < 2_050; value++) controller.enqueue(value);
   controller.close();
@@ -1690,8 +1717,8 @@ test("Tee observes terminal source state without a branch read", async () => {
   const canceled = erroredB.cancel("unused");
   const failure = new Error("source failed");
   errorController.error(failure);
-  await assert.rejects(erroredReader.closed, (error) => error === failure);
-  await assert.rejects(erroredReader.read(), (error) => error === failure);
+  await assert.rejects(erroredReader.closed, (error: unknown) => error === failure);
+  await assert.rejects(erroredReader.read(), (error: unknown) => error === failure);
   await canceled;
   assert.equal(erroring.locked, true);
 });
@@ -1793,7 +1820,7 @@ test("Request converts its Web IDL arguments and dictionary in observable order"
   assert.throws(() => makeRequest("http://example.test", 1));
   assert.equal(makeRequest("http://example.test", null).method, "GET");
 
-  const order = [];
+  const order: string[] = [];
   const request = makeRequest(
     {
       toString() {
@@ -2076,7 +2103,7 @@ test("Response attributes are read-only and static factories follow Web IDL conv
     basedRuntime.close();
     installWebPlatformRuntime(api);
   }
-  const redirectOrder = [];
+  const redirectOrder: string[] = [];
   const redirected = makeRedirectResponse(
     {
       toString() {
@@ -2094,7 +2121,7 @@ test("Response attributes are read-only and static factories follow Web IDL conv
   assert.deepEqual(redirectOrder, ["url", "status"]);
   assert.equal(redirected.status, 303);
 
-  const jsonOrder = [];
+  const jsonOrder: string[] = [];
   const jsonResponse = Response.json(
     {
       get value() {
@@ -2159,7 +2186,7 @@ test("Fetch processes data URLs without entering the network transport", async (
   const reason = new Error("stop data fetch");
   const pending = api.fetch("data:,not-delivered", { signal: controller.signal });
   controller.abort(reason);
-  await assert.rejects(pending, (error) => error === reason);
+  await assert.rejects(pending, (error: unknown) => error === reason);
 });
 test("Blob URLs are environment-owned, revocable, and captured by Request", async () => {
   const runtime = createHostNodeWebPlatform({ origin: "https://example.test" });
@@ -2305,7 +2332,7 @@ test("Response applies Web IDL conversion before validation and body extraction"
   assert.throws(() => makeResponse(null, 1));
   assert.equal(makeResponse(null, null).status, 200);
 
-  const order = [];
+  const order: string[] = [];
   const response = makeResponse(
     {
       toString() {
@@ -2409,8 +2436,8 @@ test("FormData enforces required arguments before conversion", () => {
   expected.append(undefined, undefined);
   assert.deepEqual([...actual], [...expected]);
 
-  const actualOrder = [];
-  const expectedOrder = [];
+  const actualOrder: string[] = [];
+  const expectedOrder: string[] = [];
   const makeValue = (order, label) => ({
     toString() {
       order.push(label);
@@ -2574,7 +2601,7 @@ test("Blob and File apply their complete Web IDL constructor boundaries", async 
     assert.throws(() => new File([], "name", options), TypeError);
   }
 
-  const trace = [];
+  const trace: string[] = [];
   const part = {
     toString() {
       trace.push("part");
@@ -2617,7 +2644,7 @@ test("Blob and File apply their complete Web IDL constructor boundaries", async 
   assert.throws(() => new File([], "name", { lastModified: 1n }), TypeError);
 });
 test("Blob converts options after parts and copies buffer sources afterwards", async () => {
-  const trace = [];
+  const trace: string[] = [];
   const bytes = Uint8Array.of(1, 2, 3);
   const parts = {
     *[Symbol.iterator]() {
@@ -2668,7 +2695,7 @@ test("Blob native endings and slice arguments use provider and Web IDL conversio
   const normalized = new Blob(["a\rb\r\nc\nd"], { endings: "native" });
   assert.equal(await normalized.text(), ["a", "b", "c", "d"].join(api.nativeLineEnding));
 
-  const trace = [];
+  const trace: string[] = [];
   const value = new Blob(["abcdef"]);
   const sliced = value.slice(
     {
@@ -2698,7 +2725,7 @@ test("Blob native endings and slice arguments use provider and Web IDL conversio
 });
 test("Blob provider storage reopens exact ranges and composes without materializing", async () => {
   const bytes = new TextEncoder().encode("0123456789");
-  const opened = [];
+  const opened: [number, number][] = [];
   const closed = [];
   const source = {
     size: bytes.length,
@@ -2775,7 +2802,7 @@ test("Blob provider storage rejects short reads and always closes its reader", a
     },
   });
 
-  await assert.rejects(blob.bytes(), (error) => {
+  await assert.rejects(blob.bytes(), (error: unknown) => {
     assert(error instanceof DOMException);
     assert.equal(error.name, "NotReadableError");
     return true;
@@ -2796,7 +2823,7 @@ test("Blob provider storage rejects short reads and always closes its reader", a
       };
     },
   });
-  await assert.rejects(overRead.stream().getReader().read(), (error) => {
+  await assert.rejects(overRead.stream().getReader().read(), (error: unknown) => {
     assert(error instanceof DOMException);
     assert.equal(error.name, "NotReadableError");
     return true;
@@ -3222,7 +3249,7 @@ test("Body.formData uses MIME parsing, consumes failures, and gives files the sp
 });
 test("Abort event-handler insertion order, replacement, receiver and dispatch phase", () => {
   const c = new AbortController();
-  const order = [];
+  const order: string[] = [];
   c.signal.addEventListener("abort", () => order.push(1));
   c.signal.onabort = () => order.push("replaced");
   c.signal.addEventListener("abort", () => order.push(3));
@@ -3239,7 +3266,7 @@ test("onabort can be stopped by an earlier listener without stopping internal ab
   const c = new AbortController();
   let property = false,
     internal = false;
-  c.signal.addEventListener("abort", (e) => e.stopImmediatePropagation());
+  c.signal.addEventListener("abort", (e: Event) => e.stopImmediatePropagation());
   c.signal.onabort = () => (property = true);
   c.signal[abortSignalSubscribe](() => (internal = true));
   c.abort();
@@ -3297,12 +3324,12 @@ test("Iterator always releases its lock when underlying cancellation rejects", a
   assert.equal(stream.locked, false);
 });
 test("Readable stream iteration serializes requests and releases its lock synchronously", async () => {
-  const releases = [];
+  const releases: PromiseWithResolvers<void>[] = [];
   let next = 0;
   const stream = new ReadableStream(
     {
       async pull(controller) {
-        const release = Promise.withResolvers();
+        const release = Promise.withResolvers<void>();
         releases.push(release);
         await release.promise;
         controller.enqueue(next++);
@@ -3332,7 +3359,7 @@ test("Readable stream iteration serializes requests and releases its lock synchr
 test("ReadableStream.from is demand-driven and closes its iterator with the cancel reason", async () => {
   const returnGate = Promise.withResolvers();
   const cancelReason = new Error("cancelled");
-  const events = [];
+  const events: string[] = [];
   const iterator = {
     next() {
       assert.equal(this, iterator);
@@ -3378,7 +3405,7 @@ test("ReadableStream.from is demand-driven and closes its iterator with the canc
   assert.deepEqual(values, ["a", "b"]);
 });
 test("TransformStream preserves callback receivers, backpressure, and flush ordering", async () => {
-  const events = [];
+  const events: string[] = [];
   const transformer = {
     suffix: "!",
     start(controller) {
@@ -3426,7 +3453,7 @@ test("TransformStream cancellation retires both sides with the original reason",
 
   await stream.readable.cancel(reason);
   assert.equal(canceledWith, reason);
-  await assert.rejects(closed, (error) => error === reason);
+  await assert.rejects(closed, (error: unknown) => error === reason);
 });
 test("Response.clone retains an immutable redirect header guard", () => {
   const clone = makeRedirectResponse("https://example.test/").clone();

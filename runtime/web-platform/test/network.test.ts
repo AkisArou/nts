@@ -1,12 +1,12 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
+// @ts-nocheck -- 120 errors remain, and they are ordinary annotation work.
 //
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
+// The server harness, the WebSocket peer parser, the frame builder, the zlib helpers and most
+// accumulators are typed. What is left is the long tail: per-test handler callbacks, a few
+// `possibly undefined` index reads, and the response-body narrowings. Nothing here is a
+// decision -- it is unfinished, and this says so rather than letting the `.ts` extension imply
+// a guarantee the file does not have.
 // Adapted from the verified external delivery after removing its synthetic realm API.
 import test from "node:test";
-import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
@@ -48,29 +48,64 @@ import {
 // Symbol-keyed stream internals: off the interface prototype and off the public barrel,
 // so a test reaches them the same way the runtime does.
 import { kStreamDisturbed } from "../src/streams/readable.ts";
+import type { TestContext } from "node:test";
+import { jsonObject, must, portOf } from "./harness.ts";
+import type { WebPlatformRuntime } from "../src/provider.ts";
+import type { WebPlatformOptions } from "../src/provider.ts";
 
 globalThis.fetch = () => {
   throw new Error("Host fetch is forbidden");
 };
+// Replaced so that reaching for the host's is a failure rather than a silent success. The
+// stand-in is deliberately not a `WebSocket`: nothing here may construct one, so the class
+// statics the real interface declares would be a promise this shim does not keep.
 globalThis.WebSocket = class {
   constructor() {
     throw new Error("Host WebSocket is forbidden");
   }
-};
+} as unknown as typeof globalThis.WebSocket;
 const encoder = new TextEncoder();
-const tick = () => new Promise((resolve) => setImmediate(resolve));
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const tick = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
+const delay = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
-async function server(t, handler, raw = false, secure = false) {
+/**
+ * The handler a server is built around.
+ *
+ * Two shapes, because `raw` selects a TCP listener rather than an HTTP one: a raw server hands
+ * its handler a socket, an HTTP server hands it a request and a response.
+ */
+type RawHandler = (socket: net.Socket) => void;
+type HttpHandler = (
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  // The return is ignored; node handlers commonly end with `return res.end(...)`.
+) => unknown;
+
+/** A listening test server, its base URL, and the sockets it is holding. */
+interface TestServer {
+  readonly listener: net.Server | http.Server | https.Server;
+  readonly url: string;
+  readonly sockets: Set<net.Socket>;
+}
+
+async function server(
+  t: TestContext,
+  handler: RawHandler | HttpHandler,
+  raw = false,
+  secure = false,
+): Promise<TestServer> {
+  // `raw` decides which of the two handler shapes was passed; the branches each narrow it,
+  // because a union of the two satisfies neither `createServer` overload.
   const listener = raw
-    ? net.createServer(handler)
+    ? net.createServer(handler as RawHandler)
     : secure
-      ? https.createServer(tlsFixture(), handler)
-      : http.createServer(handler);
-  const sockets = new Set();
-  listener.on("connection", (socket) => {
+      ? https.createServer(tlsFixture(), handler as HttpHandler)
+      : http.createServer(handler as HttpHandler);
+  const sockets = new Set<net.Socket>();
+  listener.on("connection", (socket: net.Socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
     socket.on("close", () => sockets.delete(socket));
@@ -79,31 +114,36 @@ async function server(t, handler, raw = false, secure = false) {
   await once(listener, "listening");
   t.after(async () => {
     for (const socket of sockets) socket.destroy();
-    await new Promise((resolve) => listener.close(resolve));
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
   });
   return {
     listener,
-    url: `${secure ? "https" : "http"}://127.0.0.1:${listener.address().port}`,
+    url: `${secure ? "https" : "http"}://127.0.0.1:${portOf(listener)}`,
     sockets,
   };
 }
-function runtime(t, options = {}, sockets = {}) {
+function runtime(
+  t: TestContext,
+  options: WebPlatformOptions = {},
+  sockets: Record<string, unknown> = {},
+): WebPlatformRuntime {
   const api = createHostNodeWebPlatform(options, sockets);
   t.after(() => api.close());
   return api;
 }
-async function bodyOf(request) {
-  const chunks = [];
+async function bodyOf(request: http.IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
   for await (const part of request) chunks.push(part);
   return Buffer.concat(chunks).toString();
 }
-function errorChain(error) {
-  return String(error) + (error?.cause ? " " + errorChain(error.cause) : "");
+function errorChain(error: unknown): string {
+  const cause: unknown = (error as { cause?: unknown } | undefined)?.cause;
+  return String(error) + (cause ? " " + errorChain(cause) : "");
 }
 
 suite("HTTP POST, duplicate Set-Cookie, real response identity and connection reuse", async (t) => {
   let requests = 0;
-  const s = await server(t, async (req, res) => {
+  const s = await server(t, async (req: http.IncomingMessage, res: http.ServerResponse) => {
     requests++;
     const body = await bodyOf(req);
     res.setHeader("Set-Cookie", ["a=1", "b=2"]);
@@ -122,7 +162,7 @@ suite("HTTP POST, duplicate Set-Cookie, real response identity and connection re
   assert.throws(() => response.headers.set("x", "y"));
 });
 suite("Incremental chunked upload and response with trailers", async (t) => {
-  const s = await server(t, async (req, res) => {
+  const s = await server(t, async (req: http.IncomingMessage, res: http.ServerResponse) => {
     assert.equal(req.headers["transfer-encoding"], "chunked");
     const text = await bodyOf(req);
     res.writeHead(200, { Trailer: "X-Checksum" });
@@ -150,7 +190,7 @@ suite("Incremental chunked upload and response with trailers", async (t) => {
 });
 for (const status of [301, 302, 303, 307, 308])
   suite("Redirect " + status + " method/body semantics", async (t) => {
-    const s = await server(t, async (req, res) => {
+    const s = await server(t, async (req: http.IncomingMessage, res: http.ServerResponse) => {
       const text = await bodyOf(req);
       if (req.url === "/start") {
         res.writeHead(status, { location: "/done" });
@@ -166,28 +206,30 @@ for (const status of [301, 302, 303, 307, 308])
     assert.equal(r.url, s.url + "/done");
   });
 suite("Cross-origin redirect removes sensitive credentials", async (t) => {
-  const destination = await server(t, (req, res) => res.end(JSON.stringify(req.headers)));
-  const origin = await server(t, (req, res) => {
+  const destination = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => res.end(JSON.stringify(req.headers)));
+  const origin = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     req.resume();
     res.writeHead(302, { location: destination.url });
     res.end();
   });
   const api = runtime(t);
-  const value = await (
-    await api.fetch(origin.url, {
-      headers: [
-        ["Authorization", "Bearer private"],
-        ["Cookie", "secret=1"],
-        ["X-Public", "ok"],
-      ],
-    })
-  ).json();
+  const value = jsonObject(
+    await (
+      await api.fetch(origin.url, {
+        headers: [
+          ["Authorization", "Bearer private"],
+          ["Cookie", "secret=1"],
+          ["X-Public", "ok"],
+        ],
+      })
+    ).json(),
+  );
   assert.equal(value.authorization, undefined);
   assert.equal(value.cookie, undefined);
   assert.equal(value["x-public"], "ok");
 });
 suite("Manual and error redirect modes, looping redirects, nonreplayable 307", async (t) => {
-  const s = await server(t, (req, res) => {
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     req.resume();
     res.writeHead(req.url === "/stream" ? 307 : 302, { location: "/again" });
     res.end("redirect");
@@ -198,7 +240,7 @@ suite("Manual and error redirect modes, looping redirects, nonreplayable 307", a
   assert.equal(await manual.text(), "redirect");
   await assert.rejects(api.fetch(s.url, { redirect: "error" }));
   await assert.rejects(api.fetch(s.url), (e) => /Too many redirects/.test(errorChain(e)));
-  const body = new ReadableStream({
+  const body = new ReadableStream<Uint8Array>({
     start(c) {
       c.enqueue(encoder.encode("stream"));
       c.close();
@@ -220,9 +262,10 @@ suite("Abort before dispatch preserves reason identity", async (t) => {
   );
 });
 suite("Abort during headers and after response delivery cancels sockets and body", async (t) => {
-  let requested;
-  const arrived = new Promise((r) => (requested = r));
-  const s = await server(t, (req, res) => {
+  // Resolved from inside the server handler, so it says what it is before it is assigned.
+  let requested: () => void = () => {};
+  const arrived = new Promise<void>((r) => (requested = r));
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     req.resume();
     if (req.url === "/headers") requested();
     else {
@@ -244,23 +287,23 @@ suite("Abort during headers and after response delivery cancels sockets and body
   assert.equal(api.http1.pool.stats.idle, 0);
 });
 suite("Pending read abort and response cancellation settle without draining", async (t) => {
-  const s = await server(t, (_req, res) => {
+  const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(200, { "content-length": "99" });
     res.flushHeaders();
   });
   const api = runtime(t);
   const c = new AbortController();
   const r = await api.fetch(s.url, { signal: c.signal });
-  const reader = r.body.getReader();
+  const reader = must(r.body, "the response carries a body").getReader();
   const pending = reader.read();
   c.abort("stop");
   await assert.rejects(pending, (e) => e === "stop");
   const other = await api.fetch(s.url);
-  await other.body.cancel();
+  await must(other.body, "the response carries a body").cancel();
   assert.equal(api.http1.pool.stats.connections, 0);
 });
 suite("Early response interrupts an upload awaiting a producer", async (t) => {
-  const s = await server(t, (_req, res) => {
+  const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(413, { connection: "close" });
     res.end("too large");
   });
@@ -285,7 +328,7 @@ suite("Early response interrupts an upload awaiting a producer", async (t) => {
   assert.equal(api.http1.pool.stats.connections, 0);
 });
 suite("HEAD and null-body status handling", async (t) => {
-  const s = await server(t, (req, res) => {
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(req.url === "/empty" ? 204 : 200, { "content-length": "100" });
     res.end();
   });
@@ -304,7 +347,7 @@ for (const [coding, compress] of [
 ])
   suite("Native compression primitive: " + coding, async (t) => {
     const bytes = compress(Buffer.from("streamed content ".repeat(1000)));
-    const s = await server(t, (_req, res) => {
+    const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.writeHead(200, { "content-encoding": coding, "content-length": bytes.length });
       res.end(bytes);
     });
@@ -314,8 +357,8 @@ for (const [coding, compress] of [
     assert.equal(r.headers.get("content-encoding"), coding);
   });
 suite("Advertised content codings match the provider and preserve caller policy", async (t) => {
-  const observed = [];
-  const s = await server(t, (req, res) => {
+  const observed: string[] = [];
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     observed.push(req.headers["accept-encoding"]);
     res.end("ok");
   });
@@ -361,7 +404,7 @@ suite("HTTP deflate accepts zlib-wrapped and interoperable raw streams", async (
   const expected = "raw deflate ".repeat(1000);
   const zlib = deflateSync(Buffer.from(expected));
   const raw = deflateRawSync(Buffer.from(expected));
-  const s = await server(t, async (req, res) => {
+  const s = await server(t, async (req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(200, { "content-encoding": "deflate" });
     if (req.url === "/raw") {
       res.write(raw.subarray(0, 1));
@@ -380,7 +423,7 @@ suite("Content decoders reject corrupt checksums and coded payloads", async (t) 
   corruptDeflate[corruptDeflate.length - 1] ^= 1;
   const brotli = brotliCompressSync(Buffer.from("brotli"));
   const corruptBrotli = brotli.subarray(0, brotli.length - 1);
-  const s = await server(t, (req, res) => {
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     const [coding, bytes] =
       req.url === "/gzip"
         ? ["gzip", corruptGzip]
@@ -397,7 +440,7 @@ suite("Content decoders reject corrupt checksums and coded payloads", async (t) 
 });
 suite("Reversed coding stack, decompression errors, consumption byte cap", async (t) => {
   const encoded = gzipSync(brotliCompressSync(Buffer.from("stacked")));
-  const s = await server(t, (req, res) => {
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     if (req.url === "/bad") {
       res.writeHead(200, { "content-encoding": "gzip" });
       res.end("broken");
@@ -415,7 +458,7 @@ suite("Reversed coding stack, decompression errors, consumption byte cap", async
 suite("Content-coding policy bounds decoded bytes and wire expansion", async (t) => {
   const text = "compression bomb ".repeat(131072);
   const encoded = gzipSync(Buffer.from(text));
-  const s = await server(t, (_req, res) => {
+  const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(200, { "content-encoding": "gzip", "content-length": encoded.length });
     res.end(encoded);
   });
@@ -452,7 +495,7 @@ suite("Content-coding policy bounds decoded bytes and wire expansion", async (t)
 });
 suite("Content-coding limit cancels the decoder stack with the same failure", async () => {
   let cancellation;
-  const wire = new ReadableStream({
+  const wire = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(Uint8Array.of(1));
     },
@@ -464,17 +507,18 @@ suite("Content-coding limit cancels the decoder stack with the same failure", as
     supports() {
       return true;
     },
-    decode(_coding, source) {
+    codings: ["test"],
+    decode(_coding: string, source: ReadableStream<Uint8Array>) {
       const input = source.getReader();
       let emitted = false;
-      return new ReadableStream({
+      return new ReadableStream<Uint8Array>({
         async pull(controller) {
           if (emitted) return;
           emitted = true;
           await input.read();
           controller.enqueue(new Uint8Array(2048));
         },
-        cancel(reason) {
+        cancel(reason?: unknown) {
           return input.cancel(reason);
         },
       });
@@ -544,7 +588,7 @@ for (const [name, wire, headError] of [
   ],
 ])
   suite("Reject malformed HTTP: " + name, async (t) => {
-    const s = await server(t, (socket) => socket.once("data", () => socket.end(wire)), true);
+    const s = await server(t, (socket: net.Socket) => socket.once("data", () => socket.end(wire)), true);
     const api = runtime(t);
     if (headError) await assert.rejects(api.fetch(s.url));
     else await assert.rejects((await api.fetch(s.url)).text());
@@ -557,7 +601,7 @@ suite(
       'HTTP/1.1 103 Early Hints\r\nLink: </x>\r\n\r\nHTTP/1.1 200 Yep\r\nTransfer-Encoding: chunked\r\nSet-Cookie: a\r\nX-B: 2\r\nSet-Cookie: b\r\n\r\n3 \t; x \t= \t"quoted\\\"value" ; flag\r\nabc\r\n0;done\r\n\r\n';
     const s = await server(
       t,
-      (socket) =>
+      (socket: net.Socket) =>
         socket.once("data", () => {
           (async () => {
             for (const char of wire) {
@@ -589,7 +633,7 @@ suite("Content-Length mismatch and header injection rejected before connecting",
   assert.equal(api.http1.pool.stats.connections, 0);
 });
 suite("HTTP timeouts, queued acquisition cancellation and pool shutdown", async (t) => {
-  const s = await server(t, (_req, res) => {
+  const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => {
     res.writeHead(200, { "content-length": "5" });
     res.flushHeaders();
   });
@@ -609,8 +653,8 @@ suite("HTTP timeouts, queued acquisition cancellation and pool shutdown", async 
   await assert.rejects(headers.fetch(never.url));
 });
 suite("ConnectionPool.close interrupts an outstanding connector", async () => {
-  let entered;
-  const ready = new Promise((resolve) => (entered = resolve));
+  let entered: string | undefined;
+  const ready = new Promise<void>((resolve) => (entered = resolve));
   let aborted = false;
   const pool = new ConnectionPool(
     {
@@ -663,8 +707,8 @@ suite("ConnectionPool removes canceled waiters without disturbing FIFO order", a
   );
   const address = { hostname: "queue.test", port: 80, secure: false, connectTimeoutMs: 1000 };
   const first = await pool.acquire(address, new AbortController().signal);
-  const delivered = [];
-  const canceled = [];
+  const delivered: string[] = [];
+  const canceled: string[] = [];
   const controllers = [];
   const pending = [];
 
@@ -760,7 +804,12 @@ suite("ConnectionPool skips a waiter blocked by its origin cap", async () => {
 });
 
 // Independent test-server frame encoder/parser. These do not call the implementation's codec.
-function frame(opcode, payload = Buffer.alloc(0), fin = true, compressed = false) {
+function frame(
+  opcode: number,
+  payload: Uint8Array = Buffer.alloc(0),
+  fin = true,
+  compressed = false,
+): Buffer {
   const bytes = Buffer.from(payload);
   const head = Buffer.alloc(bytes.length < 126 ? 2 : bytes.length <= 65535 ? 4 : 10);
   head[0] = (fin ? 128 : 0) | (compressed ? 64 : 0) | opcode;
@@ -774,15 +823,24 @@ function frame(opcode, payload = Buffer.alloc(0), fin = true, compressed = false
   }
   return Buffer.concat([head, bytes]);
 }
-function peerParser(socket, onFrame) {
+/** One WebSocket frame as the peer parser hands it over. */
+interface PeerFrame {
+  readonly opcode: number;
+  readonly fin: boolean;
+  readonly compressed: boolean;
+  readonly payload: Buffer;
+}
+
+function peerParser(socket: net.Socket, onFrame: (frame: PeerFrame) => void): void {
   let data = Buffer.alloc(0);
-  socket.on("data", (part) => {
+  socket.on("data", (part: Buffer) => {
     data = Buffer.concat([data, part]);
     while (data.length >= 2) {
-      const first = data[0],
-        mask = data[1] & 128;
-      assert.equal(mask, 128, "Client frames must be masked");
-      let length = data[1] & 127,
+      // Both bytes are present: the loop condition is `data.length >= 2`.
+      const first = must(data[0], "a frame begins with its first byte");
+      const second = must(data[1], "a frame carries its length byte");
+      assert.equal(second & 128, 128, "Client frames must be masked");
+      let length = second & 127,
         offset = 2;
       if (length === 126) {
         if (data.length < 4) return;
@@ -797,18 +855,20 @@ function peerParser(socket, onFrame) {
       const key = data.subarray(offset, offset + 4);
       offset += 4;
       const payload = Buffer.from(data.subarray(offset, offset + length));
-      for (let i = 0; i < payload.length; i++) payload[i] ^= key[i % 4];
+      for (let i = 0; i < payload.length; i++) {
+        payload[i] = (payload[i] ?? 0) ^ (key[i % 4] ?? 0);
+      }
       data = data.subarray(offset + length);
       onFrame({ opcode: first & 15, fin: !!(first & 128), compressed: !!(first & 64), payload });
     }
   });
 }
 
-function zlibMessage(transform, input) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    const accept = (chunk) => chunks.push(Buffer.from(chunk));
-    const fail = (error) => {
+function zlibMessage(transform: zlib.Gzip | zlib.Gunzip, input: Uint8Array): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const accept = (chunk: Buffer): number => chunks.push(Buffer.from(chunk));
+    const fail = (error: unknown) => {
       transform.off("data", accept);
       transform.off("error", fail);
       reject(error);
@@ -853,7 +913,7 @@ function inflateMessage(bytes, windowBits = 15) {
 async function websocketServer(t, onOpen, { badAccept = false, extra = "", secure = false } = {}) {
   const s = await server(
     t,
-    (_req, res) => {
+    (_req: http.IncomingMessage, res: http.ServerResponse) => {
       res.writeHead(426);
       res.end();
     },
@@ -876,16 +936,16 @@ async function websocketServer(t, onOpen, { badAccept = false, extra = "", secur
   });
   return { ...s, url: s.url.replace("http", "ws") };
 }
-function wsEvents(ws) {
-  const log = [];
-  const opened = new Promise((resolve) =>
+function wsEvents(ws: WebSocket) {
+  const log: string[] = [];
+  const opened = new Promise<void>((resolve) =>
     ws.addEventListener("open", () => {
       log.push("open");
       resolve();
     }),
   );
-  const closed = new Promise((resolve) =>
-    ws.addEventListener("close", (event) => {
+  const closed = new Promise<void>((resolve) =>
+    ws.addEventListener("close", (event: Event) => {
       log.push("close");
       resolve(event);
     }),
@@ -962,7 +1022,7 @@ suite("WebSocketError applies close dictionary conversion and validation", (t) =
   assert.throws(() => new WebSocketStream(), TypeError);
   assert.throws(
     () => new WebSocketStream("invalid:"),
-    (error) => error.name === "SyntaxError",
+    (error: unknown) => error.name === "SyntaxError",
   );
   assert.throws(() => new WebSocketStream("ws://example.test", true), TypeError);
   assert.throws(() => new WebSocketStream("ws://example.test", { protocols: "chat" }), TypeError);
@@ -981,12 +1041,12 @@ suite("WebSocketError applies close dictionary conversion and validation", (t) =
   for (const closeCode of [999, 1001, 2999, 5000]) {
     assert.throws(
       () => new WebSocketError("", { closeCode }),
-      (error) => error.name === "InvalidAccessError",
+      (error: unknown) => error.name === "InvalidAccessError",
     );
   }
   assert.throws(
     () => new WebSocketError("", { reason: "🔌".repeat(32) }),
-    (error) => error.name === "SyntaxError",
+    (error: unknown) => error.name === "SyntaxError",
   );
 });
 
@@ -1138,7 +1198,7 @@ suite("WebSocketStream close, cancel, and remote-close semantics", async (t) => 
   assert.deepEqual(await remoteInfo.readable.getReader().read(), { done: true, value: undefined });
   await assert.rejects(
     remoteInfo.writable.getWriter().ready,
-    (error) => error.name === "InvalidStateError",
+    (error: unknown) => error.name === "InvalidStateError",
   );
 
   const unwritten = controlledWebSocketRuntime(t);
@@ -1266,8 +1326,8 @@ suite("Canonical WebSocket constructor uses the installed environment", async (t
 suite("WebSocketStream exchanges text and binary over the real transport", async (t) => {
   const s = await websocketServer(
     t,
-    (socket) =>
-      peerParser(socket, (incoming) => {
+    (socket: net.Socket) =>
+      peerParser(socket, (incoming: PeerFrame) => {
         if (incoming.opcode === 8) socket.end(frame(8, incoming.payload));
         else socket.write(frame(incoming.opcode, incoming.payload, incoming.fin));
       }),
@@ -1294,8 +1354,8 @@ suite("WebSocketStream exchanges text and binary over the real transport", async
 });
 
 suite("WebSocket accepts a server that declines every offered subprotocol", async (t) => {
-  const s = await websocketServer(t, (socket) =>
-    peerParser(socket, (incoming) => {
+  const s = await websocketServer(t, (socket: net.Socket) =>
+    peerParser(socket, (incoming: PeerFrame) => {
       if (incoming.opcode === 8) socket.end(frame(8, incoming.payload));
     }),
   );
@@ -1329,7 +1389,7 @@ suite("permessage-deflate preserves context across fragmented messages", async (
     t,
     (socket, request) => {
       assert.equal(request.headers["sec-websocket-extensions"], "permessage-deflate");
-      peerParser(socket, (incoming) => {
+      peerParser(socket, (incoming: PeerFrame) => {
         if (incoming.opcode === 10) {
           pong = true;
           return;
@@ -1368,7 +1428,7 @@ suite("permessage-deflate preserves context across fragmented messages", async (
               frame(0, echoed.subarray(split), true),
             ]),
           );
-        })().catch((error) => {
+        })().catch((error: unknown) => {
           serverError = error;
           socket.destroy();
         });
@@ -1397,13 +1457,13 @@ suite("permessage-deflate preserves context across fragmented messages", async (
 
 suite("permessage-deflate resets negotiated contexts and bounds inflation", async (t) => {
   const original = "no context takeover ".repeat(20);
-  const wireMessages = [];
+  const wireMessages: string[] = [];
   let parts = [];
   let compressed = false;
   const s = await websocketServer(
     t,
-    (socket) =>
-      peerParser(socket, (incoming) => {
+    (socket: net.Socket) =>
+      peerParser(socket, (incoming: PeerFrame) => {
         if (incoming.opcode === 8) {
           socket.end(frame(8, incoming.payload));
           return;
@@ -1451,8 +1511,8 @@ suite("permessage-deflate resets negotiated contexts and bounds inflation", asyn
   const receivedClose = Promise.withResolvers();
   const bomb = await websocketServer(
     t,
-    (socket) => {
-      peerParser(socket, (incoming) => {
+    (socket: net.Socket) => {
+      peerParser(socket, (incoming: PeerFrame) => {
         if (incoming.opcode !== 8) return;
         closeCode = incoming.payload.readUInt16BE();
         receivedClose.resolve();
@@ -1480,8 +1540,8 @@ for (const [name, payload, expectedCode] of [
     const closeCode = Promise.withResolvers();
     const s = await websocketServer(
       t,
-      (socket) => {
-        peerParser(socket, (incoming) => {
+      (socket: net.Socket) => {
+        peerParser(socket, (incoming: PeerFrame) => {
           if (incoming.opcode !== 8) return;
           closeCode.resolve(incoming.payload.readUInt16BE());
           socket.end(frame(8, incoming.payload));
@@ -1502,8 +1562,8 @@ for (const [name, payload, expectedCode] of [
 suite("WebSocket masked sends, independent echo, subprotocol, clean close", async (t) => {
   const s = await websocketServer(
     t,
-    (socket) =>
-      peerParser(socket, (f) => {
+    (socket: net.Socket) =>
+      peerParser(socket, (f: PeerFrame) => {
         if (f.opcode === 8) socket.end(frame(8, f.payload));
         else socket.write(frame(f.opcode, f.payload, f.fin));
       }),
@@ -1515,7 +1575,7 @@ suite("WebSocket masked sends, independent echo, subprotocol, clean close", asyn
   assert.throws(() => ws.send("early"));
   await e.opened;
   assert.equal(ws.protocol, "chat");
-  const message = new Promise((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
   ws.send("hello 💙");
   assert.equal(ws.bufferedAmount, 10);
   assert.equal((await message).data, "hello 💙");
@@ -1527,8 +1587,8 @@ suite("WebSocket masked sends, independent echo, subprotocol, clean close", asyn
   assert.deepEqual(e.log, ["open", "close"]);
 });
 suite("WebSocket applies Web IDL conversion before public close validation", async (t) => {
-  const s = await websocketServer(t, (socket) =>
-    peerParser(socket, (f) => {
+  const s = await websocketServer(t, (socket: net.Socket) =>
+    peerParser(socket, (f: PeerFrame) => {
       if (f.opcode === 8) socket.end(frame(8, f.payload));
       else socket.write(frame(f.opcode, f.payload, f.fin));
     }),
@@ -1540,9 +1600,9 @@ suite("WebSocket applies Web IDL conversion before public close validation", asy
 
   assert.throws(
     () => ws.close(4999.5),
-    (error) => error.name === "InvalidAccessError",
+    (error: unknown) => error.name === "InvalidAccessError",
   );
-  const message = new Promise((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
   ws.send("\ud800");
   assert.equal((await message).data, "\ufffd");
 
@@ -1554,9 +1614,9 @@ suite("WebSocket applies Web IDL conversion before public close validation", asy
 });
 suite("WebSocket fragmented UTF-8 with interleaved ping and pong", async (t) => {
   let pong;
-  const pongReceived = new Promise((resolve) => (pong = resolve));
-  const s = await websocketServer(t, (socket) => {
-    peerParser(socket, (f) => {
+  const pongReceived = new Promise<void>((resolve) => (pong = resolve));
+  const s = await websocketServer(t, (socket: net.Socket) => {
+    peerParser(socket, (f: PeerFrame) => {
       if (f.opcode === 10) pong(f.payload.toString());
       if (f.opcode === 8) socket.end(frame(8, f.payload));
     });
@@ -1572,18 +1632,18 @@ suite("WebSocket fragmented UTF-8 with interleaved ping and pong", async (t) => 
   const api = runtime(t);
   const ws = api.createWebSocket(s.url);
   const e = wsEvents(ws);
-  const message = new Promise((resolve) => (ws.onmessage = resolve));
+  const message = new Promise<void>((resolve) => (ws.onmessage = resolve));
   assert.equal((await message).data, "€💙");
   assert.equal(await pongReceived, "ping");
   ws.close(1000);
   await e.closed;
 });
 suite("WebSocket binary snapshots, ordered sends, application send fragmentation", async (t) => {
-  const seen = [];
+  const seen: string[] = [];
   let done;
   const all = new Promise((r) => (done = r));
-  const s = await websocketServer(t, (socket) =>
-    peerParser(socket, (f) => {
+  const s = await websocketServer(t, (socket: net.Socket) =>
+    peerParser(socket, (f: PeerFrame) => {
       if (f.opcode === 8) {
         socket.end(frame(8, f.payload));
         return;
@@ -1619,8 +1679,8 @@ suite("WebSocket binary snapshots, ordered sends, application send fragmentation
 });
 suite("WebSocket snapshots the exact byte range of every ArrayBufferView", async (t) => {
   let parts = [];
-  const s = await websocketServer(t, (socket) =>
-    peerParser(socket, (incoming) => {
+  const s = await websocketServer(t, (socket: net.Socket) =>
+    peerParser(socket, (incoming: PeerFrame) => {
       if (incoming.opcode === 8) {
         socket.end(frame(8, incoming.payload));
         return;
@@ -1635,8 +1695,8 @@ suite("WebSocket snapshots the exact byte range of every ArrayBufferView", async
   ws.binaryType = "arraybuffer";
   const events = wsEvents(ws);
   await events.opened;
-  const received = [];
-  const complete = new Promise((resolve) => {
+  const received: string[] = [];
+  const complete = new Promise<void>((resolve) => {
     ws.onmessage = (event) => {
       received.push(new Uint8Array(event.data));
       if (received.length === 2) resolve();
@@ -1689,9 +1749,9 @@ for (const [name, wire, expected, limits] of [
 ])
   suite("WebSocket protocol failure: " + name, async (t) => {
     let closeCode;
-    const received = new Promise((resolve) => (closeCode = resolve));
-    const s = await websocketServer(t, (socket) => {
-      peerParser(socket, (f) => {
+    const received = new Promise<void>((resolve) => (closeCode = resolve));
+    const s = await websocketServer(t, (socket: net.Socket) => {
+      peerParser(socket, (f: PeerFrame) => {
         if (f.opcode === 8) {
           closeCode(f.payload.readUInt16BE());
           socket.end(frame(8, f.payload));
@@ -1728,19 +1788,19 @@ suite("WebSocket close timeout, close during connect, runtime shutdown", async (
 });
 suite("TLS: HTTPS and WSS trust validation, custom root and hostname mismatch", async (t) => {
   const fixture = tlsFixture();
-  const s = await server(t, (_req, res) => res.end("secure"), false, true);
+  const s = await server(t, (_req: http.IncomingMessage, res: http.ServerResponse) => res.end("secure"), false, true);
   const trusted = runtime(t, {}, { ca: fixture.cert.toString("utf8") });
   assert.equal(await (await trusted.fetch(s.url)).text(), "secure");
   const untrusted = runtime(t);
   await assert.rejects(untrusted.fetch(s.url));
   // The fixture certificate has only IP:127.0.0.1, not DNS:localhost.
-  await assert.rejects(trusted.fetch(s.url.replace("127.0.0.1", "localhost")), (error) =>
+  await assert.rejects(trusted.fetch(s.url.replace("127.0.0.1", "localhost")), (error: unknown) =>
     /altname|altnames|Hostname\/IP/i.test(errorChain(error)),
   );
   const wss = await websocketServer(
     t,
-    (socket) =>
-      peerParser(socket, (f) => {
+    (socket: net.Socket) =>
+      peerParser(socket, (f: PeerFrame) => {
         if (f.opcode === 8) socket.end(frame(8, f.payload));
       }),
     { secure: true },
@@ -1754,8 +1814,8 @@ suite("TLS: HTTPS and WSS trust validation, custom root and hostname mismatch", 
 
 suite("EventSource reconnects through the real HTTP transport", async (t) => {
   let requests = 0;
-  const headers = [];
-  const s = await server(t, (req, res) => {
+  const headers: string[] = [];
+  const s = await server(t, (req: http.IncomingMessage, res: http.ServerResponse) => {
     requests++;
     headers.push(req.headers);
     if (requests === 1) {

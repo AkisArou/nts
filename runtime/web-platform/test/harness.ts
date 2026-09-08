@@ -93,3 +93,19 @@ export function prototypeNamed(scope: object, name: string): object | undefined 
   const proto: unknown = (found as { prototype?: unknown }).prototype;
   return typeof proto === "object" && proto !== null ? proto : undefined;
 }
+
+/**
+ * A parsed JSON value, asserted to be an object.
+ *
+ * `response.json()` resolves to `unknown` -- the shared implementation cannot know the shape,
+ * and inventing one would be a claim rather than a check. This asserts the shape the caller is
+ * about to read fields off, so a body that arrived as an array or a string fails here with that
+ * sentence instead of as `undefined` three assertions later.
+ */
+export function jsonObject(value: unknown): Record<string, unknown> {
+  assert.ok(
+    typeof value === "object" && value !== null && !Array.isArray(value),
+    "expected the response body to be a JSON object",
+  );
+  return value as Record<string, unknown>;
+}
