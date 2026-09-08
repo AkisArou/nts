@@ -29,7 +29,7 @@ not measured clean and should not be quoted.**
 | `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
-| `generic-classes` | 1.17x | no cause found: assembly is comparable |
+| `generic-classes` | 1.17x | no cause found: assembly comparable, `final` refuted |
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
@@ -412,6 +412,35 @@ spending the same time inside its own frame is exactly that shape.
 
 `upcast` at 1.02x has no `uirem` in its top frames at all, so it moved for some
 other reason and should come off this list.
+
+- **`ACC_FINAL` on a field, and the construction scheme behind it.** The plan
+  has said since it was written that this backend cannot make `readonly` into
+  `ACC_FINAL`, because a constructor here is an ordinary method called after
+  `new` and `putfield` on a final field outside `<init>` throws
+  `IllegalAccessError` since JDK 9. `generic-classes` is 1.17x and `ref.java`'s
+  `Box` has `private final T v`, so this was the standing suspect and it had
+  never been priced -- the earlier 0.99x measured constructor *inlining*, and
+  noted the `ACC_FINAL` consequence without testing it.
+
+  **[0%, and measured on the reference itself rather than a proxy.]** One
+  keyword removed from `ref.java`'s `Box`, and the field written by a separate
+  `init` call after `new Box<>()` -- which is exactly the shape this backend
+  emits. Five samples each:
+
+      ref, final field, set in the constructor    ~1455 ns
+      ref, non-final, set by a later call         ~1455 ns
+      ours                                        ~1668 ns
+
+  Identical to within 0.2%. **So the construction scheme is not the gap, the
+  field flag is not the gap, and the reference wearing our shape is still 1.15x
+  faster than we are.**
+
+  Worth noting how this one was priced, because it is the shape today kept
+  getting wrong: rather than transcribing our emitted code into Java -- which
+  is what cost `awfy-queens` an afternoon -- **the change was made to the
+  reference**, one keyword and one call site, leaving a natural Java program on
+  both sides. A one-variable experiment on an artefact that already exists beats
+  a two-variable one on an artefact you wrote to test it.
 
 ## Open, and whose
 
