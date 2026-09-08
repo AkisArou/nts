@@ -187,12 +187,26 @@ const scored = roots
 
 console.log(`  ${module_}: ${primary.length} primary refusal(s), ` +
   `${cascaded.size} function(s) stopped by cascade\n`);
+console.log("  A cone counts what a refusal stopped *through other functions*.");
+console.log("  A function refused on its own account is in none of them, so the");
+console.log("  export counts below are floors and not totals.\n");
 console.log("  Primary refusals ranked by the size of their cone:\n");
 for (const { root, size, exports } of scored.slice(0, 10)) {
   console.log(`  ${String(size).padStart(4)}  ${root}`);
   if (exports.length > 0) {
     console.log(`        unblocks ${exports.length} missing export(s): ${exports.join(" ")}`);
   }
+  // Two ways this number is a *floor* rather than an answer, both of which
+  // matter to anyone deciding what to fix:
+  //
+  // 1. A function refused *directly* -- one whose own body holds an NTS1001 --
+  //    is in no cone at all, so fixing the shape it holds unblocks it without
+  //    that ever appearing here. `querystring` reports zero unblocked exports
+  //    while every one of its eight is refused, two of them by the very shape
+  //    that tops this list, because those refusals are primary rather than
+  //    inherited.
+  // 2. An export in more than one cone needs all of them fixed, so the counts
+  //    across roots do not add up and the largest is not a promise on its own.
   const shapes = shapesIn(root);
   if (shapes.length === 0) {
     console.log("        (could not attribute a shape to this one by line range)");
