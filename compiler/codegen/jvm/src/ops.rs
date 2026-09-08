@@ -1063,13 +1063,34 @@ impl Emitter<'_> {
             // exists, not a guess now.
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { object, field } => {
-                let (class, name, descriptor) = self.field_ref(*object, *field)?;
+                let (class, name, descriptor, _) = self.field_ref(*object, *field)?;
                 self.load(code, pool, *object)?;
                 code.get_field(&origin, pool, &class, &name, &descriptor);
                 Placed::OnStack
             }
             OpKind::FieldSet { object, field, value: stored } => {
-                let (class, name, descriptor) = self.field_ref(*object, *field)?;
+                let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+                // **A store into a field is an assignment to its declared type,
+                // and this was the last of the three that did not check.**
+                // `Return` checks, and the global store checks; a `putfield`
+                // did not, so a value the program could not license became a
+                // `VerifyError` at class load instead of a refusal by name.
+                //
+                // `examples/function-in-an-object-literal` is the shape:
+                // `const table = { doubled }` gives `Type5.doubled` the
+                // *function type* as its descriptor and stores the *closure
+                // class* into it, and with one closure of that signature
+                // nothing relates the two -- so the verifier said "Type
+                // 'nts/gen/Closure0' is not assignable to 'nts/gen/Fn2__2'"
+                // and the emitter had said nothing at all. Two closures of one
+                // signature and `Layout.base` relates them, which is why a
+                // second function in any object literal made it disappear.
+                //
+                // This does not make that program work; the relation is the
+                // middle end's to record. It makes the backend say so, which
+                // is the whole of what `unverifiable class` being a hard zero
+                // in the corpus is worth.
+                self.assignable_types(&self.ty(*stored).clone(), &declared)?;
                 self.load(code, pool, *object)?;
                 self.load(code, pool, *stored)?;
                 code.put_field(&origin, pool, &class, &name, &descriptor);
@@ -2745,7 +2766,20 @@ impl Emitter<'_> {
     /// carry a position rather than a name -- the position `codegen_common`'s
     /// layout decided, so that no two backends can disagree about which field
     /// is which.
-    fn field_ref(&self, object: ValueId, field: u32) -> Result<(String, String, String), Diagnostic> {
+    /// The class, member name and descriptor an access names -- **and the type
+    /// the layout declares**, because a store into a field is an assignment to
+    /// that type and the descriptor has already lost what it needs to be
+    /// checked against. Two classes can spell one descriptor, and `Object(id)`
+    /// against `Object(id)` is the question `assignable_types` asks.
+    ///
+    /// Returned from here rather than looked up again beside the call: the
+    /// layout walk is the same walk, and this file has been bitten before by
+    /// two implementations of one question drifting apart.
+    fn field_ref(
+        &self,
+        object: ValueId,
+        field: u32,
+    ) -> Result<(String, String, String, HirType), Diagnostic> {
         let ty = self.ty(object).clone();
         let HirType::Managed(nts_core::hir::ManagedType::Object(id)) = ty else {
             return Err(refuse(self.func, "a field of something that is not an object"));
@@ -2779,6 +2813,7 @@ impl Emitter<'_> {
             types::class_name(owner),
             crate::body::method_name(&entry.name),
             descriptor,
+            held,
         ))
     }
 
@@ -4415,7 +4450,7 @@ impl Emitter<'_> {
         let Some(at) = layout.fields.iter().position(|field| field.name == "ready") else {
             return Err(refuse(self.func, "a guarded cell with no `ready` field"));
         };
-        let (owner, member, descriptor) = self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
+        let (owner, member, descriptor, _) = self.field_ref(cell, u32::try_from(at).unwrap_or(0))?;
         self.load(code, pool, cell)?;
         code.get_field(origin, pool, &owner, &member, &descriptor);
         code.const_string(origin, pool, name);
