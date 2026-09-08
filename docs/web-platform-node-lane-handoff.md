@@ -70,11 +70,11 @@ of system proxy resolution.
 **Current numbers**, all with one binary pinned from the current tree and the same
 binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
 
-- 1,407 primary `NTS1001`, 337 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
+- 1,428 primary `NTS1001`, 318 `NTS1003`, and zero `NTS1004`, `NTS4xxx` and invalid HIR
   — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
-- local Node-host/real-socket corpus **819/819**, zero skipped;
+- local Node-host/real-socket corpus **822/822**, zero skipped;
 - pinned upstream corpus **2,602 tests, 2,574 applicable, 2,566 passing, 8 failing** —
   grown by 169 today and still the same eight long-standing structural failures;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
@@ -154,37 +154,45 @@ nothing here broke anything there, and `bfb7d97d` fixed a live `[object Object]`
 `node:util`'s public surface that neither corpus could see alone. Their sweep is 1,803 of
 1,803 across 22 modules with 0 divergences over 11 differential corpora.
 
-**The Web IDL surface work is half done and the mechanism is settled.** Six interfaces are
-fully conformant — `AbortSignal`, `Headers`, `TextDecoder`, `TextEncoder`, `TextDecoderStream`,
-`TextEncoderStream`. The non-standard prototype surface is **63 → 37**.
+**The Web IDL surface work is finished.** The non-standard prototype surface is **63 → 0**:
+every interface prototype carries the interface's members and nothing else, and every member
+is enumerable as Web IDL requires. Constructor and method arities, `@@toStringTag` as a data
+property, attribute brand checks, and interface constants on both the interface object and the
+prototype are all in place.
 
 Three mechanisms, in the order they apply. **`#private`** where a member is used only inside
 its own class — free on the frontier, measured. **Symbol keys** where it crosses classes or
-modules — `Object.getOwnPropertyNames` does not report symbols, so the member leaves the
-enumerable surface while staying reachable, and the keys are never re-exported from the public
-barrel. **Then** the enumerability fix, which is only safe once a prototype has no
-non-standard names left.
+modules, since `Object.getOwnPropertyNames` does not report symbols; the keys are exported for
+this runtime and never re-exported from the public barrel. **Then** the enumerability fix,
+which is only safe once a prototype has no non-standard names left.
 
-**`tsc` finds every syntactic use of a renamed member and none of the reflective ones.** `in`,
-`typeof x.name`, `hasOwnProperty`, a name in a lookup table. Converting `AbortSignal.subscribe`
-produced type errors in nine untouched modules and compiled cleanly past the one site that
-mattered — an `"subscribe" in signal` brand check that then answered `false` for every real
-signal. Grep for those by hand.
+**Two rules that cost real defects to learn.**
+
+`tsc` finds every syntactic use of a renamed member and **none of the reflective ones** — `in`,
+`typeof x.name`, `hasOwnProperty`, a name in a lookup table. Run that grep first, and run it
+across *every lane*, not only this one: the NodeJS lane's `fs` called
+`ReadableStream.cancelInternal` and neither of us looked.
+
+And a name-based rename fails **silently on reflective uses and loudly on conflated ones**.
+`enqueue`, `read`, `desiredSize`, `fail` and `release` are legitimate Web IDL members of the
+controllers and readers *as well as* internals on the stream. Confine the declaration edit to
+the class, then rewrite call sites from the compiler's reported positions. Do not use a
+regular expression on the call sites.
+
+**The frontier cost is 25 primaries**, because a computed member name is a construct this
+compiler does not lower yet. Paid knowingly; the alternative was leaving sixty-three
+non-standard members on public prototypes to keep a number down.
+
+**Five places where node is the best available oracle for interface shape and is not the
+standard**, each excluded by citation rather than convenience: `TextDecoder` giving two answers
+for one byte sequence, `Blob.textStream` (not in `FileAPI.idl`), `Event`'s constants missing
+from its prototype, `Event.isTrusted` as a prototype accessor rather than an unforgeable own
+one, and `CustomEvent.initCustomEvent` (declared legacy in `dom.idl`, unimplemented).
 
 **`Request` and `Response` are clean and enumerable but shape-deviant**: they include the
 `Body` mixin, and Web IDL copies an included mixin's members onto the interface prototype
-where these inherit them from a shared base class. Pinned in the direction it holds.
-
-**One cross-lane dependency is asserted here and cannot be seen from either corpus.** The
-NodeJS lane brand-checks `AbortSignal` with `"aborted" in signal` at five sites across
-`internal/`, `util/` and `stream/`. Symbol-keying `aborted` would silently break all five.
-It is asserted in `webidl-surface.test.mjs` with their modules named.
-
-**What remains** is `ReadableStream`'s seventeen, `EventTarget`'s seven, `Event`'s seven and
-`WebSocket`'s six. The streams ones are the hard set: six are declared on the structural
-interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost`, and a name-based scan counts
-202 call sites but conflates them with the legitimate `enqueue`, `read` and `desiredSize` on
-controllers and readers. **That one needs a type-aware pass, not a regular expression.**
+where these inherit them from a shared base class. Pinned in the direction it holds, so fixing
+it fails the test.
 
 **`idlharness` runs for `encoding` and is blocked elsewhere by a profile question.** The
 harness classifies its environment as a `Window`, a worker scope, or a plain realm. This
