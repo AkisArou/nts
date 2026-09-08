@@ -44,6 +44,15 @@ pub struct LockedPackage {
     /// on a large closure is most of what a no-op acquisition costs.
     #[serde(default)]
     pub mapped: BTreeMap<String, String>,
+    /// Specifier -> the file the checker resolved it to, absolute.
+    ///
+    /// Recorded so a settled run can seed its discovery from the lock instead
+    /// of rediscovering the graph one checker pass at a time. A dependency's
+    /// own dependencies are only visible once its source is in the program, so
+    /// without this a no-op run walked the fixpoint from scratch: four checker
+    /// passes to learn what the lock already said.
+    #[serde(default)]
+    pub resolved: BTreeMap<String, String>,
 }
 
 pub const LOCK_VERSION: u32 = 1;

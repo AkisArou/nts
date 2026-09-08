@@ -595,3 +595,53 @@ fn a_missing_vendor_tree_is_recovered_again() {
     );
     assert!(after.packages.iter().any(|p| p.name == "mapped" && p.acquired()));
 }
+
+/// A settled run asks the checker once. It used to ask four times, walking the
+/// fixpoint from scratch to rediscover a graph the lock already described — a
+/// dependency's own dependencies are invisible until its source is in the
+/// program, so every pass learned one layer that the previous run had already
+/// learned and written down.
+#[test]
+fn a_settled_run_does_not_rewalk_the_fixpoint() {
+    let root = fixture("seeded");
+    let first = acquire(&root);
+    assert!(first.files_written > 0);
+    assert!(!first.unchanged, "a run that wrote files is not unchanged");
+
+    let second = acquire(&root);
+    assert!(second.unchanged);
+    assert_eq!(
+        second.acquired(),
+        first.acquired(),
+        "the seed reproduces the graph rather than shrinking it"
+    );
+}
+
+/// And the seed must not hide a change. A newly imported package is acquired
+/// on the next run, however settled the lock was.
+#[test]
+fn a_new_dependency_is_still_found_after_a_settled_run() {
+    let root = fixture("seed-then-add");
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"shipped":"1.0.0"}}"#,
+    )
+    .unwrap();
+    let settled = acquire(&root);
+    assert!(acquire(&root).unchanged, "settled first");
+    assert!(settled.packages.iter().all(|p| p.name != "mapped"));
+
+    std::fs::write(
+        root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"shipped":"1.0.0","mapped":"2.0.0"}}"#,
+    )
+    .unwrap();
+    let after = acquire(&root);
+
+    assert!(
+        after.packages.iter().any(|p| p.name == "mapped" && p.acquired()),
+        "a dependency added after the lock settled is still acquired"
+    );
+    assert!(!after.unchanged, "and the run says it did something");
+    assert!(root.join(".nts/vendor/mapped@2.0.0/src/index.ts").is_file());
+}

@@ -171,6 +171,40 @@ fn as_workspace_package(
     })
 }
 
+/// The dependency graph a previous run wrote down.
+///
+/// Without it a settled tree walks the fixpoint from scratch: a dependency's
+/// own dependencies are invisible until its source is in the program, so each
+/// checker pass learns one layer that the last run already learned. Four passes
+/// on a 141-package closure became one.
+///
+/// Only packages whose recorded source is still on disk. A seed that outlived
+/// its source would keep a package in the graph after it was uninstalled.
+fn seeded_from_lock(workspace: &Utf8Path) -> Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> {
+    emit::read_lock(workspace)
+        .packages
+        .into_iter()
+        .filter(|(_, locked)| !locked.resolved.is_empty())
+        .filter_map(|(name, locked)| {
+            let dir = Utf8PathBuf::from(&locked.source);
+            dir.is_dir().then(|| {
+                (
+                    resolution::PackageRef {
+                        name,
+                        version: locked.version.clone(),
+                        dir,
+                    },
+                    locked
+                        .resolved
+                        .iter()
+                        .map(|(specifier, at)| (specifier.clone(), Utf8PathBuf::from(at)))
+                        .collect(),
+                )
+            })
+        })
+        .collect()
+}
+
 /// What one resolution pass found.
 #[derive(Debug, Clone, Default)]
 struct Traced {
@@ -277,16 +311,23 @@ pub fn acquire(
     let project_dir = project
         .canonicalize_utf8()
         .unwrap_or_else(|_| project.to_owned());
-    let vendor_root = workspace::root(&project_dir).join(".nts").join("vendor");
+    let workspace_root = workspace::root(&project_dir);
+    let vendor_root = workspace_root.join(".nts").join("vendor");
 
     // Accumulated across passes. A pass can only *add*: a specifier that
     // resolved into the vendor tree on a later pass is one this already knows
     // about, and re-deriving the whole set from the newest trace would lose it.
-    let mut discovered: Vec<(resolution::PackageRef, Vec<(String, Utf8PathBuf)>)> = Vec::new();
     let mut local: Vec<(String, Utf8PathBuf)> = Vec::new();
     let mut complaints: Vec<resolution::Diagnostic> = Vec::new();
+    let mut discovered = seeded_from_lock(&workspace_root);
+
     let mut trace_with = tsconfig.to_owned();
     let mut last: Option<Acquisition> = None;
+    // Across all passes, not the last one. A run that acquired a package on
+    // pass 0 and wrote nothing on pass 1 reported itself "unchanged", which is
+    // true of the pass and false of the run.
+    let mut written_in_all = 0usize;
+    let mut pruned_in_all: Vec<String> = Vec::new();
 
     for pass in 0..PASSES {
         let traced = resolved_packages(
@@ -337,10 +378,22 @@ pub fn acquire(
         // source just acquired can be built. Attributed from the previous
         // pass's trace, which is the newest one that saw the current tree.
         attribute(&mut acquisition, &complaints, &vendor_root);
+        written_in_all += acquisition.files_written;
+        for name in &acquisition.pruned {
+            if !pruned_in_all.contains(name) {
+                pruned_in_all.push(name.clone());
+            }
+        }
+        acquisition.files_written = written_in_all;
+        acquisition.pruned.clone_from(&pruned_in_all);
+        acquisition.unchanged = written_in_all == 0 && pruned_in_all.is_empty();
         let next = acquisition.tsconfig.clone();
         last = Some(acquisition);
 
-        if !grew && pass > 0 {
+        // A pass that learned nothing is the last one, including the first:
+        // with the lock seeded above, a settled tree knows everything before
+        // the checker is asked, and asking three more times only confirms it.
+        if !grew {
             break;
         }
         if options.tsgo.is_none() || pass + 1 == PASSES {
@@ -483,6 +536,73 @@ fn attribute(
     for package in &mut acquisition.packages {
         package.complaints.sort_by_key(|complaint| std::cmp::Reverse(complaint.count));
     }
+}
+
+/// Write what this package turned out to be into the lock, and map what it
+/// answers into `paths`.
+///
+/// Both outcomes are recorded, not just the successful one: `remembered` reads
+/// this back, and a package with nothing to recover is the case that most needs
+/// remembering — re-examining one costs a full walk of every source map it
+/// ships, and they are the overwhelming majority.
+#[allow(clippy::too_many_arguments)]
+fn record(
+    installed: &resolve::Installed,
+    route: &Route,
+    recovery: &recover::Recovery,
+    mapped: &[(String, Utf8PathBuf)],
+    package_root: &Utf8Path,
+    traced: Option<&Vec<(String, Utf8PathBuf)>>,
+    digest: String,
+    lock: &mut Lock,
+    paths: &mut BTreeMap<String, Vec<String>>,
+    pass: &Pass<'_>,
+) {
+    let resolved: BTreeMap<String, String> = traced
+        .map(|specifiers| {
+            specifiers
+                .iter()
+                .map(|(specifier, at)| (specifier.clone(), at.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if !recovery.any_recovered() {
+        lock.packages.insert(
+            installed.name.clone(),
+            LockedPackage {
+                version: installed.version.clone(),
+                source: installed.dir.to_string(),
+                route: route.describe(),
+                digest: String::new(),
+                files: 0,
+                mapped: BTreeMap::new(),
+                resolved,
+            },
+        );
+        return;
+    }
+
+    for (specifier, at) in mapped {
+        paths.insert(specifier.clone(), vec![relative(pass.project, at)]);
+    }
+    lock.packages.insert(
+        installed.name.clone(),
+        LockedPackage {
+            version: installed.version.clone(),
+            source: installed.dir.to_string(),
+            route: route.describe(),
+            digest,
+            files: recovery.files.len(),
+            mapped: mapped
+                .iter()
+                .filter_map(|(specifier, at)| {
+                    Some((specifier.clone(), at.strip_prefix(package_root).ok()?.to_string()))
+                })
+                .collect(),
+            resolved,
+        },
+    );
 }
 
 /// What a previous run already worked out about this package.
@@ -642,46 +762,7 @@ fn acquire_package(
         }
     }
 
-    if !recovery.any_recovered() {
-        // The memo above reads this back. `mapped` empty and `files` zero is
-        // what marks it a refusal rather than an acquisition.
-        lock.packages.insert(
-            installed.name.clone(),
-            LockedPackage {
-                version: installed.version.clone(),
-                source: installed.dir.to_string(),
-                route: route.describe(),
-                digest: String::new(),
-                files: 0,
-                mapped: BTreeMap::new(),
-            },
-        );
-    }
-
-    if recovery.any_recovered() {
-        for (specifier, at) in &mapped {
-            paths.insert(specifier.clone(), vec![relative(pass.project, at)]);
-        }
-        lock.packages.insert(
-            installed.name.clone(),
-            LockedPackage {
-                version: installed.version.clone(),
-                source: installed.dir.to_string(),
-                route: route.describe(),
-                digest,
-                files: recovery.files.len(),
-                mapped: mapped
-                    .iter()
-                    .filter_map(|(specifier, at)| {
-                        Some((
-                            specifier.clone(),
-                            at.strip_prefix(&package_root).ok()?.to_string(),
-                        ))
-                    })
-                    .collect(),
-            },
-        );
-    }
+    record(installed, &route, &recovery, &mapped, &package_root, traced, digest, lock, paths, pass);
 
     Ok((
         PackageReport {
