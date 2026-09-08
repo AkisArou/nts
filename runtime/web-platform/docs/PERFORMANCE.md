@@ -158,8 +158,22 @@ read turns the whole classification integer -- the body went from mostly-`double
 `int32_t` against 9, confirmed in the emitted C, which is deterministic.
 
 It bought nothing. On a clean run `json-build-join` went 20.78us to 22.68us, `append` 21.17 to
-21.96, `json-serialize` 15.02 to 15.37. Probably because `unicodeEscape` and the escape-table
-index both take a number, so the conversions moved rather than left. Reverted.
+21.96, `json-serialize` 15.02 to 15.37. Reverted.
+
+**Refuted as a spelling, not as an idea, and the difference is now known.** `nts_unit` already
+returns `uint16_t`; the emitter casts it to a double because the HIR type of
+`StringUnitAt { checked: false }` says so. So the double is *manufactured by the compiler at the
+read*, once per character. `| 0` then adds `nts_to_int32` on top of that manufactured double --
+it pays twice and saves once, which is the arithmetic under the measurement.
+
+`specialize` declines to narrow because a class containing only comparisons "has nothing to make
+faster": narrowing would cost a conversion at every use and buy only cheaper compares. **That rule
+is correct given what the read returns**, which is why no source spelling can win here -- the
+premise it reasons from is the manufactured double, and TypeScript cannot reach the premise.
+
+Typing the read `i32` where it is lowered -- it is a `uint16` by construction and the lowering
+knows it -- removes the double instead of converting it. The losing variant and the winning one
+are the same change at different ends, and only the compiler is at the far end. With MainClaude.
 
 **Better-looking generated code is not a faster program**, and reading the emitted C is a way to
 confirm a change happened, not a way to confirm it helped.
