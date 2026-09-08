@@ -668,6 +668,54 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "fs-more.ts",
+    module: "fs",
+    // Ownership, vectored I/O, and the bigint and byte-path variants of stat
+    // and statfs. chown calls pass -1 for both ids, which POSIX defines as
+    // "change nothing" -- the whole syscall path runs without the probe needing
+    // privileges or leaving a file it did not own.
+    checks(m) {
+      const fsm = require("node:fs");
+      const dir = mkdtempSync(join(tmpdir(), "nts-more-"));
+      const f = join(dir, "a");
+      const out = [];
+      try {
+        writeFileSync(f, "0123456789");
+        const link = join(dir, "l");
+        fsm.symlinkSync("a", link);
+        out.push({ label: "fchown -1 -1", mine: m.probeFchownNoChange(f), theirs: 0 });
+        out.push({ label: "lchown -1 -1", mine: m.probeLchownNoChange(link), theirs: 0 });
+        out.push({ label: "lchown_bytes -1 -1", mine: m.probeLchownBytesNoChange(link), theirs: 0 });
+        let enoent = 0;
+        try { fsm.lchownSync(join(dir, "nope"), -1, -1); } catch (e) { enoent = e.errno; }
+        out.push({ label: "lchown missing errno", mine: m.probeLchownMissing(join(dir, "nope")), theirs: enoent });
+        // lutimes exists in order NOT to follow the link. Checked from both
+        // sides: the link's mtime moved, and the target's did not become the
+        // value that was set. A probe aimed at a regular file would pass for an
+        // implementation that followed.
+        const before = statSync(f).mtimeMs;
+        out.push({ label: "lutimes moves link only", mine: m.probeLutimesOnLink(link, f, 5000), theirs: `${5000 * 1000}:false` });
+        out.push({ label: "lutimes left the target", mine: statSync(f).mtimeMs, theirs: before });
+        out.push({ label: "readv fills two buffers", mine: m.probeReadv(f, 4, 3), theirs: "0123456" });
+        const w = join(dir, "w");
+        out.push({ label: "writev returns the total", mine: m.probeWritev(w, "abc", "defg"), theirs: 7 });
+        out.push({ label: "writev landed in order", mine: readFileSync(w, "utf8"), theirs: "abcdefg" });
+        out.push({ label: "open_bytes succeeds", mine: m.probeOpenBytes(f), theirs: 0 });
+        out.push({ label: "stat_bytes size", mine: m.probeStatBytesSize(f), theirs: 10 });
+        out.push({ label: "stat_bigint_bytes size", mine: m.probeStatBigIntBytesSize(f), theirs: "10" });
+        out.push({ label: "fstat_bigint size", mine: m.probeFstatBigIntSize(f), theirs: "10" });
+        const bigfs = fsm.statfsSync(dir, { bigint: true });
+        out.push({ label: "statfs_bytes bsize", mine: m.probeStatfsBytesBsize(dir), theirs: fsm.statfsSync(dir).bsize });
+        out.push({ label: "statfs_bigint bsize", mine: m.probeStatfsBigIntBsize(dir), theirs: String(bigfs.bsize) });
+        out.push({ label: "statfs_bigint_bytes bsize", mine: m.probeStatfsBigIntBytesBsize(dir), theirs: String(bigfs.bsize) });
+        out.push({ label: "O_FILEMAP is 0 off Windows", mine: m.probeOFilemap(), theirs: 0 });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
