@@ -25,6 +25,53 @@ intended order. Writing a module to fit today's compiler would mean writing
 something that is not node's algorithm, and unwinding those distortions later
 costs more than waiting.
 
+## The seam: what node handles in one place and this profile handles in many
+
+Twenty-two tests were written on 2026-09-08 by one method, and it is worth
+stating because it is repeatable and it is not exhausted.
+
+**Pick something node handles uniformly, in one piece of C++, and ask whether
+this profile — which handles it at many call sites — agrees.** Node's own suite
+cannot cover the variation, because upstream there is one implementation and no
+assertion could fail. Here there are many, and they disagree independently.
+
+Every module now carries at least one such test. The score:
+
+    real defects fixed         24 `fs` functions rejecting a Buffer path
+                               83 error classes with an own key node lacks
+                                7 `zlib` signatures with the wrong C type
+                                1 wrong error code (`readFile` + `"buffer"`)
+                                1 `fs` error carrying a path node omits
+    §13 decisions asserted      6, each checked against §13 rather than assumed
+                                  from a source comment
+    divergences recorded but    2 — the timer/immediate order, which is unstable
+      deliberately unasserted       here; and `Error.prototype` identity, which
+                                    needs an unchecked assertion to reach
+    surveys that found nothing  9
+    harness bugs, all mine      6, every one in *normalisation* rather than in
+                                  the comparison, and one of them a false *pass*
+
+**The nine that found nothing are not filler.** A survey is worth the same either
+way provided it could have failed, and each is built so a plausible
+mis-implementation does: `readline` splits the same CRLF across two chunks *and
+across three*, because a buffer that handles two can still lose the middle one.
+
+### How to run it
+
+1. Pick a variation. Confirm it is under-tested upstream — `grep -l "encoding:
+   'buffer'" third_party/node/test/parallel/test-fs-*.js` returned **3 of 260**.
+2. Write a survey and **run it against node first**, capturing the oracle's
+   answers.
+3. Run the same survey through `run.mjs --module <m>`. Write results to a file in
+   the scratchpad; the harness swallows stdout and mangles an async throw.
+4. Diff. Then keep it as a test whose expected values are **node's answers**.
+
+The rules that fell out are in the sections below: a test may assert what node
+does or a decision §13 declares, never what this implementation happens to do;
+a divergence that is unstable is recorded rather than pinned; and the list of
+things the interpreted lane structurally cannot see is a **predicate to check
+before filing**, not a caveat to add afterwards.
+
 ## Which modules, and which not
 
 This file says "twenty-two modules" throughout and has never said which
