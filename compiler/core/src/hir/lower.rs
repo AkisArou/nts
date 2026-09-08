@@ -1475,9 +1475,31 @@ fn declare_a_closure_global(
     }
 }
 
-fn collect_module_scope(snapshot: &SemanticSnapshot, closures: &[ClosureInfo]) -> ModuleScope {
+fn collect_module_scope(
+    snapshot: &SemanticSnapshot,
+    closures: &[ClosureInfo],
+    hierarchy: &Hierarchy,
+) -> ModuleScope {
     let mut scope = ModuleScope::default();
+    // With the hierarchy, and that is the whole of a silent wrong answer.
+    //
+    // This probe lays out every class a module-scope binding mentions, and its
+    // layouts reach the program *first*, so they win the merge in
+    // `collect_layouts`. Built with `Hierarchy::default()` it did not know that
+    // `Request extends Body`, so `layout_of` skipped the "inherited fields
+    // first, then this class's own" construction and produced the checker's
+    // flattened order instead -- `bodyState` last where every function lowered
+    // afterwards indexed it first.
+    //
+    // Identical field *sets* in two orders, and the merge keeps one and
+    // discards the other without comparing them. So every accessor on `Request`
+    // read one field late: `get method` returned `requestHeaders`. Three of the
+    // four the Node lane found were caught by clang only because the neighbour
+    // had a different type; `NtsObj_Request` has eight consecutive
+    // `NtsString *` members, where the same defect compiles clean and returns
+    // the wrong value.
     let mut probe = FuncBuilder::new(snapshot);
+    probe.hierarchy = hierarchy.clone();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node.kind != NodeKind::Syntax(syntax::VARIABLE_DECLARATION) {
@@ -2619,9 +2641,13 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     // closure's layout is decided here. `collect_closures` reads only the
     // snapshot, so the order is free.
     let closures = collect_closures(snapshot);
-    let mut module = collect_module_scope(snapshot, &closures);
-    lowered.diagnostics.extend(module.refusals.iter().cloned());
+    // The hierarchy before the module scope, because the module scope's probe
+    // lays out classes and a layout built without the hierarchy is a different
+    // layout. `collect_hierarchy` reads the snapshot and the closures and
+    // nothing else, so it can come first; the reverse is not true.
     let hierarchy = collect_hierarchy(snapshot, &closures);
+    let mut module = collect_module_scope(snapshot, &closures, &hierarchy);
+    lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
     collect_layouts(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
