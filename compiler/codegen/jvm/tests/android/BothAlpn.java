@@ -144,12 +144,12 @@ public final class BothAlpn {
     }
 
     /** Through `org.nts.web.NetworkPrimitives`, with the same private root. */
-    static Answer viaPrimitives(Executor lane, SSLContext context, int port, String offer) throws Exception {
+    static Answer viaPrimitives(Executor lane, SSLContext context, String host, int port, String offer) throws Exception {
         final BlockingQueue<Object[]> done = new ArrayBlockingQueue<Object[]>(1);
         NetworkPrimitives api = new NetworkPrimitives(
-            lane, host -> true, (name, message) -> { }, 4, context.getSocketFactory());
+            lane, any -> true, (name, message) -> { }, 4, context.getSocketFactory());
         try {
-            api.connect("localhost", port, true, 4000, null, 0, NetworkPrimitives.DIRECT, offer,
+            api.connect(host, port, true, 4000, null, 0, NetworkPrimitives.DIRECT, offer,
                 new NetworkPrimitives.ConnectCallback() {
                     @Override public void success(int handle) { done.offer(new Object[] { Integer.valueOf(handle), null }); }
                     @Override public void failure(String name, String message) { done.offer(new Object[] { null, name }); }
@@ -175,7 +175,7 @@ public final class BothAlpn {
         thread.start();
         try {
             Answer runtime = viaRuntime(server.port(), clientOffer);
-            Answer primitives = viaPrimitives(lane, context, server.port(), clientOffer);
+            Answer primitives = viaPrimitives(lane, context, "localhost", server.port(), clientOffer);
             check(runtime.agrees(primitives),
                 what + ": the two adapters disagree -- NtsSocket said " + runtime
                     + " and NetworkPrimitives said " + primitives);
@@ -194,7 +194,58 @@ public final class BothAlpn {
     static final String[] ONLY_H2 = { "h2" };
     static final String[] NOTHING = {};
 
+    /**
+     * A server on the host, for a client on a device.
+     *
+     * <p>The only way to measure ALPN on ART: both ends inside one Android
+     * process negotiate nothing, because Conscrypt drops the offer on the
+     * server socket. So the far end stays here, `adb reverse` puts it on the
+     * device's own loopback, and what gets measured is Conscrypt's client half
+     * against a real server.
+     */
+    static void serve(String[] args) throws Exception {
+        SSLContext context = context(args[1], args[2]);
+        String[] offers = args[3].isEmpty() ? NOTHING : args[3].split(",");
+        Server server = new Server(context, offers);
+        System.out.println("PORT " + server.port());
+        System.out.flush();
+        server.run();
+    }
+
+    /**
+     * The device half: `NetworkPrimitives` against that server, twice.
+     *
+     * <p>The second case is the one worth the machinery. Conscrypt answers
+     * `null` where JSSE answers `""` for a handshake with no ALPN, and the
+     * normalisation that hides the difference is a branch that **only ever
+     * executes here** -- on the desktop it is unreachable, so no test that runs
+     * there can hold it.
+     */
+    static void client(String[] args) throws Exception {
+        SSLContext context = context(args[1], args[2]);
+        String host = args[3];
+        int port = Integer.parseInt(args[4]);
+        ExecutorService lane = Executors.newSingleThreadExecutor();
+        try {
+            Answer negotiated = viaPrimitives(lane, context, host, port, "h2,http/1.1");
+            check("h2".equals(negotiated.protocol),
+                "offering h2,http/1.1 to a server offering both gave " + negotiated);
+
+            Answer silent = viaPrimitives(lane, context, host, port, "");
+            check("".equals(silent.protocol),
+                "offering nothing should read back \"\" and not the platform's own spelling "
+                    + "for absence, which on Conscrypt is null; got " + silent);
+        } finally {
+            lane.shutdownNow();
+        }
+        System.out.printf("alpn on ART: negotiated, and absence normalised -- %d checks, %d failures%n",
+            checks, failures);
+        if (failures != 0) { System.exit(1); }
+    }
+
     public static void main(String[] args) throws Exception {
+        if ("server".equals(args[0])) { serve(args); return; }
+        if ("client".equals(args[0])) { client(args); return; }
         SSLContext context = context(args[0], args.length > 1 ? args[1] : "changeit");
         ExecutorService lane = Executors.newSingleThreadExecutor();
         try {

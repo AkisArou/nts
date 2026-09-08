@@ -53,7 +53,8 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
   "$here"/compiler/codegen/jvm/tests/env/CloseRaceTest.java \
   "$here"/compiler/codegen/jvm/tests/inbox/Stress.java \
-  "$here"/compiler/codegen/jvm/tests/store/StoreTest.java
+  "$here"/compiler/codegen/jvm/tests/store/StoreTest.java \
+  "$here"/compiler/codegen/jvm/tests/android/BothAlpn.java
 
 # shellcheck disable=SC2046
 # shellcheck disable=SC2086
@@ -228,6 +229,44 @@ esac
 # It has its own dex and its own device round trip, so it runs as a script
 # rather than as another `run` line. It was written before there was a device
 # to run it on and had never been executed until today.
+# ALPN on ART, which needs a server that is not on the device.
+#
+# Both ends inside one Android process negotiate nothing: Conscrypt **drops**
+# application protocols set on a server socket at API 29 -- they read back empty
+# immediately after being set -- so a self-contained device test would measure
+# the absence of a feature and report it as the absence of support. The first
+# version of this did exactly that and concluded ALPN was missing at 29.
+#
+# So the server stays on the host, `adb reverse` puts it on the device's own
+# loopback -- which also means the certificate's `ip:127.0.0.1` name is the one
+# being verified, and this works on a real device rather than only on an
+# emulator -- and what gets measured is Conscrypt's client half against JSSE.
+#
+# The case that justifies the arrangement is the second one: Conscrypt answers
+# `null` where JSSE answers `""` for a handshake with no ALPN, and the branch
+# that normalises it **only ever executes here**.
+echo "--- ALPN on ART, against a server on the host"
+alpn_log=$work/alpn-server.log
+java -cp "$jar:$work/classes" BothAlpn server "$work/store.p12" test-only h2,http/1.1 \
+  > "$alpn_log" 2>&1 &
+alpn_server=$!
+alpn_port=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  alpn_port=$(sed -n 's/^PORT //p' "$alpn_log" 2>/dev/null | head -1)
+  [ -n "$alpn_port" ] && break
+  sleep 1
+done
+if [ -z "$alpn_port" ]; then
+  echo "FAILED: the host ALPN server never reported a port"
+  cat "$alpn_log"
+  failed=1
+else
+  adb reverse "tcp:$alpn_port" "tcp:$alpn_port" > /dev/null
+  run BothAlpn "client /data/local/tmp/store.p12 test-only 127.0.0.1 $alpn_port"
+  adb reverse --remove "tcp:$alpn_port" > /dev/null 2>&1 || true
+fi
+kill "$alpn_server" 2>/dev/null || true
+
 echo "--- volatile barrier, through ART's own compiler"
 if sh "$here/tooling/android/barrier.sh"; then :; else failed=1; fi
 
