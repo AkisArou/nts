@@ -272,7 +272,7 @@ the checker says how far apart they are:
 
     the project's own code, before acquiring   23 errors
     the project's own code, after acquiring    23 errors
-    added, all of it inside vendored source   218 errors, over 7 of 14 packages
+    added, all of it inside vendored source   212 errors, over 7 of 14 packages
 
 The first two numbers matter as much as the third: **acquisition never made the
 program worse**, it only added source that has its own problems.
@@ -282,13 +282,13 @@ The first measurement of this was **3,091**, and 2,850 of them were one package.
 `~`, so every one of its 291 recovered files imports something that cannot
 resolve. Vendoring that and reporting it as acquired is a partial recovery
 dressed as a success, so it is now a refusal that names the specifier — and the
-count fell to 218 by declining one package rather than by fixing anything.
+count fell to 212 by declining one package rather than by fixing anything.
 
 What is left, over the seven packages that arrive with errors:
 
 | | | |
 |---|---:|---|
-| `TS2591`, `TS2503` | 51 | an ambient the package's own build supplied — `process`, `Buffer`, a namespace |
+| `TS2591`, `TS2503`, `TS2552` | 63 | an ambient the package's own build supplied — `process`, `Buffer`, a namespace |
 | `TS7006` | 26 | implicit `any`: the source assumes a `strict` its build did not set |
 | `TS2307` | 24 | a module still unresolved |
 | `TS2345`, `TS2322`, `TS2532`, `TS2339` | 68 | ordinary type errors under options the source was not written for |
