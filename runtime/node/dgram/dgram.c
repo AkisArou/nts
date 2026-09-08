@@ -300,3 +300,260 @@ void nts_udp_ref(double handle, bool keep_process_alive) {
     }
     socket->refed = keep_process_alive;
 }
+
+/* ------------------------------------------------------- the three closures */
+
+/* The same cast the emitter makes at every closure call site: the method table
+ * stores untyped pointers and the caller spells the signature. One spelling per
+ * arity and argument shape, because there is no generic way to say it. */
+static void call_2n(NtsHeader *callback, double a, double b) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, double))
+         callback->descriptor->methods[nts_closure_call_slot])(callback, a, b);
+}
+
+static void call_1n(NtsHeader *callback, double a) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double))
+         callback->descriptor->methods[nts_closure_call_slot])(callback, a);
+}
+
+static void call_message(NtsHeader *callback, NtsView *bytes,
+                         NtsString *address, NtsString *family, double port) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, NtsView *, NtsString *, NtsString *, double))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, bytes, address, family, port);
+}
+
+static void call_lookup(NtsHeader *callback, double status, NtsString *address,
+                        double family) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, NtsString *, double))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, status, address, family);
+}
+
+/* The bytes a datagram arrived in, as the `Uint8Array` the module is declared
+ * to receive. A buffer and a view over the whole of it: a `Uint8Array` lowers
+ * to `NtsView *`, which is a different struct from an `NtsArray` of `u8`. */
+static NtsView *bytes_view(const char *bytes, size_t length) {
+    NtsBuffer *buffer = nts_buffer_new((double)length);
+    if (buffer == NULL) return NULL;
+    if (length != 0) memcpy(buffer->bytes, bytes, length);
+    return nts_view_new(buffer, 0.0, (double)length, (double)NTS_ELEMENT_U8,
+                        false);
+}
+
+/* One send. The callback outlives this call, so the request owns a reference
+ * and gives it back in the completion. */
+typedef struct {
+    uv_udp_send_t request;
+    NtsHeader *callback;
+    size_t length;
+} SendRequest;
+
+static void on_sent(uv_udp_send_t *request, int status) {
+    SendRequest *sent = (SendRequest *)request;
+    /* Node reports the byte count it was asked to send, not what the kernel
+     * took: a datagram is all-or-nothing, and libuv reports a short write as a
+     * failure rather than a partial one. */
+    call_2n(sent->callback, (double)status,
+            status == 0 ? (double)sent->length : 0.0);
+    if (sent->callback != NULL) nts_release(sent->callback);
+    free(sent);
+}
+
+double nts_udp_send(double handle, NtsArray *chunks, double port,
+                    NtsString *address, NtsHeader *callback) {
+    Socket *socket = at(handle);
+    if (socket == NULL) return UV_EBADF;
+
+    size_t count = chunks == NULL ? 0 : (size_t)chunks->header.length;
+    uv_buf_t *buffers = count == 0 ? NULL : calloc(count, sizeof(uv_buf_t));
+    if (count != 0 && buffers == NULL) return UV_ENOMEM;
+
+    size_t total = 0;
+    NtsView **views = chunks == NULL ? NULL : NTS_ITEMS(chunks, NtsView *);
+    for (size_t i = 0; i < count; i++) {
+        NtsView *view = views[i];
+        size_t length = view == NULL ? 0 : (size_t)nts_view_byte_length(view);
+        buffers[i] = uv_buf_init(
+            view == NULL ? NULL : (char *)nts_view_bytes(view),
+            (unsigned int)length);
+        total += length;
+    }
+
+    /* A connected socket must be sent to with no address, and an unconnected
+     * one with an address. libuv answers EISCONN and EDESTADDRREQ for the two
+     * ways of getting that wrong, which are the errors node reports. */
+    struct sockaddr_storage target;
+    const struct sockaddr *to = NULL;
+    if (!socket->connected) {
+        char *host = cstring(address);
+        if (host == NULL) {
+            free(buffers);
+            return UV_ENOMEM;
+        }
+        int status = uv_ip4_addr(host, (int)port, (struct sockaddr_in *)&target);
+        if (status != 0) {
+            status =
+                uv_ip6_addr(host, (int)port, (struct sockaddr_in6 *)&target);
+        }
+        free(host);
+        if (status != 0) {
+            free(buffers);
+            return (double)status;
+        }
+        to = (const struct sockaddr *)&target;
+    }
+
+    SendRequest *request = calloc(1, sizeof(SendRequest));
+    if (request == NULL) {
+        free(buffers);
+        return UV_ENOMEM;
+    }
+    request->callback = callback;
+    request->length = total;
+    if (callback != NULL) nts_retain(callback);
+
+    int status = uv_udp_send(&request->request, &socket->udp, buffers,
+                             (unsigned int)count, to, on_sent);
+    free(buffers);
+    if (status != 0) {
+        if (callback != NULL) nts_release(callback);
+        free(request);
+    }
+    return (double)status;
+}
+
+/* libuv asks for somewhere to put a datagram before it knows how big one is.
+ * 64 KiB is the largest a UDP datagram can be, so one allocation always fits
+ * and the read callback reports what actually arrived. */
+static void on_alloc(uv_handle_t *handle, size_t suggested, uv_buf_t *buffer) {
+    (void)handle;
+    (void)suggested;
+    buffer->base = malloc(65536);
+    buffer->len = buffer->base == NULL ? 0 : 65536;
+}
+
+static void on_received(uv_udp_t *udp, ssize_t count, const uv_buf_t *buffer,
+                        const struct sockaddr *from, unsigned flags) {
+    Socket *socket = (Socket *)udp->data;
+    if (socket == NULL) {
+        free(buffer->base);
+        return;
+    }
+    /* `count == 0 && from == NULL` is libuv saying "nothing this time", which
+     * is not an empty datagram and not an error. An empty datagram arrives as
+     * `count == 0` with an address. */
+    if (count == 0 && from == NULL) {
+        free(buffer->base);
+        return;
+    }
+    if (count < 0) {
+        call_1n(socket->on_error, (double)count);
+        free(buffer->base);
+        return;
+    }
+    /* A truncated datagram is a lost one: node reports what it got and libuv
+     * has already dropped the tail. Reported as received rather than as an
+     * error, which is what node's own `dgram` does. */
+    (void)flags;
+
+    char text[INET6_ADDRSTRLEN] = {0};
+    int port = 0;
+    const char *family = "IPv4";
+    if (from != NULL && from->sa_family == AF_INET6) {
+        const struct sockaddr_in6 *in6 = (const struct sockaddr_in6 *)from;
+        uv_ip6_name(in6, text, sizeof(text));
+        port = ntohs(in6->sin6_port);
+        family = "IPv6";
+    } else if (from != NULL) {
+        const struct sockaddr_in *in4 = (const struct sockaddr_in *)from;
+        uv_ip4_name(in4, text, sizeof(text));
+        port = ntohs(in4->sin_port);
+    }
+
+    NtsView *bytes = bytes_view(buffer->base, (size_t)count);
+    free(buffer->base);
+    if (bytes == NULL) {
+        call_1n(socket->on_error, (double)UV_ENOMEM);
+        return;
+    }
+    call_message(socket->on_message, bytes, utf8(text), utf8(family),
+                 (double)port);
+}
+
+double nts_udp_recv_start(double handle, NtsHeader *on_message,
+                          NtsHeader *on_error) {
+    Socket *socket = at(handle);
+    if (socket == NULL) return UV_EBADF;
+
+    /* Replacing a started read replaces its callbacks, so the old pair is
+     * released here and not in `close`. */
+    if (socket->on_message != NULL) nts_release(socket->on_message);
+    if (socket->on_error != NULL) nts_release(socket->on_error);
+    socket->on_message = on_message;
+    socket->on_error = on_error;
+    if (on_message != NULL) nts_retain(on_message);
+    if (on_error != NULL) nts_retain(on_error);
+
+    return (double)uv_udp_recv_start(&socket->udp, on_alloc, on_received);
+}
+
+/* One name resolution. Like a send, the callback outlives the call. */
+typedef struct {
+    uv_getaddrinfo_t request;
+    NtsHeader *callback;
+} LookupRequest;
+
+static void on_resolved(uv_getaddrinfo_t *request, int status,
+                        struct addrinfo *result) {
+    LookupRequest *lookup = (LookupRequest *)request;
+    char text[INET6_ADDRSTRLEN] = {0};
+    double family = 0.0;
+
+    if (status == 0 && result != NULL) {
+        if (result->ai_family == AF_INET6) {
+            uv_ip6_name((struct sockaddr_in6 *)result->ai_addr, text,
+                        sizeof(text));
+            family = 6.0;
+        } else {
+            uv_ip4_name((struct sockaddr_in *)result->ai_addr, text,
+                        sizeof(text));
+            family = 4.0;
+        }
+    }
+    call_lookup(lookup->callback, (double)status, utf8(text), family);
+    if (lookup->callback != NULL) nts_release(lookup->callback);
+    if (result != NULL) uv_freeaddrinfo(result);
+    free(lookup);
+}
+
+void nts_udp_lookup(NtsString *hostname, double family, NtsHeader *callback) {
+    LookupRequest *lookup = calloc(1, sizeof(LookupRequest));
+    if (lookup == NULL) {
+        call_lookup(callback, (double)UV_ENOMEM, utf8(""), 0.0);
+        return;
+    }
+    lookup->callback = callback;
+    if (callback != NULL) nts_retain(callback);
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = family == 6.0   ? AF_INET6
+                      : family == 4.0 ? AF_INET
+                                      : AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    char *name = cstring(hostname);
+    int status = uv_getaddrinfo(loop(), &lookup->request, on_resolved,
+                                name == NULL ? "" : name, NULL, &hints);
+    free(name);
+    if (status != 0) {
+        if (callback != NULL) nts_release(callback);
+        free(lookup);
+        call_lookup(callback, (double)status, utf8(""), 0.0);
+    }
+}
