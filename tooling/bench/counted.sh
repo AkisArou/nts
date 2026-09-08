@@ -13,6 +13,32 @@
 # operation. Instructions per operation are load-independent, so this does not
 # need the measurement lock -- cycles do, and are reported for the ratio.
 #
+# # What that claim does not cover, and it is the calibration
+#
+# Load-independent is true of *load* and says nothing about **how much work
+# this decided to measure**. Across five runs of one program the calibration
+# below estimated 35, 45, 48, 78 and 97 us an operation -- a 2.8x spread in the
+# chosen N. The N-versus-2N subtraction cancels startup and warmup only while
+# both runs sit in the same regime, and at that spread they do not. So the tool
+# is exact about work and imprecise about how much of it it took.
+#
+# Three runs of one unchanged build on `node-utf8`:
+#
+#     ours   1,428,086   1,396,634   1,436,667     spread 2.9%
+#     java     228,758     232,322     238,491     spread 4.3%
+#
+# **The Java column is the tell.** It is an unchanged hand-written reference, so
+# a 4.3% spread on it cannot be attributed to anything the compiler did; a
+# spread on our side alone would always have had a second explanation. And the
+# same row through `nts-bench` is 1% across five runs, so the program is steady
+# and only this is not -- two harnesses over one program with one of them stable
+# is what makes that a diagnosis rather than a suspicion.
+#
+# Right instrument for `generic-classes`, which published 1.03x and 1.16x of the
+# same bytecode while this said 0.91x: that is a large difference in work and
+# this resolves it. **Wrong instrument for four percent.** Pass `NTS_COUNTED_N`
+# to take the calibration out of it when the question is small.
+#
 # Requires `nts-bench` to have generated the case at least once, since the
 # drivers here are rewritten from the ones it wrote into `target/bench`.
 set -eu
@@ -83,8 +109,13 @@ count() { # classpath, event, n
 
 median() { tr ' ' '\n' | grep -v '^$' | sort -n | awk '{v[NR]=$1} END {print v[int((NR+1)/2)]}'; }
 
+# `NTS_COUNTED_EVENTS` asks for more than the two. The two are the default
+# because they answer *how much work* and *how long*, and everything else is
+# for when those two disagree -- which is the case this tool exists to find.
+# `branch-misses` and `stalled-cycles-backend` separate a prediction story from
+# a memory one without a profiler.
 report() { # label, classpath, n
-  for event in instructions cycles; do
+  for event in ${NTS_COUNTED_EVENTS:-instructions cycles}; do
     low=""; high=""
     i=0
     while [ $i -lt "$reps" ]; do
