@@ -144,6 +144,17 @@ export function shape(exports) {
   delete http.getHTTPParserPoolLimit;
   delete http.readGlobalAgentBinding;
   delete http.writeGlobalAgentBinding;
+  // Four more internals the `...exports` spread carried out of the module.
+  // Node has none of them -- `n in require("node:http")` is false for each, so
+  // this is not an enumerability difference -- and `methods` is especially
+  // worth removing because node's array is `METHODS`, so a caller feature-
+  // detecting the lowercase name gets a truthy answer from us and undefined
+  // from node. Found by `test/export-surface-static.js`; nothing upstream
+  // enumerates this module.
+  delete http.HTTPParser;
+  delete http.checkInvalidHeaderChar;
+  delete http.checkIsHttpToken;
+  delete http.methods;
   Object.defineProperty(http, "globalAgent", {
     configurable: true,
     enumerable: true,
@@ -157,10 +168,15 @@ export function shape(exports) {
   http.Agent = callableConstructor(exports.Agent, "Agent");
   http.ClientRequest = requestConstructor(exports.ClientRequest);
   http.Server = callableConstructor(exports.Server, "Server");
-  http.request = (options, optionsOrCallback, callback) => {
+  // Named function expressions rather than arrows. `http.get = () => {}` is a
+  // member assignment, which named evaluation does not cover, so the property
+  // held a function whose `name` was the empty string while node's is "get".
+  // Behaviour is identical; only the name was missing, and nothing upstream
+  // reads it because on node it cannot be wrong.
+  http.request = function request(options, optionsOrCallback, callback) {
     return invokeRequest(exports.request, options, optionsOrCallback, callback);
   };
-  http.get = (options, optionsOrCallback, callback) => {
+  http.get = function get(options, optionsOrCallback, callback) {
     return invokeRequest(exports.get, options, optionsOrCallback, callback);
   };
   return http;
