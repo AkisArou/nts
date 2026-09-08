@@ -31,7 +31,7 @@ not measured clean and should not be quoted.**
 | `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
-| `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
+| `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
@@ -649,6 +649,34 @@ stable and one not, is worth knowing before either is quoted.
 So the row is **~6.58x**. My 6.69x carried a contention flag and the published
 6.43x is a single clean sitting; neither is in the band five runs give, and the
 difference between them is not the retyping and not resolvable by anything here.
+
+- **Replacing the Grisu port with a better formatter** on
+  `number-format-double`. The profile is emphatic: `NtsGrisu.shortest` **42.4%**
+  plus `timesHigh` **11.8%**, so 54% of our time is in the formatter, against
+  the JDK's `DoubleToDecimal` at 38.6% of the reference's. Since JDK 19 that is
+  Schubfach and ours is Grisu2, so this looked like a real algorithm gap and
+  the row is 1.08x. **[1.7% of a 7.6% gap. Do not write Schubfach.]**
+
+  Priced without writing it, by the technique the goal names: a prototype
+  runtime whose `numberToString` hands the whole question to `Double.toString`
+  and strips the `.0` -- which is *exactly* what `ref.java` does -- swapped
+  under the same emitted classes. Five interleaved rounds, identical checksums,
+  medians:
+
+      grisu (ours)                    5774.1 ns    1.076x
+      jdkfmt (the JDK's own Schubfach) 5680.4 ns    1.058x
+      ref                             5366.5 ns
+
+  **Our program calling the reference's own formatter is still 5.8% slower than
+  the reference.** So the formatter is not the gap; the surrounding program is.
+  A large share of a profile is not a large share of a *gap* when the reference
+  does the same work -- which is `array-predicates`' lesson arriving on a row
+  where the operation is named rather than attributed, and it was still true.
+
+  The prototype is not shippable and was never meant to be: `Double.toString`
+  switches to exponential at 1e7 and 1e-3 where JavaScript switches at 1e21 and
+  1e-6, and this case's values reach neither. It measures the ceiling, and the
+  ceiling is 1.7%.
 
 ## Open, and whose
 
