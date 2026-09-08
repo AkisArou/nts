@@ -574,6 +574,43 @@ if (!withCompiles && modules.length > 1) {
     if (summary !== "") console.log(`unmeasurable bindings: ${summary}`);
   }
 
+  // What blocks the compiled axis, by *reach*: how many distinct modules each
+  // refusal shape stops. `--backend` makes it run `emit-c` as well as `hir`, so
+  // the backend codes are counted too -- `NTS2006` and its neighbours come from
+  // the backend, and a table built on `hir` alone said nothing about 253 of them
+  // sitting in this corpus. That hole was found by another lane asking what they
+  // were, not by anything here noticing.
+  //
+  // It is the expensive block on this list, roughly an order of magnitude over
+  // the audits above, because it compiles every module twice. It lives here
+  // rather than in a flag because the compiler lane reads these numbers and was
+  // otherwise producing them by hand, three columns at a time.
+  {
+    const reach = spawnSync(
+      process.execPath,
+      [join(HERE, "blocker-reach.mjs"), "--backend"],
+      { encoding: "utf8", maxBuffer: 128 * 1024 * 1024, timeout: 3_600_000 },
+    );
+    const text = `${reach.stdout ?? ""}${reach.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("\nblocker reach: INSTRUMENT FAILURE -- zero shapes, see below");
+      for (const line of text.split("\n").filter((l) => l.includes("NTS_TSGO") || l.includes("INSTRUMENT"))) {
+        console.log(`  ${line.trim()}`);
+      }
+    } else {
+      const rows = text.split("\n");
+      const header = rows.find((l) => l.includes("distinct refusal shape"));
+      if (header !== undefined) console.log(`\nblocker reach:${header}`);
+      // The ten widest, and every backend code regardless of width, because the
+      // backend half is the half that was invisible.
+      const table = rows.filter((l) => /^ {2}\s*\d+\s+\d+\s{2}/.test(l));
+      for (const line of table.slice(0, 10)) console.log(line);
+      for (const line of table.filter((l) => l.includes("NTS2")).slice(0, 6)) {
+        if (!table.slice(0, 10).includes(line)) console.log(line);
+      }
+    }
+  }
+
   // The differential, for the same reason and at a fraction of its full size.
   // Node's tests are a fixed set of inputs a human chose; this asks node the
   // questions nobody wrote down, and it has found three real bugs -- a
