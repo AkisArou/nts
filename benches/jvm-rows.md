@@ -36,7 +36,7 @@ not measured clean and should not be quoted.**
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
-| `awfy-sieve` | **1.03x or 1.27x** | bimodal, not noisy -- two JIT shapes; below |
+| `awfy-sieve` | **1.03x or 1.27x** | two modes, and "two JIT shapes" was wrong -- below |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
 | `objects` | **0.99x** | re-measured clean: still a win, as it was |
 | `generator` | **0.99x** | re-measured clean: not losing |
@@ -568,14 +568,34 @@ is 1.04x.** Quoting 1.25x is quoting the bad one; quoting 1.04x is quoting the
 good one; the median of a single sitting is whichever the run happened to get.
 Both are written here because neither alone is the row.
 
-**The lead, unpriced.** If the good shape can be made the only shape, this row
-is at parity without any change to what is emitted -- which would make it the
-cheapest remaining win in the table. What produces two shapes from one class
-file is the question, and on-stack replacement against a standard compilation is
-the first thing to rule out, since it is what made the `generic-classes`
-assembly comparison wrong once already. Not chased yet, and it needs a
-diagnostic flag rather than a shipping one, so any number from it has to be
-checked back against a default-flags run before it counts.
+**Chased, and "two JIT shapes" was my phrase and is wrong.** Both candidates
+are ruled out and the third reading fits better.
+
+*Not the compilation.* Six runs under `-XX:+PrintCompilation`, which the two
+modes survive -- 4264 and 4282 fast against 5329 to 5373 slow. The logs are the
+same program compiled the same way: same methods, same tiers, the same `%` OSR
+markers, 12 not-entrant events in each, and compilation ids differing by one.
+
+*Not the collector.* Six runs under `-Xlog:gc`, spanning both modes, **three
+young collections in every one**.
+
+*And the mode is sticky rather than drawn per run.* Eight consecutive raw runs
+came out 5259 to 5450 -- a 3.6% spread, all slow -- where earlier sittings
+interleaved fast and slow. A property of the class file would not clump by when
+it was measured.
+
+**What fits: one program whose inner loop is about five times more sensitive to
+machine state than the reference's.** In the `nts-bench` sitting the Java column
+moved 4.50 to 4.32 us, 4%, while ours moved 5.74 to 4.48, **22%**, in the same
+direction. So there is a shared environmental component and our code amplifies
+it, which is a fact about the emitted loop rather than about the JIT.
+
+That is a smaller claim than the one it replaces and a better lead: the question
+is no longer "why two shapes" but "why is our sieve five times more sensitive
+than a `boolean[]` loop written by hand", which is answerable by comparing the
+two loops. `NtsArrayZ` puts the bytes behind a wrapper with a length field where
+the reference has a bare array; that is where I would look first, and it is the
+same representation `array-predicates` is at its floor because of.
 
 ### `node-utf8` moved 6.69x to 6.43x between two sittings, and the fix landed in between did not do it
 
