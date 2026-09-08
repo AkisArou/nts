@@ -1189,17 +1189,47 @@ impl Emitter<'_> {
         // to be *identical* rather than merely both pointers.
         let held = self.ty(stored).clone();
         if types::descriptor(self.shape, &held).as_deref() != Some(descriptor.as_str()) {
-            return Err(refuse(
-                self.func,
-                &format!(
-                    "a store of {} into the global `{}`, which is {} -- the middle \
-                     end narrowed one and not the other, and the JVM would refuse \
-                     the class rather than the store",
-                    types::describe(&held),
-                    entry.name,
-                    types::describe(&entry.ty)
-                ),
-            ));
+            // **Identical descriptors, unless both sides are objects.** The
+            // array case above is a `VerifyError` and stays refused: `[I` and
+            // `[D` are unrelated types to the verifier and no relation between
+            // their elements makes one assignable to the other.
+            //
+            // A *reference* is the opposite. `putstatic` on a field declared
+            // `LLeaf;` accepts a `Bigger` off the stack with no `checkcast` and
+            // no widening, because reference assignment on the JVM is
+            // covariant -- so refusing it was this backend being stricter than
+            // its own instruction set. `examples/upcast-to-base` is exactly
+            // that store and it was refused for a reason that was never true
+            // of it, having been written about arrays.
+            //
+            // `assignable_types` is the predicate rather than a second one: it
+            // already asks the question in the JVM's terms, walking
+            // `Layout.base` and the interfaces, and it is what `Return` uses
+            // for the same store-to-a-declared-type question. Reached only
+            // when both sides are objects, because for anything else it
+            // answers `Ok` by falling through and would let the array case
+            // past.
+            let both_objects = matches!(
+                (&held, &entry.ty),
+                (
+                    HirType::Managed(ManagedType::Object(_)),
+                    HirType::Managed(ManagedType::Object(_))
+                )
+            );
+            if !both_objects {
+                return Err(refuse(
+                    self.func,
+                    &format!(
+                        "a store of {} into the global `{}`, which is {} -- the middle \
+                         end narrowed one and not the other, and the JVM would refuse \
+                         the class rather than the store",
+                        types::describe(&held),
+                        entry.name,
+                        types::describe(&entry.ty)
+                    ),
+                ));
+            }
+            self.assignable_types(&held, &entry.ty)?;
         }
         self.load(code, pool, stored)?;
         code.put_static(origin, pool, PROGRAM, &name, &descriptor);
