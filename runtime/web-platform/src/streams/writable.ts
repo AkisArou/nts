@@ -662,6 +662,15 @@ export class WritableStream<W = unknown> {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
+    // reaches only the interface's own members.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "WritableStream",
       writable: false,
@@ -735,6 +744,15 @@ export class WritableStreamDefaultWriter<W = unknown> {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
+    // reaches only the interface's own members.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "WritableStreamDefaultWriter",
       writable: false,
@@ -888,6 +906,15 @@ export class WritableStreamDefaultController<W = unknown> {
   // Web IDL surface shape; see core/interface-tag.ts for the rule and why it is
   // written inline rather than through a helper.
   static {
+    // Web IDL member attributes. This prototype carries no non-standard names, so the pass
+    // reaches only the interface's own members.
+    for (const key of Object.getOwnPropertyNames(this.prototype)) {
+      if (key === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this.prototype, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this.prototype, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "WritableStreamDefaultController",
       writable: false,

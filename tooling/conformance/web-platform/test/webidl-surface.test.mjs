@@ -146,8 +146,21 @@ suite("the Undici-shaped classes are deliberately untagged", () => {
  */
 const FULLY_CONFORMANT = [
   "AbortSignal",
+  "Blob",
+  "ByteLengthQueuingStrategy",
+  "CountQueuingStrategy",
   "EventTarget",
+  "File",
+  "FormData",
   "Headers",
+  "ReadableByteStreamController",
+  "ReadableStreamDefaultController",
+  "TransformStream",
+  "TransformStreamDefaultController",
+  "URLSearchParams",
+  "WritableStream",
+  "WritableStreamDefaultController",
+  "WritableStreamDefaultWriter",
   "TextDecoder",
   "TextDecoderStream",
   "TextEncoder",
@@ -217,6 +230,19 @@ const REFLECTIVELY_REACHED = {
   AbortSignal: ["aborted"],
 };
 
+/**
+ * Members the conformant oracle has that the standard does not define.
+ *
+ * Node is a good oracle for interface shape and it is not the IDL. `Blob.prototype.textStream`
+ * is a Node extension: `interfaces/FileAPI.idl`, pinned in this repository, declares `stream()`
+ * and `text()` and nothing else on `Blob`. Excluded by citation rather than by convenience --
+ * this is checkable, and the check is that the IDL does not mention it.
+ */
+const HOST_EXTENSIONS = {
+  Blob: ["textStream"],
+  File: ["textStream"],
+};
+
 suite("every standard member is still reachable by its own name", () => {
   // The direction the extras check cannot see. `getOwnPropertyNames` skipping symbols is what
   // makes symbol-keying an internal invisible -- and it would make symbol-keying a *public*
@@ -226,8 +252,9 @@ suite("every standard member is still reachable by its own name", () => {
     const conformant = globalThis[name];
     if (typeof conformant !== "function") continue;
     const mine = new Set(Object.getOwnPropertyNames(api[name].prototype));
+    const extensions = new Set(HOST_EXTENSIONS[name] ?? []);
     for (const key of Object.getOwnPropertyNames(conformant.prototype)) {
-      if (key === "constructor") continue;
+      if (key === "constructor" || extensions.has(key)) continue;
       if (!mine.has(key)) missing.push(`${name}.${key}`);
     }
   }

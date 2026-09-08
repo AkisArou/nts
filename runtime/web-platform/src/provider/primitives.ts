@@ -428,10 +428,12 @@ export interface PlatformPrimitives {
    * from every other application on the same device. What crosses this seam is the
    * resolved answer.
    *
-   * **The result may already have the platform's own bypass rules applied**, and on
-   * Android it does: `http.nonProxyHosts` entries come back as `DIRECT`. That is not the
-   * same set as a caller's configured no-proxy list, which is applied above this seam
-   * because nothing below can know it.
+   * **The result may or may not have the platform's own bypass rules applied.** On Android
+   * API 26, measured from a real application, it does **not**: the framework propagates the
+   * proxy host and port but not `global_http_proxy_exclusion_list`, so a loopback request
+   * resolves to the proxy. A caller's own no-proxy list is applied above this seam in either
+   * case, because nothing below can know it -- and on that version it is the only thing
+   * applied at all.
    *
    * Returning null means "no opinion", which a caller treats as `DIRECT`. Android never
    * produces it -- an unconfigured selector answers `Proxy.NO_PROXY` for every URL, so

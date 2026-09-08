@@ -6386,3 +6386,36 @@ propagates the list would answer `DIRECT`, which is an improvement and must not 
 regression. What it asserts is that the two halves agree.
 
 820/820 host, upstream unchanged at 2,566 of 2,574.
+
+## Thirteen interfaces needed only the last step, and node was not the oracle
+
+Thirteen prototypes were already free of non-standard names and had simply never had the
+enumerability pass applied: `Blob`, `File`, `FormData`, `URLSearchParams`, both queuing
+strategies, `TransformStream` and its controller, `WritableStream` with its writer and
+controller, and the two readable controllers. No renames, so nothing reflective could break —
+this is the third step of the sequence applied where the first two were never needed.
+
+**Twenty fully conformant interfaces**, and the provider-side correction to the proxy comment
+is released too now that the Node lane has asked for landing rather than holding.
+
+### `Blob.textStream`, and node being a good oracle rather than the standard
+
+Adding those thirteen to the strict list failed immediately on one name: node's
+`Blob.prototype` has **`textStream`** and this runtime does not.
+
+The premise of that assertion was "every name the conformant implementation has, this one must
+have". The premise is wrong, and the pinned IDL says so: `interfaces/FileAPI.idl` declares
+`stream()` and `text()` on `Blob` and **nothing else**. `textStream` is a Node extension.
+
+So the exclusion is by **citation, not convenience** — the claim is checkable and the check is
+that the IDL, which sits in this repository, does not mention it. That distinction is the
+whole difference between correcting an oracle and weakening a test.
+
+This is the third time this lane has had to hold node at arm's length while still using it:
+its `TextDecoder` gives two answers for one byte sequence, its `Event.prototype` omits the
+IDL constants, and now its `Blob` carries a member the standard does not define. **A mature
+implementation is the best available oracle for interface shape and it is not the standard**,
+and the difference shows up exactly where an implementation has been useful enough to grow
+extensions.
+
+820/820 host, upstream unchanged at 2,566 of 2,574, frontier unchanged at 1,407/337.
