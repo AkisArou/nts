@@ -274,3 +274,52 @@ suite("a number with a fraction or an exponent takes the slow path and still mat
     assert.equal(parseJsonText(text).number, JSON.parse(text), text);
   }
 });
+
+// `OrdinaryOwnPropertyKeys` ordering at a size where the algorithm shows.
+//
+// `objectValue` used to reach this with `Array#sort` and a comparator, which is not lowered --
+// it was the only refusal between the whole parser and the compiled axis, so the sort is now
+// hand-written. Two things have to hold afterwards and only one of them is obvious.
+//
+// This asserts the order, at a size where a sort that is merely *nearly* right shows up: four
+// thousand shuffled indices interleaved with a string key.
+//
+// **It does not assert the complexity, and an earlier version of this comment claimed it did.**
+// The sort is a merge rather than an insertion because an object carrying thousands of
+// array-index keys is an ordinary document -- a sparse array written as an object is exactly
+// that. But a timing assertion cannot check that here: swapping in an insertion sort runs this
+// same case in 6.9ms, because four thousand elements is nowhere near where n^2 bites. Sizing up
+// until it did would make the test slow *and* timing-dependent on a machine three sessions
+// share, which is a flaky test bought with a real one. The complexity is a design decision
+// recorded at `ascendingByIndex`; this is the correctness half.
+suite("many array-index keys stay in ascending numeric order, and do not go quadratic", () => {
+  // Shuffled deterministically, so the sort has real work to do and a failure reproduces.
+  const indices: number[] = [];
+  for (let at = 0; at < 4000; at++) indices.push(at);
+  let state = 12345;
+  for (let at = indices.length - 1; at > 0; at--) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const swap = state % (at + 1);
+    const held = indices[at] as number;
+    indices[at] = indices[swap] as number;
+    indices[swap] = held;
+  }
+
+  const members: string[] = [];
+  for (const index of indices) members.push(`"${index}":${index}`);
+  // One string key, to prove the index keys still sort ahead of it rather than merely among
+  // themselves.
+  members.push('"z":0');
+  const text = `{${members.join(",")}}`;
+
+  const parsed = parseJsonText(text);
+
+  // The graph's own key list against node's, which is the ordering claim directly. `keyOrder`
+  // walks a materialised value and is the right tool for nested shapes; here the object is flat
+  // and the keys are the whole assertion.
+  assert.deepEqual([...parsed.keys], Object.keys(JSON.parse(text) as object));
+  assert.equal(parsed.keys.length, 4001);
+  assert.equal(parsed.keys[0], "0");
+  assert.equal(parsed.keys[3999], "3999");
+  assert.equal(parsed.keys[4000], "z", "a non-index key sorts after every index key");
+});

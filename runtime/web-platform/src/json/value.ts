@@ -85,6 +85,74 @@ function buildSeen(keys: readonly string[]): Map<string, number> {
   return seen;
 }
 
+/**
+ * The positions `0..indexOrder.length`, ordered by the array index each one holds.
+ *
+ * **This is a hand-written sort because `Array#sort` with a comparator is not lowered yet** --
+ * `NTS1001 this array method is not supported by this lowering yet`, which was raised at the
+ * `order.sort(...)` this replaced. It was the only refusal between `JsonValue.objectValue` and
+ * the compiled axis, and through `readValue` the only one between the whole JSON parser and it.
+ * Agreed with the compiler lane to write the sort rather than leave the parser blocked: a
+ * comparator sort is a large general feature and a key-ordering helper is a poor forcing case
+ * for it. The refusal is recorded rather than removed -- see the note in `docs/BASELINE.md`.
+ *
+ * **Merge rather than insertion, and that is not premature.** The values being ordered are array
+ * indices, and an object carrying many of them is an ordinary document -- a sparse array written
+ * as an object is exactly that. An O(n^2) pass here would be a real regression on real input,
+ * and this function has already had one quadratic in it: the duplicate scan, which cost 28.68ms
+ * where it now costs 0.81ms.
+ *
+ * Stable, though nothing depends on it: the keys reaching here are already deduplicated, so
+ * there are no ties to preserve.
+ */
+function ascendingByIndex(indexOrder: readonly number[]): readonly number[] {
+  const count = indexOrder.length;
+  let current: number[] = [];
+  for (let at = 0; at < count; at++) current.push(at);
+  if (count < 2) return current;
+
+  // Filled by pushing rather than sized up front: an array literal of a known length is one
+  // more thing to check lowers, and the buffer is written whole on every pass anyway.
+  let buffer: number[] = [];
+  for (let at = 0; at < count; at++) buffer.push(0);
+
+  for (let width = 1; width < count; width = width * 2) {
+    for (let start = 0; start < count; start = start + width * 2) {
+      const middle = start + width < count ? start + width : count;
+      const end = start + width * 2 < count ? start + width * 2 : count;
+      let left = start;
+      let right = middle;
+      let at = start;
+      while (left < middle && right < end) {
+        const leftKey = indexOrder[current[left] as number] as number;
+        const rightKey = indexOrder[current[right] as number] as number;
+        if (leftKey <= rightKey) {
+          buffer[at] = current[left] as number;
+          left++;
+        } else {
+          buffer[at] = current[right] as number;
+          right++;
+        }
+        at++;
+      }
+      while (left < middle) {
+        buffer[at] = current[left] as number;
+        left++;
+        at++;
+      }
+      while (right < end) {
+        buffer[at] = current[right] as number;
+        right++;
+        at++;
+      }
+    }
+    const swap = current;
+    current = buffer;
+    buffer = swap;
+  }
+  return current;
+}
+
 export class JsonValue {
   readonly kind: JsonKind;
   /** `boolean` values. */
@@ -248,9 +316,7 @@ export class JsonValue {
     }
 
     // Ascending numeric order, not lexicographic: "10" follows "9".
-    const order: number[] = [];
-    for (let at = 0; at < indexKeys.length; at++) order.push(at);
-    order.sort((left, right) => (indexOrder[left] as number) - (indexOrder[right] as number));
+    const order = ascendingByIndex(indexOrder);
 
     const keys: string[] = [];
     const values: JsonValue[] = [];

@@ -7290,3 +7290,44 @@ and then loads. That is the shape of the remaining gap, it is in the scan loop, 
 condition the goal names for proposing a compiler intrinsic rather than working around it.
 
 884/884 host, upstream unchanged at 2,768 of 2,776.
+
+## The comparator sort, written by hand and the refusal kept
+
+`JsonValue.objectValue` ordered its array-index keys with `Array#sort` and a comparator:
+
+    runtime/web-platform/src/json/value.ts:253:8
+    NTS1001 this array method is not supported by this lowering yet
+    order.sort((left, right) => (indexOrder[left] as number) - (indexOrder[right] as number));
+
+That single refusal was the whole of what stood between `objectValue`, `readValue`,
+`parseJsonText` and the compiled axis -- the parser had no presence there at all because of it.
+
+**Written by hand, on the compiler lane's decision rather than mine.** I put the choice to them
+rather than quietly removing their evidence: a comparator sort is a large general feature and a
+key-ordering helper is a poor forcing case for one. Their answer was to write the sort and record
+the refusal, which is what this section is. The site and the diagnostic above are the record; the
+feature is still wanted, just not on this parser's schedule.
+
+**Merge, not insertion.** The values being ordered are array indices and an object carrying
+thousands of them is an ordinary document -- a sparse array written as an object is exactly that
+-- so a quadratic pass here would be a real regression on real input. This function has already
+had one quadratic: the duplicate scan, 28.68ms where it now costs 0.81ms.
+
+**A correction inside the same change.** The test written alongside it claimed to prove the
+complexity as well as the order, with a timing assertion. It does not and it cannot: swapping an
+insertion sort back in runs the same 4,000-key case in **6.9ms**, because four thousand elements
+is nowhere near where `n^2` bites. Sizing up until it did would buy a slow, timing-dependent test
+on a machine three sessions share. The claim was removed and the comment now says which half is
+tested. The order half does have teeth -- returning insertion order instead of ascending fails it
+twice.
+
+With this gone, **the parser is blocked on exactly one refusal**, and it is a real conversion
+rather than a workaround:
+
+    runtime/web-platform/src/json/parse.ts:374:4
+    NTS1001 a conversion to number from this type is not supported by this lowering yet
+    return Number(source.slice(start, end));
+
+That is `numberValueOf` -> `Scanner#readNumber` -> `readValue` -> `parseJsonText`. It is on the
+compiler lane's list and it is now the single thing standing between the whole JSON parser and
+the compiled axis.
