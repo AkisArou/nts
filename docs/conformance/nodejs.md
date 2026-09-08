@@ -2850,6 +2850,25 @@ its size suggests: if narrowing an erased value to bigint turns out to be
 statically false rather than unrepresentable, then the cheapest available fix is
 also the one with the widest reach in the entire profile.
 
+### A third way the count is not what it looks like
+
+**Clearing the head of a cone can reveal the next refusal in the same
+function.** The compiler lane fixed the bigint narrowing and the count moved by
+`-3` and then `+1`: `determineSpecificType` is a `switch (typeof value)` and
+every arm is its own narrowing, so clearing the bigint arm let the lowering
+reach the *symbol* arm, refused for a different reason. Behind that, a string
+conversion; behind that, `toString(16)` — which is `number-tostring-radix` at
+thirteen modules.
+
+The cone was measured correctly and is real. What it cannot see is what it is
+standing in front of. So a cone is an upper bound on what one fix unblocks only
+when the refusal at its head is the **only** one in that function; otherwise it
+sizes a queue rather than a step, and `cascade-reach.mjs` now says so on every
+run alongside the other two caveats.
+
+That is not an argument against the ordering — it is the argument for it. Each
+link is small, and all of them are in one file that twenty-one modules import.
+
 ## `narrowed-bigint` may be dead code rather than a missing representation
 
 Not yet established, and recorded here as a hypothesis with the thing that would

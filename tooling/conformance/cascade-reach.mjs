@@ -189,7 +189,9 @@ console.log(`  ${module_}: ${primary.length} primary refusal(s), ` +
   `${cascaded.size} function(s) stopped by cascade\n`);
 console.log("  A cone counts what a refusal stopped *through other functions*.");
 console.log("  A function refused on its own account is in none of them, so the");
-console.log("  export counts below are floors and not totals.\n");
+console.log("  export counts below are floors and not totals. And clearing the");
+console.log("  head of a cone can reveal the next refusal in the same function,");
+console.log("  so a cone sizes a queue rather than a step.\n");
 console.log("  Primary refusals ranked by the size of their cone:\n");
 for (const { root, size, exports } of scored.slice(0, 10)) {
   console.log(`  ${String(size).padStart(4)}  ${root}`);
@@ -207,6 +209,15 @@ for (const { root, size, exports } of scored.slice(0, 10)) {
   //    inherited.
   // 2. An export in more than one cone needs all of them fixed, so the counts
   //    across roots do not add up and the largest is not a promise on its own.
+  // 3. **Clearing the head of a cone can reveal the next refusal in the same
+  //    function.** `determineSpecificType` is a `switch (typeof value)` and
+  //    every arm is its own narrowing: clearing the bigint arm let the lowering
+  //    reach the symbol arm, which was refused for a different reason, and
+  //    behind that a string conversion, and behind that a radix. The cone was
+  //    measured correctly and is real; what it cannot see is what it is
+  //    standing in front of. So a cone is an upper bound on what one fix
+  //    unblocks only when the refusal at its head is the *only* one in that
+  //    function -- otherwise it is the size of a queue, not of a step.
   const shapes = shapesIn(root);
   if (shapes.length === 0) {
     console.log("        (could not attribute a shape to this one by line range)");
