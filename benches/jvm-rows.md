@@ -22,7 +22,7 @@ not measured clean and should not be quoted.**
 
 | row | jvm/Java | note |
 | --- | --- | --- |
-| `node-utf8` | 6.69x *busy* | blocked: 62% is `toInt32`, `narrow.rs` owns it |
+| `node-utf8` | **6.58x** | blocked: 62% is `toInt32`; stable to 1%, see below |
 | `symbol-keyed-map` | 2.92x *jit* | blocked: 52% is `toInt32` |
 | `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
@@ -576,6 +576,59 @@ the first thing to rule out, since it is what made the `generic-classes`
 assembly comparison wrong once already. Not chased yet, and it needs a
 diagnostic flag rather than a shipping one, so any number from it has to be
 checked back against a default-flags run before it counts.
+
+### `node-utf8` moved 6.69x to 6.43x between two sittings, and the fix landed in between did not do it
+
+The published table read 6.43x where I had 6.69x. The change in between was
+`e7342345`, the code-unit retyping, and it was the obvious candidate. **It is
+not the cause, and the deterministic half says so without any timing.**
+
+Emitted from the bench tsconfig with a compiler built at `bcad0d7d` -- the
+commit before it -- and at HEAD, same entry, same runtime jar:
+
+    before   10 toInt32   2060 instructions
+    after    10 toInt32   2052 instructions
+
+**The coercion count does not move.** What moves is nine `dload` becoming nine
+`iload`, three more `istore`, one fewer `dconst_0` -- values leaving double
+slots for int slots, which is exactly what the change is for and is visible and
+real. It is eight bytecodes out of 2060.
+
+`counted.sh` agrees and cannot settle it: 1,433,620 instructions an operation
+before against 1,423,281 after, **0.72%**.
+
+### Neither `counted.sh` nor a single bench sitting can resolve a 4% question here
+
+Three `counted.sh` runs on **one unchanged build**:
+
+    ours   1,428,086   1,396,634   1,436,667     spread 2.9%
+    java     228,758     232,322     238,491     spread 4.3%
+
+The Java column is an unchanged reference and it moves 4.3%. Its own header says
+instructions an operation are load-independent and need no lock -- true of
+*load*, and its **calibration** is the loose part: it estimated 35, 45, 48, 78
+and 97 us an operation for one program across five runs. A 2.8x spread in how
+many operations it decides to measure is what puts the 2.9% into a counter that
+should be exact.
+
+**So `counted.sh` is the right instrument for `generic-classes`' 0.91x and the
+wrong one for this row.** It resolves a large difference in work; it cannot
+resolve four percent.
+
+### And the row itself is stable, which was worth checking rather than assuming
+
+The calibration spread looked like `awfy-sieve`'s bimodality, so I tested it.
+Five `nts-bench` runs:
+
+    48.68  48.67  48.81  48.68  49.15 us      ratios 6.60 6.54 6.56 6.62 6.61
+
+**1% spread. `node-utf8` is one of the steadiest rows in the table**, and the
+instability was entirely `counted.sh`'s. Two harnesses over one program, one
+stable and one not, is worth knowing before either is quoted.
+
+So the row is **~6.58x**. My 6.69x carried a contention flag and the published
+6.43x is a single clean sitting; neither is in the band five runs give, and the
+difference between them is not the retyping and not resolvable by anything here.
 
 ## Open, and whose
 
