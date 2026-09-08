@@ -383,6 +383,37 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "process-full.ts",
+    module: "process",
+    checks(m) {
+      const out = [
+        { label: "arch", mine: m.probeArch(), theirs: process.arch },
+        { label: "version", mine: m.probeVersion(), theirs: process.version },
+        { label: "ppid", mine: m.probePpid(), theirs: process.ppid },
+        { label: "title", mine: m.probeTitle(), theirs: process.title },
+        { label: "env key count", mine: m.probeEnvKeyCount(), theirs: Object.keys(process.env).length },
+        { label: "env has PATH", mine: m.probeEnvHasKey("PATH"), theirs: true },
+        { label: "env has nonsense", mine: m.probeEnvHasKey("NTS_UNSET_XYZ"), theirs: false },
+        { label: "group count", mine: m.probeGroupCount(), theirs: process.getgroups().length },
+        // Node's order is not `id -G`'s order, and this binding matches node's.
+        { label: "first group", mine: m.probeFirstGroup(), theirs: process.getgroups()[0] },
+        { label: "argv count", mine: m.probeArgvCount(), theirs: process.argv.length },
+        { label: "argv[0]", mine: m.probeArgvFirst(), theirs: process.argv[0] },
+        { label: "execArgv count", mine: m.probeExecArgvCount(), theirs: process.execArgv.length },
+        { label: "version table aligned", mine: m.probeVersionTableAligned(), theirs: true },
+      ];
+      // The whole `process.versions` table, name by name. A count would pass for
+      // a table whose columns had shifted by one.
+      out.push({
+        label: "versions table",
+        mine: m.probeVersionsJoined(),
+        theirs: Object.entries(process.versions).map(([k, v]) => `${k}=${v};`).join(""),
+      });
+      out.push({ label: "umask is plausible", mine: m.probeUmaskRead() >= 0 && m.probeUmaskRead() <= 0o777, theirs: true });
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
