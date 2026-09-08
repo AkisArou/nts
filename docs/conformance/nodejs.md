@@ -4589,6 +4589,35 @@ was done with the value. Controlled by reverting `tmpdir` to the libuv chain and
 rebuilding: it reports `tmpdir(["", "", "/temp"])` giving `/tmp` against node's
 `/temp` immediately, and returns to zero when the fix is restored.
 
+**And the unvalidated surface is larger than the stand-in count suggested.**
+78 stand-ins delegate to node, which is the number that explains *why* the
+interpreted lane cannot see a divergence. The number that says *how much is
+unchecked* is the count of declared bindings, because only the compiled lane can
+validate C and only two modules reach it:
+
+| module | declared bindings | compared to node |
+| --- | ---: | ---: |
+| `fs` | 133 | 0 |
+| `process` | 54 | 0 |
+| `net` | 30 | 0 |
+| `dgram` | 21 | 0 |
+| `zlib` | 20 | 0 |
+| `os` | 18 | **17** |
+| `util` | 10 | 0 |
+| `timers` | 8 | 0 |
+| everything else | 14 | 0 |
+
+**308 declared, 17 compared.** `punycode` is green and contributes nothing to
+this column, because it has no native half — it is string algorithms, which is
+part of why it was the first module to pass and why passing it said less about
+the C than the row implied.
+
+That reorders what a compiled module is *worth*. `fs` is not merely the largest
+module; it is 133 native functions that no instrument in this repository has ever
+compared against node. Getting it onto the compiled axis is worth more than its
+test count suggests, and less pleasant, because the first differential over 133
+unchecked bindings is unlikely to return zero.
+
 **The corpus is marked `addonOnly`, and that flag is the honest part.** Adding it
 put `os` into `differential-ts.mjs --all`, which the sweep runs — and on that lane
 every one of those calls resolves to node's own `os` through the stand-ins. It
