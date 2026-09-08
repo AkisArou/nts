@@ -33,6 +33,46 @@ One row is already faster than node. None is faster than bun, though `json-scan`
 three idle runs of the same source. Take a node number twice before believing a ratio built on it;
 the nts column has been stable to about 2% throughout.
 
+## What the bench table does and does not compare
+
+**Every JSON row imports our own TypeScript, so the node and bun columns are those engines
+running our code -- not their built-in `JSON`.** That makes the table a fair *compiler*
+comparison and it is the right instrument for "does nts lower this well". It is not the
+instrument for "is our JSON faster than node's JSON", and the goal's wording invites confusing
+the two.
+
+The harness cannot express the second question: one source is compiled four ways on purpose, so
+that no column drifts from another. A case calling `JSON.parse` would give node and bun their
+native parsers and this compiler a refusal -- see below.
+
+## The ceiling, measured
+
+A 1,668,869-byte document with the shape real JSON has. Every row below walks its result to the
+same checksum (48566374) or the same length, so the work is controlled across implementations.
+
+| parse | ms | | stringify | ms |
+| --- | ---: | --- | --- | ---: |
+| simdjson (C++, SIMD) | **0.851** | | bun native | **1.186** |
+| bun native | 2.962 | | node native | 2.823 |
+| node native | 4.744 | | ours on bun | 9.781 |
+| ours on bun | 16.938 | | ours on node | 11.038 |
+| ours on node | 19.445 | | | |
+| ours + `toPlainValue` (node) | 23.681 | | | |
+
+Three things follow, and the third is the one that matters.
+
+**Our TypeScript is 4x off native on the same engine, and that is not a defect.** V8's parser is
+hand-written C++; ours is TypeScript. No amount of tuning closes that *on a host*. The host path
+exists for what node's parser does not do -- `context.source`, `rawJSON`, exact error text.
+
+**A real-world parse walks the document twice.** `parseJsonText` builds the erased graph and
+`toPlainValue` walks it into plain JavaScript values: 19.445ms becomes 23.681ms, so the second
+pass is 22%. Without a reviver the graph is a pure intermediate and could be skipped entirely.
+
+**node's own parser is 5.6x off the hardware.** That is the headroom that makes the goal
+plausible at all: beating node does not require beating simdjson, it requires closing 4x with
+compiled code, and the `json-scan` result shows what one codegen fix is worth.
+
 ## Established, with the counterfactual that established it
 
 **Allocation volume is nearly free.** `json-build-append` and `json-build-join` produce the
@@ -136,6 +176,14 @@ per-case `provider` file, which are the two counterfactuals that come for free.
 
 Reading the emitted C in `target/bench/<case>.specialized.c` is the one measurement that does not
 care whether the machine is busy.
+
+## The blocker that makes all of this unreachable
+
+**`JSON.parse` and `JSON.stringify` are refused in compiled user code**: `NTS1001 \`JSON.parse\`,
+a global member with no definition here`. The implementation is reachable only by importing
+`jsonParse` from this module, which no ordinary program does. Until the global resolves to it,
+nothing measured here reaches a user, and the question "is nts's JSON faster than node's" cannot
+be asked in the terms a user would ask it. This is compiler-owned and is the first proposal.
 
 ## Open, and owned elsewhere
 
