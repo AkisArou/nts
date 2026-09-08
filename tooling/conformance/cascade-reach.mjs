@@ -82,10 +82,24 @@ if (run.error !== undefined || run.signal !== null) {
   process.exit(2);
 }
 if (primary.length === 0 && cascadeLines.length === 0) {
-  console.log(`INSTRUMENT FAILURE: ${module_} produced no diagnostics at all,`);
-  console.log(`  and the compiler exited ${run.status} rather than being killed.`);
-  console.log("  Either it compiles cleanly -- which would be news -- or the");
-  console.log("  frontend never ran. Check NTS_TSGO before believing a zero.");
+  // "Either it compiles cleanly -- which would be news -- or the frontend never
+  // ran" was the whole of this check, and it could not tell those apart. It then
+  // reported `punycode` as an instrument failure: the one module that lowers
+  // completely, compiles, and passes 3 of 3. A guard that calls the success case
+  // a failure trains its reader to ignore it.
+  //
+  // The two are distinguishable by whether anything was emitted. A frontend that
+  // never started writes no `program.c`; a module with nothing to refuse writes
+  // a real one.
+  if (/wrote .* to \S+/.test(text)) {
+    console.log(`  ${module_}: no refusals at all -- it lowers completely.`);
+    console.log("  Nothing to rank. This is the answer, not a failed measurement.");
+    process.exit(0);
+  }
+  console.log(`INSTRUMENT FAILURE: ${module_} produced no diagnostics and no`);
+  console.log(`  output, and the compiler exited ${run.status} rather than being`);
+  console.log("  killed. The frontend never ran -- check NTS_TSGO before");
+  console.log("  believing a zero.");
   process.exit(2);
 }
 

@@ -2816,6 +2816,49 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## How far each building module actually is, measured
+
+After being wrong about `string_decoder` by reading an export line instead of
+the program behind it, the same question asked of all nine that build:
+
+    module               primary refusals   stopped by cascade
+    punycode                      0                  0        <- passes 3 of 3
+    path                         33                 53
+    async_hooks                  53                 40
+    diagnostics_channel          55                 44
+    buffer                       79                137
+    string_decoder               83                143
+    querystring                  85                139
+    os                           86                141
+    url                         168                229
+
+**`punycode` at zero is the shape of a module that is actually done.** Nothing
+else is within an order of magnitude of it, and that is the answer to "which is
+nearly green": none of them. `os` reads as closest on *tests* — 4 passed, 4
+failed — and is eighth of nine on refusals, which is the same trap as
+`string_decoder` seen from the other side. A test count measures how much of a
+module the oracle happened to exercise; a refusal count measures how much of it
+exists.
+
+`path` and `async_hooks` are the two smallest, and neither is small.
+
+### And the guard that called the success case a failure
+
+Running this over `punycode` reported `INSTRUMENT FAILURE: produced no
+diagnostics at all`. Its text read *"Either it compiles cleanly — which would be
+news — or the frontend never ran"*, and it could not tell those apart, so the
+one module in the corpus that lowers completely was reported as a broken
+measurement.
+
+The two are distinguishable and now are: a frontend that never started writes no
+`program.c`; a module with nothing to refuse writes a real one. Controlled in
+both directions — `punycode` reports *"no refusals at all"* and exits 0, and the
+same run with `NTS_TSGO` pointed at nothing reports the instrument failure and
+exits 2.
+
+A guard that calls the success case a failure trains its reader to ignore it,
+which is worse than not having it.
+
 ## `string_decoder` is not one fix away, and I said it was
 
 Recorded because the error is the one this document exists to catch, made by
