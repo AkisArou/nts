@@ -69,15 +69,35 @@ including `fs`'s and `zlib`'s, in modules that do not build.
 
     1 of 22 modules' compiled artifacts pass every applicable test.
 
-    where they stop:
-       15  c-did-not-compile
-        3  built-exports-nothing
-        1  built-exports-partial
-        1  every-pass-hollow
-        1  partial            os, 4 of 7
-        1  green              punycode, 2 of 2
+Measured 2026-09-08 on the compiler lane's 16:24 binary, from a pinned worktree,
+through `build.sh`:
 
-That `1` is `punycode`, and it is a day old. This document was written when the
+    where they stop:
+        2  does not compile     fs (1 error), process (11 errors, 2 causes)
+       10  builds, publishes nothing or almost nothing
+        1  partial              os, 4 passed 4 failed
+        1  every-pass-hollow    path, 2 of 22 and both degenerate
+        1  green                punycode, 3 of 3
+
+**Twenty of twenty-two compile now, and twenty of twenty load.** That is the
+largest movement this axis has had, and it moved the green count by **zero**.
+Eleven modules crossed the compile threshold in one step and not one gained a
+passing test; nine of the eleven publish nothing at all. The compile threshold
+was never the thing between this profile and a green module.
+
+What is, counted by the reason `emit-c` gives for each export it cannot wrap:
+
+       82  is not a function this backend can name   (classes, values, aliases)
+       74  no function of that name was compiled     (refusals, all fixtured)
+        6  a signature that does not cross
+
+So the sentence below — *fifteen modules do not compile at all* — is history, and
+the number to watch is no longer how many compile but **how many publish their
+exports**. `sweep.mjs` reports that for every module with an artifact.
+
+That `1` is `punycode`, now 3 of 3 rather than 2 of 2: it was carried as
+"green and incomplete, `version` absent", `version` was never absent, and
+nothing asserted the surface until a test was written for it. This document was written when the
 number was zero and had never been anything else. The project exists to compile
 TypeScript to native code, so the green axis is the *preparation* and the red
 one is the product; a plan that spends its next month on the green axis is a
