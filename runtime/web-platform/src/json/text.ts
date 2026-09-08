@@ -198,16 +198,46 @@ export function resolveGap(space: number | string | undefined): string {
 
 /** The text of one member of an object: a quoted key, a colon, and the gap's single space. */
 /**
+ * What goes before a container member: the separator, and the indent when there is a gap.
+ *
+ * 25.5.4.5 and 25.5.4.6's formatting, expressed for a serializer that writes as it walks rather
+ * than collecting a list and joining it. `assembleContainer` below is written in terms of this
+ * and {@link containerSuffix}, so the rule has one statement and two shapes of caller rather
+ * than two statements that have to agree.
+ *
+ * Returns a literal in the gapless case -- `","` or `""` -- so the common path allocates
+ * nothing.
+ */
+export function memberPrefix(afterFirst: boolean, indent: string, gap: string): string {
+  if (gap === "") return afterFirst ? "," : "";
+  return (afterFirst ? ",\n" : "\n") + indent + gap;
+}
+
+/**
+ * What closes a container: the bracket, preceded by the *outer* indent when it has members.
+ *
+ * An empty container is `{}` or `[]` with no gap inside it however wide the gap is, which is why
+ * this needs to know whether anything was written.
+ */
+export function containerSuffix(
+  hasMembers: boolean,
+  isArray: boolean,
+  indent: string,
+  gap: string,
+): string {
+  const close = isArray ? "]" : "}";
+  if (!hasMembers || gap === "") return close;
+  return "\n" + indent + close;
+}
+
+/**
  * Assemble a finished container from its already-serialized members.
  *
- * 25.5.4.5 and 25.5.4.6 exactly: an empty container is `{}` or `[]` with no gap inside it, and a
- * non-empty one puts the *outer* indent before the closing brace and the inner indent before
- * each member.
- *
- * Spelled over primitives rather than over a frame so that everything which assembles JSON can
- * share it -- the graph serializer, the arbitrary-value serializer, and a serializer generated
- * for a statically known type, which has no frame at all. Keeping it here rather than in either
- * caller is what stops there being two spellings of the indent rule.
+ * Kept for callers that collect a list -- `plain.ts` walks arbitrary values and does -- and
+ * written in terms of {@link memberPrefix} and {@link containerSuffix} so that it cannot drift
+ * from the streaming form. Spelled over primitives rather than over a frame so that everything
+ * which assembles JSON can share it, including a serializer generated for a statically known
+ * type, which has no frame at all.
  */
 export function assembleContainer(
   parts: readonly string[],
@@ -215,12 +245,13 @@ export function assembleContainer(
   indent: string,
   gap: string,
 ): string {
-  const open = isArray ? "[" : "{";
-  const close = isArray ? "]" : "}";
-  if (parts.length === 0) return open + close;
-  if (gap === "") return open + parts.join(",") + close;
-  const inner = indent + gap;
-  return open + "\n" + inner + parts.join(",\n" + inner) + "\n" + indent + close;
+  let out = isArray ? "[" : "{";
+  for (let at = 0; at < parts.length; at++) {
+    out += memberPrefix(at !== 0, indent, gap);
+    out += parts[at] as string;
+  }
+  out += containerSuffix(parts.length !== 0, isArray, indent, gap);
+  return out;
 }
 
 export function member(key: string, valueText: string, gap: string): string {

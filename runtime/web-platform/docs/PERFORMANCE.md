@@ -222,6 +222,41 @@ monomorphic for a known shape, node's must handle any object, look for `toJSON`,
 properties and dispatch on runtime kinds. That difference *is* the advantage, and it is one a
 dynamic engine cannot take.
 
+## The shipped graph serializer streams now, and the ratio column got worse
+
+`stringifyJsonValue` built a string per container and copied it into its parent -- the shape the
+hand-written rows measured as slow. It now writes straight into one accumulator. Against the
+baseline published at `e7342345`:
+
+| | before | after |
+| --- | ---: | ---: |
+| nts C | 6.01ms | **4.78ms** |
+| nts JVM | 2.97ms | 1.40ms |
+| node, running our TypeScript | 2.68ms | 1.57 - 1.68ms |
+| against node's *native* `JSON.stringify` (0.793ms) | 7.6x off | **6.0x off** |
+
+**And `nts/node` went from 2.24x to 3.00x, which is not a regression.** Everyone got faster and
+node got faster by more -- 1.7x against our 1.26x -- because V8 exploits the streaming shape
+better than this compiler does. The row's ratio is now measuring that difference rather than
+anything about the code, and someone reading the published table will otherwise see a number
+going the wrong way after a change that made the program a quarter faster.
+
+This is the second time the two targets have wanted different shapes and the second time it went
+the direction that is inconvenient to report. `json-stringify-typed` against `-inline`: bun
+preferred the *factored* version, 1.02ms to 1.47, while nts preferred the inlined one, 1.26 to
+0.99. **A single source cannot be optimal for both, and neither can a single ratio.**
+
+**The formatting rule did not get a second statement to make this work.** Streaming needs the
+separator and the closer as they are reached, not a list to join, so `memberPrefix` and
+`containerSuffix` were factored out -- and `assembleContainer` is now written in terms of them.
+One statement of 25.5.4.5 and 25.5.4.6, two shapes of caller. `plain.ts` still collects and joins
+and did not have to change.
+
+**The gate's `tsc` caught something the tests' could not.** `member` became an unused import and
+`runtime/web-platform/test/tsconfig.json` sets `noUnusedLocals: false` -- it exists so an editor
+can resolve a test file -- while `tooling/conformance/web-platform/tsconfig.json` does not. Run
+the second one before believing a refactor is clean.
+
 ## Two more shapes of the same serializer, and one of them is a trap
 
 The typed row's profile says the largest remaining cost is string lifetime, not character work:
