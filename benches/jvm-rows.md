@@ -18,7 +18,7 @@ lane has moved.
 | `node-utf8` | 6.86x | blocked: 62% is `toInt32`, `narrow.rs` owns it |
 | `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
 | `array-from` | 2.14x | see below -- the reference does less work |
-| `array-predicates` | 1.74x | **unprobed** |
+| `array-predicates` | 1.74x | probed: the reference preallocates, see below |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | **unprobed** |
@@ -66,6 +66,14 @@ Each cost a measurement. The number in brackets is what the fix was worth.
 - **The growable-array wrapper's per-access allocation.** **[There is none.]**
   `growth-grown` reads 2.01x on bytes/op because it pushes 2048 times and
   `ref.java` preallocates -- the reference not growing, not our wrapper costing.
+- **`array-predicates`' array building**, which is 45% of its profile: `push`
+  21%, `of` 15%, `Arrays.copyOf` 9%. **[Nothing left to take.]** `filter`
+  already allocates `of(count(source))`, sized to the source length. What
+  remains is that `ref.java` writes `new double[n]` for both `xs` and `kept`
+  and never grows, where the TypeScript writes `[]` + `push` -- the reference
+  doing different work, not a defect. Growing faster than `max(4, current*2)`
+  is the only lever left and it trades against bytes/op, where this row already
+  loses at 1.33x.
 
 ## Open, and whose
 
@@ -75,7 +83,8 @@ fixed once, upstream. Do not build a JVM-only half. When it lands, measure the
 rows *before* taking any residual -- `narrow.rs` records three earlier attempts
 that each read as zero because two changes moved together.
 
-**Mine.** `array-from`: the array half is already bulk (`slice` ->
+**Mine.** `symbol-keyed-map`'s `findLinear` is *not* open -- see the list
+above; it is worth 2%. `array-from`: the array half is already bulk (`slice` ->
 `Arrays.copyOfRange`); the set half walks `next`/`keyAt` per element and unboxes
 to a `double[]`, where `ref.java` calls `HashSet.toArray()` and never unboxes --
 so check how much of that 2.14x is a reference doing less work before treating
@@ -83,5 +92,4 @@ it as a gap. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
-**Unprobed**: `array-predicates` 1.74x, `awfy-sieve` 1.25x, `awfy-queens` 1.24x,
-`generic-classes` 1.13x.
+**Unprobed**: `awfy-sieve` 1.25x, `awfy-queens` 1.24x, `generic-classes` 1.13x.
