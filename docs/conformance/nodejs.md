@@ -2816,6 +2816,57 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The refusal that costs the most is not the one the counts name
+
+A refused function refuses everything that calls it, so the price of one primary
+refusal is the size of its transitive cone rather than one line of output.
+`tooling/conformance/cascade-reach.mjs` computes that for one module.
+
+It matters because the obvious reading is wrong. In the `os` program there are
+87 primary refusals and 140 further functions stopped by cascade. Tally the
+`because it calls X` lines and the worst offenders look like `checkedOffset`
+(28) and `checkedIntegerWrite` (21) — **both of which are themselves cascaded**.
+The actual root is `ERR_OUT_OF_RANGE#constructor`, whose cone is 74 and which
+appears in the flat count nine times. The ranking anyone would naturally read
+does not merely lack precision; it names the wrong function.
+
+Across three modules the largest single lever is one shape,
+`blockers/narrowed-bigint` — an `unknown` narrowed to BigInt, in
+`internal/errors.ts`, which every module shares:
+
+    os       74 + 24 + 5    of 140 cascaded
+    buffer   71 + 24        of 136
+    fs       96 + 93 + 13   of 940
+
+Two sites do nearly all of it: `errors.ts:34` in `determineSpecificType` and
+`errors.ts:403` in `ERR_OUT_OF_RANGE`'s constructor, both `typeof input ===
+"bigint"` against an `unknown`.
+
+Traced end to end, that is why `os` exports 17 names instead of 23.
+`ERR_OUT_OF_RANGE` stops `validateInt32`, `validateInteger`, `validateUint32`
+and `validateNumberRange` in `internal/validators.ts` — imported by every
+module — and `checkSize`, `boundsError` and `checkedIntegerWrite` in `buffer`.
+In `os` it is precisely why `getPriority` and `setPriority` are missing.
+
+### The rest of what `os` is missing, since it is the nearest partial
+
+    cpus               heterogeneous-tuple-return
+    getPriority        narrowed-bigint, via ERR_OUT_OF_RANGE -> validateInt32
+    setPriority        narrowed-bigint, same chain
+    constants          readConstants refused: `name`, which `an anonymous type`
+                       does not declare, and an erased value where a concrete
+                       representation is wanted
+    networkInterfaces  `name`, which `NetworkInterfaceMap` does not declare
+    userInfo           `userInfoString`, a declaration outside every walk
+
+Four of the six failing test files come from `constants` and `priority` being
+absent, so this list is the whole of the gap between 4 of 7 and green.
+
+**Attribution of a root to a shape is a guess and is printed as one.** The
+diagnostics say which function calls a refused one, but not which function
+contains a given NTS1001, so the tool matches by line range and prints the
+candidates rather than choosing when the range is ambiguous.
+
 ## A whole class of code here was verified by nothing at all
 
 Every node module's C is exercised only *through* its module, and fifteen of
