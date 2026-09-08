@@ -4949,6 +4949,39 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## An error identity three libraries disagree about, and node barely tests
+
+**Two of node's sixty-five `zlib` test files assert an error's `code` at all.**
+That is not sloppiness upstream. On node all three decompressor families are
+constructed by the same C++ from the same library return, so `code`, `errno` and
+`message` cannot disagree with each other — an assertion that cannot fail does
+not get written. Here they are assembled in TypeScript from **three separate
+native readings** (`nts_zlib_last_status`, `nts_zlib_last_error_code`,
+`nts_zlib_last_error_message`), and any one of them can be wired to the wrong
+source silently.
+
+    zlib    Z_DATA_ERROR                  errno  -3   negative
+    brotli  ERR__ERROR_FORMAT_PADDING_1   errno -14   negative
+    zstd    ZSTD_error_prefix_unknown     errno  10   POSITIVE
+
+**The sign flip is the row worth keeping.** An implementation that normalised
+every library's status into one negative-errno convention would pass every
+round-trip test, every corrupt-input test that only checks *that* it threw, and
+`test-zlib-invalid-input.js` in full — and would still hand callers `-10` where
+node hands them `10`. There is no test in the upstream suite that could see it.
+
+`inflateRaw` is also asserted to report a *different* message from `inflate` on
+the same bytes, which is a real signal that the raw and framed paths are not
+silently one call.
+
+Written as `runtime/node/zlib/test/error-identity-static.js`. **Validated against
+node before being run against the module**, so the expected values are the
+oracle's answers rather than mine — the ordering matters, and getting it backwards
+is how a test comes to assert what the implementation already does.
+
+**Not hollow**: blanking the module fails it on `inflateSync code`, and the
+interpreted lane goes from 67 passing to 0. `zlib` is 67 of 67, up from 66.
+
 ## The native half, compared: 165 of the 177 that exist
 
 "169 of 309 bindings compared" is the number, and it understates by measuring
