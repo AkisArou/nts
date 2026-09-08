@@ -46,7 +46,10 @@ import {
 } from "../../internal/validators.ts";
 import { uvException } from "../../internal/uv.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
-import { ReadableStream } from "../../../web-platform/src/streams/readable.ts";
+import {
+  kStreamCancelInternal,
+  ReadableStream,
+} from "../../../web-platform/src/streams/readable.ts";
 import * as callbacks from "./async.ts";
 import { isBigIntStatFs, isBigIntStats } from "./stats.ts";
 import type {
@@ -883,8 +886,15 @@ export class FileHandle extends EventEmitter {
     // Closing the handle ends the stream even while a reader holds it, which
     // is why this is the internal cancel: the public one rejects on a locked
     // stream, and a handle closing under a reader is exactly that case.
+    //
+    // Reached through the exported symbol rather than by name. The web-platform
+    // lane moved its stream internals off the public prototype, which is right
+    // -- they are not part of `ReadableStream`'s Web IDL surface and should not
+    // be reachable from script. `kStreamCancelInternal` is exported precisely so
+    // a runtime that owns the stream's source can still end it, and this is that
+    // case: the handle, not script, is closing it.
     this.once("close", () => {
-      void readable.cancelInternal(undefined);
+      void readable[kStreamCancelInternal](undefined);
     });
     return readable;
   }
