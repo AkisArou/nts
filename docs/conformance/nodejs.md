@@ -4639,7 +4639,22 @@ path in the profile, checked across `ENOENT`, `EACCES`, `EEXIST`, `EISDIR`,
 `EINVAL`, `EPIPE` and `ECONNRESET`, plus platform, release and the two TTY
 probes. All agree.
 
-**308 declared, 50 compared.** `punycode` is green and contributes nothing to
+**308 declared, 38 compared** — counted as *distinct binding names*, which is
+lower than the per-module figures add up to and is the honest total. The
+per-module sum was 50; it double-counted `nts_process_env`, which two probes
+exercise, and counted `os`'s seventeen published *module functions* as bindings
+when several of them are served by one `nts_os_static_information` call. A count
+of things measured has to be a count of distinct things.
+
+Alongside those 38, `os`'s published surface is differentiated against node at
+34,238 comparisons — a different kind of coverage over the same native half.
+
+Two facts about reachability that the declared counts do not show. **`dgram` has
+zero bindings reachable without a live socket** — all 21 take a handle — so
+probing it is a different and slower kind of work than probing a module whose
+bindings take a path. And **`runtime/node/timers/` contains no `.c` file at
+all**: its eight declared bindings have no native implementation, only stand-ins
+for the interpreted lane, so there is nothing there to compare. `punycode` is green and contributes nothing to
 this column, because it has no native half — it is string algorithms, which is
 part of why it was the first module to pass and why passing it said less about
 the C than the row implied.

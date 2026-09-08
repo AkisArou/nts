@@ -10,6 +10,12 @@
 // which makes it directly comparable rather than merely observable.
 //
 // Exports prefixed away from libc: see `blockers/libc-name-collision`.
+declare function nts_process_pid(): number;
+declare function nts_process_argv(): string[];
+declare function nts_process_signal_names(): string[];
+declare function nts_process_signal_exit_code(signalCode: string): number;
+declare function nts_node_eol(): string;
+declare function nts_node_random_uuid(): string;
 declare function nts_uv_err_name(code: number): string;
 declare function nts_uv_err_message(code: number): string;
 declare function nts_platform(): string;
@@ -34,4 +40,29 @@ export function probeStdoutTty(): boolean {
 }
 export function probeStderrTty(): boolean {
   return nts_stderr_is_tty();
+}
+
+export function probePid(): number {
+  return nts_process_pid();
+}
+export function probeArgvLength(): number {
+  return nts_process_argv().length;
+}
+export function probeArgv0(): string {
+  const argv = nts_process_argv();
+  return argv.length > 0 ? (argv[0] ?? "") : "";
+}
+export function probeSignalCount(): number {
+  return nts_process_signal_names().length;
+}
+export function probeSignalExitCode(name: string): number {
+  return nts_process_signal_exit_code(name);
+}
+export function probeEol(): string {
+  return nts_node_eol();
+}
+/** Shape only: a UUID is random, so its value cannot be compared to anything. */
+export function probeUuidShape(): string {
+  const uuid = nts_node_random_uuid();
+  return `${uuid.length}:${uuid[14] ?? ""}`;
 }
