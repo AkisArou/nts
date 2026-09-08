@@ -19,7 +19,7 @@ lane has moved.
 | `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
 | `array-from` | 2.14x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.74x | at its floor: every helper inlines; the wrapper is the row |
-| `absences` | 2.66x -> **1.32x** | unsigned remainder |
+| `absences` | 2.66x -> **1.27x** | blocked: 34% is `uirem` over an `l2i` counter |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
 | `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
@@ -216,6 +216,57 @@ Each cost a measurement. The number in brackets is what the fix was worth.
   emit. There is no codegen gap in this row. It is `arrays_can_grow` being
   whole-program -- one `push` anywhere puts every array behind the wrapper --
   and per-array growability is `hir::elements`', not this lane's.
+
+### The worktree these numbers were taken from was eight hours stale
+
+`~/.cache/nts-jvm-sweep` is pinned at `f071672b`, 08:41, which is an **ancestor
+of the `uirem` fix**. Every emission under its `target/bench` predates today.
+
+I found it by measuring `absences` there and getting **2.66x** -- which is this
+table's own *pre-fix* value for that row, with `Integer.remainderUnsigned`
+sitting in the profile, the fallback that fix removed. Re-emitted from the
+current tree it is **1.27x** (560.2 ns against Java's 439.8, node 802.5, so
+0.70x node). The table was right and the instrument was behind it.
+
+**A pinned worktree has a shelf life and nothing here records it.** Pinning is
+the right answer to "a sweep cannot outlive a moving tree" and it becomes the
+wrong answer the moment the tree it is pinned to stops being the one the claims
+are about. Whatever re-pins it should write the commit and timestamp beside
+`target/bench`, because a stale number looks exactly as authoritative as a
+fresh one.
+
+Five rows moved after `f071672b` -- `absences`, `optional-chain`, `instanceof`,
+`bytes`, `upcast`, all by the `uirem` fix -- so any of those read from that
+worktree is the old value. What survives from today: the `array-from` price
+(its harness called the *current* runtime through hand-written arms), the
+`awfy-queens` A/B (both arms emitted fresh through `nts-bench`), and the
+`array-predicates` jar swap (the classes were held fixed across arms).
+
+### `absences` is the `uirem` residual, and it is 34%
+
+Re-profiled on a current emission. `NtsRuntime.uirem` is **33.89%**, the
+largest item after `absences$whole` itself, and the reference has no
+counterpart. It inlines hot at every site, so this is not call overhead -- rule
+1 checked.
+
+The call sites say what it is:
+
+    172: l2i                     <- the counter is an i64, truncated per use
+    173: istore 20
+    175: iconst_3
+    182: invokestatic NtsRuntime.uirem:(II)I
+
+`i % 3`, `i % 2` and `i % 5`, three an iteration, each an `l2i` of a long
+counter feeding a *guarded* unsigned remainder, where `ref.java` has `int i`
+and one `irem`. Two causes and both upstream: the counter held wider than it
+needs (`narrow.rs`'s `i64 -> i32`) and the operands typed `u32` so the guard
+cannot be folded (`specialize` typing a provably non-negative `rem` as `i32`,
+which `instanceof`'s residual 12% already asked for).
+
+**So this is the same cause as `instanceof`'s residual with a much larger
+number on it** -- 34% against 12% -- which makes `absences` the better
+reproducer to hand over. The power-of-two mask would fire on the `% 2` site and
+is on the answered list above at 0%; do not take it out again.
 
 ## Open, and whose
 
