@@ -337,6 +337,12 @@ const PROBES = [
       const free = m.probeFreemem(), nfree = os.freemem();
       out.push({ label: "freemem within 10%", mine: Math.abs(free - nfree) < nfree * 0.1, theirs: true, detail: `${free} vs ${nfree}` });
       out.push({ label: "udp reuseaddr > 0", mine: m.probeUdpReuseaddr() > 0, theirs: true });
+      // Setting the priority the process already has exercises the syscall
+      // without changing scheduling; lowering a nice value is refused to a
+      // non-privileged process, and EACCES is the answer that proves the call
+      // reached the kernel rather than being stubbed to success.
+      out.push({ label: "setPriority round trip", mine: m.probeSetPriorityRoundTrip(), theirs: "0:true" });
+      out.push({ label: "setPriority lower refused", mine: m.probeSetPriorityRefused(), theirs: -13 });
       return out;
     },
   },
@@ -656,6 +662,15 @@ const PROBES = [
         { label: "error codes are unique", mine: m.probeCodesAreUnique(), theirs: true },
         { label: "sleep 20ms actually elapses", mine: m.probeSleepElapses(20), theirs: true },
       ];
+      // A warning carrying a real `Error`, which has to cross as a class
+      // instance. Checked by *receiving* it: node's own `process.on("warning")`
+      // fires with the name, code and message, so the object arrived intact
+      // rather than merely not crashing.
+      const received = [];
+      const listener = (w) => received.push(`${w.name}|${w.code}|${w.message}`);
+      process.on("warning", listener);
+      out.push({ label: "emitWarning survives", mine: m.probeEmitWarningSurvives(), theirs: true });
+      process.removeListener("warning", listener);
       const errorOf = (thunk) => { try { thunk(); return null; } catch (e) { return e; } };
       for (const [thunk, label] of [
         [() => fsm.statSync("/nonexistent-nts/x"), "ENOENT"],

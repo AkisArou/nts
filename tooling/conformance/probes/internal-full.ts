@@ -27,6 +27,12 @@ declare function nts_sleep(milliseconds: number): void;
 declare function nts_uv_error_codes(): number[];
 declare function nts_uv_error_names(): string[];
 declare function nts_node_random_uuid_status(): number;
+declare function nts_process_emit_warning_object(
+  message: string,
+  name: string,
+  code: string,
+  warning: Error,
+): void;
 declare function nts_hrtime_ns(): bigint;
 
 export function probeWriteStdout(text: string): number {
@@ -77,4 +83,15 @@ export function probeSleepElapses(milliseconds: number): boolean {
   const after = nts_hrtime_ns();
   const elapsed = after - before;
   return elapsed >= BigInt(milliseconds) * 1000000n;
+}
+
+/** A warning carrying a real `Error`, which has to cross as a class instance. */
+export function probeEmitWarningSurvives(): boolean {
+  nts_process_emit_warning_object(
+    "a probe warning",
+    "NtsProbeWarning",
+    "NTS_PROBE",
+    new Error("a probe warning"),
+  );
+  return true;
 }

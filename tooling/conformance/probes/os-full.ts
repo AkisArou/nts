@@ -34,6 +34,7 @@ declare function nts_os_loadavg(): [number, number, number];
 declare function nts_os_user_info(): [number[], number[], number[], number[]];
 declare function nts_os_udp_reuseaddr(): number;
 declare function nts_os_get_priority(pid: number): number;
+declare function nts_os_set_priority(pid: number, priority: number): number;
 
 export function probeHomedir(): string {
   return nts_os_homedir();
@@ -101,4 +102,23 @@ export function probeGetPriority(pid: number): number {
 export function probeStaticJoined(): string {
   const info = nts_os_static_information();
   return `${info[0]}|${info[1]}|${info[2]}|${info[3]}|${info[4]}|${info[5]}|${info[6]}`;
+}
+
+/**
+ * Set the priority this process already has and put it back, which exercises
+ * the syscall without changing scheduling. Raising a nice value is permitted to
+ * anyone; *lowering* it is not, so setting the current value is the only round
+ * trip a non-privileged probe can make and still restore.
+ */
+export function probeSetPriorityRoundTrip(): string {
+  const original = nts_os_get_priority(0);
+  const result = nts_os_set_priority(0, original);
+  const after = nts_os_get_priority(0);
+  return `${result}:${after === original}`;
+}
+
+/** Lowering the nice value is refused for a non-privileged process. */
+export function probeSetPriorityRefused(): number {
+  const original = nts_os_get_priority(0);
+  return nts_os_set_priority(0, original - 5);
 }
