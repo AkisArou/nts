@@ -511,14 +511,26 @@ Copy from here.
 >    *Done when: a fresh clone runs `pnpm install && nts build` and compiles,
 >    having typed no other command.*
 >
-> 2. **Fix the diagnostic at the boundary.** A package that could not be
->    acquired still refuses as ``NTS1001 `x`, a builtin this compiler does not
->    provide``, which sends its reader to `hir::builtin` where nothing is
->    missing. It must name the package and version, say the implementation is
->    not in the program, and say which route would change that — the same
->    sentence `nts deps` already prints. This is `compiler/core/src/hir` and
->    `compiler/frontend-ts`, which other sessions share: coordinate before
->    changing them. *Done when: no diagnostic in that situation says "builtin".*
+> 2. **Fix the diagnostic at the boundary — but not from this lane.** A package
+>    that could not be acquired still refuses as ``NTS1001 `x`, a builtin this
+>    compiler does not provide``, which sends its reader to `hir::builtin` where
+>    nothing is missing. It must say the implementation is not in the program.
+>
+>    **This lives in `compiler/core/src/hir`, and this lane does not edit
+>    `compiler/**` or `runtime/**` — at all.** That is a standing instruction and
+>    it outranks this step. The work that *is* this lane's is making the change
+>    cheap for the lane that owns it, and that is done: a minimal repro, the
+>    route through the existing snapshot data, an anchored patch, two tests, and
+>    the verification already run — 133 examples byte-identical to the pre-patch
+>    tree, and the 22-module node profile unchanged. It is with the main lane.
+>
+>    *Done for this lane when: the change is handed over verified, and this
+>    document records whether it was taken.* **Status: handed over; the main
+>    lane's to land or decline.**
+>
+>    The half that does not need their tree is already in: `nts deps` names the
+>    package, the reason it could not be acquired, and the specifiers the program
+>    imports from it — two lines above the refusal, in the same output.
 >
 > 3. **Stop resolving bare specifiers, and ask tsgo where they went.** This is
 >    the largest single improvement available and it replaces three separate
