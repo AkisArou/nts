@@ -9096,6 +9096,75 @@ all five `fails-to-compile` fixtures went FIXED the same day. That is a good
 state for the compiler and an untested state for the check, and they are worth
 recording as two different facts.
 
+## A declared type is a promise the wrapper does not enforce
+
+The compiler trusts a parameter's declared type as a fact about every possible
+caller — which it is, inside TypeScript, and which is the basis of
+specialization. Through the Node-API wrapper it is a promise nothing checks:
+
+    export function walk(rounds: 64): number   // sums 0..rounds
+
+    nts    walk(2147483647) = 1073742848
+    node   walk(2147483647) = 2305843005992468500
+
+No error and no refusal. The emitted signature is `f64`, because an exported
+function is a root and a root is a wall, so the wrapper takes a plain `double`;
+the integer body is entered on a guard that asks only whether the argument is a
+whole `int32`; and the accumulator inside was proven small from `[64, 64]`. Three
+correct facts that are not correct together. The compiler lane's fixture is
+`blockers/literal-parameter-trusted-past-the-boundary`.
+
+**Inside TypeScript this caller cannot exist. Through our wrapper it can**, which
+is what makes it ours to size.
+
+### How much of this profile is exposed: five parameters, one of them numeric
+
+`tooling/conformance/literal-params.py`:
+
+| | count | numeric |
+| --- | ---: | ---: |
+| exported declarations (roots) | 5 | **1** |
+| every signature, exported or not | 49 | **1** |
+
+The one:
+
+    runtime/node/readline/src/promises.ts:113
+    export class Readline { … clearLine(dir: -1 | 0 | 1): this { … } }
+
+`readline/promises` publishes `Readline`, so it is public API rather than an
+internal helper. The other four are string or boolean literals —
+`fs.validateOwnerId(name: "uid" | "gid")`,
+`stream.getHighWaterMark(duplexKey: …)`, and two overload signatures of
+`stream.isIterable`. **Numeric is the column that matters**: a broken string
+literal mis-selects a branch, a broken numeric one silently returns a wrong
+number.
+
+**It is a class method, so it does not cross the boundary today.** It crosses
+when the export-class arm lands, which means the reachable instance of this
+unsoundness and the arm appear at the same moment.
+
+Node's own tests cannot reach it either: `test-readline-promises-csi.mjs` passes
+`-1`, `0` and `1` and nothing else. The differential harness sweeping values the
+declared type forbids is the only reason it surfaced — and for a *root* that is
+correct behaviour, not a bug in the harness. The type is a promise the boundary
+does not yet enforce, so sweeping past it is the check that the promise is kept.
+
+### The measurement was wrong twice first, in the direction that matters
+
+The first version scanned comments and counted `export function walk(rounds: 64)`
+out of the **prose of the fixture that raised the question** — a parser reporting
+a population that included the documentation of the population.
+
+The second missed class methods, which is where the only numeric case lives. It
+would have answered **"four, none numeric"** — and none-numeric is precisely the
+answer that makes enforcing the boundary look unnecessary.
+
+So the script runs two passes that must agree on the numeric count and names
+which one to distrust when they do not: the restricted one, because it is the
+one holding a notion of "exported" that a parser can get wrong. That branch was
+controlled by disabling the class-method regex, which reproduces the second
+failure exactly.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
