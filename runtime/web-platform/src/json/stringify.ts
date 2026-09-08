@@ -13,6 +13,8 @@ import {
   containerSuffix,
   memberPrefix,
   numberText,
+  firstEscapeIndex,
+  quoteFromIndex,
   quoteJSONString,
   resolveGap,
 } from "./text.ts";
@@ -161,7 +163,19 @@ export function stringifyJsonValue(
       }
       out += memberPrefix(frame.emitted !== 0, frame.indent, gap);
       if (!isArray) {
-        out += quoteJSONString(key);
+        // The quoted key, appended rather than built. `quoteJSONString` would allocate the
+        // quoted string, copy it into the accumulator and free it -- once per member. A key
+        // needing no escape, which is nearly all of them, is three in-place appends instead and
+        // allocates nothing. The classification is not repeated to do this: `firstEscapeIndex`
+        // is the same scan `quoteJSONString` runs for its own fast path.
+        const keyEscape = firstEscapeIndex(key, 0);
+        if (keyEscape < 0) {
+          out += '"';
+          out += key;
+          out += '"';
+        } else {
+          out += quoteFromIndex(key, keyEscape);
+        }
         out += gap === "" ? ":" : ": ";
       }
       frame.emitted++;
@@ -170,7 +184,22 @@ export function stringifyJsonValue(
         out += child.kind === "array" ? "[" : "{";
         continue;
       }
-      out += scalarText(child);
+      // Strings are the one scalar worth appending rather than building, and the common one.
+      // Everything else -- `null`, a boolean, a number, a raw node -- is either a literal or a
+      // single `numberText` call with nothing to fuse.
+      if (child.kind === "string") {
+        const text = child.text;
+        const valueEscape = firstEscapeIndex(text, 0);
+        if (valueEscape < 0) {
+          out += '"';
+          out += text;
+          out += '"';
+        } else {
+          out += quoteFromIndex(text, valueEscape);
+        }
+      } else {
+        out += scalarText(child);
+      }
       continue;
     }
 

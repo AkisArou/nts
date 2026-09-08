@@ -228,12 +228,17 @@ dynamic engine cannot take.
 hand-written rows measured as slow. It now writes straight into one accumulator. Against the
 baseline published at `e7342345`:
 
-| | before | after |
-| --- | ---: | ---: |
-| nts C | 6.01ms | **4.78ms** |
-| nts JVM | 2.97ms | 1.40ms |
-| node, running our TypeScript | 2.68ms | 1.57 - 1.68ms |
-| against node's *native* `JSON.stringify` (0.793ms) | 7.6x off | **6.0x off** |
+| | baseline `e7342345` | streaming | + fused escape append |
+| --- | ---: | ---: | ---: |
+| nts C | 6.01ms | 4.78ms | **4.13ms** |
+| nts JVM | 2.97ms | 1.40ms | 1.16ms |
+| node, running our TypeScript | 2.68ms | 1.57 - 1.68ms | 1.42ms |
+| against node's *native* (0.782ms) | 7.6x off | 6.0x | **5.3x** |
+
+**1.46x on the shipped serializer**, in two steps that are the same two the hand-written rows
+measured. The fusion is worth less here than there -- 1.16x against 1.41x -- which is what should
+happen: the graph route still pays for the collector walking a 30,000-node structure and for
+dispatching on `kind`, and neither is something a fused append touches.
 
 **And `nts/node` went from 2.24x to 3.00x, which is not a regression.** Everyone got faster and
 node got faster by more -- 1.7x against our 1.26x -- because V8 exploits the streaming shape
