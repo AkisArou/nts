@@ -1,4 +1,10 @@
-// expect: emit-c --napi -> emits-c void value;
+// expect: emit-c --napi -> emits-c NtsValue value;
+//
+// FIXED, and kept as a guard. A required member typed exactly `undefined` used
+// to emit a C field of type `void`, which is not a type a field can have; it
+// takes storage now, as `NtsValue value;`. That was 228 of `util`'s clang
+// errors' worth of the profile, and the same rule covers tuple elements -- the
+// half-void `NtsObj_Tuple249` in the same file.
 //
 // A required property typed exactly `undefined` is emitted as a C field of type
 // `void`, which is not a type a field can have and which clang rejects with

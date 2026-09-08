@@ -1,4 +1,13 @@
-// expect: emit-c --napi -> lacks-c nts_closure_call_slot
+// expect: emit-c --napi -> emits-c const uint32_t nts_closure_call_slot
+//
+// FIXED, and kept as a guard. The backend publishes the slot now, per program
+// and unconditionally, so `internal/microtask.c` names the symbol instead of
+// carrying a hardcoded `0`. Verified against the vtables: `punycode` 0,
+// `buffer` 5, `diagnostics_channel` 5, `async_hooks` 8.
+//
+// The guard is on the symbol being *emitted*, not on its value, because the
+// value is correct-by-construction per program and a fixture asserting `0`
+// would pass for the one program where the old bug was invisible.
 //
 // The backend does not publish the closure's call slot, and nothing anywhere
 // reports that. This is the blocker with no diagnostic.

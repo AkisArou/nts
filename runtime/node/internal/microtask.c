@@ -38,9 +38,9 @@
  * hardcoded list of seven modules did not include it, and running the lane over
  * all twenty-two is what surfaced it.
  *
- * The slot below is the problem *after* that one. The middle argument is a slot
- * index into the callback descriptor's method table, and the runtime calls
- * straight through it:
+ * The slot below *was* the problem after that one, and is fixed. The middle
+ * argument is a slot index into the callback descriptor's method table, and the
+ * runtime calls straight through it:
  *
  *     ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback)
  *
@@ -54,12 +54,15 @@
  * until it runs.
  *
  * Neither this file nor the runtime can know the number: a descriptor's method
- * table carries no count to scan. Only `program.c` knows it, so the compiler
- * lane is publishing it as `nts_closure_call_slot`, declared extern in
- * nts_runtime.h and emitted unconditionally. When that lands, the `0` becomes
- * `nts_closure_call_slot` and this warning goes with it. Until then the rename
- * above is the part that is finished; this call is staged, not working. */
+ * table carries no count to scan, which was checked rather than assumed --
+ * `NtsDescriptor` carries a `methods` pointer and no length. Only `program.c`
+ * knows it, and it publishes it now as `nts_closure_call_slot`, declared extern
+ * in nts_runtime.h and emitted unconditionally so a program with no closures
+ * still links. The call below names the symbol.
+ *
+ * So of the three things wrong with this file, two are fixed: the binding
+ * collision that started it, and the slot. What remains is the parameter type,
+ * which is the one that stops it compiling. */
 void nts_node_enqueue_microtask(NtsHeader *callback) {
-    /* TODO(compiler lane): nts_closure_call_slot, not 0. See above. */
-    nts_enqueue_microtask(nts_callback_task(callback, 0, false));
+    nts_enqueue_microtask(nts_callback_task(callback, nts_closure_call_slot, false));
 }
