@@ -4903,6 +4903,48 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## What the probes actually find, which is not what I expected
+
+Worth stating plainly, because it changes what the tool is for.
+
+**Every defect the probes have found, they found by failing to build — not by
+comparing.** Every single *comparison* divergence has turned out to be my
+expectation rather than the binding. Seven of them in one day:
+
+    probeUptimeShape          answers `typeof`, I matched a decimal
+    probeUuidShape            answers `length:versionNibble`, I ran a v4 regex
+    probeFstatShape           answers a column count, I looked for a file size
+    probeCrc32                is latin1 by construction, I compared UTF-8
+    write_file_utf8_fd        answers an errno, I expected a byte count
+    opendir                   fails with 0, I guarded on negative
+    statfs                    answers 8 columns, I expected node's public 7
+
+Two of those are worth separating out, because they failed in the direction that
+matters. Guarding `opendir` on `handle < 0` **reported a missing directory as a
+success**. And comparing `crc32` against UTF-8 reported a divergence on the one
+input where the encodings differ, twice, while the binding was right both times.
+
+What the probes *have* found, all through build failure:
+
+- the `libc` name collision — an exported `access` silently replaced by glibc's
+- `nts_crc32` taking `NtsArray *` against a `Uint8Array` declaration
+- seven more `zlib` signatures with the same disagreement
+- `heterogeneous-tuple-return`, which is the second blocker under `os.constants`
+- `sort-array-of-references`, which blocks `util.inspect({ sorted: true })`
+
+So the instrument's value is concentrated in **getting a binding to build and run
+at all**, and the comparisons are regression guards for what that reveals. That
+is still worth 195 of them — a guard that has never fired is doing its job as
+long as it *can* fire, which is what `--self-test` is for. But it would be wrong
+to read "0 divergences" as "the probes are finding the bugs". They are finding
+them one layer earlier, at the point where a wrong type or a missing symbol stops
+the addon from linking, and the comparison is what confirms the fix.
+
+The corollary for anyone extending this: **when a probe fails to build, that is
+the result, not an obstacle to the result.** Three of the five findings above
+were discovered while reaching for something else and were nearly filed as
+"probe didn't work".
+
 ## The bindings nothing could disagree with node about
 
 There is a category worse than "not yet checked": **no instrument in this tree
