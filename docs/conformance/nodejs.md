@@ -2879,6 +2879,38 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## `0 hollow` had never been measured, and it is true
+
+The profile is described everywhere — including in this lane's own goal — as
+*1,796 of 1,796 with 0 hollow*. The second half of that had never been checked.
+
+`sweep.mjs` computes `degenerate` from `runAddon(module, artifact, true)`, which
+is the **compiled** path. The interpreted lane, where every one of those passes
+lives, had no hollow measurement at all. The number was inherited, repeated, and
+never produced.
+
+Measured across all twenty-two modules with `run.mjs --sabotage`, which blanks
+the module and leaves its declared dependencies intact:
+
+    0 file(s) still passing with every module blanked
+
+Against **1,832** that pass unblanked. Every module reports `0 passed` when
+emptied — `fs` 344 to 0, `stream` 249 to 0, `http` 404 to 0.
+
+**The claim was true.** That is the outcome worth having and it is not the point.
+The point is that a number this document has quoted for weeks was an assertion
+until this run, and it was cheap to check — one pass over the modules, four
+minutes.
+
+`tooling/conformance/hollow-lane.sh` makes it repeatable, and refuses an empty
+run rather than reporting zero hollow passes for a glob that matched nothing.
+
+**Two claims in this document were unmeasured this afternoon.** This one was
+true. The other — that five fixtures still reproduced — was false, and had been
+for hours. The difference between them was not care taken at the time; both were
+written by someone who believed them. It was that one had a cheap check nobody
+had run and the other had a check that could not fail.
+
 ## Five fixtures were reporting defects that had been fixed
 
 `emits-c <text>` is a **substring match**, and a fragment taken from broken
