@@ -21,9 +21,9 @@ lane has moved.
 | `array-predicates` | 1.74x | probed: the reference preallocates, see below |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
-| `awfy-sieve` | 1.25x | **unprobed** |
-| `awfy-queens` | 1.24x | **unprobed** |
-| `generic-classes` | 1.13x | **unprobed** |
+| `awfy-sieve` | 1.25x | probed: no single cause, see below |
+| `awfy-queens` | 1.24x | probed: no single cause, see below |
+| `generic-classes` | 1.13x | probed: no single cause, see below |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
 
@@ -92,4 +92,20 @@ it as a gap. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
-**Unprobed**: `awfy-sieve` 1.25x, `awfy-queens` 1.24x, `generic-classes` 1.13x.
+**Probed, no single cause.** `awfy-sieve` (`Sieve$sieve` 70%), `awfy-queens`
+(`getRowColumn` 52%) and `generic-classes` (`work$whole`, everything inlined)
+are all dominated by *generated code* with no runtime helper standing out. All
+three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
+bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
+`ifnull`.
+
+`awfy-queens`' hot method is byte-for-byte the shape of its original:
+`freeRows[r] && freeMaxs[c + r] && freeMins[c - r + 7]` becomes three `baload`
+with short-circuit branches off direct fields, which is what `javac` emits.
+Closing 1.13-1.25x on these needs an assembly diff against the reference via
+`hsdis`, not another profile -- a profile has already said all it can.
+
+One incidental finding, not hot here but the same family as `narrow.rs`'s:
+`Queens.queenRows` is emitted `[D` with an `i2d` per store, where AWFY's Java
+uses `int[]`. An array's element type is `hir::elements`' decision, so it is
+theirs, and both native lanes carry it too.
