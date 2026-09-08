@@ -500,6 +500,36 @@ if (!withCompiles && modules.length > 1) {
   if (text !== "") console.log(`\n${text}`);
   if (audit.status !== 0) process.exitCode = 4;
 
+  // A fourth audit, for what is *silently wrong* rather than absent. The three
+  // above look for a missing test, a missing export, a module that stopped
+  // typechecking. This one reads emitted C for accessors the emitter marks
+  // `(void)v0` -- a getter compiled to ignore its receiver, which the source
+  // says reads a field.
+  //
+  // It exists because `Response__get_status` returned a constant `0` with no
+  // refusal, no clang error and no failing test, and was found by reading
+  // generated C for an unrelated reason. `get ok()` is `this.status >= 200`, so
+  // every response looked like a failure. Nothing in this profile could have
+  // reported that.
+  //
+  // The number is the signal rather than the exit code: a genuine class constant
+  // legitimately ignores its receiver, so a count is a question and not a
+  // verdict. What matters is it *moving*. Reads whatever `target/node/*.build`
+  // holds, so it describes the last builds rather than this run.
+  {
+    const accessors = spawnSync(
+      process.execPath,
+      [join(HERE, "accessor-audit.mjs"), "--all"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const summary = `${accessors.stdout ?? ""}`
+      .split("\n")
+      .filter((l) => l.includes("accessor(s) examined"))
+      .join("")
+      .trim();
+    if (summary !== "") console.log(`\naccessors in the last emitted C: ${summary}`);
+  }
+
   // The differential, for the same reason and at a fraction of its full size.
   // Node's tests are a fixed set of inputs a human chose; this asks node the
   // questions nobody wrote down, and it has found three real bugs -- a

@@ -30,16 +30,24 @@
 // That needs the source, and the shift found in `Request` — where four accessors
 // each read the field one position late — is not visible from the C alone.
 import { readFileSync, existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Anchored to the repository rather than the caller's directory. `--all` read
+// `target/node` relative to `cwd`, which is correct when a person runs it and
+// silently finds nothing when the sweep spawns it from elsewhere -- the summary
+// line simply never appeared, which is the quiet failure this file exists to
+// catch, in this file.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const argv = process.argv.slice(2);
 const all = argv.includes("--all");
 const named = argv.filter((a) => !a.startsWith("--"));
 
 const files = all
-  ? readdirSync("target/node", { withFileTypes: true })
+  ? readdirSync(join(ROOT, "target/node"), { withFileTypes: true })
       .filter((e) => e.isDirectory() && e.name.endsWith(".build"))
-      .map((e) => join("target/node", e.name, "program.c"))
+      .map((e) => join(ROOT, "target/node", e.name, "program.c"))
       .filter(existsSync)
   : named;
 
