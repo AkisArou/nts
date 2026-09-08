@@ -2816,6 +2816,52 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Two more, both found by a hypothesis that was wrong
+
+Chasing the `Closure54__call` defect produced two fixtures for defects that are
+not it. Four hypotheses about that closure were tried and all four failed; two of
+the failures emitted C that clang rejected for an unrelated reason, and those are
+now `blockers/upcast-to-base` and `blockers/async-returning-object`.
+
+**`upcast-to-base`** — a subclass instance assigned to a base-typed binding:
+
+    export const made: Base = new Derived();
+
+    error: incompatible pointer types assigning to 'NtsObj_Base *'
+           from 'NtsObj_Derived *'
+
+Eight lines, nothing refused. In C a derived struct is not a base struct even
+when it begins with one, so an upcast needs a cast at the assignment and the
+emitter writes it without. Reach is small — 2 sites each in `fs` and `readline`,
+zero in the nine other modules checked — and the class hierarchy was only in the
+probe to push a closure call slot above zero.
+
+**`async-returning-object`** — an `async` function resolving to an object:
+
+    export async function numbers(): Promise<number[]> { return [1, 2, 3]; }
+
+    error: incompatible pointer types passing 'NtsArray *' to parameter of type
+           'NtsHeader *'
+
+Seven lines. **This one is not the `callback-binding` shape**: the runtime's
+signature is already `void nts_promise_fulfill_tagged(NtsPromise *, NtsHeader *,
+...)`, both sides agree, and the *call site* is emitted without the cast. It is
+the whole of `stream`'s `incompatible pointer types` count, and appears there
+with `NtsObj_MemoryCacheStorageHandle *` as well — so it is any object, not
+arrays.
+
+### Three fixtures today came from guesses about something else
+
+`closure-as-function-value`, `upcast-to-base` and `async-returning-object` were
+all found while trying to reproduce a different defect. That is not luck twice
+over: a wrong hypothesis about emission still produces a *program the emitter has
+not seen*, and the corpus stopped being a source of new ones the moment twelve
+modules failed at the same earlier error. **Minimal programs written to test a
+theory are worth running even when the theory is wrong.**
+
+The `Closure54__call` pair remains unreproduced after four attempts and is
+recorded above with its evidence rather than fixtured.
+
 ## Two fixtures for what was behind the collisions
 
 Both new, both reproducing on the 14:18 probe binary, and neither refuses
