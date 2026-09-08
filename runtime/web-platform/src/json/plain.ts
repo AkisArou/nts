@@ -18,6 +18,21 @@
 //
 // Both traversals carry an explicit work stack, for the reason the plan gives for the other
 // two: a deeply nested value must not serialize on one target and kill the process on another.
+import {
+  CLOSE_BRACE,
+  CLOSE_BRACKET,
+  COMMA,
+  isDigit,
+  LOWER_F,
+  LOWER_N,
+  LOWER_T,
+  MINUS,
+  OPEN_BRACE,
+  OPEN_BRACKET,
+  QUOTE,
+  readMemberKey,
+  Scanner,
+} from "./parse.ts";
 import { member as plainMemberText, numberText, quoteJSONString, resolveGap } from "./text.ts";
 import { JsonValue } from "./value.ts";
 
@@ -331,5 +346,136 @@ export function toPlainValue(node: JsonValue): unknown {
     if (frames.length === 0) return frame.target;
     const parent = frames[frames.length - 1] as MaterializeFrame;
     place(parent.target, frame.key, frame.target);
+  }
+}
+
+/** One open container while parsing straight into ordinary values. */
+class PlainParseFrame {
+  readonly target: Record<string, unknown> | unknown[];
+  readonly isArray: boolean;
+  pendingKey = "";
+
+  constructor(target: Record<string, unknown> | unknown[], isArray: boolean) {
+    this.target = target;
+    this.isArray = isArray;
+  }
+}
+
+/**
+ * Parse JSON text straight into ordinary ECMAScript values.
+ *
+ * `toPlainValue(parseJsonText(text))` walks the document twice: once to build the erased graph
+ * and once to turn it into objects. Nothing between those two passes is observable unless a
+ * reviver is present -- and a reviver is the rare case. On a 1.67MB document the two-pass route
+ * costs 23.681ms against a one-pass bound of 8.450ms, so this is worth having.
+ *
+ * **The scanner is shared, not copied.** Every token, every error message, every number
+ * conversion and every escape comes from the same {@link Scanner} `parseJsonText` uses, and the
+ * key reader is literally the same function. What differs is only what gets built, so the
+ * surface where this can disagree with the canonical parser is the container handling below --
+ * and `test/json-plain-parse.test.ts` holds the two against each other over the whole corpus.
+ *
+ * Key order needs no work: `OrdinaryOwnPropertyKeys` puts array-index keys first in ascending
+ * numeric order and the rest in insertion order, which is what an ordinary object does natively.
+ * A repeated key keeps its first position and its last value in both routes for the same reason.
+ *
+ * Host-only, like the rest of this file: it produces arbitrary objects.
+ */
+export function parsePlainText(text: string): unknown {
+  const scanner = new Scanner(text);
+  scanner.skipWhitespace();
+  const value = readPlain(scanner);
+  scanner.skipWhitespace();
+  if (scanner.at < scanner.length) {
+    throw scanner.fail(`Unexpected non-whitespace character after JSON data`);
+  }
+  return value;
+}
+
+/** The control flow of `readValue`, building ordinary values instead of graph nodes. */
+function readPlain(scanner: Scanner): unknown {
+  const frames: PlainParseFrame[] = [];
+  for (;;) {
+    scanner.skipWhitespace();
+    const code = scanner.peek();
+    let value: unknown;
+    let opened = false;
+
+    if (code === OPEN_BRACE) {
+      scanner.at++;
+      const target: Record<string, unknown> = {};
+      const frame = new PlainParseFrame(target, false);
+      frames.push(frame);
+      scanner.skipWhitespace();
+      if (scanner.peek() === CLOSE_BRACE) {
+        scanner.at++;
+        frames.pop();
+        value = target;
+      } else {
+        frame.pendingKey = readMemberKey(scanner);
+        opened = true;
+        value = null;
+      }
+    } else if (code === OPEN_BRACKET) {
+      scanner.at++;
+      const target: unknown[] = [];
+      const frame = new PlainParseFrame(target, true);
+      frames.push(frame);
+      scanner.skipWhitespace();
+      if (scanner.peek() === CLOSE_BRACKET) {
+        scanner.at++;
+        frames.pop();
+        value = target;
+      } else {
+        opened = true;
+        value = null;
+      }
+    } else if (code === QUOTE) {
+      value = scanner.readString();
+    } else if (code === MINUS || isDigit(code)) {
+      value = scanner.readNumber();
+    } else if (code === LOWER_T) {
+      scanner.expectWord("true");
+      value = true;
+    } else if (code === LOWER_F) {
+      scanner.expectWord("false");
+      value = false;
+    } else if (code === LOWER_N) {
+      scanner.expectWord("null");
+      value = null;
+    } else {
+      throw scanner.fail(`Unexpected token ${scanner.describe()}`);
+    }
+
+    // A container was opened and its first member still has to be read.
+    if (opened) continue;
+
+    for (;;) {
+      if (frames.length === 0) return value;
+      const frame = frames[frames.length - 1] as PlainParseFrame;
+      if (frame.isArray) {
+        (frame.target as unknown[]).push(value);
+      } else {
+        place(frame.target, frame.pendingKey, value);
+      }
+      scanner.skipWhitespace();
+      const next = scanner.peek();
+      if (next === COMMA) {
+        scanner.at++;
+        if (!frame.isArray) frame.pendingKey = readMemberKey(scanner);
+        break;
+      }
+      const closer = frame.isArray ? CLOSE_BRACKET : CLOSE_BRACE;
+      if (next !== closer) {
+        throw scanner.fail(
+          frame.isArray
+            ? `Expected ',' or ']' after array element`
+            : `Expected ',' or '}' after property value`,
+        );
+      }
+      scanner.at++;
+      frames.pop();
+      value = frame.target;
+    }
   }
 }

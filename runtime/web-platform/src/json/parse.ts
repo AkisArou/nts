@@ -21,28 +21,28 @@ const TAB = 0x09;
 const LINE_FEED = 0x0a;
 const CARRIAGE_RETURN = 0x0d;
 const SPACE = 0x20;
-const QUOTE = 0x22;
+export const QUOTE = 0x22;
 const PLUS = 0x2b;
-const COMMA = 0x2c;
-const MINUS = 0x2d;
+export const COMMA = 0x2c;
+export const MINUS = 0x2d;
 const DOT = 0x2e;
 const SLASH = 0x2f;
 const ZERO = 0x30;
 const NINE = 0x39;
 const COLON = 0x3a;
 const UPPER_E = 0x45;
-const OPEN_BRACKET = 0x5b;
+export const OPEN_BRACKET = 0x5b;
 const BACKSLASH = 0x5c;
-const CLOSE_BRACKET = 0x5d;
+export const CLOSE_BRACKET = 0x5d;
 const LOWER_B = 0x62;
 const LOWER_E = 0x65;
-const LOWER_F = 0x66;
-const LOWER_N = 0x6e;
+export const LOWER_F = 0x66;
+export const LOWER_N = 0x6e;
 const LOWER_R = 0x72;
-const LOWER_T = 0x74;
+export const LOWER_T = 0x74;
 const LOWER_U = 0x75;
-const OPEN_BRACE = 0x7b;
-const CLOSE_BRACE = 0x7d;
+export const OPEN_BRACE = 0x7b;
+export const CLOSE_BRACE = 0x7d;
 
 /** One open container while parsing. Both payload lists exist so the frame has no union. */
 class Frame {
@@ -71,7 +71,7 @@ function syntaxError(message: string, position: number): SyntaxError {
   return new SyntaxError(`${message} in JSON at position ${position}`);
 }
 
-class Scanner {
+export class Scanner {
   readonly source: string;
   readonly length: number;
   at = 0;
@@ -374,7 +374,7 @@ export function numberValueOf(source: string, start: number, end: number): numbe
   return Number(source.slice(start, end));
 }
 
-function isDigit(code: number): boolean {
+export function isDigit(code: number): boolean {
   return code >= ZERO && code <= NINE;
 }
 
@@ -421,7 +421,7 @@ function readValue(scanner: Scanner): JsonValue {
         frames.pop();
         value = JsonValue.objectValue(frame.keys, frame.values, start, scanner.at);
       } else {
-        readMemberKey(scanner, frame);
+        frame.pendingKey = readMemberKey(scanner);
         opened = true;
         value = JsonValue.nullValue(start, start);
       }
@@ -473,7 +473,7 @@ function readValue(scanner: Scanner): JsonValue {
       if (next === COMMA) {
         scanner.at++;
         // A trailing comma is JavaScript, not JSON: the next token has to open a value.
-        if (!frame.isArray) readMemberKey(scanner, frame);
+        if (!frame.isArray) frame.pendingKey = readMemberKey(scanner);
         break;
       }
       const closer = frame.isArray ? CLOSE_BRACKET : CLOSE_BRACE;
@@ -494,15 +494,16 @@ function readValue(scanner: Scanner): JsonValue {
 }
 
 /** Reads `"key" :` and parks the key on the frame until its value completes. */
-function readMemberKey(scanner: Scanner, frame: Frame): void {
+export function readMemberKey(scanner: Scanner): string {
   scanner.skipWhitespace();
   if (scanner.peek() !== QUOTE) {
     throw scanner.fail(`Expected property name or '}'`);
   }
-  frame.pendingKey = scanner.readString();
+  const key = scanner.readString();
   scanner.skipWhitespace();
   if (scanner.peek() !== COLON) {
     throw scanner.fail(`Expected ':' after property name`);
   }
   scanner.at++;
+  return key;
 }

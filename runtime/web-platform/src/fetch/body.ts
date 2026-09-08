@@ -7,8 +7,7 @@ import { decodeMultipart } from "../forms/multipart-decode.ts";
 import { encodeMultipart } from "../forms/multipart.ts";
 import { parseMIMEType } from "../forms/mime.ts";
 import { URLSearchParams } from "../forms/search-params.ts";
-import { parseJsonText } from "../json/parse.ts";
-import { toPlainValue } from "../json/plain.ts";
+import { parsePlainText } from "../json/plain.ts";
 import type { RandomSource } from "../provider/primitives.ts";
 import {
   ReadableStream,
@@ -253,7 +252,12 @@ export abstract class Body {
     // The materialization is the host-only step. At a typed boundary -- `await r.json() as T`
     // -- the compiler generates a parser that builds `T` directly and this generic path is not
     // reached; see the note at the head of `json/plain.ts`.
-    return toPlainValue(parseJsonText(await this.text()));
+    // One pass. `toPlainValue(parseJsonText(...))` builds the erased graph and then
+    // walks it into ordinary objects, and nothing between those two passes is
+    // observable at a boundary that takes no reviver -- 23.681ms against 8.450ms on
+    // a 1.67MB document. `parsePlainText` shares the scanner, so the grammar, the
+    // error text and the number conversion are still spelled once.
+    return parsePlainText(await this.text());
   }
 
   async blob(): Promise<Blob> {

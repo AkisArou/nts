@@ -69,6 +69,17 @@ exists for what node's parser does not do -- `context.source`, `rawJSON`, exact 
 `toPlainValue` walks it into plain JavaScript values: 19.445ms becomes 23.681ms, so the second
 pass is 22%. Without a reviver the graph is a pure intermediate and could be skipped entirely.
 
+**Built, and it is 2.46x.** `parsePlainText` parses straight into ordinary values and
+`Body.json()` -- which is `response.json()` -- now takes it: **23.269ms to 9.465ms** on the same
+document to the same checksum, from 4.8x off node's native parser to 1.95x. It shares the
+`Scanner`, so the grammar, the error text and the number conversion are still spelled once, and
+`test/json-plain-parse.test.ts` holds it against the canonical route and against node over every
+corpus case, 2000 generated documents and every truncation of 400 of them, comparing error text
+character for character. Two of three sabotages failed it loudly; the third -- returning a
+different empty array -- is genuinely unobservable once the frame is popped, and a fourth, making
+a closed container yield its parent, hung `deepStrictEqual` on the cycle it created rather than
+failing an assertion.
+
 **Skipping the graph is worth 2.8x on that path, and that is measured, not assumed.** A
 throwaway one-pass parser -- recursive, no spec-exact errors, no source spans, written only to
 bound the answer -- parses the same document to the same checksum in **8.450ms** against 23.681ms.
