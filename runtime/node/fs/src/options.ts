@@ -9,6 +9,7 @@
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  ERR_UNKNOWN_ENCODING,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
 import {
@@ -547,6 +548,17 @@ export function requireTextEncoding(
   }
   const normalized = normalizeEncoding(encoding);
   if (normalized === undefined) {
+    // `"buffer"` is a valid *option* value everywhere else in `fs` -- `readdir`,
+    // `readlink` and `realpath` all answer Buffers for it -- so node's option
+    // validation lets it through, and the failure happens later at
+    // `Buffer.prototype.toString("buffer")`, which reports `ERR_UNKNOWN_ENCODING`
+    // rather than the generic invalid-encoding error.
+    //
+    // Exactly the lowercase spelling: `"BUFFER"` and `"Buffer"` fail node's
+    // earlier validation and get `ERR_INVALID_ARG_VALUE`. Checked against node
+    // for all three, because a case-insensitive compare here would be wrong in
+    // the direction that looks more correct.
+    if (encoding === "buffer") throw new ERR_UNKNOWN_ENCODING(encoding);
     throw new ERR_INVALID_ARG_VALUE("encoding", encoding, "is invalid encoding");
   }
   return normalized;
