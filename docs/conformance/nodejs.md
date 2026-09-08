@@ -3400,8 +3400,15 @@ clang output is two errors:
     program.c:3684  operand of type 'NtsValue' where arithmetic is required
                     -> blockers/erased-truthiness
 
-Nothing else. Both reproduce as fixtures, both are compiler-side, and the second
-one is:
+Nothing else. Both are compiler-side, and the second one is:
+
+> **Superseded.** Both were fixed shortly after this was written, and `timers`
+> compiles. The `erased-truthiness` fixture went on reporting `reproduces` for
+> hours afterwards because its expectation was a substring correct output also
+> contains — see "Five fixtures were reporting defects that had been fixed". The
+> section is kept because the *reasoning* about the declined rewrite is what it
+> is for, and that reasoning was right: the fix landed centrally, which is what
+> declining it was protecting.
 
     clearImmediate(NtsValue v0)
         v10 = v8->_onImmediate_;     // object | null | undefined
@@ -3417,7 +3424,12 @@ two errors.
 It is not being made, for the same reason `readConstants` was not restructured
 and `assert`'s `header` field was not renamed. `erased-truthiness` is 8 sites in
 `stream`, 8 in `fs` and 3 each in `events` and `assert`; those are not all
-nullable-object tests and most cannot be rewritten this way. Spelling around it
+nullable-object tests and most cannot be rewritten this way.
+
+**And that judgement was vindicated within the hour**: the compiler lane fixed
+it centrally, `!x` routes through `truthy`, and all nineteen sites went with it.
+One line here would have bought `timers` a smaller error count and left the
+other eighteen. Spelling around it
 here buys one module a smaller error count and removes the pressure from a defect
 that has to be fixed centrally regardless.
 
