@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Deterministic protocol fuzzing.
 //
 // The plan lists fuzzing under testing and observability. The property under test is
@@ -27,6 +21,7 @@ import {
 } from "../../../../runtime/web-platform/src/core/errors.ts";
 import { readFrame } from "../../../../runtime/web-platform/src/websocket/codec.ts";
 import { readHeaderFields } from "../../../../runtime/web-platform/src/http1/parser.ts";
+import type { ByteConnection } from "../../../../runtime/web-platform/src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 30_000 }, fn);
@@ -34,7 +29,7 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 const CRLF = String.fromCharCode(13, 10);
 
 /** xorshift32: small, deterministic, and identical on every run. */
-function rng(seed) {
+function rng(seed: number): () => number {
   let state = seed >>> 0 || 1;
   return () => {
     state ^= state << 13;
@@ -46,21 +41,21 @@ function rng(seed) {
   };
 }
 
-function bytesFrom(bytes) {
+function bytesFrom(bytes: Uint8Array | readonly number[]): ByteConnection {
   const source = Uint8Array.from(bytes);
   let offset = 0;
   return {
     get closed() {
       return false;
     },
-    async read(maxBytes) {
+    async read(maxBytes: number): Promise<Uint8Array | null> {
       if (offset >= source.length) return null;
       const end = Math.min(source.length, offset + maxBytes);
       const chunk = source.subarray(offset, end);
       offset = end;
       return chunk;
     },
-    async write(data) {
+    async write(data: Uint8Array): Promise<number> {
       return data.length;
     },
     close() {},
@@ -75,7 +70,7 @@ function bytesFrom(bytes) {
  * array, or a `RangeError` from an allocation, would mean the parser fell over rather
  * than refused.
  */
-function isNamedFailure(error) {
+function isNamedFailure(error: unknown): boolean {
   if (error instanceof ProtocolError || error instanceof LimitError) return true;
   return error instanceof Error && /unexpected end|closed|EOF/i.test(error.message);
 }
@@ -101,16 +96,16 @@ suite("malformed WebSocket frames always reach a named failure", async () => {
     // past its first byte rather than rejected immediately every time.
     if ((next() & 1) === 0) {
       const opcodes = [0x00, 0x01, 0x02, 0x08, 0x09, 0x0a, 0x03, 0x0b];
-      bytes[0] = (next() & 1 ? 0x80 : 0x00) | opcodes[next() % opcodes.length];
+      bytes[0] = (next() & 1 ? 0x80 : 0x00) | (opcodes[next() % opcodes.length] ?? 0);
       const lengths = [0, 5, 125, 126, 127];
-      bytes[1] = (next() & 1 ? 0x80 : 0x00) | lengths[next() % lengths.length];
+      bytes[1] = (next() & 1 ? 0x80 : 0x00) | (lengths[next() % lengths.length] ?? 0);
     }
 
-    if ((bytes[0] & 0x70) !== 0) coverage.reservedBits += 1;
-    if ((bytes[0] & 0x0f) >= 8) coverage.control += 1;
-    if ((bytes[1] & 0x80) === 0) coverage.wrongMasking += 1;
-    if ((bytes[1] & 0x7f) === 126) coverage.extendedLength += 1;
-    if ((bytes[1] & 0x7f) === 127) coverage.hugeLength += 1;
+    if (((bytes[0] ?? 0) & 0x70) !== 0) coverage.reservedBits += 1;
+    if (((bytes[0] ?? 0) & 0x0f) >= 8) coverage.control += 1;
+    if (((bytes[1] ?? 0) & 0x80) === 0) coverage.wrongMasking += 1;
+    if (((bytes[1] ?? 0) & 0x7f) === 126) coverage.extendedLength += 1;
+    if (((bytes[1] ?? 0) & 0x7f) === 127) coverage.hugeLength += 1;
 
     const reader = new BufferedReader(bytesFrom(bytes));
     try {
@@ -128,7 +123,7 @@ suite("malformed WebSocket frames always reach a named failure", async () => {
       failures += 1;
       assert.ok(
         isNamedFailure(error),
-        "iteration " + iteration + " produced an unnamed failure: " + String(error?.stack ?? error),
+        "iteration " + iteration + " produced an unnamed failure: " + String(error instanceof Error ? error.stack : error),
       );
     }
   }
@@ -187,7 +182,7 @@ suite("malformed HTTP/1 header blocks always reach a named failure", async () =>
       failures += 1;
       assert.ok(
         isNamedFailure(error),
-        "iteration " + iteration + " produced an unnamed failure: " + String(error?.stack ?? error),
+        "iteration " + iteration + " produced an unnamed failure: " + String(error instanceof Error ? error.stack : error),
       );
     }
   }

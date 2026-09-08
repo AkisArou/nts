@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -31,9 +25,12 @@ function request(overrides = {}) {
   };
 }
 
-function body(chunks, cancel = () => {}) {
+function body(
+  chunks: readonly string[],
+  cancel: (reason?: unknown) => void | Promise<void> = () => {},
+): ReadableStream<Uint8Array> {
   const values = chunks.map((chunk) => new TextEncoder().encode(chunk));
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       for (const value of values) controller.enqueue(value);
       controller.close();
@@ -42,10 +39,11 @@ function body(chunks, cancel = () => {}) {
   });
 }
 
-async function text(stream) {
+async function text(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (stream === null) return "";
   const reader = stream.getReader();
-  const chunks = [];
+  // Bytes rather than chunks: the loop below spreads each chunk into this.
+  const chunks: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -116,11 +114,11 @@ test("ResponseErrorInterceptor preserves binary error bodies as bytes", async ()
 });
 
 test("declared over-limit bodies are rejected and canceled before collection", async () => {
-  const cancellations = [];
-  const cancellation = Promise.withResolvers();
-  const source = new ReadableStream({
+  const cancellations: unknown[] = [];
+  const cancellation = Promise.withResolvers<void>();
+  const source = new ReadableStream<Uint8Array>({
     pull() {},
-    cancel(reason) {
+    cancel(reason: unknown) {
       cancellations.push(reason);
       return cancellation.promise;
     },
@@ -190,9 +188,9 @@ test("DumpInterceptor accepts the exact byte boundary and preserves trailers", a
 });
 
 test("streaming over-limit bodies are canceled with the limit error", async () => {
-  const cancellations = [];
+  const cancellations: unknown[] = [];
   const encoder = new TextEncoder();
-  const source = new ReadableStream({
+  const source = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode("ab"));
       controller.enqueue(encoder.encode("cd"));
@@ -215,12 +213,14 @@ test("streaming over-limit bodies are canceled with the limit error", async () =
     ResponseExceededMaxSizeError,
   );
   assert.equal(cancellations.length, 1);
-  assert.equal(cancellations[0].receivedBytes, 4);
+  const [cancelled] = cancellations;
+  assert.ok(cancelled instanceof ResponseExceededMaxSizeError, "the reason is the policy error");
+  assert.equal(cancelled.receivedBytes, 4);
 });
 
 test("body read failures retain exact identity instead of becoming policy errors", async () => {
   const failure = new Error("read failed");
-  const source = new ReadableStream({
+  const source = new ReadableStream<Uint8Array>({
     pull(controller) {
       controller.error(failure);
     },
@@ -237,8 +237,8 @@ test("body read failures retain exact identity instead of becoming policy errors
 
 test("abort during body consumption cancels with the exact reason", async () => {
   const controller = new AbortController();
-  const cancellations = [];
-  const source = new ReadableStream({
+  const cancellations: unknown[] = [];
+  const source = new ReadableStream<Uint8Array>({
     pull() {},
     cancel(reason) {
       cancellations.push(reason);

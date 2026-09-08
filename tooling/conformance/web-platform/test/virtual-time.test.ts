@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The integration contract requires deterministic oracle tests to use virtual time and
 // requires that network activity never silently advances it. Both follow from one
 // property: this clock moves only when told to.
@@ -19,7 +13,7 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 
 suite("nothing runs until the clock is told to move", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(10, () => ran.push("timer"));
   assert.equal(clock.now, 0);
   assert.deepEqual(ran, [], "a timer must not fire because time passed elsewhere");
@@ -38,7 +32,7 @@ suite("nothing runs until the clock is told to move", () => {
 
 suite("queued tasks run before timers and without moving the clock", () => {
   const clock = new VirtualScheduler({ startMilliseconds: 100 });
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(0, () => ran.push("due-timer"));
   clock.enqueue(() => ran.push("queued"));
   assert.deepEqual(ran, []);
@@ -50,7 +44,7 @@ suite("queued tasks run before timers and without moving the clock", () => {
 
 suite("equal deadlines run in the order they were scheduled", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   for (const label of ["a", "b", "c"]) clock.delay(5, () => ran.push(label));
   clock.delay(1, () => ran.push("early"));
   clock.advance(5);
@@ -59,7 +53,7 @@ suite("equal deadlines run in the order they were scheduled", () => {
 
 suite("the clock stops at each deadline rather than jumping to the end", () => {
   const clock = new VirtualScheduler();
-  const seen = [];
+  const seen: number[] = [];
   clock.delay(10, () => {
     seen.push(clock.now);
     // Scheduled from inside a timer, still inside the window being advanced.
@@ -74,7 +68,7 @@ suite("the clock stops at each deadline rather than jumping to the end", () => {
 
 suite("a timer scheduled beyond the window waits for the next advance", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(10, () => {
     clock.delay(100, () => ran.push("later"));
   });
@@ -87,7 +81,7 @@ suite("a timer scheduled beyond the window waits for the next advance", () => {
 
 suite("cancelling takes effect even from inside a running task", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(1, () => {
     ran.push("first");
     later.cancel();
@@ -108,7 +102,7 @@ suite("cancelling takes effect even from inside a running task", () => {
 
 suite("a failing task is reported and does not abandon the run", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(1, () => {
     throw new Error("task failed");
   });
@@ -131,7 +125,7 @@ suite("a failing task is reported and does not abandon the run", () => {
 
 suite("advancing to the next deadline drives a scheduler to quiescence", () => {
   const clock = new VirtualScheduler();
-  const ran = [];
+  const ran: string[] = [];
   clock.delay(3, () => {
     ran.push("a");
     clock.delay(7, () => ran.push("b"));
@@ -154,7 +148,7 @@ suite("invalid times are refused rather than silently normalized", () => {
   assert.throws(() => new VirtualScheduler({ startMilliseconds: Number.NaN }), RangeError);
   // Zero is valid in every position.
   const zero = new VirtualScheduler({ startMilliseconds: 0 });
-  const ran = [];
+  const ran: string[] = [];
   zero.delay(0, () => ran.push("now"));
   zero.advance(0);
   assert.deepEqual(ran, ["now"]);

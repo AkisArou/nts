@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BufferedReader } from "../../../../runtime/web-platform/src/http1/io.ts";
@@ -47,22 +41,49 @@ import {
   parseHttp2Settings,
   parseHttp2WindowUpdate,
   readHttp2Frame,
+  Http2WireError,
 } from "../../../../runtime/web-platform/src/http2/frame.ts";
+import type { Http2Frame } from "../../../../runtime/web-platform/src/http2/frame.ts";
+import type { ByteConnection } from "../../../../runtime/web-platform/src/provider/primitives.ts";
 
-function bytes(...values) {
+/**
+ * The error every wire-level failure here is, narrowed.
+ *
+ * The predicates below read `errorCode` and `streamId`; a thrown value is `unknown`, so each
+ * one went through this rather than off a type that does not declare them. It is a stronger
+ * assertion than before as well -- the class is now checked, where an error of any other type
+ * carrying an `errorCode` would previously have satisfied the predicate.
+ */
+function wireError(error: unknown): Http2WireError {
+  assert.ok(error instanceof Http2WireError, "expected an Http2WireError");
+  return error;
+}
+
+function bytes(...values: readonly number[]): Uint8Array {
   return Uint8Array.from(values);
 }
 
-function frame(type, flags, streamId, payload = new Uint8Array(0)) {
+function frame(
+  type: number,
+  flags: number,
+  streamId: number,
+  payload: Uint8Array = new Uint8Array(0),
+): Http2Frame {
   return { type, flags, streamId, payload };
 }
 
-function chunkedConnection(source, splits) {
+function chunkedConnection(source: Uint8Array, splits: readonly number[]): ByteConnection {
   let offset = 0;
   let split = 0;
+  // A closed flag behind a getter, because `ByteConnection.closed` is readonly: the literal
+  // declared it as a mutable field and then assigned through `this`, which the interface does
+  // not permit and which only worked because nothing checked.
+  let closed = false;
   return {
-    closed: false,
-    async read(maxBytes) {
+    get closed(): boolean {
+      return closed;
+    },
+    async read(maxBytes: number): Promise<Uint8Array | null> {
       if (offset === source.length) return null;
       const wanted = splits[split++] ?? source.length - offset;
       const end = Math.min(source.length, offset + wanted, offset + maxBytes);
@@ -70,11 +91,11 @@ function chunkedConnection(source, splits) {
       offset = end;
       return result;
     },
-    async write(data) {
+    async write(data: Uint8Array): Promise<number> {
       return data.length;
     },
-    close() {
-      this.closed = true;
+    close(): void {
+      closed = true;
     },
   };
 }
@@ -84,12 +105,16 @@ test("HTTP/2 frame envelope round-trips every field and ignores the reserved str
   const encoded = encodeHttp2Frame(source);
   assert.deepEqual(decodeHttp2Frame(encoded), source);
 
-  encoded[5] |= 0x80;
+  // The reserved bit lives in the sixth byte of a nine-byte frame header. Read out first so
+  // the index is checked once rather than assumed by a compound assignment.
+  const reserved = encoded[5];
+  assert.ok(reserved !== undefined, "a frame header is nine bytes");
+  encoded[5] = reserved | 0x80;
   assert.equal(decodeHttp2Frame(encoded).streamId, source.streamId);
   assert.throws(
     () => decodeHttp2Frame(encoded.subarray(0, encoded.length - 1)),
-    (error) => {
-      assert.equal(error.errorCode, HTTP2_FRAME_SIZE_ERROR);
+    (error: unknown) => {
+      assert.equal(wireError(error).errorCode, HTTP2_FRAME_SIZE_ERROR);
       return true;
     },
   );
@@ -128,11 +153,11 @@ test("SETTINGS pairs preserve order and enforce all defined value domains", () =
   assert.throws(
     () =>
       encodeHttp2Settings([{ identifier: HTTP2_SETTING_INITIAL_WINDOW_SIZE, value: 0x80000000 }]),
-    (error) => error.errorCode === 3,
+    (error: unknown) => wireError(error).errorCode === 3,
   );
   assert.throws(
     () => encodeHttp2Settings([{ identifier: HTTP2_SETTING_MAX_FRAME_SIZE, value: 16383 }]),
-    (error) => error.errorCode === HTTP2_PROTOCOL_ERROR,
+    (error: unknown) => wireError(error).errorCode === HTTP2_PROTOCOL_ERROR,
   );
   assert.throws(
     () => encodeHttp2Settings([{ identifier: HTTP2_SETTING_ENABLE_PUSH, value: 2 }]),
@@ -172,10 +197,10 @@ test("DATA, HEADERS, PRIORITY, and PUSH_PROMISE expose exact unpadded ranges", (
 
   assert.throws(
     () => parseHttp2Priority(frame(HTTP2_FRAME_PRIORITY, 0, 7, bytes(0, 0, 0, 7, 0))),
-    (error) =>
-      error.errorCode === HTTP2_PROTOCOL_ERROR &&
-      error.streamId === 7 &&
-      /depends on itself/.test(error.message),
+    (error: unknown) =>
+      wireError(error).errorCode === HTTP2_PROTOCOL_ERROR &&
+      wireError(error).streamId === 7 &&
+      /depends on itself/.test(wireError(error).message),
   );
   assert.throws(
     () => parseHttp2Data(frame(HTTP2_FRAME_DATA, HTTP2_FLAG_PADDED, 1, bytes(2, 0))),
@@ -207,7 +232,7 @@ test("control payloads preserve unsigned values and reject zero window progress"
   );
   assert.throws(
     () => parseHttp2WindowUpdate(frame(HTTP2_FRAME_WINDOW_UPDATE, 0, 3, bytes(0, 0, 0, 0))),
-    (error) => error.errorCode === HTTP2_PROTOCOL_ERROR && error.streamId === 3,
+    (error: unknown) => wireError(error).errorCode === HTTP2_PROTOCOL_ERROR && wireError(error).streamId === 3,
   );
 });
 
@@ -256,7 +281,7 @@ test("header block assembler enforces CONTINUATION exclusivity and byte limits",
   interrupted.accept(frame(HTTP2_FRAME_HEADERS, 0, 1, bytes(1)));
   assert.throws(
     () => interrupted.accept(frame(HTTP2_FRAME_PING, 0, 0, new Uint8Array(8))),
-    (error) => error.errorCode === HTTP2_PROTOCOL_ERROR,
+    (error: unknown) => wireError(error).errorCode === HTTP2_PROTOCOL_ERROR,
   );
 
   const wrongStream = new Http2HeaderBlockAssembler(4);
@@ -298,8 +323,8 @@ test("encoder and decoder enforce negotiated and absolute frame-size bounds", ()
   );
   assert.throws(
     () => decodeHttp2Frame(accepted),
-    (error) => {
-      assert.equal(error.errorCode, HTTP2_FRAME_SIZE_ERROR);
+    (error: unknown) => {
+      assert.equal(wireError(error).errorCode, HTTP2_FRAME_SIZE_ERROR);
       return true;
     },
   );

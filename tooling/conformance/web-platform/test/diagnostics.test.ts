@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -13,6 +7,12 @@ import {
 } from "../../../../runtime/web-platform/src/index.ts";
 import { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 import { createHostNodePrimitives } from "../node-primitives.ts";
+import type {
+  DiagnosticsInterceptorOptions,
+  DispatchDiagnosticEvent,
+} from "../../../../runtime/web-platform/src/dispatch/diagnostics.ts";
+import type { TransportResponse } from "../../../../runtime/web-platform/src/fetch/transport.ts";
+import type { HeaderEntry } from "../../../../runtime/web-platform/src/fetch/headers.ts";
 
 function request(url = "https://user:password@diagnostics.test/path?token=secret", overrides = {}) {
   const primitives = createHostNodePrimitives();
@@ -27,9 +27,34 @@ function request(url = "https://user:password@diagnostics.test/path?token=secret
   };
 }
 
-function diagnostics(options = {}) {
-  const events = [];
-  const reported = [];
+/**
+ * The event at `index`, asserted present and asserted to be of `type`.
+ *
+ * The assertions used to be `assert.equal(event.type, "request:create")` followed by reads of
+ * fields only that variant has. That checks the type at run time and tells the compiler
+ * nothing, so every read after it was unchecked -- and a variant that stopped carrying a field
+ * would have failed as `undefined !== expected` rather than as the shape change it is. This
+ * narrows and asserts in one step.
+ */
+function eventAt<T extends DispatchDiagnosticEvent["type"]>(
+  events: readonly DispatchDiagnosticEvent[],
+  index: number,
+  type: T,
+): Extract<DispatchDiagnosticEvent, { type: T }> {
+  const event = events[index];
+  if (event === undefined || event.type !== type) {
+    return assert.fail(`expected a ${type} event at index ${index}, got ${event?.type ?? "nothing"}`);
+  }
+  return event as Extract<DispatchDiagnosticEvent, { type: T }>;
+}
+
+function diagnostics(options: Partial<DiagnosticsInterceptorOptions> = {}): {
+  interceptor: DiagnosticsInterceptor;
+  events: DispatchDiagnosticEvent[];
+  reported: unknown[];
+} {
+  const events: DispatchDiagnosticEvent[] = [];
+  const reported: unknown[] = [];
   const interceptor = new DiagnosticsInterceptor({
     observer: { publish: (event) => events.push(event) },
     scheduler: {
@@ -63,8 +88,7 @@ test("request diagnostics redact credentials, queries and configured headers", a
       },
     },
   );
-  const created = state.events[0];
-  assert.equal(created.type, "request:create");
+  const created = eventAt(state.events, 0, "request:create");
   assert.equal(created.context.request.url, "https://diagnostics.test/path?<redacted>");
   assert.equal(created.context.request.queryRedacted, true);
   assert.equal(created.context.request.method, "POST");
@@ -85,10 +109,10 @@ test("query disclosure is explicit and non-network scheme payloads stay hidden",
     },
   });
   assert.equal(
-    included.events[0].context.request.url,
+    eventAt(included.events, 0, "request:create").context.request.url,
     "https://diagnostics.test/path?token=secret",
   );
-  assert.equal(included.events[0].context.request.queryRedacted, false);
+  assert.equal(eventAt(included.events, 0, "request:create").context.request.queryRedacted, false);
 
   const hidden = diagnostics({ includeQueryString: true });
   await hidden.interceptor.dispatch(request("data:text/plain,top-secret"), {
@@ -96,13 +120,13 @@ test("query disclosure is explicit and non-network scheme payloads stay hidden",
       return Promise.resolve({ status: 200, statusText: "", headers: [], body: null });
     },
   });
-  assert.equal(hidden.events[0].context.request.url, "data:<redacted>");
+  assert.equal(eventAt(hidden.events, 0, "request:create").context.request.url, "data:<redacted>");
 });
 
 test("response and trailer events are copied and redact response credentials", async () => {
   const state = diagnostics();
-  const trailers = Promise.withResolvers();
-  const response = {
+  const trailers = Promise.withResolvers<readonly HeaderEntry[]>();
+  const response: TransportResponse = {
     status: 200,
     statusText: "OK",
     headers: [
@@ -118,7 +142,7 @@ test("response and trailer events are copied and redact response credentials", a
     },
   });
   assert.equal(returned, response);
-  assert.deepEqual(state.events[1].headers, [
+  assert.deepEqual(eventAt(state.events, 1, "response:headers").headers, [
     ["set-cookie", "[REDACTED]"],
     ["x-visible", "yes"],
   ]);
@@ -128,22 +152,26 @@ test("response and trailer events are copied and redact response credentials", a
   ]);
   await trailers.promise;
   await Promise.resolve();
-  assert.equal(state.events[2].type, "response:trailers");
-  assert.deepEqual(state.events[2].headers, [
+  assert.deepEqual(eventAt(state.events, 2, "response:trailers").headers, [
     ["set-cookie", "[REDACTED]"],
     ["x-end", "yes"],
   ]);
-  assert.notEqual(state.events[1].headers, response.headers);
+  assert.notEqual(eventAt(state.events, 1, "response:headers").headers, response.headers);
 });
 
 test("observer mutation cannot change transport request or response headers", async () => {
-  const originalRequestHeaders = [["x-request", "original"]];
-  const originalResponseHeaders = [["x-response", "original"]];
+  const originalRequestHeaders: HeaderEntry[] = [["x-request", "original"]];
+  const originalResponseHeaders: HeaderEntry[] = [["x-response", "original"]];
   const interceptor = new DiagnosticsInterceptor({
     observer: {
       publish(event) {
-        if (event.type === "request:create") event.context.request.headers[0][1] = "changed";
-        if (event.type === "response:headers") event.headers[0][1] = "changed";
+        // A tamper attempt, and the attempt is the test: an observer must not be able to change
+        // what it observes, and the assertions below check that neither array moved. A
+        // `HeaderEntry` is a readonly tuple, so the write is a type error as well as a
+        // violation -- widened here by name so it reads as deliberate rather than silenced.
+        const tamper = (entry: HeaderEntry): string[] => entry as unknown as string[];
+        if (event.type === "request:create") tamper(event.context.request.headers[0]!)[1] = "changed";
+        if (event.type === "response:headers") tamper(event.headers[0]!)[1] = "changed";
       },
     },
     scheduler: {
@@ -177,14 +205,14 @@ test("observer mutation cannot change transport request or response headers", as
 
 test("diagnostics preserve body and trailers identity instead of proxying streams", async () => {
   const state = diagnostics();
-  const body = new ReadableStream({
+  const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new Uint8Array([1, 2, 3]));
       controller.close();
     },
   });
-  const trailers = Promise.resolve([["x-end", "yes"]]);
-  const response = { status: 200, statusText: "OK", headers: [], body, trailers };
+  const trailers: Promise<readonly HeaderEntry[]> = Promise.resolve([["x-end", "yes"]]);
+  const response: TransportResponse = { status: 200, statusText: "OK", headers: [], body, trailers };
   const returned = await state.interceptor.dispatch(request(), {
     dispatch() {
       return Promise.resolve(response);
@@ -197,7 +225,7 @@ test("diagnostics preserve body and trailers identity instead of proxying stream
 
 test("observer failures are reported without changing transport settlement", async () => {
   const observerFailure = new Error("observer failed");
-  const reported = [];
+  const reported: unknown[] = [];
   const interceptor = new DiagnosticsInterceptor({
     observer: {
       publish() {
@@ -257,9 +285,9 @@ test("dispatch failures preserve exact identity for async and synchronous transp
     }),
     (error) => error === asyncFailure,
   );
-  assert.equal(asyncState.events[1].type, "request:error");
-  assert.equal(asyncState.events[1].phase, "dispatch");
-  assert.equal(asyncState.events[1].error, asyncFailure);
+  const asyncError = eventAt(asyncState.events, 1, "request:error");
+  assert.equal(asyncError.phase, "dispatch");
+  assert.equal(asyncError.error, asyncFailure);
 
   const syncState = diagnostics();
   const syncFailure = new Error("sync failure");
@@ -272,7 +300,7 @@ test("dispatch failures preserve exact identity for async and synchronous transp
       }),
     (error) => error === syncFailure,
   );
-  assert.equal(syncState.events[1].error, syncFailure);
+  assert.equal(eventAt(syncState.events, 1, "request:error").error, syncFailure);
 });
 
 test("trailer rejection is observed without replacing the public promise", async () => {
@@ -288,9 +316,9 @@ test("trailer rejection is observed without replacing the public promise", async
   assert.equal(returned.trailers, trailers);
   await assert.rejects(returned.trailers, (error) => error === failure);
   await Promise.resolve();
-  assert.equal(state.events[2].type, "request:error");
-  assert.equal(state.events[2].phase, "trailers");
-  assert.equal(state.events[2].error, failure);
+  const trailerError = eventAt(state.events, 2, "request:error");
+  assert.equal(trailerError.phase, "trailers");
+  assert.equal(trailerError.error, failure);
 });
 
 test("request contexts are unique and display sequences are environment-local", async () => {
@@ -301,15 +329,18 @@ test("request contexts are unique and display sequences are environment-local", 
   await first.interceptor.dispatch(request(), transport);
   await first.interceptor.dispatch(request(), transport);
   await second.interceptor.dispatch(request(), transport);
-  assert.equal(first.events[0].context.sequence, 1);
-  assert.equal(first.events[2].context.sequence, 2);
-  assert.equal(second.events[0].context.sequence, 1);
-  assert.notEqual(first.events[0].context, second.events[0].context);
+  assert.equal(eventAt(first.events, 0, "request:create").context.sequence, 1);
+  assert.equal(eventAt(first.events, 2, "request:create").context.sequence, 2);
+  assert.equal(eventAt(second.events, 0, "request:create").context.sequence, 1);
+  assert.notEqual(
+    eventAt(first.events, 0, "request:create").context,
+    eventAt(second.events, 0, "request:create").context,
+  );
 });
 
 test("WebPlatformRuntime owns and applies its diagnostic observer", async () => {
   const primitives = createHostNodePrimitives();
-  const events = [];
+  const events: DispatchDiagnosticEvent[] = [];
   const runtime = new WebPlatformRuntime(primitives, {
     diagnostics: { publish: (event) => events.push(event) },
     fetchTransport: {
@@ -325,7 +356,10 @@ test("WebPlatformRuntime owns and applies its diagnostic observer", async () => 
       events.map((event) => event.type),
       ["request:create", "response:headers"],
     );
-    assert.equal(events[0].context.request.url, "https://environment.test/path?<redacted>");
+    assert.equal(
+      eventAt(events, 0, "request:create").context.request.url,
+      "https://environment.test/path?<redacted>",
+    );
   } finally {
     runtime.close();
   }

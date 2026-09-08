@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,6 +14,8 @@ import {
   setCookie,
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type { CookieJarStore, StoredCookie } from "../../../../runtime/web-platform/src/cookies/jar.ts";
+import type { FetchTransport } from "../../../../runtime/web-platform/src/fetch/transport.ts";
 
 createHostNodeWebPlatform();
 
@@ -161,7 +157,7 @@ test("CookieJar applies domain, path, secure, HttpOnly and SameSite policy", asy
 
 test("CookieJar enforces prefixes, public suffix policy and secure-overlay protection", async () => {
   const publicSuffixes = {
-    isPublicSuffix(domain) {
+    isPublicSuffix(domain: string): boolean {
       return domain === "test" || domain === "example.test";
     },
   };
@@ -216,13 +212,13 @@ test("CookieJar preserves replacement order, evicts deterministically and persis
 });
 
 test("CookieJar serializes concurrent persistent updates without losing either cookie", async () => {
-  const saved = [];
-  const store = {
+  const saved: string[][] = [];
+  const store: CookieJarStore = {
     async loadAll() {
       return [];
     },
     async saveAll(cookies) {
-      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       saved.push(cookies.map((cookie) => cookie.name).sort());
     },
   };
@@ -237,14 +233,14 @@ test("CookieJar serializes concurrent persistent updates without losing either c
 
 test("CookieJar rolls back failed persistence and rejects corrupt snapshots", async () => {
   let saves = 0;
-  const stored = [];
-  const store = {
+  const stored: StoredCookie[] = [];
+  const store: CookieJarStore = {
     async loadAll() {
       return stored;
     },
     async saveAll(cookies) {
       saves++;
-      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise<void>((resolve) => setImmediate(resolve));
       if (saves === 1) throw new Error("disk unavailable");
       stored.splice(0, stored.length, ...cookies);
     },
@@ -289,7 +285,7 @@ test("CookieJar applies lifetime caps, default paths, replacement policy and PSL
   const jar = new CookieJar({
     wallTimeMilliseconds: () => now,
     publicSuffixes: {
-      isPublicSuffix(domain) {
+      isPublicSuffix(domain: string): boolean {
         return exampleIsPublic && domain === "example.test";
       },
     },
@@ -333,9 +329,9 @@ test("CookieJar applies lifetime caps, default paths, replacement policy and PSL
 
 test("Fetch cookie policy stores redirect cookies, recomputes each hop and honors credentials", async () => {
   const jar = new CookieJar();
-  const observed = [];
+  const observed: { url: string; cookie: string | null }[] = [];
   let response = 0;
-  const transport = {
+  const transport: FetchTransport = {
     async dispatch(request) {
       observed.push({
         url: request.url.href,
@@ -396,8 +392,8 @@ test("same-origin Fetch credentials do not leak jar state across an origin redir
   const jar = new CookieJar();
   await jar.setCookie("one=1; Secure; Path=/", "https://one.test/");
   await jar.setCookie("two=2; Secure; Path=/", "https://two.test/");
-  const observed = [];
-  const transport = {
+  const observed: (string | null)[] = [];
+  const transport: FetchTransport = {
     async dispatch(request) {
       observed.push(request.headers.find((entry) => entry[0] === "cookie")?.[1] ?? null);
       if (request.url.hostname === "one.test") {

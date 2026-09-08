@@ -15,24 +15,13 @@ import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/pr
 import type { WebPlatformOptions } from "../../../../runtime/web-platform/src/provider.ts";
 import type { Event } from "../../../../runtime/web-platform/src/index.ts";
 import { MessageEvent } from "../../../../runtime/web-platform/src/index.ts";
+import { messageData } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-
-/**
- * The payload of a message event.
- *
- * `addEventListener` hands the listener the base `Event`, because one listener signature
- * serves every type; a message event carries `data` and this narrows to it rather than the
- * value being read off a type that does not declare it.
- */
-function messageData(event: Event): unknown {
-  assert.ok(event instanceof MessageEvent, "a message listener receives a MessageEvent");
-  return event.data;
-}
 
 function clientOf(t: TestContext, options: WebPlatformOptions = {}): WebPlatformRuntime {
   const api = createHostNodeWebPlatform(options);

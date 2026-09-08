@@ -17,6 +17,7 @@ import {
   HostNodeFileURLProvider,
 } from "../node-runtime.ts";
 import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
+import { causeText } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -25,24 +26,6 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 // Fetch reports every failure as an opaque `TypeError: Network request failed`, so the
 // reason lives on the cause chain. That is the specified behaviour and it is also why
 // a refused path never puts a filesystem detail into the message script sees.
-/**
- * Walk an error's cause chain into one string.
- *
- * The chain is `unknown` at every link -- `cause` is declared `unknown` and a thrown value need
- * not be an Error at all -- so each step reads the property defensively rather than assuming
- * a shape. That is what the runtime code already did; it is only now written down.
- */
-function causeText(from: unknown): string {
-  let cause: unknown = from;
-  let text = "";
-  while (cause !== undefined && cause !== null) {
-    const message: unknown = (cause as { message?: unknown }).message;
-    text += String(message ?? cause) + " ";
-    cause = (cause as { cause?: unknown }).cause;
-  }
-  return text;
-}
-
 function because(pattern: RegExp): (error: unknown) => boolean {
   return (error) => {
     assert.ok(error instanceof Error, "fetch rejects with an Error");

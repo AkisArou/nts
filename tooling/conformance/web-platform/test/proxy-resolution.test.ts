@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The proxy auto-configuration result grammar.
 //
 // There is no upstream fixture for this: WPT does not test proxies, because a browser's
@@ -23,11 +17,31 @@ import {
   systemProxyPolicy,
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type {
+  ProxyResolution,
+  ProxyRoute,
+  ProxyRouteKind,
+} from "../../../../runtime/web-platform/src/dispatch/proxy-resolution.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
-const kinds = (result) => result.routes.map((route) => route.kind);
+const kinds = (result: ProxyResolution): ProxyRouteKind[] =>
+  result.routes.map((route) => route.kind);
+
+/**
+ * The first route of a result, asserted present.
+ *
+ * `routes[0]` is `ProxyRoute | undefined`, and every use here has just asserted -- through the
+ * directive it parsed -- that there is one. Saying so once beats a non-null assertion at each
+ * site, and a parse that returned nothing now fails with that sentence instead of a property
+ * read on `undefined`.
+ */
+function firstRoute(result: ProxyResolution): ProxyRoute {
+  const route = result.routes[0];
+  assert.ok(route !== undefined, "expected the result to carry at least one route");
+  return route;
+}
 
 suite("directives are kept in the order the result gave them", () => {
   const result = parseProxyResult("PROXY a:8080; SOCKS5 b:1080; DIRECT");
@@ -82,13 +96,13 @@ suite("naming only unusable proxies is distinguishable from naming none", () => 
 });
 
 suite("HTTPS is the only directive that makes the hop to the proxy TLS", () => {
-  assert.equal(parseProxyResult("HTTPS p:443").routes[0].secure, true);
-  assert.equal(parseProxyResult("PROXY p:443").routes[0].secure, false);
-  assert.equal(parseProxyResult("HTTP p:443").routes[0].secure, false);
+  assert.equal(firstRoute(parseProxyResult("HTTPS p:443")).secure, true);
+  assert.equal(firstRoute(parseProxyResult("PROXY p:443")).secure, false);
+  assert.equal(firstRoute(parseProxyResult("HTTP p:443")).secure, false);
 });
 
 suite("a missing port takes the default for its keyword", () => {
-  const port = (value) => parseProxyResult(value).routes[0].port;
+  const port = (value: string): number => firstRoute(parseProxyResult(value)).port;
   assert.equal(port("PROXY p"), 80);
   assert.equal(port("HTTP p"), 80);
   assert.equal(port("HTTPS p"), 443);
@@ -104,10 +118,10 @@ suite("keywords are matched without regard to case", () => {
 });
 
 suite("an IPv6 proxy needs brackets, and keeps none once parsed", () => {
-  const bracketed = parseProxyResult("PROXY [::1]:8080").routes[0];
+  const bracketed = firstRoute(parseProxyResult("PROXY [::1]:8080"));
   assert.equal(bracketed.hostname, "::1", "brackets are stripped to match ConnectAddress");
   assert.equal(bracketed.port, 8080);
-  assert.equal(parseProxyResult("PROXY [::1]").routes[0].port, 80);
+  assert.equal(firstRoute(parseProxyResult("PROXY [::1]")).port, 80);
   // Unbracketed is genuinely ambiguous: `::1:8080` is a valid address as well as a host
   // and a port, so the only honest answer is to refuse it.
   assert.deepEqual(parseProxyResult("PROXY ::1:8080").unsupported, ["PROXY ::1:8080"]);
@@ -133,12 +147,12 @@ suite("surrounding whitespace and empty directives are ignored", () => {
   ]);
 });
 
-function url(href) {
+function url(href: string): URL {
   return new URL(href);
 }
 
 suite("the policy asks the host, and parses what it says", () => {
-  const asked = [];
+  const asked: string[] = [];
   const policy = new SystemProxyPolicy((target) => {
     asked.push(target.href);
     return "PROXY p:3128";
@@ -187,14 +201,14 @@ suite("the platform-backed policy reads the provider, not a captured value", (t)
   // scope must not require one, and a provider whose settings change during the process
   // must be asked again rather than answered from a cache.
   const policy = systemProxyPolicy();
-  const asked = [];
+  const asked: string[] = [];
   const api = createHostNodeWebPlatform({}, {}, undefined, (target) => {
     asked.push(target.href);
     return asked.length === 1 ? "PROXY first.test:1" : "PROXY second.test:2";
   });
   t.after(() => api.close());
-  assert.equal(policy.resolve(url("http://a.test/")).routes[0].hostname, "first.test");
-  assert.equal(policy.resolve(url("http://b.test/")).routes[0].hostname, "second.test");
+  assert.equal(firstRoute(policy.resolve(url("http://a.test/"))).hostname, "first.test");
+  assert.equal(firstRoute(policy.resolve(url("http://b.test/"))).hostname, "second.test");
   assert.deepEqual(asked, ["http://a.test/", "http://b.test/"]);
 });
 

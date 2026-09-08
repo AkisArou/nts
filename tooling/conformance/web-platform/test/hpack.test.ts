@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -15,27 +9,33 @@ import {
   decodeHpackHuffman,
   encodeHpackHuffman,
 } from "../../../../runtime/web-platform/src/http2/hpack-huffman.ts";
+import type { DecodedHpackHeaderField, HpackHeaderField } from "../../../../runtime/web-platform/src/http2/hpack.ts";
 
-function bytes(hex) {
+/** A header as the RFC 7541 vectors write it: a name and a value, in order. */
+type Pair = readonly [string, string];
+
+function bytes(hex: string): Uint8Array {
   return Uint8Array.from(Buffer.from(hex.replaceAll(" ", ""), "hex"));
 }
 
-function hex(value) {
+function hex(value: Uint8Array): string {
   return Buffer.from(value).toString("hex");
 }
 
-function fields(...pairs) {
+function fields(...pairs: readonly Pair[]): DecodedHpackHeaderField[] {
   return pairs.map(([name, value]) => ({ name, value, neverIndexed: false }));
 }
 
-const firstRequest = [
+// Annotated rather than inferred: an array of two-element arrays widens to `string[][]`, and
+// every use here destructures a name and a value from a fixed pair.
+const firstRequest: readonly Pair[] = [
   [":method", "GET"],
   [":scheme", "http"],
   [":path", "/"],
   [":authority", "www.example.com"],
 ];
-const secondRequest = [...firstRequest, ["cache-control", "no-cache"]];
-const thirdRequest = [
+const secondRequest: readonly Pair[] = [...firstRequest, ["cache-control", "no-cache"]];
+const thirdRequest: readonly Pair[] = [
   [":method", "GET"],
   [":scheme", "https"],
   [":path", "/index.html"],
@@ -44,11 +44,14 @@ const thirdRequest = [
 ];
 
 test("RFC 7541 integer examples and malformed integer bounds", () => {
-  for (const [encoded, prefix, expected] of [
+  // Each vector is an encoding, a prefix width and the integer it denotes; without the
+  // annotation the array widens to `(string | number)[][]` and none of the three has a type.
+  const integers: readonly (readonly [string, number, number])[] = [
     ["0a", 5, 10],
     ["1f9a0a", 5, 1337],
     ["2a", 8, 42],
-  ]) {
+  ];
+  for (const [encoded, prefix, expected] of integers) {
     const cursor = { bytes: bytes(encoded), offset: 0 };
     assert.equal(decodeHpackInteger(cursor, prefix), expected);
     assert.equal(cursor.offset, cursor.bytes.length);
@@ -86,7 +89,7 @@ test("RFC 7541 literal and indexed field examples", () => {
 test("RFC 7541 request sequence without Huffman coding", () => {
   const decoder = new HpackDecoder();
   const encoder = new HpackEncoder(4096, false);
-  const vectors = [
+  const vectors: readonly (readonly [string, readonly Pair[]])[] = [
     ["828684410f7777772e6578616d706c652e636f6d", firstRequest],
     ["828684be58086e6f2d6361636865", secondRequest],
     ["828785bf400a637573746f6d2d6b65790c637573746f6d2d76616c7565", thirdRequest],
@@ -103,7 +106,7 @@ test("RFC 7541 request sequence without Huffman coding", () => {
 test("RFC 7541 request sequence with Huffman coding", () => {
   const decoder = new HpackDecoder();
   const encoder = new HpackEncoder();
-  const vectors = [
+  const vectors: readonly (readonly [string, readonly Pair[]])[] = [
     ["828684418cf1e3c2e5f23a6ba0ab90f4ff", firstRequest],
     ["828684be5886a8eb10649cbf", secondRequest],
     ["828785bf408825a849e95ba97d7f8925a849e95bb8e8b4bf", thirdRequest],
@@ -117,19 +120,19 @@ test("RFC 7541 request sequence with Huffman coding", () => {
   assert.equal(decoder.dynamicTableSize, 164);
 });
 
-const firstResponse = [
+const firstResponse: readonly Pair[] = [
   [":status", "302"],
   ["cache-control", "private"],
   ["date", "Mon, 21 Oct 2013 20:13:21 GMT"],
   ["location", "https://www.example.com"],
 ];
-const secondResponse = [
+const secondResponse: readonly Pair[] = [
   [":status", "307"],
   ["cache-control", "private"],
   ["date", "Mon, 21 Oct 2013 20:13:21 GMT"],
   ["location", "https://www.example.com"],
 ];
-const thirdResponse = [
+const thirdResponse: readonly Pair[] = [
   [":status", "200"],
   ["cache-control", "private"],
   ["date", "Mon, 21 Oct 2013 20:13:22 GMT"],
@@ -153,21 +156,25 @@ test("RFC 7541 response sequences exercise the 256-byte eviction context", () =>
 
   for (const vectors of [plain, compressed]) {
     const decoder = new HpackDecoder(256);
-    for (let i = 0; i < vectors.length; i++) {
-      assert.deepEqual(decoder.decode(bytes(vectors[i])), fields(...expected[i]));
+    // Zipped rather than indexed twice: the two arrays are parallel by construction, and
+    // `entries` gives both without either index needing to be asserted present.
+    for (const [i, vector] of vectors.entries()) {
+      assert.deepEqual(decoder.decode(bytes(vector)), fields(...(expected[i] ?? [])));
     }
     assert.equal(decoder.dynamicTableLength, 3);
     assert.equal(decoder.dynamicTableSize, 215);
   }
 
   const encoder = new HpackEncoder(256, false);
-  for (let i = 0; i < plain.length; i++) {
-    const source = expected[i].map(([name, value]) => ({
+  for (const [i, encoded] of plain.entries()) {
+    // Annotated, so `indexing` keeps its literal type: inferred, the object widens it to
+    // `string` and the encoder takes only the three spellings `HpackIndexing` allows.
+    const source: readonly HpackHeaderField[] = (expected[i] ?? []).map(([name, value]) => ({
       name,
       value,
       indexing: "incremental",
     }));
-    assert.equal(hex(encoder.encode(source)), plain[i]);
+    assert.equal(hex(encoder.encode(source)), encoded);
   }
 });
 
@@ -274,7 +281,7 @@ test("encoded string and decoded header-list limits are independently enforced",
 });
 
 test("HPACK preserves opaque ByteString octets and duplicate ordering", () => {
-  const input = [
+  const input: readonly HpackHeaderField[] = [
     { name: "x-byte", value: "\u0000\u0080\u00ff" },
     { name: "x-byte", value: "second", indexing: "without" },
   ];

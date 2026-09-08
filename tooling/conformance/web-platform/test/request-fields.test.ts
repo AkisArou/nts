@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Which Request fields change what happens, and which are deliberately inert.
 //
 // The plan keeps browser-oriented fields observable even where their enforcement
@@ -26,6 +20,10 @@ import {
   Response,
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type { Socket } from "node:net";
+import { portOf } from "./harness.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
+import type { RequestInit } from "../../../../runtime/web-platform/src/fetch/request.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -33,9 +31,20 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 const CRLF = String.fromCharCode(13, 10);
 
 /** Records every request head it is sent and answers each with a fixed response. */
-async function recordingServer(t) {
-  const heads = [];
-  const sockets = new Set();
+/**
+ * A `Request` attribute read by a runtime name.
+ *
+ * The field names come from a table, so the read cannot be expressed against the interface --
+ * it declares no index signature. Widened to `unknown` here rather than to `any`, so a caller
+ * still has to say what it expects.
+ */
+function attribute(request: Request, name: string): unknown {
+  return (request as unknown as Record<string, unknown>)[name];
+}
+
+async function recordingServer(t: TestContext): Promise<{ heads: string[]; port: number }> {
+  const heads: string[] = [];
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -60,15 +69,15 @@ async function recordingServer(t) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return { heads, port: server.address().port };
+  return { heads, port: portOf(server) };
 }
 
-function runtimeFor(t) {
+function runtimeFor(t: TestContext): WebPlatformRuntime {
   const api = createHostNodeWebPlatform();
   t.after(() => api.close());
   return api;
@@ -100,14 +109,14 @@ suite("an inert field is readable, survives a clone, and reaches the Request", (
   runtimeFor(t);
   for (const [field, [, second]] of Object.entries(INERT_FIELDS)) {
     const request = new Request("https://example.test/", { [field]: second });
-    assert.equal(request[field], second, `${field} must be readable`);
-    assert.equal(request.clone()[field], second, `${field} must survive a clone`);
+    assert.equal(attribute(request, field), second, `${field} must be readable`);
+    assert.equal(attribute(request.clone(), field), second, `${field} must survive a clone`);
   }
   // And the unexposed ones stay unexposed: inventing a getter Fetch does not define
   // would be as wrong as omitting one it does.
   for (const field of Object.keys(UNEXPOSED_FIELDS)) {
     const request = new Request("https://example.test/", { [field]: "high" });
-    assert.equal(request[field], undefined, `${field} is not a Request attribute`);
+    assert.equal(attribute(request, field), undefined, `${field} is not a Request attribute`);
   }
 });
 
@@ -136,14 +145,19 @@ suite("the enforced fields do change what happens", async (t) => {
   // method and headers reach the wire.
   heads.length = 0;
   await (await api.fetch(url, { method: "HEAD", headers: { "x-marker": "here" } })).text();
-  assert.match(heads[0], /^HEAD \/path HTTP\/1\.1/);
-  assert.match(heads[0], /x-marker: here/);
+  const head = heads[0];
+  assert.ok(head !== undefined, "the server recorded the request head");
+  assert.match(head, /^HEAD \/path HTTP\/1\.1/);
+  assert.match(head, /x-marker: here/);
 
   // redirect: "error" is a policy, not metadata.
-  await assert.rejects(api.fetch(url, { redirect: "nonsense" }), TypeError);
+  // Deliberately outside the type: rejecting it is the assertion, so the value has to reach
+  // the call for the run-time check to be the thing under test.
+  const badRedirect = { redirect: "nonsense" } as unknown as RequestInit;
+  await assert.rejects(api.fetch(url, badRedirect), TypeError);
 
   // duplex is enforced at construction: a streaming body without it is refused.
-  const stream = new ReadableStream({
+  const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.close();
     },
@@ -183,6 +197,7 @@ suite("an inert field survives a Cache round trip", async (t) => {
   });
   await cache.put(request, new Response("stored"));
   const [restored] = await cache.keys();
+  assert.ok(restored !== undefined, "the cache kept the request that was put in it");
   // Observable metadata that did not survive storage would be observable only until it
   // mattered, which is worse than not having it.
   assert.equal(restored.mode, "no-cors");
