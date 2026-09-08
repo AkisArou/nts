@@ -8807,6 +8807,71 @@ Both real sites use shorthand because node's code does — `cpus` assembles a
 Rewriting either to `key: value` would compile today and would be rewriting
 correct source to hide a refusal.
 
+## Shorthand properties are not resolved, and two diagnostics say so
+
+`{ x }` refuses. `{ x: x }` compiles. Same program, same type, at module scope
+and inside a function body alike:
+
+    export function lowers(n: number): number { return n + 1; }
+
+    export const Explicit  = { lowers: lowers };   // lowers
+    export const Shorthand = { lowers };           // REFUSED
+    function inBody() { return { lowers }; }       // REFUSED
+
+**The message depends only on what the name refers to.** A narrowed local reads
+`an erased value where a concrete representation is wanted`; a module-scope
+function reads `a shorthand naming nothing in scope`. One root, two texts, and
+two fixtures — `narrowed-shorthand-property` and `shorthand-naming-a-function`
+— kept separate so a fix covering one value kind cannot leave the other
+reproducing with nothing to say so.
+
+The second message is also wrong about its own cause. The name it calls "nothing
+in scope" is an exported function declared in the same file that lowers on its
+own, which sends a reader hunting for a typo. The compiler has the honest
+phrasing already and uses it elsewhere in the same run: *a module-scope variable
+whose initializer was refused above*.
+
+### What it costs, and the half of that I did not measure
+
+| | count | confidence |
+| --- | ---: | --- |
+| `a shorthand naming nothing in scope` | **22** | certain — the wording is shorthand-specific |
+| `an erased value where a concrete representation is wanted` | 141 | an **upper bound**; shorthand is one of at least three causes |
+
+The 22 span 13 modules, with three each in `fs`, `http` and `process`.
+
+Adding them and reporting 163 would be wrong, and it is the tempting move
+because both messages come from the same defect in the cases that led here.
+Four distinct `erased value` sites, sampled:
+
+    os/main.ts:306          model,                                    shorthand
+    os/main.ts:428          return {                                  shorthand
+    buffer/blob.ts:684      const source: BlobStreamSource<...> = ..  not
+    node/validators.ts:243  const given = value ?? byDefault;         not
+
+Two of four. So the second row is a ceiling on a fraction nobody has measured,
+and it is written here as one rather than quietly summed into the first.
+
+### How it was nearly filed as something else
+
+It surfaced in `querystring`, at the module object node's own tests replace
+methods on:
+
+    export const QueryString = { unescapeBuffer, unescape, escape, stringify, parse, ... };
+
+**Every name in that literal had also been refused further up**, through the
+`decodeURIComponent` chain. So the reading that fits every available fact is a
+cascade: the shorthand names something that never lowered, and the diagnostic is
+clumsy but honest. That story would have sent the compiler lane to look at
+refusal propagation.
+
+A control naming a function refused nowhere still refuses. **A fixture with one
+control tells you the defect is present; it takes a second to tell you what the
+defect is.** Three fixtures were wrong in exactly that way on 2026-09-08 —
+this one, `narrowed-shorthand-property` (filed as being about object literals
+when it is about one spelling of them), and `refused-callback-null-vtable`
+(reproducing the text on a binary where the defect was fixed).
+
 ## What one fix is worth: `AnyView` measured against all 22 modules
 
 `arraybufferview-parameter` reproduces, and it is faithful — three NTS1001s,
