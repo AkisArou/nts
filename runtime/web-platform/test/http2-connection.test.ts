@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -41,13 +35,19 @@ import {
   encodeHttp2Settings,
   parseHttp2RstStream,
 } from "../src/http2/frame.ts";
+import { must, portOf } from "./harness.ts";
+import type { HpackHeaderField } from "../src/http2/hpack.ts";
+import type { Http2Setting } from "../src/http2/frame.ts";
+import { Http2WireError } from "../src/http2/frame.ts";
+import type { Http2ResponseHeaders } from "../src/http2/headers.ts";
+import type { ByteConnection } from "../src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function requestHeaders(port, path = "/", method = "GET") {
+function requestHeaders(port: number, path = "/", method = "GET"): HpackHeaderField[] {
   return [
     { name: ":method", value: method },
     { name: ":scheme", value: "http" },
@@ -56,9 +56,9 @@ function requestHeaders(port, path = "/", method = "GET") {
   ];
 }
 
-async function consume(stream) {
-  const reader = stream.getReader();
-  const chunks = [];
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<Buffer> {
+  const reader = must(stream, "the response carries a body").getReader();
+  const chunks: Uint8Array[] = [];
   let length = 0;
   try {
     while (true) {
@@ -76,9 +76,14 @@ async function consume(stream) {
   );
 }
 
-async function h2Pair(t, handler, settings = {}, clientOptions = {}) {
+async function h2Pair(
+  t: TestContext,
+  handler: (stream: http2.ServerHttp2Stream, headers: http2.IncomingHttpHeaders) => void,
+  settings: http2.Settings = {},
+  clientOptions: Record<string, unknown> = {},
+) {
   const server = http2.createServer({ settings });
-  const sessions = new Set();
+  const sessions = new Set<http2.ServerHttp2Session>();
   server.on("session", (session) => {
     sessions.add(session);
     session.on("error", () => {});
@@ -88,7 +93,7 @@ async function h2Pair(t, handler, settings = {}, clientOptions = {}) {
   server.on("stream", handler);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
-  const port = server.address().port;
+  const port = portOf(server);
   const socket = net.connect({ host: "127.0.0.1", port });
   socket.on("error", () => {});
   await once(socket, "connect");
@@ -99,39 +104,57 @@ async function h2Pair(t, handler, settings = {}, clientOptions = {}) {
     connection.close();
     await connection.closed;
     for (const session of sessions) session.destroy();
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
   return { connection, port, sessions };
 }
 
-class MemoryConnection {
-  closed = false;
-  incoming = [];
-  outgoing = [];
-  pending = null;
+/**
+ * The error every wire-level failure here is, narrowed.
+ *
+ * The predicates read `errorCode` and `streamId`; a thrown value is `unknown`, so each goes
+ * through this rather than off a type that does not declare them -- and the class is now
+ * checked, where anything carrying an `errorCode` previously satisfied them.
+ */
+function wireError(error: unknown): Http2WireError {
+  assert.ok(error instanceof Http2WireError, "expected an Http2WireError");
+  return error;
+}
 
-  read(maxBytes) {
+/** A read that arrived before any bytes did, and the size it asked for. */
+interface PendingRead {
+  readonly maxBytes: number;
+  readonly result: PromiseWithResolvers<Uint8Array | null>;
+}
+
+class MemoryConnection implements ByteConnection {
+  closed = false;
+  readonly incoming: Uint8Array[] = [];
+  readonly outgoing: Uint8Array[] = [];
+  pending: PendingRead | null = null;
+
+  read(maxBytes: number): Promise<Uint8Array | null> {
     if (this.incoming.length !== 0) return Promise.resolve(this.take(maxBytes));
     if (this.closed) return Promise.resolve(null);
-    const result = Promise.withResolvers();
+    const result = Promise.withResolvers<Uint8Array | null>();
     this.pending = { maxBytes, result };
     return result.promise;
   }
 
-  write(data) {
+  write(data: Uint8Array): Promise<number> {
     if (this.closed) return Promise.reject(new TypeError("closed"));
     this.outgoing.push(data.slice());
     return Promise.resolve(data.length);
   }
 
-  close() {
+  close(): void {
     if (this.closed) return;
     this.closed = true;
     this.pending?.result.reject(new TypeError("closed"));
     this.pending = null;
   }
 
-  feed(data) {
+  feed(data: Uint8Array): void {
     if (this.closed) throw new TypeError("closed");
     this.incoming.push(data.slice());
     const pending = this.pending;
@@ -140,8 +163,9 @@ class MemoryConnection {
     pending.result.resolve(this.take(pending.maxBytes));
   }
 
-  take(maxBytes) {
-    const first = this.incoming[0];
+  take(maxBytes: number): Uint8Array {
+    // Only called when `incoming` is non-empty; the callers check first.
+    const first = must(this.incoming[0], "the connection has a buffered chunk");
     if (first.length <= maxBytes) {
       this.incoming.shift();
       return first;
@@ -152,7 +176,10 @@ class MemoryConnection {
   }
 }
 
-async function memoryPair(settings = [], options = {}) {
+async function memoryPair(
+  settings: readonly Http2Setting[] = [],
+  options: Record<string, unknown> = {},
+) {
   const bytes = new MemoryConnection();
   const connection = new Http2ClientConnection(bytes, options);
   await connection.start();
@@ -171,9 +198,9 @@ async function memoryPair(settings = [], options = {}) {
 suite(
   "real h2c multiplexes responses and preserves informational headers and trailers",
   async (t) => {
-    const seen = [];
+    const seen: string[] = [];
     const pair = await h2Pair(t, (stream, headers) => {
-      const path = headers[":path"];
+      const path = must(headers[":path"], "an HTTP/2 request carries :path");
       seen.push(path);
       if (path === "/slow") {
         setTimeout(() => {
@@ -188,7 +215,7 @@ suite(
       stream.end("fast");
     });
     const signal = new AbortController().signal;
-    const informational = [];
+    const informational: Http2ResponseHeaders[] = [];
     const slowPromise = pair.connection.request({
       headers: requestHeaders(pair.port, "/slow"),
       body: null,
@@ -208,7 +235,7 @@ suite(
       ["a=1", "b=2"],
     );
     assert.equal(informational.length, 1);
-    assert.equal(informational[0].status, 103);
+    assert.equal(must(informational[0], "one informational response arrived").status, 103);
     assert.deepEqual(await fast.trailers, [
       { name: "checksum", value: "complete", neverIndexed: false },
     ]);
@@ -279,7 +306,7 @@ suite("stream flow-control failure does not terminate an unrelated stream", asyn
   );
   await assert.rejects(
     consume(failed.body),
-    (error) => error.errorCode === HTTP2_FLOW_CONTROL_ERROR && error.streamId === 1,
+    (error: unknown) => wireError(error).errorCode === HTTP2_FLOW_CONTROL_ERROR && wireError(error).streamId === 1,
   );
 
   pair.bytes.feed(
@@ -313,9 +340,9 @@ suite("HPACK compression failure terminates the connection with COMPRESSION_ERRO
       payload: Uint8Array.of(0x80),
     }),
   );
-  await assert.rejects(request, (error) => error.errorCode === HTTP2_COMPRESSION_ERROR);
+  await assert.rejects(request, (error: unknown) => wireError(error).errorCode === HTTP2_COMPRESSION_ERROR);
   await pair.connection.closed;
-  const goAway = decodeHttp2Frame(pair.bytes.outgoing.at(-1));
+  const goAway = decodeHttp2Frame(must(pair.bytes.outgoing.at(-1), "a GOAWAY frame was written"));
   assert.equal(goAway.type, HTTP2_FRAME_GOAWAY);
   assert.equal(goAway.payload[7], HTTP2_COMPRESSION_ERROR);
 });
@@ -351,7 +378,7 @@ suite(
       /pending request queue is full/,
     );
     cancelled.abort(reason);
-    await assert.rejects(secondPromise, (error) => error === reason);
+    await assert.rejects(secondPromise, (error: unknown) => error === reason);
 
     const encoder = new HpackEncoder();
     pair.bytes.feed(
@@ -388,7 +415,7 @@ suite(
 
 suite("request Content-Length is enforced against the bytes produced by the body", async () => {
   const pair = await memoryPair();
-  const body = new ReadableStream({
+  const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(Uint8Array.of(1));
       controller.close();
@@ -401,7 +428,7 @@ suite("request Content-Length is enforced against the bytes produced by the body
   });
   await assert.rejects(
     request,
-    (error) => error.errorCode === HTTP2_INTERNAL_ERROR && error.streamId === 1,
+    (error: unknown) => wireError(error).errorCode === HTTP2_INTERNAL_ERROR && wireError(error).streamId === 1,
   );
   pair.connection.close();
   await pair.connection.closed;
@@ -412,9 +439,9 @@ suite("request upload obeys the peer stream window and reaches END_STREAM", asyn
   const pair = await h2Pair(
     t,
     (stream) => {
-      const chunks = [];
+      const chunks: Uint8Array[] = [];
       let length = 0;
-      stream.on("data", (chunk) => {
+      stream.on("data", (chunk: Buffer) => {
         chunks.push(chunk);
         length += chunk.length;
       });
@@ -427,7 +454,7 @@ suite("request upload obeys the peer stream window and reaches END_STREAM", asyn
     },
     { initialWindowSize: 17 },
   );
-  const body = new ReadableStream({
+  const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(payload);
       controller.close();
@@ -445,15 +472,16 @@ suite("request upload obeys the peer stream window and reaches END_STREAM", asyn
 });
 
 suite("peer maximum-concurrency queues later streams until an active stream closes", async (t) => {
-  const arrivals = [];
-  let releaseFirst;
-  const firstCanEnd = new Promise((resolve) => {
+  const arrivals: string[] = [];
+  // Resolved from inside the server handler, so it says what it is before assignment.
+  let releaseFirst: () => void = () => {};
+  const firstCanEnd = new Promise<void>((resolve) => {
     releaseFirst = resolve;
   });
   const pair = await h2Pair(
     t,
     async (stream, headers) => {
-      arrivals.push(headers[":path"]);
+      arrivals.push(must(headers[":path"], "an HTTP/2 request carries :path"));
       stream.respond({ ":status": 200 });
       if (headers[":path"] === "/first") await firstCanEnd;
       stream.end(headers[":path"]);
@@ -481,9 +509,10 @@ suite("peer maximum-concurrency queues later streams until an active stream clos
 });
 
 suite("abort rejects with exact identity and sends CANCEL to the peer", async (t) => {
-  let serverStream;
-  let streamArrived;
-  const arrived = new Promise((resolve) => {
+  let serverStream: http2.ServerHttp2Stream | undefined;
+  // Resolved from inside the server handler, so it says what it is before it is assigned.
+  let streamArrived: () => void = () => {};
+  const arrived = new Promise<void>((resolve) => {
     streamArrived = resolve;
   });
   const pair = await h2Pair(t, (stream) => {
@@ -500,9 +529,10 @@ suite("abort rejects with exact identity and sends CANCEL to the peer", async (t
   });
   await arrived;
   controller.abort(reason);
-  await assert.rejects(request, (error) => error === reason);
-  if (!serverStream.closed) await once(serverStream, "close");
-  assert.equal(serverStream.rstCode, 8);
+  await assert.rejects(request, (error: unknown) => error === reason);
+  const cancelled = must(serverStream, "the server saw the stream before it was aborted");
+  if (!cancelled.closed) await once(cancelled, "close");
+  assert.equal(cancelled.rstCode, 8);
 });
 
 suite("PING is acknowledged with the exact opaque payload", async (t) => {
@@ -510,10 +540,10 @@ suite("PING is acknowledged with the exact opaque payload", async (t) => {
     stream.respond({ ":status": 204 });
     stream.end();
   });
-  const session = [...pair.sessions][0];
+  const session = must([...pair.sessions][0], "the server accepted a session");
   const opaque = Buffer.from("0102030405060708", "hex");
-  const reply = await new Promise((resolve, reject) => {
-    session.ping(opaque, (error, _duration, payload) => {
+  const reply = await new Promise<Buffer>((resolve, reject) => {
+    session.ping(opaque, (error: Error | null, _duration: number, payload: Buffer) => {
       if (error) reject(error);
       else resolve(payload);
     });
@@ -543,7 +573,7 @@ suite("GOAWAY retries streams above lastStreamId while an accepted stream comple
       payload: encodeHttp2GoAway(1, HTTP2_NO_ERROR),
     }),
   );
-  await assert.rejects(secondPromise, (error) => error.errorCode === HTTP2_REFUSED_STREAM);
+  await assert.rejects(secondPromise, (error: unknown) => wireError(error).errorCode === HTTP2_REFUSED_STREAM);
 
   const block = new HpackEncoder().encode([{ name: ":status", value: "200" }]);
   pair.bytes.feed(
@@ -571,9 +601,9 @@ suite("a non-SETTINGS first peer frame produces a protocol GOAWAY", async () => 
       payload: Uint8Array.from({ length: 8 }, (_, index) => index),
     }),
   );
-  await assert.rejects(connection.ready, (error) => error.errorCode === HTTP2_PROTOCOL_ERROR);
+  await assert.rejects(connection.ready, (error: unknown) => wireError(error).errorCode === HTTP2_PROTOCOL_ERROR);
   await connection.closed;
-  const last = bytes.outgoing.at(-1);
+  const last = must(bytes.outgoing.at(-1), "a GOAWAY frame was written");
   const goAway = decodeHttp2Frame(last);
   assert.equal(goAway.type, HTTP2_FRAME_GOAWAY);
   assert.equal(goAway.payload[7], HTTP2_PROTOCOL_ERROR);
@@ -620,7 +650,7 @@ suite(
     );
     await assert.rejects(
       firstPromise,
-      (error) => error.errorCode === HTTP2_PROTOCOL_ERROR && error.streamId === 1,
+      (error: unknown) => wireError(error).errorCode === HTTP2_PROTOCOL_ERROR && wireError(error).streamId === 1,
     );
     await tick();
     const reset = pair.bytes.outgoing
@@ -632,7 +662,10 @@ suite(
         }
       })
       .find((frame) => frame?.type === HTTP2_FRAME_RST_STREAM && frame.streamId === 1);
-    assert.equal(parseHttp2RstStream(reset), HTTP2_PROTOCOL_ERROR);
+    assert.equal(
+      parseHttp2RstStream(must(reset, "the peer sent an RST_STREAM for stream 1")),
+      HTTP2_PROTOCOL_ERROR,
+    );
 
     const survivorBlock = encoder.encode([
       { name: ":status", value: "200" },

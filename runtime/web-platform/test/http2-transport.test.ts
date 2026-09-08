@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
@@ -37,15 +31,28 @@ import {
 import {
   abortSignalSubscribe,
 } from "../src/core/abort-brand.ts";
+import { must, portOf } from "./harness.ts";
+import type {
+  TransportInformationalResponse,
+  TransportRequest,
+} from "../src/fetch/transport.ts";
+import type {
+  ByteConnection,
+  ConnectAddress,
+  Scheduler,
+  SocketConnector,
+} from "../src/provider/primitives.ts";
+import type { AbortSignal } from "../src/index.ts";
+import type { URLRecord } from "../src/provider/primitives.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<Buffer> {
   if (stream === null) return Buffer.alloc(0);
   const reader = stream.getReader();
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   let length = 0;
   try {
     while (true) {
@@ -60,7 +67,10 @@ async function consume(stream) {
   return Buffer.concat(chunks, length);
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(
+  url: URLRecord,
+  overrides: Partial<TransportRequest> = {},
+): TransportRequest {
   return {
     url,
     method: "GET",
@@ -72,9 +82,12 @@ function transportRequest(url, overrides = {}) {
   };
 }
 
-async function h2Server(t, handler) {
+async function h2Server(
+  t: TestContext,
+  handler: (stream: http2.ServerHttp2Stream, headers: http2.IncomingHttpHeaders) => void,
+): Promise<number> {
   const server = http2.createServer();
-  const sessions = new Set();
+  const sessions = new Set<http2.ServerHttp2Session>();
   server.on("session", (session) => {
     sessions.add(session);
     session.on("error", () => {});
@@ -86,18 +99,18 @@ async function h2Server(t, handler) {
   await once(server, "listening");
   t.after(async () => {
     for (const session of sessions) session.destroy();
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return server.address().port;
+  return portOf(server);
 }
 
 suite(
   "HTTP/2 Fetch transport multiplexes one origin and preserves request and response fields",
   async (t) => {
-    const seen = [];
+    const seen: { headers: http2.IncomingHttpHeaders; body: string }[] = [];
     const port = await h2Server(t, (stream, headers) => {
-      const chunks = [];
-      stream.on("data", (chunk) => chunks.push(chunk));
+      const chunks: Buffer[] = [];
+      stream.on("data", (chunk: Buffer) => chunks.push(chunk));
       stream.on("end", () => {
         seen.push({ headers, body: Buffer.concat(chunks).toString() });
         stream.respond({
@@ -111,9 +124,9 @@ suite(
     const primitives = createHostNodePrimitives();
     const hostConnector = new HostNodeSocketConnector();
     let connectCalls = 0;
-    const connectAddresses = [];
-    const connector = {
-      connect(address, signal) {
+    const connectAddresses: ConnectAddress[] = [];
+    const connector: SocketConnector = {
+      connect(address: ConnectAddress, signal: AbortSignal) {
         connectCalls++;
         connectAddresses.push(address);
         return hostConnector.connect(address, signal);
@@ -123,7 +136,7 @@ suite(
     t.after(() => transport.close());
     const firstURL = primitives.urls.parse(`http://127.0.0.1:${port}/first?x=1`);
     const secondURL = primitives.urls.parse(`http://127.0.0.1:${port}/second`);
-    const body = new ReadableStream({
+    const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(Uint8Array.of(116, 101, 115, 116));
         controller.close();
@@ -161,21 +174,21 @@ suite(
       ],
     );
     assert.equal(connectCalls, 1);
-    assert.deepEqual(connectAddresses[0].alpnProtocols, ["h2"]);
+    assert.deepEqual(must(connectAddresses[0], "the connector was asked to connect").alpnProtocols, ["h2"]);
   },
 );
 
 suite("shared Fetch redirects and decodes content over the HTTP/2 transport", async (t) => {
-  const paths = [];
+  const paths: string[] = [];
   const compressed = gzipSync("decoded over h2");
   const port = await h2Server(t, (stream, headers) => {
-    paths.push(headers[":path"]);
+    paths.push(must(headers[":path"], "an HTTP/2 request carries :path"));
     if (headers[":path"] === "/start") {
       stream.respond({ ":status": 302, location: "/final" });
       stream.end();
       return;
     }
-    assert.match(headers["accept-encoding"], /gzip/);
+    assert.match(must(headers["accept-encoding"], "the client offered an encoding"), /gzip/);
     stream.respond({
       ":status": 200,
       "content-encoding": "gzip",
@@ -199,26 +212,33 @@ suite("shared Fetch redirects and decodes content over the HTTP/2 transport", as
   assert.equal(transport.stats.connections, 1);
 });
 
-class ScriptedConnection {
-  closed = false;
-  incoming = [];
-  pending = null;
-  started = false;
-  encoder = new HpackEncoder();
+/** A read that arrived before any bytes did, and the size it asked for. */
+interface PendingRead {
+  readonly maxBytes: number;
+  readonly result: PromiseWithResolvers<Uint8Array | null>;
+}
 
-  constructor(refuse) {
+class ScriptedConnection implements ByteConnection {
+  closed = false;
+  readonly incoming: Uint8Array[] = [];
+  pending: PendingRead | null = null;
+  started = false;
+  readonly encoder = new HpackEncoder();
+  readonly refuse: boolean;
+
+  constructor(refuse: boolean) {
     this.refuse = refuse;
   }
 
-  read(maxBytes) {
+  read(maxBytes: number): Promise<Uint8Array | null> {
     if (this.incoming.length !== 0) return Promise.resolve(this.take(maxBytes));
     if (this.closed) return Promise.resolve(null);
-    const result = Promise.withResolvers();
+    const result = Promise.withResolvers<Uint8Array | null>();
     this.pending = { maxBytes, result };
     return result.promise;
   }
 
-  write(data) {
+  write(data: Uint8Array): Promise<number> {
     if (this.closed) return Promise.reject(new TypeError("closed"));
     if (!this.started) {
       this.started = true;
@@ -273,7 +293,7 @@ class ScriptedConnection {
     this.pending = null;
   }
 
-  feed(data) {
+  feed(data: Uint8Array): void {
     if (this.closed) return;
     this.incoming.push(data);
     const pending = this.pending;
@@ -282,8 +302,9 @@ class ScriptedConnection {
     pending.result.resolve(this.take(pending.maxBytes));
   }
 
-  take(maxBytes) {
-    const first = this.incoming[0];
+  take(maxBytes: number): Uint8Array {
+    // Only called when `incoming` is non-empty; the callers check first.
+    const first = must(this.incoming[0], "the connection has a buffered chunk");
     if (first.length <= maxBytes) {
       this.incoming.shift();
       return first;
@@ -299,9 +320,11 @@ suite(
   async () => {
     const connections = [new ScriptedConnection(true), new ScriptedConnection(false)];
     let calls = 0;
-    const connector = {
-      connect() {
-        return Promise.resolve(connections[calls++]);
+    const connector: SocketConnector = {
+      connect(): Promise<ByteConnection> {
+        // The script names one connection per attempt; running past it is a test bug rather
+        // than a case the transport has to handle.
+        return Promise.resolve(must(connections[calls++], "the script has another connection"));
       },
     };
     const primitives = createHostNodePrimitives();
@@ -318,9 +341,11 @@ suite(
 suite(
   "HTTP/2 Fetch transport applies a response-header deadline and exact timeout class",
   async (t) => {
-    let peerStream = null;
+    // Recorded into an array, because the only assignment is inside the server handler and
+    // control-flow analysis cannot see that it ran.
+    const peerStream: http2.ServerHttp2Stream[] = [];
     const port = await h2Server(t, (stream) => {
-      peerStream = stream;
+      peerStream.push(stream);
       stream.on("error", () => {});
     });
     const primitives = createHostNodePrimitives();
@@ -331,17 +356,20 @@ suite(
     const url = primitives.urls.parse(`http://127.0.0.1:${port}/timeout`);
     await assert.rejects(
       transport.dispatch(transportRequest(url)),
-      (error) => error?.name === "TimeoutError",
+      (error: unknown) => error instanceof Error && error.name === "TimeoutError",
     );
-    if (peerStream !== null && !peerStream.closed) await once(peerStream, "close");
-    assert.equal(peerStream.rstCode, 8);
+    const cancelled = must(peerStream[0], "the server saw the stream");
+    if (!cancelled.closed) await once(cancelled, "close");
+    assert.equal(cancelled.rstCode, 8);
   },
 );
 
 suite("HTTP/2 Fetch transport applies an idle deadline to each response-body read", async (t) => {
-  let peerStream = null;
+  // Recorded into an array, because the only assignment is inside the server handler and
+  // control-flow analysis cannot see that it ran.
+  const peerStream: http2.ServerHttp2Stream[] = [];
   const port = await h2Server(t, (stream) => {
-    peerStream = stream;
+    peerStream.push(stream);
     stream.on("error", () => {});
     stream.respond({ ":status": 200 });
   });
@@ -352,13 +380,14 @@ suite("HTTP/2 Fetch transport applies an idle deadline to each response-body rea
   t.after(() => transport.close());
   const url = primitives.urls.parse(`http://127.0.0.1:${port}/body-timeout`);
   const response = await transport.dispatch(transportRequest(url));
-  await assert.rejects(consume(response.body), (error) => error?.name === "TimeoutError");
-  if (peerStream !== null && !peerStream.closed) await once(peerStream, "close");
-  assert.equal(peerStream.rstCode, 8);
+  await assert.rejects(consume(response.body), (error: unknown) => error instanceof Error && error.name === "TimeoutError");
+  const cancelled = must(peerStream[0], "the server saw the stream");
+  if (!cancelled.closed) await once(cancelled, "close");
+  assert.equal(cancelled.rstCode, 8);
 });
 
 suite("HTTP/2 Fetch transport drains active streams and rejects new work", async (t) => {
-  const peer = Promise.withResolvers();
+  const peer = Promise.withResolvers<http2.ServerHttp2Stream>();
   const port = await h2Server(t, (stream) => {
     stream.on("error", () => {});
     stream.respond({ ":status": 200 });
@@ -417,12 +446,13 @@ suite("graceful drain waits for provider work from an open it cancelled", async 
   // socket stack and is exactly the case a drain must not walk away from.
   let observedAbort = false;
   let providerWorkOutstanding = true;
-  let releaseConnect;
-  const connectReleased = new Promise((resolve) => {
+  // Resolved from inside the promise executor, so it says what it is before assignment.
+  let releaseConnect: () => void = () => {};
+  const connectReleased = new Promise<void>((resolve) => {
     releaseConnect = resolve;
   });
-  const connector = {
-    connect(_address, signal) {
+  const connector: SocketConnector = {
+    connect(_address: ConnectAddress, signal: AbortSignal) {
       signal[abortSignalSubscribe](() => {
         observedAbort = true;
       });
@@ -480,7 +510,7 @@ suite("early hints arrive over HTTP/2 through the same contract", async (t) => {
   const transport = new Http2Transport(new HostNodeSocketConnector(), primitives.scheduler);
   t.after(() => transport.close());
 
-  const seen = [];
+  const seen: TransportInformationalResponse[] = [];
   const response = await transport.dispatch(
     transportRequest(primitives.urls.parse(`http://127.0.0.1:${port}/hinted`), {
       onInformational: (interim) => seen.push(interim),
@@ -496,11 +526,11 @@ suite("early hints arrive over HTTP/2 through the same contract", async (t) => {
     [103, 103],
   );
   assert.equal(
-    seen[0].headers.some(([name, value]) => name === "link" && value.includes("style.css")),
+    must(seen[0], "an informational response arrived").headers.some(([name, value]) => name === "link" && value.includes("style.css")),
     true,
   );
   assert.equal(
-    seen[1].headers.some(([name, value]) => name === "link" && value.includes("app.js")),
+    must(seen[1], "an informational response arrived").headers.some(([name, value]) => name === "link" && value.includes("app.js")),
     true,
   );
   // Pseudo-headers are not part of what a caller is handed.
@@ -519,12 +549,14 @@ suite("an observer that throws does not reset the HTTP/2 stream", async (t) => {
     stream.respond({ ":status": 200 });
     stream.end("fine");
   });
-  const reported = [];
+  const reported: unknown[] = [];
   const primitives = createHostNodePrimitives();
-  const scheduler = {
-    enqueue: (task) => primitives.scheduler.enqueue(task),
-    delay: (milliseconds, task) => primitives.scheduler.delay(milliseconds, task),
-    reportError: (error) => reported.push(error),
+  const scheduler: Scheduler = {
+    enqueue: (task: () => void) => primitives.scheduler.enqueue(task),
+    delay: (milliseconds: number, task: () => void) => primitives.scheduler.delay(milliseconds, task),
+    reportError: (error: unknown) => {
+      reported.push(error);
+    },
   };
   const transport = new Http2Transport(new HostNodeSocketConnector(), scheduler);
   t.after(() => transport.close());
@@ -579,7 +611,7 @@ suite("a chunk of HTTP/2 trailers is delivered after the body", async (t) => {
   );
   assert.notEqual(response.trailers, undefined, "HTTP/2 must expose trailers too");
   assert.equal((await consume(response.body)).toString(), "payload");
-  const trailers = await response.trailers;
+  const trailers = await must(response.trailers, "an HTTP/2 response carries trailers");
   assert.deepEqual(
     trailers.filter(([name]) => name.startsWith("x-")),
     [
@@ -620,7 +652,7 @@ suite("cancelling an HTTP/2 body does not leak an unhandled trailer rejection", 
   // Nothing here awaits `response.trailers`. Cancelling rejects it, and an unhandled
   // rejection is a test-runner failure -- which is the only way a missing guard on the
   // derived promise becomes visible, since no assertion can see a promise nobody holds.
-  await response.body.cancel(new Error("caller lost interest"));
+  await must(response.body, "the response carries a body").cancel(new Error("caller lost interest"));
   for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
   assert.ok(true, "reaching here without an unhandled rejection is the assertion");
 });

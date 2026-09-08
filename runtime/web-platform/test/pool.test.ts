@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -16,11 +10,17 @@ import {
   TransportError,
 } from "../src/index.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { must } from "./harness.ts";
+import type { OriginDispatcher } from "../src/dispatch/agent.ts";
+import type {
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
 
 const primitives = createHostNodePrimitives();
 const publicOrigin = primitives.urls.parse("https://public.test");
 
-function request(path = "/resource?value=1") {
+function request(path = "/resource?value=1"): TransportRequest {
   return {
     url: primitives.urls.parse("https://public.test" + path),
     method: "GET",
@@ -31,18 +31,21 @@ function request(path = "/resource?value=1") {
   };
 }
 
-class FakeDispatcher {
-  constructor(name) {
+class FakeDispatcher implements OriginDispatcher {
+  readonly name: string;
+  idle = true;
+  readonly requests: TransportRequest[] = [];
+  closeCalls = 0;
+  readonly destroyReasons: unknown[] = [];
+  /** Set by a test that wants the next dispatch to fail with this value. */
+  failNext: unknown = null;
+  stats = { connections: 1, pending: 0, running: 0 };
+
+  constructor(name: string) {
     this.name = name;
-    this.idle = true;
-    this.requests = [];
-    this.closeCalls = 0;
-    this.destroyReasons = [];
-    this.failNext = null;
-    this.stats = { connections: 1, pending: 0, running: 0 };
   }
 
-  dispatch(value) {
+  dispatch(value: TransportRequest): Promise<TransportResponse> {
     this.requests.push(value);
     if (this.failNext !== null) {
       const failure = this.failNext;
@@ -52,18 +55,18 @@ class FakeDispatcher {
     return Promise.resolve({ status: 200, statusText: this.name, headers: [], body: null });
   }
 
-  close() {
+  close(): Promise<void> {
     this.closeCalls++;
     return Promise.resolve();
   }
 
-  destroy(reason) {
+  destroy(reason?: unknown): Promise<void> {
     this.destroyReasons.push(reason);
     return Promise.resolve();
   }
 }
 
-function upstream(origin, dispatcher, weight) {
+function upstream(origin: string, dispatcher: OriginDispatcher, weight?: number) {
   return { url: primitives.urls.parse(origin), dispatcher, weight };
 }
 
@@ -73,7 +76,7 @@ test("RoundRobinPool rotates fixed members and aggregates live stats", async () 
   two.stats = { connections: 2, pending: 3, running: 4 };
   two.idle = false;
   const pool = new RoundRobinPool(publicOrigin, [one, two]);
-  const answers = [];
+  const answers: string[] = [];
   for (let index = 0; index < 5; index++) {
     answers.push((await pool.dispatch(request())).statusText);
   }
@@ -88,8 +91,12 @@ test("RoundRobinPool rotates fixed members and aggregates live stats", async () 
   });
   assert.equal(pool.idle, false);
   assert.throws(() => new Pool(publicOrigin, []), RangeError);
-  const wrongOrigin = request();
-  wrongOrigin.url = primitives.urls.parse("https://other.test/path");
+  // Built with the other origin rather than mutated into it: `TransportRequest.url` is
+  // readonly, and the point is only that the pool refuses a request it does not own.
+  const wrongOrigin: TransportRequest = {
+    ...request(),
+    url: primitives.urls.parse("https://other.test/path"),
+  };
   await assert.rejects(pool.dispatch(wrongOrigin), TypeError);
 });
 
@@ -122,16 +129,16 @@ test("BalancedPool uses smooth configured weights and rewrites only the URL orig
     upstream("http://two.internal/ignored", two, 1),
   ]);
   const original = request("/path?q=visible#fragment");
-  const answers = [];
+  const answers: string[] = [];
   for (let index = 0; index < 6; index++) {
     answers.push((await pool.dispatch(original)).statusText);
   }
   assert.deepEqual(answers, ["one", "two", "one", "one", "two", "one"]);
   assert.equal(original.url.origin, "https://public.test");
-  assert.equal(one.requests[0].url.href, "https://one.internal/path?q=visible#fragment");
-  assert.equal(two.requests[0].url.href, "http://two.internal/path?q=visible#fragment");
-  assert.equal(one.requests[0].body, original.body);
-  assert.equal(one.requests[0].signal, original.signal);
+  assert.equal(must(one.requests[0], "that dispatcher saw the request").url.href, "https://one.internal/path?q=visible#fragment");
+  assert.equal(must(two.requests[0], "that dispatcher saw the request").url.href, "http://two.internal/path?q=visible#fragment");
+  assert.equal(must(one.requests[0], "that dispatcher saw the request").body, original.body);
+  assert.equal(must(one.requests[0], "that dispatcher saw the request").signal, original.signal);
   assert.deepEqual(pool.upstreams, ["https://one.internal", "http://two.internal"]);
 });
 
@@ -144,15 +151,15 @@ test("only typed transport failures reduce upstream health and success restores 
   );
   const networkFailure = new TransportError("ECONNRESET", "reset");
   one.failNext = networkFailure;
-  await assert.rejects(pool.dispatch(request()), (error) => error === networkFailure);
-  assert.equal(pool.stats.entries[0].healthWeight, 1);
-  assert.equal(pool.stats.entries[0].failures, 1);
+  await assert.rejects(pool.dispatch(request()), (error: unknown) => error === networkFailure);
+  assert.equal(must(pool.stats.entries[0], "the pool tracks that upstream").healthWeight, 1);
+  assert.equal(must(pool.stats.entries[0], "the pool tracks that upstream").failures, 1);
   assert.equal((await pool.dispatch(request())).statusText, "two");
 
   const policyFailure = new TypeError("bad request");
   two.failNext = policyFailure;
-  await assert.rejects(pool.dispatch(request()), (error) => error === policyFailure);
-  assert.equal(pool.stats.entries[1].healthWeight, 100);
+  await assert.rejects(pool.dispatch(request()), (error: unknown) => error === policyFailure);
+  assert.equal(must(pool.stats.entries[1], "the pool tracks that upstream").healthWeight, 100);
 });
 
 test("BalancedPool mutation is bounded, duplicate-safe, and closes removals", async () => {
@@ -164,7 +171,7 @@ test("BalancedPool mutation is bounded, duplicate-safe, and closes removals", as
   assert.equal(duplicate.closeCalls, 0);
   assert.throws(
     () => pool.addUpstream(upstream("https://two.test", new FakeDispatcher("two"))),
-    (error) => error instanceof BalancedPoolLimitError && error.maximumUpstreams === 1,
+    (error: unknown) => error instanceof BalancedPoolLimitError && error.maximumUpstreams === 1,
   );
   assert.equal(await pool.removeUpstream("https://missing.test"), false);
   assert.equal(await pool.removeUpstream("https://one.test"), true);
@@ -177,7 +184,7 @@ test("a failed removal remains selectable and owned", async () => {
   const failure = new Error("close failed");
   one.close = () => Promise.reject(failure);
   const pool = new BalancedPool([upstream("https://one.test", one)]);
-  await assert.rejects(pool.removeUpstream("https://one.test"), (error) => error === failure);
+  await assert.rejects(pool.removeUpstream("https://one.test"), (error: unknown) => error === failure);
   assert.deepEqual(pool.upstreams, ["https://one.test"]);
   assert.equal((await pool.dispatch(request())).statusText, "one");
 });
@@ -187,9 +194,9 @@ test("late provider failures use the same typed health rule", () => {
   const pool = new BalancedPool([upstream("https://one.test", one)], { errorPenalty: 25 });
   assert.equal(pool.reportFailure("https://one.test", new TypeError("policy")), false);
   assert.equal(pool.reportFailure("https://one.test", new TransportError("EPIPE", "late")), true);
-  assert.equal(pool.stats.entries[0].healthWeight, 75);
+  assert.equal(must(pool.stats.entries[0], "the pool tracks that upstream").healthWeight, 75);
   assert.equal(pool.reportSuccess("https://one.test"), true);
-  assert.equal(pool.stats.entries[0].healthWeight, 100);
+  assert.equal(must(pool.stats.entries[0], "the pool tracks that upstream").healthWeight, 100);
   assert.equal(
     pool.reportFailure("https://missing.test", new TransportError("EPIPE", "late")),
     false,
@@ -198,7 +205,7 @@ test("late provider failures use the same typed health rule", () => {
 
 test("BalancedPool rejects missing upstreams and validates URL/weight bounds", async () => {
   const empty = new BalancedPool();
-  await assert.rejects(empty.dispatch(request()), (error) => {
+  await assert.rejects(empty.dispatch(request()), (error: unknown) => {
     return (
       error instanceof BalancedPoolMissingUpstreamError &&
       error.code === "UND_ERR_BPL_MISSING_UPSTREAM"

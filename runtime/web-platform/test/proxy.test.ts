@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { connect as tcpConnect, createServer } from "node:net";
@@ -31,51 +25,72 @@ import {
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { tlsFixture } from "./tls-fixture.ts";
 import type { WebPlatformRuntime } from "../src/provider.ts";
+import { must, portOf } from "./harness.ts";
+import type { ProxyAuthenticationContext } from "../src/dispatch/proxy.ts";
+import type {
+  ByteConnection,
+  ConnectAddress,
+  Scheduler,
+  SocketConnector,
+} from "../src/provider/primitives.ts";
+import type { AbortSignal } from "../src/index.ts";
+import type {
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type { Socket } from "node:net";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const scheduler = {
-  enqueue(task) {
+const scheduler: Scheduler = {
+  enqueue(task: () => void) {
     queueMicrotask(task);
   },
-  delay(_milliseconds, _task) {
+  delay(_milliseconds: number, _task: () => void) {
     return { cancel() {} };
   },
-  reportError(error) {
+  reportError(error: unknown): never {
     throw error;
   },
 };
 
-class ScriptedConnection {
-  constructor(chunks, maximumWrite = Infinity) {
+class ScriptedConnection implements ByteConnection {
+  readonly chunks: Uint8Array[];
+  readonly maximumWrite: number;
+  readonly writes: Uint8Array[] = [];
+  closed = false;
+
+  constructor(
+    chunks: readonly (string | readonly number[] | Uint8Array)[],
+    maximumWrite = Infinity,
+  ) {
     this.chunks = chunks.map((chunk) =>
       typeof chunk === "string" ? encoder.encode(chunk) : new Uint8Array(chunk),
     );
     this.maximumWrite = maximumWrite;
-    this.writes = [];
-    this.closed = false;
   }
 
-  async read(maximum) {
+  async read(maximum: number): Promise<Uint8Array | null> {
     if (this.chunks.length === 0) return null;
-    const chunk = this.chunks[0];
+    // Non-empty by the check above.
+    const chunk = must(this.chunks[0], "the script has another chunk");
     const result = chunk.subarray(0, maximum);
     if (result.length === chunk.length) this.chunks.shift();
     else this.chunks[0] = chunk.subarray(result.length);
     return result;
   }
 
-  async write(data) {
+  async write(data: Uint8Array): Promise<number> {
     const length = Math.min(data.length, this.maximumWrite);
     this.writes.push(data.slice(0, length));
     return length;
   }
 
-  close() {
+  close(): void {
     this.closed = true;
   }
 
-  writtenBytes() {
+  writtenBytes(): Uint8Array {
     const length = this.writes.reduce((total, bytes) => total + bytes.length, 0);
     const result = new Uint8Array(length);
     let offset = 0;
@@ -86,18 +101,20 @@ class ScriptedConnection {
     return result;
   }
 
-  writtenText() {
+  writtenText(): string {
     return decoder.decode(this.writtenBytes());
   }
 }
 
-class QueueConnector {
-  constructor(connections) {
+class QueueConnector implements SocketConnector {
+  readonly connections: ByteConnection[];
+  readonly addresses: ConnectAddress[] = [];
+
+  constructor(connections: ByteConnection[]) {
     this.connections = connections;
-    this.addresses = [];
   }
 
-  connect(address, signal) {
+  connect(address: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
     signal.throwIfAborted();
     this.addresses.push(address);
     const connection = this.connections.shift();
@@ -107,28 +124,31 @@ class QueueConnector {
 }
 
 class RecordingTls {
-  constructor() {
-    this.calls = [];
-  }
+  readonly calls: { connection: ByteConnection; target: ConnectAddress }[] = [];
 
-  upgrade(connection, target, signal) {
+  upgrade(connection: ByteConnection, target: ConnectAddress, signal: AbortSignal) {
     signal.throwIfAborted();
     this.calls.push({ connection, target });
     return Promise.resolve(connection);
   }
 }
 
-class ManualScheduler {
-  constructor() {
-    this.record = null;
-  }
+/** The single delay this scheduler holds, and whether it was cancelled before firing. */
+interface HeldDelay {
+  readonly milliseconds: number;
+  readonly task: () => void;
+  canceled: boolean;
+}
 
-  enqueue(task) {
+class ManualScheduler implements Scheduler {
+  record: HeldDelay | null = null;
+
+  enqueue(task: () => void): void {
     queueMicrotask(task);
   }
 
-  delay(milliseconds, task) {
-    const record = { milliseconds, task, canceled: false };
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
+    const record: HeldDelay = { milliseconds, task, canceled: false };
     this.record = record;
     return {
       cancel() {
@@ -137,22 +157,22 @@ class ManualScheduler {
     };
   }
 
-  reportError(error) {
+  reportError(error: unknown): never {
     throw error;
   }
 
-  expire() {
-    assert.notEqual(this.record, null);
-    assert.equal(this.record.canceled, false);
-    this.record.task();
+  expire(): void {
+    const record = must(this.record, "a delay was armed");
+    assert.equal(record.canceled, false);
+    record.task();
   }
 }
 
-function target(hostname = "origin.example", secure = true) {
+function target(hostname = "origin.example", secure = true): ConnectAddress {
   return { hostname, port: secure ? 443 : 80, secure, connectTimeoutMs: 1234 };
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(url: string, overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -164,12 +184,12 @@ function transportRequest(url, overrides = {}) {
   };
 }
 
-function replayableBytes(text) {
+function replayableBytes(text: string) {
   const bytes = encoder.encode(text);
   return {
     length: bytes.length,
     open() {
-      return new ReadableStream({
+      return new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(bytes.slice());
           controller.close();
@@ -179,10 +199,10 @@ function replayableBytes(text) {
   };
 }
 
-async function responseText(response) {
+async function responseText(response: TransportResponse): Promise<string> {
   if (response.body === null) return "";
   const reader = response.body.getReader();
-  const parts = [];
+  const parts: Uint8Array[] = [];
   let length = 0;
   while (true) {
     const result = await reader.read();
@@ -222,7 +242,7 @@ test("HTTP CONNECT preserves target identity and percent-decoded Basic credentia
     },
   ]);
   assert.equal(tls.calls.length, 1);
-  assert.equal(tls.calls[0].target, address);
+  assert.equal(must(tls.calls[0], "that call was recorded").target, address);
   assert.equal(
     connection.writtenText(),
     "CONNECT origin.example:443 HTTP/1.1\r\n" +
@@ -244,7 +264,7 @@ test("HTTP CONNECT brackets IPv6 and does not TLS-upgrade a plaintext target", a
     uri: "https://proxy.example",
   });
   await connector.connect(target("2001:db8::1", false), new AbortController().signal);
-  assert.equal(direct.addresses[0].secure, true);
+  assert.equal(must(direct.addresses[0], "the connector was asked to connect").secure, true);
   assert.equal(
     connection.writtenText(),
     "CONNECT [2001:db8::1]:80 HTTP/1.1\r\nHost: [2001:db8::1]:80\r\n\r\n",
@@ -258,14 +278,14 @@ test("HTTP CONNECT retries a 407 on a fresh connection with typed authentication
   ]);
   const second = new ScriptedConnection(["HTTP/1.1 200 ok\r\n\r\n"]);
   const direct = new QueueConnector([first, second]);
-  const calls = [];
+  const calls: ProxyAuthenticationContext[] = [];
   const connector = new HttpConnectProxyConnector({
     connector: direct,
     tls: new RecordingTls(),
     scheduler,
     urls: hostNodeURLs,
     uri: "http://proxy.example",
-    authenticate(context) {
+    authenticate(context: ProxyAuthenticationContext) {
       calls.push(context);
       return Promise.resolve("Bearer fresh-token");
     },
@@ -276,8 +296,8 @@ test("HTTP CONNECT retries a 407 on a fresh connection with typed authentication
   );
   assert.equal(first.closed, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].attempt, 1);
-  assert.deepEqual(calls[0].headers, [["proxy-authenticate", "Bearer realm=test"]]);
+  assert.equal(must(calls[0], "that call was recorded").attempt, 1);
+  assert.deepEqual(must(calls[0], "that call was recorded").headers, [["proxy-authenticate", "Bearer realm=test"]]);
   assert.match(second.writtenText(), /proxy-authorization: Bearer fresh-token\r\n/);
 });
 
@@ -324,11 +344,14 @@ test("proxy deadlines cover the whole handshake and preserve TimeoutError", asyn
     uri: "http://proxy.example",
   });
   const connecting = connector.connect(target(), new AbortController().signal);
-  assert.equal(clock.record.milliseconds, 1234);
+  assert.equal(must(clock.record, "a delay was armed").milliseconds, 1234);
   clock.expire();
   await assert.rejects(
     connecting,
-    (error) => error?.name === "TimeoutError" && error.message === "Proxy connection timed out",
+    (error: unknown) =>
+      error instanceof Error &&
+      error.name === "TimeoutError" &&
+      error.message === "Proxy connection timed out",
   );
   assert.equal(connection.closed, true);
 });
@@ -346,7 +369,7 @@ test("SOCKS5 delegates target DNS and applies end-to-end TLS after the tunnel", 
   });
   const address = target("does-not-resolve.invalid");
   assert.equal(await connector.connect(address, new AbortController().signal), connection);
-  assert.equal(tls.calls[0].target, address);
+  assert.equal(must(tls.calls[0], "that call was recorded").target, address);
   const bytes = connection.writtenBytes();
   assert.deepEqual(Array.from(bytes.subarray(0, 3)), [5, 1, 0]);
   const request = bytes.subarray(3);
@@ -371,12 +394,12 @@ test("SOCKS5 performs RFC 1929 authentication and encodes IPv4 targets", async (
     password: "pass",
   });
   await connector.connect(target("192.0.2.9", false), new AbortController().signal);
-  assert.deepEqual(Array.from(connection.writes[0]), [5, 2, 0, 2]);
+  assert.deepEqual(Array.from(must(connection.writes[0], "that write was recorded")), [5, 2, 0, 2]);
   assert.deepEqual(
-    Array.from(connection.writes[1]),
+    Array.from(must(connection.writes[1], "that write was recorded")),
     [1, 4, 117, 115, 101, 114, 4, 112, 97, 115, 115],
   );
-  assert.deepEqual(Array.from(connection.writes[2]), [5, 1, 0, 1, 192, 0, 2, 9, 0, 80]);
+  assert.deepEqual(Array.from(must(connection.writes[2], "that write was recorded")), [5, 1, 0, 1, 192, 0, 2, 9, 0, 80]);
 });
 
 test("SOCKS5 encodes compressed IPv6 and exposes the proxy reply code", async () => {
@@ -393,10 +416,10 @@ test("SOCKS5 encodes compressed IPv6 and exposes the proxy reply code", async ()
   });
   await assert.rejects(
     connector.connect(target("2001:db8::1", false), new AbortController().signal),
-    (error) => error instanceof Socks5ProxyError && error.reply === 5,
+    (error: unknown) => error instanceof Socks5ProxyError && error.reply === 5,
   );
   assert.deepEqual(
-    Array.from(rejected.writes[1]),
+    Array.from(must(rejected.writes[1], "that write was recorded")),
     [5, 1, 0, 4, 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 80],
   );
   assert.equal(rejected.closed, true);
@@ -586,8 +609,8 @@ test("ProxyAgent tunnels HTTPS and verifies TLS against the logical target", asy
   const response = await agent.dispatch(transportRequest("https://target.example/path?q=1"));
   assert.equal(response.status, 204);
   assert.equal(tls.calls.length, 1);
-  assert.equal(tls.calls[0].target.hostname, "target.example");
-  assert.deepEqual(tls.calls[0].target.alpnProtocols, ["http/1.1"]);
+  assert.equal(must(tls.calls[0], "that call was recorded").target.hostname, "target.example");
+  assert.deepEqual(must(tls.calls[0], "that call was recorded").target.alpnProtocols, ["http/1.1"]);
   assert.equal(
     connection.writtenText(),
     "CONNECT target.example:443 HTTP/1.1\r\nHost: target.example:443\r\n\r\n" +
@@ -606,14 +629,14 @@ test("ProxyAgent retries a forward 407 with typed authentication and a fresh req
     "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
   ]);
   const direct = new QueueConnector([first, second]);
-  const calls = [];
+  const calls: ProxyAuthenticationContext[] = [];
   const agent = new ProxyAgent({
     connector: direct,
     tls: new RecordingTls(),
     scheduler,
     urls: hostNodeURLs,
     uri: "http://proxy.example",
-    authenticate(context) {
+    authenticate(context: ProxyAuthenticationContext) {
       calls.push(context);
       return "Bearer fresh";
     },
@@ -622,7 +645,7 @@ test("ProxyAgent retries a forward 407 with typed authentication and a fresh req
   assert.equal(await responseText(response), "ok");
   assert.equal(first.closed, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].target.hostname, "origin.example");
+  assert.equal(must(calls[0], "that call was recorded").target.hostname, "origin.example");
   assert.match(second.writtenText(), /proxy-authorization: Bearer fresh\r\n/);
   agent.close();
 });
@@ -752,7 +775,7 @@ test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel
   });
   const response = await agent.dispatch(transportRequest("http://not-resolved-locally.example/a"));
   assert.equal(await responseText(response), "ok");
-  assert.equal(direct.addresses[0].hostname, "proxy.example");
+  assert.equal(must(direct.addresses[0], "the connector was asked to connect").hostname, "proxy.example");
   const written = connection.writtenBytes();
   const httpStart = written.indexOf(71);
   assert.equal(
@@ -765,14 +788,18 @@ test("Socks5ProxyAgent uses proxy-side DNS and origin-form HTTP after the tunnel
 // A SOCKS5 tunnel is bound to the target named in its CONNECT, so a tunnel opened
 // for one origin can never carry a request for another. The proxy endpoint being the
 // same is not a reason to share one.
-function socksConnectTarget(connection) {
+function socksConnectTarget(connection: ScriptedConnection) {
   const written = connection.writtenBytes();
   assert.deepEqual(Array.from(written.subarray(0, 3)), [5, 1, 0], "SOCKS5 greeting");
   const request = written.subarray(3);
   assert.deepEqual(Array.from(request.subarray(0, 4)), [5, 1, 0, 3], "SOCKS5 CONNECT by name");
-  const length = request[4];
+  // The CONNECT was just asserted to be by-name, so the length byte and the two port bytes
+  // after the host are all present; reading them out says so once.
+  const length = must(request[4], "a by-name CONNECT carries a host length");
   const host = decoder.decode(request.subarray(5, 5 + length));
-  const port = (request[5 + length] << 8) | request[6 + length];
+  const high = must(request[5 + length], "a CONNECT carries a port");
+  const low = must(request[6 + length], "a CONNECT carries a port");
+  const port = (high << 8) | low;
   return host + ":" + port;
 }
 
@@ -819,8 +846,8 @@ test("one SOCKS proxy endpoint never lets two target origins share a tunnel", as
 
   // Both TCP connections go to the proxy, so the proxy endpoint alone cannot be what
   // distinguishes them; the CONNECT target is.
-  assert.equal(direct.addresses[0].hostname, "proxy.example");
-  assert.equal(direct.addresses[1].hostname, "proxy.example");
+  assert.equal(must(direct.addresses[0], "the connector was asked to connect").hostname, "proxy.example");
+  assert.equal(must(direct.addresses[1], "the connector was asked to connect").hostname, "proxy.example");
   assert.equal(socksConnectTarget(alpha), "alpha.example:80");
   assert.equal(socksConnectTarget(beta), "beta.example:80");
 
@@ -869,8 +896,8 @@ test("EnvHttpProxyAgent snapshots proxy URLs and bypasses NO_PROXY destinations"
     await responseText(await agent.dispatch(transportRequest("http://origin.example/b"))),
     "proxy",
   );
-  assert.equal(connector.addresses[0].hostname, "bypass.example");
-  assert.equal(connector.addresses[1].hostname, "proxy.example");
+  assert.equal(must(connector.addresses[0], "the connector was asked to connect").hostname, "bypass.example");
+  assert.equal(must(connector.addresses[1], "the connector was asked to connect").hostname, "proxy.example");
   assert.match(proxyResponse.writtenText(), /^GET http:\/\/origin\.example\/b HTTP\/1\.1\r\n/);
   agent.close();
   await assert.rejects(agent.dispatch(transportRequest("http://origin.example/")), /closed/);
@@ -897,9 +924,9 @@ test("EnvironmentProxyConnector tunnels protocol engines and preserves direct by
   assert.equal(await connector.connect(bypass, signal), directConnection);
   assert.equal(await connector.connect(proxied, signal), proxyConnection);
   assert.equal(direct.addresses[0], bypass);
-  assert.equal(direct.addresses[1].hostname, "proxy.example");
-  assert.equal(tls.calls[0].target, proxied);
-  assert.deepEqual(tls.calls[0].target.alpnProtocols, ["h2"]);
+  assert.equal(must(direct.addresses[1], "the connector was asked to connect").hostname, "proxy.example");
+  assert.equal(must(tls.calls[0], "that call was recorded").target, proxied);
+  assert.deepEqual(must(tls.calls[0], "that call was recorded").target.alpnProtocols, ["h2"]);
   assert.equal(
     proxyConnection.writtenText(),
     "CONNECT h2.example:443 HTTP/1.1\r\nHost: h2.example:443\r\n\r\n",
@@ -908,7 +935,7 @@ test("EnvironmentProxyConnector tunnels protocol engines and preserves direct by
 
 test("WebPlatformRuntime owns one proxy policy used by its Fetch client", async (t) => {
   let request = "";
-  const sockets = new Set();
+  const sockets = new Set<Socket>();
   const proxy = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -922,15 +949,13 @@ test("WebPlatformRuntime owns one proxy policy used by its Fetch client", async 
   await new Promise((resolve) => proxy.once("listening", resolve));
   t.after(async () => {
     for (const socket of sockets) socket.destroy();
-    await new Promise((resolve) => proxy.close(resolve));
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
   });
-  const address = proxy.address();
-  assert.equal(typeof address, "object");
-  assert.notEqual(address, null);
+  const addressPort = portOf(proxy);
   const runtime = createHostNodeWebPlatform({
     proxy: {
       tls: new HostNodeTlsUpgrader(),
-      environment: { HTTP_PROXY: `http://127.0.0.1:${address.port}` },
+      environment: { HTTP_PROXY: `http://127.0.0.1:${addressPort}` },
     },
   });
   t.after(() => runtime.close());
@@ -958,45 +983,41 @@ test("real CONNECT tunnel upgrades TLS against the target identity, not the prox
     socket.once("data", () => socket.end("HTTP/1.1 204 ok\r\nConnection: close\r\n\r\n"));
   });
   origin.listen(0, "127.0.0.1");
-  await new Promise((resolve) => origin.once("listening", resolve));
-  const originAddress = origin.address();
-  assert.equal(typeof originAddress, "object");
-  assert.notEqual(originAddress, null);
+  await new Promise<void>((resolve) => origin.once("listening", () => resolve()));
+  const originAddressPort = portOf(origin);
 
   const proxy = createServer((downstream) => {
     let request = "";
-    const readHead = (chunk) => {
+    const readHead = (chunk: Buffer): void => {
       request += decoder.decode(chunk);
       if (!request.includes("\r\n\r\n")) return;
       downstream.off("data", readHead);
-      assert.match(request, new RegExp(`^CONNECT target\\.test:${originAddress.port} HTTP/1\\.1`));
-      const upstream = tcpConnect({ host: "127.0.0.1", port: originAddress.port });
+      assert.match(request, new RegExp(`^CONNECT target\\.test:${originAddressPort} HTTP/1\\.1`));
+      const upstream = tcpConnect({ host: "127.0.0.1", port: originAddressPort });
       upstream.once("connect", () => {
         downstream.write("HTTP/1.1 200 Connection Established\r\n\r\n");
         downstream.pipe(upstream);
         upstream.pipe(downstream);
       });
-      upstream.once("error", (error) => downstream.destroy(error));
+      upstream.once("error", (error: Error) => downstream.destroy(error));
     };
     downstream.on("data", readHead);
   });
   proxy.listen(0, "127.0.0.1");
   await new Promise((resolve) => proxy.once("listening", resolve));
-  const proxyAddress = proxy.address();
-  assert.equal(typeof proxyAddress, "object");
-  assert.notEqual(proxyAddress, null);
+  const proxyAddressPort = portOf(proxy);
 
   const connector = new HttpConnectProxyConnector({
     connector: new HostNodeSocketConnector(),
     tls: new HostNodeTlsUpgrader({ ca: fixture.cert.toString() }),
     scheduler,
     urls: hostNodeURLs,
-    uri: `http://127.0.0.1:${proxyAddress.port}`,
+    uri: `http://127.0.0.1:${proxyAddressPort}`,
   });
   const connection = await connector.connect(
     {
       hostname: "target.test",
-      port: originAddress.port,
+      port: originAddressPort,
       secure: true,
       connectTimeoutMs: 2000,
     },
@@ -1005,6 +1026,6 @@ test("real CONNECT tunnel upgrades TLS against the target identity, not the prox
   await connection.write(encoder.encode("GET / HTTP/1.1\r\nHost: target.test\r\n\r\n"));
   assert.match(decoder.decode(await connection.read(65536)), /^HTTP\/1\.1 204/);
   connection.close();
-  await new Promise((resolve) => proxy.close(resolve));
+  await new Promise<void>((resolve) => proxy.close(() => resolve()));
   await new Promise((resolve) => origin.close(resolve));
 });

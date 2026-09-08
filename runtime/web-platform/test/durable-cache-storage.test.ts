@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The Cache API over provider-owned durable storage.
 //
 // The plan asks for "a separate Cache/CacheStorage API with provider-owned durable
@@ -28,6 +22,11 @@ import { durableStoreFromFlat } from "../src/provider.ts";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
 import { HostNodeDurableStore } from "../host/node-runtime.ts";
 import { FakeFlat } from "./fake-flat.ts";
+import type { TestContext } from "node:test";
+import { must } from "./harness.ts";
+import type { DurableByteStore } from "../src/provider.ts";
+import type { CacheStorageEntry } from "../src/cache/cache-storage.ts";
+import type { AbortSignal } from "../src/index.ts";
 
 const encoder = new TextEncoder();
 const none = () => new AbortController().signal;
@@ -35,7 +34,7 @@ const none = () => new AbortController().signal;
 const BACKENDS = [
   {
     name: "host filesystem",
-    make(t) {
+    make(t: TestContext): DurableByteStore {
       const root = mkdtempSync(join(tmpdir(), "nts-cachestorage-"));
       t.after(() => rmSync(root, { recursive: true, force: true }));
       return new HostNodeDurableStore({ root });
@@ -50,7 +49,10 @@ const BACKENDS = [
 ];
 
 /** Every field set to something a lazy codec would lose. */
-function requestRecord(url, overrides = {}) {
+function requestRecord(
+  url: string,
+  overrides: Partial<CacheStorageEntry["request"]> = {},
+): CacheStorageEntry["request"] {
   return {
     url,
     urlWithoutFragment: url,
@@ -76,7 +78,10 @@ function requestRecord(url, overrides = {}) {
   };
 }
 
-function responseRecord(body, overrides = {}) {
+function responseRecord(
+  body: Blob | null,
+  overrides: Partial<CacheStorageEntry["response"]> = {},
+): CacheStorageEntry["response"] {
   return {
     status: 203,
     statusText: "Non-Authoritative Information",
@@ -89,16 +94,22 @@ function responseRecord(body, overrides = {}) {
   };
 }
 
-function entry(url, body, overrides = {}) {
+function entry(
+  url: string,
+  body: Blob | null,
+  overrides: Partial<CacheStorageEntry["response"]> = {},
+): CacheStorageEntry {
   return { request: requestRecord(url), response: responseRecord(body, overrides) };
 }
 
-async function blobText(blob) {
+async function blobText(blob: Blob | null): Promise<string | null> {
   return blob === null ? null : await blob.text();
 }
 
 for (const backend of BACKENDS) {
-  const only = (name, fn) => test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+  const only = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+    test(`${name} [${backend.name}]`, { timeout: 8000 }, fn);
+  };
 
   only("a cache list round-trips every field of both records", async (t) => {
     const bytes = backend.make(t);
@@ -110,7 +121,7 @@ for (const backend of BACKENDS) {
     const snapshot = await store.read(handle);
     assert.equal(snapshot.revision, 1);
     assert.equal(snapshot.entries.length, 1);
-    const [read] = snapshot.entries;
+    const read = must(snapshot.entries[0], "the snapshot holds the entry that was written");
     assert.deepEqual(read.request, original.request);
     assert.equal(read.response.status, 203);
     assert.equal(read.response.statusText, "Non-Authoritative Information");
@@ -134,8 +145,8 @@ for (const backend of BACKENDS) {
     );
     const snapshot = await store.read(handle);
     assert.equal(snapshot.revision, 1);
-    assert.equal(snapshot.entries[0].request.url, "https://cache.test/a");
-    assert.equal(await blobText(snapshot.entries[0].response.body), "first");
+    assert.equal(must(snapshot.entries[0], "the snapshot holds the entry that was written").request.url, "https://cache.test/a");
+    assert.equal(await blobText(must(snapshot.entries[0], "the snapshot holds the entry that was written").response.body), "first");
   });
 
   only("a body that came back from read is not stored twice", async (t) => {
@@ -152,7 +163,7 @@ for (const backend of BACKENDS) {
     assert.equal(await store.compareExchange(handle, 1, first.entries), true);
     const keysAfter = (await bytes.list("cache-storage", none())).map((r) => r.key).sort();
     assert.deepEqual(keysAfter, keysBefore, "no body was rewritten");
-    assert.equal(await blobText((await store.read(handle)).entries[0].response.body), "kept");
+    assert.equal(await blobText(must((await store.read(handle)).entries[0], "the snapshot holds the entry that was written").response.body), "kept");
   });
 
   only("read returns one Blob per stored body", async (t) => {
@@ -161,8 +172,8 @@ for (const backend of BACKENDS) {
     const handle = await store.open("v1");
     await store.compareExchange(handle, 0, [entry("https://cache.test/a", new Blob(["same"]))]);
 
-    const a = (await store.read(handle)).entries[0].response.body;
-    const b = (await store.read(handle)).entries[0].response.body;
+    const a = must((await store.read(handle)).entries[0], "the snapshot holds the entry that was written").response.body;
+    const b = must((await store.read(handle)).entries[0], "the snapshot holds the entry that was written").response.body;
     assert.equal(a, b, "identity is what makes the round trip recognisable");
   });
 
@@ -184,7 +195,7 @@ for (const backend of BACKENDS) {
       3,
       "names, one list, one body",
     );
-    assert.equal(await blobText((await store.read(handle)).entries[0].response.body), "a body");
+    assert.equal(await blobText(must((await store.read(handle)).entries[0], "the snapshot holds the entry that was written").response.body), "a body");
   });
 
   only("names, lists and bodies all survive a reopen", async (t) => {
@@ -197,11 +208,11 @@ for (const backend of BACKENDS) {
 
     const second = await DurableCacheStorageStore.open(bytes);
     assert.deepEqual(await second.keys(), ["v1", "v2"]);
-    const reopened = await second.lookup("v1");
+    const reopened = must(await second.lookup("v1"), "the store kept that cache name");
     const snapshot = await second.read(reopened);
     assert.equal(snapshot.revision, 1);
-    assert.equal(await blobText(snapshot.entries[0].response.body), "persisted");
-    assert.equal((await second.read(await second.lookup("v2"))).entries[0].response.body, null);
+    assert.equal(await blobText(must(snapshot.entries[0], "the snapshot holds the entry that was written").response.body), "persisted");
+    assert.equal((await second.read(must(await second.lookup("v2"), "the store kept that cache name"))).entries[0]?.response.body, null);
   });
 
   only("deleting a name removes its list and its bodies", async (t) => {
@@ -235,8 +246,8 @@ for (const backend of BACKENDS) {
     const reopened = await DurableCacheStorageStore.open(bytes);
     const keys = (await bytes.list("cache-storage", none())).map((r) => r.key).sort();
     assert.equal(keys.includes("b9999"), false, `the orphan is gone, saw ${keys}`);
-    const snapshot = await reopened.read(await reopened.lookup("v1"));
-    assert.equal(await blobText(snapshot.entries[0].response.body), "real");
+    const snapshot = await reopened.read(must(await reopened.lookup("v1"), "the store kept that cache name"));
+    assert.equal(await blobText(must(snapshot.entries[0], "the snapshot holds the entry that was written").response.body), "real");
   });
 
   only("an exchange interrupted between its keys leaves nothing dangling", async (t) => {
@@ -246,17 +257,17 @@ for (const backend of BACKENDS) {
     // window a crash lands in.
     let failLists = false;
     const interrupted = {
-      read: (...args) => bytes.read(...args),
-      source: (...args) => bytes.source(...args),
-      delete: (...args) => bytes.delete(...args),
-      list: (...args) => bytes.list(...args),
-      size: (...args) => bytes.size(...args),
+      read: (...args: Parameters<DurableByteStore["read"]>) => bytes.read(...args),
+      source: (...args: Parameters<DurableByteStore["source"]>) => bytes.source(...args),
+      delete: (...args: Parameters<DurableByteStore["delete"]>) => bytes.delete(...args),
+      list: (...args: Parameters<DurableByteStore["list"]>) => bytes.list(...args),
+      size: (...args: Parameters<DurableByteStore["size"]>) => bytes.size(...args),
       close: () => bytes.close(),
-      async write(namespace, key, signal) {
+      async write(namespace: string, key: string, signal: AbortSignal) {
         const write = await bytes.write(namespace, key, signal);
         if (!failLists || !key.startsWith("l")) return write;
         return {
-          append: (chunk) => write.append(chunk),
+          append: (chunk: Uint8Array) => write.append(chunk),
           discard: () => write.discard(),
           async commit() {
             await write.discard();
@@ -283,10 +294,10 @@ for (const backend of BACKENDS) {
     assert.deepEqual(afterFailure, ["b1", "l0", "names"], `saw ${afterFailure}`);
 
     const reopened = await DurableCacheStorageStore.open(bytes);
-    const snapshot = await reopened.read(await reopened.lookup("v1"));
+    const snapshot = await reopened.read(must(await reopened.lookup("v1"), "the store kept that cache name"));
     assert.equal(snapshot.revision, 1, "the list is still the one that committed");
     assert.equal(snapshot.entries.length, 1);
-    assert.equal(await blobText(snapshot.entries[0].response.body), "before");
+    assert.equal(await blobText(must(snapshot.entries[0], "the snapshot holds the entry that was written").response.body), "before");
     assert.equal(
       (await bytes.list("cache-storage", none())).length,
       3,
@@ -302,7 +313,7 @@ for (const backend of BACKENDS) {
       maxBodyBytesPerCache: 4,
     });
     const handle = await store.open("bounded");
-    await assert.rejects(() => store.open("second"), (e) => e?.name === "QuotaExceededError");
+    await assert.rejects(() => store.open("second"), (e: unknown) => e instanceof Error && e.name === "QuotaExceededError");
     assert.equal(await store.compareExchange(handle, 0, [entry("https://c.test/a", null)]), true);
 
     await assert.rejects(
@@ -311,11 +322,11 @@ for (const backend of BACKENDS) {
           entry("https://c.test/a", null),
           entry("https://c.test/b", null),
         ]),
-      (e) => e?.name === "QuotaExceededError",
+      (e: unknown) => e instanceof Error && e.name === "QuotaExceededError",
     );
     await assert.rejects(
       () => store.compareExchange(handle, 1, [entry("https://c.test/a", new Blob(["toolong"]))]),
-      (e) => e?.name === "QuotaExceededError",
+      (e: unknown) => e instanceof Error && e.name === "QuotaExceededError",
     );
     const snapshot = await store.read(handle);
     assert.equal(snapshot.revision, 1, "a refused exchange did not advance the revision");
@@ -359,7 +370,7 @@ for (const backend of BACKENDS) {
     await cache.put("https://cache.test/two", new Response("second page", { status: 202 }));
 
     const matched = await cache.match("https://cache.test/one");
-    assert.equal(await matched.text(), "first page");
+    assert.equal(await must(matched, "the cache holds that entry").text(), "first page");
     assert.equal((await cache.keys()).length, 2);
     assert.equal(await cache.delete("https://cache.test/two"), true);
     assert.equal(await cache.match("https://cache.test/two"), undefined);
@@ -376,7 +387,10 @@ for (const backend of BACKENDS) {
       },
     });
     const laterCache = await laterRuntime.caches.open("pages");
-    const survived = await laterCache.match("https://cache.test/one");
+    const survived = must(
+      await laterCache.match("https://cache.test/one"),
+      "the cache survived the reopen",
+    );
     assert.equal(await survived.text(), "first page");
     assert.equal(survived.status, 200);
     assert.equal((await laterCache.keys()).length, 1);
