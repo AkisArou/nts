@@ -6573,3 +6573,35 @@ sabotage is caught and names the exact assertion.
 
 The frontier does not move: 1,428/318, unchanged. Nine try/catch wrappers and two declared
 lengths cost nothing the compiler was not already paying.
+
+## The sabotage runner checks that the sabotage happened
+
+Three times this session a reading that looked like "the sabotage survived" came from a run
+that was not measuring a mutation at all. The runner refused the second kind and had no idea
+about the first or third, so it now checks all three preconditions and lives in the repository
+rather than in a session-local temp directory — which is the other half of the problem, since
+the ledger has been citing an instrument that evaporated between sessions.
+
+**The mutation is in the tree.** A patch script whose pattern does not match raises, and a
+shell that only checks the compiler afterwards runs the tests against unmodified source and
+reports zero failures. The runner now requires `git diff` to show the named file changed, and
+refuses with the reason if it did not.
+
+The Node lane reports the same hole in their `--sabotage`: it blanks a module and checks that
+tests fail, and nothing verifies the blanking took. Their note is that it has never
+misreported and they have no evidence it could not — which is exactly the position I was in
+before it did.
+
+**The distinction worth keeping is theirs.** A truncated output and a filter selecting nothing
+produce *no data*. A failed mutation scored as a passing test produces **data of the wrong
+sign**: not a missing measurement but a confident wrong one, and the honest response to a
+survivor is to go and weaken a test that was fine. So the guard has to check that the mutation
+*happened*, not that the compiler was happy afterwards.
+
+Verified in both directions before being believed: it refuses on an unmodified tree, refuses
+on a named file that did not change, and still catches a real mutation — `@@toStringTag`
+declared writable, caught by the descriptor assertion.
+
+Naming the mutated file is better than relying on the fallback, because "something under this
+lane changed" and "the thing I meant changed" are different claims and only the second is the
+one a sabotage is making.
