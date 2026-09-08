@@ -66,6 +66,25 @@ export function arrayIndexOf(key: string): number {
  * caller error rather than a checked condition -- this is an internal representation with a
  * single producer, and every consumer switches on `kind` first.
  */
+/**
+ * The member count past which duplicate detection switches from a scan to a map.
+ *
+ * Not tuned to a benchmark peak: the two curves cross somewhere in the low tens and the exact
+ * point moves with key length and engine, so this is a round number inside the region where
+ * neither choice is bad rather than a claim about where the crossing is.
+ */
+const WIDE_OBJECT = 16;
+
+function buildSeen(keys: readonly string[]): Map<string, number> {
+  // No first-occurrence guard, because the list cannot contain a repeat: a key is only pushed
+  // onto it when the lookup did not find it. A sabotage making this keep the *last* position
+  // instead of the first passed the whole suite, which is what a branch that cannot be taken
+  // looks like from the outside -- so it is gone rather than left in as untestable defence.
+  const seen = new Map<string, number>();
+  for (let at = 0; at < keys.length; at++) seen.set(keys[at] as string, at);
+  return seen;
+}
+
 export class JsonValue {
   readonly kind: JsonKind;
   /** `boolean` values. */
@@ -164,6 +183,20 @@ export class JsonValue {
    * A repeated key takes the later value and keeps the earlier position: 25.5.2 note 2 says
    * "lexically preceding values for the same key shall be overwritten", and overwriting a
    * property does not move it.
+   *
+   * ### Why the duplicate check changes shape partway through
+   *
+   * Finding the earlier occurrence of a key was a linear scan of the keys so far, which is
+   * quadratic in the number of members. That is invisible on the objects most documents are
+   * made of and it is not invisible at all on a wide one: a benchmark against node measured a
+   * flat 5,000-key object at **59x slower than the native parser**, against 2-8x everywhere
+   * else. A ratio that far out of line with its neighbours is an algorithm, not a constant
+   * factor.
+   *
+   * A `Map` fixes that and costs an allocation per object, which is the wrong trade for the
+   * common case -- most objects have a handful of members, where a scan of four strings beats
+   * building a hash table. So the scan stays until an object proves to be wide, and the map is
+   * built once at the threshold and used from there on. Both paths implement the same rule.
    */
   static objectValue(
     sourceKeys: readonly string[],
@@ -177,27 +210,40 @@ export class JsonValue {
     const stringKeys: string[] = [];
     const stringValues: JsonValue[] = [];
 
+    // Null until an object turns out to be wide enough for the scan to be the wrong shape;
+    // see the note above. `indexSeen` is separate because the two key spaces are disjoint.
+    let indexSeen: Map<string, number> | null = null;
+    let stringSeen: Map<string, number> | null = null;
+
     for (let at = 0; at < sourceKeys.length; at++) {
       const key = sourceKeys[at] as string;
       const value = sourceValues[at] as JsonValue;
       const index = arrayIndexOf(key);
       if (index >= 0) {
-        const existing = indexKeys.indexOf(key);
+        const existing = indexSeen === null ? indexKeys.indexOf(key) : (indexSeen.get(key) ?? -1);
         if (existing >= 0) {
           indexValues[existing] = value;
         } else {
+          if (indexSeen !== null) indexSeen.set(key, indexKeys.length);
           indexKeys.push(key);
           indexOrder.push(index);
           indexValues.push(value);
         }
+        if (indexSeen === null && indexKeys.length >= WIDE_OBJECT) {
+          indexSeen = buildSeen(indexKeys);
+        }
         continue;
       }
-      const existing = stringKeys.indexOf(key);
+      const existing = stringSeen === null ? stringKeys.indexOf(key) : (stringSeen.get(key) ?? -1);
       if (existing >= 0) {
         stringValues[existing] = value;
       } else {
+        if (stringSeen !== null) stringSeen.set(key, stringKeys.length);
         stringKeys.push(key);
         stringValues.push(value);
+      }
+      if (stringSeen === null && stringKeys.length >= WIDE_OBJECT) {
+        stringSeen = buildSeen(stringKeys);
       }
     }
 

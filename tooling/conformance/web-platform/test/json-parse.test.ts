@@ -22,6 +22,7 @@ import test from "node:test";
 
 import { parseJsonText } from "../../../../runtime/web-platform/src/json/parse.ts";
 import type { JsonValue } from "../../../../runtime/web-platform/src/json/value.ts";
+import { stringifyJsonValue } from "../../../../runtime/web-platform/src/json/stringify.ts";
 import { INVALID, keyOrder, must, plain, VALID } from "./json-corpus.ts";
 
 const suite = (name: string, fn: () => void): void => {
@@ -145,4 +146,65 @@ suite("a syntax error names the offset it was found at", () => {
   // The constructor is `SyntaxError` itself, not a subclass: node's is too, and code that
   // switches on `error.constructor` should not be able to tell the two apart.
   assert.equal(thrownBy("[1,]").constructor, SyntaxError);
+});
+
+suite("the scan and the map agree, on both sides of the threshold", () => {
+  // Duplicate detection changes shape at a member count, so there are two implementations of
+  // one rule and nothing in the corpus is wide enough to reach the second. Every size from
+  // well below the threshold to well above is built with duplicates and array-index keys in
+  // it, and compared with node -- which has one implementation and therefore cannot drift.
+  for (let width = 1; width <= 40; width++) {
+    const parts: string[] = [];
+    for (let at = 0; at < width; at++) {
+      parts.push(`"k${at}":${at}`);
+      // A duplicate every third key, and index-shaped keys interleaved so both key spaces
+      // cross the threshold rather than only the string one.
+      if (at % 3 === 0) parts.push(`"k${at}":${at * 100}`);
+      if (at % 4 === 0) parts.push(`"${at}":${at * 1000}`);
+      if (at % 8 === 0) parts.push(`"${at}":${at * 10000}`);
+    }
+    const text = `{${parts.join(",")}}`;
+    const node: unknown = JSON.parse(text);
+    assert.deepEqual(keyOrder(plain(parseJsonText(text))), keyOrder(node), `width ${width} order`);
+    assert.equal(stringifyJsonValue(parseJsonText(text)), JSON.stringify(node), `width ${width} values`);
+  }
+});
+
+suite("a wide object of entirely repeated keys collapses to one member", () => {
+  // The path where every lookup hits. Above the threshold this exercises the map's hit branch,
+  // which the interleaved test above reaches only every third key.
+  for (const width of [4, 16, 17, 64, 500]) {
+    const text = `{${new Array(width).fill('"same":1').join(",")}}`;
+    const parsed = parseJsonText(text);
+    assert.deepEqual([...parsed.keys], ["same"], `width ${width}`);
+    assert.equal(stringifyJsonValue(parsed), JSON.stringify(JSON.parse(text)), `width ${width}`);
+  }
+});
+
+suite("an index key repeated past the threshold is still deduplicated", () => {
+  // Reaching the map on the *index* side needs sixteen distinct array-index names in one
+  // object, and then a repeat among them. Nothing else here has both: the interleaved test
+  // above stays under the threshold on that side, and the ordering test below has no repeats.
+  // A sabotage that stopped recording index keys in the map survived because of exactly that.
+  const parts: string[] = [];
+  for (let at = 0; at < 40; at++) parts.push(`"${at}":${at}`);
+  parts.push('"0":999', '"20":888', '"39":777');
+  const text = `{${parts.join(",")}}`;
+  const parsed = parseJsonText(text);
+  assert.equal(parsed.keys.length, 40, "a repeat added a member");
+  assert.deepEqual(keyOrder(plain(parsed)), keyOrder(JSON.parse(text)));
+  assert.equal(stringifyJsonValue(parsed), JSON.stringify(JSON.parse(text)));
+});
+
+suite("a wide object keeps ordinary-own-property-keys order", () => {
+  // The ordering rule and the threshold interact: index keys are collected separately and
+  // sorted, and the map is built per key space. A wide object with indices scattered through it
+  // is where a mistake in that interaction shows.
+  const parts: string[] = [];
+  for (let at = 0; at < 60; at++) {
+    parts.push(`"z${at}":${at}`);
+    parts.push(`"${100 - at}":${at}`);
+  }
+  const text = `{${parts.join(",")}}`;
+  assert.deepEqual(keyOrder(plain(parseJsonText(text))), keyOrder(JSON.parse(text)));
 });

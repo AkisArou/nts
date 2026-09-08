@@ -6976,3 +6976,76 @@ the materialization each fail `fetch/api/response/` (113 → 112, 112 and 106).
 nothing there. Compiled axis 138 → 206 of 210 on jvm, c and llvm, agreeing on every case.
 Frontier 1,438 → 1,444 primaries and 322 → 325 cascades, all six of the new primaries in
 `plain.ts` and named above. Measured with one pinned binary, `925269398951a132`, on both sides.
+
+## Benchmarked against node, and the benchmark found a defect no test could
+
+`tooling/conformance/web-platform/json-bench.ts`, run before any tuning, per the plan's
+"measure before optimizing". Deterministic corpora, median of fifteen rounds after five
+discarded -- median rather than mean because a mean over a run containing one GC pause reports
+the pause.
+
+**This is not a fair fight and saying so matters more than the numbers.** Node's `JSON` is C++
+inside V8 with a bytecode-level fast path; this is TypeScript running on that same V8. Losing on
+the host is the expected result and is not the question the project asks. The question is the
+compiled axis, where the shared implementation is compiled rather than interpreted and node's
+C++ is the thing to beat -- and that comparison cannot be run for the parser yet, because it
+does not compile. What this measures is the distance the compiled axis has to make up.
+
+### The first run had one row that was not a constant factor
+
+Everything landed in a 2-8x band except a flat 5,000-key object, which parsed **59.39x slower
+than node**. A ratio that far out of line with its neighbours is an algorithm rather than a
+constant factor, and it was: duplicate-key detection in `JsonValue.objectValue` was
+`keys.indexOf(key)` per member, quadratic in the member count. Five thousand keys is about
+12.5 million string comparisons. Nothing in the corpus was wide enough to notice, and no
+correctness test ever would have -- the answer was right, it just took 28 ms.
+
+The fix keeps the scan for the objects most documents are made of and builds a `Map` once when
+an object proves wide, because a hash table is the wrong trade for four keys. **28.68 ms to
+0.81 ms, 59.39x slower to 1.61x.** Small-object parsing did not regress.
+
+The threshold is a performance choice and must not be a semantic one, so the suite is run at
+both extremes as controls: forcing the map always (`WIDE_OBJECT = 1`) and never (`1000000000`)
+must both stay green, and both do. Three real mutations of the rule follow, and the two that
+survived each named something:
+
+- Keeping the *last* rather than the first position in `buildSeen` changed nothing, because the
+  list it is built from cannot contain a repeat -- a key is only appended when the lookup missed.
+  The guard was a branch that cannot be taken, so it is **removed** rather than kept as
+  untestable defence.
+- Dropping index keys from the map survived because reaching the map on that side needs sixteen
+  distinct array-index names in one object *and* a repeat among them, which nothing had. A test
+  for exactly that shape was added and the sabotage now fails.
+
+`Map` costs **zero** additional refusals: the frontier is unchanged at 1,444 primaries and 325
+cascades across the change.
+
+### The numbers, after the fix
+
+| corpus | parse to graph | parse to values | stringify graph | stringify values |
+| --- | --- | --- | --- | --- |
+| records, 259 KiB | 3.17x slower | 8.74x slower | 2.56x slower | 2.75x slower |
+| numbers, 358 KiB | 2.24x slower | 5.43x slower | 1.84x slower | 2.05x slower |
+| strings, 215 KiB | 2.84x slower | 5.53x slower | 2.58x slower | 3.54x slower |
+| deep, 2,000 levels | 1.97x slower | 5.42x slower | **14.67x faster** | **1.55x faster** |
+| flat, 5,000 keys | 2.89x slower | 3.69x slower | **1.37x faster** | 1.53x slower |
+
+Three readings worth keeping:
+
+**The explicit stack is not only a safety property.** Serializing 2,000 levels of nesting is
+**14.67x faster than node**, which recurses and degrades badly there. The plan required the
+stack so that a deep value does not serialize on one target and kill the process on another;
+that it also wins outright at depth was not the reason for it.
+
+**Materializing is the expensive half.** `parse to values` is consistently the worst row --
+5 to 8.7x, against 2-3x for the graph alone. That gap is `toPlainValue`, the host-only step,
+and it is the strongest argument for the `JsonParse` boundary: a typed boundary skips it
+entirely rather than making it faster, because the compiler builds `T` directly instead of
+building a graph and walking it again.
+
+**Serialization is already competitive.** Two of five corpora serialize faster than node from
+the graph, and the rest are within 2-3x -- with no tuning applied, since the point of this pass
+was to have a baseline rather than to chase one.
+
+880/880 host, upstream unchanged at 2,768 of 2,776, compiled axis 206 of 210 agreeing on jvm, c
+and llvm. One pinned binary, `925269398951a132`, on both sides of every reading.
