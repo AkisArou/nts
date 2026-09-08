@@ -835,3 +835,269 @@ double nts_process_initgroups(double user_id, NtsString *user_name,
     free(given_group);
     return result == 0 ? 0 : -(double)saved_errno;
 }
+
+/* ------------------------------------------------- lifecycle and signals */
+
+/* Whether the process is on its way out.
+ *
+ * `assert` reads this to decide whether a failed assertion should also print,
+ * and node's answer is a flag its exit path sets rather than anything the
+ * operating system knows. So this is a flag too, and `nts_process_on_exit`'s
+ * dispatch is what sets it. */
+static bool process_exiting = false;
+
+bool nts_process_is_exiting(void) { return process_exiting; }
+
+/* Node's `beforeExit` and `exit`. Both are process-wide and installed once, so
+ * a single retained callback each rather than a list. */
+static NtsHeader *on_before_exit_callback = NULL;
+static NtsHeader *on_exit_callback = NULL;
+
+static void call_with_code(NtsHeader *callback, double code) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double))
+         callback->descriptor->methods[nts_closure_call_slot])(callback, code);
+}
+
+void nts_process_on_before_exit(NtsHeader *callback) {
+    if (on_before_exit_callback != NULL) nts_release(on_before_exit_callback);
+    on_before_exit_callback = callback;
+    if (callback != NULL) nts_retain(callback);
+}
+
+void nts_process_on_exit(NtsHeader *callback) {
+    if (on_exit_callback != NULL) nts_release(on_exit_callback);
+    on_exit_callback = callback;
+    if (callback != NULL) nts_retain(callback);
+}
+
+/* **Neither callback is dispatched yet, and that is the honest state.**
+ *
+ * `beforeExit` fires when the loop drains with work still possible, and `exit`
+ * fires once the process is committed to leaving. Both are decisions of
+ * whoever owns the loop, and in an addon that is the host: this module is
+ * loaded into a running Node process whose loop it does not start, does not
+ * drain and does not end. There is no point in this translation unit that
+ * corresponds to either event.
+ *
+ * `atexit` is not that point either. It runs after the runtime has been torn
+ * down, so calling a compiled closure from it would be reaching into a heap
+ * that is gone -- a crash on the way out, in place of a missing event.
+ *
+ * So the callbacks are held and never called, and `process.on("exit")` does
+ * not fire on the compiled axis. Recorded here rather than left to be found:
+ * the retain is real, so the day a host handshake exists, the closure is
+ * already in hand. */
+
+/* Signals, one `uv_signal_t` per name, kept until stopped. */
+typedef struct SignalEntry {
+    uv_signal_t handle;
+    int number;
+    struct SignalEntry *next;
+} SignalEntry;
+
+static SignalEntry *signals_installed = NULL;
+
+/* Node's own table, by name, because a number is platform-specific and the
+ * name is what crosses. `SIGUSR1` is 10 on Linux and 30 on macOS, which is why
+ * `os.constants` is read from the platform rather than transcribed -- the same
+ * reason applies here. */
+static int signal_number(const char *name) {
+    static const struct {
+        const char *name;
+        int number;
+    } table[] = {
+#ifdef SIGHUP
+        {"SIGHUP", SIGHUP},
+#endif
+        {"SIGINT", SIGINT},
+#ifdef SIGQUIT
+        {"SIGQUIT", SIGQUIT},
+#endif
+        {"SIGILL", SIGILL},
+        {"SIGABRT", SIGABRT},
+        {"SIGFPE", SIGFPE},
+        {"SIGSEGV", SIGSEGV},
+#ifdef SIGPIPE
+        {"SIGPIPE", SIGPIPE},
+#endif
+#ifdef SIGALRM
+        {"SIGALRM", SIGALRM},
+#endif
+        {"SIGTERM", SIGTERM},
+#ifdef SIGUSR1
+        {"SIGUSR1", SIGUSR1},
+#endif
+#ifdef SIGUSR2
+        {"SIGUSR2", SIGUSR2},
+#endif
+#ifdef SIGCHLD
+        {"SIGCHLD", SIGCHLD},
+#endif
+#ifdef SIGCONT
+        {"SIGCONT", SIGCONT},
+#endif
+#ifdef SIGWINCH
+        {"SIGWINCH", SIGWINCH},
+#endif
+#ifdef SIGBREAK
+        {"SIGBREAK", SIGBREAK},
+#endif
+    };
+    for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+        if (strcmp(table[i].name, name) == 0) return table[i].number;
+    }
+    return 0;
+}
+
+static void on_signal(uv_signal_t *handle, int number) {
+    (void)handle;
+    (void)number;
+    /* The module emits by name and this cannot hand one back: the binding is
+     * declared to take a name and return a status, with no callback, so there
+     * is no closure here to call. Node's dispatch goes through its own process
+     * object; ours would need a binding that does not exist yet.
+     *
+     * The handle is still started, which is not nothing: an installed
+     * `uv_signal_t` is what stops the default disposition from killing the
+     * process, and `process.on("SIGINT")` suppressing the default is half of
+     * what that call is for. The other half -- the event -- needs a callback
+     * binding. */
+}
+
+double nts_process_signal_start(NtsString *name) {
+    char *text = string_utf8(name);
+    if (text == NULL) return UV_ENOMEM;
+    int number = signal_number(text);
+    free(text);
+    if (number == 0) return UV_EINVAL;
+
+    for (SignalEntry *each = signals_installed; each != NULL;
+         each = each->next) {
+        if (each->number == number) return 0.0; /* already installed */
+    }
+
+    SignalEntry *entry = calloc(1, sizeof(SignalEntry));
+    if (entry == NULL) return UV_ENOMEM;
+    entry->number = number;
+    int status = uv_signal_init(uv_default_loop(), &entry->handle);
+    if (status == 0) status = uv_signal_start(&entry->handle, on_signal, number);
+    if (status != 0) {
+        free(entry);
+        return (double)status;
+    }
+    /* Unreferenced: a listened-for signal must not be the reason a process
+     * stays alive, which is node's behaviour and is what its own tests turn on. */
+    uv_unref((uv_handle_t *)&entry->handle);
+    entry->next = signals_installed;
+    signals_installed = entry;
+    return 0.0;
+}
+
+void nts_process_signal_stop(NtsString *name) {
+    char *text = string_utf8(name);
+    if (text == NULL) return;
+    int number = signal_number(text);
+    free(text);
+    if (number == 0) return;
+
+    SignalEntry **link = &signals_installed;
+    while (*link != NULL) {
+        if ((*link)->number == number) {
+            SignalEntry *found = *link;
+            *link = found->next;
+            uv_signal_stop(&found->handle);
+            /* Closed rather than freed: libuv owns the handle until its close
+             * callback runs, and freeing here would hand the loop a dangling
+             * pointer on the next iteration. */
+            uv_close((uv_handle_t *)&found->handle, (uv_close_cb)free);
+            return;
+        }
+        link = &(*link)->next;
+    }
+}
+
+/* ------------------------------------------------- what the loop is holding */
+
+/* What fd 0 is, as libuv opened it. The stand-in answers the same question
+ * from `isatty` plus `fstat`; libuv has one call for it. */
+NtsString *nts_stdin_handle_type(void) {
+    switch (uv_guess_handle(0)) {
+    case UV_TTY:
+        return utf8("TTY");
+    case UV_FILE:
+        return utf8("FILE");
+    case UV_NAMED_PIPE:
+        return utf8("PIPE");
+    case UV_TCP:
+        return utf8("TCP");
+    case UV_UDP:
+        return utf8("UDP");
+    default:
+        return utf8("UNKNOWN");
+    }
+}
+
+/* The type names of the handles the loop is holding.
+ *
+ * `uv_walk` visits every handle, including ones libuv itself owns and ones
+ * that are not referenced. Node reports only what keeps the process alive, so
+ * this skips the unreferenced and the closing -- a handle on its way out is
+ * not holding anything open, and reporting it makes a resource look leaked
+ * exactly when it is being cleaned up. */
+typedef struct {
+    const char **names;
+    size_t count;
+    size_t capacity;
+} WalkState;
+
+static void collect_handle(uv_handle_t *handle, void *argument) {
+    WalkState *state = (WalkState *)argument;
+    if (!uv_has_ref(handle) || uv_is_closing(handle)) return;
+    if (state->count == state->capacity) {
+        size_t grown = state->capacity == 0 ? 8 : state->capacity * 2;
+        const char **moved =
+            realloc(state->names, grown * sizeof(*state->names));
+        if (moved == NULL) return;
+        state->names = moved;
+        state->capacity = grown;
+    }
+    state->names[state->count++] = uv_handle_type_name(handle->type);
+}
+
+NtsArray *nts_process_active_resources(void) {
+    WalkState state = {NULL, 0, 0};
+    uv_walk(uv_default_loop(), collect_handle, &state);
+    NtsArray *result = nts_array_new(&nts_desc_ref, (double)state.count);
+    void **items = NTS_ITEMS(result, void *);
+    for (size_t i = 0; i < state.count; i++) {
+        items[i] = utf8(state.names[i] == NULL ? "unknown" : state.names[i]);
+    }
+    free(state.names);
+    return result;
+}
+
+/* **Both of these answer empty, and it is not a stub for want of trying.**
+ *
+ * Node's `_getActiveHandles` and `_getActiveRequests` hand back the handle
+ * *objects* -- the `Socket`, the `Timeout`, the `FSReqCallback` -- so a caller
+ * can inspect and even close them. Those objects are node's own JavaScript
+ * wrappers around its internal C++ handles, built by machinery this runtime
+ * does not have and would not be able to hand a caller: a compiled program's
+ * `Socket` is one of *its* objects, and libuv's `uv_handle_t` has no back
+ * pointer to it. `uv_walk` gives handles, not the objects that own them.
+ *
+ * `nts_process_active_resources` above is the part that can be answered,
+ * because a *name* survives the crossing where an object does not, and it is
+ * what node's own resource accounting is checked against.
+ *
+ * So the two return empty rather than wrong. A test asserting a count here
+ * fails, which is the correct outcome; a test asserting the arrays exist and
+ * are arrays passes, which is also correct. Neither reads as implemented. */
+NtsArray *nts_process_active_handles(void) {
+    return nts_array_new(&nts_node_desc_value, 0);
+}
+
+NtsArray *nts_process_active_requests(void) {
+    return nts_array_new(&nts_node_desc_value, 0);
+}

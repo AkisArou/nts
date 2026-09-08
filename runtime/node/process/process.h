@@ -57,4 +57,17 @@ double nts_process_load_env_file(NtsString *path);
 double nts_process_initgroups(double user_id, NtsString *user_name,
                               double group_id, NtsString *group_name);
 
+/* Lifecycle, signals, and what the loop is holding. `on_before_exit` and
+ * `on_exit` retain their callback and never call it -- an addon does not own
+ * the loop that would decide when. See process.c. */
+bool nts_process_is_exiting(void);
+void nts_process_on_before_exit(NtsHeader *callback);
+void nts_process_on_exit(NtsHeader *callback);
+double nts_process_signal_start(NtsString *name);
+void nts_process_signal_stop(NtsString *name);
+NtsString *nts_stdin_handle_type(void);
+NtsArray *nts_process_active_resources(void);
+NtsArray *nts_process_active_handles(void);
+NtsArray *nts_process_active_requests(void);
+
 #endif
