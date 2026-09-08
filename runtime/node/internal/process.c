@@ -270,8 +270,7 @@ void nts_napi_set_env(void *env) { (void)env; }
  * exact object; neither path here has an object receiver, so the already
  * extracted name, message and code are what get used. */
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
-                                     NtsString *code,
-                                     struct NtsObj_Error *warning) {
+                                     NtsString *code, NtsHeader *warning) {
     (void)warning;
     char *message_text = native_string(message);
     char *name_text = native_string(name);

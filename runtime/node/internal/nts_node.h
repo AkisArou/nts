@@ -24,10 +24,22 @@ double nts_debug_write(NtsString *text);
 bool nts_stdout_is_tty(void);
 bool nts_stderr_is_tty(void);
 void nts_process_really_exit(double code);
-struct NtsObj_Error;
+/* `warning` is `NtsHeader *` rather than `struct NtsObj_Error *`.
+ *
+ * A compiled object crossing into a hand-written binding is an `NtsHeader *` on
+ * both sides now; the emitted call passes one, and a prototype naming the
+ * per-program error struct is a *conflicting type* rather than a coercion. That
+ * is the same shape as `blockers/callback-binding`, and it regressed `buffer`
+ * and `string_decoder` from building to not building the moment the caller side
+ * changed -- two modules stopped by a declaration in this file rather than by
+ * anything the compiler could not do.
+ *
+ * Nothing is lost by widening it: the implementation is `(void)warning;`. The
+ * parameter exists because the Node host stand-in forwards that exact object,
+ * and neither path in `process.c` has an object receiver -- the name, message
+ * and code are already extracted by the caller. */
 void nts_process_emit_warning_object(NtsString *message, NtsString *name,
-                                     NtsString *code,
-                                     struct NtsObj_Error *warning);
+                                     NtsString *code, NtsHeader *warning);
 
 /* Hand this translation unit the Node-API environment, when there is one.
  *
