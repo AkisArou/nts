@@ -768,6 +768,38 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "zlib-params.ts",
+    module: "zlib",
+    // brotli and zstd, which reach the same engine through the parameterized
+    // form -- settings as two parallel arrays rather than fixed arguments.
+    // node is byte-deterministic for both, so these compare bytes rather than
+    // round-trips.
+    checks(m) {
+      const zlib = require("node:zlib");
+      const BROTLI_DECODE = 8, BROTLI_ENCODE = 9, ZSTD_COMPRESS = 10, ZSTD_DECOMPRESS = 11;
+      const asBytes = (b) => [...Buffer.from(b)].map((x) => `${x},`).join("");
+      const text = "the quick brown fox jumps over the lazy dog";
+      const out = [
+        { label: "create_params brotli", mine: m.probeCreateParams(BROTLI_ENCODE), theirs: true },
+        { label: "create_params zstd", mine: m.probeCreateParams(ZSTD_COMPRESS), theirs: true },
+        { label: "create_params with a setting", mine: m.probeCreateParamsWithSetting(BROTLI_ENCODE, 0, 0), theirs: true },
+        { label: "brotli oneshot bytes", mine: m.probeOneshotParams(BROTLI_ENCODE, text), theirs: asBytes(zlib.brotliCompressSync(Buffer.from(text))) },
+        { label: "brotli round trip", mine: m.probeParamsRoundTrip(BROTLI_ENCODE, BROTLI_DECODE, text), theirs: text },
+        { label: "zstd round trip", mine: m.probeParamsRoundTrip(ZSTD_COMPRESS, ZSTD_DECOMPRESS, text), theirs: text },
+        { label: "last error message clean", mine: m.probeLastErrorMessageClean(), theirs: "" },
+        { label: "last status clean", mine: m.probeLastStatusClean(), theirs: 0 },
+      ];
+      // zstd arrived in node 23; skip rather than fail on an older runtime, and
+      // say which happened rather than reporting a pass either way.
+      if (typeof zlib.zstdCompressSync === "function") {
+        out.push({ label: "zstd oneshot bytes", mine: m.probeOneshotParams(ZSTD_COMPRESS, text), theirs: asBytes(zlib.zstdCompressSync(Buffer.from(text))) });
+      } else {
+        console.log("      note: node here has no zstdCompressSync, so that row did not run");
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
