@@ -787,6 +787,45 @@ Not chased tonight. The row is far better posed than it was: 1.25x, of which
 choice of ours that is a *gain*, and 20.6% is ours with six named causes ruled
 out.
 
+### `awfy-queens` in the assembly: 37% more instructions and 6% more code, which do not reconcile
+
+The file said the next instrument for this row was the assembly. It is, and it
+produced a contradiction rather than an answer -- which is worth more than
+another dead hypothesis, because it rules out the whole family of them.
+
+**Per operation, with the count fixed so there is no calibration to vary:**
+
+    ours   596,248 instructions an operation
+    ref    435,131                            +37%
+
+Time is +20.6%, so our IPC is *better* and we simply execute more. Prediction
+and memory are both excluded: branch misses 3% apart, cache misses 5%.
+
+**But the compiled code is barely bigger.**
+
+    getRowColumn, standalone C2      89 x86 against 91   -- ours is SMALLER
+    placeQueen, standalone C2       464 against 438      +6%
+      of which mov                  249 against 223      +12%
+      stack references              144 against 129      +12%
+    inlining decisions              identical, same methods, same depths
+
+`getRowColumn` at parity in machine code is the strongest single fact here: it
+is 52% of our profile, 97 bytecodes against 40, and C2 compiles both to the same
+thing. **The merge really is free, and this is the third instrument to say so.**
+
+**And 6% of code cannot produce 37% of instructions.** Something executes more
+often rather than being bigger, and I have not found it. What is excluded:
+`setRowColumn` is 1.59x the samples at equal operation counts but exists only
+inlined, so its cost is inside `placeQueen`'s 6%; the entry points are the same
+program, `new Queens().innerBenchmarkLoop(n)` on both sides; and eight
+structural differences have been transcribed onto the reference and each priced
+at zero.
+
+**Where I would start next**, and it is a different kind of question from any
+asked so far: count the *calls*. Every measurement here has compared code, and
+the arithmetic says the answer is in how often that code runs. A counter in
+`getRowColumn` on both sides settles in one run what four instruments could not.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
