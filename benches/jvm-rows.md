@@ -34,7 +34,7 @@ not measured clean and should not be quoted.**
 | `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | residual is the `uirem` guard branch |
-| `in-narrowing` | 1.07x | **not previously listed** |
+| `in-narrowing` | 1.07x | characterised below: 187 bytecodes against javac's 110 |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
 | `awfy-sieve` | 1.25x -> **1.05x** *busy jit* | moved without being worked on; re-measure clean |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
@@ -342,6 +342,48 @@ which `instanceof`'s residual 12% already asked for).
 number on it** -- 34% against 12% -- which makes `absences` the better
 reproducer to hand over. The power-of-two mask would fire on the `% 2` site and
 is on the answered list above at 0%; do not take it out again.
+
+### `in-narrowing`, characterised: everything matches except the slot traffic
+
+The first look at one of the eight rows that were losing unlisted, and it is
+worth writing down because the *absence* of a cause is the result.
+
+Profile says nothing: **92.59%** in `work$whole` against the reference's
+**93.44%** in `Ref.run`, no helper on either side, nothing outside the method.
+So it is an emitted-code question, and the emitted code agrees with the
+reference everywhere anyone would look first:
+
+- **Our fields are `int`**, not `double` -- `Circle.radius`, `Wide.both` and
+  the rest are all `I`, exactly as `ref.java` declares them. Specialization
+  narrowed them. This is not the narrowing family.
+- **The reference uses `instanceof` and a cast**, which is what we emit for
+  `"both" in shape`. Same test, same arm order, same short-circuit.
+- Same `new` count, same `putfield` count, same `iand`, `ixor` and `imul`
+  counts. The arithmetic is instruction-for-instruction identical.
+
+What differs is one thing:
+
+    ours        187 instructions    44 iload + 35 istore = 79
+    ref.java    110 instructions    about 20, and mostly `iload_1`..`iload_3`
+
+**One slot per SSA value is the whole difference.** javac reuses three or four
+slots and reaches the one-byte `iload_1`-style forms; we assign a slot per value
+and cannot, so the same program is 1.7x the bytecode.
+
+**And the only fix for it is on the answered list twice over.** Record 0004
+measured the store/load round trip at C parity and called emitting "simple,
+regular, obviously correct" code "measurably free"; a stack-residency
+optimisation targeting exactly this traffic was built earlier in this project
+and reverted, because C2 already removes it. Slot reuse by live range is the
+other route and it costs the eighty-line StackMapTable design, which
+`awfy-queens` established this afternoon is not worth paying for a merge.
+
+So the honest position is: **this row is 1.07x, the cause is not found, and the
+one visible difference is a lead two separate measurements have already
+refuted.** The transcription route is closed as well -- writing a Java version
+with redundant locals prices javac's compilation of my transcription, which is
+what cost me `awfy-queens`. Building it and measuring is the only honest price,
+and three fixes measured 0% today.
 
 ## Open, and whose
 
