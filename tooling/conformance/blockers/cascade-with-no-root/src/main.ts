@@ -26,6 +26,24 @@
 // tells you only that something, somewhere, was not lowered -- and it is
 // indistinguishable from a cascade whose root was printed and scrolled away.
 //
+// **A second instance, in `os`, with a different shape and the same hole.**
+// `userInfo` gets `no wrapper for userInfo: is exported and no function of that
+// name was compiled` and **no diagnostic anywhere says why it was not
+// compiled**. The only related line in the whole run is
+//
+//     main.ts:395:2  NTS1001 `userInfoString`, a declaration outside every walk
+//
+// which is about a *helper* called only from inside `userInfo`, and is a
+// consequence rather than a cause: a body that is never walked cannot reach the
+// function it calls. So the output names the shadow and not the object.
+//
+// Three reductions were tried and none reproduces it: an overloaded function
+// whose body calls a local helper compiles clean; a generic union return type
+// gives `returns an object` / `signature does not cross`, which is a wrapper
+// limit and says so; and neither produces an `outside every walk` for the
+// helper. Recorded as a second instance of this family rather than fixtured
+// separately, because what the two share is the hole and not the shape.
+//
 // Reached from `timers`, whose `Immediate` class is generic over a tuple
 // (`class Immediate<Args extends unknown[] = []>`) and implements an interface.
 // The five real refusals there read `a member of Immediate, a class this

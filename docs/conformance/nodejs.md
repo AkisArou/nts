@@ -3148,6 +3148,21 @@ here — `f64[]` lowers cleanly and fails at the wrapper — but this one carrie
 fixture's expectation had to name `emit-c` for that reason, which is the first
 thing it demonstrates, before its own subject.
 
+**A second instance, in `os`.** `userInfo` gets `no wrapper ... no function of
+that name was compiled` and **nothing anywhere says why**. The only related line
+in the run is `userInfoString, a declaration outside every walk` — a helper
+called only from inside `userInfo`, and a consequence rather than a cause, since
+a body that is never walked cannot reach what it calls. The output names the
+shadow and not the object, and `userInfo` is one of the six exports keeping `os`
+from green.
+
+Three reductions tried, none reproducing: an overloaded function whose body
+calls a local helper compiles clean; a generic union return gives
+`returns an object` / `signature does not cross`, which is a wrapper limit that
+says so; neither yields an `outside every walk` for the helper. Recorded as a
+second instance rather than fixtured separately — what the two share is the
+hole, not the shape.
+
 Reached from `timers`, whose `Immediate` is generic over a tuple
 (`class Immediate<Args extends unknown[] = []>`) and implements an interface.
 The five real refusals there read *a member of `Immediate`, a class this
