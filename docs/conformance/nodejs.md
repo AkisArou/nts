@@ -4949,6 +4949,41 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## `deepStrictEqual` cannot see a prototype, and that weakens the suite
+
+The most consequential §13 consequence found so far, and it is not in a module —
+it is in the assertion library every other test uses.
+
+Node's `deepStrictEqual` compares prototypes. This one cannot:
+
+    Buffer.from([1])          vs  new Uint8Array([1])     node: differ   here: equal
+    Object.create(null)       vs  {}                      node: differ   here: equal
+    new (class { x = 1 })()   vs  { x: 1 }                node: differ   here: equal
+
+§13 lists `getPrototypeOf`, `setPrototypeOf` and `__proto__` together — *"there
+is no chain to read or rewrite"*. A comparator with no access to a prototype
+cannot distinguish two objects that differ only by one. This is the decision
+applied, not a gap in the port.
+
+**But it weakens every test in this profile that uses `deepStrictEqual`**, which
+is most of them. An assertion that a call returns a `Stats` rather than an object
+literal with the same fields does not actually check that. A test that means "the
+right class came back" silently means "the right fields came back".
+
+That is worth knowing *before* it is relied on. It does not invalidate the
+suite — field values are still compared exactly, and most assertions are about
+values — but any test whose point is the *identity* of a returned object needs
+`instanceof`, which does work, rather than `deepStrictEqual`.
+
+The other twenty-four rows match node exactly, including the ones people get
+wrong from memory: `NaN` **equals** `NaN`; `0` and `-0` **differ**, nested as
+well as at top level; an array hole differs from an explicit `undefined`; `Map`
+and `Set` ignore insertion order; a `Map` key of `NaN` matches; two `Uint8Array`s
+of the same bytes are equal while a `Uint8Array` and an `Int8Array` are not; a
+boxed `new Number(1)` differs from `1` and matches another boxed one; two
+mutually circular objects are equal; and a non-enumerable own property is
+ignored.
+
 ## The harness bug that reported a pass
 
 Five self-inflicted comparison bugs today, and the fifth is the only one that
