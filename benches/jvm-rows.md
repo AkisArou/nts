@@ -23,13 +23,13 @@ lane has moved.
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
 | `awfy-queens` | 1.24x | partly narrowing -- 2 f64 block params, 6 f64 adds |
-| `generic-classes` | 1.13x | probed: no single cause, see below |
+| `generic-classes` | 1.13x | C2 unrolls the reference's loop and not ours |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
 | `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | 1.09x | 55% our Grisu port vs the JDK's own formatter |
 | `module-closures` | 1.06x | no single cause -- needs `hsdis` |
-| `elementwise` | 1.03x | no single cause -- needs `hsdis` |
+| `elementwise` | 1.03x | at its floor: both lanes vectorise |
 | `upcast` | 1.07x -> **1.01x** | unsigned remainder |
 
 Won: `exceptions` 0.01x, `bigint` 0.19x, `awfy-permute` 0.71x, `mandelbrot`
@@ -160,12 +160,24 @@ has 2 `f64` block parameters and 6 `f64` adds. Counting `f64` block parameters
 and adds in the prepared IR is a five-second check that reclassified two rows I
 had sent to the assembler.
 
-`generic-classes` (`work$whole`, entirely inlined), `module-closures`
-(`work$whole` + `Closure0$call` + `drive$Closure0`) and `elementwise`
-(`Program.scale`, 100% of one method) have **zero** `f64` block parameters and
-no `i64` ones; `elementwise`'s two `f64` adds are float arithmetic doing its
-job. Those three are dominated by *generated code* with no runtime helper
-standing out. All
+`generic-classes`, `module-closures` and `elementwise` have **zero** `f64` block
+parameters and no `i64` ones, so those three are genuinely about emitted code.
+`hsdis` is built at `~/Projects/hsdis/build/linux-amd64/hsdis-amd64.so` and
+loads with `LD_LIBRARY_PATH` plus `-XX:+PrintAssembly`.
+
+Two of the three are now answered by an assembly diff:
+
+- **`elementwise` is at its floor.** Both lanes vectorise -- 36 `vmulpd` against
+  the reference's 45, an unroll-factor difference on the same SIMD shape. 1.03x
+  with both vectorised is not a gap worth opening.
+- **`generic-classes` is an unrolling difference, and the instruction counts say
+  so backwards.** Our `work$whole` compiles to **284** instructions and the
+  reference's `work` to **526** -- and the reference is *faster*. Its body
+  carries roughly twice ours (12 `xor` / 18 `add` / 31 `cmp` against 7 / 10 /
+  8), which is C2 unrolling its loop and not ours. Re-measured quiet, twice, to
+  rule out the contaminated sweep: **1.13x / 1.21x**, so it is real. Why the
+  loop is not counted is the open question and it is the only row where fewer
+  instructions are the problem. All
 three use bare JVM arrays -- `[Z`, `[D` -- with direct loads and the JVM's own
 bounds check, which is the fast path: no wrapper, no `NtsRuntime.bounds`, no
 `ifnull`.
