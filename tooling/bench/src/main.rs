@@ -269,17 +269,53 @@ fn quiet_enough(when: &str) -> Option<String> {
     ))
 }
 
-fn main() -> Result<()> {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+/// The tree this run measures and publishes into.
+///
+/// `--root` when given, and otherwise the tree this binary was *compiled* in,
+/// because `env!("CARGO_MANIFEST_DIR")` is baked in at build time. That default
+/// is load-bearing and quietly so: it means a binary built in the main checkout
+/// rewrites the main checkout's `README.md` even when run from a worktree
+/// pinned for the measurement, and the only reason a publish lands in the
+/// pinned tree is that whoever ran it also built it there.
+///
+/// `nts-suite` has the same shape and it is not hypothetical there -- a gate
+/// step run from a sealed tree edited the live checkout's outcome table, and
+/// three sessions spent an exchange working out whose change it was.
+///
+/// Kept as the default rather than replaced, because building where you measure
+/// is the right discipline and this makes it explicit rather than accidental.
+fn repository_root(args: &[String]) -> Result<Utf8PathBuf> {
+    if let Some(at) = args.iter().position(|arg| arg == "--root") {
+        let given = args.get(at + 1).context("`--root` needs a path after it")?;
+        return Utf8PathBuf::from(given)
+            .canonicalize_utf8()
+            .context("locating the repository root named by `--root`");
+    }
+    Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
-        .context("locating the repository root")?;
+        .context("locating the repository root")
+}
+
+fn main() -> Result<()> {
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    let root = repository_root(&argv)?;
     let cases_dir = root.join("benches/cases");
 
-    let requested: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| !a.starts_with('-'))
-        .collect();
+    // A flag's *value* is not a case name. Filtering on the leading dash alone
+    // would leave `--root <path>` looking like a request for a case called
+    // `<path>`, which matches nothing -- and a run with a non-empty `requested`
+    // is a filtered run, so the publish would decline and say it measured only
+    // part of the table. Loud rather than wrong, and still not what was asked.
+    let mut requested: Vec<String> = Vec::new();
+    let mut rest = argv.iter();
+    while let Some(arg) = rest.next() {
+        if arg == "--root" {
+            let _ = rest.next();
+        } else if !arg.starts_with('-') {
+            requested.push(arg.clone());
+        }
+    }
     let mut cases: Vec<Utf8PathBuf> = std::fs::read_dir(&cases_dir)
         .with_context(|| format!("reading {cases_dir}"))?
         .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())

@@ -104,11 +104,46 @@ struct Totals {
     blocked: Vec<(String, Vec<String>)>,
 }
 
-fn main() -> Result<()> {
-    let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+/// The tree this run reads its corpus from and writes its tables into.
+///
+/// `--root` when given, and otherwise the tree this binary was *compiled* in.
+///
+/// The default is baked in by `env!("CARGO_MANIFEST_DIR")`, so a binary built
+/// in the main checkout edits the main checkout's `README.md` however it is
+/// invoked -- from a pinned worktree included. `tooling/gate/pinned.sh` seals
+/// the sources a gate reads and cannot seal this, because the destination was
+/// decided when the binary was compiled rather than when it ran. `all.sh`
+/// compounds it by invoking `./target/release/nts-suite` relatively, so *which
+/// binary answers* depends on the working directory while *which README it
+/// edits* does not, and the two can disagree without saying so.
+///
+/// Not hypothetical. A `corpus` step run from a tree its operator believed was
+/// sealed moved `lowered completely` from 52 to 53 in the live checkout, and
+/// three sessions spent an exchange establishing whose uncommitted edit it was
+/// before anyone asked whether a *program* had written it. Nobody had touched
+/// the file by hand.
+///
+/// This is the isolation failure `wait-idle.sh` documents, in a third place:
+/// the instrument was made worktree-proof in the dimension someone thought
+/// about, and the write went out through the one nobody did.
+fn repository_root() -> Result<Utf8PathBuf> {
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg == "--root" {
+            let given = args.next().context("`--root` needs a path after it")?;
+            return Utf8PathBuf::from(given)
+                .canonicalize_utf8()
+                .context("locating the repository root named by `--root`");
+        }
+    }
+    Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize_utf8()
-        .context("locating the repository root")?;
+        .context("locating the repository root")
+}
+
+fn main() -> Result<()> {
+    let root = repository_root()?;
 
     let limit = std::env::args()
         .skip_while(|arg| arg != "--limit")

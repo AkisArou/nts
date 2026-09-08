@@ -700,7 +700,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # no longer shows in the count.
   backend_examples 130 "through the JVM backend" ); }
 corpus() {
-  ./target/release/nts-suite > "$root/target/suite-report.txt" 2>&1
+  ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
     "$root/target/suite-report.txt"
   # `invalid HIR` must be zero: a rejected SSA form on arbitrary input is a bug
