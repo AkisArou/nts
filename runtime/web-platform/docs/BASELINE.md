@@ -6749,3 +6749,50 @@ else.
 
 `json-parse.test.ts` does **not** carry the pragma. It was written typed, it type-checks
 strictly at zero errors, and it is the shape the other sixty-three are being converted toward.
+
+## The JSON serializer, which lowers completely
+
+Clause 25.5.4 over the erased graph: `QuoteJSONString`, `UnicodeEscape`, `SerializeJSONObject`
+and `SerializeJSONArray`, with the `space` resolution from 25.5.4 steps 5-8. The
+arbitrary-value entry point -- `toJSON`, a replacer, a property list, `[[IsRawJSON]]` and the
+cycle check -- arrives with the public surface; a graph from the parser is a tree by
+construction, since a node is immutable and assembled bottom-up.
+
+**Zero new primary refusals.** The parser's nine were all `SyntaxError` and one
+`Array.prototype.sort`, and the serializer throws nothing and sorts nothing, so it lowers
+completely: 1,437 primaries before and after, one new cascade. The first part of this module
+that compiles.
+
+Non-recursive, like the parser and for the same reason. A 50,000-deep array serializes.
+
+### The round trip is the assertion; the rest are what it cannot reach
+
+For every one of the forty-nine valid inputs in the shared corpus, `stringify(parse(text))`
+must equal `JSON.stringify(JSON.parse(text))`. That one comparison covers escaping, number
+formatting, key order and container syntax simultaneously -- and four of the five sabotages
+are caught by it alone, which is the case for writing it that way.
+
+The specific assertions cover what a round trip structurally cannot: characters that never
+appear in the corpus, and `space`, which has no parse-side input at all. Fourteen gap values
+against six shapes, all compared with node.
+
+Three details that a plausible serializer gets wrong:
+
+- **Table 78 has seven rows and `\v` is not one of them.** U+000B has no short escape in JSON
+  and must be written `\u000b`; an implementation carrying the C escape set writes `\v`,
+  which is not valid JSON at all.
+- **A solidus is never escaped on the way out**, though the parser accepts `\/` on the way in.
+  The asymmetry is real, and a serializer that escapes it produces text that still parses.
+- **`UnicodeEscape` is lowercase hex**, zero-padded to four.
+
+Numbers go through `String(value)`, which is the canonical `Number::toString` the plan
+requires rather than a second formatter -- `nts_number_to_string` on C and LLVM,
+`NtsRuntime.numberToString` on the JVM. `1e400` is valid JSON, parses to `Infinity` and
+serializes back to `null`, so it legitimately does not round-trip; it is in the corpus for
+that reason.
+
+The corpora moved into `test/json-corpus.ts` and are imported by both JSON tests, because two
+copies of "valid JSON" drift and the drift is invisible -- a case dropped from one file still
+passes in the other.
+
+838/838 host, upstream unchanged at 2,768 of 2,776.
