@@ -91,6 +91,24 @@ Each cost a measurement. The number in brackets is what the fix was worth.
   is the only lever left and it trades against bytes/op, where this row already
   loses at 1.33x.
 
+- **A mask for an unsigned remainder by a power of two.** `uirem` guards with
+  `(left | right) >= 0` and calls `Integer.remainderUnsigned` when either has
+  its high bit set; for a power-of-two divisor `x & (d - 1)` is the unsigned
+  remainder for every `x`, and `optional-chain` is `i % 2`. Built, correct, and
+  it fired -- re-emitting the case gave `uirem=0 iand=1`. **[0%, and the
+  microbenchmark said 1.60x.]** On the row: 44,248 / 44,432 ns masked against
+  44,409 guarded, with the Java reference at 35,455 / 35,606 as the drift
+  control. C2 inlines `uirem`, constant-folds the divisor, proves the guard and
+  strength-reduces the remainder itself, so there was nothing there to take.
+  **The lesson is narrower than "price it first", which I did.** The
+  hand-written pair called the helper with a divisor C2 could see but in a loop
+  it could not fold the guard out of; the reference has to do the same work
+  *in the same context*, not just the same work. A microbenchmark of a helper
+  is a measurement of the helper, not of the call site. Reverted; the patch is
+  the diff of `power_of_two_divide` in `ops.rs`, should a lane whose JIT does
+  not do this -- ART is the candidate, and is not what `benches/` measures --
+  ever want it.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
