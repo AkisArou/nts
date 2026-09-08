@@ -351,7 +351,7 @@ class WritableStreamState<W> {
     if (start === undefined || sink === null) {
       return;
     }
-    return start.call(sink, this.#controller);
+    return Reflect.apply(start, sink, [this.#controller]);
   }
 
   #invokeWrite(chunk: W | undefined): Promise<void> {
@@ -361,7 +361,7 @@ class WritableStreamState<W> {
       return Promise.resolve();
     }
     try {
-      return Promise.resolve(write.call(sink, chunk, this.#controller));
+      return Promise.resolve(Reflect.apply(write, sink, [chunk, this.#controller]));
     } catch (error) {
       return Promise.reject(error);
     }
@@ -374,7 +374,7 @@ class WritableStreamState<W> {
       return Promise.resolve();
     }
     try {
-      return Promise.resolve(close.call(sink));
+      return Promise.resolve(Reflect.apply(close, sink, []));
     } catch (error) {
       return Promise.reject(error);
     }
@@ -387,7 +387,7 @@ class WritableStreamState<W> {
       return Promise.resolve();
     }
     try {
-      return Promise.resolve(abort.call(sink, reason));
+      return Promise.resolve(Reflect.apply(abort, sink, [reason]));
     } catch (error) {
       return Promise.reject(error);
     }

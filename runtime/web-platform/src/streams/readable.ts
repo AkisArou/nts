@@ -338,7 +338,10 @@ export class ReadableStream<T> {
     this.#controller = new ReadableStreamDefaultController(readableControllerKey, this);
     let startResult: void | PromiseLike<void>;
     try {
-      startResult = startAlgorithm?.call(source, this.#controller);
+      startResult =
+        startAlgorithm === undefined
+          ? undefined
+          : Reflect.apply(startAlgorithm, source, [this.#controller]);
     } catch (error) {
       this.#clearAlgorithms();
       throw error;
@@ -353,7 +356,7 @@ export class ReadableStream<T> {
       if (typeof asyncIteratorMethod !== "function") {
         throw new TypeError("ReadableStream.from input has a non-callable async iterator");
       }
-      const iterator = asyncIteratorMethod.call(asyncIterable);
+      const iterator = Reflect.apply(asyncIteratorMethod, asyncIterable, []);
       if (iterator === null || typeof iterator !== "object") {
         throw new TypeError("ReadableStream.from async iterator must be an object");
       }
@@ -367,7 +370,7 @@ export class ReadableStream<T> {
     if (typeof iteratorMethod !== "function") {
       throw new TypeError("ReadableStream.from input has a non-callable iterator");
     }
-    const iterator = iteratorMethod.call(asyncIterable);
+    const iterator = Reflect.apply(iteratorMethod, asyncIterable, []);
     if (iterator === null || typeof iterator !== "object") {
       throw new TypeError("ReadableStream.from iterator must be an object");
     }
@@ -554,7 +557,7 @@ export class ReadableStream<T> {
     this.#queue.reset();
     this.#finish();
     if (source !== null && cancelAlgorithm !== undefined) {
-      await cancelAlgorithm.call(source, reason);
+      await Reflect.apply(cancelAlgorithm, source, [reason]);
     }
   }
 
@@ -747,7 +750,7 @@ export class ReadableStream<T> {
     this.#pulling = true;
     let pullResult: void | PromiseLike<void>;
     try {
-      pullResult = pullAlgorithm.call(source, controller);
+      pullResult = Reflect.apply(pullAlgorithm, source, [controller]);
     } catch (error) {
       this.#pulling = false;
       this[kStreamFail](error);
@@ -982,7 +985,7 @@ class ReadableStreamIteratorSource<T> implements UnderlyingSource<T> {
   }
 
   async pull(controller: ReadableStreamDefaultController<T>): Promise<void> {
-    const iteration = await this.#next.call(this.#iterator);
+    const iteration = await Reflect.apply(this.#next, this.#iterator, []);
     if (iteration === null || typeof iteration !== "object") {
       throw new TypeError("ReadableStream.from iterator result must be an object");
     }
@@ -1007,7 +1010,7 @@ class ReadableStreamIteratorSource<T> implements UnderlyingSource<T> {
     if (typeof returnMethod !== "function") {
       throw new TypeError("ReadableStream.from iterator has a non-callable return method");
     }
-    const result = await returnMethod.call(this.#iterator, reason);
+    const result = await Reflect.apply(returnMethod, this.#iterator, [reason]);
     if (result === null || typeof result !== "object") {
       throw new TypeError("ReadableStream.from iterator return result must be an object");
     }
@@ -1536,7 +1539,10 @@ class ReadableByteStreamState {
 
     let startResult: void | PromiseLike<void>;
     try {
-      startResult = start?.call(source, this.#controller);
+      startResult =
+        start === undefined
+          ? undefined
+          : Reflect.apply(start, source, [this.#controller]);
     } catch (error) {
       this.#clearAlgorithms();
       throw error;
@@ -1788,7 +1794,7 @@ class ReadableByteStreamState {
     this.#invalidateBYOBRequest();
     this.#clearAlgorithms();
     if (source !== null && cancel !== undefined) {
-      await cancel.call(source, reason);
+      await Reflect.apply(cancel, source, [reason]);
     }
   }
 
@@ -2037,7 +2043,7 @@ class ReadableByteStreamState {
     this.#pulling = true;
     let result: void | PromiseLike<void>;
     try {
-      result = pull.call(source, this.#controller);
+      result = Reflect.apply(pull, source, [this.#controller]);
     } catch (error) {
       this.#pulling = false;
       this.stream[kStreamFail](error);

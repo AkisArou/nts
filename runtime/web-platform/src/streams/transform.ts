@@ -206,7 +206,7 @@ class TransformStreamState<I, O> {
       if (transform === undefined) {
         this.enqueue(chunk as O);
       } else {
-        await transform.call(transformer, chunk, this.controller);
+        await Reflect.apply(transform, transformer, [chunk, this.controller]);
       }
     } catch (error) {
       this.error(error);
@@ -292,7 +292,7 @@ class TransformStreamState<I, O> {
     try {
       let flushResult: void | PromiseLike<void> = undefined;
       if (transformer !== null && flush !== undefined) {
-        flushResult = flush.call(transformer, this.controller);
+        flushResult = Reflect.apply(flush, transformer, [this.controller]);
       }
       await flushResult;
       this.#clearAlgorithms();
@@ -316,7 +316,7 @@ class TransformStreamState<I, O> {
     try {
       let cancelResult: void | PromiseLike<void> = undefined;
       if (transformer !== null && cancel !== undefined) {
-        cancelResult = cancel.call(transformer, reason);
+        cancelResult = Reflect.apply(cancel, transformer, [reason]);
       }
       await cancelResult;
       this.#clearAlgorithms();
@@ -340,7 +340,7 @@ class TransformStreamState<I, O> {
     try {
       let cancelResult: void | PromiseLike<void> = undefined;
       if (hadCancelAlgorithm) {
-        cancelResult = cancel.call(transformer, reason);
+        cancelResult = Reflect.apply(cancel, transformer, [reason]);
       }
       await cancelResult;
       this.#clearAlgorithms();
@@ -414,7 +414,11 @@ export class TransformStream<I = unknown, O = unknown> {
     );
 
     try {
-      startCapability.resolve(start?.call(transformer, this.#state.controller));
+      startCapability.resolve(
+        start === undefined
+          ? undefined
+          : Reflect.apply(start, transformer, [this.#state.controller]),
+      );
     } catch (error) {
       startCapability.reject(error);
       throw error;
