@@ -21,12 +21,17 @@ then `with-lock.sh`.
 
 | row | nts C | node | bun | nts/node | nts/bun |
 | --- | --- | --- | --- | --- | --- |
-| `json-serialize` | 15.02us | 12.68us | 7.19us | 1.12x | 1.98x |
-| `json-scan` | 4.33us | 3.09us | 3.55us | 1.33x | 1.22x |
+| `json-serialize` | 14.53us | 12.11us | 7.19us | 1.16x | 1.98x |
+| `json-scan` | **3.51us** | 2.92us | 3.32us | 1.21x | 1.06x |
 | `json-build-append` | 21.17us | 15.69us | 9.69us | 1.25x | 2.03x |
 | `json-build-join` | 20.78us | 22.43us | 14.56us | **0.95x** | 1.46x |
 
-One row is already faster than node. None is faster than bun.
+One row is already faster than node. None is faster than bun, though `json-scan` is now within
+6% of it.
+
+**The node column is the noisy one.** `json-scan` on node measured 3.09, 5.16 and 2.92 across
+three idle runs of the same source. Take a node number twice before believing a ratio built on it;
+the nts column has been stable to about 2% throughout.
 
 ## Established, with the counterfactual that established it
 
@@ -45,6 +50,21 @@ than the join spelling and bun 1.50x faster; nts is flat between them. **A bench
 
 **Specialization pays where numbers are formatted, not where characters are read.** `nts f64`
 costs 1.20x on `json-serialize` and nothing at all on `json-scan` (4.39 against 4.33).
+
+**An index that crosses a function parameter stops being an integer, and that costs 19%.**
+The runtime has two entries behind `charCodeAt`. The integer one is an unsigned compare and a
+read; the double one truncates through `ToIntegerOrInfinity`, compares twice in floating point
+against a converted length, then converts again. A loop-local index is proved `int32` and gets the
+fast entry -- which is why the escaper always had it. An index passed as a `number` **parameter**
+is a double and gets the slow one, on every character.
+
+`json-scan` read through `codeAt(source, at, length)` and paid it fourteen times per number.
+Restoring the integer with `| 0` at the read took the row from 4.33us to 3.51us, stable across two
+idle runs, and moved `nts/bun` from 1.22x to 1.06x. node was unaffected within its own noise.
+
+This is checkable without running anything -- `grep nts_str_char_code_at_int` the emitted C -- and
+it was found that way, not from a profile. **Across every bench emission, only four cases select
+the integer entry.** The defect is general and this fixed one instance of it.
 
 **The escaper is the program.** `quoteJSONString` is 26.98% of `json-build-append` and 36.62% of
 `json-build-join`. Assembly strategy is a sideshow.
