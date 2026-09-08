@@ -9165,6 +9165,62 @@ one holding a notion of "exported" that a parser can get wrong. That branch was
 controlled by disabling the class-method regex, which reproduces the second
 failure exactly.
 
+## Three globals that do not collide with what everyone said they did
+
+`process` fails to compile with 20 clang errors across three names, and the
+whole profile carried them as *"globals colliding with C header names —
+`version`, `platform`, `environment`"*. **None of the three collides with a C
+header name.** Each is two **program** declarations colliding with each other, a
+function against a variable:
+
+    14304  NtsString * version(void);                     <- os.version()
+    16555  static NtsString * version = 0;
+
+    14307  NtsString * platform(void);                    <- os.platform()
+    16570  static NtsString * platform = 0;
+
+    14843  static NtsString * environment(NtsString *);   <- internal/color-depth.ts:21
+    16428  static NtsObj_FileURLProvider * environment = 0;
+
+The name came from a real `header` collision found the same day and generalised
+to three cases that look similar and are not. That is how a wrong reading
+survives: `version` and `platform` sit one namespace over from a genuine libc
+collision, and the fix for the genuine one — the `access_` escape — does nothing
+for these.
+
+### The neighbours name the fix
+
+    static NtsString * sep351 = 0;
+    static NtsString * delimiter352 = 0;
+    static NtsString * delimiter354 = 0;
+    static NtsArray  * table358 = 0;
+    static NtsString * version = 0;        <- no suffix
+
+The module-scope variable namer **already disambiguates**, and already has a
+suffix scheme. `version` got no suffix because its collision is with a function.
+So this is not "add mangling"; it is "the two namers do not share a namespace",
+which is smaller, more specific, and checkable by reading the emitter rather
+than by guessing at inputs.
+
+### A diagnosis without a reproduction, labelled as one
+
+**Six attempts failed to reduce it**, every one the same way: the function half
+emitted, the variable half was folded or stayed in SSA, and there was nothing
+left to collide with. What was ruled out —
+
+    let x: T | null                      with setter and getter
+    const x: Record<string, string|undefined>       plain
+    const x: Record<string, string|undefined>       re-exported under a second name
+    readonly class field from a binding, one module-scope instance
+    const x: number[]
+
+— so whatever makes `process` emit a file-scope global is none of those.
+
+No fixture was filed and the directory was deleted rather than left holding a
+program that does not reproduce. The evidence is `process`'s own emitted C,
+which builds and can be re-read at any time; it is the *reduction* that is
+missing, and the two are worth distinguishing when handing work over.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
