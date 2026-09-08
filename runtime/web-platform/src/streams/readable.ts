@@ -32,6 +32,63 @@ import { abortSignalSubscribe } from "../core/abort.ts";
 
 export type ReadResult<T> = { done: false; value: T } | { done: true; value: undefined };
 
+/**
+ * A pending read, expressed as the three things that can happen to it.
+ *
+ * The specification calls this a *read request* and gives it to every internal consumer --
+ * `pipeTo`, `tee`, the async iterator -- while only the public `read()` gets a promise. That is
+ * not a stylistic preference: a promise resolved with an ordinary object performs a `Get` for
+ * `then` on it, so a page that has replaced `Object.prototype.then` observes every chunk the
+ * stream moves. `then-interception.any.js` asserts that piping and teeing are *not* observable
+ * that way, and both failed here for exactly that reason.
+ *
+ * The steps receive the value and the reason directly, so nothing is ever resolved *with* a
+ * `{ done, value }` object except at the public boundary, where the specification requires one.
+ */
+export interface ReadRequest<T> {
+  chunk(value: T): void;
+  close(): void;
+  error(reason: unknown): void;
+}
+
+/**
+ * Where {@link readChunk} leaves what it read.
+ *
+ * A mutable holder rather than a return value, because there is no way to return a
+ * `{ done, value }` from an `async` function without the promise being resolved *with* it --
+ * which performs the `Get` for `then` this whole arrangement exists to avoid. The slot is the
+ * caller's own object and is never handed to promise resolution.
+ */
+class ChunkSlot<T> {
+  value: T | undefined = undefined;
+  done = false;
+}
+
+/**
+ * One chunk from `reader`, through a read request.
+ *
+ * The promise is of `void` and is resolved with no argument at all, so the resolution value is
+ * `undefined` -- not an Object, so no `then` is looked up on anything. The chunk arrives in
+ * `slot`. An error still rejects, which is ordinary and unobservable in the same way.
+ */
+function readChunk<T>(reader: ReadableStreamDefaultReader<T>, slot: ChunkSlot<T>): Promise<void> {
+  const settled = Promise.withResolvers<void>();
+  reader[kReaderReadRequest]({
+    chunk: (value: T) => {
+      slot.value = value;
+      slot.done = false;
+      settled.resolve();
+    },
+    close: () => {
+      slot.value = undefined;
+      slot.done = true;
+      settled.resolve();
+    },
+    error: (reason: unknown) => settled.reject(reason),
+  });
+  return settled.promise;
+}
+
 export type UnderlyingSourceStartCallback<T> = (
   this: UnderlyingSource<T>,
   controller: ReadableStreamDefaultController<T>,
@@ -265,6 +322,8 @@ export const kStreamFinishByteStream: unique symbol = Symbol("ReadableStream fin
 export const kStreamMarkDisturbed: unique symbol = Symbol("ReadableStream markDisturbed");
 export const kStreamQueuedSize: unique symbol = Symbol("ReadableStream queuedSize");
 export const kStreamRead: unique symbol = Symbol("ReadableStream read");
+export const kStreamReadRequest: unique symbol = Symbol("ReadableStream readRequest");
+export const kReaderReadRequest: unique symbol = Symbol("ReadableStreamDefaultReader readRequest");
 export const kStreamReadInto: unique symbol = Symbol("ReadableStream readInto");
 export const kStreamRelease: unique symbol = Symbol("ReadableStream release");
 export const kStreamReleaseBYOB: unique symbol = Symbol("ReadableStream releaseBYOB");
@@ -280,7 +339,7 @@ export class ReadableStream<T> {
   #pullAlgorithm: UnderlyingSourcePullCallback<T> | undefined;
   #cancelAlgorithm: UnderlyingSourceCancelCallback<T> | undefined;
   readonly #queue = new QueueWithSizes<T>();
-  readonly #pending = new Fifo<PromiseWithResolvers<ReadResult<T>>>();
+  readonly #pending = new Fifo<ReadRequest<T>>();
   #currentReader: ReadableStreamDefaultReader<T> | ReadableStreamBYOBReader | null = null;
   #state: StreamState = "readable";
   #storedError: unknown;
@@ -561,21 +620,41 @@ export class ReadableStream<T> {
     }
   }
 
-  [kStreamRead](reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>>;
-  [kStreamRead](reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<unknown>> {
+/**
+   * The primitive every read goes through, public or internal.
+   *
+   * Nothing here resolves a promise with a `{ done, value }` object; the steps are called with
+   * the value or the reason. `kStreamRead` builds a promise on top for the public `read()`,
+   * which is the one place the specification asks for one.
+   */
+  [kStreamReadRequest](reader: ReadableStreamDefaultReader<T>, request: ReadRequest<T>): void {
     if (reader !== this.#currentReader) {
-      return Promise.reject(new TypeError("Reader has been released"));
+      request.error(new TypeError("Reader has been released"));
+      return;
     }
     this.#isDisturbed = true;
     if (this.#state === "closed") {
-      return Promise.resolve({ done: true, value: undefined });
+      request.close();
+      return;
     }
     if (this.#state === "errored") {
-      return Promise.reject(this.#storedError);
+      request.error(this.#storedError);
+      return;
     }
     const byteState = this.#byteState;
     if (byteState !== null) {
-      return byteState.readDefault();
+      // The byte path still settles through a promise of its own, so a chunk read from a byte
+      // stream is still observable to a replaced `Object.prototype.then`. `then-interception`
+      // uses a default stream and does not reach here; saying so is better than implying this
+      // closed a hole it did not.
+      void byteState.readDefault().then(
+        (result) => {
+          if (result.done) request.close();
+          else request.chunk(result.value as T);
+        },
+        (reason: unknown) => request.error(reason),
+      );
+      return;
     }
     const entry = this.#queue.dequeue();
     if (entry !== undefined) {
@@ -584,11 +663,23 @@ export class ReadableStream<T> {
       } else {
         this.#maybePull();
       }
-      return Promise.resolve({ done: false, value: entry.value });
+      request.chunk(entry.value);
+      return;
     }
-    const result = Promise.withResolvers<ReadResult<T>>();
-    this.#pending.enqueue(result);
+    this.#pending.enqueue(request);
     this.#maybePull();
+  }
+
+  [kStreamRead](reader: ReadableStreamDefaultReader<T>): Promise<ReadResult<T>> {
+    // 25.5 of the Streams standard: `read()` resolves with an ordinary object, and that object
+    // is the caller's to see. The `then` lookup on it is required behaviour here, unlike on the
+    // internal paths.
+    const result = Promise.withResolvers<ReadResult<T>>();
+    this[kStreamReadRequest](reader, {
+      chunk: (value: T) => result.resolve({ done: false, value }),
+      close: () => result.resolve({ done: true, value: undefined }),
+      error: (reason: unknown) => result.reject(reason),
+    });
     return result.promise;
   }
 
@@ -645,7 +736,7 @@ export class ReadableStream<T> {
     }
     const read = this.#takePending();
     if (read !== undefined) {
-      read.resolve({ done: false, value });
+      read.chunk(value);
     } else {
       try {
         const sizeOf = this.#sizeOf;
@@ -773,19 +864,19 @@ export class ReadableStream<T> {
     }
   }
 
-  #takePending(): PromiseWithResolvers<ReadResult<T>> | undefined {
+  #takePending(): ReadRequest<T> | undefined {
     return this.#pending.dequeue();
   }
 
   #resolvePendingAsClosed(): void {
     while (!this.#pending.empty) {
-      this.#pending.dequeue()?.resolve({ done: true, value: undefined });
+      this.#pending.dequeue()?.close();
     }
   }
 
   #rejectPending(error: unknown): void {
     while (!this.#pending.empty) {
-      this.#pending.dequeue()?.reject(error);
+      this.#pending.dequeue()?.error(error);
     }
   }
 
@@ -951,12 +1042,15 @@ class ReadableStreamAsyncIterator<T> implements AsyncIterableIterator<T> {
     }
 
     try {
-      const read = await stream[kStreamRead](reader);
-      if (read.done) {
+      // A read request for the read; the `IteratorResult` below is the *public* value and is an
+      // ordinary object because 27.1.2 says so, which is a different thing from the chunk.
+      const slot = new ChunkSlot<T>();
+      await readChunk(reader, slot);
+      if (slot.done) {
         this.#release();
         result.resolve({ done: true, value: undefined });
       } else {
-        result.resolve({ done: false, value: read.value });
+        result.resolve({ done: false, value: slot.value as T });
       }
     } catch (error) {
       this.#release();
@@ -2172,6 +2266,21 @@ export class ReadableStreamDefaultReader<T> {
     this.#closedCapability.reject(error);
   }
 
+  /**
+   * The internal read: a read request, and no promise carrying the chunk.
+   *
+   * `read()` is the public operation and must resolve with an ordinary `{ done, value }` object,
+   * which is observable to a replaced `Object.prototype.then` and is supposed to be. Every
+   * internal consumer uses this instead. See {@link ReadRequest}.
+   */
+  [kReaderReadRequest](request: ReadRequest<T>): void {
+    if (this.#stream === null) {
+      request.error(new TypeError("Reader has been released"));
+      return;
+    }
+    this.#stream[kStreamReadRequest](this, request);
+  }
+
   read(): Promise<ReadResult<T>> {
     // Web IDL: an operation whose return type is a promise must convert a thrown
     // exception into a **rejected promise**, never throw synchronously. The brand check
@@ -2335,10 +2444,13 @@ class PipeState<T> {
         return;
       }
 
-      let result: ReadResult<T>;
+      // A read request, not `read()`. This is the loop `then-interception.any.js` means by
+      // "piping should not be observable": resolving a promise with the `{ done, value }` chunk
+      // performs a `Get` for `then` on it, and a page can replace `Object.prototype.then`.
+      const slot = new ChunkSlot<T>();
       this.#reading = true;
       try {
-        result = await this.#source[kStreamRead](this.#reader);
+        await readChunk(this.#reader, slot);
       } catch (error) {
         this.#reading = false;
         this.#sourceErrored(error);
@@ -2346,12 +2458,12 @@ class PipeState<T> {
       }
       this.#reading = false;
       if (this.#shuttingDown) return;
-      if (result.done) {
+      if (slot.done) {
         this.#sourceClosePending = false;
         this.#sourceClosed();
         return;
       }
-      this.#trackWrite(writableStreamDefaultWriterWrite(this.#writer, result.value));
+      this.#trackWrite(writableStreamDefaultWriterWrite(this.#writer, slot.value as T));
       if (this.#sourceClosePending) {
         this.#sourceClosePending = false;
         this.#sourceClosed();
@@ -2606,28 +2718,26 @@ class ByteTeeState<T> {
 
   async #readDefault(): Promise<void> {
     const reader = this.#defaultReader();
-    let result: ReadResult<T>;
+    // A read request, not `read()`; see `readChunk`.
+    const slot = new ChunkSlot<T>();
     try {
-      result = await reader.read();
+      await readChunk(reader, slot);
     } catch (error) {
       if (reader === this.#reader) this.#sourceErrored(error);
       return;
     }
     if (reader !== this.#reader || this.#done) return;
-    if (result.done) {
+    if (slot.done) {
       this.#sourceClosed();
       return;
     }
-    if (!(result.value instanceof Uint8Array) || !(result.value.buffer instanceof ArrayBuffer)) {
+    const value = slot.value as T;
+    if (!(value instanceof Uint8Array) || !(value.buffer instanceof ArrayBuffer)) {
       this.#failTee(new TypeError("A byte stream produced a non-byte chunk"));
       return;
     }
-    const bytes = new Uint8Array(
-      result.value.buffer,
-      result.value.byteOffset,
-      result.value.byteLength,
-    );
-    this.#forwardDefault(result.value, bytes);
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    this.#forwardDefault(value, bytes);
   }
 
   async #readInto(view: ReadableStreamBYOBView, index: number): Promise<void> {
@@ -2908,9 +3018,10 @@ class TeeState<T> {
   }
 
   private async readOne(): Promise<void> {
-    let result: ReadResult<T>;
+    // A read request, not `read()`; see `readChunk`.
+    const slot = new ChunkSlot<T>();
     try {
-      result = await this.reader.read();
+      await readChunk(this.reader, slot);
     } catch (error) {
       this.sourceErrored(error);
       this.flushPendingSourceState();
@@ -2921,13 +3032,14 @@ class TeeState<T> {
       if (this.done) {
         return;
       }
-      if (result.done) {
+      if (slot.done) {
         this.sourceClosed();
         this.flushPendingSourceState();
         return;
       }
+      const value = slot.value as T;
       const sizeOf = this.size;
-      const size = sizeOf(result.value);
+      const size = sizeOf(value);
       if (!Number.isFinite(size) || size < 0) {
         throw new RangeError("Invalid chunk size");
       }
@@ -2940,8 +3052,8 @@ class TeeState<T> {
       const second = this.branches[1];
       // Clone before handing either branch a mutable chunk.
       const clone = this.clone;
-      const secondValue = second.canceled ? result.value : clone(result.value);
-      first.enqueue(result.value);
+      const secondValue = second.canceled ? value : clone(value);
+      first.enqueue(value);
       second.enqueue(secondValue);
       this.flushPendingSourceState();
     } catch (error) {
@@ -3174,11 +3286,14 @@ export function transfer<T>(stream: ReadableStream<T>): ReadableStream<T> {
   return new ReadableStream<T>(
     {
       async pull(controller) {
-        const result = await reader.read();
-        if (result.done) {
+        // A read request, not `read()`: teeing must not be observable to a replaced
+        // `Object.prototype.then`. See `readChunk`.
+        const slot = new ChunkSlot<T>();
+        await readChunk(reader, slot);
+        if (slot.done) {
           controller.close();
         } else {
-          controller.enqueue(result.value);
+          controller.enqueue(slot.value as T);
         }
       },
       async cancel(reason) {

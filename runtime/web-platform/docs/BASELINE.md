@@ -7331,3 +7331,36 @@ rather than a workaround:
 That is `numberValueOf` -> `Scanner#readNumber` -> `readValue` -> `parseJsonText`. It is on the
 compiler lane's list and it is now the single thing standing between the whole JSON parser and
 the compiled axis.
+
+## The upstream corpus is clean, and the gate exits 0
+
+    {"upstreamTests":2817,"applicableTests":2772,"passed":2772,"failed":0,"notApplicable":45}
+
+The eight failures this file describes as carried throughout are gone. Four were never ours and
+are now declared in the manifest with the reason; two were `.call`/`.apply` being observable and
+were fixed by invoking callbacks the way Web IDL says; one was the async iterator's prototype
+shape; and the last two were the read path.
+
+**Read requests, which is what the specification always said.** `pipeTo`, `tee`, both async
+iterators and the byte tee all awaited the public `read()`. Its promise is resolved *with* the
+`{ done, value }` chunk, and resolving a promise with an ordinary object performs a `Get` for
+`then` on it -- so a page that has replaced `Object.prototype.then` sees every chunk a stream
+moves. `then-interception.any.js` asserts that piping and teeing are not observable that way, and
+both failed here for exactly that reason.
+
+The specification's answer is a *read request*: three steps -- chunk, close, error -- called with
+the value or the reason directly. Only the public `read()` builds a promise. So
+`[kStreamReadRequest]` is now the primitive every read goes through, `#pending` holds requests
+rather than promise resolvers, and `[kStreamRead]` is a thin wrapper over the primitive that
+exists for `read()` alone. **It has exactly one caller now**, which is the check that the
+separation is real.
+
+The consumers stayed `async`. They await a `Promise<void>` resolved with no argument -- so the
+resolution value is `undefined`, not an Object, and nothing is looked up on it -- and take the
+chunk out of a `ChunkSlot` they own. That is a smaller change than rewriting four loops into
+callbacks and has the same observable behaviour.
+
+**One hole is left open and named.** A byte stream's default read still settles through
+`byteState.readDefault()`, which is a promise resolved with a result object, so a chunk read from
+a byte stream is still observable. `then-interception` uses a default stream and does not reach
+it. Saying so is better than implying this closed a hole it did not.
