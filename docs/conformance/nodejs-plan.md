@@ -29,9 +29,25 @@ sentence, which will go stale.
 
 ## The situation in one paragraph
 
-Two axes move independently. **TypeScript-on-node: 1,803 of 1,803 across 22
-modules, 0 hollow, nothing failing.** **Compiled artifact: 1 of 22**, with `os`
-loading and answering on 17 of the 23 names its shape wants.
+Two axes move independently. **TypeScript-on-node: 1,807 of 1,807 across 22
+modules, 0 hollow, 22 of 22 typechecking.** **Compiled artifact: 1 green and 1
+partial** — `punycode` 2 of 2, and `os` 4 of 7 with 17 of the 23 names its shape
+wants.
+
+**A third axis exists and had never been measured: the native half.** 308 native
+bindings are declared across `runtime/node`; **183 have a C implementation and
+125 do not**, existing only as a `declare function` and a stand-in. `dgram` has
+21 of 21 missing and no `.c` file at all; `net` 28 of 30; `fs` 60 of 133. So
+compiling is necessary and not sufficient — `dgram` would fail to *link* whatever
+the compiler does.
+
+Of the 183 that exist, **43 have been compared against node**, up from 0 at the
+start of the session. The interpreted lane cannot do that comparison: 78 of its
+binding stand-ins call node's own implementation, so that lane agrees with node
+by construction whatever the C does. `tooling/conformance/binding-probe.sh`
+builds an addon around a few of a module's bindings *without compiling the
+module*, which is how the other 43 were reached — including `fs`'s, in a module
+that does not build.
 
     1 of 22 modules' compiled artifacts pass every applicable test.
 
