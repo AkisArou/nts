@@ -17,7 +17,7 @@ lane has moved.
 | --- | --- | --- |
 | `node-utf8` | 6.86x | blocked: 62% is `toInt32`, `narrow.rs` owns it |
 | `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
-| `array-from` | 2.14x | see below -- the reference does less work |
+| `array-from` | 2.14x | real gap: rule 4 checked and does NOT excuse it |
 | `array-predicates` | 1.74x | probed: the reference preallocates, see below |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
@@ -84,11 +84,16 @@ rows *before* taking any residual -- `narrow.rs` records three earlier attempts
 that each read as zero because two changes moved together.
 
 **Mine.** `symbol-keyed-map`'s `findLinear` is *not* open -- see the list
-above; it is worth 2%. `array-from`: the array half is already bulk (`slice` ->
-`Arrays.copyOfRange`); the set half walks `next`/`keyAt` per element and unboxes
-to a `double[]`, where `ref.java` calls `HashSet.toArray()` and never unboxes --
-so check how much of that 2.14x is a reference doing less work before treating
-it as a gap. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
+above; it is worth 2%. `array-from` **is** open and the obvious excuse for it is
+gone: the array half already bulk-copies (`slice` -> `Arrays.copyOfRange`), and
+the set half walks `next`/`keyAt` per element and unboxes into a `double[]`
+where `ref.java` calls `HashSet.toArray()` and copies references. That looked
+like the reference doing less work. It is doing **more** -- unboxing into a
+`double[]` measured **0.78-0.81x** of `toArray()`, twice. So `NtsMap.keyAt` at
+34% of that profile is a real target, and the shape of a fix is a bulk
+`keys-into-array` helper rather than two calls and index arithmetic per element.
+The obstacle is that the loop is the *lowering's*, not the runtime's, so the
+helper needs someone to call it. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
