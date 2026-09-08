@@ -1,0 +1,103 @@
+// Every name node's `buffer` has, with its type, and both directions.
+//
+// This module is the reason the other surface tests in this profile exist. It
+// **compiles today** and publishes 3 of its 15 exports, and its 55 failures are
+// that one fact: every test touching an absent name dies on a TypeError about
+// `undefined`, which names nothing and reads as fifty-five behaviour bugs.
+//
+// The three it publishes are `kMaxLength`, `kStringMaxLength` and
+// `INSPECT_MAX_BYTES` — two of which arrived only when a literal-initialised
+// numeric export stopped being folded away with nothing left for the export
+// table to name.
+//
+// Node's answers come from a child `node -p`. Inside this harness
+// `require("node:buffer")` and `require("buffer")` are the **same object**, so
+// an oracle taken that way compares a thing with itself.
+//
+// **Against the addon as it stands, this file does not run at all**: it fails
+// with `loading the module: Cannot convert undefined or null to object`, because
+// `shape.mjs` cannot build a surface from three exports. That is the module's
+// state and not a defect in the test, but it is worth saying plainly -- a test
+// cannot report what a module is missing if the module is missing too much to
+// load. The count that works today is `sweep.mjs`'s `absent:` line, which reads
+// the addon's keys directly and needs no shim.
+//
+// It becomes the useful check the moment `buffer` publishes enough to be
+// shaped, and it fails under `--sabotage` today, naming all fourteen.
+
+"use strict";
+
+require("../common");
+
+const assert = require("assert");
+const { execFileSync } = require("child_process");
+const buffer = require("buffer");
+
+function fromRealNode(expression) {
+  return JSON.parse(
+    execFileSync(process.execPath, ["-p", `JSON.stringify(${expression})`], {
+      encoding: "utf8",
+    }),
+  );
+}
+
+const expected = fromRealNode('Object.keys(require("node:buffer")).sort()');
+const nodeTypes = fromRealNode(
+  'Object.fromEntries(Object.keys(require("node:buffer"))' +
+    '.map((k) => [k, typeof require("node:buffer")[k]]))',
+);
+
+assert.ok(
+  expected.length >= 10,
+  `node's buffer exports ${expected.length} names, too few to be real`,
+);
+
+const actual = new Set(Object.keys(buffer));
+const missing = expected.filter((name) => !actual.has(name));
+assert.deepStrictEqual(
+  missing,
+  [],
+  `buffer is missing name(s) node has: ${missing.join(", ")}`,
+);
+
+for (const name of expected) {
+  assert.strictEqual(
+    typeof buffer[name],
+    nodeTypes[name],
+    `buffer.${name} is ${typeof buffer[name]}, node's is ${nodeTypes[name]}`,
+  );
+}
+
+// The two numeric constants, pinned by value. They are the export kind the
+// backend was dropping: a literal initializer folded into its readers leaves
+// nothing for the export table to point at, so `INSPECT_MAX_BYTES = 50` was
+// absent while `kMaxLength = 2 ** 53 - 1` was present. Asserting the values
+// means a change to how constants are published cannot quietly take them again.
+assert.strictEqual(buffer.kMaxLength, fromRealNode('require("node:buffer").kMaxLength'));
+assert.strictEqual(
+  buffer.kStringMaxLength,
+  fromRealNode('require("node:buffer").kStringMaxLength'),
+);
+assert.strictEqual(
+  buffer.INSPECT_MAX_BYTES,
+  fromRealNode('require("node:buffer").INSPECT_MAX_BYTES'),
+);
+
+// `constants` is an object of numbers; published empty it would satisfy every
+// check above.
+const nodeConstants = fromRealNode('require("node:buffer").constants');
+assert.strictEqual(typeof buffer.constants, "object");
+assert.notStrictEqual(buffer.constants, null);
+for (const name of Object.keys(nodeConstants)) {
+  assert.strictEqual(
+    buffer.constants[name],
+    nodeConstants[name],
+    `buffer.constants.${name} is ${buffer.constants[name]}, node's is ${nodeConstants[name]}`,
+  );
+}
+
+// And that `Buffer` is the class rather than a name of the right type: a round
+// trip through the two operations every other test in this module depends on.
+const made = buffer.Buffer.from("aéb", "utf8");
+assert.strictEqual(made.length, 4);
+assert.strictEqual(made.toString("utf8"), "aéb");
