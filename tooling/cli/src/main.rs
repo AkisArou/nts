@@ -26,12 +26,73 @@ use nts_semantic_schema::SCHEMA_VERSION;
 /// the emitter bug that had lost every method.
 const TAKES_A_VALUE: [&str; 1] = ["--out"];
 
+/// The tsconfig a command was pointed at, *and* its dependencies acquired.
+///
+/// Every command that builds a program goes through here, which is what makes
+/// acquisition part of the build rather than a step somebody has to know
+/// about: `pnpm install` and then compile, with no third command. When a
+/// project has dependencies whose TypeScript could be recovered, the config
+/// returned is the generated one that resolves them; otherwise it is the
+/// developer's own, untouched.
+///
+/// `--no-acquire` opts out.
+fn project(rest: &[String]) -> Result<Utf8PathBuf> {
+    let named = named_project(rest)?;
+    if rest.iter().any(|arg| arg == "--no-acquire") {
+        return Ok(named);
+    }
+    acquire(&named)
+}
+
+/// Acquire what this project's dependencies can supply, and return the config
+/// to compile with.
+///
+/// A project with no `package.json` has no dependencies to acquire and is left
+/// exactly as it was found -- which is every example in this repository but
+/// one, so the common case costs a `stat`.
+fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
+    let dir = tsconfig
+        .parent()
+        .filter(|parent| !parent.as_str().is_empty())
+        .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf);
+    if !dir.join("package.json").is_file() {
+        return Ok(tsconfig.to_owned());
+    }
+    let acquisition = nts_deps::acquire(&dir, tsconfig, nts_deps::Options::default())?;
+
+    // Quiet when everything worked, and specific when it did not. There is no
+    // JavaScript fallback, so a dependency this compiler cannot take has to be
+    // visible here rather than as a puzzling refusal inside a file nobody chose
+    // to open.
+    let refused: Vec<_> = acquisition
+        .packages
+        .iter()
+        .filter(|package| !package.acquired())
+        .collect();
+    if !refused.is_empty() {
+        eprintln!(
+            "{} of {} dependencies acquired; these have no TypeScript to compile:",
+            acquisition.acquired(),
+            acquisition.packages.len()
+        );
+        for package in refused {
+            eprintln!(
+                "  {} {} -- {}",
+                package.name,
+                package.version,
+                package.route.describe()
+            );
+        }
+    }
+    Ok(acquisition.tsconfig.unwrap_or_else(|| tsconfig.to_owned()))
+}
+
 /// The tsconfig a command was pointed at.
 ///
 /// Returns an error rather than a path so that naming something that is not a
 /// project fails here instead of downstream as an empty program -- which is
 /// indistinguishable from a program that legitimately has nothing in it.
-fn project(rest: &[String]) -> Result<Utf8PathBuf> {
+fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
     let mut skip_next = false;
     let mut found = None;
     for arg in rest {
@@ -243,6 +304,15 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             dump_erasure(&project(&rest)?, rest.iter().any(|a| a == "--sites"))
         }
+        // Acquire the TypeScript behind this project's dependencies, and say
+        // what could not be acquired. `docs/npm-deps-plan.md` is why this is a
+        // report as much as an action: there is no JavaScript fallback, so a
+        // dependency the compiler cannot take has to be visible before a build
+        // fails on it.
+        Some("deps") => {
+            let rest: Vec<String> = args.collect();
+            deps(&rest)
+        }
         Some("version") | None => {
             println!("nts {}", env!("CARGO_PKG_VERSION"));
             println!("snapshot schema v{SCHEMA_VERSION}");
@@ -313,11 +383,22 @@ fn print_public_api(program: &hir::Program) {
     }
     println!("\npublic api");
     let names = |emitted: &str| program.funcs.iter().any(|func| func.name == emitted);
+    // Three answers, not two. A published name that no function answers to is
+    // not necessarily absent: `export const version = "2.1.0"` is a *global*,
+    // and reporting it as a missing function is how the addon backend used to
+    // describe it too -- "is not a function this backend can name", which reads
+    // like a gap and was a shape.
     let missing = |emitted: &str| {
         if names(emitted) {
             ""
+        } else if program
+            .globals
+            .iter()
+            .any(|global| global.name == emitted && global.exported)
+        {
+            "   (a value)"
         } else {
-            "   (no function of that name)"
+            "   (no function or value of that name)"
         }
     };
     for (emitted, published) in &program.public_api {
@@ -1694,6 +1775,44 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // spending two lines of output to prevent.
     if provider == hir::Provider::ReferenceCounting {
         println!("compile the runtime with -DNTS_PROVIDER_RC");
+    }
+    Ok(())
+}
+
+/// `nts deps`: acquire dependency source, and report on what was not acquired.
+fn deps(rest: &[String]) -> Result<()> {
+    // `--help` must not fall through to a real run: this command *writes*, and
+    // an accidental invocation once generated a config in a repository root
+    // that nobody asked it about.
+    if rest.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!(
+            "nts deps [tsconfig] [--dry-run] [--verbose] [--json]\n\n\
+             Acquires the TypeScript behind this project's dependencies and\n\
+             reports what could not be acquired. Writes <workspace>/.nts/ and\n\
+             <project>/tsconfig.nts.json; never touches anything else.\n\n\
+             --dry-run   report only, write nothing\n\
+             --verbose   show every specifier mapping\n\
+             --json      the same report, for a machine"
+        );
+        return Ok(());
+    }
+    let tsconfig = named_project(rest)?;
+    // The project is the directory holding `package.json`, which is where the
+    // tsconfig lives in every layout this has been pointed at so far.
+    let dir = tsconfig
+        .parent()
+        .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf);
+    let options = nts_deps::Options {
+        dry_run: rest.iter().any(|arg| arg == "--dry-run"),
+    };
+    let acquisition = nts_deps::acquire(&dir, &tsconfig, options)?;
+    if rest.iter().any(|arg| arg == "--json") {
+        println!("{}", nts_deps::report::json(&acquisition));
+    } else {
+        print!(
+            "{}",
+            nts_deps::report::render(&acquisition, rest.iter().any(|arg| arg == "--verbose"))
+        );
     }
     Ok(())
 }

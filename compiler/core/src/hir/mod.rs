@@ -1511,6 +1511,31 @@ pub struct Global {
 }
 
 impl Program {
+    /// Whether a global's value is settled once and never moves again.
+    ///
+    /// The question a *value* export has to ask. `export const version =
+    /// "2.1.0"` is one number the addon can copy at load; `export let visible =
+    /// 0` is a **live binding**, and node's semantics are that a reader sees
+    /// what the exporting module last assigned. A copy taken when the addon
+    /// loads would be a snapshot of the first value and would answer stale
+    /// forever after -- a wrong answer rather than a missing feature, and one
+    /// no test in either profile would have caught, because both read the
+    /// export before anything writes it.
+    ///
+    /// So: written by the module initializer and by nothing else. That is what
+    /// `const` means here operationally, and it is stronger than asking the
+    /// syntax -- a `const` holding an object whose field is mutated is still
+    /// settled *as a binding*, and that is the binding the addon publishes.
+    #[must_use]
+    pub fn global_is_settled(&self, global: u32) -> bool {
+        !self.funcs.iter().any(|func| {
+            func.name != lower::MODULE_INIT
+                && func.values.iter().any(|op| {
+                    matches!(op.kind, OpKind::GlobalSet { global: at, .. } if at == global)
+                })
+        })
+    }
+
     /// Where a layout's base lives in the program's layout list.
     ///
     /// Resolved here rather than in each backend, because a base's `TypeId` may
@@ -2139,15 +2164,35 @@ fn drop_classes_without_layouts(program: &mut Program) {
 /// the source asked for, and reading it is correct.
 fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
     let settle = |lowered: &mut lower::Lowered| drop_callers_of_refused(lowered);
-    if lowered
+    // What the surviving initializer actually assigns, rather than whether
+    // there is one at all.
+    //
+    // This used to return early the moment `module#init` was present, because
+    // the initializer was all-or-nothing: either every deferred global was
+    // written or none was. `excise_from_initializer` makes it neither, and the
+    // early return would then let a function read a global whose statement was
+    // cut -- which is a *wrong answer* rather than a missing one, since the
+    // slot holds its zero and the program runs.
+    //
+    // The two old behaviours are still the two ends of this: no initializer
+    // means nothing is written and every deferred global is unwritten, and a
+    // complete one writes them all and leaves this empty.
+    let written: rustc_hash::FxHashSet<u32> = lowered
         .program
         .funcs
         .iter()
-        .any(|func| func.name == lower::MODULE_INIT)
-    {
-        settle(lowered);
-        return;
-    }
+        .find(|func| func.name == lower::MODULE_INIT)
+        .map(|func| {
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .filter_map(|value| match func.values[value.0 as usize].kind {
+                    OpKind::GlobalSet { global, .. } => Some(global),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     let unwritten: Vec<u32> = lowered
         .program
         .globals
@@ -2155,6 +2200,7 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
         .enumerate()
         .filter(|(_, global)| global.deferred)
         .map(|(at, _)| u32::try_from(at).unwrap_or(u32::MAX))
+        .filter(|at| !written.contains(at))
         .collect();
     if unwritten.is_empty() {
         settle(lowered);
@@ -2180,8 +2226,8 @@ fn drop_readers_of_unwritten_globals(lowered: &mut lower::Lowered) {
         lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
             "NTS1003",
             format!(
-                "`{name}` cannot be compiled because it reads `{}`, whose initializer was lost \
-                 with the module evaluation refused above",
+                "`{name}` cannot be compiled because it reads `{}`, whose initializer was not \
+                 compiled -- see the refusal above that says which",
                 global.name
             ),
             origin.location,
@@ -2394,6 +2440,152 @@ fn settle(lowered: &mut lower::Lowered) {
     drop_readers_of_unwritten_globals(lowered);
 }
 
+/// Every function name the program still defines, plus the resumptions a
+/// generator split will provide.
+fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
+    let resumptions: Vec<String> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter_map(suspend::provides)
+        .collect();
+    lowered
+        .program
+        .funcs
+        .iter()
+        .map(|func| func.name.clone())
+        .chain(resumptions)
+        .collect()
+}
+
+/// Remove the module-scope statements that depend on a refused call, keeping
+/// the rest of the module's evaluation.
+///
+/// Returns whether it could. The excision is only sound where nothing removed
+/// is needed by control flow: a module-scope `if` whose condition came from the
+/// refused call has no answer here, and this says so by declining rather than
+/// by inventing one. Every one of the twelve modules is a flat sequence, which
+/// is what a list of `const` initializers lowers to.
+///
+/// What survives is exactly what `drop_readers_of_unwritten_globals` needs: a
+/// global whose `global.set` went with the statement is not written by the
+/// initializer that remains, so its readers are dropped and no others are.
+fn excise_from_initializer(
+    lowered: &mut lower::Lowered,
+    callee: &str,
+    present: &rustc_hash::FxHashSet<String>,
+) -> bool {
+    let Some(func) = lowered
+        .program
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == lower::MODULE_INIT)
+    else {
+        return false;
+    };
+
+    // Forward from every call to something that is no longer defined: an op
+    // that reads a doomed value is doomed, to a fixpoint. The call's own
+    // *arguments* are not -- they were computed before it and reading them is
+    // still fine, so what is left behind is dead rather than wrong.
+    let mut doomed: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
+    for (index, op) in func.values.iter().enumerate() {
+        if let OpKind::Call {
+            callee: Callee::Direct(name),
+            ..
+        } = &op.kind
+            && !present.contains(name.as_str())
+        {
+            doomed.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)));
+        }
+    }
+    if doomed.is_empty() {
+        return false;
+    }
+    for _ in 0..func.values.len() {
+        let mut grew = false;
+        for (index, op) in func.values.iter().enumerate() {
+            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+            if doomed.contains(&value) {
+                continue;
+            }
+            if operands_of(&op.kind)
+                .iter()
+                .any(|operand| doomed.contains(operand))
+            {
+                doomed.insert(value);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+
+    // Control flow is the one thing this cannot cut. A terminator reading a
+    // doomed value, or a block parameter carrying one, is a statement whose
+    // *shape* depends on the refusal rather than only its value.
+    for block in &func.blocks {
+        if operands_of_terminator(&block.terminator)
+            .iter()
+            .any(|value| doomed.contains(value))
+        {
+            return false;
+        }
+        if block.params.iter().any(|param| doomed.contains(param)) {
+            return false;
+        }
+        let carried: Vec<&Vec<ValueId>> = match &block.terminator {
+            Terminator::Jump { args, .. } => vec![args],
+            Terminator::Branch {
+                then_args,
+                else_args,
+                ..
+            } => vec![then_args, else_args],
+            Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
+        };
+        if carried
+            .iter()
+            .any(|args| args.iter().any(|value| doomed.contains(value)))
+        {
+            return false;
+        }
+    }
+
+    // The globals that lose their assignment, named before the ops go.
+    let mut lost: Vec<(u32, nts_semantic_schema::Origin)> = Vec::new();
+    for block in &func.blocks {
+        for value in &block.ops {
+            if !doomed.contains(value) {
+                continue;
+            }
+            if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
+                lost.push((global, func.values[value.0 as usize].origin.clone()));
+            }
+        }
+    }
+    for block in &mut func.blocks {
+        block.ops.retain(|value| !doomed.contains(value));
+    }
+
+    for (global, origin) in lost {
+        let name = lowered
+            .program
+            .globals
+            .get(global as usize)
+            .map_or_else(|| global.to_string(), |global| global.name.clone());
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS1003",
+            format!(
+                "the initializer of `{name}` was not compiled because it calls `{callee}`, \
+                 which was refused above; the rest of the module's evaluation still runs"
+            ),
+            origin.location,
+        ));
+    }
+    true
+}
+
 fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
     loop {
         // A function about to be split by `suspend` provides two names: its
@@ -2415,13 +2607,26 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             .collect();
         let mut refused = Vec::new();
         for func in &lowered.program.funcs {
-            let missing = func.values.iter().find_map(|op| match &op.kind {
-                OpKind::Call {
-                    callee: Callee::Direct(name),
-                    ..
-                } if !present.contains(name.as_str()) => Some((name.clone(), op.origin.clone())),
-                _ => None,
-            });
+            // Over the ops each block still *holds*, not over `func.values`.
+            // A value list keeps everything the lowering ever made, including
+            // what a pass has since taken out of the control flow -- so
+            // scanning it makes an excised call look present forever, and the
+            // loop below re-excises nothing and never terminates. A call that
+            // is in no block cannot run.
+            let missing = func
+                .blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .find_map(|value| match &func.values[value.0 as usize].kind {
+                    OpKind::Call {
+                        callee: Callee::Direct(name),
+                        ..
+                    } if !present.contains(name.as_str()) => Some((
+                        name.clone(),
+                        func.values[value.0 as usize].origin.clone(),
+                    )),
+                    _ => None,
+                });
             if let Some((name, origin)) = missing {
                 refused.push((func.name.clone(), name, origin));
             }
@@ -2430,6 +2635,30 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             return;
         }
         for (caller, callee, origin) in refused {
+            // The module initializer is a *sequence of independent statements*,
+            // and dropping it whole costs a module every global it has for one
+            // refused call. Twelve of the node profile's twenty-two modules lost
+            // theirs that way -- `channel` alone darkened five -- and the shape
+            // is always the same: one statement near the end calls something
+            // refused, so `osInformation` is never assigned and ten exports that
+            // have nothing to do with it are dropped as reading an unwritten
+            // global.
+            //
+            // Three instruments read that wrongly, which is why it survived
+            // every measurement: `emit-c` says "no function of that name was
+            // compiled", which reads as an export-table problem; `hir` reports
+            // no refusal on any of the ten lines, because nothing is wrong with
+            // them; and a chain-root analysis names the *consts* as roots.
+            //
+            // So the statements that depend on the refused call are excised and
+            // the rest of the evaluation still runs. `excise_from_initializer`
+            // says whether it could, and where it could not this falls back to
+            // dropping the whole thing, which is what it always did.
+            if caller == lower::MODULE_INIT
+                && excise_from_initializer(lowered, &callee, &present_names(lowered))
+            {
+                continue;
+            }
             lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
                 "NTS1003",
                 format!(

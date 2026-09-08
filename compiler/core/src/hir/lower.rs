@@ -2453,7 +2453,7 @@ fn probe_kind(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
     }
 }
 
-fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> PublicSurface {
+fn public_api(snapshot: &SemanticSnapshot, naming: &Naming, module: &ModuleScope) -> PublicSurface {
     let mut imported = vec![false; snapshot.modules.len()];
     for module in &snapshot.modules {
         for target in &module.imports {
@@ -2465,15 +2465,16 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> PublicSurface {
     let mut api: Vec<(String, String)> = Vec::new();
     let mut namespaces: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut functions: Vec<String> = Vec::new();
-    for (module, into) in snapshot.modules.iter().zip(&imported) {
+    for (entry, into) in snapshot.modules.iter().zip(&imported) {
         if *into {
             continue;
         }
-        for (published, symbol) in &module.exports {
+        for (published, symbol) in &entry.exports {
             let Some(record) = snapshot.symbols.get(symbol.0 as usize) else {
                 continue;
             };
             // One hop, because the frontend followed the chain already.
+            let declaring = record.aliased.unwrap_or(*symbol);
             let record = record
                 .aliased
                 .and_then(|to| snapshot.symbols.get(to.0 as usize))
@@ -2519,6 +2520,28 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming) -> PublicSurface {
             {
                 functions.push(published.clone());
             }
+            // A value export is a *global*, and its emitted name is the
+            // global's.
+            //
+            // `naming.qualified` is a map for function declarations, so a
+            // `const` fell through to the symbol's plain name -- and the plain
+            // name is not what the global is called whenever something else
+            // took it first. `export const version = codec.version` reported
+            // `version`, which is `codec`'s global; the one this module made is
+            // `version3`. The instrument said "no function of that name" and it
+            // was right about the wrong symbol.
+            //
+            // `ModuleScope::variables` is the symbol-to-global map that decided
+            // the name, so this asks it rather than guessing again.
+            if resolved.is_none()
+                && let Some(global) = module
+                    .variables
+                    .get(&declaring.0)
+                    .and_then(|at| module.globals.get(*at as usize))
+            {
+                api.push((global.name.clone(), published.clone()));
+                continue;
+            }
             let (declaration, name) =
                 resolved.unwrap_or_else(|| (declaration, record.name.clone()));
             let emitted = naming.qualified.get(&declaration).cloned().unwrap_or(name);
@@ -2540,6 +2563,53 @@ type PublicSurface = (
     Vec<(String, Vec<(String, String)>)>,
     Vec<String>,
 );
+
+/// Record what the entry modules publish, and keep a published global's name.
+///
+/// Split out of [`lower`] because it is one decision with two halves and the
+/// second is easy to lose: the addon is a different translation unit from
+/// `program.c`, so a `static` global is invisible to it however correctly the
+/// surface was computed.
+fn publish_surface(
+    lowered: &mut Lowered,
+    snapshot: &SemanticSnapshot,
+    naming: &Naming,
+    module: &ModuleScope,
+) {
+    let (api, namespaces, functions) = public_api(snapshot, naming, module);
+    // Only the ones that are not functions: a name in `functions` is published
+    // by calling something, and a global that happens to share it is a
+    // different thing.
+    //
+    // And only a *settled* one. `Program::global_is_settled` is the whole of
+    // why: a live binding published as a copy answers its first value forever,
+    // which is a wrong answer no test in either profile would catch because
+    // both read an export before anything writes it. An unsettled one keeps its
+    // `static` linkage, which is also what keeps `hir::globals` narrowing it --
+    // the guard there is about a reader this compiler cannot see, and it has
+    // still never met one.
+    let settled: Vec<usize> = api
+        .iter()
+        .filter(|(_, published)| !functions.contains(published))
+        .filter_map(|(emitted, _)| {
+            let at = lowered
+                .program
+                .globals
+                .iter()
+                .position(|global| global.name == *emitted)?;
+            lowered
+                .program
+                .global_is_settled(u32::try_from(at).unwrap_or(u32::MAX))
+                .then_some(at)
+        })
+        .collect();
+    for at in settled {
+        lowered.program.globals[at].exported = true;
+    }
+    lowered.program.public_api = api;
+    lowered.program.public_namespaces = namespaces;
+    lowered.program.public_functions = functions;
+}
 
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
@@ -2681,10 +2751,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
-    let (api, namespaces, functions) = public_api(snapshot, &shared.naming);
-    lowered.program.public_api = api;
-    lowered.program.public_namespaces = namespaces;
-    lowered.program.public_functions = functions;
+    publish_surface(&mut lowered, snapshot, &shared.naming, &module);
 
     canonicalize_objects(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every

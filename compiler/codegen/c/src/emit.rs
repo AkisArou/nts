@@ -296,16 +296,32 @@ fn drop_orphaned_bodies(
     loop {
         let defined: rustc_hash::FxHashSet<&str> =
             bodies.iter().map(|(_, _, func)| func.name.as_str()).collect();
+        // The ops each block still *holds*, not every value the function ever
+        // made. A `ValueId` is an index -- so is a field and so is a block --
+        // which means a pass cannot renumber and taking an op out of the
+        // control flow leaves it behind in the value list. Scanning that list
+        // reports a call nothing will emit, and this is the third place tonight
+        // that made the same mistake: `hir::drop_callers_of_refused` looped
+        // forever re-finding an excised call, `verify::check_calls` refused to
+        // emit `os` over one, and this dropped `module#init` after
+        // `excise_from_initializer` had removed exactly the call it names --
+        // which the addon still calls, so the module linked and died at
+        // `dlopen` with an undefined symbol.
         let orphan = bodies.iter().enumerate().find_map(|(at, (_, _, func))| {
-            func.values.iter().find_map(|op| match &op.kind {
-                OpKind::Call {
-                    callee: Callee::Direct(name),
-                    ..
-                } if !defined.contains(name.as_str()) => {
-                    Some((at, name.clone(), op.origin.clone()))
-                }
-                _ => None,
-            })
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .find_map(|value| match &func.values[value.0 as usize].kind {
+                    OpKind::Call {
+                        callee: Callee::Direct(name),
+                        ..
+                    } if !defined.contains(name.as_str()) => Some((
+                        at,
+                        name.clone(),
+                        func.values[value.0 as usize].origin.clone(),
+                    )),
+                    _ => None,
+                })
         });
         let Some((at, missing, origin)) = orphan else {
             return;

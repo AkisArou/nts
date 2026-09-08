@@ -1103,14 +1103,54 @@ fn emit_namespaces(
     }
 }
 
+/// A value export: a module-scope binding published by its *value*.
+///
+/// `export const version = "2.1.0"` is not a function and the addon has no
+/// wrapper to make for it. What it has is the global, which `lower::public_api`
+/// now resolves by name and marks exported so `emit_globals` does not make it
+/// `static` -- because `addon.c` is a different translation unit from
+/// `program.c` and a static is invisible across one.
+///
+/// Read after `module__init()`, never before. A deferred global sits at its
+/// zero until module evaluation runs, and for a reference that zero is a null
+/// pointer rather than a default -- the same ordering that had `punycode`'s
+/// `const delimiter = "-"` null when `decode` read it.
+fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
+    let mut published = Vec::new();
+    for (emitted, name) in &program.public_api {
+        if program.public_functions.iter().any(|at| at == name) {
+            continue;
+        }
+        let Some(global) = program
+            .globals
+            .iter()
+            .find(|global| global.name == *emitted && global.exported)
+        else {
+            continue;
+        };
+        // The same crossing a return value gets, and for the same reason: what
+        // leaves is a copy, so nothing has to decide who owns the storage.
+        let Some(crossing) = cross(&global.ty, &program.layouts, &FxHashSet::default()) else {
+            continue;
+        };
+        if matches!(crossing, Cross::Object(_) | Cross::Void) {
+            continue;
+        }
+        published.push((global, name.as_str(), crossing));
+    }
+    published
+}
+
 fn report_unrepresentable_exports(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
     skipped: &mut Vec<Skipped>,
 ) {
+    let values = value_exports(program);
     for (emitted, name) in &program.public_api {
         if wrapped.iter().any(|(_, published)| published == name)
             || program.public_namespaces.iter().any(|(at, _)| at == name)
+            || values.iter().any(|(_, published, _)| published == name)
         {
             continue;
         }
@@ -1136,6 +1176,52 @@ fn report_unrepresentable_exports(
             },
         });
     }
+}
+
+/// The `extern` declarations, at file scope, which is where one belongs.
+fn declare_value_exports(
+    values: &[(&hir::Global, &str, Cross)],
+    layouts: &[hir::Layout],
+) -> String {
+    let mut out = String::new();
+    for (global, _, _) in values {
+        let _ = writeln!(
+            out,
+            "extern {} {};",
+            c_type(&global.ty, layouts),
+            c_identifier(&global.name)
+        );
+    }
+    if !values.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// The publication, which goes *after* `module__init()` and the ordering is the
+/// whole of it: a deferred global holds its zero until module evaluation
+/// assigns it, and for a reference that zero is a null pointer rather than a
+/// default.
+fn publish_value_exports(values: &[(&hir::Global, &str, Cross)]) -> String {
+    let mut out = String::new();
+    for (global, publish, crossing) in values {
+        let symbol = c_identifier(&global.name);
+        let key = c_string_literal(publish);
+        let make = match crossing {
+            Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
+            Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
+            Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
+            Cross::Numbers => format!("nts_to_napi_numbers(env, {symbol}, &value)"),
+            // `value_exports` refuses these, so reaching one is a bug in it
+            // rather than a shape to handle here.
+            Cross::Object(_) | Cross::Void => continue,
+        };
+        let _ = write!(
+            out,
+            "    {{\n        napi_value value;\n        if (!nts_napi_check(env, {make}, \"could not create an exported value\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {key}, value), \"could not export a value\")) return NULL;\n    }}\n"
+        );
+    }
+    out
 }
 
 #[must_use]
@@ -1237,6 +1323,9 @@ pub fn emit(program: &hir::Program) -> Addon {
         }
     }
 
+    let values = value_exports(program);
+    out.push_str(&declare_value_exports(&values, &program.layouts));
+
     out.push_str("NAPI_MODULE_INIT() {\n");
     // Run the module's own top-level code before anything can call into it.
     //
@@ -1283,6 +1372,7 @@ pub fn emit(program: &hir::Program) -> Addon {
         );
     }
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
+    out.push_str(&publish_value_exports(&values));
     out.push_str("    return exports;\n}\n");
 
     report_unrepresentable_exports(program, &wrapped, &mut skipped);

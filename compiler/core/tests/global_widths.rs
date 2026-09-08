@@ -142,7 +142,30 @@ fn a_global_that_can_hold_what_an_integer_cannot_keeps_its_double() {
 /// `hir::globals` declines to narrow a global whose `exported` flag is set,
 /// because a reader outside the compiled set would hold the declared type and
 /// there is no layout to carry a new width across that boundary the way a
-/// field's would. The flag is **never set**. Every construction site in
+/// field's would.
+///
+/// **An external reader arrived and this test caught something better than the
+/// flag.** The Node-API addon is one: `addon.c` is a different translation unit
+/// from `program.c`, so publishing `export const version = "2.1.0"` means that
+/// global cannot be `static`. The first version of that marked *every*
+/// published global exported, this fired, and the interesting question turned
+/// out not to be narrowing at all.
+///
+/// `export let visible = 0` is a **live binding**. Node's semantics are that a
+/// reader sees what the exporting module last assigned, and an addon that
+/// copies the value when it loads answers the first one forever. That is a
+/// wrong answer, and no test in either profile would have caught it, because
+/// both read an export before anything writes it. So only a *settled* global is
+/// published -- see `Program::global_is_settled` -- and `visible` is not one.
+///
+/// Which leaves the flag unset, and this assertion exactly as it was. The guard
+/// in `hir::globals` is still waiting: the only external reader this compiler
+/// emits is generated from the same `Program` and spells whatever width this
+/// analysis decides, so it is not the reader the guard is about.
+///
+/// The flag was never set. Every construction site in `hir::lower` writes
+/// `exported: false` and only `publish_surface` sets it, for a settled global
+/// published by value. Every construction site in
 /// `hir::lower` writes `exported: false`, nothing later assigns it, and the
 /// result is visible in the emitted C: `export let visible = 0` becomes
 /// `static int32_t visible`, which no other translation unit can name.
@@ -157,7 +180,7 @@ fn a_global_that_can_hold_what_an_integer_cannot_keeps_its_double() {
 /// day someone gives a global an external reader and sets it, this fails and
 /// points at the guard that is already waiting for it.
 #[test]
-fn no_global_is_exported_and_the_narrowing_guard_is_waiting_for_one() {
+fn no_global_is_exported_and_the_narrowing_guard_is_still_waiting() {
     let Some(prepared) = prepared("module-numbers") else {
         return;
     };
@@ -173,6 +196,22 @@ fn no_global_is_exported_and_the_narrowing_guard_is_waiting_for_one() {
         "a global is marked exported: {exported:?}. `hir::globals` declines to \
          narrow one, so check that guard still says what you want before \
          deleting this test",
+    );
+
+    // `export let visible = 0` is reassigned by `setVisible`, so it is a live
+    // binding and `Program::global_is_settled` answers false for it. That is
+    // what keeps it private -- not that nothing publishes values any more.
+    assert!(
+        !prepared.program.global_is_settled(
+            prepared
+                .program
+                .globals
+                .iter()
+                .position(|global| global.name == "visible")
+                .and_then(|at| u32::try_from(at).ok())
+                .expect("`visible` is a global of examples/module-numbers"),
+        ),
+        "`visible` is assigned outside `module#init` and must not read as settled",
     );
 
     // And what that means for `export let visible = 0`, whose stores are all

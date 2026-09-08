@@ -303,7 +303,21 @@ fn check_calls(program: &Program, problems: &mut Vec<Invalid>) {
     }
     for func in &program.funcs {
         check_stores(program, func, problems);
-        for op in &func.values {
+        // The ops a block still holds, not every value the lowering ever made.
+        //
+        // This asks whether a call "reaches the linker as an undefined symbol",
+        // and only an emitted call does: every backend walks the blocks. A pass
+        // that takes an op *out* of the control flow leaves it in `func.values`
+        // -- renumbering is not available, because a `ValueId` is an index and
+        // so is a field and a block -- so scanning the value list reports a
+        // call nothing will emit. `excise_from_initializer` makes exactly that
+        // shape, and this refused to emit `os` over a call it had removed.
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .map(|value| &func.values[value.0 as usize])
+        {
             let OpKind::Call {
                 callee: Callee::Direct(name),
                 args,

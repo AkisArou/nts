@@ -2161,7 +2161,16 @@ NtsHeader *nts_environment_platform(void);
  *
  * Deliberately not `NTS_READS_ONLY`. It reads a slot `install` writes, and
  * `pure` would let a compiler answer a second call from the first across an
- * installation. */
+ * installation.
+ *
+ * **Asking is still a call.** This is safe to call and cannot throw, and that
+ * says nothing about the binding a host puts in front of it: a profile that
+ * declares it in TypeScript and forgets to supply the intrinsic gets a
+ * `ReferenceError` where a `false` was wanted, from inside whatever was trying
+ * to be careful. That happened -- `Event`'s constructor guarded correctly, the
+ * guard threw, and it surfaced three tests away as a listener called zero
+ * times, which names nothing. A precondition this function cannot state and
+ * its callers cannot see is worth stating here. */
 bool nts_environment_has_platform(void);
 
 /* A second environment, and its close.
