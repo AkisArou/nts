@@ -8831,6 +8831,28 @@ own, which sends a reader hunting for a typo. The compiler has the honest
 phrasing already and uses it elsewhere in the same run: *a module-scope variable
 whose initializer was refused above*.
 
+### Measured after the fix: the share was 9, and a sample of four said 70
+
+`fc0df644` closed it. Profile-wide, on a fresh pin:
+
+    a shorthand naming nothing in scope       22  ->  0
+    an erased value where a concrete...      141  -> 132
+
+**Nine of the 141 were shorthand.** The table below was published with the
+second row marked as a ceiling on an unmeasured share, and with four sampled
+sites of which two were shorthand. Extrapolating that sample would have put the
+share near seventy. It was off by a factor of eight.
+
+That is the whole argument for the row being written as a ceiling rather than
+summed into the first. A four-site sample is not a measurement of a 141-site
+population, and the temptation to report `163` was strongest precisely because
+both messages come from one defect in the cases that led there.
+
+The axis did not move: no module publishes a new export. 31 refusals removed,
+zero exports — the same shape as `AnyView` the same evening. Two correct and
+worthwhile fixes, no movement, and the reading is not that the fixes were wrong
+but that the remaining distance is concentrated at the wrapper.
+
 ### What it costs, and the half of that I did not measure
 
 | | count | confidence |
