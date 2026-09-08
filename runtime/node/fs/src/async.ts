@@ -77,6 +77,7 @@ import {
   displayBytePath,
   encodeFileBytes,
   encodeFileName,
+  encodeNormalizedFileBytes,
   emitRecursiveRmdirWarning,
   getOptions,
   getReadFileBuffer,
@@ -97,6 +98,7 @@ import {
   warnOnNonPortableTemplate,
   type AbortSignalLike,
   type BytePathLike,
+  type ValidatedBytePath,
   type EncodedFileName,
   type FileOptions,
   type PathLike,
@@ -310,6 +312,21 @@ declare function nts_fs_copyfile_async_bytes(
 ): void;
 declare function nts_fs_link_async_bytes(
   from: number[], to: number[], callback: (errno: number) => void,
+): void;
+declare function nts_fs_mkdir_async_bytes(
+  path: number[], mode: number, recursive: boolean,
+  callback: (errno: number, first: string) => void,
+): void;
+declare function nts_fs_rmdir_async_bytes(
+  path: number[], callback: (errno: number) => void,
+): void;
+declare function nts_fs_rm_async_bytes(
+  path: number[], recursive: boolean, force: boolean,
+  maxRetries: number, retryDelay: number,
+  callback: (errno: number) => void,
+): void;
+declare function nts_fs_readlink_async_bytes(
+  path: number[], callback: (errno: number, resolved: number[]) => void,
 ): void;
 declare function nts_fs_rename_async(
   from: string, to: string, callback: (errno: number) => void,
@@ -1831,7 +1848,7 @@ export function glob(
 }
 
 export function mkdir(
-  path: PathLike,
+  path: BytePathLike,
   options: number | string | { recursive?: boolean; mode?: number | string } | Callback<string | undefined>,
   callback?: Callback<string | undefined>,
 ): void {
@@ -1839,8 +1856,9 @@ export function mkdir(
     callback = options;
     options = {};
   }
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
   const request = asRequest(callback, "mkdir");
+  const display = displayBytePath(validatedPath);
 
   let recursive = false;
   if (options !== null && typeof options === "object" && options.recursive !== undefined) {
@@ -1852,25 +1870,30 @@ export function mkdir(
     : (options.mode ?? 0o777);
   const mode = parseFileMode(requestedMode, "mode", 0o777);
 
-  nts_fs_mkdir_async(validatedPath, mode, recursive, (errno: number, first: string) => {
+  const onMkdir = (errno: number, first: string) => {
     if (errno < 0) {
-      request(uvException(errno, "mkdir", validatedPath));
+      request(uvException(errno, "mkdir", display));
     } else {
       // Recursive `mkdir` reports the *first* directory it had to create, so
       // a caller can undo exactly what it did.
       request(null, recursive ? (first || undefined) : undefined);
     }
-  });
+  };
+  if (typeof validatedPath === "string") {
+    nts_fs_mkdir_async(validatedPath, mode, recursive, onMkdir);
+    return;
+  }
+  nts_fs_mkdir_async_bytes(validatedPath, mode, recursive, onMkdir);
 }
 
-export function rmdir(path: PathLike, callback: Callback): void;
+export function rmdir(path: BytePathLike, callback: Callback): void;
 export function rmdir(
-  path: PathLike,
+  path: BytePathLike,
   options: RmdirOptions | undefined,
   callback: Callback,
 ): void;
 export function rmdir(
-  path: PathLike,
+  path: BytePathLike,
   optionsOrCallback: RmdirOptions | Callback | undefined,
   callback?: Callback,
 ): void {
@@ -1881,12 +1904,19 @@ export function rmdir(
   } else {
     options = optionsOrCallback;
   }
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
   const request = asRequest(callback, "rmdir");
   const settings = normalizeRmdirOptions(options);
+  const display = displayBytePath(validatedPath);
+  const asBytes = typeof validatedPath === "string" ? undefined : validatedPath;
+  const removeDirectory = () => {
+    const done = settle(request, "rmdir", display);
+    if (asBytes === undefined) nts_fs_rmdir_async(validatedPath as string, done);
+    else nts_fs_rmdir_async_bytes(asBytes, done);
+  };
   if (settings.recursive) {
     emitRecursiveRmdirWarning();
-    lstat(validatedPath, (error: unknown, stats?: AnyStats) => {
+    lstat(asBytePathLike(validatedPath), (error: unknown, stats?: AnyStats) => {
       if (error !== null && error !== undefined) {
         request(error);
         return;
@@ -1896,27 +1926,39 @@ export function rmdir(
         return;
       }
       if (!stats.isDirectory()) {
-        nts_fs_rmdir_async(validatedPath, settle(request, "rmdir", validatedPath));
+        removeDirectory();
         return;
       }
-      nts_fs_rm_async(
-        validatedPath,
-        true,
-        false,
-        settings.maxRetries,
-        settings.retryDelay,
-        settle(request, "rmdir", validatedPath),
-      );
+      const done = settle(request, "rmdir", display);
+      if (asBytes === undefined) {
+        nts_fs_rm_async(
+          validatedPath as string,
+          true,
+          false,
+          settings.maxRetries,
+          settings.retryDelay,
+          done,
+        );
+      } else {
+        nts_fs_rm_async_bytes(
+          asBytes,
+          true,
+          false,
+          settings.maxRetries,
+          settings.retryDelay,
+          done,
+        );
+      }
     });
     return;
   }
-  nts_fs_rmdir_async(validatedPath, settle(request, "rmdir", validatedPath));
+  removeDirectory();
 }
 
-export function rm(path: PathLike, callback: Callback): void;
-export function rm(path: PathLike, options: RmOptions | undefined, callback: Callback): void;
+export function rm(path: BytePathLike, callback: Callback): void;
+export function rm(path: BytePathLike, options: RmOptions | undefined, callback: Callback): void;
 export function rm(
-  path: PathLike,
+  path: BytePathLike,
   optionsOrCallback: RmOptions | Callback | undefined,
   callback?: Callback,
 ): void {
@@ -1927,10 +1969,10 @@ export function rm(
   } else {
     options = optionsOrCallback;
   }
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
   const request = asRequest(callback, "rm");
   const settings = normalizeRmOptions(options);
-  lstat(validatedPath, (error: unknown, stats?: AnyStats) => {
+  lstat(asBytePathLike(validatedPath), (error: unknown, stats?: AnyStats) => {
     if (error !== null && error !== undefined) {
       if (settings.force && errorHasCode(error, "ENOENT")) {
         request(null);
@@ -1949,17 +1991,29 @@ export function rm(
         errno,
         errName(errno),
         errMessage(errno),
-        validatedPath,
+        displayBytePath(validatedPath),
       ));
       return;
     }
-    nts_fs_rm_async(
+    const done = settle(request, "rm", displayBytePath(validatedPath));
+    if (typeof validatedPath === "string") {
+      nts_fs_rm_async(
+        validatedPath,
+        settings.recursive,
+        settings.force,
+        settings.maxRetries,
+        settings.retryDelay,
+        done,
+      );
+      return;
+    }
+    nts_fs_rm_async_bytes(
       validatedPath,
       settings.recursive,
       settings.force,
       settings.maxRetries,
       settings.retryDelay,
-      settle(request, "rm", validatedPath),
+      done,
     );
   });
 }
@@ -1968,6 +2022,18 @@ export function rm(
 function errorHasCode(error: unknown, code: string): boolean {
   return error !== null && typeof error === "object" &&
     "code" in error && error.code === code;
+}
+
+/**
+ * A validated byte path, back in the public shape the exported helpers accept.
+ *
+ * `getValidatedBytePath` answers `string | number[]`, and `lstat` and friends
+ * take `string | Uint8Array`. The array is the validated bytes, so this is a
+ * re-wrapping rather than a re-encoding -- going back through a string here
+ * would undo the whole point of the byte path.
+ */
+function asBytePathLike(path: ValidatedBytePath): BytePathLike {
+  return typeof path === "string" ? path : Buffer.from(path);
 }
 
 export function unlink(path: BytePathLike, callback?: Callback): void {
@@ -2588,14 +2654,14 @@ export function symlink(
   );
 }
 
-export function readlink(path: PathLike, callback: Callback<EncodedFileName>): void;
+export function readlink(path: BytePathLike, callback: Callback<EncodedFileName>): void;
 export function readlink(
-  path: PathLike,
+  path: BytePathLike,
   options: string | FileOptions | null,
   callback: Callback<EncodedFileName>,
 ): void;
 export function readlink(
-  path: PathLike,
+  path: BytePathLike,
   optionsOrCallback: string | FileOptions | null | Callback<EncodedFileName>,
   callback?: Callback<EncodedFileName>,
 ): void {
@@ -2607,10 +2673,28 @@ export function readlink(
     options = optionsOrCallback;
   }
   const settings = getOptions(options);
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
   const request = asRequest(callback, "readlink");
+  const display = displayBytePath(validatedPath);
+  if (typeof validatedPath !== "string") {
+    // The byte path answers the target as bytes too: a symlink target is no more
+    // required to decode as UTF-8 than a filename is.
+    nts_fs_readlink_async_bytes(validatedPath, (errno: number, resolved: number[]) => {
+      if (errno < 0) request(uvException(errno, "readlink", display));
+      else {
+        request(
+          null,
+          encodeNormalizedFileBytes(
+            resolved,
+            normalizeFileResultEncoding(settings.encoding),
+          ),
+        );
+      }
+    });
+    return;
+  }
   nts_fs_readlink_async(validatedPath, (errno: number, resolved: string) => {
-    if (errno < 0) request(uvException(errno, "readlink", validatedPath));
+    if (errno < 0) request(uvException(errno, "readlink", display));
     else request(null, encodeFileName(resolved, settings.encoding));
   });
 }

@@ -267,19 +267,33 @@ globalThis.nts_fs_readlink_bytes = (path) =>
 // The asynchronous byte-path family. Each mirrors its string twin's stand-in,
 // which is how the whole async half is served here: none of it has C yet.
 globalThis.nts_fs_unlink_async_bytes = (path, cb) =>
-  fs.unlink(Buffer.from(path), (e) => cb(e ? e.errno : 0));
+  fs.unlink(Buffer.from(path), relay(cb));
 globalThis.nts_fs_chmod_async_bytes = (path, mode, cb) =>
-  fs.chmod(Buffer.from(path), mode, (e) => cb(e ? e.errno : 0));
+  fs.chmod(Buffer.from(path), mode, relay(cb));
 globalThis.nts_fs_chown_async_bytes = (path, uid, gid, cb) =>
-  fs.chown(Buffer.from(path), uid, gid, (e) => cb(e ? e.errno : 0));
+  fs.chown(Buffer.from(path), uid, gid, relay(cb));
 globalThis.nts_fs_utimes_async_bytes = (path, atime, mtime, cb) =>
-  fs.utimes(Buffer.from(path), atime, mtime, (e) => cb(e ? e.errno : 0));
+  fs.utimes(Buffer.from(path), atime, mtime, relay(cb));
 globalThis.nts_fs_rename_async_bytes = (from, to, cb) =>
-  fs.rename(Buffer.from(from), Buffer.from(to), (e) => cb(e ? e.errno : 0));
+  fs.rename(Buffer.from(from), Buffer.from(to), relay(cb));
 globalThis.nts_fs_copyfile_async_bytes = (from, to, flags, cb) =>
-  fs.copyFile(Buffer.from(from), Buffer.from(to), flags, (e) => cb(e ? e.errno : 0));
+  fs.copyFile(Buffer.from(from), Buffer.from(to), flags, relay(cb));
 globalThis.nts_fs_link_async_bytes = (from, to, cb) =>
-  fs.link(Buffer.from(from), Buffer.from(to), (e) => cb(e ? e.errno : 0));
+  fs.link(Buffer.from(from), Buffer.from(to), relay(cb));
+globalThis.nts_fs_mkdir_async_bytes = (path, mode, recursive, cb) =>
+  fs.mkdir(Buffer.from(path), { mode, recursive }, (error, first) => {
+    if (error) cb(codeOf(error), "");
+    else cb(0, first ?? "");
+  });
+globalThis.nts_fs_rmdir_async_bytes = (path, cb) => fs.rmdir(Buffer.from(path), relay(cb));
+globalThis.nts_fs_rm_async_bytes = (path, recursive, force, maxRetries, retryDelay, cb) =>
+  fs.rm(Buffer.from(path), { recursive, force, maxRetries, retryDelay }, relay(cb));
+globalThis.nts_fs_readlink_async_bytes = (path, cb) =>
+  fs.readlink(
+    Buffer.from(path),
+    { encoding: "buffer" },
+    relay(cb, (resolved) => Array.from(resolved)),
+  );
 globalThis.nts_fs_chmod = (path, mode) => status(() => fs.chmodSync(path, mode));
 globalThis.nts_fs_chown = (path, uid, gid) => status(() => fs.chownSync(path, uid, gid));
 globalThis.nts_fs_lchown = (path, uid, gid) => status(() => fs.lchownSync(path, uid, gid));
