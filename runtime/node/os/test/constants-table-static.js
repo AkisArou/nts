@@ -18,13 +18,20 @@
 // nothing upstream enumerates, because upstream they are built by one C++
 // function per call.
 //
-// **One row is deliberately absent and is a live divergence, not a decision.**
-// `os.userInfo({ encoding: "buffer" })` answers values that fail
-// `Buffer.isBuffer` -- while `fs.readFileSync` in the *same process* answers
-// values that pass. Their `.constructor` objects differ: there are two `Buffer`
-// classes at run time and `os` has the other one. The cause is not yet known,
-// so it is recorded in `docs/conformance/nodejs.md` and asserted nowhere: it is
-// not a §13 decision, and pinning it would fix a defect in place.
+// **One row is deliberately absent, and it is an artefact of this lane rather
+// than a divergence.** `os.userInfo({ encoding: "buffer" })` answers values that
+// fail `Buffer.isBuffer`, while `fs.readFileSync` in the *same process* answers
+// values that pass -- because there are two `Buffer` classes here and they are
+// **node's and this profile's**, not two copies of one:
+//
+//     os.userInfo's    class Buffer extends Uint8Array   <- this profile's
+//     globalThis       function Buffer(arg, ...)         <- node's own
+//
+// Module code constructs this profile's; a stand-in returns node's, because
+// `fs`'s stand-ins delegate to node's real `fs`. `Buffer.isBuffer` in a test is
+// node's, so it accepts one and rejects the other. In a compiled build there is
+// one `Buffer` and the question does not arise, which is why the row is absent
+// rather than asserted either way. See `docs/conformance/nodejs.md`.
 
 const assert = require("node:assert");
 const os = require("node:os");
