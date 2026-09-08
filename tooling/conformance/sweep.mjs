@@ -597,6 +597,29 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // A test that requires both `x` and `node:x` is comparing the module under
+  // test with itself, because the harness substitutes it for both spellings.
+  // One such test existed, asserted that node's `EventEmitter.prototype` names
+  // were all present, said in its own comment that it read node's class at run
+  // time, and could not have failed for the reason it was written.
+  {
+    const oracle = spawnSync(process.execPath, [join(HERE, "self-oracle.mjs")], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120_000,
+    });
+    const text = `${oracle.stdout ?? ""}${oracle.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("self-oracle: INSTRUMENT FAILURE -- no local tests scanned");
+    } else {
+      const summary = text.split("\n").filter((l) => l.includes("scanned")).join("").trim();
+      if (summary !== "") console.log(`self-oracle: ${summary}`);
+      for (const line of text.split("\n").filter((l) => /SELF-ORACLE/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+    }
+  }
+
   // What the shape shims answer for themselves. A shim builds the object node's
   // tests see out of a module's exports and is supposed to add shape and no
   // behaviour; where it supplies a value instead, every test reading it is
