@@ -23,7 +23,16 @@ set -u
 cd "$(dirname "$0")/../.."
 
 # Measured 2026-09-08 on the compiler lane's gate binary, from a pinned tree.
-FLOOR="async_hooks buffer diagnostics_channel os path punycode querystring string_decoder url"
+# Updated 2026-09-08: eleven modules moved up. They were **already building on
+# the gated commit** -- the axis has read `builds 20 of 22` for a while -- and
+# this list had not been touched since the night nine did. So the run that
+# printed "11 newly building" was reporting the age of this line, not a change
+# in the compiler, and it printed that against a binary carrying `AnyView`
+# where it was very easy to read as `AnyView`'s doing. It is not: builds and
+# loads are 20 of 22 with and without it, which is what the refusal counts
+# predicted. A stale floor does not just miss a regression, it manufactures
+# progress, and the second failure is louder than the first.
+FLOOR="assert async_hooks buffer console dgram diagnostics_channel events http net os path punycode querystring readline stream string_decoder timers url util zlib"
 
 # And the ones that do not, which is the half that rots.
 #
@@ -37,7 +46,10 @@ FLOOR="async_hooks buffer diagnostics_channel os path punycode querystring strin
 # Twelve of these fail on `blockers/duplicate-type-name` and `timers` fails on
 # an undeclared identifier. When that fixture is fixed most of this list moves,
 # and the run will say so by name.
-BLOCKED="assert console dgram events fs http net process readline stream timers util zlib"
+# The two that do not build. Both are the largest modules in the profile and
+# both have the most declared-but-unimplemented bindings, so neither is one
+# compiler fix away.
+BLOCKED="fs process"
 
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 if [ ! -x "$compiler" ]; then
