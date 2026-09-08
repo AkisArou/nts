@@ -556,6 +556,32 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // Emitting C and compiling it are different claims, and only one was being
+  // checked anywhere. The gate's `profile` step emits for all twenty-two
+  // modules and never runs a compiler over any of it, so a change that breaks
+  // every node module's compilation passes it green -- which happened on
+  // 2026-09-08 and was caught by a rebuild done for something else. A floor,
+  // not a target: it does not care how many build, only that the ones which did
+  // still do.
+  {
+    const floor = spawnSync("bash", [join(HERE, "build-floor.sh")], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 3_600_000,
+      env: process.env,
+    });
+    const text = `${floor.stdout ?? ""}${floor.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("build floor: INSTRUMENT FAILURE -- the floor list is empty");
+    } else {
+      const summary = text.split("\n").filter((l) => l.includes("still build")).join("").trim();
+      if (summary !== "") console.log(`build floor: ${summary}`);
+      for (const line of text.split("\n").filter((l) => /REGRESSED/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+    }
+  }
+
   // What the shape shims answer for themselves. A shim builds the object node's
   // tests see out of a module's exports and is supposed to add shape and no
   // behaviour; where it supplies a value instead, every test reading it is
