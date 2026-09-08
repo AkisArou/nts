@@ -3662,6 +3662,15 @@ entire, and the shape of the zero matters more than the zero:
 | `built-exports-partial` | 1 (`os`, 4 of 6) |
 | `all-passes-degenerate` | 1 (`path`, 2 of 17, both degenerate) |
 
+> **Superseded 2026-09-08.** This section is correct for the compiler it was
+> written against and is kept as the record of how the bug was characterised.
+> The `void` fields are **gone**: `emit-c` over all twenty-two modules, every
+> `program.c` produced, 24MB of generated C, count zero. The per-field analysis
+> below — that void-ness is per field rather than per struct — is the reasoning
+> that made it findable, and `blockers/void-struct-fields` is now a regression
+> guard rather than a reproduction. Do not carry "228 of 244" forward; the
+> current census is at the top of this document.
+
 244 clang errors, of which **228 are one bug**: the struct emitter writes fields
 of type `void`.
 
