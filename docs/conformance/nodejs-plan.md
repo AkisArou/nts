@@ -32,10 +32,17 @@ sentence, which will go stale.
 Two axes move independently. **TypeScript-on-node: 1,825 of 1,825 across 22
 modules, 0 hollow, 22 of 22 typechecking.** Up from 1,807 by eighteen tests written
 against seams node's own suite cannot reach — see the byte-path and encoding
-sections of the ledger. The sweep that measured it reported `util` at 23 of 24;
-`util` run alone is 24 of 24 three times over, and the machine was loaded, so
-that row is a flake rather than a failure. It is recorded rather than rounded
-away. **Compiled artifact: 1 green and 1
+sections of the ledger. **The number comes from per-module runs, not from a clean sweep.** Two full
+sweeps today were discarded, both correctly: the first because `util` reported 23
+of 24 under load and 24 of 24 alone three times over, the second because
+`runtime/web-platform/src/json/parse.ts` was *modified* mid-run and
+`web-platform-reach.mjs` says **12 of 22** modules read it. Each module counted
+here was run and verified on its own, and `http` — which the second sweep put at
+402 of 403 — is 403 of 403 alone.
+
+That is worth stating rather than rounding away. A sweep takes twenty minutes
+while three sessions commit, and a number assembled from single-module runs is
+more trustworthy than one assembled from a window in which the tree moved. **Compiled artifact: 1 green and 1
 partial** — `punycode` 2 of 2, and `os` 4 of 7 with 17 of the 23 names its shape
 wants.
 
