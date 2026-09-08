@@ -535,6 +535,27 @@ if (!withCompiles && modules.length > 1) {
     if (summary !== "") console.log(`\naccessors in the last emitted C: ${summary}`);
   }
 
+  // Whether any binding's C disagrees with its declaration about types. This is
+  // cheap -- it reads sources, builds nothing -- and it covers a defect class
+  // neither lane can see: the interpreted lane's stand-ins are node's own
+  // implementations, and the compiled lane only objects for a module that gets
+  // far enough to emit C, which fifteen of twenty-two do not. Two were found by
+  // hand in `zlib` before this existed and both had been there for as long as
+  // the file had.
+  {
+    const abi = spawnSync(
+      process.execPath,
+      [join(HERE, "binding-abi-audit.mjs")],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const text = `${abi.stdout ?? ""}`;
+    const summary = text.split("\n").filter((l) => l.includes("disagreeing")).join("").trim();
+    if (summary !== "") console.log(`binding types: ${summary}`);
+    for (const line of text.split("\n").filter((l) => l.includes("MISMATCH"))) {
+      console.log(`  ${line.trim()}`);
+    }
+  }
+
   // The differential, for the same reason and at a fraction of its full size.
   // Node's tests are a fixed set of inputs a human chose; this asks node the
   // questions nobody wrote down, and it has found three real bugs -- a
