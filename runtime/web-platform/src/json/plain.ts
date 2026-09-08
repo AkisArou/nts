@@ -33,7 +33,13 @@ import {
   readMemberKey,
   Scanner,
 } from "./parse.ts";
-import { member as plainMemberText, numberText, quoteJSONString, resolveGap } from "./text.ts";
+import {
+  assembleContainer,
+  member as plainMemberText,
+  numberText,
+  quoteJSONString,
+  resolveGap,
+} from "./text.ts";
 import { JsonValue } from "./value.ts";
 
 /** 25.5.4.2's replacer, called with the holder as its `this`. */
@@ -145,12 +151,7 @@ function plainKeys(holder: object, propertyList: readonly string[] | undefined):
 }
 
 function assemblePlain(frame: PlainFrame, gap: string): string {
-  const open = frame.isArray ? "[" : "{";
-  const close = frame.isArray ? "]" : "}";
-  if (frame.parts.length === 0) return open + close;
-  if (gap === "") return open + frame.parts.join(",") + close;
-  const inner = frame.indent + gap;
-  return open + "\n" + inner + frame.parts.join(",\n" + inner) + "\n" + frame.indent + close;
+  return assembleContainer(frame.parts, frame.isArray, frame.indent, gap);
 }
 
 function plainMember(key: string, text: string, gap: string): string {

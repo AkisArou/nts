@@ -34,6 +34,7 @@ import {
 import { forgivingBase64Decode } from "../../../../../runtime/web-platform/src/core/base64.ts";
 import { percentDecodeBytes } from "../../../../../runtime/web-platform/src/core/percent.ts";
 import {
+  assembleContainer,
   member,
   numberText,
   quoteJSONString,
@@ -143,6 +144,23 @@ export function jsonGapText(space: string): string {
 /** One object member: a quoted key, a colon, and the gap's single space. */
 export function jsonMember(key: string, valueText: string, gap: string): string {
   return member(key, valueText, gap);
+}
+
+/**
+ * The indent rule of 25.5.4.5 and 25.5.4.6, compiled.
+ *
+ * There used to be two spellings of this, one in the graph serializer and one in the
+ * arbitrary-value serializer, and they agreed. Now there is one, and this is the case that
+ * keeps it honest on all three backends -- an empty container takes no gap, a filled one puts
+ * the inner indent before each member and the outer indent before the closing brace.
+ */
+export function jsonAssemble(
+  parts: readonly string[],
+  isArray: boolean,
+  indent: string,
+  gap: string,
+): string {
+  return assembleContainer(parts, isArray, indent, gap);
 }
 
 /**

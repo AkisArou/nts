@@ -9,7 +9,13 @@
 // **No recursion here either.** The plan requires that *both* traversals use an explicit work
 // stack, for the same reason: a deeply nested value must not serialize on one target and kill
 // the process on another.
-import { member, numberText, quoteJSONString, resolveGap } from "./text.ts";
+import {
+  assembleContainer,
+  member,
+  numberText,
+  quoteJSONString,
+  resolveGap,
+} from "./text.ts";
 import { JsonValue } from "./value.ts";
 
 // Re-exported so the entry points and the tests keep one import site for the whole
@@ -61,23 +67,6 @@ function scalarText(node: JsonValue): string {
     default:
       return quoteJSONString(node.text);
   }
-}
-
-/**
- * Assemble a finished container, applying the gap exactly as 25.5.4.5 and 25.5.4.6 describe:
- * an empty container is `{}` or `[]` with no gap inside it, and a non-empty one puts the
- * *outer* indent before the closing brace and the inner indent before each member.
- */
-function assemble(frame: Frame, gap: string): string {
-  const isArray = frame.node.kind === "array";
-  const open = isArray ? "[" : "{";
-  const close = isArray ? "]" : "}";
-  if (frame.parts.length === 0) return open + close;
-  if (gap === "") return open + frame.parts.join(",") + close;
-  const inner = frame.indent + gap;
-  return (
-    open + "\n" + inner + frame.parts.join(",\n" + inner) + "\n" + frame.indent + close
-  );
 }
 
 /**
@@ -163,7 +152,12 @@ export function stringifyJsonValue(
       continue;
     }
 
-    const finished = assemble(frame, gap);
+    const finished = assembleContainer(
+      frame.parts,
+      frame.node.kind === "array",
+      frame.indent,
+      gap,
+    );
     frames.pop();
     if (frames.length === 0) return finished;
     const parent = frames[frames.length - 1] as Frame;

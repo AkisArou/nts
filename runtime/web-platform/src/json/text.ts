@@ -161,6 +161,32 @@ export function resolveGap(space: number | string | undefined): string {
 }
 
 /** The text of one member of an object: a quoted key, a colon, and the gap's single space. */
+/**
+ * Assemble a finished container from its already-serialized members.
+ *
+ * 25.5.4.5 and 25.5.4.6 exactly: an empty container is `{}` or `[]` with no gap inside it, and a
+ * non-empty one puts the *outer* indent before the closing brace and the inner indent before
+ * each member.
+ *
+ * Spelled over primitives rather than over a frame so that everything which assembles JSON can
+ * share it -- the graph serializer, the arbitrary-value serializer, and a serializer generated
+ * for a statically known type, which has no frame at all. Keeping it here rather than in either
+ * caller is what stops there being two spellings of the indent rule.
+ */
+export function assembleContainer(
+  parts: readonly string[],
+  isArray: boolean,
+  indent: string,
+  gap: string,
+): string {
+  const open = isArray ? "[" : "{";
+  const close = isArray ? "]" : "}";
+  if (parts.length === 0) return open + close;
+  if (gap === "") return open + parts.join(",") + close;
+  const inner = indent + gap;
+  return open + "\n" + inner + parts.join(",\n" + inner) + "\n" + indent + close;
+}
+
 export function member(key: string, valueText: string, gap: string): string {
   // Branched rather than appending `""`. Concatenating an empty string is a whole append --
   // a length check, a capacity check and possibly a copy -- to add nothing, and the gapless
