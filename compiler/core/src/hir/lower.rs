@@ -801,15 +801,43 @@ fn cell_name(index: usize) -> String {
 ///
 /// Synthetic. The checker's type for an arrow is its signature; the class that
 /// carries what it captured is this compiler's own construction and needs an
-/// identity to hang a layout on. Numbered down from the top, so it cannot
-/// collide with anything the snapshot assigned.
+/// identity to hang a layout on.
+///
+/// **Upward from [`super::SYNTHETIC_CLOSURES`], not downward from the top.**
+/// This counted down from `u32::MAX` and the comment said "so it cannot collide
+/// with anything the snapshot assigned" -- true, and not the whole question,
+/// because the top of the space is not the snapshot's. It is where
+/// [`super::CONSTRUCTOR_TOKENS`] lives, sixteen ids at `u32::MAX - 15`, whose
+/// own comment says it is placed there *"because closures are numbered upward
+/// from `SYNTHETIC_CLOSURES`"*.
+///
+/// Two comments, each true of the other's assumption, and the code followed the
+/// one that made them share sixteen ids. So a program's fifteenth closure had
+/// the id of `Ctor_Error` and its fourteenth `Ctor_TypeError`, and closures
+/// sixteen through thirty-one landed in [`super::PROVIDED_ERRORS`].
+///
+/// What that looked like: `runtime/node/async_hooks` emitted
+/// `nts_node_enqueue_microtask(&nts_fnval_NtsObj_Ctor_TypeError)` for a call
+/// whose HIR correctly says `const closure.static`. The C did not compile,
+/// which is the good outcome -- `program.layout` returned whichever of the two
+/// it found first, and in a program without a type clash it would have been a
+/// wrong function silently called.
+///
+/// The old assertion could not catch it: it checked the *floor*, which a
+/// descending counter passes for half a million closures, and never the ceiling
+/// it was walking into.
 fn closure_type(index: usize) -> TypeId {
-    let id = u32::MAX - u32::try_from(index).unwrap_or(0);
+    let id = super::SYNTHETIC_CLOSURES + u32::try_from(index).unwrap_or(0);
     debug_assert!(
-        id >= super::SYNTHETIC_CLOSURES,
+        id < super::PROVIDED_ERRORS,
         "more closures than the synthetic id space holds",
     );
     TypeId(id)
+}
+
+/// The `n` behind a synthetic closure type id. The inverse of [`closure_type`].
+fn closure_index(ty: TypeId) -> usize {
+    (ty.0.saturating_sub(super::SYNTHETIC_CLOSURES)) as usize
 }
 
 /// What a `for...of` head binds. See [`Lowering::for_of_head`].
@@ -920,13 +948,13 @@ fn closure_names(index: usize) -> (String, String) {
 /// the arrow it came from.
 #[must_use]
 pub fn closure_class(ty: TypeId) -> String {
-    closure_names((u32::MAX - ty.0) as usize).0
+    closure_names(closure_index(ty)).0
 }
 
 /// The one method a closure class implements.
 #[must_use]
 pub fn closure_method(ty: TypeId) -> String {
-    closure_names((u32::MAX - ty.0) as usize).1
+    closure_names(closure_index(ty)).1
 }
 
 /// Find every arrow function and work out what it captures.
@@ -1475,6 +1503,22 @@ fn declare_a_closure_global(
     }
 }
 
+/// Whether a variable declaration carries `export`.
+///
+/// The modifier is on the enclosing `VariableStatement` rather than on the
+/// declaration or its list, so this walks to the statement. Split out of
+/// `collect_module_scope`, which is at its line limit.
+fn declaration_is_exported(probe: &FuncBuilder, id: NodeId) -> bool {
+    probe
+        .ancestor(id, syntax::VARIABLE_STATEMENT)
+        .is_some_and(|statement| {
+            probe
+                .node(statement)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::EXPORT)
+        })
+}
+
 fn collect_module_scope(
     snapshot: &SemanticSnapshot,
     closures: &[ClosureInfo],
@@ -1616,9 +1660,29 @@ fn collect_module_scope(
         // reader gets the number and nothing is allocated. One whose
         // initializer is code is storage like any other, written once by
         // `module#init`.
+        //
+        // Unless it is **exported**, and then it needs both. A reader inside
+        // this module still gets the number; a reader outside needs something
+        // to name, and `publish_surface` publishes a *global* -- so folding an
+        // exported constant away left nothing for the export table to point at
+        // and the name was silently absent from the artifact.
+        //
+        // The asymmetry is what makes it a defect rather than a policy:
+        // `export const a = 50` vanished and `export const b = 50 + 0` did not,
+        // differing only in whether the value was written down or arrived at. A
+        // backend declining to export values would decline both. `buffer`
+        // published one of its fifteen exports and two of the missing fourteen
+        // were this -- `kStringMaxLength` and `INSPECT_MAX_BYTES`, both read by
+        // node's own tests.
+        //
+        // Both, not one: the constant keeps folding for every use this module
+        // makes of it, and the global costs one static whose initial value is
+        // the number and which nothing ever writes.
         if kind == nts_semantic_schema::VariableKind::Const && constant.is_some() {
             scope.constants.insert(symbol.0, value);
-            continue;
+            if !declaration_is_exported(&probe, id) {
+                continue;
+            }
         }
 
         if let Some(ty) = closure_typed_global(&mut probe, closures, kind, initializer) {
@@ -2984,6 +3048,7 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     }
 }
 
+
 /// A function type's signature as the ids it is made of, or `None` when the
 /// type is not a function.
 ///
@@ -3576,6 +3641,15 @@ fn erasable(ty: &HirType) -> bool {
                     // asks `x instanceof Promise` of an `unknown`, and a test
                     // is worth nothing if the value cannot get into one.
                     | ManagedType::Promise(_)
+                    // A symbol has had `NTS_TAG_SYMBOL` since it got a tag of
+                    // its own, and the C backend's `erased_tag` has mapped it
+                    // ever since -- this list is the one that never learned.
+                    // The fourth time this family has gone stale, and found the
+                    // same way as the others: by a narrowing that had no reason
+                    // to be refused. `typeof v === "symbol"` on an `unknown` is
+                    // a question the runtime can answer, and the value is
+                    // sitting right there.
+                    | ManagedType::Symbol
             )
     )
 }
@@ -6373,6 +6447,32 @@ impl<'a> FuncBuilder<'a> {
             && named(self.snapshot, *object).is_none()
         {
             return Ok(value);
+        }
+        // Narrowed to a `bigint`, which an erased value provably is not.
+        //
+        // An `NtsValue` carries one of eight tags -- undefined, boolean, number,
+        // string, function, symbol, object, null -- and none of them is a
+        // bigint. `erasable` refuses to put one in, and the napi boundary
+        // answers `None` for `HirType::BigInt`, so no caller can hand one in
+        // either. So `typeof v === "bigint"` on an `unknown` is not
+        // unrepresentable, it is **false**, and `hir::tags` says so in as many
+        // words: the comparison is "correctly false against a string the
+        // runtime never returns".
+        //
+        // The branch under it is therefore dead, and refusing it cost the
+        // function, its callers, and their callers. `determineSpecificType` and
+        // `ERR_OUT_OF_RANGE`'s constructor in `runtime/node/internal/errors.ts`
+        // are two such branches, and between them they stop eleven of `path`'s
+        // fifteen exports and most of `buffer`'s.
+        //
+        // A zero of the type rather than a refusal, and it is observable only if
+        // the impossible happens. The guard is folded to a constant by
+        // `tags::fold_comparisons`, so the block is removed rather than merely
+        // unreachable -- which is what makes this a lowering of dead code and
+        // not a default value someone might read.
+        if want == HirType::BigInt {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::ConstInt(0), HirType::BigInt, origin));
         }
         if !readable_back(&want) {
             return Err(self.unsupported(
@@ -19771,7 +19871,7 @@ impl<'a> FuncBuilder<'a> {
         // the load. What is left is an indirect call per iteration where there
         // should be an inlined multiply.
         let callee = if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR {
-            Callee::Direct(closure_names((u32::MAX - receiver_ty.0) as usize).1)
+            Callee::Direct(closure_names(closure_index(receiver_ty)).1)
         } else if let Some(slot) = self.hierarchy.closure_slot {
             Callee::Closure { slot }
         } else {
@@ -23144,7 +23244,76 @@ enum Branch {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_number;
+    use super::{closure_type, parse_number};
+
+    /// The synthetic id bands do not overlap.
+    ///
+    /// This is the invariant two comments each asserted and the code broke.
+    /// `closure_type` counted **down** from `u32::MAX` — "so it cannot collide
+    /// with anything the snapshot assigned", which is true and is not the whole
+    /// question — straight into [`super::super::CONSTRUCTOR_TOKENS`], sixteen
+    /// ids at `u32::MAX - 15`, whose own comment says it is placed there
+    /// *because closures are numbered upward from `SYNTHETIC_CLOSURES`*.
+    ///
+    /// So a program's fifteenth closure had the id of `Ctor_Error` and its
+    /// fourteenth `Ctor_TypeError`, and closures sixteen through thirty-one
+    /// landed in [`super::super::PROVIDED_ERRORS`]. `Program::layout` finds a
+    /// layout by asking which one holds the id, so it returned whichever it met
+    /// first: `runtime/node/async_hooks` emitted a callback as
+    /// `&nts_fnval_NtsObj_Ctor_TypeError` for a call whose HIR correctly said
+    /// `const closure.static`.
+    ///
+    /// **Asserted over the partition rather than over a program**, which is why
+    /// this is a unit test and not an example. Two backends compile the lie
+    /// without complaint — the C only failed because the emitted prototype met
+    /// a hand-written header that disagreed — so no differential can see it, and
+    /// a program that reproduces it needs sixteen closures *and* a class used as
+    /// a value, which is a shape nobody writes on purpose.
+    ///
+    /// The old assertion checked the *floor* of the closure band, which a
+    /// descending counter passes for half a million closures, and never the
+    /// ceiling it was walking into. This checks the ceiling.
+    #[test]
+    fn no_closure_id_lands_in_a_reserved_band() {
+        for index in 0..4096usize {
+            let id = closure_type(index).0;
+            assert!(
+                id >= crate::hir::SYNTHETIC_CLOSURES,
+                "closure {index} is below the closure floor: {id}",
+            );
+            assert!(
+                id < crate::hir::PROVIDED_ERRORS,
+                "closure {index} reaches the provided-error band: {id}",
+            );
+            assert!(
+                id < crate::hir::CONSTRUCTOR_TOKENS,
+                "closure {index} reaches the constructor-token band: {id}",
+            );
+        }
+    }
+
+    /// And the two reserved bands do not overlap each other.
+    ///
+    /// Sixteen apart by construction, and stated here so that widening either
+    /// one has to come past a test rather than past a reader.
+    #[test]
+    fn the_reserved_bands_are_disjoint() {
+        // Read through a binding so the comparison is not folded at compile
+        // time: `assert!(A < B)` on two constants is a constant, and clippy
+        // says so -- correctly, because a test that cannot fail is not one.
+        let errors = crate::hir::PROVIDED_ERRORS;
+        let tokens = crate::hir::CONSTRUCTOR_TOKENS;
+        assert!(errors < tokens, "the bands are ordered");
+        assert_eq!(
+            tokens - errors,
+            16,
+            "the provided-error band holds sixteen and ends where the tokens begin",
+        );
+        assert!(
+            crate::hir::builtin::ERRORS.len() <= 16,
+            "more provided error classes than either band holds",
+        );
+    }
 
     /// Every spelling a JavaScript numeric literal has.
     #[test]

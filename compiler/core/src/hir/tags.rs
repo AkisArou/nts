@@ -98,10 +98,13 @@ pub fn of_representation(ty: &super::HirType) -> u32 {
 
 /// The tag a `typeof` comparison against this literal is asking about.
 ///
-/// `None` for a spelling no tag can produce — `"bigint"`, `"symbol"`. Those
-/// comparisons are *not* rewritten: left alone they compare a string the
-/// runtime never returns and are correctly false, where folding them to a tag
-/// this compiler does not have would be inventing one.
+/// `None` for a spelling no tag can produce, which is now only `"bigint"`.
+/// That comparison is *not* rewritten: left alone it compares a string the
+/// runtime never returns and is correctly false, where folding it to a tag this
+/// compiler does not have would be inventing one.
+///
+/// `"symbol"` was in that sentence and should not have been -- `NTS_TAG_SYMBOL`
+/// exists -- so the comparison was correct and allocated a string per test.
 #[must_use]
 pub fn of_spelling(text: &str) -> Option<TagTest> {
     match text {
@@ -117,6 +120,12 @@ pub fn of_spelling(text: &str) -> Option<TagTest> {
         // could produce is correctly false -- and that stopped being true the
         // moment a function became a value something could erase.
         "function" => Some(TagTest::Is(FUNCTION)),
+        // And a symbol, for exactly the same reason and one stale comment
+        // later: `NTS_TAG_SYMBOL` exists, the C backend's `erased_tag` has
+        // mapped it since it was added, and only the two lists in `lower` had
+        // not learned. Left alone this compared a string the runtime *does*
+        // return, so it was correct and allocated one per test.
+        "symbol" => Some(TagTest::Is(SYMBOL)),
         _ => None,
     }
 }

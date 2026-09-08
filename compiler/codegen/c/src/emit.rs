@@ -502,11 +502,12 @@ fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
             }
             let mut parameters = Vec::new();
             for arg in args {
-                parameters.push(c_type_of(
-                    program,
-                    &func.values[arg.0 as usize].ty,
-                    &op.origin,
-                )?);
+                let ty = &func.values[arg.0 as usize].ty;
+                parameters.push(if crosses_as_header(ty) {
+                    "NtsHeader *".to_owned()
+                } else {
+                    c_type_of(program, ty, &op.origin)?
+                });
             }
             if parameters.is_empty() {
                 parameters.push("void".to_owned());
@@ -566,6 +567,29 @@ fn literal_name(literals: &[String], text: &str) -> String {
 /// program is one of those. A *string* is a `NtsHeader` by typedef, so a
 /// `Promise<string>` worked and a `Promise<SomeClass>` did not, which is the
 /// kind of gap that shows up as one payload type failing and the rest passing.
+/// Whether a value crosses to a hand-written binding as its header pointer.
+///
+/// A binding is C somebody wrote, in a file that cannot include the generated
+/// header: `NtsObj_Closure14` is a name this compilation invented and the next
+/// one will invent a different one. So a class instance and a closure cross as
+/// `NtsHeader *`, which every managed object begins with, and the binding casts
+/// back if it needs to.
+///
+/// This is why `nts_node.h` declares `void nts_node_enqueue_microtask(NtsHeader
+/// *callback)` and why its comment says naming the parameter otherwise "is what
+/// produced the incompatible-pointer clang error in three modules". The header
+/// was right and the emitter was generating a prototype from the *call's*
+/// argument types, so the two disagreed and neither could be changed to match
+/// the other: the binding cannot name the struct and the call cannot know the
+/// binding.
+///
+/// A string, an array, a map and a view are **not** here. Their C types are the
+/// runtime's own -- `NtsString *`, `NtsArray *` -- so a binding can name them,
+/// and `runtime/node`'s bindings do.
+fn crosses_as_header(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(ManagedType::Object(_)))
+}
+
 fn erases_class(callee: &str, at: usize) -> bool {
     matches!(
         (callee, at),
@@ -640,7 +664,13 @@ fn call_text(
             // no signature for it -- `declared` only covers functions the
             // program itself defines. A string is already an `NtsHeader`, so
             // this went unnoticed until an object payload reached one.
-            if erases_class(target, at) {
+            // A runtime helper by name, or any object crossing to a binding
+            // the compiler declared itself -- see `crosses_as_header`.
+            if erases_class(target, at)
+                || (matches!(callee, Callee::External(_))
+                    && !runtime_declares(target)
+                    && crosses_as_header(&func.values[argument.0 as usize].ty))
+            {
                 return format!("(NtsHeader *){}", value_name(*argument));
             }
             let wanted = declared.and_then(|params| params.get(at)).map(|p| &p.ty);
@@ -1105,8 +1135,43 @@ fn emit_closure_call_slot(writer: &mut CodeWriter, origin: &Origin, program: &Pr
     writer.blank(origin);
 }
 
+/// Whether any function names this global.
+///
+/// A global that nothing reads, nothing writes and nothing publishes needs no
+/// storage — and emitting one is not merely wasteful, it is a **build failure**:
+/// `benches` compiles with `-Werror`, and an unread `static` is
+/// `-Wunused-variable`.
+///
+/// This exists because an exported `const` with a folding initializer is given
+/// a global so the export table has something to point at. In a *library* that
+/// is exactly right. In an **executable** the exports are not roots — nothing
+/// outside can call in — so `publish_surface` publishes nothing, and the global
+/// is left with no reader, no writer and no external linkage.
+///
+/// `json-scan`'s `QUOTE`, `COMMA`, `MINUS` and `OPEN_BRACKET` are that shape:
+/// module constants a benchmark folds at every use.
+///
+/// Asked of the IR rather than tracked alongside it, because the answer changes
+/// with reachability and a flag set during lowering would be stale by now.
+fn global_is_named(program: &Program, at: u32) -> bool {
+    program.funcs.iter().any(|func| {
+        func.values.iter().any(|op| {
+            matches!(
+                op.kind,
+                OpKind::GlobalGet(global) | OpKind::GlobalSet { global, .. } if global == at
+            )
+        })
+    })
+}
+
 fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
-    for global in &program.globals {
+    for (at, global) in program.globals.iter().enumerate() {
+        // Not `continue`-ing on an exported one: external linkage *is* a
+        // reader, and the whole point of publishing a constant is that
+        // something outside this translation unit names it.
+        if !global.exported && !global_is_named(program, u32::try_from(at).unwrap_or(u32::MAX)) {
+            continue;
+        }
         // `c_type_of` rather than `c_type`: an object type is named per
         // program, so a global holding one cannot be spelled without it.
         let ty = c_type_of(program, &global.ty, &global.origin)?;

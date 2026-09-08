@@ -129,3 +129,66 @@ fn the_initializer_writes_every_binding_that_survived() {
         );
     }
 }
+
+/// An exported `const` with a folding initializer is still a global.
+///
+/// A `const` that folds is a value rather than storage, which is right for a
+/// name only this module reads and wrong for one it publishes: `publish_surface`
+/// publishes a **global**, so folding the constant away left nothing for the
+/// export table to point at and the name was silently absent from the artifact.
+///
+/// The asymmetry is what makes it a defect rather than a policy. `export const
+/// a = 50` vanished and `export const b = 50 + 0` did not, differing only in
+/// whether the value was written down or arrived at — and a backend declining
+/// to export values would have declined both. The node lane found it by
+/// isolating one variable at a time; a first pass with nine exports in one file
+/// gave the opposite answer and read as a rule about small integers.
+///
+/// `buffer` published one of its fifteen exports and two of the missing
+/// fourteen were this.
+///
+/// Asserted here rather than in the example because a differential drives
+/// exported *functions*: it cannot see an export table at all, so the example
+/// agreeing says nothing about whether the name is in the artifact.
+#[test]
+fn an_exported_literal_constant_is_a_global() {
+    let Some(prepared) = prepared() else {
+        return;
+    };
+    for name in ["literalConst", "computedConst"] {
+        let global = prepared
+            .program
+            .globals
+            .iter()
+            .find(|global| global.name == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{name}` is exported and needs a global to publish: {:?}",
+                    prepared
+                        .program
+                        .globals
+                        .iter()
+                        .map(|g| &g.name)
+                        .collect::<Vec<_>>()
+                )
+            });
+        assert!(
+            global.exported,
+            "`{name}` is published, so its global carries external linkage",
+        );
+    }
+
+    // And the folded one keeps its value as the global's initial, so nothing
+    // has to run for a reader outside to see 50 rather than zero.
+    let literal = prepared
+        .program
+        .globals
+        .iter()
+        .find(|global| global.name == "literalConst")
+        .expect("checked above");
+    assert!(
+        (literal.initial - 50.0).abs() < f64::EPSILON,
+        "the constant is the global's initial value, not something `module#init` assigns: {}",
+        literal.initial,
+    );
+}

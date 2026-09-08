@@ -31,11 +31,28 @@ use super::{Field, HirType, ManagedType};
 
 /// The error classes this compiler provides.
 ///
-/// Four rather than one because they are distinguishable at run time —
+/// Several rather than one because they are distinguishable at run time —
 /// `assert.throws(fn, TypeError)` is an `instanceof` check, and code that
 /// branches on which error it caught is ordinary. They hold the same two
-/// fields, so this is a list rather than four definitions.
-pub(super) const ERRORS: &[&str] = &["Error", "TypeError", "RangeError", "URIError"];
+/// fields, so this is a list rather than five definitions.
+///
+/// **Append only.** The position is the class's identity as a value: it picks
+/// the type in [`super::provided_error_type`] and the token in
+/// [`super::constructor_token`], so inserting one renames every class after it.
+///
+/// `SyntaxError` is here because a parser cannot be written without it, and a
+/// function that can raise one was refused entirely — which kept a complete,
+/// specification-exact JSON parser in `runtime/web-platform` off the compiled
+/// axis, along with every function that calls it. A class absent from this list
+/// does not merely fail where it is thrown; it refuses its caller, and its
+/// caller's caller.
+pub(super) const ERRORS: &[&str] = &[
+    "Error",
+    "TypeError",
+    "RangeError",
+    "URIError",
+    "SyntaxError",
+];
 
 /// Members of the declared `Error` that this compiler does not provide.
 ///
@@ -58,8 +75,9 @@ pub(super) fn is_error(name: &str) -> bool {
 ///
 /// The position is the class's identity as a *value*: it picks the token type
 /// in [`super::constructor_token`], so two mentions of `TypeError` anywhere in
-/// a program name one object. A list rather than a map because there are four
-/// of them and the order is the identity.
+/// a program name one object. A list rather than a map because there are a
+/// handful of them and the order *is* the identity -- which is also why
+/// [`ERRORS`] is appended to and never inserted into.
 pub(super) fn error_index(name: &str) -> Option<usize> {
     ERRORS.iter().position(|error| *error == name)
 }

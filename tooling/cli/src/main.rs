@@ -296,7 +296,7 @@ fn main() -> Result<()> {
         Some("facts") => {
             let rest: Vec<String> = args.collect();
             let tsconfig = project(&rest)?;
-            dump_facts(&tsconfig)
+            dump_facts(&tsconfig, rest.iter().any(|arg| arg == "--prepared"))
         }
         // Every layout, with its fields in order, its base, and the type ids
         // that share it.
@@ -565,7 +565,21 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
-fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
+/// What the analysis proves about every number, before or after preparation.
+///
+/// `--prepared` is not a display option. The functions a backend compiles are
+/// not the functions the lowering produced: `guards` gives a root a `#whole`
+/// variant whose parameters are integers, `signatures` narrows them, and every
+/// representation decision is made about *those*. Dumping the lowered program
+/// reports the facts of a function that is not the one being compiled -- which
+/// is how four hypotheses about `utf8Write`'s counter were tested against the
+/// wrong `utf8Write`.
+///
+/// The facts here are the finished program's, not the ones that were available
+/// at the moment a decision was made. That is the right question for "could
+/// this have been narrowed" and the wrong one for "why was it not", and the
+/// difference matters where a pass consumes an analysis it then invalidates.
+fn dump_facts(tsconfig: &Utf8Path, prepared: bool) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
@@ -573,12 +587,20 @@ fn dump_facts(tsconfig: &Utf8Path) -> Result<()> {
         bail!("the program does not typecheck");
     }
 
-    let lowered = hir::lower::lower(&snapshot);
+    let program = if prepared {
+        hir::prepare(&snapshot)
+            .map_err(|problems| {
+                anyhow::anyhow!("the prepared program does not verify: {problems:?}")
+            })?
+            .program
+    } else {
+        hir::lower::lower(&snapshot).program
+    };
     // The whole-program analysis, so this reports what the compiler actually
     // knows rather than what one function could work out alone.
     let analyses =
-        hir::interprocedural::analyze_program(&lowered.program, hir::reachable::Roots::EveryExport);
-    for (func, analysis) in lowered.program.funcs.iter().zip(&analyses) {
+        hir::interprocedural::analyze_program(&program, hir::reachable::Roots::EveryExport);
+    for (func, analysis) in program.funcs.iter().zip(&analyses) {
         let numeric: Vec<usize> = (0..func.values.len())
             .filter(|index| matches!(func.values[*index].ty, HirType::Float { .. }))
             .collect();
@@ -1613,12 +1635,74 @@ fn write_standalone(program: &hir::Program, out: &Utf8Path, sources: &[&str]) ->
 ///
 /// Prints rather than writes: the slice it renders is scalar, so there is no
 /// runtime to place beside it yet and a file would suggest otherwise.
+/// The entry points a `--entry <name>` flag names, or module initialization.
+///
+/// Repeatable, because a program may have more than one and `Roots::Entry`
+/// takes a list.
+fn named_entry() -> Vec<String> {
+    let args: Vec<String> = std::env::args().collect();
+    let named: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|(_, arg)| arg.as_str() == "--entry")
+        .filter_map(|(at, _)| args.get(at + 1).cloned())
+        .collect();
+    if named.is_empty() {
+        vec![hir::lower::MODULE_INIT.to_owned()]
+    } else {
+        named
+    }
+}
+
+/// How a program should be prepared, from the flags every emitter shares.
+///
+/// `--main` says the product is an **executable**, which is a claim about
+/// reachability rather than about output: a module's exports are not roots for
+/// one, because nothing outside the program can call them. `--rc` selects
+/// reference counting.
+///
+/// `--entry <name>` names the entry point when it is not module initialization,
+/// which is what a benchmark has: `nts-bench` prepares with `Roots::Entry(["work"])`,
+/// so `--main` alone -- whose entry is module init -- prunes a bench case to
+/// nothing. Without it the CLI cannot render the program a row actually runs,
+/// and an A/B through it prices something else.
+///
+/// One function because the three emitters must agree, and for a long time they
+/// did not: `emit-c` read both flags and `emit-llvm` and `emit-jvm` read
+/// neither, so those two always emitted the **library** reading with every
+/// export a root. A root is a wall -- its parameters stay as wide as their
+/// declared types, because the next caller is a linker away -- so the CLI
+/// showed `(Queens;DD)Z` for a method the benchmark compiles as `(Queens;II)Z`.
+///
+/// The JVM session found that by emitting the same case both ways and noticing
+/// the descriptors differed; the web-platform session lost an hour to the same
+/// thing on the C side, where the flag existed and was not known. A command
+/// whose output does not match what is built is worse than no command, because
+/// its answers are specific and wrong.
+fn emit_options(entry: &[String]) -> hir::Options<'_> {
+    let standalone = std::env::args().any(|arg| arg == "--main") || !entry.is_empty();
+    hir::Options {
+        provider: if std::env::args().any(|arg| arg == "--rc") {
+            hir::Provider::ReferenceCounting
+        } else {
+            hir::Provider::NoGc
+        },
+        roots: if standalone {
+            hir::reachable::Roots::Entry(entry)
+        } else {
+            hir::reachable::Roots::EveryExport
+        },
+        ..hir::Options::default()
+    }
+}
+
 fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
     let tsgo_binary = frontend_binary();
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let prepared = match hir::prepare(&snapshot) {
+    let entry = named_entry();
+    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry)) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
@@ -1659,7 +1743,8 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     let mut source = TsgoApi::for_compilation(tsgo_binary);
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
-    let prepared = match hir::prepare(&snapshot) {
+    let entry = named_entry();
+    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry)) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {

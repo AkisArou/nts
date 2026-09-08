@@ -101,3 +101,23 @@ export function readScaled(by: number): number {
 export function readPattern(): boolean {
   return pattern;
 }
+
+// An exported `const` whose initializer is a literal.
+//
+// A `const` that folds is a value rather than storage: the reader gets the
+// number and nothing is allocated. That is right for a name only this module
+// reads, and it left an *exported* one with nothing for the export table to
+// point at -- so `export const a = 50` was silently absent from the artifact
+// where `export const b = 50 + 0` was present, differing only in whether the
+// value was written down or arrived at.
+//
+// `buffer` published one of its fifteen exports and two of the missing
+// fourteen were this: `kStringMaxLength` and `INSPECT_MAX_BYTES`, both read by
+// node's own tests.
+export const literalConst = 50;
+export const computedConst = 2 ** 53 - 1;
+
+// And a reader inside the module, which must still fold rather than load.
+export function readsBoth(n: number): number {
+  return literalConst + computedConst + (n | 0);
+}

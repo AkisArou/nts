@@ -1331,15 +1331,20 @@ pub const fn is_closure_type(ty: TypeId) -> bool {
 ///
 /// At the top of the id space rather than beside `SYNTHETIC_CLOSURES`, because
 /// closures are numbered upward from there by a counter this cannot see: a
-/// program with enough of them would reach any fixed offset. There are four
-/// provided error classes and the band holds sixteen.
+/// program with enough of them would reach any fixed offset. The band holds
+/// sixteen and [`super::builtin::ERRORS`] is well inside it.
+///
+/// That sentence was false for as long as it stood. `closure_type` numbered
+/// *downward* from `u32::MAX`, straight into these sixteen ids, so a program's
+/// fifteenth closure was `Ctor_Error`. Both comments were internally consistent
+/// and described different programs.
 pub const CONSTRUCTOR_TOKENS: u32 = u32::MAX - 15;
 
 /// The band the *provided error classes* live in, when the program never named
 /// one.
 ///
-/// This compiler provides `Error`, `TypeError`, `RangeError` and `URIError`,
-/// and it has to be able to **construct** one for a check the language
+/// This compiler provides the classes in [`super::builtin::ERRORS`], and it has
+/// to be able to **construct** one for a check the language
 /// specifies — `"x".repeat(-1)` throws a `RangeError` whether or not the
 /// program has ever written the word. The checker only interns a type the
 /// source mentions, so `type_named("RangeError")` answers `None` for most
