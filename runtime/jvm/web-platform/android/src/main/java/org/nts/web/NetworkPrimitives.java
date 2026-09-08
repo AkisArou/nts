@@ -29,7 +29,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
- * Android API 26+/Java 8 raw networking primitives. No HTTP/WebSocket semantics.
+ * Android API 29+/Java 8 raw networking primitives. No HTTP/WebSocket semantics.
  * I/O occurs on bounded worker pools. Completions are posted to the caller's NTS
  * runtime executor. Never use Runnable::run or a blocking I/O pool as that executor.
  * Close this object before shutting down the completion executor.

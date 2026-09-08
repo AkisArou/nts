@@ -1,5 +1,10 @@
-# The OkHttp production provider's third-party dependencies: pinned, hashed,
-# licensed, and recorded here rather than resolved by a build file.
+# The build tools this lane pins: hashed, licensed, and recorded here rather
+# than resolved by a build file.
+#
+# **Nothing here ships.** OkHttp, Okio and `kotlin-stdlib` were removed when the
+# floor moved to API 29: their only unique value was ALPN below 29, and at 29
+# `SSLParameters.setApplicationProtocols` is public. What is left is R8, which
+# rewrites the artifact and is not in it.
 #
 # A version range or a `+` would make the artifact that ships differ from the
 # artifact that was reviewed, which is the whole of a supply-chain problem in
@@ -22,28 +27,18 @@
 # dependency -- but a build tool that can be swapped silently is a supply-chain
 # problem of exactly the same shape, which is why it is in the same file.
 #
-# `license` is an SPDX identifier and not the whole of the obligation, so here
-# is the rest of it, checked rather than assumed. The three `runtime` jars ship
-# inside the APK -- `build.gradle.kts` declares them `implementation`, not
-# `compileOnly` -- so whoever packages the app redistributes Apache-2.0 code and
-# owes its recipients a copy of the licence.
+# `license` is an SPDX identifier and not the whole of the obligation -- but the
+# rest of that obligation is currently empty, because **nothing here ships**.
+# R8 rewrites the artifact and is not in it, so no recipient of the APK receives
+# it and none of the redistribution duties attach.
 #
-# **None of the three carries a `META-INF/NOTICE` or `META-INF/LICENSE`**, which
-# was checked by listing them rather than inferred from the license field:
-#
-#     unzip -Z1 okhttp-4.12.0.jar | grep -i META-INF
-#
-# So section 4(d) -- propagate the NOTICE -- has nothing to propagate, and the
-# remaining duty is section 4(a), which is a packaging step in the consuming
-# app rather than something this library can discharge. Recorded because "we
-# looked and there is none" and "we did not look" are different statements and
-# only one of them survives being asked.
-#
-# One thing that listing turned up and is worth knowing if you shrink: OkHttp
-# ships its own R8 rules at `META-INF/proguard/okhttp3.pro`. They are applied
-# automatically to an app that bundles the jar; they are *not* applied by
-# `r8_keeps_the_ffi_surface_and_removes_the_rest`, which passes these jars as
-# `--lib` and shrinks only NTS-owned Java.
+# Kept, because this was measured and OkHttp may return for devices below 29:
+# none of `okhttp`, `okio-jvm` or `kotlin-stdlib` carries a `META-INF/NOTICE` or
+# `META-INF/LICENSE`, checked by listing the jars rather than inferred from the
+# license field, so Apache-2.0 section 4(d) had nothing to propagate and the
+# remaining duty was 4(a), a packaging step in the consuming app. And OkHttp
+# ships its own R8 rules at `META-INF/proguard/okhttp3.pro`, applied
+# automatically to an app that bundles it and not by anything here.
 #
 # `repository` because they are not all in one place. R8 is published to
 # Google's Maven and not to Central, and a fetcher that assumed one host would
@@ -51,7 +46,4 @@
 # simply somewhere else.
 #
 # group	artifact	version	sha256	license	scope	repository
-com.squareup.okhttp3	okhttp	4.12.0	b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0	Apache-2.0	runtime	https://repo1.maven.org/maven2
-com.squareup.okio	okio-jvm	3.6.0	67543f0736fc422ae927ed0e504b98bc5e269fda0d3500579337cb713da28412	Apache-2.0	runtime	https://repo1.maven.org/maven2
-org.jetbrains.kotlin	kotlin-stdlib	1.8.21	042a1cd1ac976cdcfe5eb63f1d8e0b0b892c9248e15a69c8cfba495d546ea52a	Apache-2.0	runtime	https://repo1.maven.org/maven2
 com.android.tools	r8	8.13.23	e3cdcb003d9beca956209ad6b9e9df31f26b732bfaed9c7c8674e903ca9f3b81	BSD-3-Clause	tool	https://maven.google.com

@@ -230,7 +230,7 @@ fn sdk() -> Option<(PathBuf, PathBuf)> {
 ///     android library   38 classes,  222 methods, 0 invoke-custom
 ///     nts-runtime.jar   45 classes,  807 methods, 0 invoke-custom
 ///
-/// D8 desugars every lambda into a class even at `--min-api 26`, where
+/// D8 desugars every lambda into a class even at `--min-api 29`, where
 /// `invoke-custom` would have been legal. So "free of accidental
 /// invokedynamic" is true of both shipped artifacts by different routes: one
 /// never has any, and the other's do not survive the toolchain.
@@ -238,7 +238,7 @@ fn sdk() -> Option<(PathBuf, PathBuf)> {
 /// The class *names* are checked too. A `d8` that produced an empty dex would
 /// satisfy "zero invoke-custom" perfectly.
 #[test]
-fn both_artifacts_dex_at_api_26_with_no_invoke_custom() {
+fn both_artifacts_dex_at_api_29_with_no_invoke_custom() {
     let (Some(javac), Some((tools, platform))) = (tool("javac"), sdk()) else { return };
     let root = repository();
     let dir = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
@@ -283,7 +283,7 @@ fn both_artifacts_dex_at_api_26_with_no_invoke_custom() {
         let ran = dex.output().unwrap();
         assert!(
             ran.status.success(),
-            "d8 refused {what} at API 26:\n{}",
+            "d8 refused {what} at API 29:\n{}",
             String::from_utf8_lossy(&ran.stderr)
         );
         let produced = out.join("classes.dex");
@@ -294,7 +294,7 @@ fn both_artifacts_dex_at_api_26_with_no_invoke_custom() {
         let custom = listing.matches("invoke-custom").count();
         assert_eq!(
             custom, 0,
-            "{what} kept {custom} invoke-custom instruction(s) after d8 --min-api 26"
+            "{what} kept {custom} invoke-custom instruction(s) after d8 --min-api 29"
         );
         let named = listing.matches("Lnts/rt/").count() + listing.matches("Lorg/nts/web/").count();
         assert!(
@@ -437,13 +437,9 @@ fn the_digest_this_test_uses_is_the_one_everyone_else_means() {
 /// **A mismatch is a failure, not a skip.** Being unable to reach Maven Central
 /// is a fact about this machine; getting different bytes from it is a fact
 /// about the supply chain, and the two must not look alike.
-fn dependencies() -> Option<Vec<PathBuf>> {
-    fetch(&["runtime"])
-}
-
 fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
     let curl = tool("curl")?;
-    let cache = std::env::temp_dir().join("nts-okhttp-deps");
+    let cache = std::env::temp_dir().join("nts-android-tools");
     std::fs::create_dir_all(&cache).ok()?;
     let mut jars = Vec::new();
     for pin in pinned().into_iter().filter(|pin| scopes.contains(&pin.scope.as_str())) {
@@ -457,16 +453,31 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
                 pin.artifact,
                 pin.version
             );
+            // **Downloaded beside the cache entry and renamed onto it.**
+            // Writing straight to `path` makes a half-written file satisfy the
+            // `exists` check above, so a second test in the same binary reads a
+            // truncated jar and R8 fails with something that looks nothing like
+            // a download problem. That is not hypothetical: renaming this cache
+            // emptied it, several tests raced on the first fetch, and the suite
+            // failed two different ways on two runs and passed single-threaded.
+            //
+            // A rename within one directory is atomic, so the entry is either
+            // absent or complete. The temporary is per-process so two binaries
+            // do not collide on it either.
+            let partial = cache.join(format!(".{name}.{}", std::process::id()));
             let fetched = Command::new(&curl)
                 .args(["-sSfL", "--max-time", "120", "-o"])
-                .arg(&path)
+                .arg(&partial)
                 .arg(&url)
                 .output()
                 .ok()?;
             if !fetched.status.success() {
-                let _ = std::fs::remove_file(&path);
+                let _ = std::fs::remove_file(&partial);
                 return None;
             }
+            // Another thread may have won the race; either copy is complete and
+            // the digest below checks whichever landed.
+            let _ = std::fs::rename(&partial, &path);
         }
         let bytes = std::fs::read(&path).ok()?;
         let found = digest(&bytes);
@@ -479,274 +490,6 @@ fn fetch(scopes: &[&str]) -> Option<Vec<PathBuf>> {
         jars.push(path);
     }
     Some(jars)
-}
-
-/// The production provider must not rewrite the response.
-///
-/// Four `OkHttp` defaults change *what happens* -- redirects, cookies, caching,
-/// retries -- and each is a piece of observable `Fetch` behaviour the shared
-/// TypeScript already owns. Transparent decompression is the one that changes
-/// what the response **says**: `OkHttp` adds `Accept-Encoding: gzip` when the
-/// caller has not, decompresses what it gets, and strips `Content-Encoding` and
-/// `Content-Length` because they would describe bytes it has replaced.
-///
-/// Correct of `OkHttp`, wrong here. With the header left to it, the sabotage
-/// reports exactly that:
-///
-///     Content-Encoding came back as null
-///     Content-Length came back as null rather than the 156 bytes the server sent
-///     the body was 40000 bytes rather than the 156 the server sent
-///
-/// Skips when the dependencies cannot be fetched. Fails, loudly, when they can
-/// be fetched and are not the pinned bytes.
-#[test]
-fn okhttp_does_not_rewrite_what_the_server_sent() {
-    let (Some(javac), Some(java), Some(jars)) = (tool("javac"), tool("java"), dependencies())
-    else {
-        return;
-    };
-    let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-okhttp-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let classpath = jars
-        .iter()
-        .map(|jar| jar.display().to_string())
-        .chain(std::iter::once(dir.display().to_string()))
-        .collect::<Vec<_>>()
-        .join(":");
-
-    for source in [
-        android().join("src/okhttp/java/org/nts/web/OkHttpNetworking.java"),
-        root.join("compiler/codegen/jvm/tests/android/OkHttpHeadersTest.java"),
-    ] {
-        let compiled = Command::new(&javac)
-            .args(["--release", "8", "-Xlint:-options", "-cp"])
-            .arg(&classpath)
-            .arg("-d")
-            .arg(&dir)
-            .arg(&source)
-            .output()
-            .unwrap();
-        assert!(
-            compiled.status.success(),
-            "{} did not compile:\n{}",
-            source.display(),
-            String::from_utf8_lossy(&compiled.stderr)
-        );
-    }
-
-    let ran = Command::new(&java)
-        .arg("-Xverify:all")
-        .arg("-cp")
-        .arg(&classpath)
-        .arg("OkHttpHeadersTest")
-        .output()
-        .unwrap();
-    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
-    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
-    // The **count**, not only the zero: a suite that stopped running half its
-    // cases reports no failures perfectly well. Same assertion as `PASS: 11`
-    // above, which is where the idea came from and where it stopped.
-    assert!(said.ends_with("19 checks, 0 failures"), "{said}");
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// And the sabotage that would let `OkHttp` rewrite the response fires.
-///
-/// The plan asks for sabotage evidence that transparent decompression cannot
-/// change exposed headers unnoticed. That evidence existed as a paragraph in the
-/// doc comment above -- run once, by hand, on an afternoon -- which says nothing
-/// about the tree a month later, and nothing at all about *which* cases the
-/// sabotage broke.
-///
-/// One line does it: the provider sets `Accept-Encoding` itself so `OkHttp`
-/// leaves the body alone. Remove it and `OkHttp` adds its own, decompresses, and
-/// strips `Content-Encoding` and `Content-Length` because they describe bytes it
-/// has replaced. Correct of `OkHttp`; wrong here, because the shared TypeScript
-/// owns that observable.
-///
-/// The three cases below are named rather than counted. A sabotage that broke
-/// some other case, or that threw before reaching these, would satisfy "the
-/// suite went red" and mean nothing.
-#[test]
-fn removing_the_encoding_header_lets_okhttp_rewrite_the_response() {
-    const LINE: &str =
-        "if (!acceptEncoding) { request.addHeader(\"Accept-Encoding\", \"gzip\"); }";
-
-    let (Some(javac), Some(java), Some(jars)) = (tool("javac"), tool("java"), dependencies())
-    else {
-        return;
-    };
-    let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-okhttp-sabotage-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let classpath = jars
-        .iter()
-        .map(|jar| jar.display().to_string())
-        .chain(std::iter::once(dir.display().to_string()))
-        .collect::<Vec<_>>()
-        .join(":");
-
-    // A copy, never the checkout: three sessions build from this tree, and a
-    // window in which it holds wrong source is a correct-looking tree that
-    // produced a wrong binary.
-    let provider = android().join("src/okhttp/java/org/nts/web/OkHttpNetworking.java");
-    let sabotaged = dir.join("OkHttpNetworking.java");
-    let text = std::fs::read_to_string(&provider).unwrap();
-    assert!(text.contains(LINE), "the sabotage no longer matches: {LINE}");
-    std::fs::write(&sabotaged, text.replace(LINE, "// sabotaged: left to OkHttp")).unwrap();
-
-    for source in [sabotaged, root.join("compiler/codegen/jvm/tests/android/OkHttpHeadersTest.java")]
-    {
-        let compiled = Command::new(&javac)
-            .args(["--release", "8", "-Xlint:-options", "-cp"])
-            .arg(&classpath)
-            .arg("-d")
-            .arg(&dir)
-            .arg(&source)
-            .output()
-            .unwrap();
-        assert!(
-            compiled.status.success(),
-            "{} did not compile under the sabotage:\n{}",
-            source.display(),
-            String::from_utf8_lossy(&compiled.stderr)
-        );
-    }
-
-    let ran = Command::new(&java)
-        .arg("-cp")
-        .arg(&classpath)
-        .arg("OkHttpHeadersTest")
-        .output()
-        .unwrap();
-    let said = String::from_utf8_lossy(&ran.stdout);
-    let failed: Vec<&str> = said.lines().filter(|it| it.starts_with("FAIL")).collect();
-    for one in
-        ["Content-Encoding came back as", "Content-Length came back as", "the body was"]
-    {
-        assert!(
-            failed.iter().any(|it| it.contains(one)),
-            "the sabotage should have broken `{one}` and did not:\n{said}\n{}",
-            String::from_utf8_lossy(&ran.stderr)
-        );
-    }
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// The two adapters, over one server, answering the same.
-///
-/// The plan's central two-adapter requirement, and the one thing the suites
-/// around it could not check. `OkHttpHeadersTest` drives `OkHttp` alone and
-/// asserts what it does; `HttpGzipTest` drives the reference alone and asserts
-/// what it does, closing with "this is the observable the production adapter has
-/// to match". Nothing checked that it matched. Two suites agreeing with their
-/// own expectations is not two adapters agreeing with each other.
-///
-/// The count is the ratchet the plan asks for -- "capture the applicable-case
-/// count when the corpus lands, and it may only rise". Pinned exactly rather
-/// than as a lower bound, so adding a case is a deliberate edit here and
-/// removing one cannot pass quietly.
-#[test]
-fn both_adapters_answer_the_same_over_one_server() {
-    let (Some(javac), Some(java), Some(jars)) = (tool("javac"), tool("java"), dependencies())
-    else {
-        return;
-    };
-    let root = repository();
-    let dir = std::env::temp_dir().join(format!("nts-both-http-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-
-    // The runtime jar as well as the pinned dependencies: this corpus drives
-    // `nts.rt.NtsSocket` on one side and OkHttp on the other, which is the
-    // whole point of it.
-    let runtime = std::env::var_os("NTS_JVM_RUNTIME_JAR")
-        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
-    let mine = dir.join("nts-runtime.jar");
-    std::fs::copy(&runtime, &mine).unwrap();
-
-    let classpath = jars
-        .iter()
-        .map(|jar| jar.display().to_string())
-        .chain(std::iter::once(mine.display().to_string()))
-        .chain(std::iter::once(dir.display().to_string()))
-        .collect::<Vec<_>>()
-        .join(":");
-
-    for source in [
-        android().join("src/okhttp/java/org/nts/web/OkHttpNetworking.java"),
-        root.join("compiler/codegen/jvm/tests/android/BothHttp.java"),
-    ] {
-        let compiled = Command::new(&javac)
-            .args(["--release", "8", "-Xlint:-options", "-cp"])
-            .arg(&classpath)
-            .arg("-d")
-            .arg(&dir)
-            .arg(&source)
-            .output()
-            .unwrap();
-        assert!(
-            compiled.status.success(),
-            "{} did not compile:\n{}",
-            source.display(),
-            String::from_utf8_lossy(&compiled.stderr)
-        );
-    }
-
-    let ran = Command::new(&java)
-        .arg("-Xverify:all")
-        .arg("-cp")
-        .arg(&classpath)
-        .arg("BothHttp")
-        .output()
-        .unwrap();
-    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
-    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
-    assert!(said.ends_with("94 checks, 0 failures"), "{said}");
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// The third-party jars dex at the same API floor, and are **not** held to the
-/// NTS-only rule.
-///
-/// The plan is explicit that the zero-invokedynamic rule must not be applied to
-/// third-party jars, and it is worth being precise about why rather than just
-/// obeying it. That rule exists so NTS-authored Java desugars predictably and
-/// stays legible as bytes; `OkHttp` is Kotlin, ships whatever its own toolchain
-/// produced, and is reviewed as a dependency -- on its version, its hash, its
-/// license and its behaviour. Counting its `invoke-custom` instructions would
-/// be measuring someone else's compiler against our house style.
-///
-/// What *is* our problem is whether it reaches a device at all, so it is dexed
-/// at the same `--min-api 26` and required to succeed. That is the question a
-/// pinned dependency can actually fail.
-#[test]
-fn the_pinned_dependencies_dex_at_the_same_api_floor() {
-    let (Some((tools, platform)), Some(jars)) = (sdk(), dependencies()) else { return };
-    let dir = std::env::temp_dir().join(format!("nts-deps-dex-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let mut dex = Command::new(tools.join("d8"));
-    dex.args(["--min-api", "26", "--lib"]).arg(&platform).arg("--output").arg(&dir);
-    for jar in &jars {
-        dex.arg(jar);
-    }
-    let ran = dex.output().unwrap();
-    assert!(
-        ran.status.success(),
-        "d8 refused the pinned dependencies at API 26:\n{}",
-        String::from_utf8_lossy(&ran.stderr)
-    );
-    let produced = dir.join("classes.dex");
-    assert!(produced.exists(), "d8 produced no dex for the pinned dependencies");
-    let dumped = Command::new(tools.join("dexdump")).arg("-d").arg(&produced).output().unwrap();
-    let listing = String::from_utf8_lossy(&dumped.stdout);
-    assert!(
-        listing.contains("Lokhttp3/OkHttpClient;"),
-        "the dependency dex does not mention OkHttp's own client class, so whatever it \
-         contains is not what was pinned"
-    );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// R8 shrinks the library and the keep rules are what stops it shrinking the
@@ -775,7 +518,6 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     // away from being removed from a release build, exactly the way
     // `AndroidNetworking`'s keep rule once matched nothing because this test
     // never compiled `src/android`.
-    let Some(jars) = dependencies() else { return };
     let dir = std::env::temp_dir().join(format!("nts-r8-{}", std::process::id()));
     let classes = dir.join("classes");
     let out = dir.join("out");
@@ -783,7 +525,6 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     std::fs::create_dir_all(&out).unwrap();
 
     let compile_path = std::iter::once(platform.display().to_string())
-        .chain(jars.iter().map(|jar| jar.display().to_string()))
         .collect::<Vec<_>>()
         .join(":");
     let mut compile = Command::new(&javac);
@@ -791,8 +532,9 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     // **Every source set, discovered rather than listed.** Three times in this
     // lane a keep rule and the compiled source list have disagreed:
     // `AndroidNetworking`'s rule matched nothing because `src/android` was not
-    // compiled here, then `src/okhttp` was missing from this test, then from
-    // the device runner. Each time R8 said so and the run scrolled past it.
+    // compiled here, then `src/okhttp` -- since deleted with the dependency --
+    // was missing from this test, then from the device runner. Each time R8
+    // said so and the run scrolled past it.
     //
     // Three occurrences of one shape is a missing invariant rather than three
     // mistakes. Naming the sets is what made forgetting one possible, so this
@@ -809,15 +551,10 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     shrink
         .arg("-cp")
         .arg(&r8)
-        .args(["com.android.tools.r8.R8", "--release", "--min-api", "26", "--lib"])
+        .args(["com.android.tools.r8.R8", "--release", "--min-api", "29", "--lib"])
         .arg(&platform);
-    // The third-party jars as libraries rather than inputs: what is being
-    // shrunk is NTS-owned Java, and dexing OkHttp here would be measuring
-    // someone else's artifact -- which `the_pinned_dependencies_dex_at_the_same_api_floor`
-    // already does, on its own terms.
-    for jar in &jars {
-        shrink.arg("--lib").arg(jar);
-    }
+    // Nothing but the platform on the library path. This lane ships no
+    // third-party jars any more, so what is shrunk here is all of what ships.
     shrink
         .arg("--pg-conf")
         .arg(android().join("consumer-rules.pro"))
@@ -842,12 +579,14 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
     //
     // **Today this is a second line rather than the only one**, and it is worth
     // saying which: with no `-dontwarn` in `consumer-rules.pro`, R8 treats a
-    // missing class as an error and the status check above already fails --
-    // verified by withholding a pinned jar, which produces `Error: Missing
-    // class okhttp3.Cache` and four more. One `-dontwarn` added for any reason
-    // turns those into warnings, R8 exits zero, the dex is produced, and the
-    // failure moves to whichever device path first touches the class. This is
-    // the assertion that survives that edit.
+    // missing class as an error and the status check above already fails. That
+    // was verified while OkHttp was pinned, by withholding its jar, which
+    // produced `Error: Missing class okhttp3.Cache` and four more; with no
+    // runtime dependency left there is nothing here to withhold, so the check
+    // below is now the only executable half. One `-dontwarn` added for any
+    // reason turns an error into a warning, R8 exits zero, the dex is produced,
+    // and the failure moves to whichever device path first touches the class.
+    // This is the assertion that survives that edit.
     let said = format!(
         "{}{}",
         String::from_utf8_lossy(&ran.stderr),
@@ -875,8 +614,6 @@ fn r8_keeps_the_ffi_surface_and_removes_the_rest() {
         "Lorg/nts/web/NetworkPrimitives$ReadCallback;",
         "Lorg/nts/web/NetworkPrimitives$WriteCallback;",
         "Lorg/nts/web/NetworkPrimitives$CleartextPolicy;",
-        "Lorg/nts/web/OkHttpNetworking;",
-        "Lorg/nts/web/OkHttpNetworking$ResponseCallback;",
     ] {
         assert!(
             listing.contains(kept),
@@ -999,34 +736,33 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
 
 /// The library compiles against the API level it declares.
 ///
-/// `--min-api 26` through D8 and R8 proves the *bytecode* is acceptable at that
+/// `--min-api 29` through D8 and R8 proves the *bytecode* is acceptable at that
 /// level. It does not prove the library avoids SDK members added after it: a
 /// call to a method introduced in API 31 dexes perfectly well and throws
 /// `NoSuchMethodError` on a device that predates it.
 ///
-/// This compiles every shipped source set against `platforms/android-26/
+/// This compiles every shipped source set against `platforms/android-29/
 /// android.jar` and lets `javac` answer. A member that does not exist at 26 is
 /// a compile error naming it.
 ///
 /// **It replaced a written-down list of ten members and their API levels**,
-/// which was the best available while there was no API-26 platform on the
+/// which was the best available while there was no API-29 platform on the
 /// machine -- and which was a second statement of a fact the jar already holds.
 /// The same move as the keep rules: where two things must agree and one can be
 /// deleted, delete it. A list must be maintained; a jar cannot be forgotten.
 #[test]
 fn the_library_compiles_against_the_api_level_it_declares() {
     let Some(javac) = tool("javac") else { return };
-    let Some(jars) = dependencies() else { return };
     let floor = PathBuf::from(
         std::env::var("ANDROID_HOME")
             .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
             .unwrap_or_default(),
     )
-    .join("platforms/android-26/android.jar");
+    .join("platforms/android-29/android.jar");
     if !floor.exists() {
         // Announced, because a skip that prints nothing reads as a pass -- and
-        // this is the check that stands for "API-26 compatible".
-        eprintln!("SKIP api-26: no platforms/android-26/android.jar; install it with sdkmanager");
+        // this is the check that stands for "API-29 compatible".
+        eprintln!("SKIP api-29: no platforms/android-29/android.jar; install it with sdkmanager");
         return;
     }
 
@@ -1034,7 +770,6 @@ fn the_library_compiles_against_the_api_level_it_declares() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let classpath = std::iter::once(floor.display().to_string())
-        .chain(jars.iter().map(|jar| jar.display().to_string()))
         .collect::<Vec<_>>()
         .join(":");
 
@@ -1046,7 +781,7 @@ fn the_library_compiles_against_the_api_level_it_declares() {
     let built = compile.output().unwrap();
     assert!(
         built.status.success(),
-        "this library names an Android member that does not exist at API 26, which is the \
+        "this library names an Android member that does not exist at API 29, which is the \
          floor it declares:\n{}",
         String::from_utf8_lossy(&built.stderr)
     );
@@ -1062,24 +797,22 @@ fn the_library_compiles_against_the_api_level_it_declares() {
 /// so a case could rot for a week and the first sign would be a compile error
 /// in the middle of a device run.
 #[test]
-fn the_device_cases_compile_against_api_26() {
+fn the_device_cases_compile_against_api_29() {
     let Some(javac) = tool("javac") else { return };
     let floor = PathBuf::from(
         std::env::var("ANDROID_HOME")
             .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
             .unwrap_or_default(),
     )
-    .join("platforms/android-26/android.jar");
+    .join("platforms/android-29/android.jar");
     if !floor.exists() {
-        eprintln!("SKIP device sources: no platforms/android-26/android.jar");
+        eprintln!("SKIP device sources: no platforms/android-29/android.jar");
         return;
     }
     let sources = sources(&android().join("src/androidTest"));
     if sources.is_empty() {
         return;
     }
-    let Some(jars) = dependencies() else { return };
-    let libraries = jars.iter().map(|jar| jar.display().to_string()).collect::<Vec<_>>().join(":");
 
     let dir = std::env::temp_dir().join(format!("nts-device-src-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -1092,7 +825,7 @@ fn the_device_cases_compile_against_api_26() {
     let mut first = Command::new(&javac);
     first
         .args(["--release", "8", "-Xlint:-options", "-cp"])
-        .arg(format!("{}:{}", floor.display(), libraries))
+        .arg(&floor)
         .arg("-d")
         .arg(&library);
     for path in shipped_sources() {
@@ -1101,14 +834,14 @@ fn the_device_cases_compile_against_api_26() {
     let built = first.output().unwrap();
     assert!(
         built.status.success(),
-        "the library did not compile against API 26:\n{}",
+        "the library did not compile against API 29:\n{}",
         String::from_utf8_lossy(&built.stderr)
     );
 
     let mut compile = Command::new(&javac);
     compile
         .args(["--release", "8", "-Xlint:-options", "-cp"])
-        .arg(format!("{}:{}:{}", floor.display(), library.display(), libraries))
+        .arg(format!("{}:{}", floor.display(), library.display()))
         .arg("-d")
         .arg(dir.join("cases"));
     for path in &sources {
@@ -1125,7 +858,7 @@ fn the_device_cases_compile_against_api_26() {
 
 /// The artifact rules, checked against the bytes rather than the build file.
 ///
-/// `build.gradle.kts` says `VERSION_1_8` and `minSdk = 26`, and a build file is
+/// `build.gradle.kts` says `VERSION_1_8` and `minSdk = 29`, and a build file is
 /// a statement of intent that nothing verifies. These read the class files.
 #[test]
 fn the_library_is_java_eight_and_names_no_sdk_outside_its_one_sdk_file() {

@@ -1,10 +1,11 @@
 #!/bin/sh
 # Build the JVM runtime into a jar the backend embeds.
 #
-# `--release 8` is not incidental. From JDK 9 on, javac compiles string `+` to
-# `invokedynamic makeConcatWithConstants`, which needs Android API 26 -- so the
-# floor keeps the Android path open, and `runtime_jar.rs` asserts the jar
-# contains no `invokedynamic` at all rather than trusting that it worked.
+# `--release 8` is not incidental: it fixes the language level and the platform
+# signatures javac compiles against, and it is what pins the class version at
+# 52. It does *not* by itself keep `invokedynamic` out -- a lambda compiles to
+# `LambdaMetafactory` at version 52 -- so `runtime_jar.rs` asserts the jar
+# contains none rather than trusting that this flag did it.
 #
 # `--date` makes the archive reproducible: without it every rebuild differs in
 # its timestamps and the drift test could never pass.

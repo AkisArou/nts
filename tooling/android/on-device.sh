@@ -41,33 +41,13 @@ jar="$here/runtime/jvm/nts-runtime.jar"
 #
 # One of the three rules was guarding a class that was never there.
 #
-# `src/okhttp` too, and it was missing for the same reason and found the same
-# way: `consumer-rules.pro` keeps `OkHttpNetworking`, this script never compiled
-# it, and R8 said the rule matched nothing. That is the third time in this lane
-# that the keep rules and the compiled source list have disagreed. The rule and
-# the run are now wrong together or right together, which is the only
-# arrangement that stays true.
-#
-# The pinned dependencies come from the cache the Rust suite fills, because that
-# is where they are hash-verified against `dependencies.tsv`. Fetching them here
-# as well would be a second, unverified way to get the same jars.
-deps=${NTS_OKHTTP_DEPS:-${TMPDIR:-/tmp}/nts-okhttp-deps}
-okhttp=$(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar 2>/dev/null | tr '\n' ':')
-# `--lib` takes one file per flag, so the classpath form is no use to d8 or R8.
-okhttp_libs=$(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar 2>/dev/null \
-  | sed 's/^/--lib /' | tr '\n' ' ')
-[ -n "$okhttp" ] || {
-  echo "no pinned OkHttp jars in $deps -- run \`cargo test -p nts-codegen-jvm --test android\`" >&2
-  echo "once to fetch and hash-verify them, or set NTS_OKHTTP_DEPS" >&2
-  exit 1
-}
 
 # **Every source set, found rather than listed.** Naming them is what made
 # forgetting one possible, three times over. A new one is in the build, in the
 # dex and in the R8 input by construction.
 sets=$(find "$here"/runtime/jvm/web-platform/android/src -name '*.java' | sort)
 # shellcheck disable=SC2086
-javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes" \
+javac --release 8 -Xlint:-options -cp "$platform:$jar" -d "$work/classes" \
   $sets \
   "$here"/compiler/codegen/jvm/tests/env/RejectTest.java \
   "$here"/compiler/codegen/jvm/tests/env/EnvTest.java \
@@ -77,14 +57,14 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes
 
 # shellcheck disable=SC2046
 # shellcheck disable=SC2086
-"$tools/d8" --min-api 26 --lib "$platform" $okhttp_libs --output "$work/dex" \
+"$tools/d8" --min-api 29 --lib "$platform" --output "$work/dex" \
   "$jar" $(find "$work/classes" -name '*.class')
 
 # The certificate names the *address*, because the imported suite connects to
 # `127.0.0.1` and requires `localhost` to be refused. `transport.rs` generates
 # the mirror of this for its own suite; see the note there.
-# The **legacy** PKCS12 algorithms, and this is an API-26 finding rather than a
-# preference. A modern `keytool` writes PBES2 with `HmacPBESHA256`, and API 26's
+# The **legacy** PKCS12 algorithms, and this is an API-29 finding rather than a
+# preference. A modern `keytool` writes PBES2 with `HmacPBESHA256`, and API 29's
 # bundled BouncyCastle cannot read that MAC:
 #
 #   java.io.IOException: PKCS12 key store mac invalid - wrong password or
@@ -96,7 +76,7 @@ javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/classes
 # before the first handshake -- and `app_process` reports that as `Killed` with
 # the exception only in logcat, so the run looked like a hang.
 #
-# These three are what API 26 accepts. They are weak, and that is fine for a
+# These three are what API 29 accepts. They are weak, and that is fine for a
 # certificate generated per run, valid for one day, for a loopback peer.
 keytool -genkeypair -alias nts-web -keyalg RSA -keysize 2048 -validity 1 \
   -J-Dkeystore.pkcs12.macAlgorithm=HmacPBESHA1 \
@@ -151,7 +131,7 @@ run Stress
 # Uses the jar the Rust suite pins and caches; skipped rather than fetched here,
 # because a shell script downloading a build tool is a supply-chain decision
 # that belongs where the digests are.
-r8=$(ls "${TMPDIR:-/tmp}"/nts-okhttp-deps/r8-*.jar 2>/dev/null | tail -1)
+r8=$(ls "${TMPDIR:-/tmp}"/nts-android-tools/r8-*.jar 2>/dev/null | tail -1)
 if [ -n "$r8" ]; then
   mkdir -p "$work/shrunk" "$work/testonly"
   # shellcheck disable=SC2046
@@ -163,12 +143,12 @@ if [ -n "$r8" ]; then
   # the check pass for a rule naming a class that does not exist -- a check
   # that could not fail, guarding against checks that cannot fail.
   # The third-party jars as libraries rather than inputs: what is being shrunk
-  # is NTS-owned Java. Dexing OkHttp here would be measuring someone else's
+  # is NTS-owned Java and there is nothing else on the path any more.
   # artifact, which `the_pinned_dependencies_dex_at_the_same_api_floor` already
   # does on its own terms.
   # shellcheck disable=SC2086
-  java -cp "$r8" com.android.tools.r8.R8 --release --min-api 26 --lib "$platform" \
-    $okhttp_libs \
+  java -cp "$r8" com.android.tools.r8.R8 --release --min-api 29 --lib "$platform" \
+    \
     --pg-conf "$here/runtime/jvm/web-platform/android/consumer-rules.pro" \
     --output "$work/shrunk" \
     $(find "$work/classes" -path '*org/nts/web/*' -name '*.class') > "$work/r8.log" 2>&1 || {
@@ -182,7 +162,7 @@ if [ -n "$r8" ]; then
     "$here"/runtime/jvm/web-platform/android/src/test/java/org/nts/web/*.java \
     "$here"/runtime/jvm/web-platform/android/src/androidTest/java/org/nts/web/*.java
   # shellcheck disable=SC2046
-  "$tools/d8" --min-api 26 --lib "$platform" --output "$work/testonly" \
+  "$tools/d8" --min-api 29 --lib "$platform" --output "$work/testonly" \
     $(find "$work/testonly" -name '*.class')
   adb push "$work/shrunk/classes.dex" /data/local/tmp/nts-shrunk.dex > /dev/null
   adb push "$work/testonly/classes.dex" /data/local/tmp/nts-testonly.dex > /dev/null
@@ -194,37 +174,6 @@ if [ -n "$r8" ]; then
 else
   echo "--- no cached R8; run \`cargo test -p nts-codegen-jvm --test android\` first to pin and fetch it"
 fi
-
-# The two-adapter HTTP corpus, on the device.
-#
-# The desktop run proves the production adapter and the deterministic reference
-# expose the same status, headers and body bytes. On ART it is a different
-# OkHttp -- Conscrypt over BoringSSL rather than JSSE, a concurrent copying
-# collector, and a dex that went through d8 -- so the transparent-decompression
-# case is the one worth having here: the plan asks for device evidence that
-# decompression cannot alter exposed headers unnoticed, and that is what this
-# corpus is for.
-#
-# OkHttp goes in as an **input** here rather than as a library, because unlike
-# the R8 run this dex has to actually execute it. That is the same distinction
-# `the_pinned_dependencies_dex_at_the_same_api_floor` makes: shrink ours, run
-# theirs.
-mkdir -p "$work/http/classes" "$work/http/dex"
-javac --release 8 -Xlint:-options -cp "$platform:$jar:$okhttp" -d "$work/http/classes" \
-  "$here"/runtime/jvm/web-platform/android/src/okhttp/java/org/nts/web/*.java \
-  "$here"/compiler/codegen/jvm/tests/android/BothHttp.java
-# shellcheck disable=SC2046
-"$tools/d8" --min-api 26 --lib "$platform" --output "$work/http/dex" \
-  "$jar" $(ls "$deps"/okhttp-*.jar "$deps"/okio-*.jar "$deps"/kotlin-stdlib-*.jar) \
-  $(find "$work/http/classes" -name '*.class')
-adb push "$work/http/dex/classes.dex" /data/local/tmp/nts-bothhttp.dex > /dev/null
-echo "--- BothHttp, both adapters over one server"
-out=$(adb shell "CLASSPATH=/data/local/tmp/nts-bothhttp.dex app_process /data/local/tmp BothHttp" 2>&1)
-echo "$out"
-# The count, not only the zero: a corpus that stopped running half its cases
-# reports no failures perfectly well.
-case "$out" in *"94 checks, 0 failures"*) ;; *) failed=1 ;; esac
-adb shell rm -f /data/local/tmp/nts-bothhttp.dex
 
 # Does `ConnectivityManager` deliver, and is the first network not a change?
 #

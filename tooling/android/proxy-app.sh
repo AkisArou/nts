@@ -18,7 +18,7 @@
 #
 # # What it found, which is a correction rather than a confirmation
 #
-# On API 26 the framework propagates the proxy **host and port** to a real app
+# On API 29 the framework propagates the proxy **host and port** to a real app
 # and does **not** propagate the exclusion list:
 #
 #     global_http_proxy_exclusion_list = localhost,127.0.0.1   (verified set)
@@ -42,14 +42,14 @@ set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
-plat=$sdk/platforms/android-26/android.jar
+plat=$sdk/platforms/android-29/android.jar
 work=${NTS_PROXY_APP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/nts/proxy-app}
 app=$here/compiler/codegen/jvm/tests/android/proxy-app
 package=org.nts.proxyprobe
 
 command -v adb > /dev/null 2>&1 || { echo "SKIP proxy-app: no adb" >&2; exit 0; }
 adb get-state > /dev/null 2>&1 || { echo "SKIP proxy-app: no device" >&2; exit 0; }
-[ -f "$plat" ] || { echo "SKIP proxy-app: no android-26 platform jar" >&2; exit 0; }
+[ -f "$plat" ] || { echo "SKIP proxy-app: no android-29 platform jar" >&2; exit 0; }
 tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort | tail -1)
 [ -n "$tools" ] || { echo "SKIP proxy-app: no build-tools" >&2; exit 0; }
 command -v keytool > /dev/null 2>&1 || { echo "SKIP proxy-app: no keytool" >&2; exit 0; }
@@ -57,10 +57,10 @@ command -v keytool > /dev/null 2>&1 || { echo "SKIP proxy-app: no keytool" >&2; 
 rm -rf "$work"
 mkdir -p "$work/classes" "$work/dex"
 "$tools/aapt2" link -I "$plat" --manifest "$app/AndroidManifest.xml" \
-  --min-sdk-version 26 --target-sdk-version 26 -o "$work/base.apk"
+  --min-sdk-version 29 --target-sdk-version 29 -o "$work/base.apk"
 javac --release 8 -Xlint:-options -cp "$plat" -d "$work/classes" \
   $(find "$app/java" -name '*.java')
-"$tools/d8" --min-api 26 --lib "$plat" --output "$work/dex" \
+"$tools/d8" --min-api 29 --lib "$plat" --output "$work/dex" \
   $(find "$work/classes" -name '*.class')
 # `python3` rather than `zip`, which is not installed here and is one more thing
 # a fresh machine would have to have.

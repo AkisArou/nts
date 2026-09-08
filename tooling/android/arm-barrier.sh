@@ -53,6 +53,10 @@ set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+# **26 on purpose, though the lane's floor is 29.** This measures what ART's
+# arm64 compiler does with a volatile field, which is a fact about ART and not
+# a claim about the API level we ship to -- and 26 is the arm64 image already
+# on disk. A 29 image would answer the same question at 2.5 GB more.
 image=$sdk/system-images/android-26/google_apis/arm64-v8a/system.img
 # **Not `$TMPDIR`.** Extracting this needs a 2.5 GB intermediate and leaves 331
 # MB behind, and `/tmp` here is `tmpfs` -- so the default would spend that in

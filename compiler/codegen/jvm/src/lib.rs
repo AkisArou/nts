@@ -166,8 +166,9 @@ pub fn emit(program: &Program) -> Emitted {
     // On `nts/gen/Program` rather than as an `INSTANCE` on each closure class,
     // because which closure types are used as values is a fact about the
     // *program* -- a scan of its operations -- and `object_class` sees one
-    // layout at a time. `LambdaMetafactory` is wrong here for a reason that
-    // arrives before Android's API 26: it does not promise one instance.
+    // layout at a time. `LambdaMetafactory` is wrong here for a reason no
+    // API level reaches: it does not promise one instance. The floor is 29 and
+    // would run an `invoke-custom` happily; identity is what rules it out.
     let singletons = closure_singletons(program);
     for (field, class) in &singletons {
         builder.field(access::PRIVATE | access::STATIC | access::FINAL, field.clone(), format!("L{class};"));

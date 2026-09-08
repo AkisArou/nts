@@ -103,17 +103,30 @@ fn the_jar_matches_the_sources_it_was_built_from() {
 
 /// The jar carries no `invokedynamic`, and is class file version 52.
 ///
-/// # Why this is a ratchet and not a curiosity
+/// # What this still catches, now that the floor is 29
 ///
-/// From JDK 9 on, `javac` compiles a string `+` into
-/// `invokedynamic makeConcatWithConstants`, which needs **Android API 26**. So
-/// the day somebody drops `--release 8` from `build.sh` -- or writes the
-/// runtime against a newer feature -- the Android path closes, and nothing else
-/// in the repository would notice until a `d8` run years later.
+/// It was written for a different reason and that reason is spent: `d8` turns
+/// `invokedynamic` into `invoke-custom`, which needs API 26, and this lane's
+/// floor is 29. The Android path no longer closes when one appears, so the
+/// original argument would have kept the assertion alive on a claim that had
+/// stopped being true.
 ///
-/// One assertion keeps it open for free. Version 52 is the same bargain: Java 8
-/// is the floor `d8` and every current JVM accept, and it is old enough that
-/// nothing here can accidentally depend on a feature Android has not got.
+/// What survives is the case the version check beside it **cannot** see. A
+/// dropped `--release 8` raises the class version and that assertion fails; but
+/// a *lambda* written in the runtime emits `invokedynamic LambdaMetafactory` at
+/// version 52, which is legal Java 8 and passes every other check here.
+/// Verified rather than assumed -- `javac --release 8` on `x -> x + 1` gives
+/// exactly that, at `major version: 52`.
+///
+/// So what this enforces now is *no lambdas and no method references in the
+/// runtime*, which is the same decision as `ClosureStatic` one level up:
+/// `LambdaMetafactory` does not promise one instance, so `f === f` could not be
+/// `if_acmpeq`, and a bootstrap resolved at first execution is a startup cost
+/// on ART that a static field is not.
+///
+/// Version 52 stays on its own terms: Java 8 is the floor `d8` and every
+/// current JVM accept, and it is old enough that nothing here can accidentally
+/// depend on a feature Android has not got.
 #[test]
 fn nothing_in_the_runtime_needs_a_feature_android_lacks() {
     let Some(javap) = tool("javap") else {
@@ -137,10 +150,12 @@ fn nothing_in_the_runtime_needs_a_feature_android_lacks() {
 
     assert!(
         !text.contains("invokedynamic"),
-        "the runtime jar contains `invokedynamic`, which needs Android API 26. \
-         The usual cause is `javac` turning a string `+` into \
-         `makeConcatWithConstants`; `build.sh` passes `--release 8` to prevent \
-         exactly that."
+        "the runtime jar contains `invokedynamic`. At a floor of API 29 that \
+         dexes, so this is not about what Android accepts: it is a lambda or a \
+         method reference, which `--release 8` compiles to `LambdaMetafactory` \
+         at version 52, and every other check here passes. One instance is not \
+         promised and the bootstrap runs at first execution. Write the class \
+         out."
     );
 
     let versions: Vec<&str> = text
@@ -172,7 +187,7 @@ fn nothing_in_the_runtime_needs_a_feature_android_lacks() {
 ///
 /// `--release 8` fixes the *language* level and the platform signatures javac
 /// compiles against; it says nothing about which of those signatures Android
-/// kept. `-Xlint`, `d8 --min-api 26` and the no-`invokedynamic` ratchet all pass
+/// kept. `-Xlint`, `d8 --min-api 29` and the no-`invokedynamic` ratchet all pass
 /// — the bytecode is valid, dexes cleanly and needs nothing above API 26. The
 /// member simply is not there, and **ART resolves lazily**, so even forcing
 /// linkage over the corpus would not find it: only executing that line does.

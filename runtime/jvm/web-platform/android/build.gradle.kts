@@ -3,21 +3,23 @@ plugins { id("com.android.library") }
 android {
     namespace = "org.nts.web"
     compileSdk = providers.gradleProperty("ntsAndroidCompileSdk").orElse("36").get().toInt()
-    defaultConfig { minSdk = 26; consumerProguardFiles("consumer-rules.pro") }
-    // `src/okhttp` is the production dispatcher and is a separate source set
-    // because it is the only one that needs a third-party dependency. Keeping
-    // it apart is what lets `src/main` be compiled and tested against real
-    // sockets with nothing on the classpath at all.
-    sourceSets["main"].java.srcDirs("src/main/java", "src/android/java", "src/okhttp/java")
+    // **29, and the reason is ALPN.** `SSLParameters.setApplicationProtocols`
+    // and `SSLSocket.getApplicationProtocol` are absent below it -- measured on
+    // a device, and the API-26 stub declares all three anyway -- so a provider
+    // there cannot report which protocol TLS selected and cannot honestly offer
+    // a choice. 29 is where HTTP/2 becomes negotiable without reflecting into
+    // Conscrypt's hidden API, which this lane's dependency rules forbid.
+    defaultConfig { minSdk = 29; consumerProguardFiles("consumer-rules.pro") }
+    sourceSets["main"].java.srcDirs("src/main/java", "src/android/java")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
 }
 
-// Exact versions, matching `dependencies.tsv`, which also carries the SHA-256
-// digests and the licenses. A range or a `+` here would let the artifact that
-// ships differ from the artifact that was reviewed.
-dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-}
+// **No runtime dependencies.** OkHttp is gone: its only unique value was ALPN
+// below API 29, and the floor is 29. Everything else it supplied is either
+// shared TypeScript's (HTTP/2, HPACK, pooling, redirects, cookies, cache,
+// decompression) or already in `NtsSocket` (TLS, hostname verification, SNI,
+// CONNECT and SOCKS). `dependencies.tsv` still pins R8, which is a build tool
+// and not in the artifact.
