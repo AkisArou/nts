@@ -4778,8 +4778,39 @@ path in the profile, checked across `ENOENT`, `EACCES`, `EEXIST`, `EISDIR`,
 `EINVAL`, `EPIPE` and `ECONNRESET`, plus platform, release and the two TTY
 probes. All agree.
 
-**308 declared, 43 compared** — counted as *distinct binding names*, which is
-lower than the per-module figures add up to and is the honest total. The
+**309 declared, 65 compared** — counted as *distinct binding names*, which is
+lower than the per-module figures add up to and is the honest total.
+
+**And re-runnable, which for most of a day they were not.** 
+built an addon and the comparison happened by hand in a terminal, so "43 bindings
+compared to node" was a claim about one afternoon rather than a check anything
+could repeat. A binding that regressed the next morning would still have been
+reported as compared and green.  rebuilds
+every probe and re-asserts every expectation — **8 probes, 85 comparisons, 0
+divergences** — and  injects one wrong expectation into a real
+binding call, so the harness is known to be able to fail rather than assumed to.
+
+Porting the hand-run comparisons into it **found five wrong checks, every one
+mine and none of them a binding**. I had written expectations against probe files
+without reading what they return:
+
+    probeUptimeShape   answers                I matched a decimal
+    probeUuidShape     answers  I ran a v4 regex on it
+    probeFstatShape    answers the column count       I looked for the file size
+    probeCrc32         narrows to bytes itself with
+                                I compared against UTF-8
+
+The last one is the instructive one: the probe is latin1 *by construction, in its
+own TypeScript*, so the only input where latin1 and UTF-8 differ reported a
+divergence and the binding was right both times. Every probe was reasonable and
+every expectation of mine was about a different object. The expected values are
+now derived from node where they can be — the uuid shape from node's own
+, the fstat count from the fourteen numeric fields node's 
+carries — rather than written down.
+
+A DIFF also carries the observed value now. A check spelled 
+reported , which is the least useful thing it could say, and finding
+these five meant fixing that first. The
 per-module sum was 50; it double-counted `nts_process_env`, which two probes
 exercise, and counted `os`'s seventeen published *module functions* as bindings
 when several of them are served by one `nts_os_static_information` call. A count
