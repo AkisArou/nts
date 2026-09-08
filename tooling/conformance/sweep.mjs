@@ -556,6 +556,34 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // And the C itself, run rather than type-checked. The audit above compares a
+  // `declare function` against a prototype, which is a claim about types; this
+  // executes the code. The two are easy to confuse, and on 2026-09-08 the
+  // position was that `zlib`'s seven changed signatures, `fs`'s eleven byte
+  // bindings and `timers`' whole handle policy had a clean audit and had never
+  // been executed by anything -- because a module's C normally runs only when
+  // the module compiles, and fifteen of twenty-two do not.
+  //
+  // Cheap, and it is the only check on this list that can fail for a reason the
+  // compiler cannot fix.
+  {
+    const ctests = spawnSync("bash", [join(HERE, "c-tests.sh")], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 600_000,
+    });
+    const text = `${ctests.stdout ?? ""}${ctests.stderr ?? ""}`;
+    const summary = text.split("\n").filter((l) => l.includes("needing a person")).join("").trim();
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("module C: INSTRUMENT FAILURE -- no test files found at all");
+    } else if (summary !== "") {
+      console.log(`module C: ${summary}`);
+    }
+    for (const line of text.split("\n").filter((l) => /did not build|CRASHED|HUNG|failed|DRIFT/.test(l))) {
+      console.log(`  ${line.trim()}`);
+    }
+  }
+
   // And how many bindings no lane can currently disagree with node about: a
   // stand-in that delegates to node's own implementation cannot disagree with
   // it, and the compiled lane only speaks for a module that builds. This is a

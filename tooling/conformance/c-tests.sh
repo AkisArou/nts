@@ -51,6 +51,17 @@ for module in zlib; do
   case "$module" in
     zlib) mine="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
   esac
+  # Absent and different are not the same finding, and a guard that reports one
+  # as the other sends the next person to look for a change nobody made. This
+  # said "build.sh no longer links zlib with ..." when the real answer was that
+  # it could not find build.sh at all.
+  if [ ! -r tooling/conformance/build.sh ]; then
+    echo "  CANNOT CHECK: tooling/conformance/build.sh is not readable from $PWD."
+    echo "  The library list below is a copy of one that lives there, and with"
+    echo "  the original out of reach there is no way to tell whether it is"
+    echo "  still right. Not proceeding on an unverifiable copy."
+    exit 2
+  fi
   if ! grep -qF -- "$mine" tooling/conformance/build.sh; then
     echo "  DRIFT: build.sh no longer links $module with:"
     echo "    $mine"
