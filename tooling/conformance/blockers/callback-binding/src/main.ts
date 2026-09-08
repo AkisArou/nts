@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> emits-c void nts_take_callback(NtsObj_Closure
+// expect: emit-c --napi -> emits-c void nts_take_callback(NtsHeader *)
+//
+// **FIXED in ac27dac4-era, kept as a guard.** The fixed form is asserted present. If it disappears, the old shape
+// is back.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // A `declare function` that takes a callback cannot be implemented in
 // hand-written C, because the emitted prototype names a **program-specific**

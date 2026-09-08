@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> emits-c NtsString * header;
+// expect: emit-c --napi -> emits-c NtsString * header_;
+//
+// **FIXED in ac27dac4-era, kept as a guard.** The fixed form is asserted present. If it disappears, the old shape
+// is back.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // A property called `header` collides with the object header every managed
 // struct carries, and the C compiler rejects the result:

@@ -1,5 +1,12 @@
-// expect: NTS1001 an `unknown` narrowed to BigInt, which it cannot be read back
-//         as
+// expect: lowers
+//
+// **FIXED in ac27dac4-era, kept as a guard.** Nothing refuses. Spelled `lowers` rather than `nothing refused`
+// because the latter also requires the wrapper to carry it, and the
+// wrapper's limits here are somebody else's blocker.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // One of the three roots of `internal/errors.ts`'s `determineSpecificType`,
 // which is the largest lowering blocker in this profile: it gates eleven of

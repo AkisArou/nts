@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> duplicates-c struct NtsObj_Context {
+// expect: emit-c --napi -> once-c struct NtsObj_Context {
+//
+// **FIXED in ac27dac4-era, kept as a guard.** Emitted exactly once. `emits-c` cannot state this -- it holds for two
+// as well, which is the bug -- so the guard is the count.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // Two distinct interfaces with the same name, in different modules, emit the
 // same C struct name — and the second definition is a redefinition:

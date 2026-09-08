@@ -1,4 +1,12 @@
-// expect: NTS1001 an erased value where a concrete representation is wanted
+// expect: lowers
+//
+// **FIXED in fc0df644, kept as a guard.** Nothing refuses. Spelled `lowers` rather than `nothing refused`
+// because the latter also requires the wrapper to carry it, and the
+// wrapper's limits here are somebody else's blocker.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // A value indexed out of an array is `T | undefined`. Narrowing it with a guard
 // that *throws* removes the `undefined` for the checker. Every later use of it

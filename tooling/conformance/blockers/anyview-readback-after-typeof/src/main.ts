@@ -1,4 +1,12 @@
-// expect: NTS1001 an `unknown` narrowed to Managed(AnyView), which it cannot be read back as
+// expect: lowers
+//
+// **FIXED in fc0df644, kept as a guard.** Nothing refuses. Spelled `lowers` rather than `nothing refused`
+// because the latter also requires the wrapper to carry it, and the
+// wrapper's limits here are somebody else's blocker.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // A value narrowed to `AnyView` by **excluding the other arm of a union with
 // `typeof`** cannot be read back. Every other way of arriving at the same value

@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> fails-to-compile where arithmetic or pointer type is required
+// expect: emit-c --napi -> compiles
+//
+// **FIXED in ac27dac4-era, kept as a guard.** The emitted C compiles. That is the whole guard: this fixture was
+// filed because it did not.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // **The expectation names a clang error, not a string in `program.c`.** It said
 // `emits-c <text>` and that is a substring match: a fragment taken from broken

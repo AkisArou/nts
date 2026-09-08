@@ -99,7 +99,7 @@ for (const name of names) {
   // `program.c`, found nothing in the empty string, and reported **FIXED** --
   // a confident all-clear for a blocker that was fully present. A false
   // "reproduces" wastes an hour; a false "FIXED" gets a fixture deleted.
-  const fileForm = /^(?:emit-c\b[^>]*->\s*)?(emits-c|emits-addon|lacks-c|duplicates-c)\b/
+  const fileForm = /^(?:emit-c\b[^>]*->\s*)?(emits-c|emits-addon|lacks-c|duplicates-c|compiles|once-c)\b/
     .test(expected);
   const viaEmit = expected.includes("emit-c") || fileForm;
   // Flags written into the expectation's command prefix, beyond the `--napi`
@@ -173,6 +173,30 @@ for (const name of names) {
   // `napi_create_function` over one implementation -- which publishes both names
   // and still breaks an identity node guarantees.
   const emitsAddon = /^emits-addon\s+(.+)$/.exec(wanted);
+  // Three guard forms, each the counterpart of a blocker form that had none.
+  //
+  // A fixed blocker with no way to state its fixed state either stays loud
+  // forever or gets deleted, and deleting it throws away the regression guard
+  // the work just earned. Thirteen fixtures were in that position at once on
+  // 2026-09-08 -- every one of them FIXED, none of them able to say so.
+  //
+  //   compiles      the counterpart of `fails-to-compile`
+  //   once-c X      the counterpart of `duplicates-c`, which means "more than
+  //                 once"; the fixed state is *exactly* once, and `emits-c`
+  //                 cannot say that because it holds for two as well
+  //   lowers        `nothing refused`, without also requiring the wrapper to
+  //                 carry it
+  //
+  // The third exists because `nothing refused` is spelled `/nothing refused/ &&
+  // !/no wrapper/`, which makes it mean "lowered *and* crossed the boundary".
+  // Those are two axes and a lowering fixture is about one of them: five
+  // fixtures here lower cleanly now and are still declined at the wrapper for
+  // reasons that have nothing to do with what they were filed for -- `takes
+  // unknown`, `returns Promise<f64[]>`, the export-class arm. Requiring both
+  // would keep them red for someone else's blocker.
+  const compiles = /^compiles$/.test(wanted);
+  const onceC = /^once-c\s+(.+)$/.exec(wanted);
+  const lowersOnly = /^lowers$/.test(wanted);
   // Absence has to be read from a file that exists. `readEmitted` answers `""`
   // for a missing one, and `"".includes(x)` is false, so the naive spelling --
   // `!readEmitted(...).includes(text)` -- reports the blocker as *holding* when
@@ -231,7 +255,7 @@ for (const name of names) {
   }
 
   let compileErrors = null;
-  if (failsToCompile !== null && program.length > 0) {
+  if ((failsToCompile !== null || compiles) && program.length > 0) {
     const emitted = /wrote .* to (\S+)/.exec(output);
     const dir = emitted === null ? null : emitted[1];
     if (dir !== null) {
@@ -250,7 +274,13 @@ for (const name of names) {
     }
   }
 
-  const holds = failsToCompile !== null
+  const holds = compiles
+    ? compileErrors !== null && compileErrors.length === 0
+    : onceC !== null
+    ? occurrences(program, onceC[1]) === 1
+    : lowersOnly
+    ? /nothing refused/.test(output)
+    : failsToCompile !== null
     ? compileErrors !== null && compileErrors.length > 0 &&
       (failsToCompile[1] === undefined ||
         compileErrors.some((l) => l.includes(failsToCompile[1]))) &&
@@ -277,7 +307,12 @@ for (const name of names) {
   // `expectsClean` printed "reproduces" for a passing guard, which read as a
   // still-open blocker on a binary where the thing had been fixed. The verdict
   // was right and the word was wrong, which is the worse of the two failures.
-  const isGuard = expectsClean || /^\/\/\s+FIXED\b/m.test(source);
+  // The three forms above are guard forms by construction: each asserts correct
+  // behaviour, so "holds" means the fix is still in place and not-holding is a
+  // regression. Deciding this from the form rather than from the prose means a
+  // guard cannot be mislabelled by someone forgetting to write FIXED.
+  const isGuard = expectsClean || compiles || onceC !== null || lowersOnly ||
+    /^\/\/\s+FIXED\b/m.test(source);
   // A `hir` expectation is a substring of the whole run, and a fixture's
   // tsconfig can pull in more than its own `src`. If the only lines carrying the
   // expected text come from *another* file, the fixture is holding on somebody
@@ -293,7 +328,15 @@ for (const name of names) {
   // state that does not exist yet -- a fixture that imports from another
   // directory -- and it is written down as such rather than counted as a
   // control that passed. An uncontrolled check is a claim; this one says so.
-  if (holds && !viaEmit && !expectsClean) {
+  // Only for expectations that *are* a diagnostic. `lowers` is a word, not a
+  // message, and searching the output for it found two incidental matches and
+  // reported a correct fixture as holding on another file's diagnostic.
+  //
+  // This guard shipped documented as uncontrolled -- "a guard against a state
+  // that does not exist yet" -- and the first time it ever fired, it was wrong.
+  // That is the argument for writing down which checks have never run: the note
+  // is what made this take a minute to diagnose instead of an hour.
+  if (holds && !viaEmit && !expectsClean && !lowersOnly) {
     const carrying = output.split("\n").filter((l) => l.includes(wanted));
     const own = carrying.filter((l) => l.includes(`blockers/${name}/src`));
     if (carrying.length > 0 && own.length === 0) {
@@ -332,6 +375,17 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: emitted once now, not twice. Expected duplicates of:`);
   } else if (lacksC !== null) {
     console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
+  } else if (compiles) {
+    console.log(`  ${verdict}  ${name}: the emitted C stopped compiling. Errors:`);
+    for (const line of (compileErrors ?? []).slice(0, 2)) {
+      console.log(`                ${line.trim()}`);
+    }
+  } else if (onceC !== null) {
+    console.log(
+      `  ${verdict}  ${name}: emitted ${occurrences(program, onceC[1])} time(s), not once:`,
+    );
+  } else if (lowersOnly) {
+    console.log(`  ${verdict}  ${name}: something refuses again. Expected nothing:`);
   } else if (emitsC !== null || emitsAddon !== null) {
     console.log(`  ${verdict}  ${name}: no longer emits it. Expected:`);
   } else if (expectsClean) {

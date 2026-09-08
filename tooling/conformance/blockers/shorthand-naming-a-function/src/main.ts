@@ -1,4 +1,12 @@
-// expect: NTS1001 a shorthand naming nothing in scope
+// expect: lowers
+//
+// **FIXED in fc0df644, kept as a guard.** Nothing refuses. Spelled `lowers` rather than `nothing refused`
+// because the latter also requires the wrapper to carry it, and the
+// wrapper's limits here are somebody else's blocker.
+//
+// The filing below is kept because what it argued is why the fix took the
+// shape it did.
+//
 //
 // **The name in the diagnostic is in scope.** It is a module-scope exported
 // function declared in this file, it lowers on its own, and writing the same
