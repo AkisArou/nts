@@ -556,6 +556,30 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // What the shape shims answer for themselves. A shim builds the object node's
+  // tests see out of a module's exports and is supposed to add shape and no
+  // behaviour; where it supplies a value instead, every test reading it is
+  // testing this repository rather than the artifact. `path/shape.mjs` handed
+  // out `sep` and `delimiter` as literals, and a module exporting the wrong
+  // separator passed 21 of 21.
+  {
+    const shims = spawnSync(process.execPath, [join(HERE, "shape-blindspot.mjs")], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 300_000,
+    });
+    const text = `${shims.stdout ?? ""}${shims.stderr ?? ""}`;
+    if (text.includes("INSTRUMENT FAILURE")) {
+      console.log("shape shims: INSTRUMENT FAILURE -- no shim exported `shape`");
+    } else {
+      const summary = text.split("\n").filter((l) => l.includes("supplying a value")).join("").trim();
+      if (summary !== "") console.log(`shape shims: ${summary}`);
+      for (const line of text.split("\n").filter((l) => /SUPPLIES/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+    }
+  }
+
   // And the C itself, run rather than type-checked. The audit above compares a
   // `declare function` against a prototype, which is a claim about types; this
   // executes the code. The two are easy to confuse, and on 2026-09-08 the
