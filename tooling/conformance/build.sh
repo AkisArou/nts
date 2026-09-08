@@ -140,7 +140,32 @@ while IFS= read -r -d '' source; do
 done < <(find "$work" -maxdepth 1 -name '*.c' -print0)
 [ "${#generated_c[@]}" -gt 0 ] || { echo "the compiler emitted no C into $work" >&2; exit 2; }
 
-clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
+# `-fvisibility=hidden`, because a shared object without it is preemptable by
+# whatever was loaded first.
+#
+# A `.so` linked without `-Bsymbolic` routes calls to its **own** global
+# functions through the PLT, and the dynamic linker resolves them against the
+# global symbol table -- where libc got there first. An addon exporting a
+# function named `access` therefore called libc's `access(2)` with an
+# `NtsString *` where a `const char *` was expected, and answered `0` for every
+# input: no refusal, no clang warning, an addon that links and loads and returns
+# plausible values. `nm` showed the addon *defining* `T access` and never calling
+# it. See `blockers/libc-name-collision`.
+#
+# The compiler lane escapes colliding names in the emitted C, which fixes the
+# other direction of the same hazard -- a program's `strlen` preempting libc's
+# for `nts_runtime.c`, which makes 58 such calls. **The two are different
+# defects.** An escape list cannot close this one, because the risk here is
+# libc's *dynamic symbol table* rather than any header, and nobody can enumerate
+# that. Hidden visibility removes every program function from the table, so the
+# question does not arise for names nobody thought of.
+#
+# Safe for the entry point: `NAPI_MODULE_INIT()` declares both
+# `node_api_module_get_api_version_vN` and `napi_register_module_vN` with
+# `NAPI_MODULE_EXPORT`, which is `__attribute__((visibility("default")))`.
+# Checked in `third_party/node/src/node_api.h` before landing this, because a
+# module whose initializer is hidden does not load at all.
+clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared -fvisibility=hidden \
   "${rc_defines[@]}" \
   "${binding_header_flags[@]}" \
   -I"$work" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
