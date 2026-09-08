@@ -22,7 +22,7 @@ lane has moved.
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
-| `awfy-queens` | 1.24x | **the merge, priced at 1.35x** -- mine, below |
+| `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
 | `generic-classes` | 1.13x | no cause found: assembly is comparable |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
@@ -121,10 +121,41 @@ Each cost a measurement. The number in brackets is what the fix was worth.
       materialised    a fresh variable per arm, copied at the merge  12,666 ns
 
   Coalesced and materialised are within 0.4% of each other and both are 1.35x
-  the short-circuit form. **The cost is the value crossing the join, not the
-  copy into the slot.** So the fix is threading the merge away, not sharing a
-  slot with it -- and the eighty-line StackMapTable design, which slot sharing
-  would have cost, is not on the table after all.
+  the short-circuit form -- which said the cost was the value crossing the
+  join, not the copy into the slot, and pointed at threading the merge away.
+
+  **Threading was then built, and it is worth 0.16%.** `thread.rs` took a
+  merge with no operations whose terminator reads only its parameter and gave
+  its terminator to each predecessor, with a branch's arm told what its
+  condition was so the one parameter read below the merge became a constant.
+  It fired: `getRowColumn` went 55 bytecodes to 46, the join gone, javac's
+  shape. Eight interleaved rounds, same checksum:
+
+      before    10990 11067 11004 11440 11325 11282 11461 11227   mean 11,224
+      threaded  11212 11117 11078 11415 11162 11121 11517 11311   mean 11,242
+
+  **So the 1.35x was real and did not transfer, and the reason is the same one
+  that cost me the power-of-two fix an hour earlier, one level subtler.** There
+  I priced a helper in a context C2 could not optimise the way it optimises the
+  real call site. Here I transcribed a *bytecode shape* into *Java source* and
+  priced javac's compilation of my transcription -- three separate locals live
+  at once -- rather than our bytecode, which stores and reloads one slot per
+  merge and which C2 sees straight through. **A transcription of emitted code
+  into source is not that emitted code.** The proxy has to be the artefact, and
+  on this lane that means emitting both ways through `nts-bench` and timing the
+  classes, which is what finally answered it.
+
+  Both halves are therefore refuted: coalescing buys nothing, and so does
+  removing the join. `awfy-queens` has no cause found, and joins
+  `generic-classes` on that short list. The reverted `thread.rs` and its hooks
+  are at `~/.cache/nts-merge-threading` -- correct, verified, 250 lines, and
+  paid for by nothing.
+
+  One thing it did establish, worth keeping: the `.javaref` for `awfy-queens`
+  cannot be run by hand from a bench directory -- `NoClassDefFoundError:
+  Queens`, because AWFY's own classes are not on that classpath. That is the
+  trap that made the Java column for `awfy-sieve` and `awfy-queens` produce no
+  number before, and it is still there.
 
   Two harness notes, both of which produced a wrong number first. Three arms
   behind one `IntPredicate` made the call site **megamorphic** -- the

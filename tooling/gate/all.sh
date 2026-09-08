@@ -586,12 +586,21 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # What is left for this backend is mostly not coverage. Seven of the eight
   # AWFY rows are at or under hand-written Java; `awfy-queens` at 1.25x is the
-  # one left, and the diagnosis written here before -- that its counter is a
-  # method parameter -- was wrong. It is the **materialised boolean**:
-  # `a && b && c` lowers to a merge per operator whose parameter this backend
-  # writes to a slot and reads back, 55 bytecodes in `getRowColumn` against
-  # javac's 25. Materialising the same three booleans in the reference, one
-  # method and the same checksum, moved it 8,946 ns -> 12,019 ns.
+  # one left, and **both diagnoses written here have now been wrong**. Not its
+  # counter being a method parameter, and not the materialised boolean either.
+  #
+  # The second one was measured and still wrong, which is the more useful
+  # failure. `a && b && c` does lower to a merge per operator whose parameter
+  # this backend writes to a slot and reads back -- 55 bytecodes in
+  # `getRowColumn` against javac's 25 -- and transcribing that shape into the
+  # reference's Java cost 1.35x. But threading the merge away in the emitter,
+  # 55 bytecodes down to 46 and the join gone, moved the row 0.16% across eight
+  # interleaved rounds. C2 sees through our store-and-reload; it does not see
+  # through what javac makes of the same shape written as Java. **A
+  # transcription of a bytecode shape into source is not that bytecode.**
+  #
+  # So the row's cause is unfound, and `benches/jvm-rows.md` holds what has
+  # been ruled out rather than a diagnosis.
   #
   # 125, level with the LLVM lane. The per-lane gap this paragraph used to
   # record -- `examples/open-typed-values`, which needs `instanceof` against a
