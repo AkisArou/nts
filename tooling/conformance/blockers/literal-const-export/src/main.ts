@@ -1,8 +1,21 @@
-// expect: emit-c --napi -> no wrapper for fromLiteral: is exported and is not a
-//         function this backend can name
+// expect: emit-c --napi -> publishes fromLiteral
 //
-// A numeric constant exported with a *literal* initializer is not published.
-// The same constant with a computed initializer is.
+// FIXED, and kept as a guard. Both constants reach the export table now, and
+// the fixture asserts the previously-missing one is published rather than
+// asserting the refusal is gone.
+//
+// It reported `CHANGED  literal-const-export: refuses differently` for a while,
+// with no `got:` line under it, and that was the harness rather than the
+// backend: `no wrapper for X` is checked against `emit-c`, which prints no
+// "nothing refused" on success, so the *fixed* state of a wrapper fixture is
+// unrecognisable in that form. `publishes X` is the form that can state it, and
+// the empty `got:` was the tell -- a fixture refusing differently would have
+// had something to show.
+//
+// The original defect, kept because the asymmetry is the whole argument:
+//
+// A numeric constant exported with a *literal* initializer was not published.
+// The same constant with a computed initializer was.
 //
 // Both lines below are `export const <name> = <number>`, both are read by
 // compiled code, and they differ only in whether the right-hand side is written
@@ -21,8 +34,9 @@
 // nothing left to name is the only way to get this shape.
 //
 // What it costs: `buffer` publishes one of its fifteen exports, and two of the
-// missing fourteen are here -- `kStringMaxLength = 536870888` and
-// `INSPECT_MAX_BYTES = 50`. Node's tests read both.
+// missing fourteen were here -- `kStringMaxLength = 536870888` and
+// `INSPECT_MAX_BYTES = 50`. Node's tests read both, so `buffer`'s export table
+// is the place to confirm the fix is worth what this said it was worth.
 
 export const fromLiteral = 50;
 export const fromComputed = 2 ** 53 - 1;
