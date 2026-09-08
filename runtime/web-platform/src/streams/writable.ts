@@ -641,17 +641,33 @@ export class WritableStream<W = unknown> {
   }
 
   abort(reason: unknown = undefined): Promise<void> {
-    if (this.locked) {
-      return Promise.reject(new TypeError("WritableStream is locked"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      if (this.locked) {
+        return Promise.reject(new TypeError("WritableStream is locked"));
+      }
+      return this[writableStreamState].abort(reason);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return this[writableStreamState].abort(reason);
   }
 
   close(): Promise<void> {
-    if (this.locked) {
-      return Promise.reject(new TypeError("WritableStream is locked"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      if (this.locked) {
+        return Promise.reject(new TypeError("WritableStream is locked"));
+      }
+      return this[writableStreamState].close();
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return this[writableStreamState].close();
   }
 
   getWriter(): WritableStreamDefaultWriter<W> {
@@ -696,7 +712,13 @@ export class WritableStreamDefaultWriter<W = unknown> {
   }
 
   get closed(): Promise<void> {
-    return this[writableWriterState].closed.promise;
+      // Web IDL: an attribute whose type is a promise must reject rather than throw, the
+      // same rule as a promise-returning operation.
+    try {
+      return this[writableWriterState].closed.promise;
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   get desiredSize(): number | null {
@@ -708,23 +730,45 @@ export class WritableStreamDefaultWriter<W = unknown> {
   }
 
   get ready(): Promise<void> {
-    return this[writableWriterState].ready.promise;
+      // Web IDL: an attribute whose type is a promise must reject rather than throw, the
+      // same rule as a promise-returning operation.
+    try {
+      return this[writableWriterState].ready.promise;
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   abort(reason: unknown = undefined): Promise<void> {
-    const stream = this[writableWriterState].stream;
-    if (stream === null) {
-      return Promise.reject(new TypeError("Writer has been released"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      const stream = this[writableWriterState].stream;
+      if (stream === null) {
+        return Promise.reject(new TypeError("Writer has been released"));
+      }
+      return stream.abort(reason);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return stream.abort(reason);
   }
 
   close(): Promise<void> {
-    const stream = this[writableWriterState].stream;
-    if (stream === null) {
-      return Promise.reject(new TypeError("Writer has been released"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      const stream = this[writableWriterState].stream;
+      if (stream === null) {
+        return Promise.reject(new TypeError("Writer has been released"));
+      }
+      return stream.close();
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return stream.close();
   }
 
   releaseLock(): void {
@@ -733,11 +777,19 @@ export class WritableStreamDefaultWriter<W = unknown> {
   }
 
   write(...args: [] | [chunk: W]): Promise<void> {
-    const stream = this[writableWriterState].stream;
-    if (stream === null) {
-      return Promise.reject(new TypeError("Writer has been released"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      const stream = this[writableWriterState].stream;
+      if (stream === null) {
+        return Promise.reject(new TypeError("Writer has been released"));
+      }
+      return stream.write(this, args[0]);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return stream.write(this, args[0]);
   }
 
 

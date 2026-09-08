@@ -76,6 +76,8 @@ const {
   TextEncoderStream,
   TransformStream,
   TransformStreamDefaultController,
+  WritableStreamDefaultController,
+  WritableStreamDefaultWriter,
   URLSearchParams,
   WritableStream,
   WebSocketError,
@@ -352,6 +354,8 @@ function createWptContext(
     TextEncoderStream,
     TransformStream,
     TransformStreamDefaultController,
+    WritableStreamDefaultController,
+    WritableStreamDefaultWriter,
     TypeError,
     Uint8Array,
     Uint8ClampedArray,
@@ -395,6 +399,12 @@ function createWptContext(
     },
     assert_own_property(object, property, message) {
       assert.equal(Object.prototype.hasOwnProperty.call(object, property), true, message);
+    },
+    assert_in_array(actual, expected, message) {
+      assert.ok(
+        expected.includes(actual),
+        message ?? `${String(actual)} must be one of ${expected.map(String).join(", ")}`,
+      );
     },
     assert_inherits(object, property, message) {
       // The property must exist on the prototype chain and *not* be an own property.

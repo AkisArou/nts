@@ -465,10 +465,18 @@ export class ReadableStream<T> {
   }
 
   cancel(reason: unknown = undefined): Promise<void> {
-    if (this.locked) {
-      return Promise.reject(new TypeError("Stream is locked"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      if (this.locked) {
+        return Promise.reject(new TypeError("Stream is locked"));
+      }
+      return this[kStreamCancelInternal](reason);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return this[kStreamCancelInternal](reason);
   }
 
   pipeThrough<R>(
@@ -815,6 +823,17 @@ export class ReadableStream<T> {
       descriptor.enumerable = true;
       Object.defineProperty(this.prototype, key, descriptor);
     }
+    // Web IDL static operations are enumerable on the interface object, the same as member
+    // operations are on the prototype. `ReadableStream.from` is the only one here, and the
+    // prototype pass could not reach it because it walks `this.prototype`.
+    for (const key of Object.getOwnPropertyNames(this)) {
+      if (key === "length" || key === "name" || key === "prototype") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(this, key);
+      if (descriptor === undefined || descriptor.enumerable) continue;
+      if (typeof descriptor.value !== "function") continue;
+      descriptor.enumerable = true;
+      Object.defineProperty(this, key, descriptor);
+    }
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStream",
       writable: false,
@@ -1047,6 +1066,14 @@ export class ReadableStreamDefaultController<T> {
       descriptor.enumerable = true;
       Object.defineProperty(this.prototype, key, descriptor);
     }
+    // Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
+    // required count is zero. A declared parameter reports one.
+    Object.defineProperty(this.prototype.enqueue, "length", {
+      value: 0,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "ReadableStreamDefaultController",
       writable: false,
@@ -1355,7 +1382,13 @@ export class ReadableStreamBYOBReader {
   }
 
   get closed(): Promise<void> {
-    return this.#closedCapability.promise;
+      // Web IDL: an attribute whose type is a promise must reject rather than throw, the
+      // same rule as a promise-returning operation.
+    try {
+      return this.#closedCapability.promise;
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   async read<TView extends ReadableStreamBYOBView>(
@@ -1391,10 +1424,18 @@ export class ReadableStreamBYOBReader {
   }
 
   cancel(reason: unknown = undefined): Promise<void> {
-    const stream = this.#stream;
-    return stream === null
-      ? Promise.reject(new TypeError("Reader has been released"))
-      : stream[kStreamCancelInternal](reason);
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      const stream = this.#stream;
+      return stream === null
+        ? Promise.reject(new TypeError("Reader has been released"))
+        : stream[kStreamCancelInternal](reason);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   releaseLock(): void {
@@ -2069,7 +2110,13 @@ export class ReadableStreamDefaultReader<T> {
   #closedState: "pending" | "fulfilled" | "rejected" = "pending";
 
   get closed(): Promise<void> {
-    return this.#closedCapability.promise;
+      // Web IDL: an attribute whose type is a promise must reject rather than throw, the
+      // same rule as a promise-returning operation.
+    try {
+      return this.#closedCapability.promise;
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
 
   constructor(stream: ReadableStream<T>) {
@@ -2092,17 +2139,33 @@ export class ReadableStreamDefaultReader<T> {
   }
 
   read(): Promise<ReadResult<T>> {
-    if (this.#stream === null) {
-      return Promise.reject(new TypeError("Reader has been released"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      if (this.#stream === null) {
+        return Promise.reject(new TypeError("Reader has been released"));
+      }
+      return this.#stream[kStreamRead](this);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return this.#stream[kStreamRead](this);
   }
 
   cancel(reason: unknown = undefined): Promise<void> {
-    if (this.#stream === null) {
-      return Promise.reject(new TypeError("Reader has been released"));
+    // Web IDL: an operation whose return type is a promise must convert a thrown
+    // exception into a **rejected promise**, never throw synchronously. The brand check
+    // on `this` is the usual thrower, and idlharness calls every one of these with
+    // `this = null` to check exactly that.
+    try {
+      if (this.#stream === null) {
+        return Promise.reject(new TypeError("Reader has been released"));
+      }
+      return this.#stream[kStreamCancelInternal](reason);
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return this.#stream[kStreamCancelInternal](reason);
   }
 
   releaseLock(): void {

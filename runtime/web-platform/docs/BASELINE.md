@@ -6530,3 +6530,46 @@ cannot.
 
 822/822 host, upstream unchanged at 2,566 of 2,574, zero `NTS1004`, zero `NTS4xxx`, zero
 invalid HIR.
+
+## `streams/idlharness` runs, and it found sixteen defects in one afternoon
+
+Blocked yesterday on `ReadableStream`'s seventeen internals; unblocked the moment they went.
+**202 of 215**, with the thirteen remaining being the cross-realm sandbox artifact already
+verified for `encoding`. Upstream is **2,602 → 2,817 tests, 2,768 passing**, and the failure
+count is still the same eight structural ones.
+
+Sixteen real conformance defects, none of which any behavioural test could see.
+
+**Nine promise-returning operations threw synchronously instead of rejecting.**
+`ReadableStream.cancel`, both readers' `read` and `cancel`, `WritableStream.abort` and
+`close`, and the writer's `abort`, `close` and `write`. Web IDL is explicit: an operation whose
+return type is a promise converts a thrown exception into a **rejected promise**, never throws.
+The brand check on `this` is the usual thrower, and idlharness calls every one of them with
+`this = null` to check exactly that. They were not `async`, so the throw escaped.
+
+**Four promise-typed attributes had the same defect** — `closed` on both readers, `closed` and
+`ready` on the writer. Same rule, applied to getters.
+
+**Two `enqueue` arities.** `undefined enqueue(optional any chunk)` has a required-argument
+count of zero; a declared parameter reports one.
+
+**And one static operation was not enumerable.** `ReadableStream.from` lives on the interface
+object, and the enumerability pass written yesterday walks `this.prototype` — so it could not
+reach a static member by construction. Web IDL gives static operations the same attributes as
+member operations.
+
+### Two harness gaps, and one more null instrument
+
+`WritableStreamDefaultWriter` and `WritableStreamDefaultController` were never exposed as
+globals in the sandbox, which failed twenty-one tests for a reason belonging entirely to the
+runner. `assert_in_array` was missing from the small testharness surface.
+
+And the sabotage for the promise fix **reported a survivor against an unmodified tree**. The
+patch script's regex did not match, it raised, and the shell ran the test anyway because the
+guard checked `tsc` output rather than whether the patch had applied. Third variant of the same
+failure today: a `head -14` truncation, a fixture filter selecting nothing, and now a failed
+mutation scored as a passing one. Re-run with the patch's exit status gating the test, the
+sabotage is caught and names the exact assertion.
+
+The frontier does not move: 1,428/318, unchanged. Nine try/catch wrappers and two declared
+lengths cost nothing the compiler was not already paying.

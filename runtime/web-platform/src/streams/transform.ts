@@ -499,6 +499,14 @@ export class TransformStreamDefaultController<O = unknown> {
       descriptor.enumerable = true;
       Object.defineProperty(this.prototype, key, descriptor);
     }
+    // Web IDL: `undefined enqueue(optional any chunk)` -- one optional argument, so the
+    // required count is zero. A declared parameter reports one.
+    Object.defineProperty(this.prototype.enqueue, "length", {
+      value: 0,
+      writable: false,
+      enumerable: false,
+      configurable: true,
+    });
     Object.defineProperty(this.prototype, Symbol.toStringTag, {
       value: "TransformStreamDefaultController",
       writable: false,
