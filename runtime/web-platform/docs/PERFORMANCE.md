@@ -98,6 +98,55 @@ whole upstream corpus, which is the same discipline as running against node.
 plausible at all: beating node does not require beating simdjson, it requires closing 4x with
 compiled code, and the `json-scan` result shows what one codegen fix is worth.
 
+## Compiled against *native*, measured at last -- and the extrapolation was optimistic
+
+The ceiling table below compares our TypeScript on a host with that host's built-in JSON, which
+is a 4x gap and says nothing about compiled performance. `json-stringify-doc` is the first row
+that answers the real question, because serialization compiles today where parsing does not:
+`numberValueOf` ends in `Number(text)` and that direction is refused, while `numberText` is
+`String(value)` and lowers to `nts_number_to_string`.
+
+One 534,107-byte document, built once, serialized repeatedly. **The output is byte-identical to
+`JSON.stringify`'s** -- checked character by character, not by length -- so the comparison is
+controlled.
+
+| | ms per serialize | vs node native |
+| --- | ---: | ---: |
+| bun native `JSON.stringify` | **0.455** | 0.51x |
+| node native `JSON.stringify` | **0.885** | 1.00x |
+| bun running *our* TypeScript | 2.06 - 2.38 | 2.6x |
+| node running *our* TypeScript | 2.83 - 3.24 | 3.5x |
+| nts JVM, compiled | 3.15 - 3.65 | 4.0x |
+| nts C, compiled, `NoGc` | 4.87 | 5.5x |
+| nts C, compiled, `rc` | 7.78 | **8.8x** |
+
+**Compilation did not close the gap; it widened it.** Our compiled C is 8.8x off node's built-in
+and 17.1x off bun's, where our TypeScript *on node* is 3.5x off. The host JIT beats our own
+compiled output on our own code by 2.4x, and the JVM backend beats the C backend by 2.1x, which
+is not the usual ordering and is its own finding.
+
+**And the cause is not the escaper.** I predicted it would be -- 534,000 characters through a
+per-character floating-point classification -- and the profile says otherwise:
+`nts_collect_cycles` 9.7%, `nts_array_new` 8.5%, `nts_mark_gray_child` 7.8%, `nts_release` 5.0%,
+`nts_each_reference` 3.2%, `malloc` 3.1%. That is cycle collection and allocation over a large
+persistent object graph. (The profile covers module init as well as the timed loop and cannot
+separate document construction from serialization; the `NoGc` counterfactual below is the
+controlled version of the same claim.)
+
+## Refuted here: "reference counting is a net win, not a tax"
+
+That entry is below, established from `NoGc` running 40.68us against 17.78us on
+`json-build-append` -- 2.3x *slower*. **It does not generalise, and this row is where it breaks.**
+The same case under `NoGc` is **4.87ms against 7.78ms: 1.6x faster.**
+
+The difference is the live set. `json-build-append` holds almost nothing between iterations, so
+reclamation is cheap and not reclaiming means the working set stops fitting. This document is a
+30,000-node `JsonValue` graph that survives every iteration, and the cycle collector walks it
+again each time. **Reference counting is a win where the live set is small and a tax where it is
+large**, and the earlier entry generalised from a workload that only ever showed one side.
+
+Both measurements stand; only the sentence drawn from the first was too broad.
+
 ## Established, with the counterfactual that established it
 
 **Allocation volume is nearly free.** `json-build-append` and `json-build-join` produce the
