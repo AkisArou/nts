@@ -414,6 +414,63 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "fs-blind.ts",
+    module: "fs",
+    // The ten `fs` bindings `standin-blindspot.mjs` named: each has a stand-in
+    // that calls node's own implementation, and `fs` does not compile, so until
+    // this file nothing in the tree could report them wrong.
+    checks(m) {
+      const fsm = require("node:fs");
+      const osm = require("node:os");
+      const pathm = require("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "nts-blind-"));
+      const f = join(dir, "a");
+      const out = [];
+      try {
+        writeFileSync(f, "0123456789");
+        const link = join(dir, "l");
+        fsm.symlinkSync("a", link);
+        const st = statSync(f);
+        const numeric = ["dev", "mode", "nlink", "uid", "gid", "rdev", "blksize",
+          "ino", "size", "blocks", "atimeMs", "mtimeMs", "ctimeMs", "birthtimeMs"];
+        out.push({ label: "stat column count", mine: m.probeStatCount(f), theirs: numeric.length });
+        out.push({ label: "stat size column", mine: m.probeStatSize(f), theirs: st.size });
+        out.push({ label: "stat bigint count", mine: m.probeStatBigIntCount(f), theirs: numeric.length });
+        out.push({ label: "stat bigint size", mine: m.probeStatBigIntSize(f), theirs: String(fsm.statSync(f, { bigint: true }).size) });
+        out.push({ label: "stat follows symlink", mine: m.probeStatSize(link), theirs: st.size });
+        out.push({ label: "read utf8 by fd", mine: m.probeReadUtf8(f), theirs: readFileSync(f, "utf8") });
+        // The return is an errno, not a byte count -- `main.ts:899` is
+        // `check(result, "write")`. Expecting the length reported a divergence
+        // for a binding that had written the file correctly, which the next row
+        // proves.
+        const w = join(dir, "w");
+        out.push({ label: "write utf8 by fd", mine: m.probeWriteUtf8(w, "written by nts"), theirs: 0 });
+        out.push({ label: "write landed", mine: readFileSync(w, "utf8"), theirs: "written by nts" });
+        out.push({
+          label: "read bytes by fd",
+          mine: m.probeReadBytes(f, 10),
+          theirs: [...readFileSync(f)].map((b) => `${b},`).join(""),
+        });
+        out.push({ label: "access_bytes ok", mine: m.probeAccessBytes(f, 0), theirs: 0 });
+        const nope = join(dir, "nope");
+        let enoent = 0;
+        try { fsm.accessSync(nope, 0); } catch (e) { enoent = e.errno; }
+        out.push({ label: "access_bytes ENOENT", mine: m.probeAccessBytes(nope, 0), theirs: enoent });
+        out.push({ label: "realpath_bytes", mine: m.probeRealpathBytes(link), theirs: fsm.realpathSync(link) });
+        const made = m.probeMkdtempBytes(join(dir, "tXXXXXX"));
+        out.push({
+          label: "mkdtemp_bytes",
+          mine: typeof made === "string" && !made.includes("XXXXXX") && existsSync(made),
+          theirs: true,
+          detail: made,
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
