@@ -30,16 +30,9 @@ package nts.rt;
  * refusal, and the differential reads that as a defect on a case the other
  * lanes decline.
  */
-public final class NtsDataView {
-    final NtsBuffer buffer;
-    final int offset;
-    /** `-1` when the view tracks the buffer's length, as a length-less view does. */
-    final int declared;
-
+public final class NtsDataView extends NtsAnyView {
     private NtsDataView(NtsBuffer buffer, int offset, int declared) {
-        this.buffer = buffer;
-        this.offset = offset;
-        this.declared = declared;
+        super(buffer, offset, declared);
     }
 
     /** `new DataView(buffer, byteOffset)` -- tracks the buffer's length. */

@@ -210,6 +210,24 @@ pub const TUPLE: &str = "nts/rt/NtsTuple";
 /// class rather than accept one.
 pub const VIEW_BASE: &str = "nts/rt/NtsView";
 
+/// What a typed array and a `DataView` share, which nothing here can name yet.
+///
+/// `nts/rt/NtsAnyView` holds the `buffer`, `offset` and `declared` that both
+/// kinds carried separately, and both now extend it. It is the JVM half of
+/// `ArrayBufferView` -- the union a function takes when it wants "some window
+/// on these bytes" and reads `buffer` or `byteOffset` without caring which kind
+/// arrived.
+///
+/// **Deliberately not mapped from anything.** `ManagedType` has `View(element)`
+/// and `DataView` and no variant for the union, so no program can produce a
+/// value of it and there is nothing for this to be the descriptor of. The same
+/// arrangement as the three view classes above that no `HirType` reaches: the
+/// runtime half is written and the middle end supplies the type when it has
+/// one. What it must *not* do meanwhile is guess -- answering `NtsAnyView`
+/// where a program said `Uint8Array` would lose every element accessor and
+/// every one of the eleven monomorphic call sites record 0182 measured.
+pub const ANY_VIEW: &str = "nts/rt/NtsAnyView";
+
 /// The class for a typed array over `element`.
 ///
 /// Eleven classes rather than one with a kind field, and the difference is

@@ -36,11 +36,7 @@ package nts.rt;
  * for `Float32Array`, and `Uint8ClampedArray`'s own rounding, which is neither
  * of those.
  */
-public abstract class NtsView {
-    final NtsBuffer buffer;
-    final int offset;
-    /** `-1` when the view tracks the buffer's length. */
-    final int declared;
+public abstract class NtsView extends NtsAnyView {
 
     /**
      * `log2` of the element width, as a field rather than a virtual call.
@@ -60,9 +56,7 @@ public abstract class NtsView {
     final int shift;
 
     NtsView(NtsBuffer buffer, int offset, int declared, int shift) {
-        this.buffer = buffer;
-        this.offset = offset;
-        this.declared = declared;
+        super(buffer, offset, declared);
         this.shift = shift;
     }
 
