@@ -9313,6 +9313,80 @@ measured.
 what `cascade-reach.mjs` says about `createSocket`, and the export tables of all
 five.
 
+## The native half, and what finishing it did not buy
+
+Written 2026-09-09: `dgram` 21 of 21, `net` 30 of 30, `process` and `assert`
+9 of 9, `internal` 4 of 4. `runtime/node/dgram/` and `runtime/node/net/` had no
+usable `.c` at all — `net.c` was eleven lines holding two option defaults.
+
+**It was found by reading the artifacts, not the source.** `nm -D` on the built
+addons said thirteen of the twenty were carrying undefined `nts_` bindings while
+`build-floor.sh` reported every one as "builds and loads". A shared object binds
+lazily, so an undefined function symbol is not an error until something calls
+it: they initialised and would have aborted on first call. `punycode` was the
+only one with none, and the only one that passes.
+
+Rebuilt after: `net`, `http` and `dgram` went from 10, 10 and 14 undefined to
+**one** each, and that one was `nts_async_context_get` — which could not be
+written until the return-position escape landed, and is written now.
+
+**And it bought no passing tests.** `dgram` measured **0 of 110** with all 21 of
+its bindings defined: `createSocket is not a function`, because its own
+thirteen refusals stop the module. Necessary and not sufficient, which is the
+half of that sentence worth keeping.
+
+### Three bindings that do less than their names
+
+`nts_process_on_before_exit` and `nts_process_on_exit` retain their callback and
+never call it. Both events are decisions of whoever owns the loop, and an addon
+is loaded into a running Node process whose loop it does not start, drain or
+end. `atexit` is not the point either: it runs after the runtime is torn down,
+so calling a compiled closure from it reaches into a heap that is gone — a crash
+on the way out in place of a missing event.
+
+`nts_process_active_handles` and `_active_requests` answer empty. Node hands back
+the handle *objects*; a compiled program's `Socket` is one of its own objects and
+`uv_handle_t` has no back pointer to it. `uv_walk` gives handles, not owners.
+`nts_process_active_resources` is the part that can be answered, because a
+**name** survives the crossing where an object does not.
+
+`nts_on_collected` registers nothing. This runtime has no weak reference and no
+finalization primitive at all, so a `destroy` hook does not fire for a resource
+it owns. **No fixture** — it needs a runtime primitive rather than a binding, so
+there is no program that reproduces it, only an absence.
+
+## `os` regressed out of the floor, and the first bisect was four copies of one run
+
+`os` was 17 of 23 exports and the second-closest module. It no longer compiles:
+
+    program.c:1982  error: conflicting types for 'nts_os_cpus'
+                    emitted:  NtsObj_Tuple1416 *
+                    os.h:25:  NtsArray *
+
+`nts_os_cpus(): [string[], number[]]` is a heterogeneous tuple, which is
+`blockers/heterogeneous-tuple-return` reaching a real module. Bisected:
+`445ea94b` builds it, `fc0df644` does not.
+
+**Three bindings have that shape and only one conflicts today**, because only one
+is reached — `nts_os_network_interfaces` and `nts_os_constants` are behind
+refusals and will produce the identical conflict when their callers lower.
+`nts_os_user_info` and `nts_os_loadavg` are homogeneous and emit `NtsArray *`,
+which agrees with `os.c`.
+
+### The bisect that said the opposite
+
+The first run of it built `os` with four older pinned binaries and reported that
+every one failed — so the regression was not the compiler's. **All four had used
+the same live binary.** `tooling/conformance/build.sh` read only
+`NTS_COMPILER` and fell back to `target/release/nts`, so
+`NTS_BIN=<pin> build.sh <module>` was silently unpinned. `build-floor.sh` accepts
+either and passes `NTS_COMPILER` down, so floor runs were always pinned; only
+direct calls were affected.
+
+It honours both now, controlled after the change rather than declared. **A pin
+that is silently ignored is worse than no pin: it produces a control that looks
+run and is not**, and four copies of one measurement look like agreement.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
