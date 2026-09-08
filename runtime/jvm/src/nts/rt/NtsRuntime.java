@@ -330,6 +330,121 @@ public final class NtsRuntime {
         while (end > start && isJsWhitespace(s.charAt(end - 1))) { --end; }
         return s.substring(start, end);
     }
+    /**
+     * `Number(s)` -- ECMAScript StringToNumber, and **deliberately not
+     * {@link Double#parseDouble}**, which differs from JavaScript in both
+     * directions.
+     *
+     * <p>Java accepts a trailing `d` or `f`, its own definition of surrounding
+     * whitespace, and `0x1p3` hex floats. JavaScript accepts `0b`, `0o` and
+     * `0x` integers, a bare leading `.`, and a signed `Infinity`. Java
+     * *throws* where JavaScript answers `NaN`, and `parseDouble("")` throws
+     * where `Number("")` is **+0**.
+     *
+     * <p>So the grammar is checked by hand first and `parseDouble` is reached
+     * only once the span is known to be a decimal literal -- at which point the
+     * two agree, because the grammar admits exactly what both read the same
+     * way. That is the same arrangement as the C runtime's, where the check
+     * guards a `strtod`, and it is a transliteration of it rather than a second
+     * design: `nts_str_to_number`, `nts_number_radix` and
+     * `nts_number_span_is_decimal` are the three pieces and these are the same
+     * three.
+     *
+     * <p>`examples/number-from-string` compares 48 spellings against node,
+     * including `-0`'s sign, both infinities, `nan`, `inf`, `1e309` and
+     * `9007199254740993`.
+     */
+    public static double strToNumber(String s) {
+        if (s == null) { return 0.0; }
+        int from = 0, to = s.length();
+        while (from < to && isJsWhitespace(s.charAt(from))) { ++from; }
+        while (to > from && isJsWhitespace(s.charAt(to - 1))) { --to; }
+        // Empty or all space is +0, which is the case `parseDouble` throws on.
+        if (from == to) { return 0.0; }
+
+        // Non-ASCII anywhere in the body is `NaN`: no digit, sign, point or
+        // exponent marker is above 0x7F, so a unit that is cannot be part of
+        // any literal. Checked before the grammar rather than inside it, as
+        // the C does, so the two cannot disagree about a stray unit.
+        for (int at = from; at < to; ++at) {
+            if (s.charAt(at) > 0x7F) { return Double.NaN; }
+        }
+        String text = s.substring(from, to);
+
+        int body = 0;
+        boolean negative = false;
+        if (text.charAt(0) == '+' || text.charAt(0) == '-') {
+            negative = text.charAt(0) == '-';
+            body = 1;
+        }
+        // `Infinity` with an optional sign, and the only thing spelled with
+        // letters that is not `NaN`. `parseDouble` also accepts "NaN", "inf"
+        // and "Infinityd"; JavaScript accepts none of them.
+        if (text.length() - body == 8 && text.startsWith("Infinity", body)) {
+            return negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+        }
+        // The whole string, sign included: a radix literal cannot carry one,
+        // so `-0x10` is `NaN` rather than -16.
+        double radix = radixLiteral(text);
+        if (!Double.isNaN(radix)) { return radix; }
+        return isDecimalSpan(text) ? Double.parseDouble(text) : Double.NaN;
+    }
+
+    /** `0x`, `0o` and `0b`, unsigned by grammar. `NaN` when it is not one. */
+    private static double radixLiteral(String text) {
+        if (text.length() < 3 || text.charAt(0) != '0') { return Double.NaN; }
+        final int base;
+        switch (text.charAt(1)) {
+            case 'x': case 'X': base = 16; break;
+            case 'o': case 'O': base = 8; break;
+            case 'b': case 'B': base = 2; break;
+            default: return Double.NaN;
+        }
+        // Accumulated in a `double` rather than a `long`, because the result is
+        // a `double` and a literal past 2^53 has to round the way the arithmetic
+        // rounds rather than wrap the way a `long` would.
+        double value = 0.0;
+        for (int at = 2; at < text.length(); ++at) {
+            char unit = text.charAt(at);
+            final int digit;
+            if (unit >= '0' && unit <= '9') { digit = unit - '0'; }
+            else if (unit >= 'a' && unit <= 'f') { digit = unit - 'a' + 10; }
+            else if (unit >= 'A' && unit <= 'F') { digit = unit - 'A' + 10; }
+            else { return Double.NaN; }
+            if (digit >= base) { return Double.NaN; }
+            value = value * base + digit;
+        }
+        return value;
+    }
+
+    /** Whether the whole span is a decimal literal `parseDouble` reads as JS does. */
+    private static boolean isDecimalSpan(String text) {
+        int at = 0, length = text.length();
+        if (at < length && (text.charAt(at) == '+' || text.charAt(at) == '-')) { ++at; }
+        int before = at;
+        while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+        int integral = at - before;
+        int fractional = 0;
+        if (at < length && text.charAt(at) == '.') {
+            ++at;
+            int start = at;
+            while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+            fractional = at - start;
+        }
+        // `.` alone, `+.` and `-` are not literals. One digit somewhere is the
+        // whole requirement and it may be on either side of the point: `1.`,
+        // `.5` and `1` are all numbers and `.` is not.
+        if (integral == 0 && fractional == 0) { return false; }
+        if (at < length && (text.charAt(at) == 'e' || text.charAt(at) == 'E')) {
+            ++at;
+            if (at < length && (text.charAt(at) == '+' || text.charAt(at) == '-')) { ++at; }
+            int start = at;
+            while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+            if (at == start) { return false; }
+        }
+        return at == length;
+    }
+
     public static String strTrimStart(String s) {
         int start = 0;
         while (start < s.length() && isJsWhitespace(s.charAt(start))) { ++start; }

@@ -471,6 +471,10 @@ fn string_external(name: &str) -> Option<(&'static str, &'static str, &'static s
         "nts_str_ends_with" => (RUNTIME, "strEndsWith", STRING_STRING_TO_Z),
         "nts_str_point_width" => (RUNTIME, "strPointWidth", "(Ljava/lang/String;D)D"),
         "nts_str_trim" => (RUNTIME, "strTrim", "(Ljava/lang/String;)Ljava/lang/String;"),
+        // `Number(s)`. Not `Double.parseDouble`, which throws where JavaScript
+        // answers `NaN` and throws on `""` where `Number("")` is +0; see
+        // `NtsRuntime.strToNumber`, which is a transliteration of the C.
+        "nts_str_to_number" => (RUNTIME, "strToNumber", "(Ljava/lang/String;)D"),
         "nts_str_repeat" => (
             RUNTIME,
             "strRepeat",
