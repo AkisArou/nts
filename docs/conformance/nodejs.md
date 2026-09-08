@@ -2816,6 +2816,56 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## What the building modules are missing, in exports rather than tests
+
+Seven modules build. Only one passes. Asking each addon what it actually
+publishes explains every one of the six failures, and it is a shorter list than
+the test counts suggest:
+
+    module           exports published / expected
+    buffer            1 / 15
+    os               17 / 23
+    path              4 / 15
+    punycode          2 / 2      <- the one that passes
+    querystring       0 / 9
+    string_decoder    0 / 2
+    url               0 / n
+
+`string_decoder` is the cheapest of all of them: it exports a class and a
+`default`, both reported as *not a function this backend can name*. One
+capability, `blockers/export-class`, is the whole module.
+
+**`path` is the one that moves most for one fix.** All eleven of its missing
+functions — `basename`, `dirname`, `extname`, `format`, `isAbsolute`, `join`,
+`matchesGlob`, `normalize`, `parse`, `relative`, `resolve` — are refused for a
+single reason: they call `validateString`, which calls
+`ERR_INVALID_ARG_TYPE#constructor`, which calls `determineSpecificType`, which
+is `blockers/narrowed-bigint`. Four links, one shape.
+
+Measured the same way: `url` 3, `os` 2 (`getPriority`, `setPriority`),
+`buffer` 1 (`SlowBuffer`). Seventeen exports across four modules from one fix.
+
+### A name mismatch nearly published the opposite conclusion
+
+The first run of this check reported that **none** of `path`'s missing exports
+were in that cone. The compiler names the function `join@posix`; the export
+table wants `join`; matching the plain name found nothing. A silent zero from a
+name mismatch is indistinguishable from a real negative result, and it survived
+only because the answer was surprising enough to check twice.
+
+`cascade-reach.mjs` now matches on the name before any scope suffix and prints
+which exports a cone would unblock, so the question is answered by the tool
+rather than by a hand-written filter each time.
+
+### And the count is a floor
+
+`querystring` reports **zero** unblocked exports while all eight of its function
+exports are refused — two of them by the very shape at the top of its own list.
+A function whose own body holds an NTS1001 is refused *directly* and is
+therefore in no cone at all, so fixing that shape unblocks it without ever
+appearing in the number. The tool now says so on every run rather than leaving
+a reader to infer it from a figure that looks complete.
+
 ## The counted lane, run over every module, with its control
 
 Run 2026-09-08 from a worktree pinned at `46e1c9e5` so it could not be
