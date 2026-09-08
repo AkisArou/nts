@@ -2816,6 +2816,52 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `string_decoder` is not one fix away, and I said it was
+
+Recorded because the error is the one this document exists to catch, made by
+the person keeping the document.
+
+I read `no wrapper for StringDecoder: is not a function this backend can name`,
+counted two exports and one cause, and reported that `export-class` was **the
+entire module, 2 of 2**. I never checked whether the class's methods compile.
+They do not:
+
+    src/main.ts:30   a parameter of unrepresentable type (`ArrayBufferView`)
+    StringDecoder#fillLast   cannot be compiled because it calls `Buffer#toString`
+    StringDecoder#flush      ... `Buffer#toString`
+    StringDecoder#utf8Text   ... `Buffer#toString`
+    StringDecoder#utf16Text  ... `Buffer#toString`
+    StringDecoder#base64Text ... `Buffer#toString`
+
+83 primary refusals and 143 functions stopped by cascade, headed by
+`determineSpecificType` at 93 and `decodeIn` at 15. `export-class` would publish
+a class whose every method had been refused.
+
+**That is a description of a grouped diagnostic mistaken for a blocker** — the
+third of the five rules — applied to a module rather than to a message. The
+wrapper line is a true statement about one export and says nothing about the
+program behind it, and I treated the two as the same claim. The tell was
+available and I did not look for it: a module with two exports and 83 primary
+refusals is not one fix from anything.
+
+### `diagnostics_channel` had a cause nobody had measured
+
+It builds, publishes **zero of seven exports**, and every one is refused through
+a single field:
+
+    #map = new Map<string | symbol, WeakRef<Channel>>()
+
+`Map` is representable — the two sibling `Map` fields beside it are not refused.
+It is `WeakRef` alone, and §16 puts `WeakRef` and `FinalizationRegistry` in the
+**gap** column rather than the not-a-goal column, so it is a blocker and it had
+no fixture. Now `blockers/weakref-property`.
+
+The registry cannot be written another way and stay correct: node holds channels
+weakly precisely so a process that names channels dynamically does not leak one
+per name, and the `FinalizationRegistry` beside it clears an entry only when
+nothing has taken the name in the meantime. A strong map compiles and is a
+different program.
+
 ## A floor for compilation, because nothing was checking it
 
 Emitting C and compiling it are different claims, and only one was being made.
