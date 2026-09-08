@@ -133,6 +133,50 @@ persistent object graph. (The profile covers module init as well as the timed lo
 separate document construction from serialization; the `NoGc` counterfactual below is the
 controlled version of the same claim.)
 
+## And then the graph was removed, and the gap was the graph
+
+`json-stringify-typed` is the same document again, byte-identical output again, serialized
+straight from a typed structure with no `JsonValue` anywhere. It is what direct typed
+materialization emits: at a boundary where the type is known, a serializer *for that type*
+rather than a generic representation and a walk over it. Written by hand because the compiler
+cannot emit it yet -- the point was to find out what it is worth before anyone ports the
+implementation to native code on the assumption that it would not be enough.
+
+| route | nts C | nts LLVM | nts JVM | node, our TS | bun, our TS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| graph (`json-stringify-doc`) | 7.20ms | 6.13 | 3.20 | 2.85 | 2.09 |
+| typed (`json-stringify-typed`) | **1.26ms** | 1.21 | 1.06 | 0.860 | 0.878 |
+
+**5.7x, from removing the intermediate.** Against the native serializers on the same document:
+
+| | ms | our compiled typed route is |
+| --- | ---: | --- |
+| bun native `JSON.stringify` | 0.455 | 2.77x behind |
+| node native `JSON.stringify` | 0.885 | **1.42x behind** |
+| our typed TypeScript on node | 0.860 | -- |
+| our compiled typed route | 1.26 | |
+
+So the honest position moved from **8.8x off node's built-in to 1.42x**, and from 17.1x off bun's
+to 2.77x, without touching the compiler, the escaper or the number formatter. Only the traversal
+changed. Everything under the type is still `quoteJSONString` and `numberText`, unchanged,
+because the escaping and number rules are the part that must not exist twice.
+
+**Our typed TypeScript on node is 0.860ms against V8's own 0.885ms.** Essentially tied, and
+faster is the expected direction rather than a surprise: a monomorphic serializer for a known
+type does not enumerate properties, look for `toJSON`, or dispatch on a runtime kind. A generic
+`JSON.stringify` must. Direct typed materialization is not a faster way to do the same work; it
+is a smaller problem.
+
+**The prediction was wrong and in the useful direction.** I predicted 2.5-4ms and 2-3x from the
+profile, reasoning that the graph shrinks fivefold and 20,000 redundant key escapes per pass go
+away. It is 1.26ms and 5.7x. Under-predicting is worth recording because the profile did not say
+how much of the cost was *avoidable* -- it named `nts_collect_cycles` and `nts_array_new` as
+large, and a profile never says what a different architecture would not do at all.
+
+**What is left is a compiler gap and it is now the smaller half.** 1.26ms compiled against 0.860
+for the same TypeScript on node is 1.47x, which is the ordinary codegen distance this lane
+already measures on every other row -- not a representation problem.
+
 ## Refuted here: "reference counting is a net win, not a tax"
 
 That entry is below, established from `NoGc` running 40.68us against 17.78us on
