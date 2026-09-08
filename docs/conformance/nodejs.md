@@ -4828,6 +4828,32 @@ all emit the base field **first** and read correctly. So the trigger for
 base-last ordering is something none of those has, and it is not inheritance,
 module boundaries, abstractness, or field-type representability on their own.
 
+**And a second, worse one in the same file.** `Response__get_status` ignores its
+receiver entirely:
+
+    double Response__get_status(NtsObj_Response * v0) {
+        (void)v0;
+        double v1;
+        v1 = 0.0;
+
+where `response.ts:117` says `return this.responseStatus;` and the struct has
+`int32_t responseStatus` in it. **No refusal is reported for that line** — `hir`
+says nothing about `response.ts:110-129`. Its sibling accessors on the same class
+are correct: `statusText`, `redirected`, `type` and `url` all read their fields.
+
+That one has no type mismatch to catch it. It compiles clean, links, loads, and
+answers `0` for every response's status. **A `fetch` that checked `response.ok`
+or `response.status` would take the wrong branch, always, with nothing anywhere
+reporting a problem.**
+
+`NtsObj_Response` also has its `bodyState` near the *front*, unlike
+`NtsObj_Request` — so the base-last ordering is not universal either, and these
+are two defects rather than one with two faces.
+
+Ten reductions have failed to produce either: the nine above, plus a mutable
+`private` field with a getter, which was the obvious guess from
+`responseStatus` being mutable where `responseStatusText` is `readonly`.
+
 Recorded unreduced because the real-world instance is unambiguous and the
 compiler lane is looking at `util` now. A fixture would be better and does not
 exist yet.
