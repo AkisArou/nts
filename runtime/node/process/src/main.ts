@@ -408,7 +408,19 @@ class Process extends EventEmitter {
    * operation and the microtask checkpoint, and nothing in the language names
    * that instant.
    */
-  nextTick = processNextTick;
+  // A named function expression rather than the rename the other four got:
+  // `nextTick` is already an import at the top of this file, and the
+  // implementation *calls* it. Renaming the module function to `nextTick`
+  // shadowed that import, so the function called itself -- unbounded recursion
+  // that the module loader caught first as a redeclaration. The name node
+  // publishes and the name of the internal it delegates to are the same word,
+  // and only one of them can have it at module scope.
+  nextTick = function nextTick<A extends unknown[]>(
+    callback: (...args: A) => void,
+    ...args: A
+  ): void {
+    processNextTick(callback, ...args);
+  };
 
   cwd = cwd;
   chdir = chdir;
@@ -425,7 +437,7 @@ class Process extends EventEmitter {
 
   abort = abort;
 
-  kill = processKill;
+  kill = kill;
 
   /**
    * Ask the process to end.
@@ -435,7 +447,7 @@ class Process extends EventEmitter {
    * hypothetical, because the usual reason to listen is to flush something,
    * and flushing can fail and call `exit` with a different code.
    */
-  exit = processExit;
+  exit = exit;
 
   getuid = getuid;
   getgid = getgid;
@@ -462,7 +474,7 @@ class Process extends EventEmitter {
    * knows about all three -- so asking each module and merging would be a list
    * that is wrong whenever a module forgets to register.
    */
-  getActiveResourcesInfo = nts_process_active_resources;
+  getActiveResourcesInfo = getActiveResourcesInfo;
   // Arrow initializers rather than bare aliases: a class field takes its name
   // from an *anonymous* function expression, and an alias of an already-built
   // function keeps that function's name, which for a host binding stand-in is
@@ -506,12 +518,35 @@ class Process extends EventEmitter {
    * this process was holding is gone. That is the point -- a supervisor that
    * `execve`s its real payload keeps the pid its own supervisor is watching.
    */
-  execve = processExecve;
+  execve = execve;
 
   loadEnvFile = loadEnvFile;
 
   /** Write past every stream and every hook, for debugging the streams. */
-  _rawDebug = rawDebug;
+  _rawDebug = _rawDebug;
+}
+
+/**
+ * The five below are declared with the names node publishes them under.
+ *
+ * They were `processNextTick`, `processKill`, `processExit`, `processExecve`
+ * and -- the one that is not merely a name -- `nts_process_active_resources`
+ * itself. A field assigned the binding directly publishes *the binding* as the
+ * public API: its identity is the stand-in's on the interpreted lane and the C
+ * function's on the compiled one, and `process.getActiveResourcesInfo.name`
+ * read `"resourcesAfterHarness"`, the name of a harness shim that subtracts the
+ * runner's own pipes. The same aliasing once left `os.freemem.name` empty and
+ * published 4 of `os`'s 23 names.
+ *
+ * `x = x` in a field initializer reads oddly and is correct: class-field
+ * initializers do not bind the field name, so the right-hand side is the
+ * hoisted module-scope declaration.
+ *
+ * Node ships nothing that reads any of these names, because on node they cannot
+ * be wrong. `test/export-surface-static.js` compares every one against node's.
+ */
+function getActiveResourcesInfo(): string[] {
+  return nts_process_active_resources();
 }
 
 function processNextTick<A extends unknown[]>(callback: (...args: A) => void, ...args: A): void {
@@ -527,7 +562,7 @@ function processNextTick<A extends unknown[]>(callback: (...args: A) => void, ..
   nextTick(callback, ...args);
 }
 
-function processKill(pid: number, signal?: string | number): true {
+function kill(pid: number, signal?: string | number): true {
   // `!=` on purpose: node accepts a numeric string here, and the check is
   // "does this round-trip through a 32-bit integer", not "is this a number".
   if (pid != (pid | 0)) {
@@ -538,7 +573,7 @@ function processKill(pid: number, signal?: string | number): true {
   return true;
 }
 
-function processExit(...given: [] | [code: number | string | null | undefined]): never {
+function exit(...given: [] | [code: number | string | null | undefined]): never {
   if (given.length !== 0) process.exitCode = given[0];
 
   emitExitOnce(process, process.exitCode ?? 0);
@@ -607,7 +642,7 @@ function fatalException(error: unknown, fromPromise = false): boolean {
   return false;
 }
 
-function processExecve(
+function execve(
   execPath: string,
   args: readonly string[] = [],
   environment: Readonly<Record<string, string | undefined>> = process.env,
@@ -668,7 +703,12 @@ function loadEnvFile(path = ".env"): void {
   refreshEnvironment();
 }
 
-function rawDebug(...args: unknown[]): void {
+// Declared with the underscore because that is the name node's carries:
+// `process._rawDebug.name` is `"_rawDebug"` there and was `"rawDebug"` here.
+// The only reference is the field assignment above, so the name was the whole
+// difference. Found by `test/export-surface-static.js`; node ships nothing that
+// reads it, because on node it cannot be wrong.
+function _rawDebug(...args: unknown[]): void {
   nts_process_raw_debug(format(...args));
 }
 
