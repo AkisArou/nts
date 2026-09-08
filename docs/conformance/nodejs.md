@@ -2816,6 +2816,74 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The prediction was wrong, and which half of it was wrong matters
+
+Measured on the compiler lane's gate binary, from a worktree pinned at my HEAD.
+Three of its fixes are in it: `callback-binding`, `literal-const-export`, and
+the bigint and symbol narrowings.
+
+**I wrote that `path` would go from 2 of 21 to about 20 of 21. It is 2 of 22.**
+
+The number was wrong. The reasoning was not, and the difference is the whole
+lesson. `cascade-reach` on the same binary shows `determineSpecificType` still
+at the head of the cone, still gating the same eleven exports — and its shape
+has changed:
+
+    before   errors.ts:34   an `unknown` narrowed to BigInt
+    after    errors.ts:53   a conversion to string from this type
+
+That is a `String(symbol)`, one link along the same chain, and the cone **grew**
+from 33 to 36 rather than emptying. The eleven exports are still one *function*
+away. They were never one *fix* away, and the claim should have been written
+that way — which is exactly the caveat recorded two sections above, now
+demonstrated on a real prediction instead of argued.
+
+Writing it down first is what made that legible. A prediction recorded only
+after the fact would have become "the chain was longer than expected", which
+explains nothing and cannot be checked.
+
+### What the fixes did buy, in exports
+
+    async_hooks           did not compile  ->  builds, 13 exports
+    diagnostics_channel   did not compile  ->  builds,  0 exports
+    string_decoder        did not compile  ->  builds,  0 exports
+    buffer                 1 export        ->  3 exports
+    path                   4 exports       ->  4 exports
+    punycode               6 exports, 3 of 3
+
+`callback-binding` did what it was measured to do: `async_hooks` and
+`diagnostics_channel` compile *and link*, confirming their native halves were
+complete. And `literal-const-export` is confirmed on a real module rather than
+on its fixture, with precisely the two names predicted:
+
+    INSPECT_MAX_BYTES = 50
+    kStringMaxLength  = 536870888
+
+**Still 1 of 22 green.** Four modules now build that did not, and none of them
+publishes enough to pass a test. `async_hooks` exports thirteen internal names
+and none of its public four — `AsyncLocalStorage`, `AsyncResource`,
+`createHook`, `executionAsyncResource` — which are classes, so it waits on
+`export-class` with `string_decoder` and `diagnostics_channel`.
+
+### A regression, caught only because the whole set was rebuilt
+
+`buffer` and `string_decoder` went from building to **not** building:
+
+    error: conflicting types for 'nts_process_emit_warning_object'
+    incompatible pointer types passing 'NtsHeader *' to 'struct NtsObj_Error *'
+
+A compiled object crossing into a hand-written binding is an `NtsHeader *` on
+both sides now, and `internal/nts_node.h` still named the per-program error
+struct — the `callback-binding` shape, in this lane's own file rather than the
+compiler's. Two modules stopped by a declaration here, not by anything the
+compiler could not do.
+
+Nothing was lost by widening it: the implementation is `(void)warning;`, and the
+parameter exists only because the Node host stand-in forwards that object.
+**It would not have been found by measuring the modules that were already
+interesting** — it appeared in two that already built, and only rebuilding
+everything showed it.
+
 ## The `void` struct fields are gone, measured over the whole corpus
 
 The standing description of this axis is *"228 of 244 clang errors are one
