@@ -1,16 +1,17 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Private test certificate generated in a temporary directory, never trusted globally.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-let fixture;
-export function tlsFixture() {
+
+/** A key and certificate in PEM, as `node:tls` wants them. */
+export interface TlsFixture {
+  readonly key: Buffer;
+  readonly cert: Buffer;
+}
+
+let fixture: TlsFixture | undefined;
+export function tlsFixture(): TlsFixture {
   if (fixture) return fixture;
   const dir = mkdtempSync(join(tmpdir(), "nts-web-tls-"));
   try {
@@ -46,7 +47,7 @@ export function tlsFixture() {
   }
 }
 
-const named = new Map();
+const named = new Map<string, TlsFixture>();
 
 /**
  * A private certificate presenting exactly the given subjectAltName entries.
@@ -55,7 +56,7 @@ const named = new Map();
  * certificate covering more than one name. Entries are passed through verbatim, for
  * example `"DNS:alpha.test"` or `"IP:127.0.0.1"`.
  */
-export function tlsFixtureFor(entries) {
+export function tlsFixtureFor(entries: readonly string[]): TlsFixture {
   const subjectAltName = entries.join(",");
   const cached = named.get(subjectAltName);
   if (cached) return cached;

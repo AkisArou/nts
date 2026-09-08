@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The internal machinery that is publicly reachable, and the assertion that there is none.
 //
 // This file began as a measurement of a deviation too large to close in passing: sixty-three
@@ -30,10 +24,13 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import * as api from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 /** Web IDL constants legitimately appear on the interface prototype object. */
 const IDL_CONSTANTS = new Set([
@@ -54,7 +51,9 @@ const IDL_CONSTANTS = new Set([
  * regression. The assertion is exact equality in both directions, so a removal has to
  * change this table and the count below rather than passing silently.
  */
-const INTERNAL_PROTOTYPE_MEMBERS = {};
+// Empty, and the type is what keeps it meaningful: an untyped `{}` makes every read off it
+// `unknown`, so the count assertion below could not add up its entries.
+const INTERNAL_PROTOTYPE_MEMBERS: Readonly<Record<string, readonly string[]>> = {};
 
 /**
  * Standard members this runtime has that the oracle does not implement.
@@ -63,16 +62,34 @@ const INTERNAL_PROTOTYPE_MEMBERS = {};
  * declared -- and node does not provide it. Excluded by citation, not convenience: the claim
  * is checkable against an IDL file pinned in this repository.
  */
-const ORACLE_OMITS = {
+const ORACLE_OMITS: Readonly<Record<string, readonly string[]>> = {
   CustomEvent: ["initCustomEvent"],
 };
 
-function internalMembers(name) {
-  const mine = Object.getOwnPropertyNames(api[name].prototype).filter(
+/**
+ * The prototype of a constructor looked up by a runtime name, or `undefined`.
+ *
+ * Indexing a module namespace or `globalThis` with a string is the one thing here TypeScript
+ * cannot express, since neither declares an index signature -- so the read is widened to
+ * `unknown` and every step out of it is checked: that the value is callable, and that its
+ * `prototype` is an object. Nothing is asserted that was not tested.
+ */
+function prototypeNamed(scope: object, name: string): object | undefined {
+  const found: unknown = (scope as Record<string, unknown>)[name];
+  if (typeof found !== "function") return undefined;
+  const proto: unknown = (found as { prototype?: unknown }).prototype;
+  return typeof proto === "object" && proto !== null ? proto : undefined;
+}
+
+function internalMembers(name: string): string[] {
+  const ours = prototypeNamed(api, name);
+  const theirs = prototypeNamed(globalThis, name);
+  if (ours === undefined || theirs === undefined) return [];
+  const mine = Object.getOwnPropertyNames(ours).filter(
     (key) => key !== "constructor" && !IDL_CONSTANTS.has(key),
   );
   const conformant = new Set([
-    ...Object.getOwnPropertyNames(globalThis[name].prototype),
+    ...Object.getOwnPropertyNames(theirs),
     ...(ORACLE_OMITS[name] ?? []),
   ]);
   return mine.filter((key) => !conformant.has(key)).sort();
@@ -80,7 +97,7 @@ function internalMembers(name) {
 
 suite("the non-standard prototype surface is exactly what is written down", () => {
   for (const [name, expected] of Object.entries(INTERNAL_PROTOTYPE_MEMBERS)) {
-    assert.equal(typeof globalThis[name], "function", `${name} needs a conformant oracle`);
+    assert.notEqual(prototypeNamed(globalThis, name), undefined, `${name} needs a conformant oracle`);
     assert.deepEqual(
       internalMembers(name),
       expected,
@@ -97,11 +114,11 @@ suite("no interface has grown a non-standard member", () => {
   // were. A sabotage adding a named method to `ReadableStream` passed it.
   //
   // A gate whose coverage is a list goes stale the moment the thing it guards changes shape.
-  const grown = [];
-  for (const [name, constructor] of Object.entries(api)) {
-    if (typeof constructor !== "function" || !constructor.prototype) continue;
+  const grown: string[] = [];
+  for (const [name] of Object.entries(api)) {
     if (!/^[A-Z]/.test(name)) continue;
-    if (typeof globalThis[name] !== "function") continue;
+    if (prototypeNamed(api, name) === undefined) continue;
+    if (prototypeNamed(globalThis, name) === undefined) continue;
     const extra = internalMembers(name);
     if (extra.length > 0) grown.push(`${name}: ${extra.join(" ")}`);
   }
@@ -124,11 +141,17 @@ suite("interface members are enumerable, as Web IDL requires", () => {
   // It started failing. The blocker was never enumerability itself: it was that a blanket
   // pass would also enumerate the sixty-three internal members, making one deviation worse to
   // improve the other. Those are gone, so this is safe, and the assertion is now the fix.
-  const wrong = [];
+  const wrong: string[] = [];
   for (const name of ["Headers", "ReadableStream", "Request", "Response", "Event"]) {
-    for (const key of Object.getOwnPropertyNames(api[name].prototype)) {
+    const proto = prototypeNamed(api, name);
+    assert.notEqual(proto, undefined, `${name} is not on the platform surface`);
+    if (proto === undefined) continue;
+    for (const key of Object.getOwnPropertyNames(proto)) {
       if (key === "constructor") continue;
-      if (!Object.getOwnPropertyDescriptor(api[name].prototype, key).enumerable) {
+      // A descriptor for a name `getOwnPropertyNames` just returned is always present; saying
+      // so out loud beats an assertion, because a missing one would otherwise read as enumerable.
+      const descriptor = Object.getOwnPropertyDescriptor(proto, key);
+      if (descriptor === undefined || !descriptor.enumerable) {
         wrong.push(`${name}.${key}`);
       }
     }

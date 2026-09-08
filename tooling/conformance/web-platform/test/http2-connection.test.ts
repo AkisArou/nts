@@ -5,6 +5,7 @@
 // `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
 // job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http2 from "node:http2";
 import net from "node:net";
@@ -41,7 +42,9 @@ import {
   parseHttp2RstStream,
 } from "../../../../runtime/web-platform/src/http2/frame.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function requestHeaders(port, path = "/", method = "GET") {

@@ -13,6 +13,7 @@
 // is finally the thing under test.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 // Imported for its side effect: it installs the host environment slot the shared
 // runtime reads. The runtime itself is built by hand here so the clock can be ours.
@@ -29,7 +30,9 @@ import {
   TextEncoder,
 } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const encoder = new TextEncoder();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 

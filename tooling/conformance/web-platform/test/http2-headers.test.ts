@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -13,11 +7,11 @@ import {
   validateHttp2RequestHeaders,
 } from "../../../../runtime/web-platform/src/http2/headers.ts";
 
-function encoded(...pairs) {
+function encoded(...pairs: readonly [string, string][]) {
   return pairs.map(([name, value]) => ({ name, value }));
 }
 
-function decoded(...pairs) {
+function decoded(...pairs: readonly [string, string][]) {
   return pairs.map(([name, value]) => ({ name, value, neverIndexed: false }));
 }
 
@@ -146,7 +140,9 @@ test("response pseudo-headers produce a status and never leak into regular field
 });
 
 test("connection-specific fields, invalid TE, uppercase names, and wire controls are malformed", () => {
-  for (const field of [
+  // Annotated rather than inferred: an array of two-element arrays widens to `string[][]`,
+  // and `encoded` takes pairs.
+  const malformed: readonly [string, string][] = [
     ["connection", "close"],
     ["keep-alive", "timeout=5"],
     ["proxy-connection", "close"],
@@ -160,7 +156,8 @@ test("connection-specific fields, invalid TE, uppercase names, and wire controls
     ["x-newline", "a\nb"],
     ["x-space", " value"],
     ["x-tab", "value\t"],
-  ]) {
+  ];
+  for (const field of malformed) {
     assert.throws(() =>
       validateHttp2RequestHeaders(
         encoded(

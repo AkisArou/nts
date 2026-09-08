@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Surfaces where the standard requires *the same object*, not an equal one.
 //
 // Written on a suggestion from the Node lane, whose own version of this found three
@@ -17,17 +11,21 @@
 // and any `WeakMap` keyed on the object. Nothing else in this corpus would notice.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 import {
   AbortController,
   Request,
   Response,
 } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
-function runtime(t) {
+function runtime(t: TestContext): WebPlatformRuntime {
   const api = createHostNodeWebPlatform();
   t.after(() => api.close());
   return api;
@@ -79,10 +77,14 @@ suite("a body is one stream across reads, so locking it is observable", (t) => {
   runtime(t);
   const response = new Response("hello");
   assert.equal(response.body, response.body);
+  const body = response.body;
+  // Narrowed rather than asserted: `body` is declared nullable because a bodiless response
+  // exists, and this one was constructed with a body. Saying so is a real assertion.
+  assert.ok(body, "a Response constructed with a body exposes one");
   // The identity is what makes disturbance work at all: a reader taken from one read must
   // lock the stream a second read returns.
-  const reader = response.body.getReader();
-  assert.equal(response.body.locked, true);
+  const reader = body.getReader();
+  assert.equal(body.locked, true);
   reader.releaseLock();
 });
 

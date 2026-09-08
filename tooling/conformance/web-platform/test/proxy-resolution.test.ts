@@ -14,6 +14,7 @@
 // names nothing usable.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import {
   NoProxyMatcher,
@@ -23,7 +24,9 @@ import {
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const kinds = (result) => result.routes.map((route) => route.kind);
 
 suite("directives are kept in the order the result gave them", () => {

@@ -16,6 +16,7 @@
 // asserted rather than assumed, and adding a field to the wrong side fails here.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { createServer } from "node:net";
 
 import {
@@ -26,7 +27,9 @@ import {
 } from "../../../../runtime/web-platform/src/index.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const CRLF = String.fromCharCode(13, 10);
 
 /** Records every request head it is sent and answers each with a fixed response. */

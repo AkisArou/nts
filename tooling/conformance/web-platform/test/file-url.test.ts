@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `file:` is a capability-scoped provider extension: absent by default, and when
 // present it is the provider that decides which files exist and which may be read.
 // The shared layer owns which URLs are fetchable at all and the shape of the response.
@@ -12,6 +6,7 @@
 // provider's scoping is its own to prove.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,28 +16,44 @@ import {
   createHostNodeWebPlatform,
   HostNodeFileURLProvider,
 } from "../node-runtime.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 // Fetch reports every failure as an opaque `TypeError: Network request failed`, so the
 // reason lives on the cause chain. That is the specified behaviour and it is also why
 // a refused path never puts a filesystem detail into the message script sees.
-function because(pattern) {
+/**
+ * Walk an error's cause chain into one string.
+ *
+ * The chain is `unknown` at every link -- `cause` is declared `unknown` and a thrown value need
+ * not be an Error at all -- so each step reads the property defensively rather than assuming
+ * a shape. That is what the runtime code already did; it is only now written down.
+ */
+function causeText(from: unknown): string {
+  let cause: unknown = from;
+  let text = "";
+  while (cause !== undefined && cause !== null) {
+    const message: unknown = (cause as { message?: unknown }).message;
+    text += String(message ?? cause) + " ";
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return text;
+}
+
+function because(pattern: RegExp): (error: unknown) => boolean {
   return (error) => {
+    assert.ok(error instanceof Error, "fetch rejects with an Error");
     assert.equal(error.name, "TypeError");
     assert.equal(error.message, "Network request failed");
-    let cause = error.cause;
-    let text = "";
-    while (cause !== undefined && cause !== null) {
-      text += String(cause.message ?? cause) + " ";
-      cause = cause.cause;
-    }
-    assert.match(text, pattern);
+    assert.match(causeText(error.cause), pattern);
     return true;
   };
 }
 
-function tree(t) {
+function tree(t: TestContext): { dir: string; root: string } {
   const dir = mkdtempSync(join(tmpdir(), "nts-file-url-"));
   const root = join(dir, "root");
   mkdirSync(root);
@@ -55,7 +66,7 @@ function tree(t) {
   return { dir, root };
 }
 
-function runtimeWith(t, root) {
+function runtimeWith(t: TestContext, root: string | null): WebPlatformRuntime {
   const api = createHostNodeWebPlatform({
     fileURLs:
       root === null

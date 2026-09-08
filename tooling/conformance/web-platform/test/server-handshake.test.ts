@@ -14,6 +14,7 @@
 // merely looks right.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { createServer } from "node:net";
 import { createHash } from "node:crypto";
 
@@ -23,7 +24,9 @@ import {
 } from "../../../../runtime/web-platform/src/provider.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const KEY = Buffer.alloc(16, 7).toString("base64");
 
 function headersOf(overrides = {}) {

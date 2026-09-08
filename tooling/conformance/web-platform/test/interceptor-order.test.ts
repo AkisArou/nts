@@ -14,6 +14,7 @@
 // only exercised the right order would pass just as happily if the order did not matter.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import {
   AbortController,
@@ -24,7 +25,9 @@ import {
   TransportError,
 } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 class ImmediateScheduler {
   delays = [];

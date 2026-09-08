@@ -12,6 +12,7 @@
 // upgrade, which host was asked for, whether the framing is one it can accept.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import {
   BufferedReader,
@@ -19,7 +20,9 @@ import {
   readRequestHead,
 } from "../../../../runtime/web-platform/src/provider.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const CRLF = String.fromCharCode(13, 10);
 const encoder = new TextEncoder();
 

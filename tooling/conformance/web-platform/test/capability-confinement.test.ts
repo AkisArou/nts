@@ -12,6 +12,7 @@
 // compiled-provider evidence.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
 import {
@@ -22,7 +23,9 @@ import {
   WebSocketStream,
 } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 // A complete second runtime is the most plausible forgery: script that obtained one

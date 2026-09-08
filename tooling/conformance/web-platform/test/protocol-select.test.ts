@@ -12,6 +12,7 @@
 // evidence, and it says nothing about providers that cannot report a selection.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import http2 from "node:http2";
 import { createServer as createTlsServer } from "node:tls";
 import { connect as tcpConnect, createServer } from "node:net";
@@ -31,7 +32,9 @@ import {
 } from "../node-primitives.ts";
 import { tlsFixture } from "./tls-fixture.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 async function consume(stream) {
   if (stream === null) return "";

@@ -10,6 +10,7 @@
 // unusual interim sequence on request.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { createServer } from "node:net";
 
 import { AbortController } from "../../../../runtime/web-platform/src/index.ts";
@@ -20,7 +21,9 @@ import {
   hostNodeURLs,
 } from "../node-primitives.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const CRLF = String.fromCharCode(13, 10);
 
 /** A server that writes exactly the response text it is given. */

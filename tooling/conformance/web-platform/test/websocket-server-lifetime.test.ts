@@ -12,6 +12,7 @@
 // drive it with the canonical client over real sockets.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { createServer } from "node:net";
 
 import {
@@ -24,7 +25,9 @@ import {
   hostNodeRandom,
 } from "../node-primitives.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const decoder = new TextDecoder();
 
 /** Minimal ByteConnection over an accepted Node socket, honouring maxBytes. */

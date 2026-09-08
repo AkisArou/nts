@@ -15,6 +15,7 @@
 // upload may be buffered, which is the guess the old error existed to avoid.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +33,9 @@ import {
 } from "../../../../runtime/web-platform/src/index.ts";
 import { HostNodeDurableStore } from "../node-runtime.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const encoder = new TextEncoder();
 const none = () => new AbortController().signal;
 

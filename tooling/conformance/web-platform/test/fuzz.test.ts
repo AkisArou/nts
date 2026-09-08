@@ -16,6 +16,7 @@
 // interesting shape passes forever while testing nothing.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { BufferedReader } from "../../../../runtime/web-platform/src/provider.ts";
 // Internal error types: a test may name them, but they are not widened into the
@@ -27,7 +28,9 @@ import {
 import { readFrame } from "../../../../runtime/web-platform/src/websocket/codec.ts";
 import { readHeaderFields } from "../../../../runtime/web-platform/src/http1/parser.ts";
 
-const suite = (name, fn) => test(name, { timeout: 30_000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 30_000 }, fn);
+};
 const CRLF = String.fromCharCode(13, 10);
 
 /** xorshift32: small, deterministic, and identical on every run. */

@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `integrity` was accepted on a Request and never checked. A caller who wrote
 // integrity metadata got no verification and no error, which is the one failure mode
 // they cannot detect. These tests cover the check and, as much as the check itself,
@@ -12,6 +6,7 @@
 // Host evidence for the shared algorithm and one provider's digest.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import http from "node:http";
 import { createHash } from "node:crypto";
 
@@ -23,15 +18,19 @@ import {
   digestMatches,
   parseIntegrity,
 } from "../../../../runtime/web-platform/src/provider.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
+import type { WebPlatformOptions } from "../../../../runtime/web-platform/src/provider.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const BODY = "integrity subject";
 
-function base64(algorithm, text) {
+function base64(algorithm: string, text: string): string {
   return createHash(algorithm).update(text).digest("base64");
 }
 
-async function origin(t, body = BODY) {
+async function origin(t: TestContext, body: string = BODY): Promise<string> {
   const server = http.createServer((_request, response) => {
     response.writeHead(200, { "content-type": "text/plain" });
     response.end(body);
@@ -39,10 +38,14 @@ async function origin(t, body = BODY) {
   server.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
-  return `http://127.0.0.1:${server.address().port}/`;
+  // `address()` is a union with a pipe path and `null`; a TCP listener that has emitted
+  // `listening` is always the object form, and narrowing says so rather than assuming it.
+  const address = server.address();
+  assert.ok(address !== null && typeof address === "object", "a listening TCP server has an address");
+  return `http://127.0.0.1:${address.port}/`;
 }
 
-function runtimeWith(t, digest) {
+function runtimeWith(t: TestContext, digest: WebPlatformOptions["digest"]): WebPlatformRuntime {
   const api = createHostNodeWebPlatform({ digest });
   t.after(() => api.close());
   return api;
@@ -51,22 +54,34 @@ function runtimeWith(t, digest) {
 // A separate helper rather than `runtimeWith(t, undefined)`: passing `undefined`
 // explicitly triggers a default parameter, so that spelling built a runtime that did
 // have a provider and the fail-closed assertions passed for the wrong reason.
-function runtimeWithoutDigest(t) {
+function runtimeWithoutDigest(t: TestContext): WebPlatformRuntime {
   const api = createHostNodeWebPlatform({});
   t.after(() => api.close());
   assert.equal(api.requestContext.digest, undefined, "this runtime must have no provider");
   return api;
 }
 
-function because(pattern) {
+/**
+ * Walk an error's cause chain into one string.
+ *
+ * The chain is `unknown` at every link -- `cause` is declared `unknown` and a thrown value need
+ * not be an Error at all -- so each step reads the property defensively rather than assuming
+ * a shape. That is what the runtime code already did; it is only now written down.
+ */
+function causeText(from: unknown): string {
+  let cause: unknown = from;
+  let text = "";
+  while (cause !== undefined && cause !== null) {
+    const message: unknown = (cause as { message?: unknown }).message;
+    text += String(message ?? cause) + " ";
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return text;
+}
+
+function because(pattern: RegExp): (error: unknown) => boolean {
   return (error) => {
-    let cause = error;
-    let text = "";
-    while (cause !== undefined && cause !== null) {
-      text += String(cause.message ?? cause) + " ";
-      cause = cause.cause;
-    }
-    assert.match(text, pattern);
+    assert.match(causeText(error), pattern);
     return true;
   };
 }
@@ -221,7 +236,7 @@ test("the base64url alphabet and padding are digests, not junk", () => {
   // converts them; rejecting them here would break every caller using that spelling.
   const entries = parseIntegrity("sha256-YWJj-ZGVm_Z2hp=");
   assert.equal(entries.length, 1);
-  assert.equal(entries[0].digest, "YWJj-ZGVm_Z2hp=");
+  assert.equal(entries[0]?.digest, "YWJj-ZGVm_Z2hp=");
 });
 
 test("metadata that parses to nothing means no check, not a check that fails", () => {

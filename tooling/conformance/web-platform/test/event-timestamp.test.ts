@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `Event.timeStamp`, and the parts of it WPT does not pin.
 //
 // The upstream fixture asserts `ev.timeStamp > 0`, which a wall clock satisfies just as
@@ -16,13 +10,17 @@
 // that wanted the other, or the reverse. Nothing upstream would notice either.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 import { Event } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
-function runtime(t) {
+function runtime(t: TestContext): WebPlatformRuntime {
   const api = createHostNodeWebPlatform();
   t.after(() => api.close());
   return api;

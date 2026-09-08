@@ -6,6 +6,7 @@
 // job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Adapted from the verified external delivery after removing its synthetic realm API.
 import test from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
@@ -59,7 +60,9 @@ globalThis.WebSocket = class {
 const encoder = new TextEncoder();
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 async function server(t, handler, raw = false, secure = false) {
   const listener = raw
     ? net.createServer(handler)

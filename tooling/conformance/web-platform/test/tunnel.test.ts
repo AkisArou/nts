@@ -15,6 +15,7 @@
 // -- which is exactly what an HTTP server will not do on request.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { createServer } from "node:net";
 
 import {
@@ -28,7 +29,9 @@ import {
   hostNodeURLs,
 } from "../node-primitives.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const CRLF = String.fromCharCode(13, 10);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

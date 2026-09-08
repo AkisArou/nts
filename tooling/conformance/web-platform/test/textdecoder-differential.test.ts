@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `TextDecoder` against node's, across encodings, options and chunk boundaries.
 //
 // The pinned WPT fixtures cover the standard's cases. This covers the *combinations* —
@@ -17,15 +11,18 @@
 // which is the property that makes a differential worth running.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { TextDecoder } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 30000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 30000 }, fn);
+};
 const NativeTextDecoder = globalThis.TextDecoder;
 
 const ENCODINGS = ["utf-8", "utf-16le", "utf-16be"];
 
-function generator(seed) {
+function generator(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (state * 1103515245 + 12345) & 0x7fffffff;
@@ -34,9 +31,9 @@ function generator(seed) {
 }
 
 /** Bytes with a deliberate bias towards the shapes that break decoders. */
-function bytesFor(random) {
+function bytesFor(random: () => number): Uint8Array {
   const length = Math.floor(random() * 14);
-  const out = [];
+  const out: number[] = [];
   for (let index = 0; index < length; index++) {
     const pick = random();
     if (pick < 0.3) out.push(Math.floor(random() * 0x80));
@@ -50,21 +47,41 @@ function bytesFor(random) {
   return Uint8Array.from(out);
 }
 
+/**
+ * The decoding surface this compares, structurally.
+ *
+ * Structural rather than `TextDecoder`, because the whole point is to run node's decoder and
+ * the platform's through the same function; they are different types from different realms
+ * and only their shape is shared.
+ */
+interface StreamingDecoder {
+  decode(input: Uint8Array, options: { stream: boolean }): string;
+}
+
 /** What a decoder did, as a value, so throwing and returning compare the same way. */
-function outcome(decoder, chunks) {
+interface DecodeOutcome {
+  readonly text?: string;
+  readonly threw?: string;
+}
+
+function outcome(decoder: StreamingDecoder, chunks: readonly Uint8Array[]): DecodeOutcome {
   try {
     let text = "";
-    for (let index = 0; index < chunks.length; index++) {
-      text += decoder.decode(chunks[index], { stream: index < chunks.length - 1 });
+    // `entries` rather than an index, so the chunk is not typed as possibly absent under
+    // `noUncheckedIndexedAccess` and does not need an assertion to say what the loop bound
+    // already guarantees.
+    for (const [index, chunk] of chunks.entries()) {
+      text += decoder.decode(chunk, { stream: index < chunks.length - 1 });
     }
     return { text };
   } catch (error) {
-    return { threw: error?.constructor?.name ?? "Error" };
+    // A caught value is `unknown`, and only an Error carries a meaningful constructor name.
+    return { threw: error instanceof Error ? error.constructor.name : "Error" };
   }
 }
 
-function split(bytes, random) {
-  const pieces = [];
+function split(bytes: Uint8Array, random: () => number): Uint8Array[] {
+  const pieces: Uint8Array[] = [];
   let offset = 0;
   while (offset < bytes.length) {
     const take = 1 + Math.floor(random() * 4);
@@ -138,8 +155,8 @@ suite("node's answer depends on where the chunk boundary falls; this one does no
   // 1/1/1/1/1 and 4/1 are right and 1/3/1 is wrong. The answer depends on where the
   // boundary falls, which no reading of the standard makes defensible.
   const bytes = [0xea, 0xef, 0xbb, 0xbf, 0x41];
-  const chunksOf = (sizes) => {
-    const out = [];
+  const chunksOf = (sizes: readonly number[]): Uint8Array[] => {
+    const out: Uint8Array[] = [];
     let offset = 0;
     for (const size of sizes) {
       out.push(Uint8Array.from(bytes.slice(offset, offset + size)));

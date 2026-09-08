@@ -14,6 +14,7 @@
 // exists.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { connect as tcpConnect, createServer } from "node:net";
 import { createServer as createTlsServer } from "node:tls";
 
@@ -40,7 +41,9 @@ import { tlsFixture } from "./tls-fixture.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const scheduler = {
   enqueue(task) {
     queueMicrotask(task);

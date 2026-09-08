@@ -9,10 +9,13 @@
 // property: this clock moves only when told to.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { VirtualScheduler } from "../../../../runtime/web-platform/src/provider.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 suite("nothing runs until the clock is told to move", () => {
   const clock = new VirtualScheduler();

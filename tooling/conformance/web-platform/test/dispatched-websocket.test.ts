@@ -16,6 +16,7 @@
 // transport rather than a fake.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import {
   AbortController,
@@ -35,7 +36,9 @@ import { connect, createServer } from "node:net";
 
 import { websocketServer } from "./websocket-echo-server.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const none = () => new AbortController().signal;

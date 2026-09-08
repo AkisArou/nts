@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // A WebSocket server that listens, accepts and upgrades, end to end.
 //
 // This closes the largest row that was open in the plan. The handshake, the server-side
@@ -16,6 +10,7 @@
 // bound-address field. Every one of those decisions has a test here.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { connect } from "node:net";
 
 import { AbortController } from "../../../../runtime/web-platform/src/index.ts";
@@ -28,11 +23,18 @@ import {
   HostNodeSocketBinder,
   hostNodeRandom,
 } from "../node-primitives.ts";
+import type { ListenAddress, SocketListener } from "../../../../runtime/web-platform/src/provider/primitives.ts";
+import type { WebSocketServerOptions } from "../../../../runtime/web-platform/src/websocket/server.ts";
+import type { WebSocketSession } from "../../../../runtime/web-platform/src/websocket/transport.ts";
+import type { Event } from "../../../../runtime/web-platform/src/index.ts";
+import { MessageEvent } from "../../../../runtime/web-platform/src/index.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const none = () => new AbortController().signal;
 
-function serverOf(t, options = {}) {
+function serverOf(t: TestContext, options: Partial<WebSocketServerOptions> = {}): WebSocketServer {
   const scheduler = new HostNodeScheduler(() => {});
   const server = new WebSocketServer({
     random: hostNodeRandom,
@@ -44,7 +46,7 @@ function serverOf(t, options = {}) {
   return server;
 }
 
-async function listening(t, options = {}) {
+async function listening(t: TestContext, options: Partial<ListenAddress> = {}): Promise<SocketListener> {
   const listener = await new HostNodeSocketBinder().listen(
     { hostname: "127.0.0.1", port: 0, ...options },
     none(),
@@ -79,7 +81,9 @@ suite("a bind failure rejects the listen rather than escaping as an event", asyn
         { hostname: "127.0.0.1", port: first.address.port },
         none(),
       ),
-    (error) => String(error?.code ?? "") === "EADDRINUSE",
+    // A thrown value is `unknown`, and only some carry a `code`; reading it through a
+    // widened shape is what the untyped version was doing implicitly.
+    (error: unknown) => String((error as { code?: unknown }).code ?? "") === "EADDRINUSE",
   );
 });
 
@@ -106,7 +110,7 @@ suite("aborting one accept rejects it and leaves the listener open", async (t) =
   const client = connect(listener.address.port, "127.0.0.1");
   t.after(() => client.destroy());
   const connection = await accepted;
-  assert.notEqual(connection, null);
+  assert.ok(connection !== null, "the listener accepted a connection");
   connection.close();
 });
 
@@ -140,8 +144,9 @@ suite("the loop serves a real WebSocket client over a real socket", async (t) =>
   const listener = await listening(t);
   const server = serverOf(t);
   const controller = new AbortController();
-  const sessions = [];
-  const errors = [];
+  // The shape `onSession` pushes, named so the accumulator is not `any[]`.
+  const sessions: { session: WebSocketSession; target: string }[] = [];
+  const errors: unknown[] = [];
 
   const loop = serveWebSocketUpgrades(listener, server, controller.signal, {
     onSession: (result, head) => {
@@ -170,18 +175,24 @@ suite("the loop serves a real WebSocket client over a real socket", async (t) =>
   assert.equal(server.connections, 1, "the server counted the session it owns");
 
   assert.equal(sessions.length, 1, "the loop handed the session to its caller");
-  assert.equal(sessions[0].target, "/", "with the request head that produced it");
+  assert.equal(sessions[0]?.target, "/", "with the request head that produced it");
 
-  const echoed = new Promise((resolve) => {
-    socket.addEventListener("message", (event) => resolve(event.data));
+  const echoed = new Promise<unknown>((resolve) => {
+    // `addEventListener` is typed with the base `Event`; a message event carries `data`, and
+    // the listener narrows to it rather than the handler being widened.
+    socket.addEventListener("message", (event: Event) => {
+      resolve(event instanceof MessageEvent ? event.data : undefined);
+    });
   });
   socket.send("through the accept loop");
 
   // The server side of the session is the embedder's to drive.
-  const incoming = await sessions[0].session.next();
+  const first = sessions[0];
+  assert.ok(first !== undefined, "the loop handed over a session");
+  const incoming = await first.session.next();
   assert.equal(incoming.kind, "text");
   assert.equal(incoming.data, "through the accept loop");
-  await sessions[0].session.send(incoming);
+  await first.session.send(incoming);
   assert.equal(await echoed, "through the accept loop");
 
   socket.close(1000, "done");
@@ -208,11 +219,12 @@ suite("a connection that is not an upgrade is refused without stopping the loop"
     plain.write(`GET / HTTP/1.1${CRLF}Host: x${CRLF}${CRLF}`);
   });
   t.after(() => plain.destroy());
-  const status = await new Promise((resolve) => {
+  const status = await new Promise<string>((resolve) => {
     let text = "";
     plain.on("data", (chunk) => {
       text += chunk.toString("latin1");
-      if (text.includes(CRLF)) resolve(text.split(CRLF)[0]);
+      // `split` always yields at least one element; the fallback says so without an assertion.
+      if (text.includes(CRLF)) resolve(text.split(CRLF)[0] ?? "");
     });
     plain.on("error", () => resolve("error"));
   });

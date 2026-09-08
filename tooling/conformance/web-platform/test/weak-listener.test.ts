@@ -14,6 +14,7 @@
 // the shared algorithm; they are not compiled-provider evidence.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import {
   AbortController,
@@ -25,7 +26,9 @@ import {
   addWeaklyHeldEventListener,
 } from "../../../../runtime/web-platform/src/core/events.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 async function collectWeakReference(reference) {

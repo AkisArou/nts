@@ -1,15 +1,17 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // An echoing WebSocket server over a real socket, built from the shared server pieces.
 //
 // Extracted rather than copied. Two suites need a real peer -- the server-session tests
 // and the dispatched client -- and a harness that exists twice is a harness that drifts,
 // which for a test peer means two suites quietly stop testing the same thing.
 import { createServer } from "node:net";
+import type { Socket } from "node:net";
+import type { TestContext } from "node:test";
+import type {
+  ByteConnection,
+  SocketMessage,
+  WebSocketDeflateProvider,
+  WebSocketUpgradeOptions,
+} from "../../../../runtime/web-platform/src/provider.ts";
 
 import {
   acceptWebSocketUpgrade,
@@ -27,11 +29,12 @@ import {
 const encoder = new TextEncoder();
 
 /** Minimal ByteConnection over an accepted Node socket. Test harness, not a provider. */
-export function byteConnection(socket) {
-  const pending = [];
-  let waiting = null;
+export function byteConnection(socket: Socket): ByteConnection {
+  const pending: Uint8Array[] = [];
+  // The resolver of a `read` that arrived before any bytes did. `null` when nobody waits.
+  let waiting: ((chunk: Uint8Array | null) => void) | null = null;
   let ended = false;
-  socket.on("data", (chunk) => {
+  socket.on("data", (chunk: Buffer) => {
     if (waiting !== null) {
       const resolve = waiting;
       waiting = null;
@@ -55,8 +58,8 @@ export function byteConnection(socket) {
     },
     // The contract is "a nonempty chunk of at most maxBytes"; returning a whole socket
     // chunk regardless is a contract violation the reader is entitled to trip over.
-    async read(maxBytes) {
-      const take = (chunk) => {
+    async read(maxBytes: number): Promise<Uint8Array | null> {
+      const take = (chunk: Uint8Array | null): Uint8Array | null => {
         if (chunk === null || chunk.length <= maxBytes) return chunk;
         pending.unshift(chunk.subarray(maxBytes));
         return chunk.subarray(0, maxBytes);
@@ -64,11 +67,11 @@ export function byteConnection(socket) {
       const next = pending.shift();
       if (next !== undefined) return take(next);
       if (ended) return null;
-      return new Promise((resolve) => {
+      return new Promise<Uint8Array | null>((resolve) => {
         waiting = (chunk) => resolve(take(chunk));
       });
     },
-    async write(data) {
+    async write(data: Uint8Array): Promise<number> {
       socket.write(Buffer.from(data));
       return data.length;
     },
@@ -78,9 +81,28 @@ export function byteConnection(socket) {
   };
 }
 
-export async function websocketServer(t, upgradeOptions, deflate) {
-  const seen = { protocol: null, extensions: null, messages: [], errors: [] };
-  const sockets = new Set();
+/** What the server end observed, for a test to assert against afterwards. */
+export interface WebSocketServerSeen {
+  protocol: string | null;
+  extensions: string | null;
+  readonly messages: SocketMessage[];
+  readonly errors: unknown[];
+}
+
+export interface WebSocketServerHandle {
+  readonly port: number;
+  readonly seen: WebSocketServerSeen;
+}
+
+export async function websocketServer(
+  t: TestContext,
+  upgradeOptions: WebSocketUpgradeOptions = {},
+  // Optional in fact as well as in use: most callers want no compression, and leaving it
+  // untyped made every one of those calls read as a missing argument.
+  deflate?: WebSocketDeflateProvider,
+): Promise<WebSocketServerHandle> {
+  const seen: WebSocketServerSeen = { protocol: null, extensions: null, messages: [], errors: [] };
+  const sockets = new Set<Socket>();
   const scheduler = new HostNodeScheduler(() => {});
   const server = createServer((socket) => {
     sockets.add(socket);
@@ -113,7 +135,12 @@ export async function websocketServer(t, upgradeOptions, deflate) {
       try {
         while (true) {
           const incoming = await session.next();
-          if (incoming.kind === "closed") break;
+          // `"close"`, not `"closed"`. It was the latter, which is not one of the three kinds
+          // `SocketIncoming` has, so the comparison was always false: the loop never broke on
+          // a close, pushed the close frame into `messages`, and then tried to echo it back as
+          // a message. Typing this file is what surfaced it -- every run took the error path
+          // at the end of every connection, and no assertion looked.
+          if (incoming.kind === "close") break;
           seen.messages.push(incoming);
           await session.send(incoming);
         }
@@ -123,10 +150,15 @@ export async function websocketServer(t, upgradeOptions, deflate) {
     })();
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return { port: server.address().port, seen };
+  // A listening TCP server always has the object form; narrowing says so rather than assuming.
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("the echo server did not bind a TCP port");
+  }
+  return { port: address.port, seen };
 }

@@ -18,12 +18,15 @@
 // host providers owe their own evidence for the flat surface; this owes the layer above.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import { AbortController } from "../../../../runtime/web-platform/src/index.ts";
 import { durableStoreFromFlat } from "../../../../runtime/web-platform/src/provider.ts";
 import { FakeFlat } from "./fake-flat.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const none = () => new AbortController().signal;

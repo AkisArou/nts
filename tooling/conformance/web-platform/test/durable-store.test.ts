@@ -16,6 +16,7 @@
 // guarantees against its own storage.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 import { mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +24,9 @@ import { join } from "node:path";
 import { AbortController } from "../../../../runtime/web-platform/src/index.ts";
 import { HostNodeDurableStore } from "../node-runtime.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const none = () => new AbortController().signal;

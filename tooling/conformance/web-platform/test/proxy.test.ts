@@ -30,6 +30,7 @@ import {
 } from "../node-primitives.ts";
 import { createHostNodeWebPlatform } from "../node-runtime.ts";
 import { tlsFixture } from "./tls-fixture.ts";
+import type { WebPlatformRuntime } from "../../../../runtime/web-platform/src/provider.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

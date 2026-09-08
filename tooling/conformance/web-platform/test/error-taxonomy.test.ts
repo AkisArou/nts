@@ -16,11 +16,14 @@
 // one we would choose today; see the note on proxy errors below.
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TestContext } from "node:test";
 
 import * as api from "../../../../runtime/web-platform/src/index.ts";
 import { DOMException } from "../../../../runtime/web-platform/src/core/errors.ts";
 
-const suite = (name, fn) => test(name, { timeout: 8000 }, fn);
+const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
+  test(name, { timeout: 8000 }, fn);
+};
 
 /**
  * Every error this runtime exports, how to build one, and whether it is a typed
