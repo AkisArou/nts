@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,9 +8,16 @@ import {
   ReadableStream,
 } from "../src/index.ts";
 import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import { must } from "./harness.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import type { PlatformPrimitives } from "../src/provider/primitives.ts";
 
-function stream(...chunks) {
-  return new ReadableStream({
+function stream(...chunks: readonly (readonly number[])[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(Uint8Array.from(chunk));
       controller.close();
@@ -24,7 +25,11 @@ function stream(...chunks) {
   });
 }
 
-function request(primitives, url, overrides = {}) {
+function request(
+  primitives: PlatformPrimitives,
+  url: string,
+  overrides: Partial<TransportRequest> = {},
+): TransportRequest {
   return {
     url: primitives.urls.parse(url),
     method: "GET",
@@ -36,10 +41,12 @@ function request(primitives, url, overrides = {}) {
   };
 }
 
-async function consume(body) {
-  if (body === null) return new Uint8Array(0);
+async function consume(
+  body: ReadableStream<Uint8Array> | null | undefined,
+): Promise<Uint8Array> {
+  if (body === null || body === undefined) return new Uint8Array(0);
   const reader = body.getReader();
-  const bytes = [];
+  const bytes: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -99,19 +106,23 @@ test("MockAgent matches typed request fields and exposes body, headers, trailers
   assert.equal(path.lastIndex, 0);
   agent.assertNoPendingInterceptors();
 
-  const history = agent.getCallHistory();
+  const history = must(agent.getCallHistory(), "the mock agent records its calls");
   assert.equal(history.calls().length, 1);
-  assert.equal(history.firstCall().method, "POST");
-  assert.equal(history.lastCall().bodyText, "hello");
-  assert.equal(history.nthCall(1).fullURL, "https://example.test/items?x=1");
+  assert.equal(must(history.firstCall(), "the history holds that call").method, "POST");
+  assert.equal(must(history.lastCall(), "the history holds that call").bodyText, "hello");
+  assert.equal(must(history.nthCall(1), "the history holds that call").fullURL, "https://example.test/items?x=1");
   assert.equal(history.filterCalls((entry) => entry.path === "/items").length, 1);
   assert.equal([...history].length, 1);
-  history.firstCall().body[0] = 0;
-  assert.equal(history.firstCall().bodyText, "hello");
-  assert.equal(history.firstCall().body[0], 104);
-  const exposedHeaders = history.firstCall().headers;
-  exposedHeaders.length = 0;
-  assert.equal(history.firstCall().headers.length, 1);
+  // A tamper attempt, and the attempt is the test: the recorded body must be a copy, which the
+  // assertion below checks. `body` is a readonly view, so the write is a violation as well as a
+  // type error -- widened here to keep it deliberate.
+  (must(history.firstCall(), "the history holds that call").body as Uint8Array)[0] = 0;
+  assert.equal(must(history.firstCall(), "the history holds that call").bodyText, "hello");
+  assert.equal(must(must(history.firstCall(), "the history holds that call").body, "the call recorded a body")[0], 104);
+  const exposedHeaders = must(history.firstCall(), "the history holds that call").headers;
+  // The same attempt on the recorded headers, for the same reason.
+  (exposedHeaders as unknown as { length: number }).length = 0;
+  assert.equal(must(history.firstCall(), "the history holds that call").headers.length, 1);
   history.clear();
   assert.equal(history.calls().length, 0);
   await agent.close();
@@ -121,8 +132,8 @@ test("MockAgent close is graceful and shared by concurrent callers", async () =>
   const primitives = createHostNodePrimitives();
   const agent = new MockAgent(primitives.scheduler);
   agent.disableNetConnect();
-  const started = Promise.withResolvers();
-  const release = Promise.withResolvers();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
   agent
     .get("https://close.test")
     .intercept({ path: "/" })
@@ -214,9 +225,10 @@ test("direct MockPool dispatch does not search a different overlapping pool", as
 
 test("MockAgent fallback replays the consumed request and applies network policy", async () => {
   const primitives = createHostNodePrimitives();
-  const seen = [];
-  const fallback = {
-    async dispatch(value) {
+  // What the fallback recorded: the URL it saw and the bytes it drained, not the request.
+  const seen: { url: string; body: Uint8Array }[] = [];
+  const fallback: FetchTransport = {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       seen.push({ url: value.url.href, body: await consume(value.body) });
       return { status: 204, statusText: "", headers: [], body: null };
     },
@@ -231,10 +243,10 @@ test("MockAgent fallback replays the consumed request and applies network policy
       bodyLength: 4,
     }),
   );
-  assert.deepEqual([...seen[0].body], [1, 2, 3, 4]);
+  assert.deepEqual([...must(seen[0], "the fallback saw the request").body], [1, 2, 3, 4]);
   await assert.rejects(
     agent.dispatch(request(primitives, "https://blocked.test/")),
-    (error) => error instanceof MockNotMatchedError && /disabled/.test(error.message),
+    (error: unknown) => error instanceof MockNotMatchedError && /disabled/.test(error.message),
   );
   agent.deactivate();
   await agent.dispatch(request(primitives, "https://blocked.test/deactivated"));
@@ -255,13 +267,13 @@ test("MockAgent delay observes exact abort reason and errors preserve identity",
     request(primitives, "https://errors.test/delay", { signal: abort.signal }),
   );
   abort.abort(expected);
-  await assert.rejects(delayed, (error) => error === expected);
+  await assert.rejects(delayed, (error: unknown) => error === expected);
 
   const failure = new Error("expected failure");
   pool.intercept({ path: "/error" }).replyWithError(failure);
   await assert.rejects(
     agent.dispatch(request(primitives, "https://errors.test/error")),
-    (error) => error === failure,
+    (error: unknown) => error === failure,
   );
   await agent.close();
 });
@@ -286,7 +298,7 @@ test("MockAgent bounds captured request bodies before matching or fallback", asy
         bodyLength: 4,
       }),
     ),
-    (error) => error?.name === "LimitError",
+    (error: unknown) => error instanceof Error && error.name === "LimitError",
   );
   assert.equal(fallbacks, 0);
   const exact = await agent.dispatch(
@@ -311,7 +323,7 @@ test("MockAgent call history has explicit bounded drop-oldest behavior", async (
   for (const path of ["one", "two", "three"]) {
     await agent.dispatch(request(primitives, `https://history.test/${path}`));
   }
-  const history = agent.getCallHistory();
+  const history = must(agent.getCallHistory(), "the mock agent records its calls");
   assert.deepEqual(
     history.calls().map((entry) => entry.path),
     ["/two", "/three"],

@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The plan requires a WebSocket server as a Node/server extension. This is its
 // handshake: validating an upgrade request and producing the response, with no I/O of
 // its own, because reading the request and taking over the connection belong to
@@ -23,6 +17,14 @@ import {
   serializeUpgradeResponse,
 } from "../src/provider.ts";
 import { createHostNodeWebPlatform } from "../host/node-runtime.ts";
+import type { Socket } from "node:net";
+import { messageData, must, portOf } from "./harness.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
+import type {
+  WebSocketUpgradeAccepted,
+  WebSocketUpgradeOutcome,
+} from "../src/websocket/server-handshake.ts";
+import type { Event } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -41,7 +43,19 @@ function headersOf(overrides = {}) {
   return Object.entries(base).filter(([, value]) => value !== undefined);
 }
 
-function headerValue(outcome, name) {
+/**
+ * An accepted upgrade, narrowed.
+ *
+ * `WebSocketUpgradeOutcome` is a union: only the accepted arm carries `protocol`. Reading it off
+ * the union was possible only because nothing checked, and asserting the arm is a stronger
+ * statement than the property read was.
+ */
+function accepted(outcome: WebSocketUpgradeOutcome): WebSocketUpgradeAccepted {
+  assert.ok(outcome.accepted, `expected an accepted upgrade, got status ${outcome.status}`);
+  return outcome;
+}
+
+function headerValue(outcome: WebSocketUpgradeOutcome, name: string): string | null {
   for (const [key, value] of outcome.headers) if (key === name) return value;
   return null;
 }
@@ -127,40 +141,44 @@ suite("subprotocol selection follows the server's preference", () => {
   const both = acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-protocol": "a, b" }), {
     protocols: ["b", "a"],
   });
-  assert.equal(both.protocol, "b", "the server's order decides, not the client's");
+  assert.equal(accepted(both).protocol, "b", "the server's order decides, not the client's");
   assert.equal(headerValue(both, "sec-websocket-protocol"), "b");
 
   const none = acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-protocol": "x, y" }), {
     protocols: ["a"],
   });
   assert.equal(none.accepted, true, "no common subprotocol is not a failed handshake");
-  assert.equal(none.protocol, null);
+  assert.equal(accepted(none).protocol, null);
   assert.equal(headerValue(none, "sec-websocket-protocol"), null);
 
   // A server that declares none selects none even when the client offers.
   const declared = acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-protocol": "a" }));
-  assert.equal(declared.protocol, null);
+  assert.equal(accepted(declared).protocol, null);
 });
 
 suite("our own client completes the handshake this server produces", async (t) => {
   let seenProtocol = null;
-  const sockets = new Set();
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
     socket.on("close", () => sockets.delete(socket));
     let head = "";
-    const readHead = (chunk) => {
+    const readHead = (chunk: Buffer): void => {
       head += chunk.toString("latin1");
       if (!head.includes("\r\n\r\n")) return;
       socket.off("data", readHead);
       const [requestLine, ...lines] = head.slice(0, head.indexOf("\r\n\r\n")).split("\r\n");
-      const method = requestLine.split(" ")[0];
-      const headers = lines.map((line) => {
+      const method = must(requestLine, "the client sent a request line").split(" ")[0];
+      const headers: HeaderEntry[] = lines.map((line) => {
         const colon = line.indexOf(":");
         return [line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()];
       });
-      const outcome = acceptWebSocketUpgrade(method, headers, { protocols: ["chat"] });
+      const outcome = acceptWebSocketUpgrade(
+        must(method, "a request line begins with a method"),
+        headers,
+        { protocols: ["chat"] },
+      );
       seenProtocol = outcome.accepted ? outcome.protocol : null;
       socket.write(serializeUpgradeResponse(outcome));
       if (!outcome.accepted) {
@@ -169,15 +187,19 @@ suite("our own client completes the handshake this server produces", async (t) =
       }
       // A minimal echo, framed by hand: the point is that a real client accepted the
       // handshake and then spoke to us, not that this is a finished server.
-      socket.on("data", (frame) => {
-        const masked = (frame[1] & 0x80) !== 0;
-        const length = frame[1] & 0x7f;
+      socket.on("data", (frame: Buffer) => {
+        // A frame short enough to be missing its second byte is not one this hand-rolled echo
+        // has to serve; reading it out once says so rather than each access assuming it.
+        const second = frame[1];
+        if (second === undefined) return;
+        const masked = (second & 0x80) !== 0;
+        const length = second & 0x7f;
         const maskStart = 2;
         const payloadStart = maskStart + (masked ? 4 : 0);
         const payload = Buffer.from(frame.subarray(payloadStart, payloadStart + length));
         if (masked) {
           for (let index = 0; index < payload.length; index++) {
-            payload[index] ^= frame[maskStart + (index % 4)];
+            payload[index] = (payload[index] ?? 0) ^ (frame[maskStart + (index % 4)] ?? 0);
           }
         }
         socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
@@ -186,12 +208,12 @@ suite("our own client completes the handshake this server produces", async (t) =
     socket.on("data", readHead);
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  const port = server.address().port;
+  const port = portOf(server);
 
   const api = createHostNodeWebPlatform();
   t.after(() => api.close());
@@ -201,7 +223,7 @@ suite("our own client completes the handshake this server produces", async (t) =
     socket.addEventListener("error", () => reject(new Error("the client rejected the handshake")));
   });
   const message = new Promise((resolve) => {
-    socket.addEventListener("message", (event) => resolve(event.data));
+    socket.addEventListener("message", (event: Event) => resolve(messageData(event)));
   });
   await opened;
   assert.equal(socket.protocol, "chat", "the client sees the subprotocol the server chose");
@@ -214,12 +236,12 @@ suite("our own client completes the handshake this server produces", async (t) =
 suite("compression is declined unless the server asks to negotiate it", () => {
   const offered = headersOf({ "sec-websocket-extensions": "permessage-deflate" });
   const off = acceptWebSocketUpgrade("GET", offered);
-  assert.equal(off.perMessageDeflate, null);
+  assert.equal(accepted(off).perMessageDeflate, null);
   assert.equal(headerValue(off, "sec-websocket-extensions"), null);
 
   const on = acceptWebSocketUpgrade("GET", offered, { perMessageDeflate: true });
   assert.equal(headerValue(on, "sec-websocket-extensions"), "permessage-deflate");
-  assert.deepEqual(on.perMessageDeflate, {
+  assert.deepEqual(accepted(on).perMessageDeflate, {
     response: "permessage-deflate",
     incomingNoContextTakeover: false,
     outgoingNoContextTakeover: false,
@@ -229,11 +251,11 @@ suite("compression is declined unless the server asks to negotiate it", () => {
 
   // No offer at all is declined even when negotiation is enabled.
   const none = acceptWebSocketUpgrade("GET", headersOf(), { perMessageDeflate: true });
-  assert.equal(none.perMessageDeflate, null);
+  assert.equal(accepted(none).perMessageDeflate, null);
 });
 
 suite("the negotiated parameters are the ones the server commits to", () => {
-  const negotiate = (value) =>
+  const negotiate = (value: string): WebSocketUpgradeOutcome =>
     acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-extensions": value }), {
       perMessageDeflate: true,
     });
@@ -242,38 +264,38 @@ suite("the negotiated parameters are the ones the server commits to", () => {
   const both = negotiate(
     "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
   );
-  assert.equal(both.perMessageDeflate.outgoingNoContextTakeover, true);
-  assert.equal(both.perMessageDeflate.incomingNoContextTakeover, true);
+  assert.equal(must(accepted(both).perMessageDeflate, "compression was negotiated").outgoingNoContextTakeover, true);
+  assert.equal(must(accepted(both).perMessageDeflate, "compression was negotiated").incomingNoContextTakeover, true);
   assert.equal(
-    both.perMessageDeflate.response,
+    must(accepted(both).perMessageDeflate, "compression was negotiated").response,
     "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
   );
 
   // A window ceiling on the server's own traffic is adopted and echoed.
   const limited = negotiate("permessage-deflate; server_max_window_bits=10");
-  assert.equal(limited.perMessageDeflate.outgoingWindowBits, 10);
-  assert.match(limited.perMessageDeflate.response, /server_max_window_bits=10/);
+  assert.equal(must(accepted(limited).perMessageDeflate, "compression was negotiated").outgoingWindowBits, 10);
+  assert.match(must(accepted(limited).perMessageDeflate, "compression was negotiated").response, /server_max_window_bits=10/);
 
   // A bare server_max_window_bits leaves the choice to the server, which keeps 15 and
   // therefore says nothing about it.
   const bare = negotiate("permessage-deflate; server_max_window_bits");
-  assert.equal(bare.perMessageDeflate.outgoingWindowBits, 15);
-  assert.equal(bare.perMessageDeflate.response, "permessage-deflate");
+  assert.equal(must(accepted(bare).perMessageDeflate, "compression was negotiated").outgoingWindowBits, 15);
+  assert.equal(must(accepted(bare).perMessageDeflate, "compression was negotiated").response, "permessage-deflate");
 
   // client_max_window_bits may be answered only because the client mentioned it.
   const client = negotiate("permessage-deflate; client_max_window_bits=9");
-  assert.equal(client.perMessageDeflate.incomingWindowBits, 9);
-  assert.match(client.perMessageDeflate.response, /client_max_window_bits=9/);
+  assert.equal(must(accepted(client).perMessageDeflate, "compression was negotiated").incomingWindowBits, 9);
+  assert.match(must(accepted(client).perMessageDeflate, "compression was negotiated").response, /client_max_window_bits=9/);
   // A bare client_max_window_bits states support without asking for a limit, so the
   // server does not impose one and must not name the parameter.
   const bareClient = negotiate("permessage-deflate; client_max_window_bits");
-  assert.equal(bareClient.perMessageDeflate.response, "permessage-deflate");
+  assert.equal(must(accepted(bareClient).perMessageDeflate, "compression was negotiated").response, "permessage-deflate");
   // And a client that never mentioned it is never sent it.
-  assert.equal(negotiate("permessage-deflate").perMessageDeflate.response, "permessage-deflate");
+  assert.equal(must(accepted(negotiate("permessage-deflate")).perMessageDeflate, "compression was negotiated").response, "permessage-deflate");
 });
 
 suite("an offer that cannot be honoured exactly is passed over", () => {
-  const negotiate = (value) =>
+  const negotiate = (value: string): WebSocketUpgradeOutcome =>
     acceptWebSocketUpgrade("GET", headersOf({ "sec-websocket-extensions": value }), {
       perMessageDeflate: true,
     });
@@ -289,12 +311,12 @@ suite("an offer that cannot be honoured exactly is passed over", () => {
   ]) {
     const outcome = negotiate(bad);
     assert.equal(outcome.accepted, true, "a bad extension offer is not a failed handshake");
-    assert.equal(outcome.perMessageDeflate, null, `must not accept: ${bad}`);
+    assert.equal(accepted(outcome).perMessageDeflate, null, `must not accept: ${bad}`);
   }
 
   // Several entries in preference order: the first honourable one wins.
   const fallback = negotiate("permessage-deflate; unknown_parameter, permessage-deflate");
-  assert.equal(fallback.perMessageDeflate.response, "permessage-deflate");
+  assert.equal(must(accepted(fallback).perMessageDeflate, "compression was negotiated").response, "permessage-deflate");
   // An unrelated extension is ignored rather than accepted.
-  assert.equal(negotiate("some-other-extension").perMessageDeflate, null);
+  assert.equal(accepted(negotiate("some-other-extension")).perMessageDeflate, null);
 });

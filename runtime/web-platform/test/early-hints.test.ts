@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Interim (1xx) responses were counted and discarded, so `103 Early Hints` -- the one
 // interim response a client is meant to act on -- could never be seen. These tests use
 // a raw socket server, because Node's HTTP server will not emit a malformed or
@@ -20,6 +14,15 @@ import {
   createHostNodePrimitives,
   hostNodeURLs,
 } from "../host/node-primitives.ts";
+import type { Socket } from "node:net";
+import { portOf } from "./harness.ts";
+import type {
+  TransportInformationalResponse,
+  TransportRequest,
+} from "../src/fetch/transport.ts";
+import type { ReadableStream } from "../src/streams/readable.ts";
+import { must } from "./harness.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -27,8 +30,8 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 const CRLF = String.fromCharCode(13, 10);
 
 /** A server that writes exactly the response text it is given. */
-async function rawServer(t, responseText) {
-  const sockets = new Set();
+async function rawServer(t: TestContext, responseText: string): Promise<number> {
+  const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -41,15 +44,15 @@ async function rawServer(t, responseText) {
     });
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return server.address().port;
+  return portOf(server);
 }
 
-function transportRequest(url, overrides = {}) {
+function transportRequest(url: string, overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -61,7 +64,7 @@ function transportRequest(url, overrides = {}) {
   };
 }
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (stream === null) return "";
   const reader = stream.getReader();
   const parts = [];
@@ -77,7 +80,7 @@ async function consume(stream) {
   return Buffer.concat(parts).toString();
 }
 
-function makeTransport(t, options = {}) {
+function makeTransport(t: TestContext, options: Record<string, unknown> = {}): Http1Transport {
   const primitives = createHostNodePrimitives();
   const transport = new Http1Transport(
     new HostNodeSocketConnector(),
@@ -113,24 +116,24 @@ suite("early hints reach the caller in order, before the final response", async 
       "done",
   );
   const transport = makeTransport(t);
-  const seen = [];
+  const seen: TransportInformationalResponse[] = [];
   const response = await transport.dispatch(
     transportRequest(`http://127.0.0.1:${port}/`, {
-      onInformational: (interim) => seen.push(interim),
+      onInformational: (interim: TransportInformationalResponse) => seen.push(interim),
     }),
   );
 
   // Both hints arrived, in order, before the final response was returned.
   assert.equal(seen.length, 2);
   assert.deepEqual(
-    seen.map((interim) => interim.status),
+    seen.map((interim: TransportInformationalResponse) => interim.status),
     [103, 103],
   );
-  assert.deepEqual(seen[0].headers, [
+  assert.deepEqual(must(seen[0], "the observer saw that many interim responses").headers, [
     ["link", "</style.css>; rel=preload; as=style"],
     ["link", "</app.js>; rel=preload; as=script"],
   ]);
-  assert.deepEqual(seen[1].headers, [["link", "</late.png>; rel=preload"]]);
+  assert.deepEqual(must(seen[1], "the observer saw that many interim responses").headers, [["link", "</late.png>; rel=preload"]]);
 
   // And the final response is unaffected by having been preceded by them.
   assert.equal(response.status, 200);
@@ -150,10 +153,10 @@ suite("the final response is never delivered as an interim one", async (t) => {
       "ok",
   );
   const transport = makeTransport(t);
-  const seen = [];
+  const seen: TransportInformationalResponse[] = [];
   const response = await transport.dispatch(
     transportRequest(`http://127.0.0.1:${port}/`, {
-      onInformational: (interim) => seen.push(interim),
+      onInformational: (interim: TransportInformationalResponse) => seen.push(interim),
     }),
   );
   assert.equal(response.status, 200);
@@ -174,15 +177,15 @@ suite("a 100 Continue is an interim response like any other", async (t) => {
       CRLF,
   );
   const transport = makeTransport(t);
-  const seen = [];
+  const seen: TransportInformationalResponse[] = [];
   const response = await transport.dispatch(
     transportRequest(`http://127.0.0.1:${port}/`, {
-      onInformational: (interim) => seen.push(interim),
+      onInformational: (interim: TransportInformationalResponse) => seen.push(interim),
     }),
   );
   assert.equal(response.status, 204);
   assert.deepEqual(
-    seen.map((interim) => interim.status),
+    seen.map((interim: TransportInformationalResponse) => interim.status),
     [100],
   );
 });
@@ -204,14 +207,14 @@ suite("a caller that throws does not change the request", async (t) => {
       CRLF +
       "fine!",
   );
-  const reported = [];
+  const reported: unknown[] = [];
   const primitives = createHostNodePrimitives();
   // Delegating explicitly rather than spreading: the host scheduler's methods live on
   // its prototype, and a spread copies none of them.
   const scheduler = {
-    enqueue: (task) => primitives.scheduler.enqueue(task),
-    delay: (milliseconds, task) => primitives.scheduler.delay(milliseconds, task),
-    reportError: (error) => reported.push(error),
+    enqueue: (task: () => void) => primitives.scheduler.enqueue(task),
+    delay: (milliseconds: number, task: () => void) => primitives.scheduler.delay(milliseconds, task),
+    reportError: (error: unknown) => reported.push(error),
   };
   const transport = new Http1Transport(new HostNodeSocketConnector(), scheduler, {});
   t.after(() => transport.close());
@@ -248,18 +251,22 @@ suite("the caller may mutate what it is given", async (t) => {
       "hi",
   );
   const transport = makeTransport(t);
-  const captured = [];
+  const captured: TransportInformationalResponse[] = [];
   const response = await transport.dispatch(
     transportRequest(`http://127.0.0.1:${port}/`, {
-      onInformational: (interim) => {
+      onInformational: (interim: TransportInformationalResponse) => {
         captured.push(interim);
-        interim.headers.push(["injected", "value"]);
+        // A tamper attempt, and the attempt is the test: what an observer does to the interim
+        // response must not reach the final one, which the assertions below check. `headers` is
+        // a readonly array, so the write is a violation as well as a type error -- widened here
+        // so it reads as deliberate rather than silenced.
+        (interim.headers as HeaderEntry[]).push(["injected", "value"]);
       },
     }),
   );
   assert.equal(response.status, 200);
   assert.equal(await consume(response.body), "hi");
-  assert.equal(captured[0].headers.length, 2, "the mutation landed on what was handed over");
+  assert.equal(must(captured[0], "the observer saw that many interim responses").headers.length, 2, "the mutation landed on what was handed over");
   assert.equal(
     response.headers.some(([name]) => name === "injected"),
     false,
@@ -286,14 +293,14 @@ suite("the interim limit still applies and is still a LimitError", async (t) => 
     "no";
   const port = await rawServer(t, text);
   const transport = makeTransport(t, { maxInformational: 3 });
-  const seen = [];
+  const seen: TransportInformationalResponse[] = [];
   await assert.rejects(
     transport.dispatch(
       transportRequest(`http://127.0.0.1:${port}/`, {
-        onInformational: (interim) => seen.push(interim),
+        onInformational: (interim: TransportInformationalResponse) => seen.push(interim),
       }),
     ),
-    (error) => /Too many informational/.test(String(error)),
+    (error: unknown) => /Too many informational/.test(String(error)),
   );
   // Exposing hints did not raise the bound: the ones within it were still delivered.
   assert.equal(seen.length, 3);

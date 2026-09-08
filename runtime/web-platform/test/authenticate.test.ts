@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Origin authentication: parsing challenges, and answering them exactly once.
 //
 // The plan asks for "authentication hooks with explicit ordering and ownership" and
@@ -25,17 +19,36 @@ import {
   ReadableStream,
   TextEncoder,
 } from "../src/index.ts";
+import { must } from "./harness.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import type {
+  AuthenticationChallenge,
+  AuthenticationContext,
+} from "../src/dispatch/authenticate.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 const encoder = new TextEncoder();
 
-const schemes = (value) => parseChallenges(value).map((challenge) => challenge.scheme);
-const paramsOf = (value, index = 0) => parseChallenges(value)[index]?.parameters;
+const schemes = (value: string): string[] =>
+  parseChallenges(value).map((challenge) => challenge.scheme);
+const paramsOf = (value: string, index = 0): readonly HeaderEntry[] | undefined =>
+  parseChallenges(value)[index]?.parameters;
+
+/** The challenge at `index`, asserted present -- every use here has just parsed one. */
+function challengeAt(value: string, index = 0): AuthenticationChallenge {
+  return must(parseChallenges(value)[index], `expected a challenge at ${index} in ${value}`);
+}
 
 suite("a single challenge with one parameter", () => {
-  const [challenge] = parseChallenges('Basic realm="simple"');
+  const challenge = challengeAt('Basic realm="simple"');
   assert.equal(challenge.scheme, "basic");
   assert.equal(challenge.token68, null);
   assert.deepEqual(challenge.parameters, [["realm", "simple"]]);
@@ -65,17 +78,17 @@ suite("RFC 7235's own ambiguous example parses as the RFC says", () => {
     parsed.map((challenge) => challenge.scheme),
     ["newauth", "basic"],
   );
-  assert.deepEqual(parsed[0].parameters, [
+  assert.deepEqual(must(parsed[0], "the header parsed to that many challenges").parameters, [
     ["realm", "apps"],
     ["type", "1"],
     ["title", 'Login to "apps"'],
   ]);
-  assert.deepEqual(parsed[1].parameters, [["realm", "simple"]]);
+  assert.deepEqual(must(parsed[1], "the header parsed to that many challenges").parameters, [["realm", "simple"]]);
 });
 
 suite("a scheme with nothing after it is still a challenge", () => {
   assert.deepEqual(schemes("Negotiate"), ["negotiate"]);
-  const [challenge] = parseChallenges("Negotiate");
+  const challenge = challengeAt("Negotiate");
   assert.equal(challenge.token68, null);
   assert.deepEqual(challenge.parameters, []);
 });
@@ -83,14 +96,14 @@ suite("a scheme with nothing after it is still a challenge", () => {
 suite("token68 is kept apart from parameters", () => {
   // `Negotiate abc==` is an opaque credential, not a nameless parameter, and an
   // authenticator has to be able to tell the difference.
-  const [challenge] = parseChallenges("Negotiate a87421bK3bkfhk==");
+  const challenge = challengeAt("Negotiate a87421bK3bkfhk==");
   assert.equal(challenge.scheme, "negotiate");
   assert.equal(challenge.token68, "a87421bK3bkfhk==");
   assert.deepEqual(challenge.parameters, []);
 });
 
 suite("schemes and parameter names are matched case-insensitively", () => {
-  const [challenge] = parseChallenges('BASIC REALM="Kept As Sent"');
+  const challenge = challengeAt('BASIC REALM="Kept As Sent"');
   assert.equal(challenge.scheme, "basic");
   // The name is folded because callers compare it; the value is not, because it is data.
   assert.deepEqual(challenge.parameters, [["realm", "Kept As Sent"]]);
@@ -116,11 +129,14 @@ suite("a malformed tail keeps what was already understood", () => {
   assert.deepEqual(paramsOf('Basic realm="a", Bearer realm=', 0), [["realm", "a"]]);
 });
 
-function request(overrides = {}) {
+const urls = createHostNodePrimitives().urls;
+
+function request(overrides: Partial<TransportRequest> = {}): TransportRequest {
   return {
-    url: { href: "https://auth.test/resource" },
+    // A parsed record rather than a `{ href }` stub: `TransportRequest.url` is a `URLRecord`.
+    url: urls.parse("https://auth.test/resource"),
     method: "GET",
-    headers: [["accept", "*/*"]],
+    headers: [["accept", "*/*"]] as HeaderEntry[],
     body: null,
     bodyLength: null,
     signal: new AbortController().signal,
@@ -128,8 +144,8 @@ function request(overrides = {}) {
   };
 }
 
-function bodyOf(text) {
-  return new ReadableStream({
+function bodyOf(text: string): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(encoder.encode(text));
       controller.close();
@@ -138,8 +154,19 @@ function bodyOf(text) {
 }
 
 /** Answers `401` until an `Authorization` header arrives, recording every attempt. */
-function challengingTransport(options = {}) {
-  const seen = [];
+/** What a test may vary about the challenging transport. */
+interface ChallengeOptions {
+  readonly acceptCredential?: boolean;
+  readonly status?: number;
+  readonly headers?: readonly HeaderEntry[];
+}
+
+function challengingTransport(options: ChallengeOptions = {}): FetchTransport & {
+  seen: TransportRequest[];
+  readonly cancelled: number;
+  readonly drained: number;
+} {
+  const seen: TransportRequest[] = [];
   let cancelled = 0;
   let drained = 0;
   return {
@@ -151,7 +178,7 @@ function challengingTransport(options = {}) {
     get drained() {
       return drained;
     },
-    async dispatch(value) {
+    async dispatch(value: TransportRequest): Promise<TransportResponse> {
       seen.push(value);
       const authorization = value.headers.find(([name]) => name === "authorization");
       if (authorization !== undefined && options.acceptCredential !== false) {
@@ -185,9 +212,9 @@ function challengingTransport(options = {}) {
 
 suite("a challenge is answered once and the retry carries the credential", async () => {
   const transport = challengingTransport();
-  const contexts = [];
+  const contexts: AuthenticationContext[] = [];
   const interceptor = new AuthenticationInterceptor({
-    authenticate: (context) => {
+    authenticate: (context: AuthenticationContext) => {
       contexts.push(context);
       return "Basic dXNlcjpwYXNz";
     },
@@ -199,25 +226,25 @@ suite("a challenge is answered once and the retry carries the credential", async
 
   // Never preemptive: the first request goes out as the caller wrote it.
   assert.equal(
-    transport.seen[0].headers.some(([name]) => name === "authorization"),
+    must(transport.seen[0], "the transport saw that many attempts").headers.some(([name]) => name === "authorization"),
     false,
     "credentials must not be sent before they are asked for",
   );
   assert.deepEqual(
-    transport.seen[1].headers.find(([name]) => name === "authorization"),
+    must(transport.seen[1], "the transport saw that many attempts").headers.find(([name]) => name === "authorization"),
     ["authorization", "Basic dXNlcjpwYXNz"],
   );
   // And the rest of the request survives the rewrite.
-  assert.deepEqual(transport.seen[1].headers.find(([name]) => name === "accept"), [
+  assert.deepEqual(must(transport.seen[1], "the transport saw that many attempts").headers.find(([name]) => name === "accept"), [
     "accept",
     "*/*",
   ]);
 
   assert.equal(contexts.length, 1);
-  assert.equal(contexts[0].attempt, 1);
-  assert.equal(contexts[0].status, 401);
+  assert.equal(must(contexts[0], "the interceptor authenticated that many times").attempt, 1);
+  assert.equal(must(contexts[0], "the interceptor authenticated that many times").status, 401);
   assert.deepEqual(
-    contexts[0].challenges.map((challenge) => challenge.scheme),
+    must(contexts[0], "the interceptor authenticated that many times").challenges.map((challenge) => challenge.scheme),
     ["basic"],
   );
 });
@@ -275,9 +302,10 @@ suite("challenges from several fields are collected in order", async () => {
       ["www-authenticate", "Negotiate"],
     ],
   });
-  let seen;
+  // Assigned from inside the authenticate callback, so it says what it will hold.
+  let seen: readonly AuthenticationChallenge[] | undefined;
   const interceptor = new AuthenticationInterceptor({
-    authenticate: (context) => {
+    authenticate: (context: AuthenticationContext) => {
       seen = context.challenges;
       return null;
     },
@@ -285,7 +313,7 @@ suite("challenges from several fields are collected in order", async () => {
 
   await interceptor.dispatch(request(), transport);
   assert.deepEqual(
-    seen.map((challenge) => challenge.scheme),
+    must(seen, "the interceptor was asked to authenticate").map((challenge) => challenge.scheme),
     ["basic", "negotiate"],
   );
 });
@@ -329,8 +357,8 @@ suite("a replayable body is sent again with the credential", async () => {
     transport,
   );
   assert.equal(response.status, 200);
-  assert.notEqual(transport.seen[1].body, null);
-  assert.equal(transport.seen[1].bodyLength, 7);
+  assert.notEqual(must(transport.seen[1], "the transport saw that many attempts").body, null);
+  assert.equal(must(transport.seen[1], "the transport saw that many attempts").bodyLength, 7);
 });
 
 suite("the challenge body is consumed before the connection carries the answer", async () => {

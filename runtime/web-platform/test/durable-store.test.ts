@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The durable byte store's contract, exercised against the host filesystem strawman.
 //
 // The shape came from the JVM lane after they ran a capability check on a real API-26
@@ -23,6 +17,9 @@ import { join } from "node:path";
 
 import { AbortController } from "../src/index.ts";
 import { HostNodeDurableStore } from "../host/node-runtime.ts";
+import { must } from "./harness.ts";
+import type { DurableByteStore } from "../src/provider.ts";
+import type { AbortSignal } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -31,13 +28,19 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const none = () => new AbortController().signal;
 
-function store(t) {
+function store(t: TestContext): { store: HostNodeDurableStore; root: string } {
   const root = mkdtempSync(join(tmpdir(), "nts-durable-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return { store: new HostNodeDurableStore({ root }), root };
 }
 
-async function put(target, namespace, key, text, signal = none()) {
+async function put(
+  target: DurableByteStore,
+  namespace: string,
+  key: string,
+  text: string,
+  signal: AbortSignal = none(),
+): Promise<void> {
   const write = await target.write(namespace, key, signal);
   await write.append(encoder.encode(text));
   await write.commit();
@@ -53,7 +56,7 @@ suite("a committed value reads back whole and by range", async (t) => {
   );
 
   // The ranged path is the seam Blob already consumes.
-  const source = await target.source("cache", "greeting", none());
+  const source = must(await target.source("cache", "greeting", none()), "the key that was just written has a source");
   assert.equal(source.size, 19);
   const reader = source.open(6, 7);
   const chunk = await reader.read(64);
@@ -66,7 +69,7 @@ suite("a reader opened before a delete keeps reading", async (t) => {
   const { store: target } = store(t);
   await put(target, "cache", "doomed", "bytes that outlive their key");
 
-  const source = await target.source("cache", "doomed", none());
+  const source = must(await target.source("cache", "doomed", none()), "the key that was just written has a source");
   assert.equal(source.size, 28);
   const reader = source.open(0, source.size);
   assert.equal(decoder.decode(await reader.read(6)), "bytes ");
@@ -126,7 +129,7 @@ suite("discarding leaves the key holding what it held", async (t) => {
   assert.equal(decoder.decode(await target.read("cache", "key", none())), "original");
 
   // And it leaves no partial file behind for a later run to trip over.
-  const namespaceDirectory = join(root, readdirSync(root)[0]);
+  const namespaceDirectory = join(root, must(readdirSync(root)[0], "the store made a namespace directory"));
   assert.deepEqual(
     readdirSync(namespaceDirectory).filter((name) => name.startsWith(".partial-")),
     [],
@@ -162,7 +165,7 @@ suite("a crashed write is invisible rather than half-present", async (t) => {
   // exactly as a process that died would. The temporary file is still on disk.
   const write = await target.write("cache", "key", none());
   await write.append(encoder.encode("lost work"));
-  const namespaceDirectory = join(root, readdirSync(root)[0]);
+  const namespaceDirectory = join(root, must(readdirSync(root)[0], "the store made a namespace directory"));
   assert.equal(
     readdirSync(namespaceDirectory).some((name) => name.startsWith(".partial-")),
     true,
@@ -298,7 +301,7 @@ suite("a source reads the value it was opened over, or fails", async (t) => {
   const { store: target } = store(t);
   await put(target, "cache", "key", "the original value");
 
-  const source = await target.source("cache", "key", none());
+  const source = must(await target.source("cache", "key", none()), "the key that was just written has a source");
   assert.equal(source.size, 18);
 
   // The value is replaced after the source exists but before it is read. Blob shares
@@ -307,8 +310,8 @@ suite("a source reads the value it was opened over, or fails", async (t) => {
   await put(target, "cache", "key", "a completely different and longer value");
 
   const reader = source.open(0, 18);
-  let bytes = null;
-  let failure = null;
+  let bytes: Uint8Array | undefined = undefined;
+  let failure: unknown = null;
   try {
     bytes = await reader.read(64);
   } catch (error) {
@@ -322,15 +325,17 @@ suite("a source reads the value it was opened over, or fails", async (t) => {
   } else {
     // If it read anything, it must be the value the source was opened over -- never a
     // prefix of a different one, which is what clamping to the new size would give.
-    assert.equal(decoder.decode(bytes), "the original value".slice(0, bytes.length));
-    assert.ok(bytes.length > 0);
+    // The read succeeded, so it returned bytes; the branch it is in is the proof.
+    const read = must(bytes, "a read that did not fail returned a chunk");
+    assert.equal(decoder.decode(read), "the original value".slice(0, read.length));
+    assert.ok(read.length > 0);
   }
 });
 
 suite("a reader opened before a replacement keeps reading the original", async (t) => {
   const { store: target } = store(t);
   await put(target, "cache", "key", "the original value");
-  const source = await target.source("cache", "key", none());
+  const source = must(await target.source("cache", "key", none()), "the key that was just written has a source");
   const reader = source.open(0, 18);
   // Reading once pins the value; the descriptor outlives the rename that replaces it.
   const first = await reader.read(4);
@@ -341,20 +346,20 @@ suite("a reader opened before a replacement keeps reading the original", async (
   // The rest of the *original* value, not the rest of the new one. This is what Blob
   // means by an immutable stored range, and it is the reason the descriptor is opened
   // rather than the path re-resolved.
-  const parts = [first];
+  const parts: Uint8Array[] = [must(first, "the reader returned its first chunk")];
   while (true) {
     const chunk = await reader.read(64);
     if (chunk === undefined) break;
     parts.push(chunk);
   }
   await reader.close();
-  assert.equal(Buffer.concat(parts.map((p) => Buffer.from(p))).toString(), "the original value");
+  assert.equal(Buffer.concat(parts.map((p: Uint8Array) => Buffer.from(p))).toString(), "the original value");
 });
 
 suite("two readers over one source are independent", async (t) => {
   const { store: target } = store(t);
   await put(target, "cache", "key", "abcdefghij");
-  const source = await target.source("cache", "key", none());
+  const source = must(await target.source("cache", "key", none()), "the key that was just written has a source");
 
   const left = source.open(0, 5);
   const right = source.open(5, 5);

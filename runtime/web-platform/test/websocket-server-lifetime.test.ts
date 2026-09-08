@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The WebSocket server's lifetime owner.
 //
 // Not an accept loop: listening, TLS and HTTP parsing belong to the server this is
@@ -24,6 +18,15 @@ import {
   HostNodeScheduler,
   hostNodeRandom,
 } from "../host/node-primitives.ts";
+import type { Socket } from "node:net";
+import { messageData, must, portOf } from "./harness.ts";
+import type { ByteConnection } from "../src/provider/primitives.ts";
+import type { HeaderEntry } from "../src/fetch/headers.ts";
+import type { WebPlatformRuntime } from "../src/provider.ts";
+import type { WebSocketServerOptions } from "../src/websocket/server.ts";
+import type { WebSocket } from "../src/websocket/websocket.ts";
+import type { Event } from "../src/index.ts";
+import { CloseEvent } from "../src/index.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -31,11 +34,13 @@ const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void
 const decoder = new TextDecoder();
 
 /** Minimal ByteConnection over an accepted Node socket, honouring maxBytes. */
-function byteConnection(socket) {
-  const pending = [];
-  let waiting = null;
+function byteConnection(socket: Socket): ByteConnection {
+  const pending: Uint8Array[] = [];
+  // The resolver of a `read` that arrived before any bytes did. `null` when nobody waits.
+  let waiting: ((chunk: Uint8Array | null) => void) | null = null;
   let ended = false;
-  const deliver = (chunk) => {
+  // `null` is the end-of-stream signal, delivered the same way a chunk is.
+  const deliver = (chunk: Uint8Array | null): void => {
     if (waiting !== null) {
       const resolve = waiting;
       waiting = null;
@@ -45,7 +50,7 @@ function byteConnection(socket) {
     if (chunk !== null) pending.push(chunk);
     else ended = true;
   };
-  socket.on("data", (chunk) => deliver(new Uint8Array(chunk)));
+  socket.on("data", (chunk: Buffer) => deliver(new Uint8Array(chunk)));
   socket.on("end", () => {
     ended = true;
     deliver(null);
@@ -55,8 +60,8 @@ function byteConnection(socket) {
     get closed() {
       return socket.destroyed;
     },
-    async read(maxBytes) {
-      const take = (chunk) => {
+    async read(maxBytes: number): Promise<Uint8Array | null> {
+      const take = (chunk: Uint8Array | null): Uint8Array | null => {
         if (chunk === null || chunk.length <= maxBytes) return chunk;
         pending.unshift(chunk.subarray(maxBytes));
         return chunk.subarray(0, maxBytes);
@@ -64,11 +69,11 @@ function byteConnection(socket) {
       const next = pending.shift();
       if (next !== undefined) return take(next);
       if (ended) return null;
-      return new Promise((resolve) => {
+      return new Promise<Uint8Array | null>((resolve) => {
         waiting = (chunk) => resolve(take(chunk));
       });
     },
-    async write(data) {
+    async write(data: Uint8Array): Promise<number> {
       socket.write(Buffer.from(data));
       return data.length;
     },
@@ -78,27 +83,30 @@ function byteConnection(socket) {
   };
 }
 
-async function readRequestHead(reader) {
+async function readRequestHead(reader: BufferedReader): Promise<{
+  method: string;
+  headers: HeaderEntry[];
+}> {
   const requestLine = await reader.line(8192);
-  const headers = [];
+  const headers: HeaderEntry[] = [];
   while (true) {
     const line = await reader.line(8192);
     if (line === "") break;
     const colon = line.indexOf(":");
     headers.push([line.slice(0, colon).trim().toLowerCase(), line.slice(colon + 1).trim()]);
   }
-  return { method: requestLine.split(" ")[0], headers };
+  return { method: must(requestLine.split(" ")[0], "a request line begins with a method"), headers };
 }
 
 /** Runs a WebSocketServer behind a real listener and echoes whatever arrives. */
-async function hosted(t, serverOptions = {}) {
+async function hosted(t: TestContext, serverOptions: Partial<WebSocketServerOptions> = {}) {
   const server = new WebSocketServer({
     random: hostNodeRandom,
     scheduler: new HostNodeScheduler(() => {}),
     ...serverOptions,
   });
-  const refusals = [];
-  const sockets = new Set();
+  const refusals: number[] = [];
+  const sockets = new Set<Socket>();
   const listener = createServer((socket) => {
     sockets.add(socket);
     socket.on("error", () => {});
@@ -128,18 +136,22 @@ async function hosted(t, serverOptions = {}) {
   t.after(() => {
     server.destroy();
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => listener.close(resolve));
+    return new Promise<void>((resolve) => listener.close(() => resolve()));
   });
-  return { server, port: listener.address().port, refusals };
+  return { server, port: portOf(listener), refusals };
 }
 
-function clientFor(t) {
+function clientFor(t: TestContext): WebPlatformRuntime {
   const api = createHostNodeWebPlatform();
   t.after(() => api.close());
   return api;
 }
 
-async function connected(api, port, protocols) {
+async function connected(
+  api: WebPlatformRuntime,
+  port: number,
+  protocols?: readonly string[],
+): Promise<WebSocket> {
   const socket = api.createWebSocket(`ws://127.0.0.1:${port}/`, protocols ?? []);
   await new Promise((resolve, reject) => {
     socket.addEventListener("open", resolve);
@@ -159,7 +171,7 @@ suite("the server counts the sessions it is holding", async (t) => {
   assert.equal(first.protocol, "chat");
 
   // A round trip proves the counted sessions are the live ones.
-  const back = new Promise((resolve) => first.addEventListener("message", (e) => resolve(e.data)));
+  const back = new Promise<unknown>((resolve) => first.addEventListener("message", (e: Event) => resolve(messageData(e))));
   first.send("still here");
   assert.equal(await back, "still here");
 
@@ -200,7 +212,14 @@ suite("close reaches every open session and settles once", async (t) => {
 
   const closes = sockets.map(
     (socket) =>
-      new Promise((resolve) => socket.addEventListener("close", (event) => resolve(event))),
+      new Promise<CloseEvent>((resolve) =>
+        socket.addEventListener("close", (event: Event) => {
+          // The close listener receives a `CloseEvent`; the assertions below read `code` and
+          // `wasClean`, which only that arm carries.
+          assert.ok(event instanceof CloseEvent, "a close listener receives a CloseEvent");
+          resolve(event);
+        }),
+      ),
   );
   // Two callers share one shutdown rather than starting a second.
   const first = server.close();

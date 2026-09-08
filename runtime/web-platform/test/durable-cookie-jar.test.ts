@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // A cookie jar that survives the process.
 //
 // Run over two providers reached two different ways, following what the durable cache
@@ -32,6 +26,11 @@ import {
 import { durableStoreFromFlat } from "../src/provider.ts";
 import { HostNodeDurableStore } from "../host/node-runtime.ts";
 import { FakeFlat } from "./fake-flat.ts";
+import type { TestContext } from "node:test";
+import type { DurableByteStore } from "../src/provider.ts";
+import { must } from "./harness.ts";
+import type { StoredCookie } from "../src/cookies/jar.ts";
+import type { AbortSignal } from "../src/index.ts";
 
 const none = () => new AbortController().signal;
 const encoder = new TextEncoder();
@@ -39,7 +38,7 @@ const encoder = new TextEncoder();
 const BACKENDS = [
   {
     name: "host filesystem",
-    make(t) {
+    make(t: TestContext): DurableByteStore {
       const root = mkdtempSync(join(tmpdir(), "nts-jar-"));
       t.after(() => rmSync(root, { recursive: true, force: true }));
       return new HostNodeDurableStore({ root });
@@ -53,7 +52,10 @@ const BACKENDS = [
   },
 ];
 
-function suite(name, fn) {
+function suite(
+  name: string,
+  fn: (t: TestContext, store: DurableByteStore) => void | Promise<void>,
+): void {
   for (const backend of BACKENDS) {
     test(`${name} [${backend.name}]`, { timeout: 15000 }, async (t) => {
       const api = createHostNodeWebPlatform();
@@ -63,7 +65,7 @@ function suite(name, fn) {
   }
 }
 
-async function writeRaw(store, text) {
+async function writeRaw(store: DurableByteStore, text: string): Promise<void> {
   const write = await store.write("cookies", "jar", none());
   await write.append(encoder.encode(text));
   await write.commit();
@@ -116,7 +118,7 @@ suite("a snapshot that is not JSON is refused rather than read as empty", async 
   await writeRaw(store, "this is not json");
   await assert.rejects(
     () => new DurableCookieJarStore(store, none()).loadAll(),
-    (error) => error instanceof CookieJarStoreError && /valid JSON/.test(error.message),
+    (error: unknown) => error instanceof CookieJarStoreError && /valid JSON/.test(error.message),
   );
 });
 
@@ -124,7 +126,7 @@ suite("a snapshot that is JSON but not an array is refused", async (t, store) =>
   await writeRaw(store, '{"sid":"abc"}');
   await assert.rejects(
     () => new DurableCookieJarStore(store, none()).loadAll(),
-    (error) => error instanceof CookieJarStoreError && /not an array/.test(error.message),
+    (error: unknown) => error instanceof CookieJarStoreError && /not an array/.test(error.message),
   );
 });
 
@@ -134,7 +136,7 @@ suite("one unreadable cookie rejects the load by default", async (t, store) => {
   await writeRaw(store, '[{"name":"sid"}]');
   await assert.rejects(
     () => new DurableCookieJarStore(store, none()).loadAll(),
-    (error) => error instanceof CookieJarStoreError && /unreadable cookie/.test(error.message),
+    (error: unknown) => error instanceof CookieJarStoreError && /unreadable cookie/.test(error.message),
   );
 });
 
@@ -155,7 +157,7 @@ suite("dropping is available, keeps the good ones, and says what it dropped", as
     sameSite: "Default",
   };
   await writeRaw(store, JSON.stringify([good, { name: "broken" }, null]));
-  const reports = [];
+  const reports: [number, number][] = [];
   const loaded = await new DurableCookieJarStore(store, none(), {
     onInvalid: "drop",
     reportDropped: (count, total) => reports.push([count, total]),
@@ -185,7 +187,7 @@ suite("a cookie value outside ASCII survives the round trip", async (t, store) =
   // octet string, so code units up to 0xFF are legitimate, and an encoder that assumed the
   // serialized form was ASCII would refuse a perfectly valid cookie.
   const jarStore = new DurableCookieJarStore(store, none());
-  const cookie = {
+  const cookie: StoredCookie = {
     name: "sid",
     value: "caf\u00e9-\u00ff",
     expiryTime: 4102444800000,
@@ -203,7 +205,7 @@ suite("a cookie value outside ASCII survives the round trip", async (t, store) =
   await jarStore.saveAll([cookie]);
   const loaded = await jarStore.loadAll();
   assert.equal(loaded.length, 1);
-  assert.equal(loaded[0].value, "caf\u00e9-\u00ff");
+  assert.equal(must(loaded[0], "the jar loaded the cookie it saved").value, "caf\u00e9-\u00ff");
 });
 
 suite("a snapshot that is not valid UTF-8 is refused, not repaired", async (t, store) => {
@@ -214,7 +216,7 @@ suite("a snapshot that is not valid UTF-8 is refused, not repaired", async (t, s
   await write.commit();
   await assert.rejects(
     () => new DurableCookieJarStore(store, none()).loadAll(),
-    (error) => error instanceof CookieJarStoreError && /UTF-8/.test(error.message),
+    (error: unknown) => error instanceof CookieJarStoreError && /UTF-8/.test(error.message),
   );
 });
 
@@ -225,10 +227,10 @@ suite("a save that fails mid-write leaves the key writable rather than stuck", a
   let failNext = true;
   const failing = {
     ...store,
-    write: async (namespace, key, signal) => {
+    write: async (namespace: string, key: string, signal: AbortSignal) => {
       const inner = await store.write(namespace, key, signal);
       return {
-        append: async (bytes) => {
+        append: async (bytes: Uint8Array) => {
           if (failNext) {
             failNext = false;
             throw new Error("the device is full");
@@ -261,7 +263,7 @@ suite("the namespace and key are configurable and actually used", async (t, stor
   assert.deepEqual(await store.list("cookies", none()), []);
 });
 
-async function readRaw(store) {
+async function readRaw(store: DurableByteStore): Promise<string | null> {
   const bytes = await store.read("cookies", "jar", none());
   return bytes === null ? null : new TextDecoder().decode(bytes);
 }
@@ -275,7 +277,7 @@ async function readRaw(store) {
 // value below is distinct within its type so that any transposition changes the result, and
 // the booleans are carried across three cookies whose patterns differ pairwise, since two of
 // them sharing a value would hide a swap of exactly those two.
-const ROUND_TRIP = [
+const ROUND_TRIP: readonly StoredCookie[] = [
   {
     name: "sid",
     value: "café-ÿ",
@@ -335,7 +337,7 @@ suite("the snapshot on disk holds the field names it claims to", async (t, store
   // read by another would carry the values across swapped. Asserting the text is what pins
   // the format rather than the pair's internal consistency.
   const jarStore = new DurableCookieJarStore(store, none());
-  await jarStore.saveAll([ROUND_TRIP[0]]);
+  await jarStore.saveAll([must(ROUND_TRIP[0], "the fixture has a first cookie")]);
   assert.equal(
     await readRaw(store),
     '[{"name":"sid","value":"café-ÿ","expiryTime":4102444800000,' +
@@ -349,7 +351,7 @@ suite("a field of the wrong kind is unreadable rather than coerced", async (t, s
   // The reader checks each field's kind, and these are the coercions a reader written with
   // `String(x)` or `Number(x)` would silently accept: a number where a name goes, a string
   // where a timestamp goes, a string where a flag goes, and a sameSite outside the four.
-  const base = ROUND_TRIP[0];
+  const base = must(ROUND_TRIP[0], "the round-trip fixture has a first cookie");
   const corruptions = [
     { name: 7 },
     { value: null },
@@ -369,21 +371,23 @@ suite("a field of the wrong kind is unreadable rather than coerced", async (t, s
     await writeRaw(store, JSON.stringify([{ ...base, ...patch }]));
     await assert.rejects(
       () => new DurableCookieJarStore(store, none()).loadAll(),
-      (error) => error instanceof CookieJarStoreError,
+      (error: unknown) => error instanceof CookieJarStoreError,
       `accepted ${JSON.stringify(patch)}`,
     );
   }
 });
 
 suite("a missing field is unreadable rather than defaulted", async (t, store) => {
-  const base = ROUND_TRIP[0];
+  const base = must(ROUND_TRIP[0], "the round-trip fixture has a first cookie");
   for (const field of Object.keys(base)) {
-    const entry = { ...base };
+    // Widened to a record so a field can be removed by its runtime name: the point is to hand
+    // the reader a snapshot that is missing one, which a `StoredCookie` cannot be.
+    const entry: Record<string, unknown> = { ...base };
     delete entry[field];
     await writeRaw(store, JSON.stringify([entry]));
     await assert.rejects(
       () => new DurableCookieJarStore(store, none()).loadAll(),
-      (error) => error instanceof CookieJarStoreError,
+      (error: unknown) => error instanceof CookieJarStoreError,
       `accepted a snapshot with no ${field}`,
     );
   }

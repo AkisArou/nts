@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Reusing one HTTP/2 connection for a second origin is sound only when the peer's
 // certificate covers that origin and the endpoint is the same one. Getting this wrong
 // is a cross-origin routing defect rather than a slow path, so the conditions are
@@ -32,12 +26,22 @@ import {
   hostNodeURLs,
 } from "../host/node-primitives.ts";
 import { tlsFixtureFor } from "./tls-fixture.ts";
+import type { Socket } from "node:net";
+import { causeText, portOf } from "./harness.ts";
+import type { TransportRequest } from "../src/fetch/transport.ts";
+import type { ReadableStream } from "../src/streams/readable.ts";
+import type {
+  ConnectAddress,
+  SocketConnector,
+} from "../src/provider/primitives.ts";
+import type { AbortSignal } from "../src/index.ts";
+import type { TlsFixture } from "./tls-fixture.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
 };
 
-async function consume(stream) {
+async function consume(stream: ReadableStream<Uint8Array> | null): Promise<string> {
   if (stream === null) return "";
   const reader = stream.getReader();
   const parts = [];
@@ -53,7 +57,7 @@ async function consume(stream) {
   return Buffer.concat(parts).toString();
 }
 
-function transportRequest(url) {
+function transportRequest(url: string): TransportRequest {
   return {
     url: hostNodeURLs.parse(url),
     method: "GET",
@@ -90,9 +94,9 @@ suite("a dNSName covers exactly what it says and no more", () => {
 });
 
 /** One h2 origin whose certificate covers alpha and beta but not gamma. */
-async function h2Origin(t) {
+async function h2Origin(t: TestContext): Promise<{ fixture: TlsFixture; port: number }> {
   const fixture = tlsFixtureFor(["IP:127.0.0.1", "DNS:alpha.test", "DNS:beta.test"]);
-  const sockets = new Set();
+  const sockets = new Set<Socket>();
   const h2 = http2.createServer();
   h2.on("stream", (stream, headers) => {
     stream.respond({ ":status": 200, "content-type": "text/plain" });
@@ -105,33 +109,38 @@ async function h2Origin(t) {
     h2.emit("connection", socket);
   });
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   t.after(() => {
     for (const socket of sockets) socket.destroy();
-    return new Promise((resolve) => server.close(resolve));
+    return new Promise<void>((resolve) => server.close(() => resolve()));
   });
-  return { fixture, port: server.address().port };
+  return { fixture, port: portOf(server) };
 }
 
 /** Counts connects and supplies the endpoint the shared DNS policy would have. */
-function resolvingConnector(base, resolvedAddress = "127.0.0.1") {
-  const opened = [];
+function resolvingConnector(
+  base: SocketConnector,
+  resolvedAddress = "127.0.0.1",
+): SocketConnector & { opened: string[] } {
+  const opened: string[] = [];
   return {
     opened,
     reportsNegotiatedProtocol: true,
-    connect(address, signal) {
+    connect(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
       return base.connect({ ...address, resolvedAddress }, signal);
     },
-    connectNegotiated(address, signal) {
+    connectNegotiated(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
-      return base.connectNegotiated({ ...address, resolvedAddress }, signal);
+      const negotiate = base.connectNegotiated;
+      assert.ok(negotiate !== undefined, "the wrapped connector negotiates");
+      return negotiate.call(base, { ...address, resolvedAddress }, signal);
     },
   };
 }
 
 suite("a covered origin on the same endpoint reuses the connection", async (t) => {
-  const endpointsFor = () => ["127.0.0.1"];
+  const endpointsFor = (_address: ConnectAddress): readonly string[] => ["127.0.0.1"];
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   const connector = resolvingConnector(
@@ -139,7 +148,7 @@ suite("a covered origin on the same endpoint reuses the connection", async (t) =
   );
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoints: (address) => endpointsFor(address),
+    knownEndpoints: (address: ConnectAddress) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -169,7 +178,7 @@ suite("coalescing is off unless it is asked for", async (t) => {
 });
 
 suite("an origin the certificate does not cover is never routed over the connection", async (t) => {
-  const endpointsFor = () => ["127.0.0.1"];
+  const endpointsFor = (_address: ConnectAddress): readonly string[] => ["127.0.0.1"];
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   const connector = resolvingConnector(
@@ -177,7 +186,7 @@ suite("an origin the certificate does not cover is never routed over the connect
   );
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoints: (address) => endpointsFor(address),
+    knownEndpoints: (address: ConnectAddress) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -188,7 +197,7 @@ suite("an origin the certificate does not cover is never routed over the connect
   // not speak for it.
   await assert.rejects(
     transport.dispatch(transportRequest(`https://gamma.test:${port}/c`)),
-    (error) => /gamma\.test|altnames|certificate/i.test(String(error) + String(error?.cause)),
+    (error: unknown) => /gamma\.test|altnames|certificate/i.test(String(error) + causeText(error)),
   );
   assert.deepEqual(connector.opened, ["alpha.test", "gamma.test"]);
 });
@@ -197,29 +206,32 @@ suite("a different endpoint is a different peer even under one certificate", asy
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   const base = new HostNodeSocketConnector({ ca: fixture.cert.toString() });
-  const opened = [];
+  const opened: string[] = [];
   // alpha resolves to the loopback address; beta claims a different endpoint, so the
   // certificate covering both is not on its own a reason to reuse the connection.
   const connector = {
     reportsNegotiatedProtocol: true,
-    connect(address, signal) {
+    connect(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
-      return base.connect({ ...address, resolvedAddress: endpointsFor(address)[0] }, signal);
+      return base.connect(
+        { ...address, resolvedAddress: endpointsFor(address)[0] ?? "127.0.0.1" },
+        signal,
+      );
     },
-    connectNegotiated(address, signal) {
+    connectNegotiated(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
       return base.connectNegotiated(
-        { ...address, resolvedAddress: endpointsFor(address)[0] },
+        { ...address, resolvedAddress: endpointsFor(address)[0] ?? "127.0.0.1" },
         signal,
       );
     },
   };
-  function endpointsFor(address) {
+  function endpointsFor(address: ConnectAddress): string[] {
     return address.hostname === "alpha.test" ? ["127.0.0.1"] : ["127.0.0.2"];
   }
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoints: (address) => endpointsFor(address),
+    knownEndpoints: (address: ConnectAddress) => endpointsFor(address),
   });
   t.after(() => transport.close());
 
@@ -231,26 +243,26 @@ suite("a different endpoint is a different peer even under one certificate", asy
 });
 
 suite("a connection with no known endpoint does not coalesce", async (t) => {
-  const endpointsFor = () => undefined;
+  const endpointsFor = (_address: ConnectAddress): readonly string[] | undefined => undefined;
   const { fixture, port } = await h2Origin(t);
   const primitives = createHostNodePrimitives();
   // No resolvedAddress at all: certificate coverage alone must not be enough.
   const base = new HostNodeSocketConnector({ ca: fixture.cert.toString() });
-  const opened = [];
+  const opened: string[] = [];
   const connector = {
     reportsNegotiatedProtocol: true,
-    connect(address, signal) {
+    connect(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
       return base.connect(address, signal);
     },
-    connectNegotiated(address, signal) {
+    connectNegotiated(address: ConnectAddress, signal: AbortSignal) {
       opened.push(address.hostname);
       return base.connectNegotiated(address, signal);
     },
   };
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoints: (address) => endpointsFor(address),
+    knownEndpoints: (address: ConnectAddress) => endpointsFor(address),
   });
   t.after(() => transport.close());
   await assert.rejects(transport.dispatch(transportRequest(`https://alpha.test:${port}/a`)));
@@ -268,7 +280,7 @@ suite("the live endpoint may be any of the ones the origin is known to reach", a
     // beta is known to reach two addresses and the live connection is on the second.
     // Asking which endpoint a fresh lookup would pick would answer 127.0.0.9 and miss
     // a connection that legitimately serves this origin.
-    knownEndpoints: (address) =>
+    knownEndpoints: (address: ConnectAddress) =>
       address.hostname === "alpha.test" ? ["127.0.0.1"] : ["127.0.0.9", "127.0.0.1"],
   });
   t.after(() => transport.close());
@@ -367,7 +379,7 @@ suite("a transport can take its probe straight from the shared DNS cache", async
   );
   const transport = new Http2Transport(connector, primitives.scheduler, {
     coalesceConnections: true,
-    knownEndpoints: (address) => {
+    knownEndpoints: (address: ConnectAddress) => {
       const known = cache.knownAddresses(address.hostname);
       return known.length === 0 ? undefined : known;
     },

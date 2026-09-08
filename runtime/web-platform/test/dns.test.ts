@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
@@ -21,26 +15,40 @@ import { HostNodeSocketConnector } from "../host/node-primitives.ts";
 import {
   abortSignalSubscribe,
 } from "../src/core/abort-brand.ts";
+import { must, portOf } from "./harness.ts";
+import type {
+  ByteConnection,
+  ConnectAddress,
+  DnsAddress,
+  DnsResolveOptions,
+  Scheduler,
+} from "../src/provider/primitives.ts";
+import type { AbortSignal } from "../src/index.ts";
 
-function v4(address, ttlMilliseconds = 1000) {
+function v4(address: string, ttlMilliseconds = 1000): DnsAddress {
   return { address, family: 4, ttlMilliseconds };
 }
 
-function v6(address, ttlMilliseconds = 1000) {
+function v6(address: string, ttlMilliseconds = 1000): DnsAddress {
   return { address, family: 6, ttlMilliseconds };
 }
 
-class ManualScheduler {
-  constructor() {
-    this.pending = [];
-  }
+/** A delay this scheduler was asked for, and whether it was cancelled before firing. */
+interface PendingDelay {
+  readonly milliseconds: number;
+  readonly task: () => void;
+  canceled: boolean;
+}
 
-  enqueue(task) {
+class ManualScheduler implements Scheduler {
+  readonly pending: PendingDelay[] = [];
+
+  enqueue(task: () => void): void {
     task();
   }
 
-  delay(milliseconds, task) {
-    const record = { milliseconds, task, canceled: false };
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
+    const record: PendingDelay = { milliseconds, task, canceled: false };
     this.pending.push(record);
     return {
       cancel() {
@@ -49,14 +57,15 @@ class ManualScheduler {
     };
   }
 
-  reportError(error) {
+  reportError(error: unknown): void {
     throw error;
   }
 
   runNext() {
     while (this.pending.length !== 0) {
       const record = this.pending.shift();
-      if (record.canceled) continue;
+      // `shift` on a non-empty array always yields one; the loop condition is the proof.
+      if (record === undefined || record.canceled) continue;
       record.task();
       return record.milliseconds;
     }
@@ -64,26 +73,28 @@ class ManualScheduler {
   }
 }
 
-class FakeConnection {
-  constructor(name) {
+class FakeConnection implements ByteConnection {
+  readonly name: string;
+  closed = false;
+
+  constructor(name: string) {
     this.name = name;
-    this.closed = false;
   }
 
-  read() {
+  read(): Promise<Uint8Array | null> {
     return Promise.resolve(null);
   }
 
-  write(data) {
+  write(data: Uint8Array): Promise<number> {
     return Promise.resolve(data.length);
   }
 
-  close() {
+  close(): void {
     this.closed = true;
   }
 }
 
-function address(hostname = "service.test") {
+function address(hostname = "service.test"): ConnectAddress {
   return { hostname, port: 443, secure: true, connectTimeoutMs: 5000 };
 }
 
@@ -97,7 +108,7 @@ test("DnsCache caps TTLs, expires records independently, deduplicates and rotate
   const source = [v4("192.0.2.1", 50), v4("192.0.2.2", 200), v4("192.0.2.1", 50)];
   const cache = new DnsCache({
     resolver: {
-      resolve() {
+      resolve(): Promise<readonly DnsAddress[]> {
         calls++;
         return Promise.resolve(source);
       },
@@ -111,7 +122,11 @@ test("DnsCache caps TTLs, expires records independently, deduplicates and rotate
     first.map((entry) => entry.address),
     ["192.0.2.1", "192.0.2.2"],
   );
-  source[0].address = "203.0.113.99";
+  // Mutating the resolver's own record on purpose: the assertion below is that the cache
+  // returned a copy and did not hand out a view of it. `DnsAddress.address` is readonly, so the
+  // write is a violation as well as a type error -- widened here to keep it deliberate.
+  (must(source[0], "the fixture has a first address") as { address: string }).address =
+    "203.0.113.99";
   const second = await cache.lookup("example.TEST", [4], signal);
   assert.deepEqual(
     second.map((entry) => entry.address),
@@ -140,11 +155,16 @@ test("DnsCache caps TTLs, expires records independently, deduplicates and rotate
 });
 
 test("DnsCache coalesces misses without letting one consumer cancel another", async () => {
-  const resolution = Promise.withResolvers();
-  let resolverSignal;
+  const resolution = Promise.withResolvers<readonly DnsAddress[]>();
+  // Captured from inside the resolver, so it says what it will hold.
+  let resolverSignal: AbortSignal | undefined;
   const cache = new DnsCache({
     resolver: {
-      resolve(_hostname, _options, signal) {
+      resolve(
+        _hostname: string,
+        _options: DnsResolveOptions,
+        signal: AbortSignal,
+      ): Promise<readonly DnsAddress[]> {
         resolverSignal = signal;
         return resolution.promise;
       },
@@ -158,14 +178,15 @@ test("DnsCache coalesces misses without letting one consumer cancel another", as
   assert.equal(cache.stats.resolverCalls, 1);
   const reason = new Error("first left");
   firstController.abort(reason);
-  await assert.rejects(first, (error) => error === reason);
-  assert.equal(resolverSignal.aborted, false);
+  await assert.rejects(first, (error: unknown) => error === reason);
+  assert.equal(must(resolverSignal, "the resolver was called").aborted, false);
   resolution.resolve([v6("2001:db8::1")]);
   assert.deepEqual(await second, [v6("2001:db8::1")]);
 });
 
 test("DnsCache cancels a miss when its final consumer leaves", async () => {
-  let resolverSignal;
+  // Captured from inside the resolver, so it says what it will hold.
+  let resolverSignal: AbortSignal | undefined;
   const cache = new DnsCache({
     resolver: {
       resolve(_hostname, _options, signal) {
@@ -182,21 +203,21 @@ test("DnsCache cancels a miss when its final consumer leaves", async () => {
   const first = cache.lookup("cancel.test", [4], one.signal);
   const second = cache.lookup("cancel.test", [4], two.signal);
   one.abort(new Error("one"));
-  assert.equal(resolverSignal.aborted, false);
+  assert.equal(must(resolverSignal, "the resolver was called").aborted, false);
   const finalReason = new Error("two");
   two.abort(finalReason);
   await assert.rejects(first);
-  await assert.rejects(second, (error) => error === finalReason);
-  assert.equal(resolverSignal.aborted, true);
+  await assert.rejects(second, (error: unknown) => error === finalReason);
+  assert.equal(must(resolverSignal, "the resolver was called").aborted, true);
   await Promise.resolve();
   assert.equal(cache.stats.pending, 0);
 });
 
 test("DnsCache bounds pending lookups and settled LRU entries", async () => {
-  const pending = Promise.withResolvers();
+  const pending = Promise.withResolvers<readonly DnsAddress[]>();
   const cache = new DnsCache({
     resolver: {
-      resolve(hostname) {
+      resolve(hostname: string): Promise<readonly DnsAddress[]> {
         if (hostname === "pending.test") return pending.promise;
         return Promise.resolve([v4(hostname === "one.test" ? "192.0.2.1" : "192.0.2.2")]);
       },
@@ -245,7 +266,12 @@ test("DnsCache rejects empty and malformed provider answers", async () => {
 
 test("DnsConnector alternates families, preserves logical identity and closes a late loser", async () => {
   const scheduler = new ManualScheduler();
-  const attempts = [];
+  // One recorded connect: what it was asked for, and the resolver that decides its outcome.
+  const attempts: {
+    target: ConnectAddress;
+    signal: AbortSignal;
+    result: PromiseWithResolvers<ByteConnection>;
+  }[] = [];
   const cache = new DnsCache({
     resolver: {
       resolve: () => Promise.resolve([v6("2001:db8::1"), v6("2001:db8::2"), v4("192.0.2.1")]),
@@ -258,8 +284,8 @@ test("DnsConnector alternates families, preserves logical identity and closes a 
     preferredFamily: 6,
     attemptDelayMilliseconds: 25,
     connector: {
-      connect(target, signal) {
-        const result = Promise.withResolvers();
+      connect(target: ConnectAddress, signal: AbortSignal): Promise<ByteConnection> {
+        const result = Promise.withResolvers<ByteConnection>();
         attempts.push({ target, signal, result });
         return result.promise;
       },
@@ -268,7 +294,7 @@ test("DnsConnector alternates families, preserves logical identity and closes a 
   const connecting = connector.connect(address(), new AbortController().signal);
   await flushMicrotasks();
   assert.equal(attempts.length, 1);
-  assert.deepEqual(attempts[0].target, {
+  assert.deepEqual(must(attempts[0], "the connector made that many attempts").target, {
     hostname: "service.test",
     port: 443,
     secure: true,
@@ -277,13 +303,13 @@ test("DnsConnector alternates families, preserves logical identity and closes a 
     resolvedFamily: 6,
   });
   assert.equal(scheduler.runNext(), 25);
-  assert.equal(attempts[1].target.resolvedAddress, "192.0.2.1");
+  assert.equal(must(attempts[1], "the connector made that many attempts").target.resolvedAddress, "192.0.2.1");
   const winner = new FakeConnection("winner");
-  attempts[1].result.resolve(winner);
+  must(attempts[1], "the connector made that many attempts").result.resolve(winner);
   assert.equal(await connecting, winner);
-  assert.equal(attempts[0].signal.aborted, true);
+  assert.equal(must(attempts[0], "the connector made that many attempts").signal.aborted, true);
   const late = new FakeConnection("late");
-  attempts[0].result.resolve(late);
+  must(attempts[0], "the connector made that many attempts").result.resolve(late);
   await Promise.resolve();
   assert.equal(late.closed, true);
 });
@@ -299,18 +325,19 @@ test("a failed address accelerates the next attempt and exhaustion invalidates D
     },
     nowMilliseconds: () => 0,
   });
-  const attempts = [];
+  // One recorded connect: what it was asked for, and the resolver that decides its outcome.
+  const attempts: (string | undefined)[] = [];
   const connector = new DnsConnector({
     cache,
     scheduler: new ManualScheduler(),
     connector: {
-      connect(target) {
+      connect(target: ConnectAddress): Promise<ByteConnection> {
         attempts.push(target.resolvedAddress);
         return Promise.reject(new Error("failed " + target.resolvedAddress));
       },
     },
   });
-  await assert.rejects(connector.connect(address(), new AbortController().signal), (error) => {
+  await assert.rejects(connector.connect(address(), new AbortController().signal), (error: unknown) => {
     return error instanceof DnsConnectionError && error.failures.length === 2;
   });
   assert.deepEqual(attempts, ["192.0.2.1", "2001:db8::1"]);
@@ -320,7 +347,8 @@ test("a failed address accelerates the next attempt and exhaustion invalidates D
 
 test("DnsConnector preserves exact external cancellation and bypasses literal addresses", async () => {
   let resolverCalls = 0;
-  let attemptedSignal;
+  // Captured from inside the connector, so it says what it will hold.
+  let attemptedSignal: AbortSignal | undefined;
   const cache = new DnsCache({
     resolver: {
       resolve() {
@@ -347,8 +375,8 @@ test("DnsConnector preserves exact external cancellation and bypasses literal ad
   await flushMicrotasks();
   const reason = new Error("cancel exact");
   controller.abort(reason);
-  await assert.rejects(connecting, (error) => error === reason);
-  assert.equal(attemptedSignal.aborted, true);
+  await assert.rejects(connecting, (error: unknown) => error === reason);
+  assert.equal(must(attemptedSignal, "the connector was asked to connect").aborted, true);
 
   const literalConnection = new FakeConnection("literal");
   const literal = new DnsConnector({
@@ -366,15 +394,13 @@ test("DnsConnector preserves exact external cancellation and bypasses literal ad
 test("HostNodeSocketConnector connects physically while retaining logical hostname", async () => {
   const server = createServer((socket) => socket.end());
   server.listen(0, "127.0.0.1");
-  await new Promise((resolve) => server.once("listening", resolve));
-  const serverAddress = server.address();
-  assert.notEqual(serverAddress, null);
-  assert.equal(typeof serverAddress, "object");
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  const serverPort = portOf(server);
   const connector = new HostNodeSocketConnector();
   const connection = await connector.connect(
     {
       hostname: "does-not-resolve.invalid",
-      port: serverAddress.port,
+      port: serverPort,
       secure: false,
       connectTimeoutMs: 1000,
       resolvedAddress: "127.0.0.1",
@@ -383,5 +409,5 @@ test("HostNodeSocketConnector connects physically while retaining logical hostna
     new AbortController().signal,
   );
   connection.close();
-  await new Promise((resolve) => server.close(resolve));
+  await new Promise<void>((resolve) => server.close(() => resolve()));
 });

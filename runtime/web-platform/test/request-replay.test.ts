@@ -1,9 +1,3 @@
-// @ts-nocheck -- converted from `.mjs` and not yet typed.
-//
-// This file was JavaScript until the suite moved to running TypeScript source directly,
-// and it was never type-checked. The pragma says so out loud rather than leaving the
-// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
-// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Holding a one-shot request body so a retry has something to send.
 //
 // This is the spill area's caller. Until it existed, spilling was a mechanism with no
@@ -32,6 +26,14 @@ import {
   UnreplayableRequestError,
 } from "../src/index.ts";
 import { HostNodeDurableStore } from "../host/node-runtime.ts";
+import { createHostNodePrimitives } from "../host/node-primitives.ts";
+import type { RequestBodyStore } from "../src/fetch/transport.ts";
+import type {
+  FetchTransport,
+  TransportRequest,
+  TransportResponse,
+} from "../src/fetch/transport.ts";
+import { must } from "./harness.ts";
 
 const suite = (name: string, fn: (t: TestContext) => void | Promise<void>): void => {
   test(name, { timeout: 8000 }, fn);
@@ -40,27 +42,27 @@ const encoder = new TextEncoder();
 const none = () => new AbortController().signal;
 
 class ImmediateScheduler {
-  delays = [];
-  errors = [];
+  readonly delays: number[] = [];
+  readonly errors: unknown[] = [];
 
-  enqueue(task) {
+  enqueue(task: () => void): void {
     queueMicrotask(task);
   }
 
-  delay(milliseconds, task) {
+  delay(milliseconds: number, task: () => void): { cancel(): void } {
     this.delays.push(milliseconds);
     queueMicrotask(task);
     return { cancel() {} };
   }
 
-  reportError(error) {
+  reportError(error: unknown): void {
     this.errors.push(error);
   }
 }
 
-function chunkedStream(chunks) {
+function chunkedStream(chunks: readonly string[]): ReadableStream<Uint8Array> {
   let index = 0;
-  return new ReadableStream({
+  return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (index >= chunks.length) controller.close();
       else controller.enqueue(encoder.encode(chunks[index++]));
@@ -68,10 +70,11 @@ function chunkedStream(chunks) {
   });
 }
 
-async function consume(body) {
+async function consume(body: ReadableStream<Uint8Array> | null | undefined): Promise<string> {
   if (body === null || body === undefined) return "";
   const reader = body.getReader();
-  const parts = [];
+  // Bytes rather than chunks: the loop spreads each chunk into this.
+  const parts: number[] = [];
   try {
     while (true) {
       const item = await reader.read();
@@ -85,31 +88,37 @@ async function consume(body) {
 }
 
 /** Fails `failures` times with a retryable transport error, recording each body sent. */
-function flakyTransport(failures) {
-  const sent = [];
+function flakyTransport(failures: number): FetchTransport & {
+  sent: string[];
+  readonly attempts: number;
+} {
+  const sent: string[] = [];
   let attempts = 0;
   return {
     sent,
     get attempts() {
       return attempts;
     },
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       attempts++;
       sent.push(await consume(request.body));
       if (attempts <= failures) throw new TransportError("ECONNRESET", "reset");
-      return { status: 200, statusText: "OK", headers: [], body: null, trailers: null };
+      return { status: 200, statusText: "OK", headers: [], body: null, trailers: undefined };
     },
   };
 }
 
-function area(t, options = {}) {
+function area(
+  t: TestContext,
+  options: Record<string, unknown> = {},
+): { bytes: HostNodeDurableStore; open: () => Promise<DurableSpillArea> } {
   const root = mkdtempSync(join(tmpdir(), "nts-replay-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bytes = new HostNodeDurableStore({ root });
   return { bytes, open: () => DurableSpillArea.open(bytes, options) };
 }
 
-function retrying(store) {
+function retrying(store?: RequestBodyStore): RetryInterceptor {
   return new RetryInterceptor({
     scheduler: new ImmediateScheduler(),
     maxRetries: 3,
@@ -119,9 +128,16 @@ function retrying(store) {
   });
 }
 
-function post(body, overrides = {}) {
+const urls = createHostNodePrimitives().urls;
+
+function post(
+  body: ReadableStream<Uint8Array> | null,
+  overrides: Partial<TransportRequest> = {},
+): TransportRequest {
   return {
-    url: { href: "https://replay.test/upload" },
+    // A parsed record rather than a `{ href }` stub: `TransportRequest.url` is a `URLRecord`,
+    // and the stub satisfied nothing but the one field this file happened to read.
+    url: urls.parse("https://replay.test/upload"),
     method: "POST",
     headers: [],
     body,
@@ -171,9 +187,10 @@ suite("a body under the threshold is held without touching the store", async (t)
   const transport = flakyTransport(1);
   const interceptor = retrying(spilledRequestBodyStore(await open()));
 
-  let listedDuring = null;
+  // Assigned only from inside the dispatch, so it needs to say what it will hold.
+  let listedDuring: readonly unknown[] | null = null;
   const watching = {
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       listedDuring ??= await bytes.list("spill", none());
       return transport.dispatch(request);
     },
@@ -189,11 +206,15 @@ suite("a body over the threshold is in the store while it is held", async (t) =>
   const transport = flakyTransport(1);
   const interceptor = retrying(spilledRequestBodyStore(await open()));
 
-  let listedDuring = null;
+  // Recorded into an array rather than a `let`: the only assignment is inside the dispatch, and
+  // control-flow analysis cannot see that it ran, so afterwards the variable reads as still
+  // holding its initialiser. Pushing keeps the first observation with the same first-write-wins
+  // meaning `??=` had.
+  const listedDuring: (readonly unknown[])[] = [];
   const watching = {
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       const result = await transport.dispatch(request);
-      listedDuring ??= await bytes.list("spill", none());
+      if (listedDuring.length === 0) listedDuring.push(await bytes.list("spill", none()));
       return result;
     },
   };
@@ -209,7 +230,11 @@ suite("a body over the threshold is in the store while it is held", async (t) =>
     "a body larger than the threshold",
     "a body larger than the threshold",
   ]);
-  assert.equal(listedDuring?.length, 1, "the spilled body is in the store during the dispatch");
+  assert.equal(
+    must(listedDuring[0], "the watcher observed the store during the dispatch").length,
+    1,
+    "the spilled body is in the store during the dispatch",
+  );
   assert.deepEqual(await bytes.list("spill", none()), [], "and gone once the dispatch settles");
 });
 
@@ -217,7 +242,7 @@ suite("the held body is released when the dispatch fails too", async (t) => {
   const { bytes, open } = area(t, { memoryThresholdBytes: 4 });
   const failing = {
     attempts: 0,
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       this.attempts++;
       await consume(request.body);
       throw new TransportError("ECONNRESET", "reset");
@@ -255,9 +280,10 @@ suite("a method this interceptor would not retry is not held", async (t) => {
   const transport = flakyTransport(1);
   const interceptor = retrying(spilledRequestBodyStore(await open()));
 
-  let listedDuring = null;
+  // Assigned only from inside the dispatch, so it needs to say what it will hold.
+  let listedDuring: readonly unknown[] | null = null;
   const watching = {
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       listedDuring ??= await bytes.list("spill", none());
       return transport.dispatch(request);
     },
@@ -286,9 +312,10 @@ suite("a body that can already replay itself is not held again", async (t) => {
     open: () => chunkedStream([text]),
   };
 
-  let listedDuring = null;
+  // Assigned only from inside the dispatch, so it needs to say what it will hold.
+  let listedDuring: readonly unknown[] | null = null;
   const watching = {
-    async dispatch(request) {
+    async dispatch(request: TransportRequest): Promise<TransportResponse> {
       listedDuring ??= await bytes.list("spill", none());
       return transport.dispatch(request);
     },
