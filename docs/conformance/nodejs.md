@@ -4828,6 +4828,22 @@ all emit the base field **first** and read correctly. So the trigger for
 base-last ordering is something none of those has, and it is not inheritance,
 module boundaries, abstractness, or field-type representability on their own.
 
+**The two passing modules are not affected by it, and that was checked rather
+than hoped.** After writing that "the module compiles" carries more weight than
+it can bear, the obvious next question is whether this profile's own green rows
+are among the casualties:
+
+    punycode   0 accessors emitted at all -- it has no class getters
+    os        95 accessors, 2 miscompiled: Blob.size, File.lastModified
+              both with 0 call sites -- a declaration and a definition, nothing
+              reaching them
+
+So `punycode` 2 of 2 and `os` 4 of 7 stand as measured. The two miscompiled
+accessors in `os`'s program arrive through the provider chain that also drags in
+the stream dictionaries, and nothing in `os` calls them. That is a narrower and
+better answer than "the counts mean less than they read": for these two modules,
+they mean exactly what they say.
+
 **And a second, worse one in the same file.** `Response__get_status` ignores its
 receiver entirely:
 
