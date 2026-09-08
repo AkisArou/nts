@@ -261,18 +261,34 @@ for (const name of names) {
     continue;
   }
   unexpected++;
+  // A guard that stops holding is a **regression**, and every branch below used
+  // to call it `FIXED` -- the reassuring word, for the one outcome that needs a
+  // person fastest. `isGuard` was computed and then consulted only on the
+  // holding path, so the label was right when nothing was wrong and wrong when
+  // something was.
+  //
+  // Controlled 2026-09-08 rather than asserted, because a check with no
+  // demonstrated failure is a claim: `undefined-required-field`'s expectation
+  // was pointed at a string the backend does not emit, standing in for the fix
+  // regressing, and the harness printed `FIXED       undefined-required-field:
+  // no longer emits it`. It is `REGRESSED` now, and the fixture was restored.
+  //
+  // The sentences below stay as they are -- "no longer emits it" describes a
+  // guard's regression as accurately as a blocker's fix. Only the word was
+  // carrying the wrong meaning.
+  const verdict = isGuard ? "REGRESSED " : "FIXED     ";
   if (failsToCompile !== null) {
-    console.log(`  FIXED       ${name}: the emitted C compiles now. Expected a clang error:`);
+    console.log(`  ${verdict}  ${name}: the emitted C compiles now. Expected a clang error:`);
   } else if (duplicatesC !== null) {
-    console.log(`  FIXED       ${name}: emitted once now, not twice. Expected duplicates of:`);
+    console.log(`  ${verdict}  ${name}: emitted once now, not twice. Expected duplicates of:`);
   } else if (lacksC !== null) {
-    console.log(`  FIXED       ${name}: the backend now emits it. Expected absence of:`);
+    console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
   } else if (emitsC !== null || emitsAddon !== null) {
-    console.log(`  FIXED       ${name}: no longer emits it. Expected:`);
+    console.log(`  ${verdict}  ${name}: no longer emits it. Expected:`);
   } else if (expectsClean) {
     console.log(`  REGRESSED   ${name}: expected no refusal, got:`);
   } else if (isClean) {
-    console.log(`  FIXED       ${name}: no longer refuses. Expected:`);
+    console.log(`  ${verdict}  ${name}: no longer refuses. Expected:`);
   } else {
     console.log(`  CHANGED     ${name}: refuses differently. Expected:`);
   }
