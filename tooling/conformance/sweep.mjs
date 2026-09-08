@@ -229,8 +229,23 @@ function addon(module) {
   // says so on the same line. Not a downgrade -- the tests really do pass -- but
   // the first row on an axis that has only ever reported zero will be quoted,
   // and it should carry its own caveat.
-  const missing = stage === "green" ? shapeNamesMissingFrom(module, artifact) : [];
-  const incomplete = missing.length > 0 ? `incomplete: ${missing.join(", ")} absent` : "";
+  // Computed for *every* module that produced an artifact, not only green ones.
+  //
+  // It was `stage === "green"` because the case it was written for was
+  // `punycode` passing everything with `version` absent. But the modules that
+  // most need this are the ones that build and fail: their missing names are the
+  // whole explanation, and without them a row reads as a behaviour problem.
+  // `buffer` at 0 of 55 looks like fifty-five broken assertions and is one fact
+  // -- it publishes 3 of its 15 exports. `path` at 2 of 22 is eleven absent
+  // functions, and every test that touches one fails with a TypeError about
+  // `undefined`, which names nothing.
+  //
+  // I derived that by hand for five modules today, one addon at a time, before
+  // noticing this line already knew how and was declining to say.
+  const missing = artifact !== null ? shapeNamesMissingFrom(module, artifact) : [];
+  const incomplete = missing.length > 0
+    ? `${stage === "green" ? "incomplete" : "absent"}: ${missing.join(", ")}`
+    : "";
   return {
     stage,
     // Its own field as well as part of `detail`, because the two output paths

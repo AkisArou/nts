@@ -2816,6 +2816,35 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The sweep already knew which exports were missing and declined to say
+
+`shapeNamesMissingFrom` derives, from a module's own `shape.mjs`, the names that
+shim needs and the addon does not publish. It was gated on `stage === "green"`,
+because the case it was written for was `punycode` passing everything with
+`version` absent.
+
+But the modules that most need it are the ones that **build and fail**. Their
+missing names are the whole explanation, and without them a row reads as a
+behaviour problem:
+
+    buffer   0 of 55   ->  11 absent: Blob Buffer File SlowBuffer atob btoa constants isAscii ...
+    path     2 of 22   ->  12 absent: basename dirname extname format isAbsolute join ...
+    os       4 of 8    ->   6 absent: constants cpus getPriority networkInterfaces setPriority userInfo
+
+`buffer` at 0 of 55 looks like fifty-five broken assertions and is one fact: it
+publishes 3 of its 15 exports. Every test that touches an absent name fails with
+a TypeError about `undefined`, which names nothing.
+
+**I derived all three of those by hand today, one addon at a time, before
+noticing this line already knew how and was declining to say it.** The gate was
+a reasonable choice for the case it was written against and became wrong when
+the axis grew a category it did not anticipate — modules that build and publish
+almost nothing, which did not exist when it was written.
+
+Now computed for every module that produced an artifact, labelled `incomplete:`
+on a green row and `absent:` otherwise, since the two mean different things: one
+is a caveat on a pass, the other is the reason for a failure.
+
 ## One failure, four instruments, four mechanisms
 
 Named by the compiler lane and worth stating once for all of them: **a result
