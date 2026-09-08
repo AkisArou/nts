@@ -4949,6 +4949,37 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## An ordering divergence, recorded rather than pinned
+
+**Node runs all expired timers, then the immediate, and it is stable across five
+runs. This profile is not — three runs gave two different orders.**
+
+    node   tick1,tick2,micro1,tick-in-micro,timeout0,timeout-neg,timeout-last,immediate1  (x5)
+    here   tick1,tick2,micro1,tick-in-micro,timeout0,timeout-neg,immediate1,timeout-last
+           tick1,tick2,micro1,tick-in-micro,immediate1,timeout0,timeout-neg,timeout-last  (x2)
+
+The `nextTick` and microtask half is exactly right — `tick1,tick2` before
+`micro1`, and a `nextTick` queued *inside* a microtask still running before any
+timer. What is wrong is the boundary between the timer queue and the immediate
+queue.
+
+The cause is visible in the stand-in: it arms **one** host timer for the whole
+timer queue and re-arms after each drain. So a timer that becomes due *during* a
+drain gets a fresh host timeout queued behind an immediate that was already
+armed, where node's timers phase would have taken it in the same pass.
+
+**It is recorded here and not asserted anywhere.** A test that pins an order this
+implementation does not yet guarantee is a flaky test, and a flaky test is worse
+than a documented gap: it teaches everyone reading the suite to re-run rather
+than to look. The rule from `cpSync` again, arrived at from the other direction —
+there the divergence was stable and asserting it would have pinned a defect; here
+it is unstable and asserting *either* answer would be wrong half the time.
+
+What the timers test does assert is the part that is deterministic: a `Timeout`
+is an object, `ref`, `unref`, `hasRef` and `refresh` all return the handle so
+they chain, and `clearTimeout(undefined)` is a no-op answering `undefined` rather
+than a throw. `Symbol.toPrimitive` is absent by §13 and asserted as such.
+
 ## `EventEmitter`, where the answer depends on *when*
 
 Node keeps one listener array per event and copies it before emitting, so
