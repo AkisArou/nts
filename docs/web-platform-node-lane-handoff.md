@@ -74,7 +74,7 @@ binary on both sides of every slice, on `runtime/web-platform/tsconfig.json`:
   — **but read the `NTS4xxx` zero with the correction in the ledger**: a backend defect
   behind a language refusal never reaches the emitter, so that zero says "nothing
   currently emitted trips the backend", and it gets harder to keep as primaries fall;
-- local Node-host/real-socket corpus **814/814**, zero skipped;
+- local Node-host/real-socket corpus **819/819**, zero skipped;
 - pinned upstream corpus **2,602 tests, 2,574 applicable, 2,566 passing, 8 failing** —
   grown by 169 today and still the same eight long-standing structural failures;
 - compiled axis **138 of 142 cases across 13 functions**, agreeing on jvm, c and llvm,
@@ -154,26 +154,37 @@ nothing here broke anything there, and `bfb7d97d` fixed a live `[object Object]`
 `node:util`'s public surface that neither corpus could see alone. Their sweep is 1,803 of
 1,803 across 22 modules with 0 divergences over 11 differential corpora.
 
-**Two Web IDL deviations are measured, pinned and blocked on one refactor.** Forty-five
-internal methods remain publicly reachable on interface prototypes (down from sixty-three),
-and interface members are non-enumerable where Web IDL requires enumerable. The second
-cannot be fixed before the first, because a blanket enumerability pass would enumerate the
-internals too.
+**The Web IDL surface work is half done and the mechanism is settled.** Six interfaces are
+fully conformant — `AbortSignal`, `Headers`, `TextDecoder`, `TextEncoder`, `TextDecoderStream`,
+`TextEncoderStream`. The non-standard prototype surface is **63 → 37**.
 
-`#private` closed eighteen of them and is free on the frontier — measured, after this file
-carried the opposite claim as a reason not to try. The remaining forty-five resist because
-they are a **cross-class protocol**, not an oversight: six are declared on the structural
-interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost` where a private identifier
-is not legal, the rest are `ReadableStream` delegating to `ReadableByteStreamState`, and
-`Event.initialize` is called from outside the `Event` class. All five that looked safe were
-attempted and all five were refused by `tsc`.
+Three mechanisms, in the order they apply. **`#private`** where a member is used only inside
+its own class — free on the frontier, measured. **Symbol keys** where it crosses classes or
+modules — `Object.getOwnPropertyNames` does not report symbols, so the member leaves the
+enumerable surface while staying reachable, and the keys are never re-exported from the public
+barrel. **Then** the enumerability fix, which is only safe once a prototype has no
+non-standard names left.
 
-**The mechanism that closes both is symbol-keyed members.** `readable.ts` already uses that
-pattern for `readableStreamBrand` and two others, and `Object.getOwnPropertyNames` does not
-report symbol keys — so the members leave the enumerable surface and the enumerability fix
-becomes safe in the same move. It is a cross-module refactor touching `cache/`, `http1/`,
-`dispatch/` and `websocket/`, and it is the single highest-value piece of work left in this
-lane, because it also unblocks `streams/idlharness`.
+**`tsc` finds every syntactic use of a renamed member and none of the reflective ones.** `in`,
+`typeof x.name`, `hasOwnProperty`, a name in a lookup table. Converting `AbortSignal.subscribe`
+produced type errors in nine untouched modules and compiled cleanly past the one site that
+mattered — an `"subscribe" in signal` brand check that then answered `false` for every real
+signal. Grep for those by hand.
+
+**`Request` and `Response` are clean and enumerable but shape-deviant**: they include the
+`Body` mixin, and Web IDL copies an included mixin's members onto the interface prototype
+where these inherit them from a shared base class. Pinned in the direction it holds.
+
+**One cross-lane dependency is asserted here and cannot be seen from either corpus.** The
+NodeJS lane brand-checks `AbortSignal` with `"aborted" in signal` at five sites across
+`internal/`, `util/` and `stream/`. Symbol-keying `aborted` would silently break all five.
+It is asserted in `webidl-surface.test.mjs` with their modules named.
+
+**What remains** is `ReadableStream`'s seventeen, `EventTarget`'s seven, `Event`'s seven and
+`WebSocket`'s six. The streams ones are the hard set: six are declared on the structural
+interfaces `ReadableByteStreamHost` and `ReadableStreamBYOBHost`, and a name-based scan counts
+202 call sites but conflates them with the legitimate `enqueue`, `read` and `desiredSize` on
+controllers and readers. **That one needs a type-aware pass, not a regular expression.**
 
 **`idlharness` runs for `encoding` and is blocked elsewhere by a profile question.** The
 harness classifies its environment as a `Window`, a worker scope, or a plain realm. This
