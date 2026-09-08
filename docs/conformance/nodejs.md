@@ -2816,6 +2816,36 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `punycode` was already whole, and nothing said so
+
+It has been carried as "green and incomplete — `version` absent". Measured on
+2026-09-08 against node in the same process:
+
+    decode  encode  toASCII  toUnicode  ucs2  version      <- ours
+    decode  encode  toASCII  toUnicode  ucs2  version      <- node's
+
+Same six names, same types, `version` reads `"2.1.0"` on both, and `ucs2`
+carries `decode` and `encode`. The claim was historical. **Nothing asserted any
+of it**, which is why it could stay in the ledger unchallenged.
+
+Node ships two test files for this module and neither reads `version` or
+enumerates the surface — upstream `punycode` is a vendored userland library
+whose exports cannot go missing, so there was no failure for a test to catch.
+A compiled artifact *can* lose an export silently, and the ledger said it had.
+
+`local/export-surface-static.js` asserts the whole surface: the sorted key list
+by `deepStrictEqual` so an *added* name fails too, the exact `version` string,
+and `ucs2` as an object of two functions round-tripping a surrogate pair — so
+`ucs2.decode` cannot be a `charCodeAt` map and pass.
+
+Pinning `version` is deliberate. It is a string constant, and a constant export
+is exactly what the backend was dropping until this morning: a numeric literal
+was folded into its readers with nothing left for the export table to name.
+Strings were unaffected, which is the only reason this one survived.
+
+**`punycode` compiled is now 3 of 3**, and the new file fails under
+`--sabotage`, so the extra pass is not a hollow one.
+
 ## Every module, every cone: one shape reaches all of them
 
 `cascade-reach.mjs` run over all 22 modules on the 11:30 binary. Refusal shapes
