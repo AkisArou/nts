@@ -29,6 +29,7 @@ bool nts_stderr_is_tty(void);
  * shared translation unit can spell. See `async.c`. */
 void nts_async_context_set(NtsHeader *frame);
 void nts_on_collected(NtsValue resource, NtsHeader *on_collected);
+void nts_schedule_unreferenced_immediate(NtsHeader *callback);
 void nts_process_really_exit(double code);
 /* `warning` is `NtsHeader *` rather than `struct NtsObj_Error *`.
  *
