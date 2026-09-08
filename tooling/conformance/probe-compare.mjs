@@ -836,6 +836,22 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "net-defaults.ts",
+    module: "net",
+    // The whole of net's reachable native half, which is two bindings: 28 of
+    // its 30 have no C at all. A row saying "2 of 30" is more honest than net
+    // being absent from the table.
+    checks(m) {
+      const net = require("node:net");
+      return [
+        { label: "autoSelectFamily default", mine: m.probeAutoSelectFamily(), theirs: net.getDefaultAutoSelectFamily() },
+        { label: "attempt timeout default", mine: m.probeAutoSelectFamilyTimeout(), theirs: net.getDefaultAutoSelectFamilyAttemptTimeout() },
+        { label: "stable across calls", mine: m.probeAutoSelectFamilyStable(), theirs: true },
+        { label: "checkpoint survives 1000", mine: m.probeCheckpointSurvives(1000), theirs: true },
+      ];
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
