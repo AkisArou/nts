@@ -10,33 +10,62 @@ Two numbers per row: `jvm/Java` **at or under 1.00x** against the hand-written
 
 ## Where the rows stand
 
-Measured on the JVM lane, all 51 cases, nothing refused. `->` marks a row this
-lane has moved.
+**Re-taken from the current tree on 2026-09-08, all 51 cases, nothing refused.**
+The previous table was read from `~/.cache/nts-jvm-sweep`, which is pinned at
+`f071672b` from 08:41 and so predates this morning's `uirem` fix -- see the
+stale-worktree section below. `->` marks a row this lane has moved. A row marked
+*busy* or *jit* is one `nts-bench` itself flagged: another compiler was running,
+or the same binary varied by more than 10% across five runs. **Those four are
+not measured clean and should not be quoted.**
+
+**25 rows above 1.00x, 26 at or under it.**
 
 | row | jvm/Java | note |
 | --- | --- | --- |
-| `node-utf8` | 6.86x | blocked: 62% is `toInt32`, `narrow.rs` owns it |
-| `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
-| `array-from` | 2.14x | **priced: 5.9x on the set walk** -- the lowering's, below |
-| `array-predicates` | 1.74x | at its floor: every helper inlines; the wrapper is the row |
-| `absences` | 2.66x -> **1.27x** | blocked: 34% is `uirem` over an `l2i` counter |
-| `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
-| `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
+| `node-utf8` | 6.69x *busy* | blocked: 62% is `toInt32`, `narrow.rs` owns it |
+| `symbol-keyed-map` | 2.92x *jit* | blocked: 52% is `toInt32` |
+| `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
+| `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
+| `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
+| `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
-| `generic-classes` | 1.13x | no cause found: assembly is comparable |
-| `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
-| `bytes` | 1.19x -> **1.12x** | unsigned remainder |
-| `array-methods` | 1.17x | 25% is `toInt32` on an `f64` accumulator -- blocked |
-| `number-format-double` | 1.09x | 55% our Grisu port vs the JDK's own formatter |
-| `module-closures` | 1.06x | closure ABI is `(D)D` where the reference's is `(I)I` |
-| `elementwise` | 1.03x | at its floor: both lanes vectorise |
-| `upcast` | 1.07x -> **1.01x** | unsigned remainder |
+| `generic-classes` | 1.17x | no cause found: assembly is comparable |
+| `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
+| `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
+| `elementwise` | 1.08x | at its floor: both lanes vectorise |
+| `instanceof` | 3.74x -> **1.08x** | residual is the `uirem` guard branch |
+| `in-narrowing` | 1.07x | **not previously listed** |
+| `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
+| `awfy-sieve` | 1.25x -> **1.05x** *busy jit* | moved without being worked on; re-measure clean |
+| `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
+| `objects` | 0.96x -> **1.05x** *busy jit* | flagged both ways; it was a win, re-measure clean |
+| `generator` | 1.04x | **not previously listed** |
+| `symbol-keys` | 1.04x | **not previously listed** |
+| `arrays` | 1.03x | **not previously listed** |
+| `fib` | 1.03x | **not previously listed** |
+| `upcast` | 1.07x -> **1.02x** | the `uirem` residual |
+| `checksum` | 1.01x | **not previously listed** |
+| `closure-merge` | 1.01x | **not previously listed** |
+| `growth-grown` | 1.01x | **not previously listed** |
 
-Won: `exceptions` 0.01x, `bigint` 0.19x, `awfy-permute` 0.71x, `mandelbrot`
-0.81x, `awfy-list` 0.93x, `objects` 0.96x, `awfy-nbody` 0.99x. `objects` read
-1.07x in the first sweep and that was one of the 32 rows measured while another
-session compiled -- re-measured quiet, it is a win. Four AWFY rows under hand-written
-Java, two at parity, two above.
+**Eight rows were losing and unlisted**, all between 1.01x and 1.07x, which is
+why they were invisible: a table written from the rows someone had already
+looked at is a record of attention rather than of the lane. `in-narrowing` at
+1.07x is the largest of them.
+
+At or under 1.00x, best first: `exceptions` 0.01, `bigint` 0.17,
+`array-mutations` 0.67, `awfy-permute` 0.72, `loop` 0.75, `awfy-mandelbrot`
+0.84, `closures` 0.85, `map-and-set` 0.86, `user-iterable` 0.90, `awfy-list`
+0.93, `case-convert` 0.94, `logical-assignment` 0.94, `substrings` 0.95,
+`erasure-stored-unknown` 0.96, `awfy-bounce` 0.97, `awfy-towers` 0.98,
+`erasure-stored-typed` 0.98, `dispatch` 0.99, `pipeline` 0.99, and at 1.00
+exactly: `accumulate`, `awfy-nbody`, `erasure-typed`, `erasure-unknown`,
+`growth-fixed`, `number-format`, `strings`.
+
+**Five AWFY rows at or under hand-written Java, one at 1.05 pending a clean
+run, two above.** `loop` at 0.75x is worth noting against its own history: it
+was 1.93x when this lane started and the cause was number specialization
+rather than codegen.
 
 ## bytes/op, all 51 measured against Java
 
