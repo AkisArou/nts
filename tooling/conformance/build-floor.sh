@@ -25,6 +25,20 @@ cd "$(dirname "$0")/../.."
 # Measured 2026-09-08 on the compiler lane's gate binary, from a pinned tree.
 FLOOR="async_hooks buffer diagnostics_channel os path punycode querystring string_decoder url"
 
+# And the ones that do not, which is the half that rots.
+#
+# A list of "known to fail" that nobody updates quietly becomes a list nobody
+# reads, and then a module that *started* building is invisible -- the same
+# failure as a `-Werror` suppression outliving its cause. So this is checked in
+# both directions: a name in `FLOOR` that stops building is a regression, and a
+# name in `BLOCKED` that starts building is news that has to be acted on rather
+# than a pleasant surprise nobody notices.
+#
+# Twelve of these fail on `blockers/duplicate-type-name` and `timers` fails on
+# an undeclared identifier. When that fixture is fixed most of this list moves,
+# and the run will say so by name.
+BLOCKED="assert console dgram events fs http net process readline stream timers util zlib"
+
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 if [ ! -x "$compiler" ]; then
   echo "  no compiler at $compiler; the compiler lane builds it" >&2
@@ -47,6 +61,16 @@ for module in $FLOOR; do
   failures=$((failures + 1))
 done
 
+joined=0
+for module in $BLOCKED; do
+  out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
+    timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1)
+  if printf '%s' "$out" | grep -q 'bytes$'; then
+    printf '  %-22s NOW BUILDS -- move it into FLOOR and say what changed\n' "$module"
+    joined=$((joined + 1))
+  fi
+done
+
 echo
 if [ "$built" -eq 0 ] && [ "$failures" -eq 0 ]; then
   # An empty floor is not a clean run. The list is written above rather than
@@ -54,5 +78,9 @@ if [ "$built" -eq 0 ] && [ "$failures" -eq 0 ]; then
   echo "  INSTRUMENT FAILURE: the floor list is empty."
   exit 2
 fi
-echo "  $built of $(printf '%s\n' $FLOOR | wc -l | tr -d ' ') still build, $failures regressed"
+total=$(printf '%s\n' $FLOOR | wc -l | tr -d ' ')
+echo "  $built of $total still build, $failures regressed, $joined newly building"
+# A newly-building module is not a failure and must not be silent either. It is
+# reported and does not fail the run, because the right response is to move the
+# name and record why, not to make the run red until somebody does.
 [ "$failures" -eq 0 ]
