@@ -1,4 +1,4 @@
-// expect: a parameter of unrepresentable type (`ArrayBufferView`)
+// expect: nothing refused -- FIXED, kept as a guard
 //
 // `ArrayBufferView` as a parameter does not lower, alone or in a union, so the
 // function is never compiled and the wrapper reports it as absent rather than as
@@ -47,12 +47,20 @@
 // `Uint8Array` only the wrapper half would be missing. It also means a fix that
 // stops at `Uint8Array` — which is the obvious first step and the one
 // `f64-parameter` suggests — publishes nothing for this module.
+// **FIXED in `ac27dac4`, kept as a guard.** `ArrayBufferView` is a
+// representation now: `writeView` lowers to `(buf: managed<anyview>) -> f64`
+// and reads `.byteLength` off it, and the optional form narrows and lowers too.
+//
+// The union case that used to live here moved to
+// `blockers/anyview-readback-after-typeof`. It survived the fix, and leaving it
+// in would have kept this fixture reporting -- for a defect it is not named
+// for, which is exactly the shape that makes a fixture worthless. What remains
+// are the two cases this was actually about.
+//
+// The original filing, kept because the distinction it drew was the useful part:
+//
 export function writeView(buf: ArrayBufferView): string {
   return buf.byteLength.toString();
-}
-
-export function writeUnion(buf: ArrayBufferView | string): string {
-  return typeof buf === "string" ? buf : buf.byteLength.toString();
 }
 
 export function endOptional(buf?: ArrayBufferView): string {
