@@ -217,6 +217,22 @@ plan and the repository owner**, not for a lane that would answer it in whicheve
 turns a fixture green. `encoding` and `streams` are unaffected because their IDL is
 `[Exposed=*]` throughout.
 
+**Two follow-ups agreed with the repository owner, to be done after JSON lands.** Both were
+raised while the JSON work was in flight and both were deliberately deferred rather than
+folded into it.
+
+1. **Type the host tests.** The suite now runs TypeScript source directly, and sixty-three of
+   the sixty-four files carry `// @ts-nocheck` because they were JavaScript and were never
+   checked. `grep -l "@ts-nocheck" tooling/conformance/web-platform/test/*.ts` is the list.
+   Measured cost: **2,784 errors** under the repository's strict profile, **1,808** relaxed —
+   mostly implicit `any` on helper parameters and argument mismatches from tests written
+   loosely against typed APIs. `json-parse.test.ts` is the exception and the model: written
+   typed, zero errors, no pragma.
+2. **Move the tests under `runtime/web-platform/`.** They sit in
+   `tooling/conformance/web-platform/test/` for historical reasons rather than a decided one,
+   and they now import the source directly, which makes the distance look stranger than it is.
+   The upstream WPT runner, the unrouted gate and `check.sh` all reference those paths.
+
 **Still open, and why.** The **public server module or package** is a repository-layout
 decision. The **Undici API ledger** still cannot be written honestly with nothing pinned.
 **Server-side TLS** — terminating `wss://` — is deliberately separate: it needs a
