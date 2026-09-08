@@ -2816,6 +2816,51 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Two fixtures for what was behind the collisions
+
+Both new, both reproducing on the 14:18 probe binary, and neither refuses
+anything — `emit-c` reports success and publishes a wrapper, and the defect is a
+line of C clang will not accept. So both assert against the emitted file.
+
+**`blockers/erased-truthiness`** — a truthiness test on an erased value is a C
+cast rather than a tag check:
+
+    if (value)          ->   v5 = (bool)v0;      // v0 is NtsValue
+    error: operand of type 'NtsValue' where arithmetic or pointer type is required
+
+`NtsValue` is a tag and a payload, so there is nothing for `(bool)` to do with
+it. JavaScript truthiness asks about the tag first — `undefined` and `null` are
+false whatever the payload — and the payload second. That is a function, not a
+conversion. **Most common remaining error in the corpus**: 8 sites in `stream`,
+8 in `fs`, 3 each in `events` and `assert`, 1 in `timers`. It needs no new
+`ManagedType`.
+
+**`blockers/closure-as-function-value`** — a closure stored in a variable of a
+*named function type* gets two C types that do not relate:
+
+    error: incompatible pointer types assigning to 'NtsObj_Fn__4 *'
+           from 'NtsObj_Closure0 *'
+
+The declaration produces the structural spelling, the arrow produces a closure
+object, and both are correct descriptions of the same value. The alias is
+load-bearing: `let stored: Drain | undefined` produces it and an inferred `let`
+does not, so the profile meets it where it writes its host contracts down rather
+than everywhere it uses a callback. Second most common: 4 sites in `events`, 4
+in `stream`, 3 in `fs`.
+
+### One defect with no fixture, and it is being reported as such
+
+`timers` emits a vtable entry for `Closure54__call` with no declaration and no
+body — the symbol occurs exactly once in the whole file. Three sibling closures
+get all three artefacts.
+
+**Two hypotheses were tried and both were wrong.** A closure inside a refused
+function still gets its body; a closure taken as a value gets its body too — that
+second attempt is what produced `closure-as-function-value` instead. So this is
+recorded with the evidence from the real module and *without* a minimal
+reproduction, which is the honest state rather than a fixture that reproduces
+something else and is labelled as this.
+
 ## `duplicate-type-name` worked completely, and nothing newly builds
 
 Measured on the compiler lane's 14:18 probe binary, from a pinned tree:
