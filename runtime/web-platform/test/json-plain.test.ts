@@ -145,6 +145,47 @@ suite("a throwing getter propagates its own error", () => {
   assert.throws(() => JSON.stringify(value), CustomError);
 });
 
+suite("the key handed to user code is a string, even for an array element", () => {
+  // The existing replacer suite logs `${key}` into a template, which stringifies a number
+  // exactly as it stringifies a string -- so it would pass unchanged if an array element's
+  // index reached user code as a number. 25.5.4.2 says the key is a String, and node agrees.
+  // This is the only assertion that can tell the difference.
+  test("a replacer is called with a string index", () => {
+    const seen: string[] = [];
+    stringifyPlain(["a", "b"], {
+      replacer(this: unknown, key: string, held: unknown): unknown {
+        seen.push(typeof key);
+        return held;
+      },
+    });
+    const theirs: string[] = [];
+    JSON.stringify(["a", "b"], function (this: unknown, key: string, held: unknown): unknown {
+      theirs.push(typeof key);
+      return held;
+    });
+    assert.deepEqual(seen, theirs);
+    assert.ok(seen.every((kind) => kind === "string"), `saw ${seen.join(",")}`);
+  });
+
+  test("toJSON is called with a string index", () => {
+    const seen: string[] = [];
+    const element = {
+      toJSON(this: unknown, key: string): unknown {
+        seen.push(typeof key);
+        return 1;
+      },
+    };
+    stringifyPlain([element, element]);
+    const theirs: string[] = [];
+    JSON.stringify([
+      { toJSON(this: unknown, key: string): unknown { theirs.push(typeof key); return 1; } },
+      { toJSON(this: unknown, key: string): unknown { theirs.push(typeof key); return 1; } },
+    ]);
+    assert.deepEqual(seen, theirs);
+    assert.ok(seen.every((kind) => kind === "string"), `saw ${seen.join(",")}`);
+  });
+});
+
 suite("a replacer sees the same keys, values and this as node's", () => {
   const shapes: unknown[] = [
     { a: 1, b: [1, 2], c: { d: null } },

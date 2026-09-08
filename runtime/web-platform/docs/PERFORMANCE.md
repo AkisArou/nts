@@ -176,6 +176,42 @@ strictly less work and cost nothing to read -- but they buy nothing, and **that 
 from the pair above and I did not predict it.** Allocation being nearly free means removing an
 allocation is nearly worthless, which is the same sentence read in the other direction.
 
+**"The escaper's code unit can be made an integer from TypeScript."** It cannot, and this is
+settled rather than untried. Six spellings were ruled out by reading emitted C: hoisting
+`value.length`, three loop shapes (`for` against `.length`, `while`, and an `at < s.length ? ... :
+0` ternary), mutating the index inside the body, splitting the `number`-typed consumer so the unit
+is only ever compared, breaking the constant shared with the neighbour comparison, and deleting
+the checked lookahead read entirely. Every one: float constants 8 or 9, integer constants 0.
+
+The reason is visible in the shipped artifacts. **Integer code units come from bitwise operators,
+not from a rule about where the unit came from.**
+
+| function | bitwise ops | integer unit constants |
+| --- | ---: | ---: |
+| `utf8Write` | 15 | 8 |
+| `unicodeEscape` | 6 | takes `int32_t`, 30 int32 locals to 10 double |
+| `quoteJSONString` | 2 | 0 |
+
+`unicodeEscape` gets `int32_t` for free because its body is `(unit >> 4) & 0xf`. `quoteJSONString`
+only ever *compares* its unit, and comparing does not earn the representation. So the only
+source-level lever is a bitwise operator -- which is `| 0`, already measured and already refuted,
+because the conversion is per character and so is the saving. There is no third spelling.
+
+**"Making the array index lazy will help the stringifier."** `SerializeJSONArray` never puts the
+key in the output, so `String(frame.index)` per element is a string nobody reads -- 24000 of them
+on the test document. Passing the index as a number and calling `String` only where the
+specification hands it to user code is strictly less work.
+
+Not measurable: 10.758/10.622/10.605ms against 10.743/10.798/10.574ms, three runs each. V8 caches
+small-integer strings, so there was nothing to save. Reverted, because unlike the redundant slice
+it also cost a `string | number` union and two casts to read.
+
+**What survived it is the test.** The existing replacer suite logged `${key}` into a template,
+which stringifies a number exactly as it stringifies a string, so it would have passed unchanged
+had the index reached user code as a number -- and 25.5.4.2 says the key is a String.
+`json-plain.test.ts` now asserts `typeof key` for both a replacer and a `toJSON` on an array
+element, against node. Both fail if the `String(key)` is removed.
+
 **"Serialization is allocation-bound; allocation is the lever."** Written into an earlier goal
 from a profile showing `nts_each_reference` at 20%, with no counterfactual. The append/join pair
 above disproves it. The error was substituting a ranking for a price, and it is the second time
@@ -219,6 +255,13 @@ per-case `provider` file, which are the two counterfactuals that come for free.
 
 Reading the emitted C in `target/bench/<case>.specialized.c` is the one measurement that does not
 care whether the machine is busy.
+
+**`nts emit-c <project> --main`, never bare `emit-c`.** Bare `emit-c` roots *every export*, and a
+root is a wall -- its parameters stay as wide as their declared types because the next caller is a
+linker away. `--main` roots only the module initialiser, which is what `nts-bench` does, and only
+then does the emission match what ships. Four probe results in this lane were taken the wrong way
+and had to be re-run; two of them reversed. Note that under `--main` an export nothing calls is
+dead, so a probe needs a module-level `export const x = work(seed)` to keep its subject alive.
 
 ## The blocker that makes all of this unreachable
 
