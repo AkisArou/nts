@@ -4633,7 +4633,13 @@ Fourteen of `process`'s, in a module that also does not build — `cwd`,
 `execPath`, `argv0`, the four `get{e,}{u,g}id` calls, `env` present and absent,
 `envHas` both ways, and the memory and uptime shapes. All agree.
 
-**308 declared, 39 compared.** `punycode` is green and contributes nothing to
+Eleven of `internal`'s, which every module shares — the errno-to-name mapping
+that node exposes as `util.getSystemErrorName` and that sits under every error
+path in the profile, checked across `ENOENT`, `EACCES`, `EEXIST`, `EISDIR`,
+`EINVAL`, `EPIPE` and `ECONNRESET`, plus platform, release and the two TTY
+probes. All agree.
+
+**308 declared, 50 compared.** `punycode` is green and contributes nothing to
 this column, because it has no native half — it is string algorithms, which is
 part of why it was the first module to pass and why passing it said less about
 the C than the row implied.
