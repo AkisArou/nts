@@ -98,10 +98,12 @@ import {
   displayBytePath,
   encodeFileBytes,
   encodeFileName,
+  encodeNormalizedFileBytes,
   emitRecursiveRmdirWarning,
   getOptions,
   getReadFileBuffer,
   getReadFileOptions,
+  bothPathsAsBytes,
   getValidatedBytePath,
   getValidatedPath,
   normalizeRmOptions,
@@ -201,6 +203,17 @@ declare function nts_fs_rename(from: string, to: string): number;
 declare function nts_fs_copyfile(from: string, to: string, flags: number): number;
 declare function nts_fs_access(path: string, mode: number): number;
 declare function nts_fs_access_bytes(path: number[], mode: number): number;
+declare function nts_fs_unlink_bytes(path: number[]): number;
+declare function nts_fs_mkdir_bytes(path: number[], mode: number): number;
+declare function nts_fs_rmdir_bytes(path: number[]): number;
+declare function nts_fs_chmod_bytes(path: number[], mode: number): number;
+declare function nts_fs_chown_bytes(path: number[], uid: number, gid: number): number;
+declare function nts_fs_utimes_bytes(path: number[], atime: number, mtime: number): number;
+declare function nts_fs_lutimes_bytes(path: number[], atime: number, mtime: number): number;
+declare function nts_fs_rename_bytes(from: number[], to: number[]): number;
+declare function nts_fs_copyfile_bytes(from: number[], to: number[], flags: number): number;
+declare function nts_fs_link_bytes(from: number[], to: number[]): number;
+declare function nts_fs_readlink_bytes(path: number[]): number[];
 declare function nts_fs_chmod(path: string, mode: number): number;
 declare function nts_fs_chown(path: string, uid: number, gid: number): number;
 declare function nts_fs_lchown(path: string, uid: number, gid: number): number;
@@ -1018,11 +1031,74 @@ export interface MkdirOptions {
   mode?: number | string;
 }
 
-export function mkdirSync(
-  path: PathLike,
+/**
+ * `mkdir` on a path that is bytes rather than text.
+ *
+ * The recursive walk splits on the byte `0x2f` rather than on a string `"/"`,
+ * because the components either side of a separator need not decode as UTF-8
+ * and re-encoding them would create a directory with a different name than the
+ * caller asked for. The *return* value is still a string: node answers the first
+ * created path as a string even when it was given a Buffer, which was read off
+ * node rather than assumed.
+ */
+function mkdirBytes(
+  path: number[],
   options?: number | string | MkdirOptions,
 ): string | undefined {
-  const validatedPath = getValidatedPath(path);
+  const requestedMode = typeof options === "number" || typeof options === "string"
+    ? options
+    : (options?.mode ?? 0o777);
+  const mode = parseFileMode(requestedMode, "mode", 0o777);
+  let recursive = false;
+  if (options !== null && typeof options === "object" && options.recursive !== undefined) {
+    validateBoolean(options.recursive, "options.recursive");
+    recursive = options.recursive;
+  }
+
+  if (!recursive) {
+    check(nts_fs_mkdir_bytes(path, mode), "mkdir", displayBytePath(path));
+    return undefined;
+  }
+
+  const SLASH = 0x2f;
+  const prefix: number[] = [];
+  let finalResult = 0;
+  let firstCreated: string | undefined;
+  let index = 0;
+  while (index < path.length) {
+    if (path[index] === SLASH) {
+      prefix.push(SLASH);
+      index++;
+      continue;
+    }
+    while (index < path.length && path[index] !== SLASH) {
+      prefix.push(path[index] ?? 0);
+      index++;
+    }
+    const result = nts_fs_mkdir_bytes(prefix.slice(), mode);
+    finalResult = result;
+    if (result === 0 && firstCreated === undefined) {
+      firstCreated = displayBytePath(prefix.slice());
+    }
+    // -17 is EEXIST: a component already there is not an error for a recursive
+    // make, exactly as in the string path above.
+    if (result < 0 && result !== -17) {
+      check(result, "mkdir", displayBytePath(prefix.slice()));
+    }
+  }
+  if (finalResult < 0 && finalResult !== -17) {
+    check(finalResult, "mkdir", displayBytePath(path));
+  }
+  return firstCreated;
+}
+
+export function mkdirSync(
+  path: BytePathLike,
+  options?: number | string | MkdirOptions,
+): string | undefined {
+  const validated = getValidatedBytePath(path);
+  if (typeof validated !== "string") return mkdirBytes(validated, options);
+  const validatedPath = validated;
   const requestedMode = typeof options === "number" || typeof options === "string"
     ? options
     : (options?.mode ?? 0o777);
@@ -1070,26 +1146,37 @@ export function mkdirSync(
   return firstCreated;
 }
 
-export function rmdirSync(path: PathLike, options?: RmdirOptions): void {
-  const validatedPath = getValidatedPath(path);
+export function rmdirSync(path: BytePathLike, options?: RmdirOptions): void {
+  const validatedPath = getValidatedBytePath(path);
   const settings = normalizeRmdirOptions(options);
+  const asBytes = typeof validatedPath === "string" ? undefined : validatedPath;
   if (settings.recursive) {
     emitRecursiveRmdirWarning();
-    const columns = nts_fs_stat(validatedPath, false);
+    const columns = asBytes === undefined
+      ? nts_fs_stat(validatedPath as string, false)
+      : nts_fs_stat_bytes(asBytes, false);
     if (columns.length === 0) {
-      throw uvException(-nts_errno(), "stat", validatedPath);
+      throw uvException(-nts_errno(), "stat", displayBytePath(validatedPath));
     }
     if (new Stats(columns).isDirectory()) {
-      rmSyncValidated(validatedPath, {
+      const recursiveOptions = {
         force: false,
         maxRetries: settings.maxRetries,
         recursive: true,
         retryDelay: settings.retryDelay,
-      });
+      };
+      if (asBytes === undefined) {
+        rmSyncValidated(validatedPath as string, recursiveOptions);
+      } else {
+        rmSyncValidatedBytes(asBytes, recursiveOptions);
+      }
       return;
     }
   }
-  check(nts_fs_rmdir(validatedPath), "rmdir", validatedPath);
+  const result = asBytes === undefined
+    ? nts_fs_rmdir(validatedPath as string)
+    : nts_fs_rmdir_bytes(asBytes);
+  check(result, "rmdir", displayBytePath(validatedPath));
 }
 
 export function mkdtempSync(prefix: BytePathLike): string;
@@ -1152,36 +1239,47 @@ export function mkdtempDisposableSync(
 
 // ------------------------------------------------------------------- links
 
-export function unlinkSync(path: PathLike): void {
-  const validatedPath = getValidatedPath(path);
-  check(nts_fs_unlink(validatedPath), "unlink", validatedPath);
+export function unlinkSync(path: BytePathLike): void {
+  const validatedPath = getValidatedBytePath(path);
+  const result = typeof validatedPath === "string"
+    ? nts_fs_unlink(validatedPath)
+    : nts_fs_unlink_bytes(validatedPath);
+  check(result, "unlink", displayBytePath(validatedPath));
 }
 
-export function renameSync(from: PathLike, to: PathLike): void {
-  const validatedFrom = getValidatedPath(from, "oldPath");
-  const validatedTo = getValidatedPath(to, "newPath");
-  check(nts_fs_rename(validatedFrom, validatedTo), "rename", validatedFrom, validatedTo);
+export function renameSync(from: BytePathLike, to: BytePathLike): void {
+  const validatedFrom = getValidatedBytePath(from, "oldPath");
+  const validatedTo = getValidatedBytePath(to, "newPath");
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  const result = asBytes === null
+    ? nts_fs_rename(validatedFrom as string, validatedTo as string)
+    : nts_fs_rename_bytes(asBytes[0], asBytes[1]);
+  check(result, "rename", displayBytePath(validatedFrom), displayBytePath(validatedTo));
 }
 
 export function copyFileSync(
-  from: PathLike,
-  to: PathLike,
+  from: BytePathLike,
+  to: BytePathLike,
   mode: number | null = 0,
 ): void {
-  const validatedFrom = getValidatedPath(from, "src");
-  const validatedTo = getValidatedPath(to, "dest");
-  check(
-    nts_fs_copyfile(validatedFrom, validatedTo, validateAccessMode(mode)),
-    "copyfile",
-    validatedFrom,
-    validatedTo,
-  );
+  const validatedFrom = getValidatedBytePath(from, "src");
+  const validatedTo = getValidatedBytePath(to, "dest");
+  const flags = validateAccessMode(mode);
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  const result = asBytes === null
+    ? nts_fs_copyfile(validatedFrom as string, validatedTo as string, flags)
+    : nts_fs_copyfile_bytes(asBytes[0], asBytes[1], flags);
+  check(result, "copyfile", displayBytePath(validatedFrom), displayBytePath(validatedTo));
 }
 
-export function linkSync(from: PathLike, to: PathLike): void {
-  const validatedFrom = getValidatedPath(from, "existingPath");
-  const validatedTo = getValidatedPath(to, "newPath");
-  check(nts_fs_link(validatedFrom, validatedTo), "link", validatedFrom, validatedTo);
+export function linkSync(from: BytePathLike, to: BytePathLike): void {
+  const validatedFrom = getValidatedBytePath(from, "existingPath");
+  const validatedTo = getValidatedBytePath(to, "newPath");
+  const asBytes = bothPathsAsBytes(validatedFrom, validatedTo);
+  const result = asBytes === null
+    ? nts_fs_link(validatedFrom as string, validatedTo as string)
+    : nts_fs_link_bytes(asBytes[0], asBytes[1]);
+  check(result, "link", displayBytePath(validatedFrom), displayBytePath(validatedTo));
 }
 
 export function symlinkSync(
@@ -1207,17 +1305,29 @@ export function symlinkSync(
   );
 }
 
-export function readlinkSync(path: PathLike): string;
+export function readlinkSync(path: BytePathLike): string;
 export function readlinkSync(
-  path: PathLike,
+  path: BytePathLike,
   options: string | FileOptions | null,
 ): EncodedFileName;
 export function readlinkSync(
-  path: PathLike,
+  path: BytePathLike,
   options?: string | FileOptions | null,
 ): EncodedFileName {
   const settings = getOptions(options);
-  const validatedPath = getValidatedPath(path);
+  const validatedPath = getValidatedBytePath(path);
+  // The byte path answers the target as bytes as well. A symlink target is no
+  // more required to decode as UTF-8 than a filename is, so reading one back
+  // through the string binding would flatten it to replacement characters
+  // before the caller could ask for a Buffer.
+  if (typeof validatedPath !== "string") {
+    const bytes = nts_fs_readlink_bytes(validatedPath);
+    checkErrno("readlink", displayBytePath(validatedPath));
+    return encodeNormalizedFileBytes(
+      bytes,
+      normalizeFileResultEncoding(settings.encoding),
+    );
+  }
   const target = nts_fs_readlink(validatedPath);
   checkErrno("readlink", validatedPath);
   return encodeFileName(target, settings.encoding);
@@ -1304,20 +1414,23 @@ export function _realpathSyncNative(
 
 // ------------------------------------------------------------- permissions
 
-export function chmodSync(path: PathLike, mode: number | string): void {
-  const validatedPath = getValidatedPath(path);
-  check(
-    nts_fs_chmod(validatedPath, parseFileMode(mode, "mode")),
-    "chmod",
-    validatedPath,
-  );
+export function chmodSync(path: BytePathLike, mode: number | string): void {
+  const validatedPath = getValidatedBytePath(path);
+  const parsed = parseFileMode(mode, "mode");
+  const result = typeof validatedPath === "string"
+    ? nts_fs_chmod(validatedPath, parsed)
+    : nts_fs_chmod_bytes(validatedPath, parsed);
+  check(result, "chmod", displayBytePath(validatedPath));
 }
 
-export function chownSync(path: PathLike, uid: number, gid: number): void {
-  const validatedPath = getValidatedPath(path);
+export function chownSync(path: BytePathLike, uid: number, gid: number): void {
+  const validatedPath = getValidatedBytePath(path);
   validateOwnerId(uid, "uid");
   validateOwnerId(gid, "gid");
-  check(nts_fs_chown(validatedPath, uid, gid), "chown", validatedPath);
+  const result = typeof validatedPath === "string"
+    ? nts_fs_chown(validatedPath, uid, gid)
+    : nts_fs_chown_bytes(validatedPath, uid, gid);
+  check(result, "chown", displayBytePath(validatedPath));
 }
 
 export function lchownSync(path: BytePathLike, uid: number, gid: number): void {
@@ -1340,37 +1453,31 @@ export function truncateSync(path: BytePathLike, length = 0): void {
 }
 
 export function utimesSync(
-  path: PathLike,
+  path: BytePathLike,
   atime: number | string | Date,
   mtime: number | string | Date,
 ): void {
-  const validatedPath = getValidatedPath(path);
-  check(
-    nts_fs_utimes(
-      validatedPath,
-      toUnixTimestamp(atime, "atime"),
-      toUnixTimestamp(mtime, "mtime"),
-    ),
-    "utime",
-    validatedPath,
-  );
+  const validatedPath = getValidatedBytePath(path);
+  const at = toUnixTimestamp(atime, "atime");
+  const mt = toUnixTimestamp(mtime, "mtime");
+  const result = typeof validatedPath === "string"
+    ? nts_fs_utimes(validatedPath, at, mt)
+    : nts_fs_utimes_bytes(validatedPath, at, mt);
+  check(result, "utime", displayBytePath(validatedPath));
 }
 
 export function lutimesSync(
-  path: PathLike,
+  path: BytePathLike,
   atime: number | string | Date,
   mtime: number | string | Date,
 ): void {
-  const validatedPath = getValidatedPath(path);
-  check(
-    nts_fs_lutimes(
-      validatedPath,
-      toUnixTimestamp(atime, "atime"),
-      toUnixTimestamp(mtime, "mtime"),
-    ),
-    "lutime",
-    validatedPath,
-  );
+  const validatedPath = getValidatedBytePath(path);
+  const at = toUnixTimestamp(atime, "atime");
+  const mt = toUnixTimestamp(mtime, "mtime");
+  const result = typeof validatedPath === "string"
+    ? nts_fs_lutimes(validatedPath, at, mt)
+    : nts_fs_lutimes_bytes(validatedPath, at, mt);
+  check(result, "lutime", displayBytePath(validatedPath));
 }
 
 function cpStatSync(
@@ -1711,9 +1818,14 @@ export function cpSync(
 }
 
 /** Upstream `lib/fs.js`. `rm -r`, assembled here from the one-syscall bindings. */
-export function rmSync(path: PathLike, options?: RmOptions): void {
-  const validatedPath = getValidatedPath(path);
-  rmSyncValidated(validatedPath, normalizeRmOptions(options));
+export function rmSync(path: BytePathLike, options?: RmOptions): void {
+  const validatedPath = getValidatedBytePath(path);
+  const settings = normalizeRmOptions(options);
+  if (typeof validatedPath === "string") {
+    rmSyncValidated(validatedPath, settings);
+    return;
+  }
+  rmSyncValidatedBytes(validatedPath, settings);
 }
 
 /**
@@ -1749,6 +1861,52 @@ export function _validateRmOptionsSync(
 }
 
 /** Traverse with options that were validated once at the public boundary. */
+/**
+ * `rm` on a path that is bytes rather than text.
+ *
+ * The string version above joins children with a template literal, which cannot
+ * be used here: a directory entry need not decode as UTF-8, and building the
+ * child path through a string would ask the kernel to remove a *different* file
+ * than the one `readdir` just reported. So children are joined as bytes, and the
+ * entry names come from `nts_fs_scandir_bytes` rather than from `readdirSync`.
+ *
+ * `displayBytePath` is still used for the error paths, because an exception's
+ * `path` property is a string on node too -- lossy there and lossy here, and
+ * that is node's answer rather than a shortcut.
+ */
+function rmSyncValidatedBytes(path: number[], options: NormalizedRmOptions): void {
+  const columns = nts_fs_stat_bytes(path, false);
+  if (columns.length === 0) {
+    const errno = -nts_errno();
+    const code = errName(errno);
+    if (options.force && (code === "ENOENT" || code === "ENOTDIR")) {
+      return;
+    }
+    throw uvException(errno, "lstat", displayBytePath(path));
+  }
+
+  const stats = new Stats(columns);
+  if (!stats.isDirectory()) {
+    check(nts_fs_unlink_bytes(path), "unlink", displayBytePath(path));
+    return;
+  }
+  if (!options.recursive) {
+    const errno = nts_fs_eisdir();
+    throw new ERR_FS_EISDIR(errno, errName(errno), errMessage(errno), displayBytePath(path));
+  }
+  const rows = nts_fs_scandir_bytes(path);
+  for (const row of rows) {
+    if (row === undefined || row.length < 2) continue;
+    const child = path.slice();
+    child.push(0x2f);
+    for (let index = 1; index < row.length; index++) {
+      child.push(row[index] ?? 0);
+    }
+    rmSyncValidatedBytes(child, options);
+  }
+  check(nts_fs_rmdir_bytes(path), "rmdir", displayBytePath(path));
+}
+
 function rmSyncValidated(validatedPath: string, options: NormalizedRmOptions): void {
   const columns = nts_fs_stat(validatedPath, false);
   if (columns.length === 0) {

@@ -578,14 +578,30 @@ double nts_fs_futimes(double fd, double atime, double mtime) {
   return simple(result);
 }
 
+static double lutimes_native_path(char *p, double atime, double mtime) {
+  uv_fs_t request;
+  int result = uv_fs_lutime(NULL, &request, p, atime, mtime, NULL);
+  uv_fs_req_cleanup(&request);
+  return simple(result);
+}
+
 double nts_fs_lutimes(NtsString *path, double atime, double mtime) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t request;
-  int result = uv_fs_lutime(NULL, &request, p, atime, mtime, NULL);
+  double r = lutimes_native_path(p, atime, mtime);
   free(p);
-  uv_fs_req_cleanup(&request);
-  return simple(result);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_lutimes_bytes(NtsArray *path, double atime, double mtime) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = lutimes_native_path(p, atime, mtime);
+  free(p);
+  return r;
 }
 
 /* With growth disabled, the capacity is the fstat size of a regular-file byte
@@ -893,12 +909,35 @@ double nts_fs_dir_close(double identifier) {
 
 /* ------------------------------------------------------------ one-liners */
 
+static double unlink_native_path(char *p) {
+  uv_fs_t req;
+  double r = simple(uv_fs_unlink(NULL, &req, p, NULL));
+  uv_fs_req_cleanup(&req);
+  return r;
+}
+
 double nts_fs_unlink(NtsString *path) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r = simple(uv_fs_unlink(NULL, &req, p, NULL));
+  double r = unlink_native_path(p);
   free(p);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_unlink_bytes(NtsArray *path) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = unlink_native_path(p);
+  free(p);
+  return r;
+}
+
+static double mkdir_native_path(char *p, double mode) {
+  uv_fs_t req;
+  double r = simple(uv_fs_mkdir(NULL, &req, p, (int)mode, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -906,9 +945,25 @@ double nts_fs_unlink(NtsString *path) {
 double nts_fs_mkdir(NtsString *path, double mode) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r = simple(uv_fs_mkdir(NULL, &req, p, (int)mode, NULL));
+  double r = mkdir_native_path(p, mode);
   free(p);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_mkdir_bytes(NtsArray *path, double mode) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = mkdir_native_path(p, mode);
+  free(p);
+  return r;
+}
+
+static double rmdir_native_path(char *p) {
+  uv_fs_t req;
+  double r = simple(uv_fs_rmdir(NULL, &req, p, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -916,9 +971,25 @@ double nts_fs_mkdir(NtsString *path, double mode) {
 double nts_fs_rmdir(NtsString *path) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r = simple(uv_fs_rmdir(NULL, &req, p, NULL));
+  double r = rmdir_native_path(p);
   free(p);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_rmdir_bytes(NtsArray *path) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = rmdir_native_path(p);
+  free(p);
+  return r;
+}
+
+static double rename_native_paths(char *a, char *b) {
+  uv_fs_t req;
+  double r = simple(uv_fs_rename(NULL, &req, a, b, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -931,10 +1002,32 @@ double nts_fs_rename(NtsString *from, NtsString *to) {
     free(a);
     return (double)UV_ENOMEM;
   }
-  uv_fs_t req;
-  double r = simple(uv_fs_rename(NULL, &req, a, b, NULL));
+  double r = rename_native_paths(a, b);
   free(a);
   free(b);
+  return r;
+}
+
+/* Both paths as bytes. The TypeScript converts *both* when either side is a
+ * Buffer, rather than offering four mixed forms: node accepts any combination,
+ * and a string always has a byte spelling while the reverse is not true. */
+double nts_fs_rename_bytes(NtsArray *from, NtsArray *to) {
+  char *a = native_byte_path(from);
+  if (a == NULL) return (double)-nts_errno();
+  char *b = native_byte_path(to);
+  if (b == NULL) {
+    free(a);
+    return (double)-nts_errno();
+  }
+  double r = rename_native_paths(a, b);
+  free(a);
+  free(b);
+  return r;
+}
+
+static double copyfile_native_paths(char *a, char *b, double flags) {
+  uv_fs_t req;
+  double r = simple(uv_fs_copyfile(NULL, &req, a, b, (int)flags, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -947,11 +1040,26 @@ double nts_fs_copyfile(NtsString *from, NtsString *to, double flags) {
     free(a);
     return (double)UV_ENOMEM;
   }
-  uv_fs_t req;
-  double r = simple(uv_fs_copyfile(NULL, &req, a, b, (int)flags, NULL));
+  double r = copyfile_native_paths(a, b, flags);
   free(a);
   free(b);
-  uv_fs_req_cleanup(&req);
+  return r;
+}
+
+/* Both paths as bytes. The TypeScript converts *both* when either side is a
+ * Buffer, rather than offering four mixed forms: node accepts any combination,
+ * and a string always has a byte spelling while the reverse is not true. */
+double nts_fs_copyfile_bytes(NtsArray *from, NtsArray *to, double flags) {
+  char *a = native_byte_path(from);
+  if (a == NULL) return (double)-nts_errno();
+  char *b = native_byte_path(to);
+  if (b == NULL) {
+    free(a);
+    return (double)-nts_errno();
+  }
+  double r = copyfile_native_paths(a, b, flags);
+  free(a);
+  free(b);
   return r;
 }
 
@@ -978,12 +1086,35 @@ double nts_fs_access_bytes(NtsArray *path, double mode) {
   return result;
 }
 
+static double chmod_native_path(char *p, double mode) {
+  uv_fs_t req;
+  double r = simple(uv_fs_chmod(NULL, &req, p, (int)mode, NULL));
+  uv_fs_req_cleanup(&req);
+  return r;
+}
+
 double nts_fs_chmod(NtsString *path, double mode) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r = simple(uv_fs_chmod(NULL, &req, p, (int)mode, NULL));
+  double r = chmod_native_path(p, mode);
   free(p);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_chmod_bytes(NtsArray *path, double mode) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = chmod_native_path(p, mode);
+  free(p);
+  return r;
+}
+
+static double chown_native_path(char *p, double uid, double gid) {
+  uv_fs_t req;
+  double r = simple(uv_fs_chown(NULL, &req, p, (uv_uid_t)uid, (uv_gid_t)gid, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -991,11 +1122,19 @@ double nts_fs_chmod(NtsString *path, double mode) {
 double nts_fs_chown(NtsString *path, double uid, double gid) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r =
-      simple(uv_fs_chown(NULL, &req, p, (uv_uid_t)uid, (uv_gid_t)gid, NULL));
+  double r = chown_native_path(p, uid, gid);
   free(p);
-  uv_fs_req_cleanup(&req);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_chown_bytes(NtsArray *path, double uid, double gid) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = chown_native_path(p, uid, gid);
+  free(p);
   return r;
 }
 
@@ -1023,12 +1162,35 @@ double nts_fs_lchown_bytes(NtsArray *path, double uid, double gid) {
   return result;
 }
 
+static double utimes_native_path(char *p, double atime, double mtime) {
+  uv_fs_t req;
+  double r = simple(uv_fs_utime(NULL, &req, p, atime, mtime, NULL));
+  uv_fs_req_cleanup(&req);
+  return r;
+}
+
 double nts_fs_utimes(NtsString *path, double atime, double mtime) {
   char *p = native_path(path);
   if (p == NULL) return (double)UV_ENOMEM;
-  uv_fs_t req;
-  double r = simple(uv_fs_utime(NULL, &req, p, atime, mtime, NULL));
+  double r = utimes_native_path(p, atime, mtime);
   free(p);
+  return r;
+}
+
+/* The same call against a path that is already bytes. Node accepts a Buffer
+ * wherever it accepts a string path, and a filename need not be valid UTF-8 --
+ * decoding one to route it through the string form would rename the file. */
+double nts_fs_utimes_bytes(NtsArray *path, double atime, double mtime) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return (double)-nts_errno();
+  double r = utimes_native_path(p, atime, mtime);
+  free(p);
+  return r;
+}
+
+static double link_native_paths(char *a, char *b) {
+  uv_fs_t req;
+  double r = simple(uv_fs_link(NULL, &req, a, b, NULL));
   uv_fs_req_cleanup(&req);
   return r;
 }
@@ -1041,11 +1203,26 @@ double nts_fs_link(NtsString *from, NtsString *to) {
     free(a);
     return (double)UV_ENOMEM;
   }
-  uv_fs_t req;
-  double r = simple(uv_fs_link(NULL, &req, a, b, NULL));
+  double r = link_native_paths(a, b);
   free(a);
   free(b);
-  uv_fs_req_cleanup(&req);
+  return r;
+}
+
+/* Both paths as bytes. The TypeScript converts *both* when either side is a
+ * Buffer, rather than offering four mixed forms: node accepts any combination,
+ * and a string always has a byte spelling while the reverse is not true. */
+double nts_fs_link_bytes(NtsArray *from, NtsArray *to) {
+  char *a = native_byte_path(from);
+  if (a == NULL) return (double)-nts_errno();
+  char *b = native_byte_path(to);
+  if (b == NULL) {
+    free(a);
+    return (double)-nts_errno();
+  }
+  double r = link_native_paths(a, b);
+  free(a);
+  free(b);
   return r;
 }
 
@@ -1092,6 +1269,30 @@ NtsString *nts_fs_readlink(NtsString *path) {
   NtsString *out = r == 0 ? nts_string_from_utf8((const char *)req.ptr,
                                                  strlen((const char *)req.ptr))
                           : nts_string_from_utf8("", 0);
+  uv_fs_req_cleanup(&req);
+  return out;
+}
+
+/* `readlink` on a byte path. The *target* is returned as bytes too, because a
+ * symlink target is no more required to be valid UTF-8 than a filename is, and
+ * the string form of this binding would flatten one to replacement characters
+ * before the caller ever saw it. */
+NtsArray *nts_fs_readlink_bytes(NtsArray *path) {
+  char *p = native_byte_path(path);
+  if (p == NULL) return empty_doubles();
+  uv_fs_t req;
+  int r = uv_fs_readlink(NULL, &req, p, NULL);
+  free(p);
+  nts_node_set_errno(r);
+  if (r != 0) {
+    uv_fs_req_cleanup(&req);
+    return empty_doubles();
+  }
+  const unsigned char *target = (const unsigned char *)req.ptr;
+  size_t length = strlen((const char *)target);
+  NtsArray *out = nts_array_new(&nts_node_desc_double, (double)length);
+  double *items = NTS_ITEMS(out, double);
+  for (size_t i = 0; i < length; i++) items[i] = (double)target[i];
   uv_fs_req_cleanup(&req);
   return out;
 }

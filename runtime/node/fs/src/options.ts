@@ -180,6 +180,33 @@ export function getValidatedBytePath(
   return bytes;
 }
 
+/**
+ * Both sides of a two-path call as bytes, or `null` when neither needs it.
+ *
+ * Node accepts any mixture of string and Buffer for `rename`, `link` and
+ * `copyFile`. Rather than four native forms, the pair is normalised here: a
+ * string always has a byte spelling, and a byte path does *not* always have a
+ * string one -- a filename need not decode as UTF-8, and routing it through a
+ * string would rename the file. So when either side is bytes, both become bytes.
+ */
+export function bothPathsAsBytes(
+  from: ValidatedBytePath,
+  to: ValidatedBytePath,
+): [number[], number[]] | null {
+  if (typeof from === "string" && typeof to === "string") return null;
+  return [pathAsBytes(from), pathAsBytes(to)];
+}
+
+function pathAsBytes(path: ValidatedBytePath): number[] {
+  if (typeof path !== "string") return path;
+  const encoded = Buffer.from(path, "utf8");
+  const bytes = new Array<number>(encoded.length);
+  for (let i = 0; i < encoded.length; i++) {
+    bytes[i] = encoded[i] ?? 0;
+  }
+  return bytes;
+}
+
 export function validateFileDescriptor(fd: unknown): asserts fd is number {
   validateInteger(fd, "fd", 0, 2_147_483_647);
 }

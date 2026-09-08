@@ -239,6 +239,31 @@ globalThis.nts_fs_copyfile = (from, to, flags) => status(() => fs.copyFileSync(f
 globalThis.nts_fs_access = (path, mode) => status(() => fs.accessSync(path, mode));
 globalThis.nts_fs_access_bytes = (path, mode) =>
   status(() => fs.accessSync(Buffer.from(path), mode));
+// The byte-path family. Each delegates the way its string twin does; the point
+// of the pair is that a Buffer path reaches the filesystem as the bytes it is,
+// and the interpreted lane can only demonstrate the routing, not the encoding.
+globalThis.nts_fs_unlink_bytes = (path) =>
+  status(() => fs.unlinkSync(Buffer.from(path)));
+globalThis.nts_fs_mkdir_bytes = (path, mode) =>
+  status(() => fs.mkdirSync(Buffer.from(path), { mode }));
+globalThis.nts_fs_rmdir_bytes = (path) =>
+  status(() => fs.rmdirSync(Buffer.from(path)));
+globalThis.nts_fs_chmod_bytes = (path, mode) =>
+  status(() => fs.chmodSync(Buffer.from(path), mode));
+globalThis.nts_fs_chown_bytes = (path, uid, gid) =>
+  status(() => fs.chownSync(Buffer.from(path), uid, gid));
+globalThis.nts_fs_utimes_bytes = (path, atime, mtime) =>
+  status(() => fs.utimesSync(Buffer.from(path), atime, mtime));
+globalThis.nts_fs_lutimes_bytes = (path, atime, mtime) =>
+  status(() => fs.lutimesSync(Buffer.from(path), atime, mtime));
+globalThis.nts_fs_rename_bytes = (from, to) =>
+  status(() => fs.renameSync(Buffer.from(from), Buffer.from(to)));
+globalThis.nts_fs_copyfile_bytes = (from, to, flags) =>
+  status(() => fs.copyFileSync(Buffer.from(from), Buffer.from(to), flags));
+globalThis.nts_fs_link_bytes = (from, to) =>
+  status(() => fs.linkSync(Buffer.from(from), Buffer.from(to)));
+globalThis.nts_fs_readlink_bytes = (path) =>
+  attempt(() => [...fs.readlinkSync(Buffer.from(path), { encoding: "buffer" })], []);
 globalThis.nts_fs_chmod = (path, mode) => status(() => fs.chmodSync(path, mode));
 globalThis.nts_fs_chown = (path, uid, gid) => status(() => fs.chownSync(path, uid, gid));
 globalThis.nts_fs_lchown = (path, uid, gid) => status(() => fs.lchownSync(path, uid, gid));

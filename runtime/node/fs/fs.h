@@ -92,4 +92,26 @@ double nts_errno(void);
 NtsString *nts_uv_err_name(double code);
 NtsString *nts_uv_err_message(double code);
 
+/* The byte-path family.
+ *
+ * Node accepts a Buffer wherever it accepts a string path, and a POSIX filename
+ * is a byte sequence that need not decode as UTF-8. Routing such a path through
+ * the string form would rewrite it -- `readdir` hands back replacement
+ * characters, and the name that comes out no longer opens the file that went in.
+ * Thirteen public `fs` functions rejected a Buffer before these existed, and
+ * none of node's 260 `fs` test files passes one, so nothing upstream could have
+ * caught it. See `runtime/node/fs/test/byte-path-static.js`.
+ */
+double nts_fs_unlink_bytes(NtsArray *path);
+double nts_fs_mkdir_bytes(NtsArray *path, double mode);
+double nts_fs_rmdir_bytes(NtsArray *path);
+double nts_fs_chmod_bytes(NtsArray *path, double mode);
+double nts_fs_chown_bytes(NtsArray *path, double uid, double gid);
+double nts_fs_utimes_bytes(NtsArray *path, double atime, double mtime);
+double nts_fs_lutimes_bytes(NtsArray *path, double atime, double mtime);
+double nts_fs_rename_bytes(NtsArray *from, NtsArray *to);
+double nts_fs_copyfile_bytes(NtsArray *from, NtsArray *to, double flags);
+double nts_fs_link_bytes(NtsArray *from, NtsArray *to);
+NtsArray *nts_fs_readlink_bytes(NtsArray *path);
+
 #endif
