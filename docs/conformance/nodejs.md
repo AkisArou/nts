@@ -8749,6 +8749,75 @@ construct is more useful than a workaround that hides it.
 | an array method on a non-numeric array | 1 | `push` onto `CpuInfo[]` |
 | a name declared outside this function | 1 | |
 
+## What one fix is worth: `AnyView` measured against all 22 modules
+
+`arraybufferview-parameter` reproduces, and it is faithful — three NTS1001s,
+every one from the fixture's own `src`, and a `hir` diagnostic cannot appear in
+a correct compiler's output. It is a real defect. What had never been measured
+is what removing it **buys**, and the answer changed the recommendation.
+
+Primary NTS1001 refusals per module on `445ea94b`, split by whether the message
+names `ArrayBufferView`:
+
+| module | total | anyview | residual | | module | total | anyview | residual |
+| --- | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |
+| punycode | 0 | 0 | **0** | | os | 86 | 5 | 81 |
+| path | 33 | **0** | 33 | | process | 1990 | 54 | 1936 |
+| async_hooks | 53 | **0** | 53 | | events | 1124 | 31 | 1093 |
+| diagnostics_channel | 55 | **0** | 55 | | util | 1189 | 34 | 1155 |
+| timers | 58 | **0** | 58 | | assert | 1210 | 34 | 1176 |
+| buffer | 79 | 5 | 74 | | console | 1241 | 34 | 1207 |
+| string_decoder | 83 | 9 | 74 | | readline | 1341 | 43 | 1298 |
+| querystring | 85 | 5 | 80 | | net | 1508 | 42 | 1466 |
+| url | 168 | 5 | 163 | | dgram | 1531 | 43 | 1488 |
+| zlib | 1759 | 127 | 1632 | | stream | 1660 | 43 | 1617 |
+| | | | | | http | 1964 | 43 | 1921 |
+| | | | | | fs | 2107 | 64 | 2043 |
+
+**No module reaches residual 0.** Four are `anyview = 0` exactly — `path`, and
+all three of the NtsTask trio — and for those the conclusion is airtight in a way
+reachability cannot weaken, because zero is zero. Elsewhere it is 2–7% of that
+module's primary refusals. So the fix is worth making and is not worth
+sequencing work behind, and those are different questions about the same fixture.
+
+### The controls, which are the reason the table is publishable
+
+A refusal count has been wrong here twice, so each of these was run rather than
+reasoned:
+
+- **Cascades are not counted.** `NTS1003` is 0 for `path`, so the 33 are primary.
+  Counting `NTS1001` and `NTS1003` together would have inflated every row by its
+  cone and made the residual look worse than it is.
+- **Lines are sites.** 33 lines are 33 *distinct* `file:line:col`, so no site is
+  double-counted; the 17 distinct *messages* are a different and smaller number.
+- **The instrument distinguishes silence from absence.** `punycode` reads
+  `0 / 0 / 0`, and it is the one module that lowers completely. A frontend that
+  never ran reads the same as a module with no refusals unless something
+  separates them.
+
+### What actually unblocks `path`
+
+From `cascade-reach.mjs`, and it is not on the list above:
+
+```
+36  determineSpecificType        <- 36 of path's 53 cascaded functions
+    unblocks 11 exports: basename dirname extname format isAbsolute join
+                         matchesGlob normalize parse relative resolve
+    errors.ts:70  `JSON.stringify`, a global member with no definition here
+ 6  inspectValueWithin           errors.ts:518   `length` of something without one
+ 3  parseInteger                 glob-matcher.ts:336 a conversion to number
+ 2  validateArray                validators.ts:94 `length` of something without one
+```
+
+`blockers/json-stringify` is filed and reproducing.
+
+**Two things this does not say.** A cone counts what a refusal stopped *through
+other functions*, so a function refused on its own account is in none of them and
+the export counts are floors. And clearing the head of a cone can reveal the next
+refusal in the same function — **a cone sizes a queue rather than a step.**
+Eleven exports is the largest single move available on `path`, which is a
+different claim from `path` going green.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
