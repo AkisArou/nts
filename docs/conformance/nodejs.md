@@ -4629,7 +4629,11 @@ dangerous defect in this document: an exported function whose name is also a
 libc symbol is silently replaced by libc's, with no refusal, no clang error, and
 plausible return values. `fs` exports fourteen such names.
 
-**308 declared, 25 compared.** `punycode` is green and contributes nothing to
+Fourteen of `process`'s, in a module that also does not build — `cwd`,
+`execPath`, `argv0`, the four `get{e,}{u,g}id` calls, `env` present and absent,
+`envHas` both ways, and the memory and uptime shapes. All agree.
+
+**308 declared, 39 compared.** `punycode` is green and contributes nothing to
 this column, because it has no native half — it is string algorithms, which is
 part of why it was the first module to pass and why passing it said less about
 the C than the row implied.
