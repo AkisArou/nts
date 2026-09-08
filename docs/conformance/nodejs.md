@@ -8955,9 +8955,18 @@ cannot be read back", which is false.
 A refusal count has been wrong here twice, so each of these was run rather than
 reasoned:
 
-- **Cascades are not counted.** `NTS1003` is 0 for `path`, so the 33 are primary.
-  Counting `NTS1001` and `NTS1003` together would have inflated every row by its
-  cone and made the residual look worse than it is.
+- **Cascades are not counted**, and the evidence first given for that was
+  worthless. It read "`NTS1003` is 0 for `path`, so the 33 are primary" — and
+  **`nts hir` never emits `NTS1003` at all**. Zero for every module, always, so
+  the check could not have failed. A control that cannot fail is not a control,
+  and this one was published as one.
+
+  The conclusion survives, on evidence that can fail: `hir` and `emit-c` agree
+  exactly on the `NTS1001` count — `path` 31 and 31, `os` 80 and 80,
+  `string_decoder` 74 and 74 — while `emit-c` additionally reports 51, 146 and
+  152 cascade lines that `hir` does not. So `hir`'s count is the primaries, and
+  the two tools disagreeing on `NTS1003` is what shows it rather than one tool
+  reporting zero.
 - **Lines are sites.** 33 lines are 33 *distinct* `file:line:col`, so no site is
   double-counted; the 17 distinct *messages* are a different and smaller number.
 - **The instrument distinguishes silence from absence.** `punycode` reads
