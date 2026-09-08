@@ -912,10 +912,42 @@ fn call_text(
 
 /// Which layouts some `ObjectNew` in the program actually creates.
 ///
+/// Layouts a *published class* is constructed through, which this program may
+/// never construct itself.
+///
+/// `string_decoder` exports `StringDecoder` and writes no `new StringDecoder`
+/// anywhere: every construction is one the host performs through the addon. So
+/// the whole-program scan below correctly finds nothing, and the descriptor the
+/// wrapper needs in order to allocate does not exist.
+///
+/// The descriptor stays `static` -- `program.c` keeping its own is the rule
+/// that refuses object *parameters* at the boundary, and it is a good rule.
+/// What is added is one narrow, deliberate hole per published class: a factory
+/// that allocates and returns the header, so the wrapper can construct without
+/// being handed a layout it could then misread.
+fn published_class_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
+    let classes: rustc_hash::FxHashSet<&str> = program
+        .funcs
+        .iter()
+        .filter_map(|func| func.name.split_once('#').map(|(owner, _)| owner))
+        .collect();
+    program
+        .public_api
+        .iter()
+        .filter(|(emitted, _)| classes.contains(emitted.as_str()))
+        .filter_map(|(emitted, _)| {
+            program
+                .layouts
+                .iter()
+                .position(|layout| layout.name == *emitted)
+        })
+        .collect()
+}
+
 /// A descriptor is read through an object's own header, so only a layout a
 /// program allocates can ever have its read.
 fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize> {
-    let mut found = rustc_hash::FxHashSet::default();
+    let mut found: rustc_hash::FxHashSet<usize> = published_class_layouts(program);
     let want = |found: &mut rustc_hash::FxHashSet<usize>, ty: &nts_core::hir::ClassId| {
         if let Some(at) = program
             .layouts
@@ -1761,6 +1793,7 @@ fn emit_object_descriptors(
 ) {
     let cyclic_layouts = program.cyclic_layouts();
     let needed = layouts_needing_descriptors(program);
+    let published = published_class_layouts(program);
     for (index, layout) in program.layouts.iter().enumerate() {
         // A layout nothing allocates *and* nothing tests against needs no
         // descriptor. It still needs its struct, because something is declared
@@ -1892,6 +1925,10 @@ fn emit_object_descriptors(
                 erased.len()
             ),
         );
+        if published.contains(&index) {
+            writer.line(origin, construction_hole(&name));
+        }
+
         // A named function used as a value is one object, so it is emitted
         // rather than allocated: static, immortal, and nothing in it but the
         // header. `NTS_IMMORTAL` is what keeps reference counting away from
@@ -1907,6 +1944,18 @@ fn emit_object_descriptors(
         }
         writer.blank(origin);
     }
+}
+
+/// The construction hole for a published class, and the only symbol among these
+/// that leaves the translation unit.
+///
+/// It hands back a header rather than the typed pointer, so nothing outside can
+/// reach a field without going through a method: the descriptor stays private,
+/// and a caller holding one of these can allocate and nothing else. That keeps
+/// the rule which refuses object *parameters* at the boundary -- `program.c`
+/// keeps its own layouts -- while letting a wrapper build the one thing it must.
+fn construction_hole(name: &str) -> String {
+    format!("NtsHeader *nts_construct_{name}(void) {{ return nts_object_new(&nts_desc_{name}); }}")
 }
 
 /// Whether anything in the program refers to this layout's single instance.

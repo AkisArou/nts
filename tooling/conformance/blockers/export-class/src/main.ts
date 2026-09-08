@@ -1,7 +1,6 @@
-// expect: emit-c --napi -> no wrapper for Decoder: is exported and is not a
-//         function this backend can name
+// expect: emit-c --napi -> emits-addon napi_define_class(env, "Decoder"
 //
-// A class as a module export. `string_decoder`'s entire public surface is one --
+// FIXED, kept as a guard. A class as a module export. `string_decoder`'s entire public surface is one --
 // `shape.mjs` needs exactly the name `StringDecoder` and nothing else -- so this
 // single kind of export is the whole distance between that module compiling,
 // which it does, and it passing anything, which it cannot.
@@ -28,3 +27,21 @@ export class Decoder {
     return this.encoding;
   }
 }
+
+// **What it took, and what it did not.** A `napi_define_class` whose
+// constructor allocates through a factory `program.c` now emits for a published
+// class -- the descriptor stays private and the factory is the one deliberate
+// hole -- a prototype built from property descriptors, and a finalizer that
+// releases the instance when the JavaScript object dies.
+//
+// Verified by loading it, not by reading it: `new Decoder("utf8").name()`
+// answers `"utf8"`, a second instance is independent, and `d instanceof
+// Decoder` is true. The first version linked and did not run, and the version
+// before that did not compile -- `unmarshal` emits `goto nts_napi_cleanup` and
+// the constructor callback had no such label. No emit-only check would have
+// caught either.
+//
+// It does **not** yet do the prototype chain this file warns about. `stream`
+// needs five classes with `Duplex` extending `Readable`, and five independent
+// `napi_define_class` calls satisfy every name while leaving `duplex
+// instanceof Readable` false. That is the next piece and it is separate.

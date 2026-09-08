@@ -734,6 +734,422 @@ fn crossings_of(
     Ok((ret, crossings))
 }
 
+
+/// One `napi_create_function` per exported name, beside the class fragments.
+///
+/// One wrapper can publish under several names: `export const upper = impl.upper`
+/// and `export const alias = impl.upper` are one function and two properties,
+/// and a loop that asked each function for *a* name published it once under
+/// whichever came first.
+fn publish_functions(wrapped: &[(&str, &str)]) -> String {
+    let mut out = String::new();
+    for (name, publish) in wrapped {
+        let symbol = c_identifier(name);
+        let property = c_string_literal(publish);
+        let _ = write!(
+            out,
+            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
+        );
+    }
+    out
+}
+
+/// Every published class, emitted after the free functions so a class's member
+/// callbacks sit below the ordinary wrappers in the file.
+///
+/// Returns the `NAPI_MODULE_INIT` fragments that define them and the names they
+/// publish under, the second so `report_unrepresentable_exports` stops calling
+/// a class "not a function this backend can name" once it is one.
+fn emit_classes<'a>(
+    program: &'a hir::Program,
+    classes: &FxHashSet<String>,
+    ownership: &hir::own::Summaries,
+    release_managed: bool,
+    skipped: &mut Vec<Skipped>,
+    out: &mut String,
+) -> (String, Vec<&'a str>) {
+    let mut class_inits = String::new();
+    let mut published_classes: Vec<&str> = Vec::new();
+    for (emitted, publish) in &program.public_api {
+        // `classes` is every name before a `#`, which includes the owner of a
+        // *specialization* -- `digits#whole` made the ordinary function
+        // `digits` look like a class, and it was refused as one with "is a
+        // class whose constructor was not compiled". A regression the fixtures
+        // caught on the first run.
+        //
+        // A class has a **layout**; a specialized function does not. That is
+        // the test, and it is the one thing here the `#` cannot fake.
+        if !classes.contains(emitted)
+            || !program.layouts.iter().any(|layout| layout.name == *emitted)
+        {
+            continue;
+        }
+        if let Some((code, init)) = class_definition(
+            emitted,
+            publish,
+            program,
+            classes,
+            ownership,
+            release_managed,
+            skipped,
+        ) {
+            out.push_str(&code);
+            class_inits.push_str(&init);
+            published_classes.push(publish.as_str());
+        }
+    }
+    (class_inits, published_classes)
+}
+
+/// The crossings of a class member, whose receiver is not an argument.
+///
+/// [`crossings_of`] refuses anything with a `#` in its name, which was right
+/// for as long as a class could not be published at all. A member differs from
+/// a free function in exactly one way: its first parameter is the instance, and
+/// the instance arrives as the callback's `this` rather than in `argv`.
+fn member_crossings(
+    func: &hir::Func,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+) -> Result<(Cross, Vec<Cross>), Skipped> {
+    let ret = cross(&func.return_type, layouts, classes).ok_or_else(|| Skipped {
+        function: func.name.clone(),
+        reason: format!("returns {}", spell(&func.return_type)),
+    })?;
+    let mut crossings = Vec::new();
+    for parameter in func.params.iter().skip(1) {
+        let crossing = cross(&parameter.ty, layouts, classes).ok_or_else(|| Skipped {
+            function: func.name.clone(),
+            reason: format!("takes {}", spell(&parameter.ty)),
+        })?;
+        if matches!(crossing, Cross::Object(_) | Cross::Bytes | Cross::Void) {
+            return Err(Skipped {
+                function: func.name.clone(),
+                reason: format!(
+                    "takes {}, which crosses outward only",
+                    spell(&parameter.ty)
+                ),
+            });
+        }
+        crossings.push(crossing);
+    }
+    Ok((ret, crossings))
+}
+
+/// The member name a class function publishes under, and whether it is an
+/// accessor.
+///
+/// The lowering spells a getter `Class#get lastChar`, so the space is the whole
+/// of the distinction and `split_once` on it is the test. Node exposes these
+/// three as prototype *accessors* -- `decoder.lastChar`, not
+/// `decoder.lastChar()` -- so publishing them as methods would satisfy the name
+/// and answer a function where a `Buffer` belongs.
+fn member_kind(member: &str) -> (&str, Option<&'static str>) {
+    if let Some(rest) = member.strip_prefix("get ") {
+        return (rest, Some("getter"));
+    }
+    if let Some(rest) = member.strip_prefix("set ") {
+        return (rest, Some("setter"));
+    }
+    (member, None)
+}
+
+/// One member's callback: the instance out of `this`, then the ordinary
+/// argument path.
+fn member_callback(
+    func: &hir::Func,
+    instance: &str,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+    release_managed: bool,
+    return_is_borrowed: bool,
+) -> Result<String, Skipped> {
+    let (ret, crossings) = member_crossings(func, layouts, classes)?;
+    let symbol = c_identifier(&func.name);
+    let params: Vec<String> = func.params.iter().map(|p| c_type(&p.ty, layouts)).collect();
+    let mut out = format!(
+        "{} {symbol}({});\nstatic napi_value nts_napi_{symbol}(napi_env env, napi_callback_info info) {{\n",
+        c_type(&func.return_type, layouts),
+        params.join(", ")
+    );
+    let count = crossings.len();
+    if count == 0 {
+        out.push_str("    napi_value self;\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, NULL, NULL, &self, NULL), \"could not read callback arguments\")) return NULL;\n");
+    } else {
+        let _ = write!(
+            out,
+            "    size_t argc = {count};\n    napi_value argv[{count}];\n    napi_value self;\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, &self, NULL), \"could not read callback arguments\")) return NULL;\n    if (argc < {count}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the compiled method requires {count} arguments\");\n        return NULL;\n    }}\n"
+        );
+    }
+    let _ = write!(
+        out,
+        "    {instance} *nts_self = NULL;\n    if (!nts_napi_check(env, napi_unwrap(env, self, (void **)&nts_self), \"could not read the instance\")) return NULL;\n"
+    );
+
+    let mut args: Vec<String> = vec!["nts_self".to_owned()];
+    for (index, (crossing, parameter)) in crossings.iter().zip(func.params.iter().skip(1)).enumerate() {
+        let name = format!("a{index}");
+        out.push_str(&declare_argument(crossing, &parameter.ty, layouts, &name));
+        args.push(name);
+    }
+    out.push_str("    napi_value out = NULL;\n");
+    for (index, ((crossing, parameter), name)) in crossings
+        .iter()
+        .zip(func.params.iter().skip(1))
+        .zip(args.iter().skip(1))
+        .enumerate()
+    {
+        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
+    }
+    out.push_str(
+        "    NtsLanding nts_landing;\n    if (setjmp(nts_landing.frame) != 0) {\n        nts_napi_raise(env, &nts_landing);\n        out = NULL;\n        goto nts_napi_cleanup;\n    }\n    nts_landing_push(&nts_landing);\n",
+    );
+    let call = format!("{symbol}({})", args.join(", "));
+    out.push_str(&marshal(
+        &ret,
+        &func.return_type,
+        &call,
+        "",
+        layouts,
+        release_managed,
+        return_is_borrowed,
+    ));
+    out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
+    if release_managed {
+        for (crossing, name) in crossings.iter().zip(args.iter().skip(1)) {
+            if matches!(crossing, Cross::Str | Cross::Numbers) {
+                let _ = writeln!(
+                    out,
+                    "    if ({name} != NULL) nts_release((NtsHeader *){name});"
+                );
+            }
+        }
+    }
+    out.push_str("    return out;\n}\n\n");
+    Ok(out)
+}
+
+/// The `new` callback: allocate through the factory, run the constructor, and
+/// hand the instance to the JavaScript object that will own it.
+///
+/// Split from [`class_definition`] because it is the only part that is about
+/// *lifetime* rather than about signatures. A constructor that cannot cross
+/// takes the class with it -- unlike a member's refusal, which only omits that
+/// member -- because without one there is no instance for anything else to be
+/// called on.
+fn constructor_callback(
+    constructor: &hir::Func,
+    instance: &str,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+    release_managed: bool,
+    skipped: &mut Vec<Skipped>,
+) -> Option<String> {
+    let mut out = String::new();
+    let (ctor_ret, ctor_crossings) = match member_crossings(constructor, layouts, classes) {
+        Ok(both) => both,
+        Err(why) => {
+            skipped.push(why);
+            return None;
+        }
+    };
+    let _ = ctor_ret;
+    let ctor_symbol = c_identifier(&constructor.name);
+    let ctor_params: Vec<String> = constructor
+        .params
+        .iter()
+        .map(|p| c_type(&p.ty, layouts))
+        .collect();
+    let count = ctor_crossings.len();
+    let _ = write!(
+        out,
+        "void {ctor_symbol}({});\nstatic napi_value nts_napi_new_{instance}(napi_env env, napi_callback_info info) {{\n",
+        ctor_params.join(", ")
+    );
+    if count == 0 {
+        out.push_str("    napi_value self;\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, NULL, NULL, &self, NULL), \"could not read callback arguments\")) return NULL;\n");
+    } else {
+        let _ = write!(
+            out,
+            "    size_t argc = {count};\n    napi_value argv[{count}];\n    napi_value self;\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, &self, NULL), \"could not read callback arguments\")) return NULL;\n    if (argc < {count}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the constructor requires {count} arguments\");\n        return NULL;\n    }}\n"
+        );
+    }
+    let mut args: Vec<String> = vec!["nts_self".to_owned()];
+    for (index, (crossing, parameter)) in ctor_crossings
+        .iter()
+        .zip(constructor.params.iter().skip(1))
+        .enumerate()
+    {
+        let name = format!("a{index}");
+        out.push_str(&declare_argument(crossing, &parameter.ty, layouts, &name));
+        args.push(name);
+    }
+    // The same shape every other wrapper has, and it has to be: `unmarshal`
+    // emits `goto nts_napi_cleanup`, so a callback without that label does not
+    // compile. The first version returned early instead and clang stopped at
+    // `use of undeclared label` -- found by linking the addon, which no
+    // emit-only check would have caught.
+    out.push_str("    napi_value out = NULL;\n    NtsLanding nts_landing;\n");
+    for (index, ((crossing, parameter), name)) in ctor_crossings
+        .iter()
+        .zip(constructor.params.iter().skip(1))
+        .zip(args.iter().skip(1))
+        .enumerate()
+    {
+        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
+    }
+    let _ = write!(
+        out,
+        "    {instance} *nts_self = ({instance} *)nts_construct_{instance}();\n    if (nts_self == NULL) {{\n        napi_throw_error(env, NULL, \"could not allocate the instance\");\n        goto nts_napi_cleanup;\n    }}\n    if (setjmp(nts_landing.frame) != 0) {{\n        nts_napi_raise(env, &nts_landing);\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    nts_landing_push(&nts_landing);\n    {ctor_symbol}({});\n    if (!nts_napi_check(env, napi_wrap(env, self, nts_self, nts_finalize_{instance}, NULL, NULL), \"could not attach the instance\")) {{\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    out = self;\nnts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n",
+        args.join(", ")
+    );
+    if release_managed {
+        for (crossing, name) in ctor_crossings.iter().zip(args.iter().skip(1)) {
+            if matches!(crossing, Cross::Str | Cross::Numbers) {
+                let _ = writeln!(
+                    out,
+                    "    if ({name} != NULL) nts_release((NtsHeader *){name});"
+                );
+            }
+        }
+    }
+    out.push_str("    return out;\n}\n\n");
+    Some(out)
+}
+
+/// A published class: a constructor that allocates, a prototype carrying the
+/// members, and a finalizer that releases.
+///
+/// Returns the callbacks and the `NAPI_MODULE_INIT` fragment that defines the
+/// class, plus every member left out and why. **A member that cannot cross is
+/// omitted rather than failing the class**, and each omission is reported --
+/// which is a departure from `cross`'s "better to have no wrapper than a
+/// wrapper that loses behaviour", and deliberate. That rule is about an object
+/// copied as plain data, where the methods vanish *silently*; here the surface
+/// is named at build time, so a caller learns what is missing from the build
+/// rather than from `undefined is not a function`.
+fn class_definition(
+    class: &str,
+    publish: &str,
+    program: &hir::Program,
+    classes: &FxHashSet<String>,
+    ownership: &hir::own::Summaries,
+    release_managed: bool,
+    skipped: &mut Vec<Skipped>,
+) -> Option<(String, String)> {
+    let layouts = &program.layouts;
+    let prefix = format!("{class}#");
+    let Some(constructor) = program
+        .funcs
+        .iter()
+        .find(|func| func.name == format!("{class}#constructor"))
+    else {
+        // Silent `?` here cost an hour: the class fell back to the export
+        // pass's generic "is not a function this backend can name", which is
+        // the message that exists for a class and so read as unchanged.
+        skipped.push(Skipped {
+            function: class.to_owned(),
+            reason: "is a class whose constructor was not compiled".to_owned(),
+        });
+        return None;
+    };
+    // The receiver's C type is the struct the factory allocates. Taken from the
+    // signature rather than rebuilt from the layout name, so the two cannot
+    // disagree about spelling.
+    let Some(receiver) = constructor.params.first() else {
+        skipped.push(Skipped {
+            function: class.to_owned(),
+            reason: "is a class whose constructor takes no receiver".to_owned(),
+        });
+        return None;
+    };
+    let instance = c_type(&receiver.ty, layouts)
+        .trim_end_matches(" *")
+        .to_owned();
+
+    let mut out = format!("typedef struct {instance} {instance};\nNtsHeader *nts_construct_{instance}(void);\n");
+
+    // The finalizer, which is the whole of the ownership story: the instance is
+    // this heap's, the JavaScript object merely points at it, and when that
+    // object dies the reference goes with it.
+    let _ = write!(
+        out,
+        "static void nts_finalize_{instance}(napi_env env, void *data, void *hint) {{\n    (void)env;\n    (void)hint;\n    if (data != NULL) nts_release((NtsHeader *)data);\n}}\n"
+    );
+
+    out.push_str(&constructor_callback(
+        constructor,
+        &instance,
+        layouts,
+        classes,
+        release_managed,
+        skipped,
+    )?);
+
+    // The members, in declaration order, so the emitted file reads like the
+    // class does.
+    let mut descriptors: Vec<String> = Vec::new();
+    for func in &program.funcs {
+        let Some(member) = func.name.strip_prefix(&prefix) else {
+            continue;
+        };
+        if member == "constructor" {
+            continue;
+        }
+        // `#` separates a class from its member *and* a function from its
+        // specialization variant, so `Holder#constructor#whole` splits to the
+        // member `constructor#whole` and sailed past the test above. It was
+        // published as a prototype method under that literal name.
+        //
+        // A specialization is an internal shape, never a published one: the
+        // surface is what the class declares. Skipped by the `#`, which is the
+        // only thing that distinguishes the two here.
+        if member.contains('#') {
+            continue;
+        }
+        match member_callback(
+            func,
+            &instance,
+            layouts,
+            classes,
+            release_managed,
+            ownership.hands_back(&func.name),
+        ) {
+            Ok(text) => {
+                out.push_str(&text);
+                let symbol = c_identifier(&func.name);
+                let (name, accessor) = member_kind(member);
+                let property = c_string_literal(name);
+                descriptors.push(match accessor {
+                    Some("getter") => format!(
+                        "{{ {property}, NULL, NULL, nts_napi_{symbol}, NULL, NULL, napi_default, NULL }}"
+                    ),
+                    Some("setter") => format!(
+                        "{{ {property}, NULL, NULL, NULL, nts_napi_{symbol}, NULL, napi_default, NULL }}"
+                    ),
+                    _ => format!(
+                        "{{ {property}, NULL, nts_napi_{symbol}, NULL, NULL, NULL, napi_default, NULL }}"
+                    ),
+                });
+            }
+            Err(why) => skipped.push(why),
+        }
+    }
+
+    let property = c_string_literal(publish);
+    let init = if descriptors.is_empty() {
+        format!(
+            "    {{\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, 0, NULL, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n"
+        )
+    } else {
+        format!(
+            "    {{\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, sizeof(members) / sizeof(members[0]), members, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n",
+            descriptors.join(",\n            ")
+        )
+    };
+    Some((out, init))
+}
+
 /// One function's wrapper. Every refusal is [`crossings_of`]'s.
 fn wrapper(
     func: &hir::Func,
@@ -1240,11 +1656,21 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
 fn report_unrepresentable_exports(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
+    published_classes: &[&str],
     skipped: &mut Vec<Skipped>,
 ) {
     let values = value_exports(program);
+    let already: FxHashSet<String> = skipped.iter().map(|s| s.function.clone()).collect();
     for (emitted, name) in &program.public_api {
-        if wrapped.iter().any(|(_, published)| published == name)
+        // A specific reason already given is the better one, and this pass
+        // cannot improve on it. Re-deriving from the symbol produced *two*
+        // lines for one export -- "is a class whose constructor was not
+        // compiled", which says what to fix, followed by "is not a function
+        // this backend can name", which says the thing that has been true of
+        // every class since before either message existed.
+        if already.contains(emitted)
+            || published_classes.contains(&name.as_str())
+            || wrapped.iter().any(|(_, published)| published == name)
             || program.public_namespaces.iter().any(|(at, _)| at == name)
             || values.iter().any(|(_, published, _)| published == name)
         {
@@ -1424,6 +1850,9 @@ pub fn emit(program: &hir::Program) -> Addon {
         }
     }
 
+    let (class_inits, published_classes) =
+        emit_classes(program, &classes, &ownership, release_managed, &mut skipped, &mut out);
+
     let values = value_exports(program);
     let functions: Vec<String> =
         program.funcs.iter().map(|func| func.name.clone()).collect();
@@ -1466,19 +1895,13 @@ pub fn emit(program: &hir::Program) -> Addon {
             c_identifier(nts_core::hir::lower::MODULE_INIT)
         );
     }
-    for (name, publish) in &wrapped {
-        let symbol = c_identifier(name);
-        let property = c_string_literal(publish);
-        let _ = write!(
-            out,
-            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
-        );
-    }
+    out.push_str(&publish_functions(&wrapped));
+    out.push_str(&class_inits);
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
     out.push_str(&publish_value_exports(&values, &functions));
     out.push_str("    return exports;\n}\n");
 
-    report_unrepresentable_exports(program, &wrapped, &mut skipped);
+    report_unrepresentable_exports(program, &wrapped, &published_classes, &mut skipped);
 
     Addon {
         source: out,
