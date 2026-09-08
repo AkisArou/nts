@@ -285,6 +285,24 @@ a global member with no definition here`. The implementation is reachable only b
 nothing measured here reaches a user, and the question "is nts's JSON faster than node's" cannot
 be asked in the terms a user would ask it. This is compiler-owned and is the first proposal.
 
+## The parse row does not exist yet, and what it needs
+
+There are four JSON rows and none of them parses a document. `json-scan` times the number grammar
+because that is the only part of the parser that compiles. A real parse row needs three things
+and two of them are not mine:
+
+- `SyntaxError` representable, then `Frame#constructor`, then `Number(string)` for
+  `numberValueOf`. With MainClaude; `SyntaxError` has landed and the rest is queued.
+- **simdjson as the `ref.cpp`.** It is installed here (4.6.9, headers and shared object) and it is
+  the right C++ reference for this row -- the one case in this lane where a reference is not a
+  second implementation of a specification we already got right, because it answers "what is the
+  hardware capable of" rather than "is our escaper correct". It needs `-lsimdjson` on the
+  reference link line, and `tooling/bench/src/main.rs` links only `-lm` today. Not my file.
+- A corpus. The 1.67MB document used for the ceiling numbers above is the obvious candidate and
+  is generated rather than checked in.
+
+Until then the ceiling table above is where the parse numbers live, and they are host numbers.
+
 ## Open, and owned elsewhere
 
 `SyntaxError` unrepresentable keeps the whole parser off the compiled axis and out of this table;
