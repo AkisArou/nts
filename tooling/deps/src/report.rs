@@ -70,6 +70,15 @@ pub fn render(acquisition: &Acquisition, verbose: bool) -> String {
                 package.version,
                 package.route.describe()
             );
+            // The specifiers the program imports from it. Named because the
+            // refusal that follows a build does not name them: a function from
+            // an unacquired package refuses as `a builtin this compiler does
+            // not provide`, and nothing in that sentence says which import it
+            // came from. Until the lowerer can say so, this is where the two
+            // can be connected.
+            if package.imported.len() > 1 || package.imported.first().is_some_and(|s| *s != package.name) {
+                let _ = writeln!(out, "      imported as {}", package.imported.join(", "));
+            }
         }
     }
 

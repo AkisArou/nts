@@ -55,6 +55,13 @@ pub struct PackageReport {
     pub depth: usize,
     /// Specifiers this package now answers, and the file each resolves to.
     pub mapped: Vec<(String, Utf8PathBuf)>,
+    /// Specifiers the program imports from this package, acquired or not.
+    ///
+    /// Kept separately from `mapped`, which is empty for a package that could
+    /// not be acquired — and that is exactly the package a developer needs
+    /// named, because a name imported from it is about to refuse with no
+    /// mention of where it came from.
+    pub imported: Vec<String>,
     /// Files written into the vendor tree.
     pub files: usize,
     /// `exports` subpath patterns, which are reported rather than guessed at.
@@ -156,6 +163,7 @@ fn as_workspace_package(
         origin: Origin::Workspace,
         route: Route::ShippedTypeScript,
         depth: installed.depth,
+        imported: mapped.iter().map(|(name, _)| name.clone()).collect(),
         mapped,
         files: 0,
         patterns: patterns.to_vec(),
@@ -378,6 +386,7 @@ fn work_list(
                         origin: Origin::Workspace,
                         route: Route::ShippedTypeScript,
                         depth: 0,
+                        imported: vec![specifier.clone()],
                         mapped: vec![(specifier.clone(), file.clone())],
                         files: 0,
                         patterns: Vec::new(),
@@ -571,6 +580,9 @@ fn acquire_package(
             origin: Origin::Registry,
             route,
             depth: installed.depth,
+            imported: traced.map(|specifiers| {
+                specifiers.iter().map(|(name, _)| name.clone()).collect()
+            }).unwrap_or_default(),
             mapped,
             files: recovery.files.len(),
             patterns,
