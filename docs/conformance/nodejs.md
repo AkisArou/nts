@@ -2879,6 +2879,38 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The interpreted axis, measured end to end rather than spot-checked
+
+All 22 modules, `check.sh <module> --ts`, run today:
+
+    assert       11 / 25     async_hooks  115 / 153   buffer       54 / 96
+    console      18 / 38     dgram         76 / 109   diagnostics_channel 32 / 59
+    events       31 / 51     fs           344 / 393   http        404 / 450
+    net         147 / 178    os             8 / 12    path         21 / 22
+    process      87 / 151    punycode       3 / 3     querystring   7 / 8
+    readline    ...          stream       249 / 266   string_decoder 4 / 5
+    timers       55 / 66     url           49 / 52    util         24 / 52
+    zlib         68 / 74
+
+    1,832 passed, 0 failed, 29 skipped, 429 not applicable
+
+**Zero failures in every module.** The standing figure in the goal text is
+1,796; this is 1,832, and the difference is tests added since — including three
+export-surface files written today, one of which (`zlib`) was hollow when
+written and is not now.
+
+This is the axis the goal calls preparation, and it is the one condition of the
+five that is unambiguously met. It is worth stating plainly *because* it is not
+the product: 1,832 passing files on the interpreted lane is compatible with
+1 of 22 on the compiled one, and the two numbers describe different objects.
+The first says this profile's TypeScript is right; the second says almost none
+of it survives lowering yet.
+
+**Measured, not spot-checked.** Earlier in the day I had run four modules and
+quoted the ledger for the rest — which is the same shape as reading a `no
+wrapper` line and calling it a module's whole story. Running all twenty-two took
+six minutes.
+
 ## A cascade that names a refusal nobody printed
 
 `blockers/cascade-with-no-root`. The entire output for the file is:
