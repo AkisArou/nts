@@ -2879,6 +2879,50 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The `uses` files knew about the `dgram` bug, and nothing read them
+
+A `uses` file names the other profile modules a module depends on. Thirteen
+modules have one, and **nothing had ever read one back**.
+
+`dgram/uses` names `net`. `dgram` calls `nts_net_default_auto_select_family`.
+`build.sh` consulted neither the file nor `net`'s C, and the addon compiled,
+linked, and failed at `require`. **The declaration that would have prevented an
+afternoon's diagnosis was already in the tree, correct, and unread.**
+
+Read back:
+
+    13 modules with a `uses` file
+     8 import something they do not declare
+     5 declare something they do not import directly
+
+    events    imports util               declares async_hooks
+    stream    imports events, string_decoder   declares buffer, zlib/iter
+    process   imports fs, net, os, stream, util
+    readline  imports buffer, events, string_decoder, timers, util
+    net       imports buffer, diagnostics_channel, stream, timers
+    http      imports async_hooks, process, timers, url
+    fs        imports path, readline
+
+**Only the undeclared direction is an error.** The looser half — declaring
+something not imported *directly* — is usually a transitive dependency and is
+reported rather than failed. A list that fails on its looser half stops being
+maintained, which is how a list gets to be unread for as long as this one was.
+
+### And this audit also opened with false findings
+
+The first run reported `stream` and `zlib` declaring each other spuriously,
+because an entry may name a **subpath** — `stream/uses` says `zlib/iter` — and
+reading the whole line as a module name manufactures a mismatch. A parsing
+artefact wearing the shape of a finding.
+
+**Third time today an instrument of mine opened with false findings**, after
+`shape-blindspot.mjs`'s three false-alarm classes and `skip-audit.mjs`'s
+sixty-one. The pattern is consistent enough to state as a rule rather than an
+anecdote: **a new instrument's first output is a draft.** Every one of these was
+caught by reading a flagged row and finding it implausible, which is not a
+method — the method is to plant a known-good and a known-bad input and require
+the tool to separate them before any row is believed.
+
 ## The skip lists, read back for the first time
 
 429 `not-applicable` entries across the profile. A skip removes a file from a
