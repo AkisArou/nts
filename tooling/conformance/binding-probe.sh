@@ -69,13 +69,27 @@ module_c=()
 while IFS= read -r -d '' c; do module_c+=("$c"); done \
   < <(find "$src" -maxdepth 1 -name '*.c' -print0)
 
+# Every probe needs the shared internal half, but for `internal` itself that is
+# the module's own directory -- so appending it unconditionally handed clang the
+# same translation unit twice and the link died on a page of "multiple
+# definition of nts_os_release". Deduplicate by real path rather than by module
+# name: the next module to keep a file under `internal/` would hit this too, and
+# a name check would not catch it.
+link_c=("${module_c[@]}")
+for support in "$root/runtime/node/internal/shared.c" "$root/runtime/node/internal/process.c"; do
+  duplicate=0
+  for existing in "${module_c[@]}"; do
+    if [ "$(realpath "$existing")" = "$(realpath "$support")" ]; then duplicate=1; break; fi
+  done
+  [ "$duplicate" -eq 0 ] && link_c+=("$support")
+done
+
 clang -std=c11 -O2 -D_GNU_SOURCE -fPIC -shared \
   "${includes[@]}" \
   -I"$work/out" -I"$napi" -I"$uv_include" -I"$src" -I"$root/runtime/node/internal" \
   -o "$work/$module-probe.node" \
   "$work/out"/*.c \
-  "${module_c[@]}" \
-  "$root/runtime/node/internal/shared.c" "$root/runtime/node/internal/process.c" \
+  "${link_c[@]}" \
   "${module_libraries[@]}" -luv -lm
 
 echo "$work/$module-probe.node"

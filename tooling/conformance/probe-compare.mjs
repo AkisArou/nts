@@ -127,6 +127,184 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "os.ts",
+    module: "os",
+    checks(m) {
+      const os = require("node:os");
+      return [
+        { label: "hostname", mine: m.hostname(), theirs: os.hostname() },
+        { label: "tmpdir", mine: m.tmpdir(), theirs: os.tmpdir() },
+      ];
+    },
+  },
+  {
+    file: "process.ts",
+    module: "process",
+    checks(m) {
+      const out = [
+        { label: "argv0", mine: m.probeArgv0(), theirs: process.argv0 },
+        { label: "cwd", mine: m.probeCwd(), theirs: process.cwd() },
+        { label: "execPath", mine: m.probeExecPath(), theirs: process.execPath },
+        { label: "env PATH", mine: m.probeEnv("PATH"), theirs: process.env.PATH },
+        { label: "env has PATH", mine: m.probeEnvHas("PATH"), theirs: true },
+        { label: "env absent", mine: m.probeEnvHas("NTS_DEFINITELY_UNSET_XYZ"), theirs: false },
+        { label: "getuid", mine: m.probeGetuid(), theirs: process.getuid() },
+        { label: "getgid", mine: m.probeGetgid(), theirs: process.getgid() },
+        { label: "geteuid", mine: m.probeGeteuid(), theirs: process.geteuid() },
+        { label: "getegid", mine: m.probeGetegid(), theirs: process.getegid() },
+      ];
+      // Memory figures move between the two calls, so the comparable thing is
+      // the order of magnitude rather than the number. Anything else would be a
+      // check that fails for a reason other than a defect.
+      const av = m.probeAvailableMemory(), nav = process.availableMemory();
+      out.push({ label: "availableMemory within 4x", mine: av > 0 && av < nav * 4 && av > nav / 4, theirs: true });
+      const cm = m.probeConstrainedMemory();
+      out.push({ label: "constrainedMemory >= 0", mine: cm >= 0, theirs: true });
+      const up = m.probeUptimeShape();
+      out.push({ label: "uptime is a number", mine: up, theirs: typeof process.uptime() });
+      return out;
+    },
+  },
+  {
+    file: "zlib.ts",
+    module: "zlib",
+    checks(m) {
+      const zlib = require("node:zlib");
+      const out = [];
+      // The one that found a real defect: this binding was declared to take a
+      // Uint8Array and implemented against NtsArray.
+      for (const text of ["", "a", "hello", "the quick brown fox", "\u00ff\u00fe"]) {
+        out.push({
+          label: `crc32 ${JSON.stringify(text)}`,
+          mine: m.probeCrc32(text, 0),
+          // `probes/zlib.ts` builds its Uint8Array with `charCodeAt(i) & 0xff`,
+          // so the bytes that cross are latin1 by construction. Comparing
+          // against UTF-8 here reported a divergence on the one input where the
+          // two encodings differ, and the binding was right both times.
+          theirs: zlib.crc32(Buffer.from(text, "latin1"), 0),
+        });
+      }
+      out.push({ label: "crc32 with initial", mine: m.probeCrc32("abc", 12345), theirs: zlib.crc32(Buffer.from("abc"), 12345) });
+      // Which byte sequence does a probe that takes a *string* actually hash?
+      // "\u00ff\u00fe" is two bytes in latin1 and four in UTF-8, and the two
+      // give different CRCs -- so this says which encoding crossed the boundary
+      // rather than only that something disagreed.
+      const hi = "\u00ff\u00fe";
+      out.push({
+        label: "crc32 high bytes is utf-8",
+        mine: m.probeCrc32(hi, 0),
+        theirs: zlib.crc32(Buffer.from(hi, "latin1"), 0),
+        detail: `utf-8 would be ${zlib.crc32(Buffer.from(hi, "utf8"), 0)}`,
+      });
+      out.push({ label: "vernum > 0", mine: m.probeVernum() > 0, theirs: true });
+      out.push({ label: "lastStatus is Z_OK", mine: m.probeLastStatus(), theirs: 0 });
+      out.push({ label: "lastErrorCode empty", mine: m.probeLastErrorCode(), theirs: "" });
+      return out;
+    },
+  },
+  {
+    file: "internal.ts",
+    module: "internal",
+    checks(m) {
+      const os = require("node:os");
+      const out = [
+        { label: "platform", mine: m.probePlatform(), theirs: process.platform },
+        { label: "pid", mine: m.probePid(), theirs: process.pid },
+        { label: "eol", mine: m.probeEol(), theirs: os.EOL },
+        { label: "stdout isTTY", mine: m.probeStdoutTty(), theirs: process.stdout.isTTY === true },
+        { label: "stderr isTTY", mine: m.probeStderrTty(), theirs: process.stderr.isTTY === true },
+      ];
+      // uv error names, against the codes node itself reports through fs.
+      const fsm = require("node:fs");
+      const codeOf = (thunk) => { try { thunk(); return null; } catch (e) { return e; } };
+      const enoent = codeOf(() => fsm.statSync("/nonexistent-nts-probe/xyz"));
+      out.push({ label: "err name ENOENT", mine: m.probeErrName(enoent.errno), theirs: enoent.code });
+      const ebadf = codeOf(() => fsm.fstatSync(9999));
+      out.push({ label: "err name EBADF", mine: m.probeErrName(ebadf.errno), theirs: ebadf.code });
+      out.push({ label: "err message ENOENT", mine: m.probeErrMessage(enoent.errno).length > 0, theirs: true });
+      out.push({ label: "release non-empty", mine: m.probeRelease().length > 0, theirs: true });
+      out.push({ label: "argv length >= 1", mine: m.probeArgvLength() >= 1, theirs: true });
+      out.push({ label: "argv0 non-empty", mine: m.probeArgv0().length > 0, theirs: true });
+      out.push({ label: "signal count > 0", mine: m.probeSignalCount() > 0, theirs: true });
+      // 128 + signal number is node's exit code for a fatal signal.
+      out.push({ label: "SIGINT exit code", mine: m.probeSignalExitCode("SIGINT"), theirs: 128 + 2 });
+      out.push({ label: "SIGTERM exit code", mine: m.probeSignalExitCode("SIGTERM"), theirs: 128 + 15 });
+      const uuid = m.probeUuidShape();
+      // `length:versionNibble`, derived from node's own generator rather than
+      // written down, so the day node changes shape this follows.
+      const nodeUuid = require("node:crypto").randomUUID();
+      out.push({ label: "uuid length:version", mine: uuid, theirs: `${nodeUuid.length}:${nodeUuid[14]}` });
+      return out;
+    },
+  },
+  {
+    file: "fs.ts",
+    module: "fs",
+    checks(m) {
+      const fsm = require("node:fs");
+      const errnoOf = (thunk) => { try { thunk(); return 0; } catch (e) { return e.errno; } };
+      const nx = "/nonexistent-nts-probe/xyz";
+      const out = [
+        { label: "access ENOENT", mine: m.probeAccess(nx, 0), theirs: errnoOf(() => fsm.accessSync(nx, 0)) },
+        { label: "chmod ENOENT", mine: m.probeChmod(nx, 0o644), theirs: errnoOf(() => fsm.chmodSync(nx, 0o644)) },
+        { label: "rmdir ENOENT", mine: m.probeRmdir(nx), theirs: errnoOf(() => fsm.rmdirSync(nx)) },
+        { label: "EISDIR constant", mine: m.probeEisdir(), theirs: errnoOf(() => fsm.readFileSync("/")) },
+      ];
+      const dir = mkdtempSync(join(tmpdir(), "nts-probe-"));
+      const p2 = (n) => join(dir, n);
+      try {
+        out.push({ label: "access on a real file", mine: (writeFileSync(p2("a"), "x"), m.probeAccess(p2("a"), 0)), theirs: 0 });
+        out.push({ label: "mkdir creates", mine: m.probeMkdir(p2("d"), 0o755) === 0 && statSync(p2("d")).isDirectory(), theirs: true });
+        out.push({ label: "rmdir removes", mine: m.probeRmdir(p2("d")) === 0 && !existsSync(p2("d")), theirs: true });
+        out.push({ label: "chmod sets mode", mine: m.probeChmod(p2("a"), 0o600) === 0 && (statSync(p2("a")).mode & 0o777) === 0o600, theirs: true });
+        require("node:fs").symlinkSync("some-target", p2("s"));
+        out.push({ label: "readlink", mine: m.probeReadlink(p2("s")), theirs: readlinkSync(p2("s")) });
+        out.push({ label: "realpath", mine: m.probeRealpath(p2("a")), theirs: require("node:fs").realpathSync(p2("a")) });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      out.push({ label: "mkdtemp warns", mine: m.probeWarnsOnMkdtemp(), theirs: false });
+      return out;
+    },
+  },
+  {
+    file: "fs-descriptor.ts",
+    module: "fs",
+    checks(m) {
+      const fsm = require("node:fs");
+      const errnoOf = (thunk) => { try { thunk(); return 0; } catch (e) { return e.errno; } };
+      const out = [
+        { label: "close EBADF", mine: m.probeCloseBad(9999), theirs: errnoOf(() => fsm.closeSync(9999)) },
+        { label: "fsync EBADF", mine: m.probeFsyncBad(9999), theirs: errnoOf(() => fsm.fsyncSync(9999)) },
+      ];
+      const dir = mkdtempSync(join(tmpdir(), "nts-probe-"));
+      const f = join(dir, "a");
+      try {
+        writeFileSync(f, "0123456789");
+        out.push({ label: "open/close succeeds", mine: m.probeOpenClose(f, 0), theirs: 0 });
+        out.push({ label: "fsync succeeds", mine: m.probeFsync(f, 0), theirs: 0 });
+        out.push({ label: "fdatasync succeeds", mine: m.probeFdatasync(f, 0), theirs: 0 });
+        // The shape string carries size; node knows the same file.
+        const shape = m.probeFstatShape(f, 0);
+        // The probe answers `columns.length`. Node's own Stats carries exactly
+        // these fourteen numeric fields, so the expected count is derived from
+        // node rather than asserted -- checking for the file's size in that
+        // string was simply the wrong question about the wrong value.
+        const numeric = ["dev", "mode", "nlink", "uid", "gid", "rdev", "blksize",
+          "ino", "size", "blocks", "atimeMs", "mtimeMs", "ctimeMs", "birthtimeMs"];
+        const st = fsm.statSync(f);
+        out.push({
+          label: "fstat column count",
+          mine: Number(shape),
+          theirs: numeric.filter((k) => typeof st[k] === "number").length,
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
@@ -154,7 +332,13 @@ for (const probe of PROBES) {
   total += checks.length;
   diverged += bad.length;
   console.log(`${checks.length} check(s), ${bad.length} divergence(s)`);
-  for (const c of bad) console.log(`      DIFF  ${c.label}: mine=${c.mine} node=${c.theirs}`);
+  for (const c of bad) {
+    // A check written as `mine: /re/.test(x)` throws x away, and then a DIFF
+    // says `mine=false` -- which is the least useful thing it could say. Any
+    // check may carry `detail` with what was actually observed.
+    const detail = c.detail === undefined ? "" : `  saw ${JSON.stringify(c.detail)}`;
+    console.log(`      DIFF  ${c.label}: mine=${c.mine} node=${c.theirs}${detail}`);
+  }
 }
 
 console.log(`\n  ${built} probe(s) built, ${total} comparison(s), ${diverged} divergence(s)`);
