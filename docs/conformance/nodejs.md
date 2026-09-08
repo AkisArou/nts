@@ -2816,6 +2816,47 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## Why `buffer` builds and then fails all 55 of its tests
+
+It builds — under reference counting too, 196 retain/release sites — and it
+publishes **one of its fifteen exports**. That is the whole explanation for the
+test result, and it took asking the addon rather than reading the sweep label.
+
+The fourteen missing exports fall into two groups, and they need different work:
+
+    is not a function this backend can name   (6)
+      Blob  Buffer  default  File  constants  INSPECT_MAX_BYTES
+      kStringMaxLength
+
+    no function of that name was compiled     (8)
+      SlowBuffer  atob  btoa  isAscii  isUtf8  resolveObjectURL  transcode
+
+The second group is the refusal cascade — `atob` and `btoa` are class
+expressions the walk does not enter, the rest sit behind `narrowed-bigint`. The
+first group is a backend capability, and **two of them turned out to be a
+defect rather than a limit**.
+
+### A literal-initialised numeric export is dropped; a computed one is not
+
+    export const fromLiteral = 50;          // never published
+    export const fromComputed = 2 ** 53 - 1; // published
+
+Both read by compiled code, differing only in whether the right-hand side is
+written out or arrived at. Fixtured as `blockers/literal-const-export`.
+
+It is not about the value — 50 and 536870888 both fail, `2 ** 53 - 1` and
+`50 + 0` both succeed. **It is also not about a rule I first thought I saw.** A
+first pass put nine exports in one file and produced the opposite answer, which
+read as a rule about small integers; isolating one variable at a time gave the
+real one. That is the fourth time this document records a measurement that
+changed when the thing being measured was made smaller.
+
+The asymmetry is the argument that it is a defect. A backend declining to export
+values would decline both; one exporting them would export both. Folding a
+literal into its readers and then having nothing left to name is the only way to
+arrive at this shape — and it costs `buffer` its `kStringMaxLength` and
+`INSPECT_MAX_BYTES`, both of which node's tests read.
+
 ## The refusal that costs the most is not the one the counts name
 
 A refused function refuses everything that calls it, so the price of one primary
