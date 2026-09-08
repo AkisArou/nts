@@ -34,18 +34,18 @@ not measured clean and should not be quoted.**
 | `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
-| `in-narrowing` | 1.07x | characterised below: 187 bytecodes against javac's 110 |
+| `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
 | `awfy-sieve` | 1.25x -> **1.05x** *busy jit* | moved without being worked on; re-measure clean |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
-| `objects` | 0.96x -> **1.05x** *busy jit* | flagged both ways; it was a win, re-measure clean |
-| `generator` | 1.04x | **not previously listed** |
-| `symbol-keys` | 1.04x | **not previously listed** |
+| `objects` | **0.99x** | re-measured clean: still a win, as it was |
+| `generator` | **0.99x** | re-measured clean: not losing |
+| `symbol-keys` | **0.98x** | re-measured clean: not losing |
 | `arrays` | 1.03x | **not previously listed** |
 | `fib` | 1.03x | **not previously listed** |
-| `upcast` | 1.07x -> **1.02x** | the `uirem` residual |
-| `checksum` | 1.01x | **not previously listed** |
-| `closure-merge` | 1.01x | **not previously listed** |
+| `upcast` | 1.07x -> **0.99x** | re-measured clean; no `uirem` in its profile |
+| `checksum` | **1.00x** | parity |
+| `closure-merge` | **1.00x** | parity |
 | `growth-grown` | 1.01x | **not previously listed** |
 
 **Eight rows were losing and unlisted**, all between 1.01x and 1.07x, which is
@@ -500,6 +500,50 @@ one shape, one JDK.** What it does establish for this row is complete -- the
 cost is the field's representation, monomorphisation is free, and our codegen
 for the representation we chose is at parity with hand-written Java making the
 same choice.
+
+### The noise band, measured -- and six rows that were not losing
+
+The re-taken table put 25 rows above 1.00x, eight of them newly listed between
+1.01x and 1.07x. Those are the rows most likely to be an artefact of the run
+rather than a fact about the lane, so the borderline thirteen were measured
+**twice**. The second run carried no contamination flag at all; the first
+carried seven.
+
+    row              run 1    run 2 (clean)
+    checksum         1.00x    1.00x     parity
+    closure-merge    1.00x    1.00x     parity
+    objects          1.00x    0.99x     wins
+    upcast           1.01x    0.99x     wins
+    generator        1.03x    0.99x     wins
+    symbol-keys      1.05x    0.98x     wins
+    in-narrowing     1.02x    1.01x     parity, not the 1.07x it was listed at
+    arrays           1.03x    1.02x
+    fib              1.03x    1.02x
+    elementwise      1.05x    1.04x
+    growth-grown     1.01x    1.06x
+    bytes            1.10x    1.10x
+    awfy-sieve       1.06x    1.26x
+
+**Six of the eight newly-listed rows are at or under 1.00x.** They were listed
+because a single contaminated sweep put them a few percent above it.
+
+**So the honest count is nineteen rows losing, not twenty-five** -- and the
+useful output is the band rather than the six. Run-to-run movement on the same
+binary was 0.20x on `awfy-sieve`, 0.07x on `symbol-keys`, 0.05x on
+`growth-grown`, 0.04x on `generator`. **A row between about 0.95x and 1.05x
+cannot be called a win or a loss from one run**, and every row in that band
+needs two before it is quoted. `nts-bench` says as much itself when the same
+binary varies by more than 10% across its five internal runs; what this adds is
+that the *between-process* variance is of the same size and nothing was
+checking it.
+
+`in-narrowing` is the one that cost something: it was investigated at 1.07x --
+profile, bytecode counts, the 187-against-110 comparison -- and it is 1.01x.
+The bytecode difference is real and costs one or two percent, not seven. The
+investigation's conclusion is unchanged and its motivation was inflated.
+
+`awfy-sieve` moving 1.06x to 1.26x on the same binary is the worst offender in
+the table and wants its own careful sitting before anyone reads either number.
 
 ## Open, and whose
 
