@@ -1,4 +1,5 @@
 import { decodeUTF8, utf8 } from "../core/encoding.ts";
+import { idlIterator, idlIteratorPrototype } from "../core/idl-iterator.ts";
 import { coerceToUSVString } from "../core/webidl.ts";
 
 export type SearchParamEntry = readonly [name: string, value: string];
@@ -123,6 +124,9 @@ export function formDecode(input: string): string {
 }
 
 /** Standalone URLSearchParams. Live linkage to URL is supplied by the existing NTS URL package. */
+/** Shared by every iterator `URLSearchParams` hands out; see `idl-iterator.ts`. */
+const SEARCH_PARAMS_ITERATOR_PROTOTYPE = idlIteratorPrototype("URLSearchParams Iterator");
+
 export class URLSearchParams {
   private readonly list: SearchParamEntry[] = [];
 
@@ -225,20 +229,34 @@ export class URLSearchParams {
     this.list.sort(compareEntriesByName);
   }
 
-  *entries(): Generator<SearchParamEntry, void, unknown> {
+  // WebIDL iterator objects rather than the generators themselves; see `idl-iterator.ts` and
+  // the note on `Headers`. The traversals are unchanged.
+  entries(): IterableIterator<SearchParamEntry> {
+    return idlIterator(SEARCH_PARAMS_ITERATOR_PROTOTYPE, this.#entrySteps());
+  }
+
+  keys(): IterableIterator<string> {
+    return idlIterator(SEARCH_PARAMS_ITERATOR_PROTOTYPE, this.#keySteps());
+  }
+
+  values(): IterableIterator<string> {
+    return idlIterator(SEARCH_PARAMS_ITERATOR_PROTOTYPE, this.#valueSteps());
+  }
+
+  *#entrySteps(): Generator<SearchParamEntry, void, unknown> {
     for (const entry of this.list) {
       yield [entry[0], entry[1]];
     }
   }
 
-  *keys(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) {
+  *#keySteps(): Generator<string, void, unknown> {
+    for (const entry of this.#entrySteps()) {
       yield entry[0];
     }
   }
 
-  *values(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) {
+  *#valueSteps(): Generator<string, void, unknown> {
+    for (const entry of this.#entrySteps()) {
       yield entry[1];
     }
   }
@@ -261,7 +279,7 @@ export class URLSearchParams {
     return result.join("");
   }
 
-  [Symbol.iterator](): Generator<SearchParamEntry, void, unknown> {
+  [Symbol.iterator](): IterableIterator<SearchParamEntry> {
     return this.entries();
   }
 

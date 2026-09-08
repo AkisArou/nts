@@ -9,6 +9,18 @@ pnpm exec tsc --project tooling/conformance/web-platform/tsconfig.json --pretty 
 # Exports nothing mentions. Four mechanisms nothing routed through were found by hand in
 # this lane, none of them by looking, so the discipline is a gate rather than a habit.
 node tooling/conformance/web-platform/unrouted.mjs
+# Every test file on disk must appear in the list below. The list is explicit on purpose --
+# it fixes the order and lets a file be held back deliberately -- but the failure mode is that
+# a new file simply never runs, which reads exactly like a file that passes. Two had already
+# slipped through when this was added.
+for file in runtime/web-platform/test/*.test.ts; do
+  grep -q "$(basename "$file")" "$0" || {
+    echo "check.sh: $file is not named below, so it would not run." >&2
+    echo "  Add it to the list, or say in the file why it is held back." >&2
+    exit 2
+  }
+done
+
 # The environment intrinsics are preloaded, which is what a real environment does with
 # them: they exist before the first module runs. Defining them on first import instead
 # made them arrive after any suite that reached the platform barrel first.
@@ -36,8 +48,10 @@ node --expose-gc \
   runtime/web-platform/test/webidl-surface.test.ts \
   runtime/web-platform/test/idl-internal-surface.test.ts \
   runtime/web-platform/test/durable-cookie-jar.test.ts \
+  runtime/web-platform/test/idl-iterator.test.ts \
   runtime/web-platform/test/json-parse.test.ts \
   runtime/web-platform/test/json-plain.test.ts \
+  runtime/web-platform/test/json-plain-parse.test.ts \
   runtime/web-platform/test/json-stringify.test.ts \
   runtime/web-platform/test/json-surface.test.ts \
   runtime/web-platform/test/identity.test.ts \

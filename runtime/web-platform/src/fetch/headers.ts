@@ -1,5 +1,6 @@
 import { trimHTTPWhitespace } from "../core/ascii.ts";
 import { coerceToByteString } from "../core/webidl.ts";
+import { idlIterator, idlIteratorPrototype } from "../core/idl-iterator.ts";
 
 /** Transport entries retain wire order and duplicates. Public iteration is sorted. */
 export type HeaderEntry = readonly [name: string, value: string];
@@ -100,6 +101,9 @@ function convertHeaderSequenceEntry(entry: HeaderSequenceEntry): HeaderEntry {
 export const headersRawEntries: unique symbol = Symbol("Headers raw entries");
 export const headersGuardIsImmutable: unique symbol = Symbol("Headers guard is immutable");
 export const headersMakeImmutable: unique symbol = Symbol("Headers make immutable");
+
+/** Shared by every iterator `Headers` hands out; see `idl-iterator.ts`. */
+const HEADERS_ITERATOR_PROTOTYPE = idlIteratorPrototype("Headers Iterator");
 
 export class Headers {
   private readonly list: HeaderEntry[] = [];
@@ -261,7 +265,23 @@ export class Headers {
     return result;
   }
 
-  *entries(): Generator<HeaderEntry, void, unknown> {
+  // The three public iterators return WebIDL iterator objects rather than the generators
+  // themselves: an interface's iterators must share one prototype whose own prototype is
+  // %IteratorPrototype%, and a generator's chain is a level deeper. See `idl-iterator.ts`. The
+  // traversals below are unchanged, so order and liveness are too.
+  entries(): IterableIterator<HeaderEntry> {
+    return idlIterator(HEADERS_ITERATOR_PROTOTYPE, this.#entrySteps());
+  }
+
+  keys(): IterableIterator<string> {
+    return idlIterator(HEADERS_ITERATOR_PROTOTYPE, this.#keySteps());
+  }
+
+  values(): IterableIterator<string> {
+    return idlIterator(HEADERS_ITERATOR_PROTOTYPE, this.#valueSteps());
+  }
+
+  *#entrySteps(): Generator<HeaderEntry, void, unknown> {
     // Mutations invalidate the cache; ordinary traversal does not sort repeatedly.
     let index = 0;
     while (true) {
@@ -273,14 +293,14 @@ export class Headers {
     }
   }
 
-  *keys(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) {
+  *#keySteps(): Generator<string, void, unknown> {
+    for (const entry of this.#entrySteps()) {
       yield entry[0];
     }
   }
 
-  *values(): Generator<string, void, unknown> {
-    for (const entry of this.entries()) {
+  *#valueSteps(): Generator<string, void, unknown> {
+    for (const entry of this.#entrySteps()) {
       yield entry[1];
     }
   }
@@ -289,12 +309,12 @@ export class Headers {
     callback: (this: unknown, value: string, name: string, parent: Headers) => void,
     thisArg?: unknown,
   ): void {
-    for (const entry of this.entries()) {
+    for (const entry of this.#entrySteps()) {
       callback.call(thisArg, entry[1], entry[0], this);
     }
   }
 
-  [Symbol.iterator](): Generator<HeaderEntry, void, unknown> {
+  [Symbol.iterator](): IterableIterator<HeaderEntry> {
     return this.entries();
   }
 
