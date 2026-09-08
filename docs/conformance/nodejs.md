@@ -8736,18 +8736,76 @@ refusals is not worth replacing it with a delegation layer that would then be a
 divergence from node to maintain and explain. A refusal naming the real
 construct is more useful than a workaround that hides it.
 
-16 of 31 functions lower. The rest:
+### Re-measured 2026-09-08: `os` publishes 17 of node's 23
 
-| refused | count | what needs it |
-| --- | ---: | --- |
-| indexing something that is not an array | 3 | `Record<string, number>` for `os.constants` |
-| a parameter of unrepresentable type (`unknown`) | 3 | the validators |
-| an object with an optional property | 3 | `NetworkInterfaceInfo.scopeid` |
-| a parameter with a default | 2 | `getPriority(pid = 0)` |
-| a union of `number \| undefined` | 1 | `setPriority(pid, priority?)` |
-| `null` where it is not a reference | 1 | `UserInfo.shell` is `string \| null` |
-| an array method on a non-numeric array | 1 | `push` onto `CpuInfo[]` |
-| a name declared outside this function | 1 | |
+The table this section used to end with is withdrawn rather than patched. It
+read `a parameter with a default | 2 | getPriority(pid = 0)`, and there are
+**zero** such refusals in `os` today — `getPriority` lowers with its default
+handled, as `export func getPriority(pid: f64) -> f64`. A row naming a function
+that lowers is worse than no row, because it sends someone to fix a construct
+that works.
+
+What the addon actually publishes, against node in the same process:
+
+    node has, we do not:  constants  cpus  getPriority  networkInterfaces
+                          setPriority  userInfo
+    we have, node does not:  (none)
+
+Six exports, and they divide into two groups that need entirely different work.
+
+**Two lower and are dropped by cascade.** `getPriority` and `setPriority` both
+appear in the IR and neither is named by any NTS1001. They sit in
+`determineSpecificType`'s cone, which is 96 of `os`'s 141 cascaded functions and
+is rooted at `errors.ts:70`, `JSON.stringify`. For these two the cone is a step
+rather than a queue — checked, not assumed, and it is the first time that has
+come out this way.
+
+**Four do not lower, and only five of `os`'s 86 refusals are in its own source:**
+
+| export | site | refusal |
+| --- | --- | --- |
+| `cpus` | `main.ts:306` | an erased value where a concrete representation is wanted |
+| `userInfo` | `main.ts:428` | an erased value where a concrete representation is wanted |
+| `networkInterfaces` | `main.ts:340` | `name`, which `NetworkInterfaceMap` does not declare |
+| `constants` | `main.ts:541` | `name`, which `an anonymous type` does not declare |
+| `networkInterfaces` | `main.ts:395` | `userInfoString`, a declaration outside every walk |
+
+The other 81 refusals are shared code reached through the tsconfig cone —
+`errors.ts`, `blob.ts`, `encodings.ts`, `validators.ts` — and belong to whatever
+module fixes them first, not to `os`.
+
+So `os` is **two shapes and one chain** away from whole, not six separate
+problems. The `does not declare` shape already has four fixtures.
+
+### The `erased value` shape is narrower than its diagnostic
+
+It had no fixture, and writing one moved it a long way from what the message
+says. A value indexed out of an array is `T | undefined`; narrowed by a guard
+that throws, it lowers when read, compared, returned, used in arithmetic, and
+written into an object as `key: value`. It refuses **only in shorthand
+position**:
+
+    const first = xs[0];
+    if (first === undefined) throw new Error("");
+    return first + 1;        // lowers
+    return { lo: first };    // lowers
+    return { first };        // REFUSED
+
+`{ first }` is sugar for `{ first: first }` and the checker gives them the same
+type. A backend that could not put a narrowed value into an object would refuse
+both, so the asymmetry is the argument that this is a defect.
+
+`blockers/narrowed-shorthand-property` holds three functions and **two of them
+are controls that must stay clean**. That is not decoration: the fixture was
+written as "narrowed into an object literal", asserted the correct diagnostic,
+reproduced, and pointed at the wrong construct. Only the explicit-spelling
+control lowering cleanly located it. A fixture with one control says its defect
+is present; it takes a second to say what the defect *is*.
+
+Both real sites use shorthand because node's code does — `cpus` assembles a
+`CpuInfo` from seven guarded values, `userInfo` a `UserInfo` from three.
+Rewriting either to `key: value` would compile today and would be rewriting
+correct source to hide a refusal.
 
 ## What one fix is worth: `AnyView` measured against all 22 modules
 
