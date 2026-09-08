@@ -47,6 +47,16 @@ function expectedC(tsType) {
   // are reported as tuple so the caller can say which, since the heterogeneous
   // case is a separate open blocker.
   if (/^\[/.test(t)) return "tuple";
+  // A closure parameter cannot be checked here and the reason is not laziness.
+  // The compiler names a closure type per *program* -- `NtsObj_Closure0` in one,
+  // `NtsObj_Closure20` in `timers`, `NtsObj_Closure18` in
+  // `diagnostics_channel` -- so there is no single C spelling a shared header
+  // could carry, and `nts_node.h` writes `NtsHeader *` instead. clang rejects
+  // that pair. It is a real open blocker rather than an audit gap:
+  // `blockers/callback-binding`. Counted and reported below rather than skipped
+  // in silence, because a checker that quietly ignores a category is how the
+  // 177 above could look like coverage it is not.
+  if (/=>/.test(t)) return "closure";
   return null; // unions, interfaces, aliases -- not decided here
 }
 
@@ -111,7 +121,7 @@ function normalizeC(t) {
 
 const decls = declarations();
 const protos = prototypes();
-let mismatches = 0, checked = 0, skipped = 0, noProto = 0;
+let mismatches = 0, checked = 0, noProto = 0, closureParams = 0;
 
 for (const [name, d] of [...decls].sort()) {
   const p = protos.get(name);
@@ -132,6 +142,7 @@ for (const [name, d] of [...decls].sort()) {
   for (let i = 0; i < d.params.length; i++) {
     const want = expectedC(d.params[i]);
     const got = p.params[i];
+    if (want === "closure") { closureParams++; continue; }
     if (want === null || want === "tuple" || got === undefined) continue;
     if (normalizeC(got) !== want) {
       problems.push(`param ${i} is ${d.params[i]} -> ${want}, C says ${got}`);
@@ -151,4 +162,11 @@ console.log(
   `\n  ${checked} binding(s) with a prototype checked, ${mismatches} disagreeing; ` +
     `${noProto} declared with no prototype found`,
 );
+if (closureParams > 0) {
+  console.log(
+    `  ${closureParams} closure parameter(s) not checkable: the compiler names a ` +
+      `closure type per program,\n  so no shared header can spell it -- ` +
+      `blockers/callback-binding, not an audit gap`,
+  );
+}
 process.exitCode = mismatches > 0 ? 1 : 0;

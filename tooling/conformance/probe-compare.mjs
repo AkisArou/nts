@@ -639,6 +639,35 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "internal-full.ts",
+    module: "internal",
+    checks(m) {
+      const fsm = require("node:fs");
+      const lengths = m.probeErrorTableLengths().split(":");
+      const out = [
+        { label: "write_stdout returns", mine: m.probeWriteStdout(""), theirs: 0 },
+        { label: "write_stderr returns", mine: m.probeWriteStderr(""), theirs: 0 },
+        { label: "debug_write returns", mine: m.probeDebugWrite(""), theirs: 0 },
+        { label: "uuid status clean", mine: m.probeUuidStatus(), theirs: 0 },
+        // Two parallel arrays. A length check alone cannot see them drift
+        // relative to each other, so the pairing is checked against node below.
+        { label: "error tables same length", mine: lengths[0], theirs: lengths[1] },
+        { label: "error codes are unique", mine: m.probeCodesAreUnique(), theirs: true },
+        { label: "sleep 20ms actually elapses", mine: m.probeSleepElapses(20), theirs: true },
+      ];
+      const errorOf = (thunk) => { try { thunk(); return null; } catch (e) { return e; } };
+      for (const [thunk, label] of [
+        [() => fsm.statSync("/nonexistent-nts/x"), "ENOENT"],
+        [() => fsm.fstatSync(9999), "EBADF"],
+        [() => fsm.readFileSync("/"), "EISDIR"],
+      ]) {
+        const e = errorOf(thunk);
+        out.push({ label: `code ${e.errno} names ${label}`, mine: m.probeNameForCode(e.errno), theirs: e.code });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
