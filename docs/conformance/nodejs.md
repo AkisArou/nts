@@ -8941,6 +8941,114 @@ refusal in the same function — **a cone sizes a queue rather than a step.**
 Eleven exports is the largest single move available on `path`, which is a
 different claim from `path` going green.
 
+## The last seven surface tests, and the four defects they found
+
+Every module in the profile now pins its export surface against node's, taken
+from a child `node -p`. The last seven — `dgram`, `util`, `net`, `http`,
+`process`, `readline`, `fs` — went in on 2026-09-08 and found four defects on
+their first run. **Node ships nothing that enumerates a module**, so none of
+this could fail upstream and none of it was visible here.
+
+| module | found |
+| --- | --- |
+| `http` | published `HTTPParser`, `checkInvalidHeaderChar`, `checkIsHttpToken`, `methods` — node has none of them — and had lost the names of `request` and `get` |
+| `util` | `isArray` skipped `DEP0044` entirely |
+| `process` | published a **binding** as public API, and carried five wrong names |
+| `fs` | nothing. The first failure was the test's own bug |
+
+### `process.getActiveResourcesInfo` was the binding
+
+`getActiveResourcesInfo = nts_process_active_resources` assigned the binding
+straight to the public field, so the exported function *was* the binding — its
+identity is the stand-in's on the interpreted lane and the C function's on the
+compiled one. It read:
+
+    process.getActiveResourcesInfo.name === "resourcesAfterHarness"
+
+which is the name of a **harness shim** in `bindings.node.mjs` that subtracts the
+runner's own pipes from the resource count. The same aliasing once left
+`os.freemem.name` empty and published 4 of `os`'s 23 names.
+
+### What a function's name is compared against
+
+Not the key it is filed under. That cost the `fs` test its first failure against
+a correct module: `fs.FileReadStream.name` is `"ReadStream"` **on node too**,
+because `FileReadStream` *is* `ReadStream` under a second key.
+
+So the check reads node's `.name` for each key, and the aliases are pinned
+separately — a check node's own tests could never need, because on node two keys
+holding one object are the same object by construction. An artifact publishing
+two distinct functions with the right names and the right behaviour passes
+everything else and is still wrong: replacing one key would not change what the
+other sees.
+
+### Names that differ where ours is right
+
+`process.chdir`, `cwd` and `umask` are internal wrappers on node, so node's names
+are `wrappedChdir`, `wrappedCwd`, `wrappedUmask`. `_fatalException`, `setegid`,
+`seteuid`, `setgid` and `setuid` are **anonymous** on node, assigned to members
+where named evaluation does not apply. Ours are declarations with correct names,
+and copying an accident of node's assignment would be making this code worse.
+Each is pinned with its reason; an unpinned mismatch still fails.
+
+That is the opposite direction from `http.get`, which was an arrow assigned to a
+member and so had no name at all while node's did. There, matching node was the
+fix. The two cases look identical in a diff of the test and are opposite in what
+they ask for.
+
+### What is pinned absent
+
+`util` 8, `process` 28, `net` 2, `http` 1, `dgram` 1 — each with a reason rather
+than a bucket, and `dgram`'s carrying the argument `shape.mjs` already made: a
+throwing stand-in is a worse answer than no property, because a test checking for
+it would see something that looks implemented. `readline` and `fs` pin the empty
+list, which is the strongest form.
+
+Every one of the seven fails under `--sabotage`.
+
+## Reference counting types a global's save-temporary from the wrong side
+
+`counted-lane.sh` covered all twenty building modules for the first time on
+2026-09-08 — it had only ever run over nine, and the set moved under it when
+eleven more started building. **Six of the twenty fail to build under counting**,
+and five of them are one defect:
+
+    static NtsObj_WritableLike * stdout = 0;      <- the binding
+    NtsObj_StandardStream * v1506;                <- the save-temporary
+    v1506 = stdout;                               <- error
+    stdout = (NtsObj_WritableLike *)v1258;
+    nts_release((NtsHeader *)v1506);
+
+Counting inserts the temporary so the previous value can be released after the
+store. It is the only construct that reads the binding back, and it takes the
+type of the value being *stored* rather than of the storage being *read*.
+
+**Five identical error texts are not automatically one bug**, so this was checked
+rather than counted: `assert`, `console`, `fs`, `readline` and `util` each emit
+`static NtsObj_WritableLike * stdout` with a narrower save-temporary. `process`
+is the sixth and fails on something else — two globals colliding with C header
+names, which is a known separate item.
+
+`blockers/rc-widened-global-save` reproduces it in eleven lines, and the
+uncounted build of that same program compiles with **zero** errors.
+
+### The harness gained a form for it, and the control is mechanical
+
+`emit-c --napi --rc ->` passes flags through. When a fixture names a flag, the
+check now also builds *without* it and requires that build to be clean.
+
+A fixture saying "this fails under `--rc`" makes two claims and the second is the
+whole content. Asserting only the failure would hold equally well for a program
+that does not compile at all — a different defect with a different owner. That
+control was prose in the first draft, and **prose is not a control**.
+
+Inverting the condition flips the fixture's verdict, so the branch is
+load-bearing. It has not been shown to reject a real mis-attributed fixture,
+because no program in this tree currently emits non-compiling C without `--rc`:
+all five `fails-to-compile` fixtures went FIXED the same day. That is a good
+state for the compiler and an untested state for the check, and they are worth
+recording as two different facts.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
