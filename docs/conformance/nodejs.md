@@ -4949,6 +4949,36 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## `EventEmitter`, where the answer depends on *when*
+
+Node keeps one listener array per event and copies it before emitting, so
+upstream every question about mutation-during-emit has one implementation and one
+answer. Here the list is a class with its own copy-on-emit discipline, and each
+of these is a separate decision it could get wrong independently.
+
+**Sixteen cases whose answer is not derivable from the documentation**, fifteen
+matching:
+
+- a listener removed *during* an emit still runs that time
+- a listener added during an emit does **not** run that time
+- `removeAllListeners` mid-emit still lets the already-copied ones run
+- `on(f); on(f); removeListener(f)` removes one, not both
+- `listeners()` returns a copy, so mutating it changes nothing
+- `newListener` fires *before* the listener is added, `removeListener` after
+- `eventNames()` keeps insertion order and mixes strings with symbols
+
+**The sixteenth is §13, not a defect.** Node's `once` wrapper carries a
+`.listener` property pointing at the original function, so
+`rawListeners(e)[0].listener` is a function there and `undefined` here. §13 says
+it directly — *"a function here is a C function, not an object with
+properties"* — so the relationship is a typed record (`ListenerRecord.original`)
+rather than a property on a callable.
+
+Asserted rather than omitted, on the rule the `buffer` test records. **Both times
+§13 turned an apparent defect into a decision today, the tell was a comment in
+this profile's own source saying so** — which was then checked against §13 rather
+than trusted. A source comment claiming a decision is a lead, not a citation.
+
 ## Eighty-three error classes each carried a key node does not have
 
 Node builds every `ERR_*` from a single factory in `lib/internal/errors.js`, so
