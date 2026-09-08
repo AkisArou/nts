@@ -63,6 +63,18 @@ index both take a number, so the conversions moved rather than left. Reverted.
 **Better-looking generated code is not a faster program**, and reading the emitted C is a way to
 confirm a change happened, not a way to confirm it helped.
 
+**"Removing the redundant slice will help."** A string needing no escaping was still copied
+whole: `out + value.slice(plainFrom) + '"'` with `plainFrom` at zero. `nts_str_range` has no
+whole-string fast path -- it allocates and `memcpy`s -- so skipping it when `plainFrom === 0`
+removes a real allocation and a real copy on the majority of strings, keys included. `member`
+likewise stopped appending `""` when there is no gap.
+
+Not measurable. `json-serialize` 15.02us to 14.53us with node moving 12.68 to 12.11 in the same
+pair of runs; `json-build-join` moved the wrong way by as much. Both changes are kept -- they are
+strictly less work and cost nothing to read -- but they buy nothing, and **that was predictable
+from the pair above and I did not predict it.** Allocation being nearly free means removing an
+allocation is nearly worthless, which is the same sentence read in the other direction.
+
 **"Serialization is allocation-bound; allocation is the lever."** Written into an earlier goal
 from a profile showing `nts_each_reference` at 20%, with no counterfactual. The append/join pair
 above disproves it. The error was substituting a ranking for a price, and it is the second time

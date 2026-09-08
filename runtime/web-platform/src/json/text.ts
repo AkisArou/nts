@@ -120,6 +120,11 @@ export function quoteJSONString(value: string): string {
     else if (unit === FORM_FEED) out += "\\f";
     else out += unicodeEscape(unit);
   }
+  // Nothing was escaped. `plainFrom` only moves in the two branches that also append to `out`,
+  // so `plainFrom === 0` means `out` is still the opening quote and the slice would copy the
+  // whole string to produce exactly what `value` already is. That is the common case: most
+  // strings in most documents contain nothing Table 78 or 25.5.4.3 has anything to say about.
+  if (plainFrom === 0) return '"' + value + '"';
   return out + value.slice(plainFrom) + '"';
 }
 
@@ -157,5 +162,9 @@ export function resolveGap(space: number | string | undefined): string {
 
 /** The text of one member of an object: a quoted key, a colon, and the gap's single space. */
 export function member(key: string, valueText: string, gap: string): string {
-  return quoteJSONString(key) + ":" + (gap === "" ? "" : " ") + valueText;
+  // Branched rather than appending `""`. Concatenating an empty string is a whole append --
+  // a length check, a capacity check and possibly a copy -- to add nothing, and the gapless
+  // form is the one every compact document takes.
+  if (gap === "") return quoteJSONString(key) + ":" + valueText;
+  return quoteJSONString(key) + ": " + valueText;
 }
