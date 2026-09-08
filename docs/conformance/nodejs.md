@@ -2879,6 +2879,51 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## A cascade that names a refusal nobody printed
+
+`blockers/cascade-with-no-root`. The entire output for the file is:
+
+    main.ts:24:9  NTS1003 `make` cannot be compiled because it calls
+                  `Handle#hasRef`, which was refused above
+    no wrapper for Immediate: is exported and is not a function this backend can name
+    no wrapper for make: is exported and no function of that name was compiled
+
+**There is no `above`.** Not one NTS1001 in the run. The single actionable
+sentence points at something that does not appear in the output.
+
+This is the diagnostic form of every instrument failure in this document: a
+result that cannot be told apart from a different result. A cascade with a
+visible root says what to fix. A cascade with no root says only that something,
+somewhere, was not lowered — and is indistinguishable from one whose root was
+printed and scrolled past.
+
+**And `nts hir` reports `5 function(s), nothing refused` for the same file.**
+Only `emit-c` produces the cascade. A blocker invisible to `hir` is not new
+here — `f64[]` lowers cleanly and fails at the wrapper — but this one carries an
+**NTS1003**, a *lowering* code, out of a run the lowering called clean. The
+fixture's expectation had to name `emit-c` for that reason, which is the first
+thing it demonstrates, before its own subject.
+
+Reached from `timers`, whose `Immediate` is generic over a tuple
+(`class Immediate<Args extends unknown[] = []>`) and implements an interface.
+The five real refusals there read *a member of `Immediate`, a class this
+compiler has no type for*, which at least names a cause; the reduction lost the
+cause and kept the cascade.
+
+### Two neighbours, both of which refuse honestly
+
+Found on the way and not fixtured separately, because each says why:
+
+    new Immediate<[]>(fn, [])     an array literal of unrepresentable type
+                                  (an untyped node)  -- the empty tuple
+    #heap: (T | undefined)[]      `null` or `undefined` where what it stands in
+                                  for is not a reference
+
+The second is `priority-queue.ts:26` and is **not reproducible from that line
+alone** — I wrote the identical field, with `<T extends object>` and the
+optional second callback, and it compiled. Recorded as a failed reduction rather
+than as a fixture.
+
 ## `timers` is two fixtured blockers from compiling, and both are named
 
 The closest module on the axis, measured on the 14:18 probe binary. Its entire
