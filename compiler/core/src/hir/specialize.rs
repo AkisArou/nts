@@ -925,20 +925,30 @@ fn insert_conversions(
             let kind = func.values[value.0 as usize].kind.clone();
             let ty = func.values[value.0 as usize].ty.clone();
             let updated = match kind {
-                // An erased operand is left exactly as it is. `comparison_type`
-                // falls back to comparing in doubles, on the argument that every
-                // integer this pass produces is exact as an `f64` -- which is
-                // sound for numbers and false for a value that is not one. The
-                // conversion it asked for emitted `(double)v` on a sixteen-byte
-                // struct: uncompilable C, from `x === 5` on a `number |
-                // undefined`, in a function the lowering called complete.
+                // An operand that is not a number is left exactly as it is.
+                // `comparison_type` falls back to comparing in doubles, on the
+                // argument that every integer this pass produces is exact as an
+                // `f64` -- which is sound for numbers and false for anything
+                // else. The conversion it asked for emitted `(double)v` on a
+                // sixteen-byte struct: uncompilable C, from `x === 5` on a
+                // `number | undefined`, in a function the lowering called
+                // complete.
                 //
-                // The emitter compares these by testing the tag first, and that
-                // needs both sides as they are.
+                // That guard was written for the erased case alone, and the
+                // same fallback then emitted `(double)v3` on a *pointer*.
+                // `candidate === entry` where `MemoryEntry extends
+                // HttpCacheEntry` is where it turned up -- the plainest linear
+                // scan there is -- and it only needed the two sides to be
+                // spelled differently, which a subtype and its base always are.
+                //
+                // Written as "both are numbers" rather than a list of what is
+                // not, because the list is what went stale: a bool, a string, a
+                // bigint and an object all reach here and none of them is an
+                // `f64`. The two sides that *are* numbers still unify, which is
+                // the whole of what this fallback was for.
                 OpKind::Binary { op: bin, lhs, rhs }
                     if bin.is_comparison()
-                        && (func.values[lhs.0 as usize].ty == HirType::Erased
-                            || func.values[rhs.0 as usize].ty == HirType::Erased) =>
+                        && !(compares_as_a_number(func, lhs) && compares_as_a_number(func, rhs)) =>
                 {
                     None
                 }
@@ -1047,6 +1057,19 @@ fn insert_conversions(
 
     func.blocks = blocks;
     count
+}
+
+/// Whether a comparison operand is a number, and so has a width to unify.
+///
+/// A `bigint` is not one. It is exact and 128 bits wide, so narrowing it to an
+/// `f64` to meet the other side would lose most of it -- and the checker will
+/// not let it meet a `number` anyway, so the pair is always two bigints, which
+/// already agree.
+fn compares_as_a_number(func: &Func, value: ValueId) -> bool {
+    matches!(
+        func.values[value.0 as usize].ty,
+        HirType::Float { .. } | HirType::Int { .. }
+    )
 }
 
 /// The type two operands of a comparison should be brought to.
@@ -1234,6 +1257,20 @@ fn convert(
         }
         #[allow(clippy::cast_precision_loss)]
         (OpKind::ConstInt(value), HirType::Float { .. }) => OpKind::ConstFloat(*value as f64),
+        // Crossing the erased boundary is not a coercion, and a `Convert` is
+        // emitted as a C cast -- `(double)v` on a sixteen-byte struct, and
+        // `(NtsValue)v` on a double, neither of which is C. The IR already has
+        // the two operations that mean this, and they know that the
+        // representation is tag-beside-payload today and may be NaN-boxed
+        // tomorrow.
+        //
+        // Reached wherever a width was asked for and the value had none: a
+        // block edge whose parameter is erased, a field store, a call argument.
+        // Five sites in `events`, five in `stream`, six in `fs`.
+        _ if *wanted == HirType::Erased => OpKind::Erase { value: operand },
+        _ if func.values[operand.0 as usize].ty == HirType::Erased => {
+            OpKind::Unerase { value: operand }
+        }
         _ => OpKind::Convert(operand),
     };
 

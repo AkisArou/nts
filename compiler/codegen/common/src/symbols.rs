@@ -329,6 +329,32 @@ pub fn c_identifier(name: &str) -> String {
     }
 }
 
+/// The C spelling of a *struct member*, which is a narrower namespace than a
+/// linkage name and has one collision of its own.
+///
+/// Every managed object begins with `NtsHeader header;` -- that is what lets a
+/// provider read the descriptor without knowing the type -- so a TypeScript
+/// field called `header` is a second member of that name in the same struct.
+/// clang says `duplicate member`, and then every `_Static_assert` about the
+/// layout fails as well, because `offsetof` no longer names one thing. Ten of
+/// `assert`'s errors were that one field, and `assert/src/error.ts` is entitled
+/// to it: node's `AssertionError` does not expose the name, so nothing outside
+/// can see what it is called.
+///
+/// The same underscore rule as [`c_identifier`], for the same reason: it is
+/// reversible by inspection. It is a separate function rather than an addition
+/// to the reserved list because the collision is a member's, not a linker's --
+/// a *function* named `header` is fine, and there is no reason to rename it.
+#[must_use]
+pub fn c_member(name: &str) -> String {
+    let spelled = c_identifier(name);
+    if spelled == "header" {
+        format!("{spelled}_")
+    } else {
+        spelled
+    }
+}
+
 /// What a name becomes on the JVM.
 ///
 /// # A second rule, deliberately beside the first

@@ -1321,6 +1321,24 @@ pub const fn is_closure_type(ty: TypeId) -> bool {
     ty.0 >= SYNTHETIC_CLOSURES
 }
 
+/// Whether a type id names a closure that has a body of its own.
+///
+/// The narrow half of [`is_closure_type`], and the two are deliberately
+/// different questions. That one asks what a value's *tag* should be, and a
+/// class used as a value answers `"function"` there, correctly. This one asks
+/// whether the class has a `call` to dispatch to -- which a real closure does
+/// and a constructor token or a provided error class does not, because nothing
+/// calls a class value: it exists to have an address.
+///
+/// By the band rather than by the name, because the name is a convention and
+/// the band is the definition. `Ctor_` catches the constructor tokens and
+/// `RangeError` is spelled exactly as a user class would be, so a name test
+/// refused twelve examples for holding an error constructor.
+#[must_use]
+pub const fn has_a_closure_body(ty: TypeId) -> bool {
+    ty.0 >= SYNTHETIC_CLOSURES && ty.0 < PROVIDED_ERRORS
+}
+
 /// The band the constructor tokens live in.
 ///
 /// A class used as a *value* -- `value === TypeError`, or a `constructor`
@@ -2445,6 +2463,61 @@ fn settle(lowered: &mut lower::Lowered) {
     drop_readers_of_unwritten_globals(lowered);
 }
 
+/// Closure classes whose one method is a function that is no longer here, by
+/// the type ids that name them and the method they lost.
+///
+/// A named function taken as a *value* becomes a closure whose single method is
+/// that function. Refusing the function drops the method, and the class is left
+/// with a dispatch table that cannot be filled -- but the class, its descriptor
+/// and its single static instance are all still emitted, and so is every site
+/// that takes the value. C accepts the result. The failure is a null
+/// dereference on the first call, three layers from the function that was
+/// refused.
+///
+/// `runtime/node/timers` is the whole shape: `host.install(processTimers,
+/// processImmediate)`, where `processTimers` is refused for reading a name from
+/// an enclosing scope. The module compiled, the addon loaded, and `setTimeout`
+/// crashed. Its sibling in the same program lost its *body* instead of its
+/// table, which clang caught -- the same defect, and only the loud half was
+/// visible.
+fn uncallable_closures(
+    lowered: &lower::Lowered,
+    present: &rustc_hash::FxHashSet<String>,
+) -> rustc_hash::FxHashMap<TypeId, String> {
+    let mut found = rustc_hash::FxHashMap::default();
+    for layout in &lowered.program.layouts {
+        // A constructor token and a provided error class are both closure
+        // types and both mean to be -- `typeof TypeError` is `"function"` --
+        // and neither has a method, because nothing calls a class value.
+        if !layout.types.iter().any(|ty| has_a_closure_body(*ty)) {
+            continue;
+        }
+        // Two ways to lose the method, and both were seen in one program.
+        // Naming a function that is no longer here is the loud half: the
+        // descriptor takes its address and nothing defines it, so C says so.
+        // Having no method at all is the quiet half: the table is a null
+        // pointer, C is content, and the call reads through it.
+        let lost = layout
+            .methods
+            .iter()
+            .flatten()
+            .find(|method| !present.contains(method.as_str()))
+            .cloned()
+            .or_else(|| {
+                layout
+                    .methods
+                    .iter()
+                    .all(Option::is_none)
+                    .then(|| format!("{}#call", layout.name))
+            });
+        let Some(lost) = lost else { continue };
+        for ty in &layout.types {
+            found.insert(*ty, lost.clone());
+        }
+    }
+    found
+}
+
 /// Every function name the program still defines, plus the resumptions a
 /// generator split will provide.
 fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
@@ -2463,6 +2536,64 @@ fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
         .collect()
 }
 
+/// Every value in this function that depends on something no longer defined,
+/// each with the name whose absence dooms it.
+///
+/// The name is carried along so the diagnostic on a lost global can say which
+/// refusal reached it. Forward from every seed: an op that reads a doomed value
+/// is doomed, to a fixpoint. A seed's own *arguments* are not -- they were
+/// computed before it and reading them is still fine, so what is left behind is
+/// dead rather than wrong.
+fn doomed_values(
+    func: &Func,
+    present: &rustc_hash::FxHashSet<String>,
+    uncallable: &rustc_hash::FxHashMap<TypeId, String>,
+) -> rustc_hash::FxHashMap<ValueId, String> {
+    let mut doomed: rustc_hash::FxHashMap<ValueId, String> = rustc_hash::FxHashMap::default();
+    for (index, op) in func.values.iter().enumerate() {
+        // Two ways to name a function that is gone: calling it, and *being* it.
+        // The second is a closure over a refused function, which has no method
+        // left to dispatch to -- see `uncallable_closures`.
+        let absent = match &op.kind {
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } if !present.contains(name.as_str()) => Some(name.clone()),
+            OpKind::ClosureStatic => match &op.ty {
+                HirType::Managed(ManagedType::Object(ty)) => uncallable.get(ty).cloned(),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(name) = absent {
+            doomed.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)), name);
+        }
+    }
+    if doomed.is_empty() {
+        return doomed;
+    }
+    for _ in 0..func.values.len() {
+        let mut grew = false;
+        for (index, op) in func.values.iter().enumerate() {
+            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+            if doomed.contains_key(&value) {
+                continue;
+            }
+            let inherited = operands_of(&op.kind)
+                .iter()
+                .find_map(|operand| doomed.get(operand).cloned());
+            if let Some(name) = inherited {
+                doomed.insert(value, name);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    doomed
+}
+
 /// Remove the module-scope statements that depend on a refused call, keeping
 /// the rest of the module's evaluation.
 ///
@@ -2477,8 +2608,8 @@ fn present_names(lowered: &lower::Lowered) -> rustc_hash::FxHashSet<String> {
 /// initializer that remains, so its readers are dropped and no others are.
 fn excise_from_initializer(
     lowered: &mut lower::Lowered,
-    callee: &str,
     present: &rustc_hash::FxHashSet<String>,
+    uncallable: &rustc_hash::FxHashMap<TypeId, String>,
 ) -> bool {
     let Some(func) = lowered
         .program
@@ -2493,38 +2624,9 @@ fn excise_from_initializer(
     // that reads a doomed value is doomed, to a fixpoint. The call's own
     // *arguments* are not -- they were computed before it and reading them is
     // still fine, so what is left behind is dead rather than wrong.
-    let mut doomed: rustc_hash::FxHashSet<ValueId> = rustc_hash::FxHashSet::default();
-    for (index, op) in func.values.iter().enumerate() {
-        if let OpKind::Call {
-            callee: Callee::Direct(name),
-            ..
-        } = &op.kind
-            && !present.contains(name.as_str())
-        {
-            doomed.insert(ValueId(u32::try_from(index).unwrap_or(u32::MAX)));
-        }
-    }
+    let doomed = doomed_values(func, present, uncallable);
     if doomed.is_empty() {
         return false;
-    }
-    for _ in 0..func.values.len() {
-        let mut grew = false;
-        for (index, op) in func.values.iter().enumerate() {
-            let value = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
-            if doomed.contains(&value) {
-                continue;
-            }
-            if operands_of(&op.kind)
-                .iter()
-                .any(|operand| doomed.contains(operand))
-            {
-                doomed.insert(value);
-                grew = true;
-            }
-        }
-        if !grew {
-            break;
-        }
     }
 
     // Control flow is the one thing this cannot cut. A terminator reading a
@@ -2533,11 +2635,11 @@ fn excise_from_initializer(
     for block in &func.blocks {
         if operands_of_terminator(&block.terminator)
             .iter()
-            .any(|value| doomed.contains(value))
+            .any(|value| doomed.contains_key(value))
         {
             return false;
         }
-        if block.params.iter().any(|param| doomed.contains(param)) {
+        if block.params.iter().any(|param| doomed.contains_key(param)) {
             return false;
         }
         let carried: Vec<&Vec<ValueId>> = match &block.terminator {
@@ -2551,29 +2653,33 @@ fn excise_from_initializer(
         };
         if carried
             .iter()
-            .any(|args| args.iter().any(|value| doomed.contains(value)))
+            .any(|args| args.iter().any(|value| doomed.contains_key(value)))
         {
             return false;
         }
     }
 
     // The globals that lose their assignment, named before the ops go.
-    let mut lost: Vec<(u32, nts_semantic_schema::Origin)> = Vec::new();
+    let mut lost: Vec<(u32, String, nts_semantic_schema::Origin)> = Vec::new();
     for block in &func.blocks {
         for value in &block.ops {
-            if !doomed.contains(value) {
+            let Some(cause) = doomed.get(value) else {
                 continue;
-            }
+            };
             if let OpKind::GlobalSet { global, .. } = func.values[value.0 as usize].kind {
-                lost.push((global, func.values[value.0 as usize].origin.clone()));
+                lost.push((
+                    global,
+                    cause.clone(),
+                    func.values[value.0 as usize].origin.clone(),
+                ));
             }
         }
     }
     for block in &mut func.blocks {
-        block.ops.retain(|value| !doomed.contains(value));
+        block.ops.retain(|value| !doomed.contains_key(value));
     }
 
-    for (global, origin) in lost {
+    for (global, callee, origin) in lost {
         let name = lowered
             .program
             .globals
@@ -2610,6 +2716,11 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             .map(|func| func.name.as_str())
             .chain(resumptions.iter().map(String::as_str))
             .collect();
+        // Recomputed each round, like `present`: dropping a body can be what
+        // empties the next closure's method slot.
+        let owned: rustc_hash::FxHashSet<String> =
+            present.iter().map(|name| (*name).to_owned()).collect();
+        let uncallable = uncallable_closures(lowered, &owned);
         let mut refused = Vec::new();
         for func in &lowered.program.funcs {
             // Over the ops each block still *holds*, not over `func.values`.
@@ -2622,15 +2733,26 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                 .blocks
                 .iter()
                 .flat_map(|block| block.ops.iter())
-                .find_map(|value| match &func.values[value.0 as usize].kind {
-                    OpKind::Call {
-                        callee: Callee::Direct(name),
-                        ..
-                    } if !present.contains(name.as_str()) => Some((
-                        name.clone(),
-                        func.values[value.0 as usize].origin.clone(),
-                    )),
-                    _ => None,
+                .find_map(|value| {
+                    let op = &func.values[value.0 as usize];
+                    match &op.kind {
+                        OpKind::Call {
+                            callee: Callee::Direct(name),
+                            ..
+                        } if !present.contains(name.as_str()) => {
+                            Some((name.clone(), op.origin.clone()))
+                        }
+                        // Holding a closure whose method was refused is as
+                        // fatal as calling the function directly, and quieter:
+                        // the call would not link, and this compiles.
+                        OpKind::ClosureStatic => match &op.ty {
+                            HirType::Managed(ManagedType::Object(ty)) => uncallable
+                                .get(ty)
+                                .map(|lost| (lost.clone(), op.origin.clone())),
+                            _ => None,
+                        },
+                        _ => None,
+                    }
                 });
             if let Some((name, origin)) = missing {
                 refused.push((func.name.clone(), name, origin));
@@ -2660,7 +2782,7 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
             // says whether it could, and where it could not this falls back to
             // dropping the whole thing, which is what it always did.
             if caller == lower::MODULE_INIT
-                && excise_from_initializer(lowered, &callee, &present_names(lowered))
+                && excise_from_initializer(lowered, &present_names(lowered), &uncallable)
             {
                 continue;
             }

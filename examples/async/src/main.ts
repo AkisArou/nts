@@ -327,3 +327,38 @@ export async function allWithARejection(n: number): Promise<number> {
 export async function raceWithARejection(n: number): Promise<number> {
   return await Promise.race([afterOneTick(n), rejects(n)]);
 }
+
+// An array payload, returned directly rather than through `Promise.all`.
+//
+// `allOfStrings` above says the array is the first class C refuses an erased
+// reference for, and it is -- on the way *out*, where the runtime hands one
+// back. This is the way *in*, and it was a separate hole: the fulfil that
+// carries a tag alongside the reference was not on the list of positions the
+// emitter erases the class for, so `nts_promise_fulfill_tagged` was handed an
+// `NtsArray *` where it declares `NtsHeader *`.
+//
+// The list is now the header's, read back out of clang by a test, because this
+// was the third time it went stale and the helper it was missing sits one line
+// below one that was on it.
+export async function threeNumbers(n: number): Promise<number> {
+  const values: number[] = [n, n + 1, n + 2];
+  return values[0]! + values[1]! * 10 + values[2]! * 100;
+}
+
+// The same shape with an object payload, which is what a module returning a
+// handle does. Neither is a number, and the tag is what tells them apart.
+class Boxed {
+  value: number;
+  constructor(value: number) {
+    this.value = value;
+  }
+}
+
+async function boxed(n: number): Promise<Boxed> {
+  return new Boxed(n * 3);
+}
+
+export async function throughABox(n: number): Promise<number> {
+  const box = await boxed(n);
+  return box.value;
+}

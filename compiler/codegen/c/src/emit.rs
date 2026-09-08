@@ -14,6 +14,7 @@
 //! to be visible.
 
 pub use nts_codegen_common::symbols::c_identifier;
+use nts_codegen_common::symbols::c_member;
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
@@ -284,11 +285,13 @@ impl Emitted {
 /// and the fixed point is what `drop_callers_of_refused` computes for the same
 /// reason.
 ///
-/// Direct calls only. A dropped function that a dispatch table names is still a
-/// dangling symbol and still a clang error -- unchanged, rare, and not made
-/// worse here; `emit_object_descriptors` reads the program's layouts rather
-/// than these bodies, so the two would have to be reconciled and a null slot is
-/// worse than a link error.
+/// Direct calls only. A dropped function that a dispatch table names used to be
+/// left as a dangling symbol on the argument that a null slot is worse than a
+/// link error -- true while nothing checked the slot. It is not true now:
+/// `emit_object_descriptors` takes the surviving names, writes null for a slot
+/// whose body is gone, and refuses the one case where null is reachable, which
+/// is a closure. So the table agrees with the bodies, and the case that would
+/// have been a silent crash is a diagnostic instead.
 fn drop_orphaned_bodies(
     bodies: &mut Vec<(String, CodeWriter, &Func)>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -421,6 +424,12 @@ pub fn emit(program: &Program) -> Emitted {
     }
 
     drop_orphaned_bodies(&mut bodies, &mut diagnostics);
+    // The C names of the functions this translation unit will actually define,
+    // after the backend's own refusals have taken their callers with them.
+    // `program.funcs` is the wrong list: it still holds the bodies dropped just
+    // above, and a dispatch table built from it names them.
+    let defined: rustc_hash::FxHashSet<String> =
+        bodies.iter().map(|(_, _, func)| c_identifier(&func.name)).collect();
 
     let descriptors = descriptors_reached(&bodies);
 
@@ -451,7 +460,7 @@ pub fn emit(program: &Program) -> Emitted {
     }
     writer.blank(&origin);
 
-    emit_object_descriptors(&mut writer, &origin, program);
+    emit_object_descriptors(&mut writer, &origin, program, &defined, &mut diagnostics);
     emit_descriptors(&mut writer, &origin, &descriptors);
     emit_literals(&mut writer, &origin, &literals);
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
@@ -590,12 +599,50 @@ fn crosses_as_header(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(ManagedType::Object(_)))
 }
 
+/// Every parameter the runtime declares as `NtsHeader *`, by helper and
+/// position.
+///
+/// The runtime stores one reference slot for every payload, so a helper that
+/// takes *any* managed value names the base header and the caller supplies the
+/// class. Our value has the class -- `NtsArray *`, `NtsObj_Foo *` -- and C
+/// rejects the narrowing on the way in, so the cast is written here.
+///
+/// This was a hand-kept list of the four positions someone had hit, and it went
+/// stale three times: `nts_promise_fulfill_tagged` is the same helper as
+/// `nts_promise_fulfill_reference` with a tag, one line below it in the header,
+/// and an `async` function returning an array is the most ordinary program that
+/// reaches it. So it is no longer kept by hand. The header is the authority,
+/// every position it declares is here, and `the_erasures_still_match_the_header`
+/// reads it back out of clang.
+///
+/// Listing a position the emitter never reaches costs nothing: a cast to
+/// `NtsHeader *` on a value that is already one is a cast to its own type.
+const ERASES_CLASS: &[(&str, usize)] = &[
+    ("nts_callback_task", 0),
+    ("nts_concat_into", 0),
+    ("nts_environment_install_platform", 0),
+    ("nts_number_to_string_into", 0),
+    ("nts_promise_fulfill_reference", 1),
+    ("nts_promise_fulfill_tagged", 1),
+    ("nts_promise_reject", 1),
+    ("nts_release", 0),
+    ("nts_retain", 0),
+    ("nts_set_timeout", 0),
+    ("nts_str_at_into", 0),
+    ("nts_str_char_at_into", 0),
+    ("nts_str_slice_into", 0),
+    ("nts_str_substring_general", 0),
+    ("nts_str_substring_into", 0),
+    ("nts_str_substring_into_fn", 0),
+    ("nts_string_from_char_code_into", 0),
+    ("nts_string_from_code_point_into", 0),
+    ("nts_tag_of_reference", 0),
+    ("nts_value_eq_reference", 1),
+    ("nts_value_of_reference", 0),
+];
+
 fn erases_class(callee: &str, at: usize) -> bool {
-    matches!(
-        (callee, at),
-        ("nts_promise_fulfill_reference" | "nts_promise_reject", 1)
-            | ("nts_set_timeout" | "nts_environment_install_platform", 0)
-    )
+    ERASES_CLASS.binary_search(&(callee, at)).is_ok()
 }
 
 /// Whether a runtime helper *returns* a managed reference of any class.
@@ -936,6 +983,48 @@ fn erased_comparison(
         "{name} = {negate}{helper}({}, {cast}{});",
         value_name(value),
         value_name(against)
+    ))
+}
+
+/// `a === b` between two references whose classes differ, as one address
+/// against another.
+///
+/// `===` on two references is identity, and identity does not care which class
+/// either side was declared as: base-first layout puts a derived object and its
+/// base at the same address, which is what makes the question answerable at
+/// all. C does care -- the two pointers have different struct types -- so both
+/// sides are spelled as the header they both begin with.
+///
+/// Found as `candidate === entry` in a linear scan over `interface MemoryEntry
+/// extends HttpCacheEntry`, which is the plainest way anyone writes that loop.
+/// It had been reaching the numeric fallback and emitting `(double)v3` on a
+/// pointer; the middle end no longer offers a width for it, and this is the
+/// other half.
+///
+/// Not strings, which compare by value and were taken above; not the absent
+/// reference, which was taken above that.
+fn reference_comparison(
+    func: &Func,
+    name: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    let left = &func.values[lhs.0 as usize].ty;
+    let right = &func.values[rhs.0 as usize].ty;
+    if !matches!(bin, BinOp::Eq | BinOp::Ne) || !left.is_managed() || !right.is_managed() {
+        return None;
+    }
+    // Same class on both sides is already valid C, and saying so plainly reads
+    // better than two casts that change nothing.
+    if left == right {
+        return None;
+    }
+    let operator = if matches!(bin, BinOp::Ne) { "!=" } else { "==" };
+    Some(format!(
+        "{name} = (const NtsHeader *){} {operator} (const NtsHeader *){};",
+        value_name(lhs),
+        value_name(rhs)
     ))
 }
 
@@ -1399,7 +1488,7 @@ fn emit_object_types(
             // The fact is not lost: `readonly` stays in the HIR, where a field
             // load that cannot change is something this compiler can common up
             // itself. That is strictly more than the C qualifier was buying.
-            writer.line(origin, format!("    {ty} {};", c_identifier(&field.name)));
+            writer.line(origin, format!("    {ty} {};", c_member(&field.name)));
         }
         writer.line(origin, "};");
         // What this compiler believes about the struct clang just laid out.
@@ -1428,7 +1517,7 @@ fn emit_object_types(
                     origin,
                     format!(
                         "_Static_assert(offsetof({name}, {}) == {offset}u, \"{name}.{} is not where nts computed\");",
-                        c_identifier(&field.name),
+                        c_member(&field.name),
                         field.name
                     ),
                 );
@@ -1443,7 +1532,135 @@ fn emit_object_types(
 /// Separate from the structs because a dispatch table takes the address of a
 /// function, and a function has to be declared before that is legal. The structs
 /// come first because a declaration's parameter types need them.
-fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+/// Whether one of this layout's objects reaches somewhere that could call it.
+///
+/// Two conditions, and both are needed.
+///
+/// **Live.** Over the ops each block still holds, not over `func.values`: a
+/// value list keeps everything the lowering ever made, including what a pass has
+/// since taken out of the control flow. A value that is in no block cannot run.
+///
+/// **Handed to something outside.** A closure with no method is only a defect
+/// if something calls it, and the only caller this translation unit cannot
+/// answer for is a native one. `runtime/node/timers` hands its two to
+/// `nts_timers_install`, which invokes them from C, and that is the case worth
+/// stopping.
+///
+/// Deliberately *not* a store. A store is not a call, and reading one as an
+/// escape refused two examples that are right: `examples/absent` builds five
+/// closures purely to ask `typeof` of them, and `examples/library` puts seven
+/// exported `const` arrows into globals. Neither calls one, the pruner
+/// correctly drops each `#call` as unreachable, and a descriptor nothing reads
+/// is a static struct. The narrower rule is also the honest one -- what makes
+/// the timers case unanswerable is precisely that the caller is on the other
+/// side of the ABI.
+///
+/// Through an `Erase` on the way, because a closure crossing into a native
+/// binding is usually erased first.
+fn escapes_uncalled(
+    program: &Program,
+    defined: &rustc_hash::FxHashSet<String>,
+    layout: &nts_core::hir::Layout,
+) -> bool {
+    program
+        .funcs
+        .iter()
+        .filter(|func| defined.contains(&c_identifier(&func.name)))
+        .any(|func| {
+            let live: Vec<ValueId> = func
+                .blocks
+                .iter()
+                .flat_map(|block| block.ops.iter().copied())
+                .collect();
+            let is_one = |value: ValueId| {
+                let op = &func.values[value.0 as usize];
+                matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ClosureStatic)
+                    && matches!(&op.ty, HirType::Managed(ManagedType::Object(ty))
+                        if layout.types.contains(ty))
+            };
+            let carries = |value: ValueId| match &func.values[value.0 as usize].kind {
+                OpKind::Erase { value } => is_one(*value),
+                _ => is_one(value),
+            };
+            live.iter().any(|value| match &func.values[value.0 as usize].kind {
+                // Every argument, because any of them can be the callback.
+                OpKind::Call { callee: Callee::External(_), args, .. } => {
+                    args.iter().copied().any(carries)
+                }
+                _ => false,
+            })
+        })
+}
+
+/// A closure class whose dispatch table would be null, which is a defect.
+///
+/// The comment in `emit_object_descriptors` is right about an ordinary class: a
+/// slot it does not implement is null and unreachable, because a call only uses
+/// a slot the receiver's static type declares. A closure is the opposite -- its
+/// class exists *for* its one method, every call through it reads
+/// `descriptor->methods[nts_closure_call_slot]`, and a null table there is a
+/// null dereference on the first call rather than dead weight.
+///
+/// `runtime/node/timers` emitted exactly that: two closures passed to one call,
+/// one losing its body -- which clang caught -- and the other losing its whole
+/// table, which clang accepted. The one that compiled was the dangerous one: it
+/// loads, and `setTimeout` crashes three layers from the cause. Refusing here
+/// turns a latent crash into a build failure, whatever the cause turns out to
+/// be.
+///
+/// A constructor token and a provided error class both answer yes to
+/// `is_closure_type` and both mean to -- `typeof TypeError` is `"function"` --
+/// and neither has a method, because nothing calls a class value: it exists to
+/// have an address. `has_a_closure_body` is the narrower question, asked by the
+/// band rather than by the name. A name test on `Ctor_` refused twelve examples
+/// for holding a `RangeError`, which is spelled exactly as a user class is.
+fn a_closure_with_nothing_to_call(
+    program: &Program,
+    defined: &rustc_hash::FxHashSet<String>,
+    layout: &nts_core::hir::Layout,
+    origin: &Origin,
+) -> Option<Diagnostic> {
+    let is_a_closure = layout
+        .types
+        .iter()
+        .any(|ty| nts_core::hir::has_a_closure_body(*ty));
+    // Empty and naming-something-absent are the same condition here: both leave
+    // the table with nothing to dispatch to. They were two separate bugs in one
+    // program -- `Closure55` had no slot and `Closure54` had a slot pointing at
+    // a body that was never emitted -- and only the second was loud.
+    let callable = layout
+        .methods
+        .iter()
+        .flatten()
+        .any(|name| defined.contains(&c_identifier(name)));
+    if !is_a_closure || callable {
+        return None;
+    }
+    // Only where the value still escapes to something that could call it. The
+    // middle end excises the statements that held one when the method was
+    // refused, and `layouts_needing_descriptors` scans `func.values` -- which
+    // keeps every value the lowering ever made, excised or not -- so the
+    // descriptor outlives the last holder. A descriptor nothing reads is a
+    // static struct; a refusal nothing earns is a module that will not build.
+    escapes_uncalled(program, defined, layout).then(|| {
+        Diagnostic::error(
+            "NTS2006",
+            format!(
+                "closure class `{}` reached code generation with no method to call",
+                layout.name
+            ),
+            origin.location,
+        )
+    })
+}
+
+fn emit_object_descriptors(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    defined: &rustc_hash::FxHashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     let cyclic_layouts = program.cyclic_layouts();
     let needed = layouts_needing_descriptors(program);
     for (index, layout) in program.layouts.iter().enumerate() {
@@ -1472,19 +1689,30 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
         // class does not implement is null, which is unreachable: a call only
         // uses a slot the receiver's static type declares, and every class at or
         // below that type fills it.
-        let methods = if layout.methods.iter().all(Option::is_none) {
+        diagnostics.extend(a_closure_with_nothing_to_call(program, defined, layout, origin));
+        // A slot naming a function this program does not define is written as
+        // null rather than as its address. The middle end drops a body long
+        // after the layout that named it was built -- a refusal, then pruning,
+        // then reshaping -- and nothing goes back to clear the slot, so the
+        // descriptor took the address of a symbol nothing declares. Two in
+        // `fs`, one in `timers`, and each one stopped the whole module.
+        //
+        // Null is what the slot already means when a class does not implement
+        // it, and it is unreachable for the same reason: a call uses a slot the
+        // receiver's static type declares, and a class whose method was refused
+        // is one no surviving call can reach. A *closure* is the exception, and
+        // is refused above rather than nulled here.
+        let entry = |method: &Option<String>| {
+            method
+                .as_ref()
+                .map(|name| c_identifier(name))
+                .filter(|symbol| defined.contains(symbol))
+                .map_or_else(|| "0".to_owned(), |symbol| format!("(void *){symbol}"))
+        };
+        let methods = if layout.methods.iter().all(|method| entry(method) == "0") {
             "0".to_owned()
         } else {
-            let entries: Vec<String> = layout
-                .methods
-                .iter()
-                .map(|method| {
-                    method.as_ref().map_or_else(
-                        || "0".to_owned(),
-                        |name| format!("(void *){}", c_identifier(name)),
-                    )
-                })
-                .collect();
+            let entries: Vec<String> = layout.methods.iter().map(entry).collect();
             writer.line(
                 origin,
                 format!(
@@ -1506,7 +1734,7 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
         } else {
             let entries: Vec<String> = references
                 .iter()
-                .map(|field| format!("offsetof({name}, {})", c_identifier(field)))
+                .map(|field| format!("offsetof({name}, {})", c_member(field)))
                 .collect();
             writer.line(
                 origin,
@@ -1532,7 +1760,7 @@ fn emit_object_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &P
         } else {
             let entries: Vec<String> = erased
                 .iter()
-                .map(|field| format!("offsetof({name}, {})", c_identifier(field)))
+                .map(|field| format!("offsetof({name}, {})", c_member(field)))
                 .collect();
             writer.line(
                 origin,
@@ -1783,7 +2011,7 @@ fn field_of(
     layout
         .fields
         .get(field as usize)
-        .map(|field| c_identifier(&field.name))
+        .map(|field| c_member(&field.name))
         .ok_or_else(|| {
             Diagnostic::error(
                 "NTS2006",
@@ -2428,6 +2656,12 @@ fn binary_text(
         return text;
     }
 
+    // After the string rule, which compares by value, and after the null one:
+    // both of those are references too, and this would answer them by address.
+    if let Some(text) = reference_comparison(func, name, bin, lhs, rhs) {
+        return text;
+    }
+
     let operator = match bin {
         BinOp::Add => "+",
         BinOp::Sub => "-",
@@ -2955,6 +3189,28 @@ fn managed_op(
     Ok(())
 }
 
+/// The cast a store into a global needs, or nothing.
+///
+/// Only an *up*cast is reachable -- TypeScript checked assignability long
+/// before this ran -- and base-first layout makes one free: the same address,
+/// with the base's fields at the base's offsets. C still wants it spelled,
+/// because the two pointers have different struct types.
+fn upcast_to_global(
+    global: u32,
+    value: ValueId,
+    func: &Func,
+    context: &Context<'_>,
+    origin: &Origin,
+) -> String {
+    let Some(declared) = context.program.globals.get(global as usize).map(|held| &held.ty) else {
+        return String::new();
+    };
+    if declared == &func.values[value.0 as usize].ty || !declared.is_managed() {
+        return String::new();
+    }
+    c_type_of(context.program, declared, origin).map_or_else(|_| String::new(), |ty| format!("({ty})"))
+}
+
 fn emit_op(
     writer: &mut CodeWriter,
     func: &Func,
@@ -3034,9 +3290,24 @@ fn emit_op(
             }
         }
         OpKind::GlobalGet(global) => format!("{name} = {};", global_name(context.program, *global)),
+        // A derived object stored where a base is declared, which for a global
+        // is `let drain: Drain | undefined` holding an arrow: the closure's
+        // class extends the signature's, so the two agree on every field and
+        // the cast is a no-op -- but C will not take one pointer for the other
+        // without being told, exactly as it will not at a call.
+        //
+        // The *alias* is what makes this visible. An inferred `let` takes the
+        // closure's own class and needs nothing; a declared function type gives
+        // the slot the signature's class, so the profile meets this where it
+        // writes its host contracts down rather than everywhere it uses a
+        // callback. Four sites in `events`, four in `stream`, three in `fs`.
+        //
+        // Only an *up*cast is reachable: TypeScript checked assignability
+        // before any of this ran.
         OpKind::GlobalSet { global, value } => format!(
-            "{} = {};",
+            "{} = {}{};",
             global_name(context.program, *global),
+            upcast_to_global(*global, *value, func, context, &op.origin),
             value_name(*value)
         ),
         OpKind::ConstBool(v) => format!("{name} = {v};"),
@@ -3044,10 +3315,8 @@ fn emit_op(
         // than an allocation. This is the difference between a string-heavy
         // program allocating once at startup and allocating in a loop.
         OpKind::ConstString(text) => {
-            format!(
-                "{name} = (NtsString *)(void *)&{};",
-                literal_name(context.literals, text)
-            )
+            let literal = literal_name(context.literals, text);
+            format!("{name} = (NtsString *)(void *)&{literal};")
         }
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs),
         OpKind::Call { callee, args, .. } => {
@@ -3363,5 +3632,171 @@ mod tests {
         // symbol worse to link against.
         assert_eq!(c_identifier("compute"), "compute");
         assert_eq!(c_identifier("sumTo"), "sumTo");
+    }
+
+    /// A closure with no body, handed to a native binding, is refused; the same
+    /// closure kept to itself is not.
+    ///
+    /// Both halves matter and the second is the one that cost three rounds. The
+    /// first version of this guard refused any *live* closure without a method,
+    /// and `examples/absent` builds five purely to ask `typeof` of them. The
+    /// second added stores, and `examples/library` puts seven exported `const`
+    /// arrows into globals. Neither calls one; the pruner drops each `#call` as
+    /// unreachable and is right to. What makes the native case different is not
+    /// that the value moved -- it is that the caller is on the other side of the
+    /// ABI and cannot be asked.
+    #[test]
+    fn a_bodiless_closure_is_refused_only_where_native_code_can_call_it() {
+        use nts_core::hir::{Block, Field, Layout, Op, Terminator};
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::Origin;
+
+        let origin = Origin::source(Location { file: SourceId(0), span: Span::new(0, 1) });
+        let closure = nts_semantic_schema::TypeId(nts_core::hir::SYNTHETIC_CLOSURES + 9);
+        let ty = HirType::Managed(ManagedType::Object(closure));
+        let layout = Layout {
+            types: vec![closure],
+            name: "Closure9".to_owned(),
+            fields: Vec::<Field>::new(),
+            // A slot naming a body that is not in `defined`: the backend-refusal
+            // half, which used to emit `(void *)Closure9__call` and not link.
+            methods: vec![Some("Closure9#call".to_owned())],
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let op = |kind, ty: &HirType| Op { kind, ty: ty.clone(), origin: origin.clone() };
+        let holder = |last: OpKind| Func {
+            name: "holds".to_owned(),
+            params: Vec::new(),
+            return_type: HirType::Void,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1)],
+                terminator: Terminator::Return(None),
+            }],
+            values: vec![op(OpKind::ClosureStatic, &ty), op(last, &HirType::Void)],
+            origin: origin.clone(),
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+        };
+        let defined: rustc_hash::FxHashSet<String> = ["holds".to_owned()].into_iter().collect();
+
+        let handed_over = OpKind::Call {
+            callee: Callee::External("nts_timers_install".to_owned()),
+            args: vec![ValueId(0)],
+            frame: None,
+        };
+        let mut program = Program { layouts: vec![layout.clone()], ..Program::default() };
+        program.funcs = vec![holder(handed_over)];
+        assert!(
+            a_closure_with_nothing_to_call(&program, &defined, &layout, &origin).is_some(),
+            "a closure with no body passed to a native binding must be refused"
+        );
+
+        // Kept to itself: stored in a global, which is what an exported `const`
+        // arrow does, and never handed anywhere C can call it.
+        let stored = OpKind::GlobalSet { global: 0, value: ValueId(0) };
+        program.funcs = vec![holder(stored)];
+        assert!(
+            a_closure_with_nothing_to_call(&program, &defined, &layout, &origin).is_none(),
+            "a store is not a call, and refusing one refuses programs that are right"
+        );
+
+        // And with the body present it is an ordinary closure either way.
+        let present: rustc_hash::FxHashSet<String> =
+            ["holds".to_owned(), "Closure9__call".to_owned()].into_iter().collect();
+        program.funcs = vec![holder(OpKind::Call {
+            callee: Callee::External("nts_timers_install".to_owned()),
+            args: vec![ValueId(0)],
+            frame: None,
+        })];
+        assert!(
+            a_closure_with_nothing_to_call(&program, &present, &layout, &origin).is_none(),
+            "a closure whose body was emitted has something to dispatch to"
+        );
+    }
+
+    #[test]
+    fn the_erasure_table_is_searchable() {
+        assert!(
+            ERASES_CLASS.windows(2).all(|pair| pair[0] < pair[1]),
+            "ERASES_CLASS is binary-searched and is out of order"
+        );
+    }
+
+    /// Every `NtsHeader *` parameter the header declares is in `ERASES_CLASS`.
+    ///
+    /// The list used to be kept by hand and went stale three times, each time
+    /// as an `incompatible pointer types` error in a module that had done
+    /// nothing unusual. Skips without clang, because a missing tool is not a
+    /// broken table; fails when clang runs and refuses, because that is.
+    #[test]
+    fn the_erasures_still_match_the_header() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let header = root.join("runtime/c/nts_runtime.h");
+        let dir = std::env::temp_dir().join(format!("nts-erasures-{}", std::process::id()));
+        if std::fs::create_dir_all(&dir).is_err()
+            || std::fs::copy(&header, dir.join("nts_runtime.h")).is_err()
+            || std::fs::write(dir.join("probe.c"), "#include \"nts_runtime.h\"\n").is_err()
+        {
+            eprintln!("SKIP: the runtime header is unavailable");
+            return;
+        }
+        let Ok(output) = std::process::Command::new("clang")
+            .args(["-Xclang", "-ast-dump", "-fsyntax-only", "-I"])
+            .arg(&dir)
+            .arg(dir.join("probe.c"))
+            .output()
+        else {
+            eprintln!("SKIP: clang is unavailable");
+            return;
+        };
+        assert!(
+            output.status.success(),
+            "clang refused the header:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let dump = String::from_utf8_lossy(&output.stdout);
+        let mut declared: Vec<(String, usize)> = Vec::new();
+        for line in dump.lines() {
+            // `FunctionDecl 0x… <…> … name 'returns (params)'`
+            let Some(at) = line.find("FunctionDecl ") else { continue };
+            let rest = &line[at..];
+            let (Some(open), Some(close)) = (rest.find(" '"), rest.rfind('\'')) else { continue };
+            if close <= open + 2 {
+                continue;
+            }
+            let name = rest[..open].split_whitespace().last().unwrap_or("");
+            if !name.starts_with("nts_") {
+                continue;
+            }
+            let signature = &rest[open + 2..close];
+            let Some(paren) = signature.find('(') else { continue };
+            for (index, parameter) in
+                signature[paren + 1..].trim_end_matches(')').split(',').enumerate()
+            {
+                if matches!(parameter.trim(), "NtsHeader *" | "const NtsHeader *") {
+                    declared.push((name.to_owned(), index));
+                }
+            }
+        }
+        assert!(
+            declared.len() > 15,
+            "only {} header parameters parsed; the parse is wrong",
+            declared.len()
+        );
+        declared.sort_unstable();
+        declared.dedup();
+
+        let known: Vec<(String, usize)> =
+            ERASES_CLASS.iter().map(|(name, at)| ((*name).to_owned(), *at)).collect();
+        assert_eq!(
+            declared, known,
+            "the header's `NtsHeader *` parameters and `ERASES_CLASS` disagree"
+        );
     }
 }

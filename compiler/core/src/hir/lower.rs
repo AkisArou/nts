@@ -1418,7 +1418,22 @@ fn storable(probe: &mut FuncBuilder<'_>, name: NodeId, ty: &HirType) -> Result<(
     // `an object type with no layout` on a program the lowering called clean.
     probe
         .materialize(name, ty)
-        .map_err(|diagnostic| diagnostic.message)
+        // The **noun phrase**, not the finished sentence. Everything stored in
+        // `ModuleScope::unsupported` is handed back to `unsupported`, which
+        // interpolates it into "… is not supported by this lowering yet" -- so
+        // recycling a diagnostic's own message appended the tail twice:
+        //
+        //     ... unrepresentable type (`Map<string, WeakRef>`) is not
+        //     supported by this lowering yet is not supported by this lowering yet
+        //
+        // and only on this path, so two refusals of one shape in one file read
+        // differently. Every other producer of that map stores a phrase.
+        .map_err(|diagnostic| {
+            diagnostic
+                .message
+                .strip_suffix(" is not supported by this lowering yet")
+                .map_or(diagnostic.message.clone(), str::to_owned)
+        })
 }
 
 /// A name for a module global that no other module global has.
@@ -3043,11 +3058,49 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
                 existing.name = layout.name;
             }
         } else {
-            program.layouts.push(layout);
+            program.layouts.push(unshared_layout_name(&program.layouts, layout));
         }
     }
 }
 
+/// A layout name no other layout in this program already has.
+///
+/// A layout is named after its declaring **symbol**, so two classes called
+/// `Frame` in modules that never import each other get one spelling and two
+/// structs -- a `redefinition of NtsObj_Frame` and a failed size assertion,
+/// which stopped twelve of the twenty-two node modules from building.
+///
+/// They are correctly **not merged**: `same_shape` is false because the fields
+/// differ, so the compiler had the hard half right. An inspect walk's frame is
+/// `{ isArray, start, items, keys, values }` and a WebSocket's is
+/// `{ fin, opcode, payload, compressed }`, and merging them would have been a
+/// wrong answer at run time rather than a build failure.
+///
+/// Suffixed with the type id, which is what the anonymous fallback already uses
+/// -- an object type with no symbol is `Type{id}` -- so this is the established
+/// spelling for "unique and deterministic" rather than a second one.
+///
+/// # Why a suffix is safe here
+///
+/// Four predicates read a layout name and decide something by it, and every one
+/// is a prefix or infix test: [`is_signature_name`] wants `Fn` and `__`,
+/// [`super::builtin::is_constructor_name`] wants `Ctor_`,
+/// [`super::is_tuple_layout_name`] and [`generated_name`] likewise. `Frame1234`
+/// matches none of them, exactly as `Frame` matches none, so `nominal_name` is
+/// unchanged and nothing that decides a *descriptor kind* moves.
+///
+/// The JVM backend takes its class names from this field, so a rename is
+/// visible there; it was named to that session before it landed.
+fn unshared_layout_name(existing: &[Layout], mut layout: Layout) -> Layout {
+    if !existing.iter().any(|known| known.name == layout.name) {
+        return layout;
+    }
+    let Some(ty) = layout.types.first() else {
+        return layout;
+    };
+    layout.name = format!("{}{}", layout.name, ty.0);
+    layout
+}
 
 /// A function type's signature as the ids it is made of, or `None` when the
 /// type is not a function.
@@ -10425,6 +10478,16 @@ impl<'a> FuncBuilder<'a> {
         {
             return Err(self.unsupported(id, "a promise settled with another promise"));
         }
+        // At the payload's own type before the helper is chosen from it. The
+        // two were read independently, so a `Promise<Buffer>` settled from a
+        // value the flow had erased picked `nts_promise_fulfill_tagged` -- from
+        // the declared payload -- and handed it the erased value, which is a
+        // struct where the helper wants a pointer. Five modules, one site each,
+        // and the C was the only thing that objected.
+        let value = match value {
+            Some(value) => Some(self.coerce(value, &result.payload, id)?),
+            None => None,
+        };
         let origin = self.origin(id);
         let (helper, args) = match (&result.payload, value) {
             (HirType::Void, _) | (_, None) => ("nts_promise_fulfill_void", vec![result.promise]),
@@ -10469,10 +10532,13 @@ impl<'a> FuncBuilder<'a> {
             // The runtime settles a promise with a number or with a reference,
             // and an erased value is neither: it is a tag beside a payload, so
             // fulfilling with one needs a third helper that knows the layout.
-            // Refused rather than settled through whichever arm looks closest,
-            // which is how a reference payload would have gone out as a double.
-            (HirType::Erased, Some(_)) => {
-                return Err(self.unsupported(id, "an `async` function settling with `unknown`"));
+            // This was refused, on the argument that settling one through
+            // whichever arm looks closest is how a reference payload goes out
+            // as a double. The argument was right and one helper short: the
+            // third one exists, all three backends already emit it, and it
+            // needs no tag because the value carries its own.
+            (HirType::Erased, Some(value)) => {
+                ("nts_promise_fulfill_value", vec![result.promise, value])
             }
         };
         Ok(self.runtime_call(helper, args, HirType::Void, origin))
@@ -13466,6 +13532,30 @@ impl<'a> FuncBuilder<'a> {
                 Ok(self.push(
                     OpKind::Call {
                         callee: Callee::External(helper.to_owned()),
+                        args: vec![value],
+                        frame: None,
+                    },
+                    text,
+                    origin,
+                ))
+            }
+            // `String(sym)` is `SymbolDescriptiveString` -- `"Symbol("`, the
+            // description, `")"` -- and it is the one conversion the language
+            // *only* allows through `String`: `sym + ""` throws a `TypeError`
+            // by 13.15.3, which is why this arm exists and no implicit
+            // coercion reaches it.
+            //
+            // `nts_symbol_to_string` already exists in all three backends --
+            // the C runtime, `hir::runtime`'s table, LLVM's signatures and the
+            // JVM's `ops` -- so this arm is the whole of the feature. It was
+            // reached the moment `typeof v === "symbol"` on an `unknown`
+            // stopped being refused, which is `determineSpecificType`'s next
+            // link in `runtime/node/internal/errors.ts`.
+            HirType::Managed(ManagedType::Symbol) => {
+                let origin = self.origin(from);
+                Ok(self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_symbol_to_string".to_owned()),
                         args: vec![value],
                         frame: None,
                     },
@@ -17945,6 +18035,27 @@ impl<'a> FuncBuilder<'a> {
 
         let value = self.lower_expression(*operand)?;
         let Some(op) = op else { return Ok(value) };
+        // `!x` is `ToBoolean(x)` negated, and `ToBoolean` is a *rule* rather
+        // than a representation change: `""`, `0`, `NaN`, `null` and
+        // `undefined` are false and every other value is true.
+        //
+        // Lowering `Not` straight onto the operand left a `bool` operation over
+        // whatever the operand was, and the passes below made the types agree
+        // the only way they can -- by inserting a `Convert`. On an erased value
+        // that is `(bool)v` over a sixteen-byte struct, which the C compiler
+        // refuses: `operand of type 'NtsValue' where arithmetic or pointer type
+        // is required`, eight times in `stream`, eight in `fs`, three each in
+        // `events` and `assert`. It was the most common remaining error in the
+        // node profile once the layout-name collisions stopped hiding it.
+        //
+        // `truthy` is the rule and is already emitted for `&&`, `||` and every
+        // `if`; every backend has an arm for it. This operator was the one that
+        // did not ask.
+        let value = if op == UnOp::Not {
+            self.truthy(id, value)
+        } else {
+            value
+        };
         let origin = self.origin(id);
         let ty = self
             .type_of(id)

@@ -306,7 +306,23 @@ fn c_type(ty: &HirType) -> &'static str {
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
 pub fn check(tsconfig: &Utf8Path) -> Result<Report> {
-    let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    // `NTS_TSGO`, then the frontend this repository builds, and only then the
+    // bare name through `PATH`.
+    //
+    // The bare name was the whole of it, and it is the worst of the three: on a
+    // machine with an asdf shim it fails, and on one with *some* other `tsgo`
+    // installed it **succeeds** against an unpinned frontend, which is quietly
+    // wrong rather than loudly broken. `tsgo::locate` exists to answer exactly
+    // this and its own doc says why -- a run with the variable unset "is green
+    // whatever it would have found".
+    //
+    // Every gate script exports the variable, so the gate never saw it. What
+    // did was `cargo test --workspace` outside the gate: `jvm_sabotage` failed
+    // with "`examples/bitwise` has to agree with node *before* the sabotage",
+    // which reads as a compiler regression and is the frontend never starting.
+    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
+        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |at| at.to_string())
+    });
     // The tool's identity, so a rebuilt frontend does not read entries the old
     // one wrote. Size and modified time rather than a hash of the binary: it is
     // eighty megabytes and this runs once per check.

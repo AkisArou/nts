@@ -432,7 +432,13 @@ fn workers(files: usize) -> usize {
 }
 
 fn run(root: &Utf8Path, files: &[Utf8PathBuf], limit: usize) -> Result<Totals> {
-    let tsgo = std::env::var("NTS_TSGO").unwrap_or_else(|_| "tsgo".to_owned());
+    // See the note in `nts_differential::check`: the bare name reaches an asdf
+    // shim here and an unpinned frontend elsewhere, and a corpus run whose
+    // frontend never starts reports every case as `frontend failed` rather than
+    // as an environment problem.
+    let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
+        nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |at| at.to_string())
+    });
 
     // A multi-file case, which this harness has one workspace per worker for
     // and therefore cannot express. Filtered before the limit is applied so
