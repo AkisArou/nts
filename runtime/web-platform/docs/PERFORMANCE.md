@@ -19,19 +19,22 @@ Measured on one pinned binary, both sides, machine idle. A run that reports vari
 1.2x across its five repetitions is a contended run and is not a number -- `wait-idle.sh` first,
 then `with-lock.sh`.
 
-| row | nts C | node | bun | nts/node | nts/bun |
-| --- | --- | --- | --- | --- | --- |
-| `json-serialize` | 14.53us | 12.11us | 7.19us | 1.16x | 1.98x |
-| `json-scan` | **2.41us** (llvm 2.25) | 2.35us | 2.17us | 0.96x | 1.04x |
-| `json-build-append` | 21.17us | 15.69us | 9.69us | 1.25x | 2.03x |
-| `json-build-join` | 20.78us | 22.43us | 14.56us | **0.95x** | 1.46x |
+| row | nts C | nts LLVM | nts f64 | node | bun | nts/node | nts/bun |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `json-serialize` | 14.87us | 14.52us | 17.84us | 12.79us | 6.79us | 1.14x | 2.14x |
+| `json-scan` | 2.31us | 2.20us | 5.75us | 1.85us | 2.13us | 1.19x | 1.03x |
+| `json-build-append` | 21.51us | 20.42us | 25.06us | 16.23us | 8.23us | 1.26x | 2.48x |
+| `json-build-join` | 22.78us | 22.85us | 25.71us | 23.22us | 12.32us | **0.98x** | 1.85x |
 
-One row is already faster than node. None is faster than bun, though `json-scan` is now within
-6% of it.
+One clean run, all four rows, so the columns are comparable to each other. The ratio column divides
+by whichever nts backend is faster.
 
-**The node column is the noisy one.** `json-scan` on node measured 3.09, 5.16 and 2.92 across
-three idle runs of the same source. Take a node number twice before believing a ratio built on it;
-the nts column has been stable to about 2% throughout.
+One row is faster than node. None is faster than bun, though `json-scan` is level with it.
+
+**The node column is the noisy one, and on `json-scan` it is noisy enough to change the verdict.**
+Across idle runs of identical source node has measured 1.85, 2.35, 2.86, 2.92, 3.09 and 5.16 on
+that row while nts stayed between 2.20 and 2.45. So `json-scan` is *parity* -- ahead on some runs,
+behind on others -- and a single run claiming either is not evidence. Take a node number twice.
 
 ## What the bench table does and does not compare
 
