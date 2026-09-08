@@ -2970,6 +2970,43 @@ a drain as `callback->descriptor->methods[nts_closure_call_slot]`, so that is a
 null dereference on the first timer that fires. The compile error is the *safe*
 half of this pair: it stops. The other one loads.
 
+**Reproduced on the seventh attempt, by bisecting the module instead of
+guessing the shape.** `blockers/refused-callback-null-vtable`:
+
+    import { onTimers } from "./drain.ts";   // onTimers is refused
+    nts_install(onTimers);
+
+    nts_desc_NtsObj_Closure0 = { ..., 0u, 0u, 0, 0, "Closure0", 0u, 0 };
+                                              ^ methods
+
+**A refused function passed as a callback becomes a closure with a null method
+table, and the program compiles.** No body was emitted because the function was
+refused, but the descriptor, the static instance and the call site were all
+emitted anyway.
+
+The bisect: removing the `promises` import moved the closure number 54 -> 40 and
+kept the defect. Replacing `host.install(processTimers, processImmediate)` with
+two local arrows made it **disappear**. `processTimers` is refused at
+`timeout.ts:286`. That identified the trigger in two steps after six guesses had
+failed.
+
+**Six wrong hypotheses first**, and they are worth listing because each was
+plausible and each cost a probe: a closure inside a refused function keeps its
+body; a closure taken as a value keeps its body; an imported top-level function
+passed as a callback emits correctly; a class hierarchy pushing the call slot
+above zero emits correctly; a call through a `const` alias to a declared binding
+emits correctly; and sixty closures in one program all get bodies, so it is not
+position or count.
+
+Two of those wrong guesses produced `blockers/closure-as-function-value` and
+`blockers/upcast-to-base`.
+
+**Bisection found in two steps what guessing had not found in six.** The
+difference is that a bisect asks the program which half matters, and a
+hypothesis asks me.
+
+### The old note, kept because the reasoning was wrong in a useful way
+
 **Three hypotheses were tried and all were wrong.** A closure inside a refused
 function still gets its body. A closure taken as a value gets its body too —
 that attempt is what produced `closure-as-function-value` instead, so the wrong
