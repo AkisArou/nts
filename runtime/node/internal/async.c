@@ -57,6 +57,34 @@ static void call_0(NtsHeader *callback) {
 
 static NtsHeader *current_frame = NULL;
 
+/* Read the frame the current continuation carries.
+ *
+ * Writable as of the return-position escape: the prototype is
+ * `NtsHeader * nts_async_context_get(void)` and the call site casts it back to
+ * the per-program struct, symmetrically with how an argument is cast on the way
+ * in. Before that the prototype named `NtsObj_AsyncContextFrame *` and no
+ * shared translation unit could spell it --
+ * `tooling/conformance/blockers/binding-returns-program-type`, whose two
+ * controls are the parameter and callback forms and stay clean.
+ *
+ * **Retained, because the caller releases.** Checked rather than assumed: with
+ * `--rc`, the emitted call site is
+ *
+ *     v0 = (NtsObj_Frame *)nts_probe_returns_frame();
+ *     ...
+ *     nts_release((NtsHeader *)v0);
+ *
+ * so a returned reference is owned and this owes one. Returning the stored
+ * pointer bare would hand out a borrow the caller then frees, and the second
+ * read would be of a dead object.
+ *
+ * Not marked `NTS_ALLOCATES`: that is `__attribute__((malloc))`, a promise the
+ * result aliases nothing, and this returns the same object on every call. */
+NtsHeader *nts_async_context_get(void) {
+    if (current_frame != NULL) nts_retain(current_frame);
+    return current_frame;
+}
+
 void nts_async_context_set(NtsHeader *frame) {
     if (frame == current_frame) return;
     if (frame != NULL) nts_retain(frame);

@@ -24,9 +24,10 @@ double nts_debug_write(NtsString *text);
 bool nts_stdout_is_tty(void);
 bool nts_stderr_is_tty(void);
 
-/* Async context and collection. `nts_async_context_get` is absent on purpose:
- * it returns an object, so its prototype names a per-program struct that no
- * shared translation unit can spell. See `async.c`. */
+/* Async context and collection. `nts_async_context_get` is writable as of the
+ * return-position escape; before it, its prototype named a per-program struct
+ * no shared translation unit could spell. See `async.c`. */
+NtsHeader *nts_async_context_get(void);
 void nts_async_context_set(NtsHeader *frame);
 void nts_on_collected(NtsValue resource, NtsHeader *on_collected);
 void nts_schedule_unreferenced_immediate(NtsHeader *callback);
