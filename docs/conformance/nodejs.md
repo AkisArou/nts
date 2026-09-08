@@ -4949,6 +4949,54 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Thirteen `fs` functions rejected a Buffer path
+
+**Node accepts a Buffer wherever it accepts a string path**, and a POSIX filename
+is a byte sequence that need not decode as UTF-8. `unlinkSync`, `mkdirSync`,
+`rmdirSync`, `chmodSync`, `chownSync`, `utimesSync`, `lutimesSync`, `renameSync`,
+`copyFileSync`, `linkSync`, `readlinkSync` and `rmSync` all threw
+`ERR_INVALID_ARG_TYPE` on one. Only `truncateSync` worked, and only because it
+delegates to `openSync`, which was already byte-aware.
+
+**None of node's 260 `fs` test files passes a Buffer path**, so nothing upstream
+could have found it. On node the path is bytes in C++ end to end and only becomes
+a string at the boundary; there is no separate byte code path that could be
+wrong. Here there is — `getValidatedBytePath` and a `_bytes` binding per
+operation — and it is different code from the string route with different bugs.
+
+It was found by writing the assertion the oracle had no reason to write: a
+filename of `61 ff fe 62`, two bytes of which are illegal anywhere in UTF-8, and
+then watching `unlinkSync` refuse to remove the file `readdir` had just listed.
+
+Eleven new native bindings, each a thin wrapper over the same shared helper its
+string twin now calls, so the two cannot drift. `readlink_bytes` answers the
+*target* as bytes too, since a symlink target is no more required to decode than
+a filename is. Two-path calls normalise both sides to bytes when either is: a
+string always has a byte spelling and the reverse is not true.
+
+**The recursive walks were the part worth care.** Recursive `mkdir` splits on the
+byte `0x2f` rather than on a string `"/"`, and the byte `rm` joins children from
+`scandir_bytes` rather than through a template literal — because building a child
+path through a string asks the kernel to remove a *different* file than the one
+`readdir` just reported.
+
+`cpSync` is the fourteenth and is **not fixed**. Its implementation is an
+eight-function family typed on `string`, and it carries a design question this
+change was not the place to answer: node hands the user's `filter` callback
+strings, so a byte-path `cp` has to decide what the filter sees.
+
+### A test may assert what node does, never what this implementation does
+
+The first draft of the family test asserted that `cpSync` **throws** — pinning
+the defect as expected behaviour. It passed against the module and failed against
+node, which is exactly backwards for a test whose whole purpose is to check the
+module against node. The assertion is gone; the gap is recorded here instead,
+which is where a gap belongs.
+
+`fs` interpreted is **340 of 340**, up from 338. Sabotage fails all 340, so
+neither new test is hollow. 22 of 22 modules typecheck. The ABI audit covers 188
+bindings now, 0 disagreeing.
+
 ## An error identity three libraries disagree about, and node barely tests
 
 **Two of node's sixty-five `zlib` test files assert an error's `code` at all.**
