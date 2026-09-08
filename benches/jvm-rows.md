@@ -28,7 +28,7 @@ not measured clean and should not be quoted.**
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
-| `awfy-queens` | 1.24x | no cause found: the merge was measured and is not it |
+| `awfy-queens` | 1.26x | **cause found for 58% of it**: `[D` where AWFY has `int[]` |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
@@ -677,6 +677,40 @@ difference between them is not the retyping and not resolvable by anything here.
   switches to exponential at 1e7 and 1e-3 where JavaScript switches at 1e21 and
   1e-6, and this case's values reach neither. It measures the ceiling, and the
   ceiling is 1.7%.
+
+### `awfy-queens` has a cause for most of its gap, and it was filed as incidental
+
+This row was "no cause found" after the merge was built and refuted at 0.16%.
+The cause was already written down here as an aside -- *"`Queens.queenRows` is
+emitted `[D` with an `i2d` per store, where AWFY's Java uses `int[]`"* -- filed
+under "one incidental finding, not hot here". **It is the majority of the row.**
+
+One keyword changed on the reference, `int[]` to `double[]`, nothing else
+touched. Five interleaved rounds, identical checksums:
+
+    ref int[]      median  8704.7 ns    spread 0.7%
+    ref double[]   median  9970.5 ns    spread 0.9%
+    ours           median 11001.4 ns    spread 2.2%
+
+**The element type alone costs the reference 14.5%.** The whole gap is 1.264x;
+`[D` against `int[]` is **1.145x** of it and the remainder is 1.103x, so by
+share of the logarithm the array's element type is **58% of this row**.
+
+**It is `hir::elements`', the same owner as `array-predicates`' wrapper**, and
+it is not a JVM-only cost -- the note that recorded it says both native lanes
+carry it too. A `double[]` is eight bytes an element against four, an `i2d` per
+store and a `d2i` per read, and on this row it is worth more than every codegen
+question asked about it put together.
+
+**What this corrects about the earlier work.** The merge-threading measurement
+was right and the conclusion drawn from it -- "no cause found" -- was too strong:
+what it showed was that the *bytecode shape* was not the cause, and I read that
+as nothing being the cause. The thing that was already written down two lines
+below it, in the same file, was.
+
+The residual is real and unexplained: **1.103x** with the element type held
+equal, which is a smaller and better-posed question than the one this row had
+before.
 
 ## Open, and whose
 
