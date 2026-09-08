@@ -1,6 +1,7 @@
 # `tooling/conformance`
 
-Thirty-seven scripts, and a new session needs about six of them. This says which
+Forty scripts and 43 fixtures, and a new session needs about six of the
+scripts. This says which
 six, and what the rest are for when you reach them.
 
 ## The loop
