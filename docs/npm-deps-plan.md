@@ -430,8 +430,9 @@ and was there before acquisition — 23 of the corpus's, before and after.
 
 ## What it does not do yet
 
-**Step 2**, which is in `compiler/core/src/hir` — the main lane's file, raised
-with them rather than changed unilaterally.
+**Step 2**, which is in `compiler/core/src/hir` — and that tree is not this
+lane's to edit. The change is written, tested and handed to the main lane, who
+own it.
 
 **It needs no schema bump, and the claim that it did was wrong.** The lowerer
 cannot tell a `lib.d.ts` builtin from a name whose package was excluded *by
@@ -443,13 +444,31 @@ already distinguishes them from the other side of the import.
 > there is no node to point at.
 
 A builtin has none. An imported name declares at its **import specifier**, which
-is decoded because the program wrote it, and walking up its `parent` chain to the
-`ImportDeclaration` gives the module specifier's text. Every field involved is
-already in the snapshot. A complete patch and a repro are with the main lane.
+is decoded because the program wrote it, and walking its `parent` chain reaches
+the `ImportDeclaration` in five hops.
 
-The half that *is* done: `nts deps` names the specifiers a program imports from
-each package it could not acquire, so a reader can connect the refusal to its
-cause before the lowerer does it for them.
+    `pad`, an imported name whose implementation is not in this program
+    `parseFloat`, a builtin this compiler does not provide
+
+Verified while it was applied: 133 examples byte-identical to the pre-patch run,
+and the 22-module node profile unchanged — its 15 `builtin` refusals are all
+genuine `lib.d.ts` globals with no import to blame, and all keep the old wording.
+
+Two details worth keeping if it lands. The diagnostic's location must stay on
+the **call**: pointing at the import reads better and attributes the failure to
+a node outside the walked function, which costs the *caller* its own diagnostic.
+And the second test is not redundant — "never say builtin" would otherwise pass
+by never saying it.
+
+One thing the message still cannot do is name the package inline. A module
+specifier's `text` is `None`, because a string literal's text lives in the
+extended section of the wire format and `ast.rs` decodes that only for template
+literals. The main lane has taken that separately. `nts deps` names the package
+two lines above the refusal meanwhile.
+
+**The half that is done here:** `nts deps` names the specifiers a program
+imports from each package it could not acquire, so a reader can connect the
+refusal to its cause before the lowerer does it for them.
 
 Two things the measurements say are not worth doing, recorded so they are not
 rediscovered as ideas:
