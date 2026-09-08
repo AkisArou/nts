@@ -9221,6 +9221,55 @@ program that does not reproduce. The evidence is `process`'s own emitted C,
 which builds and can be re-read at any time; it is the *reduction* that is
 missing, and the two are worth distinguishing when handing work over.
 
+## The counted lane's answer needs a control the lane does not run
+
+Six of the twenty building modules failed to *build* under reference counting.
+Five shared one defect (`blockers/rc-widened-global-save`), and with it fixed:
+
+| module | counted | uncounted (control) |
+| --- | --- | --- |
+| `assert` | 0 passed, 12 failed, 1484 rc sites | 0 passed, 12 failed, 5 rc sites |
+| `console` | 0 passed, 19 failed, 1542 rc sites | 0 passed, 19 failed, 5 rc sites |
+| `readline` | 0 passed, 26 failed, 1746 rc sites | 0 passed, 26 failed, 5 rc sites |
+| `util` | 0 passed, 25 failed, 1507 rc sites | 0 passed, 25 failed, 5 rc sites |
+
+Identical on both sides, with ~1500 retain/release sites in one and 5 in the
+other. **The allocator sees no defect these tests can reach**, and the `0 passed`
+is the export-table story rather than a counting one — it is the same number
+uncounted.
+
+**The right-hand column is not produced by `counted-lane.sh`.** Its "pass" means
+the module built and its tests ran, and the comparison that makes a row mean
+anything — *the same, counted and uncounted* — has to be run separately. Read
+without it, those four rows say `0 passed` and look like a finding.
+
+## What `string_decoder` needs beyond the class arm
+
+Zero own-source refusals, and two wrapper declines left. Five of its six files
+must pass; one is not-applicable.
+
+Four of the five — `split-sequences-static.js`, `export-surface-static.js`, and
+node's `-end` and `-fuzz` — use only `write` and `end`, and the export-class arm
+settles them. The fifth is `core-static.js`, which reads the instance internals:
+
+    assert(decoder.lastChar.equals(new Uint8Array([0xe1, 0, 0, 0])));
+    assert.strictEqual(decoder.lastNeed, 2);
+    assert.strictEqual(decoder.lastTotal, 3);
+
+Checked against node rather than assumed, since over-asserting in our own test
+would be our own fault: node exposes all three as **prototype accessors**, and
+`lastChar` is a **Buffer** — `<Buffer e1 00 00 00>`, with `.equals` a function.
+The assertions match node's behaviour, so the bar is right.
+
+Which makes green require the class arm **plus** three accessors crossing the
+boundary **plus** `lastChar` arriving as something that answers `.equals`; ours
+is `managed<view<u8>>` in the IR. Node ships nothing that reads those three, so
+without this file the module would report 5 of 5 on the class arm alone.
+
+If accessors are out of scope for a pass, the file stays as it is and the module
+reports **4 of 5 with the reason named**. A green row bought by dropping the only
+test that reads the accessors is not a green module.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
