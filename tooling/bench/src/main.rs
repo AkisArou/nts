@@ -388,6 +388,36 @@ fn main() -> Result<()> {
 /// Between markers rather than appended, so the surrounding prose is written by
 /// hand and the numbers never are. A table typed out by a person is a table that
 /// drifts from the machine that produced it.
+/// How to read a ratio that moved, which the shape of the table hides.
+///
+/// Split from [`legend`] for the length limit, and it is a real seam: the rest
+/// of the legend says what each column *is*, and this says what a *change* in
+/// one does and does not mean.
+///
+/// Both paragraphs come from the same day. A streaming rewrite made
+/// `json-stringify-doc` 1.26x faster and moved its `nts/V8` from 2.24x to
+/// 3.00x, because node gained 1.7x on the same change -- so the row reads as a
+/// 34% loss and is a win. Nothing in a ratio can say that, and the lane that
+/// wrote the improvement had to say it by hand.
+fn reading_a_ratio() -> &'static str {
+    "\n\
+        **A ratio moving is not this compiler moving.** Every column is \
+        measured in the same run, so a row can worsen while the program gets \
+        faster — and did: `json-stringify-doc` went from 6.01 ms to 4.78 ms on \
+        one change while its `nts/V8` went from 2.24x to **3.00x**, because the \
+        same change bought node 1.7x against our 1.26x. Nothing regressed; V8 \
+        exploits the streaming shape better than we do, and the ratio reports \
+        that gap rather than the program. Compare a row against the previous \
+        run's *absolute* numbers before reading its ratio as a direction.\n\n\
+        And where two rows are one algorithm written two ways, the hosts \
+        disagree about which way is better: on `json-stringify-typed` against \
+        `json-stringify-inline`, Bun prefers the factored source and this \
+        compiler prefers the inlined one, in opposite directions on the same \
+        pair. **No single source is optimal for every column**, so those rows \
+        measure a tradeoff rather than a result, and they are kept as a pair \
+        for exactly that reason.\n"
+}
+
 /// What a reader has to know before the numbers mean anything.
 ///
 /// Split from [`write_readme`] because the two are different kinds of thing:
@@ -470,6 +500,7 @@ fn legend(root: &Utf8Path) -> String {
         produce the same checksum as everything else. Bun is skipped where it \
         is not installed.\n";
 
+
     // The commit the numbers are a function of. Benchmarks run from a worktree
     // pinned to a hash precisely so that they are quotable later; a table that
     // did not say which hash would be a measurement of a tree nobody can check
@@ -484,6 +515,7 @@ fn legend(root: &Utf8Path) -> String {
             || "an unknown commit".to_owned(),
             |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
         );
+    let legend = format!("{legend}{}", reading_a_ratio());
     let legend = format!(
         "{legend}\nMeasured at `{commit}`, one case at a time, on cores pinned away from \
          the other sessions sharing this checkout, with the benchmark lock held so nothing \

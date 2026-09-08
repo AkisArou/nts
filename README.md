@@ -115,6 +115,10 @@ The suite also measures the same TypeScript with number specialization switched 
 
 `V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 
+**A ratio moving is not this compiler moving.** Every column is measured in the same run, so a row can worsen while the program gets faster — and did: `json-stringify-doc` went from 6.01 ms to 4.78 ms on one change while its `nts/V8` went from 2.24x to **3.00x**, because the same change bought node 1.7x against our 1.26x. Nothing regressed; V8 exploits the streaming shape better than we do, and the ratio reports that gap rather than the program. Compare a row against the previous run's *absolute* numbers before reading its ratio as a direction.
+
+And where two rows are one algorithm written two ways, the hosts disagree about which way is better: on `json-stringify-typed` against `json-stringify-inline`, Bun prefers the factored source and this compiler prefers the inlined one, in opposite directions on the same pair. **No single source is optimal for every column**, so those rows measure a tradeoff rather than a result, and they are kept as a pair for exactly that reason.
+
 Measured at `e7342345`, one case at a time, on cores pinned away from the other sessions sharing this checkout, with the benchmark lock held so nothing else was running.
 
 **These rows disagreed with themselves.** Measured five times from the same binary, their passes did not agree, so each published number says which shape the JIT settled into rather than how fast the program is, and a rerun may land on another shape. They are listed because the table cannot show it: a flipped row and a solid one are the same number on the page.
