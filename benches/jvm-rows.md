@@ -22,7 +22,7 @@ lane has moved.
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
-| `awfy-queens` | 1.24x | partly narrowing -- 2 f64 block params, 6 f64 adds |
+| `awfy-queens` | 1.24x | **the merge, priced at 1.35x** -- mine, below |
 | `generic-classes` | 1.13x | no cause found: assembly is comparable |
 | `instanceof` | 3.74x -> **1.12x** | residual 12% is the guard branch |
 | `bytes` | 1.19x -> **1.12x** | unsigned remainder |
@@ -108,6 +108,31 @@ Each cost a measurement. The number in brackets is what the fix was worth.
   the diff of `power_of_two_divide` in `ops.rs`, should a lane whose JIT does
   not do this -- ART is the candidate, and is not what `benches/` measures --
   ever want it.
+
+- **Coalescing a block parameter's slot with its argument's.** `getRowColumn`
+  emits `istore 7; iload 7; istore 8` where javac emits nothing, so sharing one
+  slot between a parameter and the values that feed it looked like the fix, and
+  it is the standard out-of-SSA answer. **[0.4%. It is not the copy.]** Priced
+  on AWFY's own `Queens` against a copy differing only in `getRowColumn`, five
+  samples each, one JVM per arm:
+
+      short-circuit   `freeRows[r] && freeMaxs[..] && freeMins[..]`   9,338 ns
+      coalesced       one variable reused across both arms           12,620 ns
+      materialised    a fresh variable per arm, copied at the merge  12,666 ns
+
+  Coalesced and materialised are within 0.4% of each other and both are 1.35x
+  the short-circuit form. **The cost is the value crossing the join, not the
+  copy into the slot.** So the fix is threading the merge away, not sharing a
+  slot with it -- and the eighty-line StackMapTable design, which slot sharing
+  would have cost, is not on the table after all.
+
+  Two harness notes, both of which produced a wrong number first. Three arms
+  behind one `IntPredicate` made the call site **megamorphic** -- the
+  short-circuit arm alone moved 9,436 to 17,330 ns, because C2 stopped inlining
+  `innerBenchmarkLoop` and every arm was then measured through a virtual call
+  the benchmark does not have. One JVM per arm, chosen by argv, fixed it. And
+  the first clean run still had one 21,991 outlier against a 12,620 median, so
+  five samples rather than two is what makes this readable.
 
 ## Open, and whose
 
