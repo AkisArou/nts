@@ -4903,6 +4903,66 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## A defect class neither lane can see, and the audit that closes it
+
+A binding is a triple: a `declare function` in TypeScript, an implementation in
+C, and a stand-in in `bindings.node.mjs`. The first two have to agree about
+*types* or the emitted C does not compile. **Nothing was checking that**, and the
+reason it went unchecked for so long is that neither running lane is capable of
+noticing:
+
+- the **interpreted** lane's stand-ins delegate to node's own implementations, so
+  it agrees with node whatever the C says — 78 of them do this
+- the **compiled** lane would object, but only for a module that gets far enough
+  to emit C, and fifteen of twenty-two never do
+
+So a type mismatch sits silently until the day its module starts compiling —
+which is precisely the day when the most other things are also changing, and the
+worst possible time to first meet it.
+
+**Two were found by hand, both in `zlib`, both the same shape.** A parameter
+declared `Uint8Array` implemented as `NtsArray *`, when a `Uint8Array` lowers to
+`NtsView *` — different structs. `nts_crc32` was the first. The second was seven
+more signatures in the same file: `input` and `dictionary` on `nts_zlib_create`,
+`nts_zlib_create_params`, `nts_zlib_write`, `nts_zlib_write_sync`,
+`nts_zlib_oneshot` and `nts_zlib_oneshot_params`, plus the bytes four of them
+return. The header's own contract line reads *"Every signature mirrors
+src/native.d.ts exactly"*, and had been false since the file was written.
+
+Both were found by a probe that was reaching for something else and failed to
+build. That is two finds at the cost of two derailed tasks, so the third one is a
+tool: `tooling/conformance/binding-abi-audit.mjs` reads every declaration and
+every C prototype and compares them directly.
+
+    177 binding(s) with a prototype checked, 0 disagreeing;
+    131 declared with no prototype found
+
+The 177 is the same number the `nm` audit calls linkable — two tools written for
+different reasons agreeing on a count, which is worth more than either alone.
+
+**Controlled rather than trusted.** Reintroducing the exact
+`nts_zlib_write_sync` signature that was wrong this morning produces:
+
+    MISMATCH  nts_zlib_write_sync
+              returns Uint8Array -> NtsView *, C says NtsArray *
+              param 2 is Uint8Array -> NtsView *, C says NtsArray *
+
+and restoring it returns to 0. A check that has never been observed to fail is a
+claim about a check, not a measurement of a tree. It runs in the sweep now; it
+reads sources and builds nothing, so it is free.
+
+### What the fix was worth measuring against
+
+`zlib` compresses **byte for byte identically to node** — 28 comparisons across
+deflate at levels 1, 6 and 9, `deflateRaw`, and inflate-of-deflate, over five
+payloads including a 430-byte one and high bytes, 0 divergences.
+
+That comparison is the point. `zlib`'s own tests round-trip through one
+implementation, so **a compressor that is self-consistently wrong passes all of
+them**. One of the checks asserts that levels 1 and 6 produce *different* sizes,
+because otherwise every row above it passes for a build that ignores the level
+and always deflates at one setting.
+
 ## 132 of 309 bindings have no C at all
 
 The compiled axis is not only blocked by compiler defects. **Of 309 distinct
