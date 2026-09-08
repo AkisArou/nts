@@ -372,6 +372,7 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Managed(ManagedType::Buffer) => "buffer".to_owned(),
         HirType::Managed(ManagedType::View(element)) => format!("view{}", spell(element)),
         HirType::Managed(ManagedType::DataView) => "dataview".to_owned(),
+        HirType::Managed(ManagedType::AnyView) => "anyview".to_owned(),
         HirType::Managed(ManagedType::Array(element)) => format!("[{}]", spell(element)),
         HirType::Managed(ManagedType::Object(id)) => format!("obj{}", id.0),
         HirType::Managed(ManagedType::Promise(payload)) => {

@@ -4190,6 +4190,16 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::DataView));
     }
 
+    // An `ArrayBufferView`, which is none of the above and is not a typed array
+    // either: it is the interface every typed array and `DataView` satisfies,
+    // and it is how node declares every API that takes "some view". There is no
+    // element to read, because the declaration does not name one -- see
+    // `ManagedType::AnyView` for why that is a representation rather than
+    // `View` of something.
+    if named(snapshot, ty) == Some("ArrayBufferView") {
+        return Some(HirType::Managed(ManagedType::AnyView));
+    }
+
     // A provided error class used as a **value**. `lib.d.ts` declares
     // `TypeError` as a variable of type `TypeErrorConstructor`, so this is the
     // type a name's own mention has and the type a slot holding one is declared
@@ -6451,6 +6461,35 @@ impl<'a> FuncBuilder<'a> {
     /// [`FuncBuilder::present_of`] is the one read-back that does *not* come
     /// from here, because its licence is different -- see it for why.
     fn narrowed(&mut self, id: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        // A view narrowed to its element type, which is the other direction of
+        // `AnyView` and the one that makes it a representation rather than a
+        // trapdoor.
+        //
+        // `ArrayBufferView` carries no element type -- that is the whole of why
+        // it has a variant of its own -- and `view instanceof Uint8Array` is the
+        // program supplying one. Both are a single `NtsView *` at run time, so
+        // nothing is read and nothing is converted: the element type goes back
+        // to being a fact the compiler carries.
+        //
+        // Spelled as erase-then-unerase because those two already mean "put it
+        // in the representation everything shares" and "read it back as this
+        // one". An op that reinterprets one pointer as another would be a second
+        // answer to a question `Unerase` answers, and `Unerase` additionally
+        // knows to materialize the class it lands in.
+        //
+        // Without this the discrimination lowers and the *reconstruction* does
+        // not, which is worse than refusing both: the web-platform lane's BYOB
+        // path tests thirteen ways and rebuilds thirteen ways, because
+        // `ReadableStreamBYOBRequest.respond` has to hand back a view of the
+        // type the caller passed. Half of a round trip is not a queue position,
+        // it is "cannot be expressed".
+        if self.values[value.0 as usize].ty == HirType::Managed(ManagedType::AnyView)
+            && let Some(want @ HirType::Managed(ManagedType::View(_))) = self.type_of(id)
+        {
+            let origin = self.origin(id);
+            let erased = self.push(OpKind::Erase { value }, HirType::Erased, origin.clone());
+            return Ok(self.push(OpKind::Unerase { value: erased }, want, origin));
+        }
         if self.values[value.0 as usize].ty != HirType::Erased {
             return Ok(value);
         }
@@ -17397,8 +17436,10 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
         }
 
-        if let HirType::Managed(ManagedType::View(_)) = self.values[value.0 as usize].ty {
-            return self.view_property(id, value, member_name);
+        if let HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) =
+            self.values[value.0 as usize].ty
+        {
+            return self.any_view_property(id, value, member_name);
         }
         let sequence = matches!(
             self.values[value.0 as usize].ty,
@@ -19172,6 +19213,34 @@ impl<'a> FuncBuilder<'a> {
     /// `buffer`, `byteLength` and `byteOffset` are the three an array does not
     /// have and a view does. They are the reason this is a separate
     /// representation rather than a flag.
+    /// The same three on a view whose element type the declaration does not
+    /// name, and the one it cannot answer.
+    ///
+    /// `byteLength`, `byteOffset` and `buffer` need no width: `NtsView` carries
+    /// all three whatever it holds. `length` does -- it is `byteLength` divided
+    /// by the element size -- so it is refused here rather than inside
+    /// `view_property`, where it would read as a member this compiler does not
+    /// provide instead of one this *declaration* cannot support.
+    fn any_view_property(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let anonymous = matches!(
+            self.values[value.0 as usize].ty,
+            HirType::Managed(ManagedType::AnyView)
+        );
+        if anonymous && member_name == "length" {
+            return Err(self.unsupported(
+                id,
+                "`length` of an `ArrayBufferView`, whose element width the declaration does \
+                 not give -- `byteLength` is the same question this type can answer",
+            ));
+        }
+        self.view_property(id, value, member_name)
+    }
+
     fn view_property(
         &mut self,
         id: NodeId,

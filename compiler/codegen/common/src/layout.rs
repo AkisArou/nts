@@ -119,6 +119,7 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             | ManagedType::Date
             | ManagedType::Buffer
             | ManagedType::View(_)
+            | ManagedType::AnyView
             | ManagedType::DataView
             | ManagedType::Object(_)
             | ManagedType::Array(_)

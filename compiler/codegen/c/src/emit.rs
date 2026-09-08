@@ -2248,6 +2248,12 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             ManagedType::Object(_)
             | ManagedType::Array(_)
             | ManagedType::View(_)
+            // And a view whose element the declaration did not name, which is
+            // the same runtime object with the same tag. Leaving it out would
+            // have refused `unknown` of an `ArrayBufferView` -- exactly how the
+            // typed view above came to be missing, which is a mistake worth
+            // making once.
+            | ManagedType::AnyView
             | ManagedType::Date
             | ManagedType::Buffer
             | ManagedType::DataView
@@ -2322,7 +2328,12 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
-        HirType::Managed(ManagedType::View(_)) => "NtsView *",
+        // One C type for both, because it is one runtime object: `NtsView`
+        // carries its element kind in its descriptor, so a declaration that does
+        // not name one still points at something that knows. What the missing
+        // element costs is the *operations* -- an indexed read has no width to
+        // emit -- and those are refused where they are lowered rather than here.
+        HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) => "NtsView *",
         HirType::Managed(ManagedType::DataView) => "NtsDataView *",
         // One runtime type whatever it carries. The payload's representation is
         // in the HIR type for the compiler's sake -- it says which

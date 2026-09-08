@@ -1165,6 +1165,7 @@ fn render(ty: &HirType) -> String {
             format!("managed<view<{}>>", render(element))
         }
         HirType::Managed(ManagedType::DataView) => "managed<dataview>".to_owned(),
+        HirType::Managed(ManagedType::AnyView) => "managed<anyview>".to_owned(),
         // Named by the part of the synthetic space it is in. Every one of them
         // printed as `closure#N` before, which is the one thing an `async`
         // frame and a generator's frame are not -- and this dump is where a

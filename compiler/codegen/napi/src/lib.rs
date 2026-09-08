@@ -89,7 +89,13 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // A view's bytes could cross, but who owns them afterwards is the
         // same unanswered lifetime question the buffer's are.
         HirType::Managed(
-            ManagedType::Buffer | ManagedType::DataView | ManagedType::View(_),
+            ManagedType::Buffer
+            | ManagedType::DataView
+            | ManagedType::View(_)
+            // And one whose element the declaration did not name, for the same
+            // unanswered question plus a second: the wrapper would have to
+            // decide what to hand back without knowing the width.
+            | ManagedType::AnyView,
         ) => None,
         // A `number[]` crosses as a copy. `Param::shape` carries `Rest` now, so
         // the reason this used to refuse -- that HIR did not distinguish
@@ -183,6 +189,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Date) => "Date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "ArrayBuffer".to_owned(),
         HirType::Managed(ManagedType::View(_)) => "TypedArray".to_owned(),
+        HirType::Managed(ManagedType::AnyView) => "ArrayBufferView".to_owned(),
         HirType::Managed(ManagedType::DataView) => "DataView".to_owned(),
         HirType::Managed(ManagedType::Array(e)) => format!("{}[]", spell(e)),
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => {
@@ -228,7 +235,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
         HirType::Managed(ManagedType::Date) => "NtsDate *".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *".to_owned(),
-        HirType::Managed(ManagedType::View(_)) => "NtsView *".to_owned(),
+        HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) => "NtsView *".to_owned(),
         HirType::Managed(ManagedType::DataView) => "NtsDataView *".to_owned(),
         HirType::Managed(ManagedType::Array(_)) => "NtsArray *".to_owned(),
         // The fixed runtime layout, not a generated struct: the payload's

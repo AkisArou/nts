@@ -280,6 +280,10 @@ pub const BIGINT_DESCRIPTOR: &str = "Lnts/rt/NtsBigInt;";
 /// `None` is a type this backend cannot represent yet, which is a refusal by
 /// name rather than a guess.
 #[must_use]
+// Two arms return `None` for two different reasons, and merging them to satisfy
+// `match_same_arms` would put "no class to name" and "control reached a value of
+// type `never`" behind one pattern. The comments are the point.
+#[allow(clippy::match_same_arms)]
 pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
     let program = shape.program;
     Some(match ty {
@@ -396,6 +400,12 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // point at. Resizability is a field.
         HirType::Managed(ManagedType::Buffer) => nts_jvm_emitter::descriptor::object(BUFFER),
         HirType::Managed(ManagedType::DataView) => nts_jvm_emitter::descriptor::object(VIEW),
+        // A view whose element type the declaration does not name. `NtsViewU8`
+        // and `NtsViewF64` are different classes here, so there is no one
+        // descriptor that covers both -- and `Ljava/lang/Object;` would compile
+        // and then fail the verifier at the first use, which is the trade the
+        // `AnyView` arms exist to avoid. Refused by name; see `describe`.
+        HirType::Managed(ManagedType::AnyView) => return None,
         // Every `ManagedType` is spelled above, so there is no catch-all here
         // and adding a variant upstream is a compile error rather than a
         // silent refusal. `never` reaching a value position means control got
@@ -406,6 +416,9 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 
 /// How a value of this type is computed and stored.
 #[must_use]
+// As in `descriptor`: "no class to name" and "no value at all" are two
+// refusals, and one pattern would say they are one.
+#[allow(clippy::match_same_arms)]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
         HirType::Erased
@@ -423,6 +436,11 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::Set(_)
             | ManagedType::Promise(_),
         ) => Kind::Ref,
+        // Not `Kind::Ref`: an `ArrayBufferView` has no class this backend can
+        // name, so answering `Ref` would carry it to `vtype` and refuse there
+        // with a less useful message. `None` is a refusal by name -- see
+        // `describe`.
+        HirType::Managed(ManagedType::AnyView) => return None,
         HirType::Int { bits: 64, .. } => Kind::Long,
         // A `boolean` is an `int` everywhere except in a descriptor: there is
         // no narrower computational type on this machine.
@@ -435,6 +453,11 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
 
 /// The frame entry for a slot holding this type.
 #[must_use]
+// Third of three: the `AnyView` arm is unreachable and spelled anyway, so that
+// teaching `kind` to answer `Ref` for it is a compile error here rather than a
+// `VerifyError` at class load. Merging it with the arms that have no value at
+// all would remove exactly that.
+#[allow(clippy::match_same_arms)]
 pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
     let program = shape.program;
     Some(match kind(ty)? {
@@ -481,6 +504,11 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),
             HirType::Managed(ManagedType::Buffer) => VType::Object(BUFFER.to_owned()),
             HirType::Managed(ManagedType::DataView) => VType::Object(VIEW.to_owned()),
+            // Unreachable, because `kind` refuses one before this is asked --
+            // and spelled rather than left to a wildcard, so that the day
+            // `kind` learns to answer `Ref` for it this is a compile error
+            // instead of a `VerifyError`.
+            HirType::Managed(ManagedType::AnyView) => return None,
             // **No catch-all**, and the missing one here cost a day of the wrong
             // diagnosis. `descriptor` says of its own last arm that every
             // `ManagedType` is spelled out so adding a variant upstream is a
@@ -515,6 +543,14 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Symbol) => "a symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "a date".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "an array buffer".to_owned(),
+        // The refusal string this backend uses everywhere an `ArrayBufferView`
+        // reaches it, written once so `grep -c` counts the arms that are left
+        // to fill in. The C and LLVM lanes represent one as an `NtsView *` whose
+        // element kind the descriptor carries; nothing here reads a descriptor
+        // at run time yet, so a view with no element type has no class to name.
+        HirType::Managed(ManagedType::AnyView) => {
+            "an ArrayBufferView with no element type".to_owned()
+        }
         // The element, for the reason the array arm below gives: the refusals
         // this most needs to be readable are the three element types the
         // runtime has and the middle end has not, and "a typed array" three

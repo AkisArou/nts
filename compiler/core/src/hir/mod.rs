@@ -227,6 +227,32 @@ pub enum ManagedType {
     /// *operation* over different storage, which is what lets the bounds
     /// checks, their elimination and the verifier go on working unchanged.
     View(Box<HirType>),
+    /// An `ArrayBufferView` -- a view whose element type the declaration does
+    /// not say.
+    ///
+    /// `ArrayBufferView` is what every node API that takes "some typed array"
+    /// is declared as, and it is not a typed array: it is the interface a
+    /// `Uint8Array`, a `Float64Array` and a `DataView` all satisfy. So there is
+    /// no element to carry, and carrying one would be inventing a fact the
+    /// source did not state.
+    ///
+    /// A variant rather than `View(Erased)`, because those are different
+    /// claims. `View(Erased)` says the elements are tagged values, which is a
+    /// representation and a wrong one -- the bytes are `uint8_t` or `double`
+    /// and nothing in them is a tag. This says the width is not known here,
+    /// which is a fact about the declaration.
+    ///
+    /// What can be asked of one is what does not need the width: `byteLength`,
+    /// `byteOffset`, the backing buffer, and being handed to a native binding
+    /// that takes an `NtsView *` and reads the element kind out of the
+    /// descriptor at run time. An indexed read is not on that list and is
+    /// refused, because `v[0]` at an unknown width is not a narrower answer, it
+    /// is a different one.
+    ///
+    /// 621 sites across 17 of the node profile's 22 modules were refused for
+    /// wanting this, which is what makes it worth a representation rather than
+    /// a refusal.
+    AnyView,
     /// A `DataView`: a window on a [`ManagedType::Buffer`] with explicit
     /// endianness and no element type.
     ///
