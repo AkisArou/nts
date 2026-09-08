@@ -4949,6 +4949,53 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## The native half, compared: 165 of the 177 that exist
+
+"169 of 309 bindings compared" is the number, and it understates by measuring
+against a denominator that includes 132 bindings with **no C to compare**. The
+comparable population is the 177 that link, and **165 of those have now been run
+against node** — up from 43 at the start of the day, all of them hand-run and
+none of them repeatable.
+
+**The remaining twelve are blocked, not pending**, which is the distinction worth
+keeping:
+
+    3   nts_process_abort, nts_process_execve, nts_process_really_exit
+        declared `never`. A probe cannot survive them and one that forked to
+        survive them would be measuring the fork.
+
+    3   nts_os_constants, nts_os_cpus, nts_os_network_interfaces
+        heterogeneous tuple returns -- blockers/heterogeneous-tuple-return
+
+    1   nts_node_enqueue_microtask, declared by four modules
+        a closure parameter, whose C type the compiler names per program --
+        blockers/callback-binding
+
+    1   nts_zlib_write, which answers a Promise
+
+So there is no queue left on this axis that work alone would clear. Every
+remaining row needs either a compiler fix that is already fixtured, or is
+unreachable by construction and always will be.
+
+### The strongest results, which are the ones about bytes
+
+Most comparisons ask whether a binding answers the number node answers. Four ask
+something harder:
+
+- **`zlib` compresses byte for byte like node** at levels 1, 6 and 9, raw and
+  framed, over five payloads. One check asserts that levels 1 and 6 produce
+  *different* sizes, because otherwise every other row passes for a build that
+  ignores the level.
+- **brotli and zstd do too**, through the parameterized form. Both round-trip as
+  well, but the round-trip is the weaker claim: a compressor that is
+  self-consistently wrong round-trips perfectly and passes every test `zlib` has.
+- **Streaming in three pieces produces the identical stream to one call.** That
+  is the property a stateful compressor exists to have, and no round-trip can
+  see it — an engine that silently restarted between writes still inflates back
+  to the right answer.
+- **A `read_bigint` position past 2^53 reads nothing** rather than wrapping to a
+  small offset, which is what a bigint truncated through a double would do.
+
 ## What the probes actually find, which is not what I expected
 
 Worth stating plainly, because it changes what the tool is for.
