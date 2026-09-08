@@ -4774,6 +4774,42 @@ are not fifteen instances of one distance from the goal: `os` and `zlib` have
 complete native halves waiting on the compiler, and `dgram` has no native half at
 all.
 
+## `util` emits accessors that read the wrong field
+
+In `util`'s generated C, every accessor on `Request` reads the field *after* the
+one its source names:
+
+    get method()     returns this.requestMethod    emits v0->requestHeaders
+    get redirect()   returns this.requestRedirect  emits v0->requestCredentials
+    get integrity()  returns this.requestIntegrity emits v0->requestKeepalive
+    get url()        returns this.parsedURL.href   emits v0->blobURLObject
+
+Checked against `runtime/web-platform/src/fetch/request.ts` line by line. Four
+accessors, four shifts, all by exactly one position, in declaration order.
+
+**Three of the four are caught by clang only because the neighbouring field has a
+different type** — `NtsObj_Headers *` into an `NtsString *`, a `bool` into an
+`NtsString *`, `NtsObj_Blob *` into an `NtsObj_URLRecord *`. Where two adjacent
+fields share a type this compiles silently and returns the wrong value. `Request`
+has eight consecutive `NtsString *` members, so most of that class's accessors
+would have been silently wrong rather than loudly.
+
+**It is not reduced, and six attempts failed.** A plain class, a class in another
+module, a class with an unrepresentable member, a subclass, a subclass of an
+`abstract` base, and a class whose first field has an index-signature type all
+emit correct accessors. So it is none of those alone.
+
+**The one asymmetry found and not explained**: `Request extends Body`, `Body`
+declares `protected bodyState: BodyState`, and **`NtsObj_Request` does not
+contain a `bodyState` member at all.** A base-class field that is counted when
+indices are assigned and absent when the struct is written would produce exactly
+this shift. That is a reading of the evidence, not a measurement — the reduction
+that would demonstrate it has not been found.
+
+Recorded unreduced because the real-world instance is unambiguous and the
+compiler lane is looking at `util` now. A fixture would be better and does not
+exist yet.
+
 ## What stops all of it compiling
 
 > Re-derived from a type graph that is no longer truncated. See the note under
