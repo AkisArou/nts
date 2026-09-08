@@ -4805,6 +4805,7 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+
     fn node(&self, id: NodeId) -> &'a nts_semantic_schema::NodeRecord {
         &self.snapshot.nodes[id.0 as usize]
     }
@@ -8155,6 +8156,17 @@ impl<'a> FuncBuilder<'a> {
     /// Collected before a loop body is lowered, because the header needs a
     /// parameter for each of them *before* the body can refer to it — the body
     /// reads the value the previous iteration produced, which does not exist yet.
+    /// Whether a symbol is a module-scope binding rather than a local.
+    ///
+    /// A global is *memory*. It is read with `GlobalGet` and written with
+    /// `GlobalSet`, so a loop that assigns one needs no block parameter to
+    /// carry it: the next iteration reads the slot the last one wrote. An `if`
+    /// that assigns a global has always worked for exactly this reason -- it
+    /// carries nothing.
+    fn is_a_global(&self, symbol: u32) -> bool {
+        self.module.variables.contains_key(&symbol)
+    }
+
     fn assigned_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
         // Every form that writes to a name, not just `=`. Missing one does not
         // fail loudly: the header simply gets no parameter for that name, the
@@ -8162,6 +8174,25 @@ impl<'a> FuncBuilder<'a> {
         // the update. `for (let i = 0; i < n; i++)` then runs forever, and the
         // only thing that catches it is the SSA verifier noticing that the exit
         // reads a value the body defined.
+        // A global is skipped here rather than at each of the seven call
+        // sites, because "which names does this loop carry" is one question and
+        // it was being answered in one place already.
+        //
+        // Before this, a loop assigning a module-scope binding was refused --
+        // "a loop assigning a name declared outside it" -- because `begin_loop`
+        // looks each carried symbol up in the binding table and a global is not
+        // in it. The message named the wrong thing: every accumulator is
+        // declared outside its loop, and what actually failed was that a global
+        // has no binding to carry.
+        //
+        // The refusal was worse than a missing feature. Module evaluation skips
+        // a refused statement and keeps going -- `NTS1005` says so, and says
+        // "every value this line would have computed keeps whatever it held
+        // before it" -- so the global kept its *initial* value and the export
+        // reading it still compiled. `let total = 0; for (const v of table)
+        // total = total + v;` answered 0 where node answers 10, with no
+        // diagnostic on the export and nothing in a published-name count able
+        // to see it.
         let written = match self.kind_of(root) {
             Some(syntax::BINARY_EXPRESSION) => {
                 let children = self.children(root);
@@ -8643,6 +8674,43 @@ impl<'a> FuncBuilder<'a> {
         let header = self.new_block();
         let body = self.new_block();
         let latch = if steps { self.new_block() } else { header };
+
+        // A global is *memory* and is not carried.
+        //
+        // It is read with `GlobalGet` and written with `GlobalSet`, so the next
+        // iteration reads the slot the last one wrote and there is nothing for
+        // a block parameter to hold. An `if` that assigns a global has always
+        // worked for exactly this reason: it carries nothing.
+        //
+        // This used to be a refusal -- "a loop assigning a name declared
+        // outside it" -- because the lookup below found no binding for a
+        // global. The message named the wrong thing (every accumulator is
+        // declared outside its loop) and the recovery was worse than the
+        // refusal: module evaluation skips a refused statement and keeps going,
+        // so the global kept its *initial* value and the export reading it
+        // still compiled. `let total = 0; for (const v of table) total = total
+        // + v;` answered 0 where node answers 10, with no diagnostic on the
+        // export and nothing in a published-name count able to see it.
+        //
+        // Decided here rather than where the carried set is *collected*,
+        // because a `for (let i = 0; ...)` head at module scope is picked up by
+        // `collect_module_scope` as a module binding: filtering it there
+        // stopped `i` being carried and the loop never advanced. By the time
+        // this runs the head has been lowered and `i` has a binding, which is
+        // the question that actually distinguishes them.
+        let kept: Vec<u32> = carried
+            .iter()
+            .copied()
+            .filter(|symbol| self.bindings.contains_key(symbol))
+            .collect();
+        if let Some(missing) = carried
+            .iter()
+            .find(|symbol| !self.bindings.contains_key(symbol) && !self.is_a_global(**symbol))
+        {
+            let _ = missing;
+            return Err(self.unsupported(id, "a loop assigning a name declared outside it"));
+        }
+        let carried: &[u32] = &kept;
 
         // The values entering the loop, in the order the parameters take them.
         let mut incoming = Vec::new();
@@ -14541,9 +14609,29 @@ impl<'a> FuncBuilder<'a> {
             // references is recorded on the layout for the collector that comes
             // later, because that is a fact about the layout and the layout is
             // decided here.
-            let field_ty = self.represent(property.ty).ok_or_else(|| {
+            // `undefined` is a value with a name, not an absence.
+            // `representation_of` answers `Void` for it, which is right for a
+            // return type -- a function returning `undefined` returns nothing
+            // -- and is not a representation at all for a slot: C has no
+            // zero-width member, so the emitter wrote `void value;` and clang
+            // rejected the whole struct.
+            //
+            // Every field of the eight WHATWG stream dictionaries went that
+            // way. `type?: undefined` compiles and `type: undefined` does not,
+            // which is the control pair that placed it: optionality already
+            // routes through `Erased` below and a *required* member of the same
+            // type had no route at all. Two spellings of one set of values, two
+            // answers, and one of them was not an answer.
+            //
+            // `Never` joins it. A field typed `never` can hold nothing, so any
+            // read is unreachable -- and the struct still needs a member, or
+            // every offset after it lands somewhere the layout does not say.
+            let field_ty = match self.represent(property.ty).ok_or_else(|| {
                 self.unrepresentable_member(id, "a property", &property.name, property.ty)
-            })?;
+            })? {
+                HirType::Void | HirType::Never => HirType::Erased,
+                held => held,
+            };
             // A field of object type needs that object's *layout*, not only its
             // representation: the struct has to name a member of it, and the
             // descriptor beside it takes an `offsetof` into it.
@@ -14698,8 +14786,13 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Layout, Diagnostic> {
         let mut fields = Vec::with_capacity(elements.len());
         for (at, element) in elements.iter().enumerate() {
-            let Some(field) = self.represent(*element) else {
-                return Err(self.unrepresentable(id, &format!("element {at} of a tuple")));
+            // A slot, so `undefined` and `never` take storage. See the note
+            // in `fields_of`: `NtsObj_Tuple249 { NtsValue _0_; void _1_; }` is
+            // what a half-`undefined` tuple emitted, and clang rejects it.
+            let field = match self.represent(*element) {
+                Some(HirType::Void | HirType::Never) => HirType::Erased,
+                Some(held) => held,
+                None => return Err(self.unrepresentable(id, &format!("element {at} of a tuple"))),
             };
             // An element of object type needs that object's *layout*, not only
             // its representation: the tuple's struct has to name a member of

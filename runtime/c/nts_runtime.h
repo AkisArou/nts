@@ -2443,6 +2443,20 @@ NtsPromise *nts_promise_race(NtsArray *promises);
  * anything posted with `nts_post_task` wants `false`. */
 NtsTask nts_callback_task(NtsHeader *callback, double slot, bool repeating);
 
+/* Where a closure's `call` sits in its descriptor's method table.
+ *
+ * Defined by the *program* -- `codegen/c::emit_closure_call_slot` -- because
+ * the compiler is the only thing that knows it, and it is not a constant: a
+ * closure's method goes after every named method in the program, so the number
+ * is 0 only where nothing declares a method. `async_hooks` is 8,
+ * `diagnostics_channel` and `buffer` are 5, `punycode` is 0.
+ *
+ * Declared here so a binding that posts a compiled closure as a task can pass
+ * it to `nts_callback_task` rather than guessing. Guessing 0 does not fail to
+ * link and does not fail to load; it calls through a null entry the first time
+ * the task runs. */
+extern const uint32_t nts_closure_call_slot;
+
 double nts_set_timeout(NtsHeader *callback, double slot, double delay_ms,
                        bool repeating);
 void nts_clear_timeout(double id);

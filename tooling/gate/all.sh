@@ -319,10 +319,20 @@ profile() {
   #   done
   #
   # Two binaries over one corpus is what tells a compiler regression from corpus
-  # growth, and it has answered that question four times today -- once finding
+  # growth, and it has answered that question five times today -- once finding
   # a real thousand-refusal regression of mine that three separate repairs all
-  # shared, and three times finding nothing but growth.
-  ceiling=19000
+  # shared, and four times finding nothing but growth.
+  #
+  # The fifth: 18914 -> 19086 tripped this, and the same loop said
+  #
+  #   before (d66d52ae)  19094      after  19086      -8
+  #
+  # over the corpus of *after*, per module -- eight modules one lower and none
+  # higher. So the compiler took eight off and the corpus put a hundred and
+  # eighty on, which is under ten minutes of the Node lane committing. The
+  # ceiling is raised because the corpus earned it and the run that says so is
+  # in this comment rather than in a memory of it.
+  ceiling=19500
   if [ "$refusals" -gt "$ceiling" ]; then
     printf '  ^ above the ceiling of %s -- reach went backwards\n' "$ceiling"
     return 1

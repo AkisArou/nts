@@ -457,6 +457,7 @@ pub fn emit(program: &Program) -> Emitted {
     if let Err(diagnostic) = emit_globals(&mut writer, program) {
         diagnostics.push(diagnostic);
     }
+    emit_closure_call_slot(&mut writer, &origin, program);
 
     for (_, body, _) in bodies {
         writer.append(body);
@@ -1067,6 +1068,43 @@ fn global_name(program: &Program, global: u32) -> String {
 /// `static` unless exported, so a name a program keeps to itself does not become
 /// part of the artifact's ABI -- and so the linker can drop one nothing reads,
 /// which is the same reachability argument `--gc-sections` makes for functions.
+/// Where a closure's `call` sits in a descriptor's method table, published so
+/// that hand-written C can reach it.
+///
+/// The compiler decides this number and nothing else can. `hir` puts a
+/// closure's method *after* every named method in the program --
+/// `closure_slot = hierarchy.slots.len()` -- so it is 0 only in a program that
+/// declares no methods at all, and `nts_callback_call` indexes the table with
+/// it directly: it casts `descriptor->methods[entry->slot]` to the callback's
+/// signature and calls it, with no check that the entry is filled.
+///
+/// A binding that wants to post a compiled closure as a task has to pass that
+/// slot to `nts_callback_task`, and neither it nor the runtime can work it out:
+/// a descriptor's method table carries no count to scan for the one filled
+/// entry. Measured across the built profile before this existed --
+/// `async_hooks` 8, `diagnostics_channel` 5, `buffer` 5, `punycode` 0 -- which
+/// is the worst possible distribution for a hardcoded constant, because the
+/// module anyone tries first is the one where 0 happens to be right and the
+/// three that matter dereference a null.
+///
+/// Emitted unconditionally. A program with no closures has nothing to call, so
+/// the value is unused rather than wrong, and a declaration in `nts_runtime.h`
+/// that some translation unit references must resolve in every link.
+fn emit_closure_call_slot(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+    let slot = program
+        .layouts
+        .iter()
+        .filter(|layout| layout.types.iter().copied().any(nts_core::hir::is_closure_type))
+        .find_map(|layout| layout.methods.iter().position(Option::is_some))
+        .and_then(|slot| u32::try_from(slot).ok())
+        .unwrap_or(0);
+    writer.line(
+        origin,
+        format!("const uint32_t nts_closure_call_slot = {slot}u;"),
+    );
+    writer.blank(origin);
+}
+
 fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
     for global in &program.globals {
         // `c_type_of` rather than `c_type`: an object type is named per
