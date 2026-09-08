@@ -9270,6 +9270,40 @@ If accessors are out of scope for a pass, the file stays as it is and the module
 reports **4 of 5 with the reason named**. A green row bought by dropping the only
 test that reads the accessors is not a green module.
 
+## Five modules whose cascade counts are suspect until re-measured
+
+The compiler lane found a lowering bug on 2026-09-09: a constructor call was
+named from the **source text of the identifier**, so a class whose name is
+declared in two files was called as `Frame#constructor` while its definition was
+`Frame@parse#constructor`. The caller was then dropped as "calls something
+refused" — **with no refusal anywhere**. A cascade with no root at the bottom of
+it.
+
+`runtime/node` declares 290 classes and four names twice:
+
+| name | declared in | one program? |
+| --- | --- | --- |
+| `Socket` | `dgram/src/main.ts`, `net/src/main.ts` | yes — `dgram` links `net` |
+| `Server` | `http/src/server.ts`, `net/src/main.ts` | yes — `http` links `net` |
+| `Interface` | `readline/src/interface.ts`, `readline/src/promises.ts` | yes — one module |
+| `DrainWaiter` | `stream/src/iter/broadcast.ts`, `stream/src/iter/classic.ts` | yes — one module |
+
+Every pair lands in a single program, which is the condition. So **`dgram`,
+`net`, `http`, `readline` and `stream` may each carry fictional cascades**, and
+any conclusion drawn from what they do *not* reach is suspect until re-measured
+against a binary carrying the fix.
+
+The one that matters most here is `dgram`. Its native half is complete, and the
+reading that only two of its twenty-one bindings are reached — and that
+`createSocket` is stopped by its own refusals — rests on which functions were
+dropped. `Socket` is one of the two duplicated names, and `dgram.createSocket`
+returns a `Socket`. If that cascade was fictional, `dgram` is closer than it
+measured.
+
+**Re-measure before quoting any of it**: `dgram` and `net` own-source refusals,
+what `cascade-reach.mjs` says about `createSocket`, and the export tables of all
+five.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
