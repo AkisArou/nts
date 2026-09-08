@@ -17,6 +17,12 @@ declare function nts_process_memory_usage(
 ): number;
 declare function nts_process_umask(mask: number): number;
 declare function nts_process_umask_read(): number;
+declare function nts_process_resource_usage(
+  values: [
+    number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number,
+  ],
+): number;
 declare function nts_hrtime_ns(): bigint;
 
 /** `[errno, user, system]`, so a wrong errno cannot hide behind plausible numbers. */
@@ -75,4 +81,33 @@ export function probeHrtimeIsNanoseconds(): boolean {
   // A value in nanoseconds since an arbitrary epoch is large; one in
   // milliseconds or seconds would not clear this by orders of magnitude.
   return nts_hrtime_ns() > 1_000_000_000n;
+}
+
+/**
+ * All sixteen `uv_getrusage` columns. Reported as the errno, the column count,
+ * and which columns are non-negative -- a count alone would pass for a binding
+ * that filled the first two and left fourteen zeroes, which is exactly what a
+ * short `memcpy` would do.
+ */
+export function probeResourceUsageShape(): string {
+  const values: [
+    number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number,
+  ] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const errno = nts_process_resource_usage(values);
+  let nonNegative = 0;
+  for (let index = 0; index < values.length; index++) {
+    if ((values[index] ?? -1) >= 0) nonNegative++;
+  }
+  return `${errno}:${values.length}:${nonNegative}`;
+}
+
+/** `maxRSS` is column 2 and is always positive for a live process. */
+export function probeMaxRss(): number {
+  const values: [
+    number, number, number, number, number, number, number, number,
+    number, number, number, number, number, number, number, number,
+  ] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  nts_process_resource_usage(values);
+  return values[2];
 }

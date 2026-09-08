@@ -493,6 +493,10 @@ const PROBES = [
       const out = [
         { label: "cpuUsage errno + signs", mine: m.probeCpuUsage(), theirs: "0:true:true" },
         { label: "memoryUsage all columns", mine: m.probeMemoryShape(), theirs: "0:true:true:true:true:true" },
+        // All sixteen uv_getrusage columns present and non-negative. A count
+        // alone would pass for a binding that filled two and left fourteen
+        // zeroes, which is what a short memcpy does.
+        { label: "resourceUsage 16 columns", mine: m.probeResourceUsageShape(), theirs: "0:16:16" },
         { label: "hrtime monotonic", mine: m.probeHrtimeMonotonic(), theirs: true },
         { label: "hrtime is nanoseconds", mine: m.probeHrtimeIsNanoseconds(), theirs: true },
       ];
@@ -518,6 +522,16 @@ const PROBES = [
       // `umask(m)` answers the *previous* mask, which is node's contract, and
       // the probe puts the original back before returning. Checked against
       // node's own reading rather than a constant.
+      // maxRSS is reported in kilobytes by getrusage and bytes by memoryUsage,
+      // so the comparable claim is that they describe the same process rather
+      // than that they are equal.
+      const maxRss = m.probeMaxRss();
+      out.push({
+        label: "maxRSS plausible vs rss",
+        mine: maxRss > 0 && maxRss * 1024 >= mem.rss / 2,
+        theirs: true,
+        detail: `${maxRss}kB vs ${mem.rss}B`,
+      });
       const current = process.umask();
       out.push({
         label: "umask previous/set/restored",
