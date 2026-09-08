@@ -17,6 +17,15 @@
 //
 // Node's answers come from a child `node -p`: inside this harness
 // `require("node:assert")` and `require("assert")` are the same object.
+//
+// **One thing this file cannot do, and it is inherent to the module.** Its
+// assertion library *is* the module under test. Under `--sabotage` it fails
+// with `assert.ok is not a function` -- from its own first check, before any
+// substance -- so it cannot distinguish a blank `assert` from a wrong one. Every
+// test in this directory has that property and none of them can avoid it; the
+// only oracle that would is a second assertion library, which would be a
+// stranger dependency than the gap is worth. Recorded so the next reader does
+// not mistake the sabotage message for a finding.
 
 "use strict";
 
