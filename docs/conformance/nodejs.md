@@ -2879,6 +2879,48 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The chain in `determineSpecificType`, five links deep and still moving
+
+`internal/errors.ts`'s `determineSpecificType` is a `switch (typeof value)` in
+which **every arm is its own lowering problem**. Clearing one reveals the next,
+and this document has now watched it happen five times:
+
+    an `unknown` narrowed to BigInt     errors.ts:34    fixed
+    an `unknown` narrowed to Symbol     behind it       fixed
+    `String(symbol)`                    errors.ts:53    fixed
+    `toString` on a number, radix       errors.ts:463   open (13 modules)
+    `JSON.stringify`                    errors.ts:70    **current head**
+
+Measured on the 15:39 binary, that head's cone in `os` is **96 functions**, and
+it gates `getPriority` and `setPriority` through `validateInt32` ->
+`ERR_INVALID_ARG_TYPE`. Every module imports this file, so the same head sits
+under every argument check in the profile.
+
+`JSON` is in §16's **gap** column rather than the not-a-goal column, so it is a
+blocker; it had no fixture while it sat behind four other refusals in the same
+function. Now `blockers/json-stringify`.
+
+**And it is not avoidable by writing the source differently.** Node reports a
+string argument as `type string ('abc')` and switches to `JSON.stringify`
+exactly when the value contains a single quote, so the message stays parseable.
+Doing that without it means reimplementing JavaScript string escaping — which
+`inspectString` two hundred lines below already had to do for the control range,
+and which is recorded there as agreeing with node "on almost nothing".
+
+**This is the fifth prediction in this document that a cone would empty and did
+not.** The caveat printed by `cascade-reach.mjs` — *clearing the head of a cone
+can reveal the next refusal in the same function, so a cone sizes a queue rather
+than a step* — was written after the first. Five links in, the useful statement
+about this function is not any one head but that it has a queue, and the queue
+is what `os` is waiting on.
+
+### Fixture state on that binary
+
+Six report loudly, and all six are the compiler lane's fixes landing rather than
+regressions: `callback-binding`, `duplicate-type-name`, `erased-truthiness`,
+`field-named-header` and `narrowed-bigint` FIXED, `literal-const-export`
+CHANGED. Five of those were filed from this lane today.
+
 ## Why the compiling modules publish nothing: two causes, nearly equal
 
 Ten modules that compile and publish nothing or almost nothing, counted by the
