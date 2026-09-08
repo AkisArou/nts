@@ -716,6 +716,58 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "process-more.ts",
+    module: "process",
+    // The rest of process's reachable native half. abort, execve and
+    // really_exit are declared `never` and stay unreachable -- a probe that
+    // forked to survive them would be measuring the fork.
+    checks(m) {
+      const osm = require("node:os");
+      // node's `allowedNodeEnvironmentFlags` is a Set subclass whose `size` and
+      // iteration disagree -- 284 against 281 on this build, because `has` and
+      // `size` account for dash/underscore spellings differently. The
+      // comparable count is what it *iterates*, and comparing against `.size`
+      // reported a divergence for a binding that matches node flag for flag.
+      const nodeFlags = [...process.allowedNodeEnvironmentFlags];
+      const out = [
+        { label: "allowed env flag count", mine: m.probeAllowedEnvFlagCount(), theirs: nodeFlags.length },
+        { label: "allowed flags none missing", mine: nodeFlags.filter((f) => !m.probeAllowedEnvFlagHas(f)).length, theirs: 0 },
+        { label: "chdir round trip", mine: m.probeChdirRoundTrip(osm.tmpdir()), theirs: "0:true:true" },
+        { label: "kill self signal 0", mine: m.probeKillExistence(process.pid), theirs: 0 },
+        { label: "raw_debug survives", mine: m.probeRawDebugSurvives(""), theirs: true },
+        { label: "title round trip", mine: m.probeTitleRoundTrip("nts-probe"), theirs: "true:true" },
+        { label: "setuid to self", mine: m.probeSetuidSelf(process.getuid()), theirs: 0 },
+        { label: "setgid to self", mine: m.probeSetgidSelf(process.getgid()), theirs: 0 },
+        { label: "seteuid to self", mine: m.probeSeteuidSelf(process.geteuid()), theirs: 0 },
+        { label: "setegid to self", mine: m.probeSetegidSelf(process.getegid()), theirs: 0 },
+        { label: "thread cpu usage", mine: m.probeThreadCpuUsage(), theirs: "0:true:true" },
+      ];
+      let chdirErr = 0;
+      try { process.chdir("/nonexistent-nts/x"); } catch (e) { chdirErr = e.errno; }
+      out.push({ label: "chdir missing errno", mine: m.probeChdirMissing("/nonexistent-nts/x"), theirs: chdirErr });
+      let killErr = 0;
+      try { process.kill(2147483600, 0); } catch (e) { killErr = e.errno; }
+      out.push({ label: "kill absent pid errno", mine: m.probeKillMissing(2147483600), theirs: killErr });
+      out.push({ label: "load_env_file missing", mine: m.probeLoadEnvFileMissing("/nonexistent-nts/.env"), theirs: -2 });
+      // The privileged setters, on the only path this process can take. As a
+      // non-root user each is refused with UV_EPERM, which is a real answer
+      // about a real syscall rather than a skipped row. setgroups is probed
+      // only this way: succeeding would change the group set of the process
+      // running the tests.
+      for (const [label, mine] of [
+        ["setuid root", m.probeSetuidRoot()],
+        ["setgroups", m.probeSetgroupsRefused()],
+        ["initgroups", m.probeInitgroupsRefused()],
+      ]) {
+        out.push({ label: `${label} refused with EPERM`, mine, theirs: -1 });
+      }
+      for (const name of ["release", "features", "config"]) {
+        out.push({ label: `metadata ${name} non-empty`, mine: m.probeMetadataLength(name) > 0, theirs: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
