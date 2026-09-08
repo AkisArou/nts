@@ -2769,7 +2769,82 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
-## The compiled artifact, which is the gate and is entirely red
+## The whole compiled axis, measured in one run
+
+This table had been owed for a long time and was started four times: twice
+abandoned when I handed the machine to another lane, once discarded for tree
+movement, once for editing the running wrapper. **It completed at `06:01:45` on
+2026-09-08**, over all 22 modules, against a compiler pinned at a scratch copy
+(`NTS_BIN`) so a peer's rebuild could not substitute the thing under test.
+
+    module                interpreted        compiled artifact
+    assert                 10 / 10   h0      c-did-not-compile
+    async_hooks           114 / 114  h0      c-did-not-compile
+    buffer                 53 / 53   h0      built-exports-partial
+    console                17 / 17   h0      c-did-not-compile
+    dgram                  75 / 75   h0      c-did-not-compile
+    diagnostics_channel    32 / 32   h0      c-did-not-compile
+    events                 30 / 30   h0      c-did-not-compile
+    fs                    338 / 338  h0      c-did-not-compile
+    http                  403 / 403  h0      c-did-not-compile
+    net                   146 / 146  h0      c-did-not-compile
+    os                      7 / 7    h0      partial            <- 4 of 7
+    path                   19 / 19   h0      all-passes-degenerate
+    process                87 / 87   h0      c-did-not-compile
+    punycode                2 / 2    h0      green              <- 2 of 2
+    querystring             6 / 6    h0      built-exports-nothing
+    readline               24 / 24   h0      c-did-not-compile
+    stream                248 / 248  h0      c-did-not-compile
+    string_decoder          3 / 3    h0      built-exports-nothing
+    timers                 54 / 54   h0      c-did-not-compile
+    url                    49 / 49   h0      built-exports-nothing
+    util                   24 / 24   h0      c-did-not-compile
+    zlib                   66 / 66   h0      c-did-not-compile
+
+    1,807 / 1,807 interpreted, 0 hollow
+    compiled: 1 green, 1 partial, 15 do not compile, 5 build and do not work
+
+**The interpreted column sums to exactly 1,807**, which is the standing green
+total. That is worth stating because it means this single run confirms both axes
+rather than one — the compiled measurement did not come at the cost of a stale
+green number, and the two columns describe the same tree at the same moment.
+
+**The five that build and do not work are the useful rows**, and they are three
+different kinds of failure that a pass/fail column would have flattened:
+
+- `built-exports-nothing` — `querystring`, `string_decoder`, `url`. The addon
+  compiles, links and loads, and its export table is empty. Nothing refused.
+- `built-exports-partial` — `buffer`. Some names publish and the ones the tests
+  need do not.
+- `all-passes-degenerate` — `path`. **Every test passes and the result is
+  worthless**: blank the module and they still pass, so the suite is not
+  reaching the addon at all. This row is the reason the sweep runs sabotage on
+  the compiled lane and not only the interpreted one. A green cell here would
+  have been the most damaging number in the document.
+
+`c-did-not-compile` covers 15 modules and is the least informative outcome in
+the table — it is one word for at least four distinct compiler refusals plus, in
+`dgram` and `timers`, a native half that does not exist to link against.
+
+### Provenance, because a sweep that outlived its tree says nothing
+
+Three commits landed inside the run's window (`05:50:14`–`06:01:45`). All three
+were confined to `runtime/web-platform/` and `tooling/conformance/web-platform/`,
+which is another lane's. Checked rather than assumed, in three ways:
+
+- no file under `runtime/node` was touched in the window
+- no file under `runtime/web-platform/src` was **modified** — the only two src
+  changes are *additions* of new files
+- `web-platform-reach.mjs` reports **0 of 22** modules reach either new file
+
+The build and test tooling the sweep itself reads — `build.sh`, `sweep.mjs`,
+`run.mjs` — was not touched. So the run describes one tree. The reason this is
+written down rather than trusted: five earlier sweeps were discarded for exactly
+this, and a contaminated sweep is indistinguishable from a clean one in its own
+output.
+
+## The compiled artifact, which is the gate, and its first green row
+
 
 **`punycode` passes node's own tests as a compiled addon.** On the compiler as
 it ships, from a clean build directory:
