@@ -267,13 +267,26 @@ regression guard, and the annotated-const one exists because that repair landed
 twice — the first laid the object out as the declared type and broke
 `instanceof`, one relation recorded and a narrower one walked.
 
-**Two blockers have evidence but no fixture, and the attempt failed rather than
-being skipped.** The `NtsTask` microtask struct (three modules one clang error
-from compiling) and the `void` struct fields (228 of 244 clang errors, twelve
-modules) are both reported from the *generated C of real modules* — the exact
-error text, the struct with `void abort; void close; void start;` in it, and the
-call passing a closure pointer where a three-field struct is declared. Neither
-has a minimal reproduction.
+**Both of those blockers now have fixtures, and the profile they described has
+changed.** Re-measured on the 11:16 binary, building every module with
+`NTS_COMPILER` pinned:
+
+    120  no member named X in X          <- now the dominant kind
+     49  redefinition of X
+     12  incompatible pointer types
+     10  static assertion: NtsObj_Frame is not the size nts computed
+
+`228 of 244 ... void struct fields` is historical and no longer the shape. Twelve
+modules hit clang's twenty-error limit, so those counts are floors.
+
+**And the "`NtsTask` microtask struct" is `callback-binding`, not a struct.**
+`async_hooks` and `diagnostics_channel` have **two** clang errors each and they
+are the same call site — the emitted prototype names a closure type per program
+(`NtsObj_Ctor_TypeError`, `NtsObj_Closure18`) where `nts_node.h` says
+`NtsHeader *`. `timers` is those two plus an undeclared `Closure54__call` and one
+`NtsValue` arithmetic error. So the guess that three modules are one error from
+compiling was right about the shape and wrong about which mismatch, and the
+fixture that reproduces it is `blockers/callback-binding`.
 
 **Read from the generated C that is still on disk, the `void` fields are three
 WHATWG Streams dictionaries**, and the shape of the evidence rules out the
