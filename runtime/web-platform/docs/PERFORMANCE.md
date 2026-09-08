@@ -258,6 +258,40 @@ rather than on the target.
 for the same TypeScript on node is 1.47x, which is the ordinary codegen distance this lane
 already measures on every other row -- not a representation problem.
 
+## Answered: typing the code unit `i32` is real, correct, and worth nothing here
+
+The escaper's classification comparing against `92.0`, `32.0`, `34.0` and `55296.0` in floating
+point was the last item on this lane's compiler list. The compiler lane has now typed the read
+`i32` where the index is provable, and the effect on this module is visible in the emitted C --
+same probe, their binary against the day before:
+
+    yesterday   firstEscapeIndex   float consts 7   int consts 0
+    current     firstEscapeIndex   float consts 1   int consts 6
+
+**And the rows do not move.** Two clean runs, quoting the ratio to node because that column runs
+our TypeScript and a compiler change cannot touch it:
+
+| row | before | after |
+| --- | --- | --- |
+| `json-serialize` | 1.14x node | 1.15x, 1.15x |
+| `json-scan` | 1.19x node | 1.20x, 1.20x |
+| `json-build-append` | 1.26x node | 1.29x |
+
+Absolute numbers all fell 5-10% because the machine was quieter -- node fell 12.79 to 12.14 too
+-- which is the whole reason to quote ratios.
+
+**So making a comparison-only classification integer buys nothing measurable, and the `pays` gate
+was right.** Its comment says *"a class with no arithmetic in it has nothing to make faster"*, and
+for this shape that is simply true. The `| 0` result under Refuted said the same thing from the
+other side, and both are now explained by the same fact: **the index half selects a different
+runtime entry, which is a call-level difference worth 46% on `json-scan`; the value half only
+decides whether a compare is `ucomisd` or `cmp`, and the hardware does not care.**
+
+**Not a reason to revert it.** It is a correctness claim about the IR -- a code unit proven inside
+its string *is* a `uint16` -- and it is a prerequisite for anything vectorised, because a loop
+carrying `f64` code units cannot become `<32 x i8>` however good the cost model is. Gates do not
+show up on the rows they gate.
+
 ## Refuted here: "reference counting is a net win, not a tax"
 
 That entry is below, established from `NoGc` running 40.68us against 17.78us on
