@@ -2879,6 +2879,57 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## The `export-class` arm split: no module moves on classes alone
+
+Measured on `445ea94b`, separating the two arms of *is not a function this
+backend can name* by asking the source what each unwrappable name is:
+
+    module                class  binding  other   refusals behind it
+    zlib                     16      12       2       23
+    http                      7       6       1       10
+    net                       5       0       1        8
+    stream                    5       2       4       16
+    async_hooks               4       1       0        5
+    assert                    3      18       0        2
+    buffer                    3       1       1        7
+    timers                    3       4       1       12
+    url                       3       0       0       10
+    diagnostics_channel       2       0       0        5
+    events                    2       4       1        7
+    console                   1       1       2        1
+    dgram                     1       0       0        1
+    process                   1       1       2        2
+    readline                  1       1       1       11
+    string_decoder            1       0       1        0
+    querystring               0       1       0        7
+    os / path / util          0       0       0     6 / 11 / 1
+
+**No module moves on the exported-class arm alone.** Every one has refusals
+behind it — functions that were never compiled — so publishing its classes would
+leave it publishing a class and not the functions beside it.
+
+The compiler lane's guess was `zlib` and `events` move and `assert` does not.
+`assert` is right, and for the reason guessed: 18 of its 21 are the
+`export const x = obj.method` arm. But `zlib` has 23 refusals and `events` has
+7, so neither moves on either arm.
+
+### The exception is one module, and it is not a class question
+
+`string_decoder` is the **only module in the profile with zero refusals**. Its
+two unwrappable exports are:
+
+    StringDecoder      export class StringDecoder
+    default            export default { StringDecoder }
+
+A class, and an object literal containing that class. So the answer to "do the
+two arms ship together or separately" is: **separately buys exactly one module,
+and only if a value-shaped `default` ships with the class.** Everything else
+needs the refusal queue drained as well.
+
+**That is a stronger argument for shipping them together than the reach numbers
+were**, and it is the opposite of what the 82-vs-74 split suggested. Eighty-two
+sites is a real count and it is not a count of modules that would move.
+
 ## `0 hollow` had never been measured, and it is true
 
 The profile is described everywhere — including in this lane's own goal — as
