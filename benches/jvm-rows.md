@@ -36,7 +36,7 @@ not measured clean and should not be quoted.**
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
-| `awfy-sieve` | 1.25x -> **1.05x** *busy jit* | moved without being worked on; re-measure clean |
+| `awfy-sieve` | **1.03x or 1.27x** | bimodal, not noisy -- two JIT shapes; below |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
 | `objects` | **0.99x** | re-measured clean: still a win, as it was |
 | `generator` | **0.99x** | re-measured clean: not losing |
@@ -544,6 +544,38 @@ investigation's conclusion is unchanged and its motivation was inflated.
 
 `awfy-sieve` moving 1.06x to 1.26x on the same binary is the worst offender in
 the table and wants its own careful sitting before anyone reads either number.
+
+### `awfy-sieve` is bimodal rather than noisy, and the reference is not
+
+It swung 1.06x to 1.26x on one binary, which read as contention. It is not. Six
+runs on a quiet machine, each `nts-bench`'s own best-of-five:
+
+    run 1   ours 5.74 us   Java 4.50   1.27x
+    run 2        5.74            4.48   1.28x
+    run 3        5.38            4.29   1.25x
+    run 4        4.49            4.32   1.04x
+    run 5        4.44            4.33   1.03x
+    run 6        4.48            4.32   1.04x
+
+**The Java reference is stable to +/-2% across all six.** Ours lands in one of
+two places -- about 5.5 us or about 4.47 us -- with nothing in between, and
+`nts-bench` raised its own "varied 1.27x across 5 runs of the same binary" on
+five of the six. That flag has been read as "the machine was busy" and on this
+row it is not: it is the same binary settling into two different compilations.
+
+**So the row's number depends on which shape the JIT picked, and the good shape
+is 1.04x.** Quoting 1.25x is quoting the bad one; quoting 1.04x is quoting the
+good one; the median of a single sitting is whichever the run happened to get.
+Both are written here because neither alone is the row.
+
+**The lead, unpriced.** If the good shape can be made the only shape, this row
+is at parity without any change to what is emitted -- which would make it the
+cheapest remaining win in the table. What produces two shapes from one class
+file is the question, and on-stack replacement against a standard compilation is
+the first thing to rule out, since it is what made the `generic-classes`
+assembly comparison wrong once already. Not chased yet, and it needs a
+diagnostic flag rather than a shipping one, so any number from it has to be
+checked back against a default-flags run before it counts.
 
 ## Open, and whose
 
