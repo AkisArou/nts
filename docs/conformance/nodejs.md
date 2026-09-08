@@ -2816,6 +2816,50 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## A test comparing node with node, and passing for it
+
+`events/test/prototype-surface-static.js` asserted that every name on node's
+`EventEmitter.prototype` is on ours. Its comment said *"node's own class, read
+at run time rather than listed, so this tracks the running node"*. It did not:
+
+    same=true   sameProto=true
+
+**The harness substitutes the module under test for the `node:` specifier too**,
+so `require("node:events")` and `require("events")` are one object, and the file
+compared node's prototype with itself. It passed for as long as it existed and
+could not have failed for the reason it was written.
+
+Found while writing the same shape for `zlib` and probing the two specifiers
+before trusting them — not by anything going wrong. My own new `zlib` test had
+the identical fault and would have shipped with it.
+
+The fix in both: read node's names from a **child `node -p`**, which has no
+harness hooks, so what it prints is node's.
+
+### What each found once it was real
+
+`zlib`, under sabotage, now names all 47 missing exports instead of tripping its
+own floor. In the ordinary lane it found nothing — but the first version reported
+`Z_MAX_CHUNK is Infinity, node's is null`, which was **my transport, not a
+divergence**: `JSON.stringify(Infinity)` is `null`. Values cross as strings now.
+I came within one commit of recording a false divergence in this document.
+
+`events` immediately surfaced `_events`, `_eventsCount` and `_maxListeners` —
+**the exact three its own comment had already called implementation state**, and
+the reason it was written missing-only rather than as an equality. The author
+anticipated them; the hollow comparison meant nothing ever had to handle them.
+Excluded by name, not by an `_` prefix rule, because `_` does not mark private
+here — `path._makeLong` is public API in this same profile.
+
+Both now fail informatively when the module is blanked. `events` previously
+failed the sabotage lane with `Cannot convert undefined or null to object` from
+inside `getOwnPropertyNames`: a true failure naming neither the module nor the
+reason, and indistinguishable from a broken harness.
+
+**Every other test in this profile that reads a `node:` specifier as an oracle
+has this fault**, and finding them is a sweep worth running rather than a thing
+to notice one at a time.
+
 ## `typecheck: 0 of 22` was a missing tool, not a broken profile
 
 The first full sweep run from a pinned worktree reported:
