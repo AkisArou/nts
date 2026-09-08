@@ -2861,6 +2861,74 @@ impl Emitter<'_> {
         Ok(Placed::OnStack)
     }
 
+    /// A value on the stack, replaced by JavaScript's truthiness of it.
+    ///
+    /// **A conversion to `Bool` is not a width change**, and treating it as one
+    /// is how `!groups.length` came out wrong: the table below maps
+    /// `(Int, Int)` to no opcode, so `convert i32 -> bool` left the length `2`
+    /// on the stack, and `not` -- which is `ixor 1` -- turned it into `3`
+    /// rather than `0`. Every later test then read `3` as true *and* as not
+    /// false. A boolean here has to be canonically 0 or 1.
+    ///
+    /// That was a pre-existing defect with no case to expose it: any function
+    /// reaching it also converted a managed value to a boolean, which this
+    /// backend refused outright, so the whole function was declined before the
+    /// integer conversion could answer wrongly. Fixing the refusal is what made
+    /// it reachable.
+    fn materialize_truth(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        from: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let Some(scratch) = self.scratch else {
+            return Err(refuse(self.func, "a truthiness test with no scratch slot"));
+        };
+        let truthy = code.label();
+        let done = code.label();
+        match from {
+            // A string's truthiness is `length != 0`, which is a different test
+            // from every other reference's, and nothing has produced one here.
+            HirType::Managed(ManagedType::String) => {
+                return Err(refuse(self.func, "a string used as a boolean"));
+            }
+            // Only `null` and `undefined` are falsy among references: an empty
+            // array is truthy, and so is every object.
+            HirType::Managed(_) => code.branch_present(origin, true, truthy),
+            HirType::Int { bits: 64, .. } => {
+                code.const_long(origin, pool, 0);
+                code.compare(origin, insn::LCMP, Kind::Long);
+                code.branch_zero(origin, Compare::Ne, truthy);
+            }
+            HirType::Int { .. } => code.branch_zero(origin, Compare::Ne, truthy),
+            // `0`, `-0` and `NaN` are the falsy numbers. `dcmpl` answers `-1`
+            // for a NaN on either side, so a bare `!= 0` would call it truthy;
+            // `branch_float` is the entry point that pairs the comparison with
+            // the branch that answers `false` for one.
+            HirType::Float { .. } => {
+                let kind = types::kind(from)
+                    .ok_or_else(|| refuse(self.func, "a float with no kind"))?;
+                if kind == Kind::Float {
+                    code.const_float(origin, pool, 0.0);
+                } else {
+                    code.const_double(origin, pool, 0.0);
+                }
+                code.branch_float(origin, Compare::Ne, kind, truthy);
+            }
+            _ => return Err(refuse(self.func, "a value this backend cannot test for truth")),
+        }
+        code.const_int(origin, pool, 0);
+        code.store(origin, Kind::Int, scratch);
+        code.goto(origin, done);
+        code.bind(truthy);
+        code.const_int(origin, pool, 1);
+        code.store(origin, Kind::Int, scratch);
+        code.bind(done);
+        code.load(origin, Kind::Int, scratch);
+        Ok(())
+    }
+
     /// A `Convert`, which a widened operand makes into nothing at all.
     ///
     /// This is the instruction `widen` exists to delete: an `i32` held in a
@@ -3505,6 +3573,23 @@ impl Emitter<'_> {
         } else {
             source
         };
+        // **A managed value becoming a boolean is truthiness, not an opcode.**
+        // The table below is keyed on `Kind`, which has no arm for a reference,
+        // so this refused -- `a conversion this backend has no opcode for: an
+        // array of strings to a boolean`, found by the npm lane pointing a real
+        // package at this backend rather than by any fixture here.
+        //
+        // For everything that is not a string, JavaScript truthiness of a
+        // managed value is exactly "is it there": an array is truthy however
+        // empty, an object is truthy, and only `null` and `undefined` are not.
+        //
+        // **A string is deliberately still refused.** Its truthiness is
+        // `length != 0`, which is a different test, and nothing has produced
+        // one here -- so it stays a refusal by name rather than a third arm
+        // written against no case.
+        if matches!(to, HirType::Bool) && !matches!(from, HirType::Bool) {
+            return self.materialize_truth(code, pool, from, origin);
+        }
         // Widen to the computational kind first, then narrow to the declared
         // width. Doing it in one step would need a case per pair.
         let opcode = match (source, target) {

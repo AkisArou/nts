@@ -575,6 +575,15 @@ impl Code {
         self.branch(origin, insn::IF_ACMPEQ + u8::from(!equal), target, 2);
     }
 
+    /// `ifnull` / `ifnonnull`: is one reference there.
+    ///
+    /// Separate from [`Code::branch_ref`], which compares *two* references and
+    /// pops two. Nothing reached for these until a managed value had to become
+    /// a boolean, which is why they were in `insn` and not here.
+    pub fn branch_present(&mut self, origin: &Origin, present: bool, target: Label) {
+        self.branch(origin, if present { insn::IFNONNULL } else { insn::IFNULL }, target, 1);
+    }
+
     pub fn goto(&mut self, origin: &Origin, target: Label) {
         self.branch(origin, insn::GOTO, target, 0);
     }

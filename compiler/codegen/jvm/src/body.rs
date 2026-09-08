@@ -22,7 +22,7 @@
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
 use nts_core::hir::{
-    BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, BlockId, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
 };
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
@@ -432,6 +432,21 @@ impl<'a> Emitter<'a> {
                     OpKind::Binary { op, .. } => comparison(*op).is_some(),
                     OpKind::Unary { op: UnOp::Truthy, operand } => {
                         !matches!(self.ty(*operand), HirType::Bool)
+                    }
+                    // A managed value converted to a boolean is truthiness,
+                    // which branches and rejoins and so needs the same slot for
+                    // the same reason -- `Code` counts one linear depth, and an
+                    // arm that pushes on both sides of a join is counted twice.
+                    // A string is excluded here because `ops::convert` refuses
+                    // it: its truthiness is `length != 0` and nothing has
+                    // produced one.
+                    OpKind::Convert(operand) => {
+                        matches!(self.func.values[value.0 as usize].ty, HirType::Bool)
+                            && matches!(
+                                self.ty(*operand),
+                                HirType::Managed(managed)
+                                    if !matches!(managed, ManagedType::String)
+                            )
                     }
                     _ => false,
                 }
