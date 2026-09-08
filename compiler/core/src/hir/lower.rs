@@ -4789,6 +4789,99 @@ impl<'a> FuncBuilder<'a> {
     /// A block parameter is a value like any other, but it belongs to the block
     /// rather than to the operation list — nothing computes it, a predecessor
     /// supplies it.
+    /// What a merged binding is typed as where the two arms disagree.
+    ///
+    /// It used to be the *then* arm's type outright, and that is a wrong answer
+    /// rather than an imprecision:
+    ///
+    /// `let f: Mapper = (v) => v + k; if (pick) { f = (v) => v * k; } f(5)`
+    ///
+    /// Two arrows are two closure classes, siblings with no relation. Typing
+    /// the merge as one of them tells every later pass that the value *is* that
+    /// class -- so `devirtualize_closures` turns the call into a direct call to
+    /// that arm's body, reachability then finds nothing calling the other, and
+    /// the other body is **deleted**. The program answers 15 where node answers
+    /// 8, on both pointer backends, because there is only one body left to
+    /// call. The JVM lane could not compile it at all, and that is how it was
+    /// found: an upcast is a pointer on two lanes and a checked store on the
+    /// third.
+    ///
+    /// So the merge takes the binding's *declared* type -- `Mapper`, whose
+    /// layout every closure of that signature is given as a base by
+    /// `relate_closures_to_signatures`. The call is then a dispatch through the
+    /// slot, which is what "call this closure, whichever it is" means, and both
+    /// bodies stay reachable.
+    ///
+    /// Where there is no declared object type to take, this keeps the old
+    /// answer rather than refusing. Merges whose arms disagree are common --
+    /// dozens across five `runtime/node` modules, mostly two object types or an
+    /// erased value against a concrete one -- and making every one of them
+    /// honest means inserting coercions on the edges, which is a larger change
+    /// than this and is not what makes the program above wrong.
+    fn merged_type(
+        &mut self,
+        id: NodeId,
+        symbol: u32,
+        from_then: ValueId,
+        from_else: ValueId,
+    ) -> HirType {
+        let then_ty = self.values[from_then.0 as usize].ty.clone();
+        let else_ty = self.values[from_else.0 as usize].ty.clone();
+        if then_ty == else_ty {
+            return then_ty;
+        }
+        // Only where both arms are objects, which is where a sibling pair can
+        // masquerade as one class. An erased arm is already the top and needs
+        // no help; a numeric pair is a width question this does not answer.
+        if !matches!(
+            (&then_ty, &else_ty),
+            (
+                HirType::Managed(ManagedType::Object(_)),
+                HirType::Managed(ManagedType::Object(_))
+            )
+        ) {
+            return then_ty;
+        }
+        // From the binding's *declaration node* rather than from
+        // `SymbolRecord::ty`, which the checker leaves empty for an ordinary
+        // local. `let f: Mapper = ...` writes the type on the declaration, and
+        // that node is what `declarations` points at.
+        let declared = self
+            .snapshot
+            .symbols
+            .get(symbol as usize)
+            .and_then(|record| {
+                record.ty.or_else(|| {
+                    record
+                        .declarations
+                        .first()
+                        .and_then(|at| self.snapshot.node_types.get(at).copied())
+                })
+            })
+            .and_then(|ty| self.represent(ty));
+        let Some(declared @ HirType::Managed(ManagedType::Object(at))) = declared else {
+            return then_ty;
+        };
+        // Whenever it resolves, not only when it differs from both arms. An
+        // `else if` nests a merge inside a merge, so the outer one sees the
+        // inner merge's parameter -- already the declared type -- on one side
+        // and a concrete closure on the other. Treating "equals one arm" as
+        // "nothing to do" then took the *other* arm's concrete type and put the
+        // bug back one level out: `threeWays` answered as though the first
+        // branch had been taken, whichever it was.
+        //
+        // And the type has to have a layout, because a merge is the *first*
+        // place this one is used as a value: a signature is written on a
+        // declaration and never allocated, so nothing else would ask for one,
+        // and a backend handed a type id with no layout declines the whole
+        // function. The old answer is kept where it cannot be had -- a decline
+        // is not an improvement on an imprecise type.
+        if self.layout_of(id, at).is_err() {
+            return then_ty;
+        }
+        declared
+    }
+
     fn push_block_param(&mut self, block: BlockId, ty: HirType, origin: Origin) -> ValueId {
         let index = u32::try_from(self.blocks[block.0 as usize].params.len()).unwrap_or(0);
         let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
@@ -12201,6 +12294,7 @@ impl<'a> FuncBuilder<'a> {
         let handler_bindings = std::mem::replace(&mut self.bindings, entry.clone());
 
         self.join_try(
+            id,
             &origin,
             (body_tail, body_open, body_bindings),
             (handler_tail, handler_open, handler_bindings),
@@ -12379,6 +12473,7 @@ impl<'a> FuncBuilder<'a> {
     /// Merge the two ways out of a `try`.
     fn join_try(
         &mut self,
+        id: NodeId,
         origin: &Origin,
         body: (BlockId, bool, rustc_hash::FxHashMap<u32, ValueId>),
         handler: (BlockId, bool, rustc_hash::FxHashMap<u32, ValueId>),
@@ -12406,8 +12501,8 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let mut params = Vec::new();
-        for (symbol, from_body, _) in &merged {
-            let ty = self.values[from_body.0 as usize].ty.clone();
+        for (symbol, from_body, from_handler) in &merged {
+            let ty = self.merged_type(id, *symbol, *from_body, *from_handler);
             params.push((*symbol, self.push_block_param(merge, ty, origin.clone())));
         }
 
@@ -13413,8 +13508,8 @@ impl<'a> FuncBuilder<'a> {
         }
 
         let mut params = Vec::new();
-        for (symbol, from_then, _) in &merged {
-            let ty = self.values[from_then.0 as usize].ty.clone();
+        for (symbol, from_then, from_else) in &merged {
+            let ty = self.merged_type(id, *symbol, *from_then, *from_else);
             params.push((*symbol, self.push_block_param(merge, ty, origin.clone())));
         }
 
@@ -17002,6 +17097,13 @@ impl<'a> FuncBuilder<'a> {
         // assigning a `double` to an `NtsValue` -- with no source location and
         // nothing naming the join.
         let merge = self.new_block();
+        // A conditional whose arms are two closures has the *signature* as its
+        // type, which is the right answer and the one nothing else
+        // materialises: a signature is written on a declaration and never
+        // allocated, so this merge is the first place it is used as a value.
+        if let HirType::Managed(ManagedType::Object(at)) = ty {
+            let _ = self.layout_of(id, at);
+        }
         let result = self.push_block_param(merge, ty.clone(), origin.clone());
 
         let mut merged = Vec::new();
@@ -17015,8 +17117,8 @@ impl<'a> FuncBuilder<'a> {
         merged.sort_unstable();
 
         let mut params = Vec::new();
-        for (symbol, from_then, _) in &merged {
-            let carried = self.values[from_then.0 as usize].ty.clone();
+        for (symbol, from_then, from_else) in &merged {
+            let carried = self.merged_type(id, *symbol, *from_then, *from_else);
             params.push((
                 *symbol,
                 self.push_block_param(merge, carried, origin.clone()),
