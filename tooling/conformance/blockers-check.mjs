@@ -229,6 +229,33 @@ for (const name of names) {
   // still-open blocker on a binary where the thing had been fixed. The verdict
   // was right and the word was wrong, which is the worse of the two failures.
   const isGuard = expectsClean || /^\/\/\s+FIXED\b/m.test(source);
+  // A `hir` expectation is a substring of the whole run, and a fixture's
+  // tsconfig can pull in more than its own `src`. If the only lines carrying the
+  // expected text come from *another* file, the fixture is holding on somebody
+  // else's diagnostic and would keep holding after its own defect was fixed.
+  //
+  // The same shape as the five `emits-c` fixtures that matched correct output:
+  // an expectation satisfied by something other than the thing it names.
+  //
+  // **This guard has not been controlled and cannot be, as the tree stands.**
+  // Every fixture's tsconfig covers only its own `src`, so there is no other
+  // file for a diagnostic to come from, and an expectation matching nothing
+  // takes the `CHANGED` path before reaching here. It is a guard against a
+  // state that does not exist yet -- a fixture that imports from another
+  // directory -- and it is written down as such rather than counted as a
+  // control that passed. An uncontrolled check is a claim; this one says so.
+  if (holds && !viaEmit && !expectsClean) {
+    const carrying = output.split("\n").filter((l) => l.includes(wanted));
+    const own = carrying.filter((l) => l.includes(`blockers/${name}/src`));
+    if (carrying.length > 0 && own.length === 0) {
+      unexpected++;
+      console.log(`  NOT ITS OWN ${name}: the expected text appears ${carrying.length} time(s),`);
+      console.log("                none of them in this fixture's own source. It is holding");
+      console.log("                on another file's diagnostic.");
+      continue;
+    }
+  }
+
   if (holds) {
     console.log(`  ${isGuard ? "guard ok  " : "reproduces"}  ${name}`);
     continue;
