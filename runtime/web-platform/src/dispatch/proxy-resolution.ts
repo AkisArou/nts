@@ -209,12 +209,23 @@ export type SystemProxyResolver = (url: URLRecord) => string | null;
 /**
  * System proxy lookup, with the caller's bypass list applied on this side.
  *
- * The host may already have applied its *own* bypass rules -- on Android it does, measured:
- * `http.nonProxyHosts` entries come back as `DIRECT`. This is a different list. It is the
- * one the caller configured, which no provider can know about, and it has to be honoured on
- * every platform including those with no system bypass list at all.
+ * **Two independent reasons, and the second was measured after the first was written.**
  *
- * So the two are not redundant, and applying this one here is not distrust of the platform.
+ * This is the caller's list, which no provider can know about, and it has to be honoured on
+ * every platform including those with no system bypass list at all. That alone is sufficient.
+ *
+ * And the platform may not apply its own. On Android API 26, measured from a real
+ * application rather than from a bare `app_process`, the framework propagates the proxy's
+ * host and port and **does not propagate the exclusion list**: with
+ * `global_http_proxy_exclusion_list` set to `localhost,127.0.0.1`, `http.nonProxyHosts`
+ * arrives empty and a request to `127.0.0.1` is routed to the proxy. So on that version this
+ * application is not a second opinion -- it is the only thing keeping a loopback request off
+ * the proxy.
+ *
+ * An earlier measurement through `app_process` with the property set by hand showed the
+ * selector honouring `nonProxyHosts`, which is true of the selector and says nothing about
+ * what a device hands it. Both facts are recorded because the difference between them is the
+ * whole point.
  */
 export class SystemProxyPolicy {
   private readonly resolver: SystemProxyResolver;

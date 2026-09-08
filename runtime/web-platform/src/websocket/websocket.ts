@@ -160,7 +160,7 @@ export class WebSocket extends EventTarget {
     this.url = parsed.href;
     context.registerWebSocket(this);
     this.registered = true;
-    this.connect(parsed, offers).catch((error) => this.fail(error));
+    this.#connect(parsed, offers).catch((error) => this.#fail(error));
   }
 
   get readyState(): number {
@@ -186,7 +186,7 @@ export class WebSocket extends EventTarget {
   set binaryType(value: "blob" | "arraybuffer") {
     if (value === "blob" || value === "arraybuffer") this.binary = value;
   }
-  private async connect(url: URLRecord, protocols: readonly string[]): Promise<void> {
+  async #connect(url: URLRecord, protocols: readonly string[]): Promise<void> {
     checkNetworkPort(url.port);
     const session = await this.context.transport.connect(
       { url, protocols, origin: this.context.origin ?? "null" },
@@ -195,7 +195,7 @@ export class WebSocket extends EventTarget {
     this.context.scheduler.enqueue(() => {
       if (this.state !== this.CONNECTING) {
         session.abort();
-        this.fail(new DOMException("Closed while connecting", "AbortError"));
+        this.#fail(new DOMException("Closed while connecting", "AbortError"));
         return;
       }
       this.session = session;
@@ -204,14 +204,14 @@ export class WebSocket extends EventTarget {
       this.negotiatedExtensions = session.extensions;
       const event = new Event("open");
       this.dispatchEvent(event);
-      this.readLoop(session).catch((error) => this.fail(error));
+      this.#readLoop(session).catch((error) => this.#fail(error));
     });
   }
-  private async readLoop(session: WebSocketSession): Promise<void> {
+  async #readLoop(session: WebSocketSession): Promise<void> {
     while (this.state !== this.CLOSED && !this.closeQueued) {
       const incoming = await session.next();
       if (incoming.kind === "close") {
-        this.finish(incoming);
+        this.#finish(incoming);
         return;
       }
       // A task per message, awaited before the next read, bounds the event backlog.
@@ -259,7 +259,7 @@ export class WebSocket extends EventTarget {
     this.amount += pending.size;
     if (this.state !== this.OPEN) return;
     if (this.amount > (this.context.maxBufferedAmount ?? 16 * 1024 * 1024)) {
-      this.fail(new LimitError("WebSocket send buffer is full"));
+      this.#fail(new LimitError("WebSocket send buffer is full"));
       return;
     }
     this.sends = this.sends.then(async () => {
@@ -279,7 +279,7 @@ export class WebSocket extends EventTarget {
         this.amount -= pending.size;
       });
     });
-    this.sends.catch((error) => this.fail(error));
+    this.sends.catch((error) => this.#fail(error));
   }
 
   close(code?: number, reason = ""): void {
@@ -288,31 +288,31 @@ export class WebSocket extends EventTarget {
     if (this.state === this.CONNECTING) {
       this.state = this.CLOSING;
       this.controller.abort();
-      this.fail(new DOMException("Closed while connecting", "AbortError"));
+      this.#fail(new DOMException("Closed while connecting", "AbortError"));
       return;
     }
     this.state = this.CLOSING;
     this.sends
       .then(() => this.session?.close(close.closeCode, close.reason))
-      .catch((error) => this.fail(error));
+      .catch((error) => this.#fail(error));
   }
   /** @internal */ closeForRuntime(): void {
     if (this.state === this.CLOSED) return;
     this.controller.abort();
     this.session?.abort();
-    this.finish({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
+    this.#finish({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
   }
-  private fail(_error: unknown): void {
+  #fail(_error: unknown): void {
     this.controller.abort();
     this.session?.abort();
-    this.finish({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
+    this.#finish({ kind: "close", code: 1006, reason: "", wasClean: false, failed: true });
   }
-  private finish(info: SocketClose): void {
+  #finish(info: SocketClose): void {
     if (this.closeQueued || this.state === this.CLOSED) return;
     this.closeQueued = true;
     this.context.scheduler.enqueue(() => {
       this.state = this.CLOSED;
-      this.unregister();
+      this.#unregister();
       if (info.failed) {
         const error = new Event("error");
         this.dispatchEvent(error);
@@ -326,7 +326,7 @@ export class WebSocket extends EventTarget {
     });
   }
 
-  private unregister(): void {
+  #unregister(): void {
     if (!this.registered) return;
     this.registered = false;
     this.context.unregisterWebSocket(this);

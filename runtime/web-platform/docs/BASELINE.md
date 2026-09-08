@@ -6343,3 +6343,46 @@ Frontier unchanged. 819/819 host, upstream unchanged at 2,566 of 2,574.
 
 What remains is `ReadableStream`'s seventeen, `Event`'s seven and `WebSocket`'s six. The
 streams set is still the hard one and still needs a type-aware pass.
+
+## Five of `WebSocket`'s six, and a device measurement that reversed its own conclusion
+
+Five `WebSocket` internals were `private` and are private identifiers now. `closeForRuntime`
+is the sixth and is held: it is called from `provider/web-platform-runtime.ts`, and `provider/`
+is paused while the Node lane's sweep runs. Surface 63 → **25**.
+
+### The bypass reason was understated, not wrong
+
+The JVM lane corrected its own measurement, and the correction reverses the conclusion I had
+already written into a comment on their evidence.
+
+They first showed `DefaultProxySelector` honouring `http.nonProxyHosts` — measured through a
+bare `app_process` with the property **set by hand**. On that basis I rewrote this lane's
+comment from "the platforms disagree, so hedge" to "these are two different lists". Both of
+us treated a fact about the selector as a fact about the platform.
+
+They then built a real APK. On API 26 the framework propagates the proxy's host and port to
+an application and **does not propagate `global_http_proxy_exclusion_list`**: with the list
+set to `localhost,127.0.0.1`, `http.nonProxyHosts` arrives empty and a request to `127.0.0.1`
+routes to the proxy.
+
+So the original hedge was not wrong, it was *understated*. The double application is not a
+second opinion on that version — **it is the only thing keeping a loopback request off the
+proxy.** Both facts are now in the comment, because the difference between "the selector
+honours the list" and "a device gives the selector the list" is the whole point.
+
+A test pins both halves: with no caller list a loopback host goes to the proxy, because the
+resolver's answer is honoured and nothing here invents a loopback exemption; with the caller's
+list it does not.
+
+**And the near-miss they reported is the same instrument failure this ledger keeps recording.**
+`settings put global http_proxy host:port` **clears** the exclusion list. They set the list
+first, the proxy second, read back an empty list, and were one step from publishing their own
+configuration as Android's behaviour. Their check now asserts the list took before believing
+anything downstream — a verified precondition, which is the `head -14` truncation in different
+costume, walked into by someone who had read about mine.
+
+The check reports the bypass result rather than requiring one direction: a later Android that
+propagates the list would answer `DIRECT`, which is an improvement and must not read as a
+regression. What it asserts is that the two halves agree.
+
+820/820 host, upstream unchanged at 2,566 of 2,574.

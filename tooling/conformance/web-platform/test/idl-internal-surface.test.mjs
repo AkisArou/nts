@@ -93,7 +93,10 @@ const INTERNAL_PROTOTYPE_MEMBERS = {
     "releaseBYOB",
     "requestClose",
   ],
-  WebSocket: ["closeForRuntime", "connect", "fail", "finish", "readLoop", "unregister"],
+  // Only `closeForRuntime` remains: it is called from `provider/web-platform-runtime.ts`, so
+  // symbol-keying it means touching `provider/`, which is held while the Node lane's sweep
+  // runs. The other five were `private` and are private identifiers now.
+  WebSocket: ["closeForRuntime"],
 };
 
 function internalMembers(name) {
@@ -133,7 +136,7 @@ suite("the count is stated, so shrinking it is visible", () => {
   const total = Object.values(INTERNAL_PROTOTYPE_MEMBERS).reduce((n, list) => n + list.length, 0);
   // Written as a number rather than derived, so that removing an entry has to change this
   // line too and cannot pass unnoticed as a no-op.
-  assert.equal(total, 30);
+  assert.equal(total, 25);
 });
 
 suite("interface members are not enumerable, which Web IDL requires them to be", () => {

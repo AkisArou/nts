@@ -197,3 +197,20 @@ suite("a host with no system proxy story answers direct, not an error", (t) => {
   t.after(() => api.close());
   assert.deepEqual(kinds(systemProxyPolicy().resolve(url("http://a.test/"))), ["direct"]);
 });
+
+suite("a loopback host is not bypassed unless the caller says so", () => {
+  // Pinned because of a device measurement rather than a guess. On Android API 26 the
+  // framework propagates the proxy's host and port to an application but *not*
+  // `global_http_proxy_exclusion_list`, so the platform itself answers "use the proxy" for
+  // `127.0.0.1`. Nothing here invents a loopback exemption -- the resolver's answer is
+  // honoured, which is the contract -- so the caller's own list is what keeps a loopback
+  // request off the proxy, and this asserts both halves of that.
+  const proxied = new SystemProxyPolicy(() => "PROXY p:3128");
+  assert.deepEqual(kinds(proxied.resolve(url("http://127.0.0.1:8080/x"))), [
+    "http-connect",
+    "direct",
+  ]);
+
+  const bypassed = new SystemProxyPolicy(() => "PROXY p:3128", new NoProxyMatcher("127.0.0.1"));
+  assert.deepEqual(kinds(bypassed.resolve(url("http://127.0.0.1:8080/x"))), ["direct"]);
+});
