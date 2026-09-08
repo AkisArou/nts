@@ -2816,6 +2816,61 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `assert`'s twenty errors are five known shapes, and one was new
+
+Broken down rather than counted, on the 14:18 probe binary:
+
+    10  field-named-header      (6 static-assertion + 2 sizeof + 2 duplicate member)
+     4  erased-truthiness       (NtsValue where arithmetic required)
+     3  async-returning-object  (NtsArray * to NtsHeader * parameter)
+     2  identity-across-subtype (pointer cannot be cast to double)   <- new
+     1  error limit reached, so there is more behind
+
+Four of the five already had fixtures. The fifth is new and is now
+`blockers/identity-across-subtype`:
+
+    if (candidate === entry)     // Extended vs Base
+
+    v22 = (double)v11;   v23 = (double)v1;   v12 = v22 == v23;
+    error: pointer cannot be cast to type 'double'
+
+`===` between a subtype reference and a supertype reference is emitted as a
+**numeric** comparison of two pointers. The operands have different C struct
+types, so they cannot be compared directly, and the emitter takes the numeric
+path rather than casting either to a common one — when `===` on two references
+is address equality, which a cast to the shared base would give.
+
+It is the identity form of `upcast-to-base`, which is the assignment form. Both
+come from C not treating a derived struct as its base even when it begins with
+one. They are separate fixtures because the fixes differ: the assignment needs a
+cast on the right, the comparison needs a common type for both sides.
+
+Traced to `MemoryHttpCacheStore.touch` in web-platform's cache store —
+`interface MemoryEntry extends HttpCacheEntry`, compared in a linear scan. There
+is no other way to write that.
+
+### A rename that would have removed half of `assert`'s errors, not done
+
+`field-named-header` is 10 of the 20, and the field is **mine**:
+`assert/src/error.ts` returns `{ message: string; header?: string; skipped?: boolean }`.
+Node's `AssertionError` exposes `actual code diff expected generatedMessage
+operator` and no `header`, so the name is unobservable and renaming it would
+break nothing.
+
+**It was not renamed.** Ten of twenty errors is not the twenty, so `assert` would
+still not compile — and a rename buys a smaller number in exchange for removing
+the pressure on a compiler defect that any module could hit. The fixture exists
+precisely so the collision is fixed once rather than avoided everywhere.
+
+### And a negative result worth keeping
+
+Eight minimal programs covering ordinary shapes — a getter/setter pair, an array
+of objects, `Map<string, object>`, optional chaining, a typed `catch`, array
+spread, a static method, a class implementing an interface — **all compile
+clean, none refused.** The emitter handles ordinary object-oriented TypeScript.
+The defects found today are specific rather than pervasive, which is a more
+useful thing to know than another list of what is broken.
+
 ## Two more, both found by a hypothesis that was wrong
 
 Chasing the `Closure54__call` defect produced two fixtures for defects that are
