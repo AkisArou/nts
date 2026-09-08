@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `TextDecoder` against node's, across encodings, options and chunk boundaries.
 //
 // The pinned WPT fixtures cover the standard's cases. This covers the *combinations* —

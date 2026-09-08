@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Interim (1xx) responses were counted and discarded, so `103 Early Hints` -- the one
 // interim response a client is meant to act on -- could never be seen. These tests use
 // a raw socket server, because Node's HTTP server will not emit a malformed or

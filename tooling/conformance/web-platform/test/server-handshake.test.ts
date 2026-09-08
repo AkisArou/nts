@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The plan requires a WebSocket server as a Node/server extension. This is its
 // handshake: validating an upgrade request and producing the response, with no I/O of
 // its own, because reading the request and taking over the connection belong to

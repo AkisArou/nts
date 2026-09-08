@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // The durable byte store's contract, exercised against the host filesystem strawman.
 //
 // The shape came from the JVM lane after they ran a capability check on a real API-26

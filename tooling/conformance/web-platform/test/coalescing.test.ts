@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Reusing one HTTP/2 connection for a second origin is sound only when the peer's
 // certificate covers that origin and the endpoint is the same one. Getting this wrong
 // is a cross-origin routing defect rather than a slow path, so the conditions are

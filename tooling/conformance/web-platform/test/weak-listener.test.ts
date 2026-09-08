@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // A listener whose lifetime is bounded by a caller-supplied resource. Node's
 // `util.aborted(signal, resource)` needs this: when the resource is collected the
 // wait must stop being answered, so the promise stays pending forever rather than

@@ -27,6 +27,18 @@ const suite = (name: string, fn: () => void): void => {
   test(name, { timeout: 15000 }, fn);
 };
 
+/**
+ * An indexed read that is known to be in range.
+ *
+ * `noUncheckedIndexedAccess` types every index as `T | undefined`, which is right in general
+ * and noise in a test that has just asserted the length. Narrowing here keeps the assertions
+ * about JSON rather than about the index.
+ */
+function must<T>(value: T | undefined): T {
+  assert.notEqual(value, undefined);
+  return value as T;
+}
+
 /** The erased graph as an ordinary value, so it can be compared with node's parse result. */
 function plain(node: JsonValue): unknown {
   switch (node.kind) {
@@ -48,8 +60,8 @@ function plain(node: JsonValue): unknown {
         // `out["__proto__"] = v` sets the prototype and creates no own property, so a plain
         // assignment here silently disagreed with node for `{"__proto__":1}` — the case that
         // is in the corpus for this reason.
-        Object.defineProperty(out, node.keys[at], {
-          value: plain(node.values[at]),
+        Object.defineProperty(out, must(node.keys[at]), {
+          value: plain(must(node.values[at])),
           writable: true,
           enumerable: true,
           configurable: true,
@@ -199,7 +211,7 @@ suite("valid JSON agrees with node on value and on key order", () => {
       expected = JSON.parse(text);
     } catch (error) {
       assert.fail(
-        `node rejected a case listed as valid: ${JSON.stringify(text)} (${error.message})`,
+        `node rejected a case listed as valid: ${JSON.stringify(text)} (${String(error)})`,
       );
     }
     const actual = plain(parseJsonText(text));
@@ -251,14 +263,14 @@ suite("names that only look like indices stay in the string bucket", () => {
   const parsed = parseJsonText(text);
   assert.deepEqual([...parsed.keys], Object.keys(JSON.parse(text)));
   // 4294967294 is 2^32 - 2 and is an index; 4294967295 is 2^32 - 1 and is not.
-  assert.equal(parsed.keys[0], "4294967294");
+  assert.equal(must(parsed.keys[0]), "4294967294");
 });
 
 suite("a repeated key takes the later value and keeps the earlier position", () => {
   const text = '{"a":1,"b":2,"a":3}';
   const parsed = parseJsonText(text);
   assert.deepEqual([...parsed.keys], ["a", "b"]);
-  assert.equal(parsed.values[0].number, 3);
+  assert.equal(must(parsed.values[0]).number, 3);
   assert.deepEqual(plain(parsed), JSON.parse(text));
 });
 
@@ -268,9 +280,12 @@ suite("source spans cover exactly the text of each value", () => {
   const text = '{"a":  123 , "b":[true]}';
   const root = parseJsonText(text);
   assert.equal(text.slice(root.start, root.end), text);
-  assert.equal(text.slice(root.values[0].start, root.values[0].end), "123");
-  assert.equal(text.slice(root.values[1].start, root.values[1].end), "[true]");
-  assert.equal(text.slice(root.values[1].items[0].start, root.values[1].items[0].end), "true");
+  const first = must(root.values[0]);
+  const second = must(root.values[1]);
+  assert.equal(text.slice(first.start, first.end), "123");
+  assert.equal(text.slice(second.start, second.end), "[true]");
+  const inner = must(second.items[0]);
+  assert.equal(text.slice(inner.start, inner.end), "true");
 });
 
 suite("deep nesting does not exhaust a native stack", () => {
@@ -279,10 +294,10 @@ suite("deep nesting does not exhaust a native stack", () => {
   // 100k levels is far past any recursive implementation and far short of a memory problem.
   const depth = 100000;
   const text = "[".repeat(depth) + "]".repeat(depth);
-  let node = parseJsonText(text);
+  let node: JsonValue = parseJsonText(text);
   let seen = 0;
   while (node.items.length > 0) {
-    node = node.items[0];
+    node = must(node.items[0]);
     seen++;
   }
   assert.equal(seen, depth - 1);
@@ -291,11 +306,11 @@ suite("deep nesting does not exhaust a native stack", () => {
 suite("a syntax error names the offset it was found at", () => {
   // A plain `SyntaxError`, as 25.5.2.1 requires and as every engine throws, with the offset in
   // the message rather than in an invented numeric property.
-  const thrownBy = (text) => {
+  const thrownBy = (text: string): SyntaxError => {
     try {
       parseJsonText(text);
     } catch (error) {
-      return error;
+      return error as SyntaxError;
     }
     return assert.fail(`expected ${JSON.stringify(text)} to throw`);
   };

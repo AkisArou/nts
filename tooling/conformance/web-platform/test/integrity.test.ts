@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // `integrity` was accepted on a Request and never checked. A caller who wrote
 // integrity metadata got no verification and no error, which is the one failure mode
 // they cannot detect. These tests cover the check and, as much as the check itself,

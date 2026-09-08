@@ -6727,3 +6727,25 @@ Two things were changed rather than reported, because both are corrections: the 
 which is the more natural spelling in a scanner and avoids substring semantics entirely.
 
 831/831 host, upstream unchanged at 2,768 of 2,776, frontier 1,428 to 1,437 primaries.
+
+### The extension implied a guarantee the files did not have
+
+Converting the suite to `.ts` made an editor start type-checking sixty-three files that had
+never been checked, because a `.ts` file gets checked whether or not a project lists it. The
+gate stayed green throughout — `check.sh` type-checks the *source*, and the conformance
+project includes `./*.ts`, not `./test/**` — so the cost was invisible from the gate and
+immediate in an editor.
+
+Measured before deciding anything: **2,784 errors** under the repository's strict profile,
+**1,808** under a relaxed one. Most are `implicitly has an 'any' type` on helper parameters and
+argument mismatches from tests written as JavaScript against typed APIs. That is a real piece
+of work and it is not this one.
+
+So the untyped state is now **explicit and countable** rather than either hidden or pretended
+away. Each converted file carries `// @ts-nocheck` with the reason; `grep -l "@ts-nocheck"
+test/*.ts` is the remaining list, and removing a pragma is a per-file job. A `test/tsconfig.json`
+gives an editor a project to resolve against so it reports what the gate reports and nothing
+else.
+
+`json-parse.test.ts` does **not** carry the pragma. It was written typed, it type-checks
+strictly at zero errors, and it is the shape the other sixty-three are being converted toward.

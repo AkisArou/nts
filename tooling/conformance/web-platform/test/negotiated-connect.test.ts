@@ -1,3 +1,9 @@
+// @ts-nocheck -- converted from `.mjs` and not yet typed.
+//
+// This file was JavaScript until the suite moved to running TypeScript source directly,
+// and it was never type-checked. The pragma says so out loud rather than leaving the
+// `.ts` extension to imply a guarantee that does not hold. Removing it is a per-file
+// job: `grep -lc "@ts-nocheck" test/*.ts` is the remaining list.
 // Shared policy cannot select an HTTP engine over a connection whose ALPN result it
 // never learns. These tests cover the connect/upgrade result that reports it, and the
 // contract that makes an absent report unambiguous: a provider that cannot report the
