@@ -334,7 +334,7 @@ fn recover_one(
         let Some(map) = read_map(&absolute) else {
             continue;
         };
-        match harvest(&map, &absolute, index, written) {
+        match harvest(&map, &absolute, &installed.dir, index, written) {
             Harvest::Recovered(entry) => return (Route::SourceMap, Some(entry)),
             Harvest::Holes { have, want } => best = worse(best, Route::MapIncomplete { have, want }),
             Harvest::Ambiguous { sources } => best = worse(best, Route::MapAmbiguous { sources }),
@@ -574,20 +574,65 @@ fn resolve_in_index(from: &Utf8Path, specifier: &str, index: &MapIndex) -> Optio
         .find(|candidate| index.contains_key(candidate))
 }
 
+/// The same resolution, against files the package actually ships.
+fn resolve_on_disk(from: &Utf8Path, specifier: &str, package_dir: &Utf8Path) -> Option<Utf8PathBuf> {
+    let base = crate::resolve::normalize(&from.parent()?.join(specifier));
+    let stem = base.as_str();
+    let swapped = [
+        stem.strip_suffix(".js").map(|head| format!("{head}.ts")),
+        stem.strip_suffix(".js").map(|head| format!("{head}.tsx")),
+        stem.strip_suffix(".mjs").map(|head| format!("{head}.mts")),
+        stem.strip_suffix(".cjs").map(|head| format!("{head}.cts")),
+    ];
+    swapped
+        .into_iter()
+        .flatten()
+        .map(Utf8PathBuf::from)
+        .chain(
+            ["ts", "tsx", "mts", "cts"]
+                .into_iter()
+                .map(|ext| Utf8PathBuf::from(format!("{stem}.{ext}"))),
+        )
+        .chain(
+            ["index.ts", "index.tsx", "index.mts", "index.cts"]
+                .into_iter()
+                .map(|leaf| base.join(leaf)),
+        )
+        .find(|candidate| package_dir.join(candidate).is_file())
+}
+
 /// Pull an entry and everything it reaches out of the index.
 ///
 /// `visited` is tracked separately from `written` on purpose. The entry is
 /// already in `written` when this is called — that is how it was identified —
 /// so keying the walk on `written` made it skip the seed and scan nothing,
 /// which looked exactly like a package that genuinely had one module.
-fn walk_recovered(entry: &Utf8Path, index: &MapIndex, written: &mut FxHashMap<Utf8PathBuf, String>) {
+fn walk_recovered(
+    entry: &Utf8Path,
+    package_dir: &Utf8Path,
+    index: &MapIndex,
+    written: &mut FxHashMap<Utf8PathBuf, String>,
+) {
     let mut visited: Vec<Utf8PathBuf> = Vec::new();
     let mut queue = vec![entry.to_owned()];
     while let Some(at) = queue.pop() {
         if visited.contains(&at) {
             continue;
         }
-        let Some(text) = index.get(&at).cloned().or_else(|| written.get(&at).cloned()) else {
+        let Some(text) = index
+            .get(&at)
+            .cloned()
+            .or_else(|| written.get(&at).cloned())
+            // A module that emits nothing — a type-only one, or a re-export
+            // barrel — is in no map, because there was no output for a map to
+            // describe. Some packages ship it anyway, at exactly the path their
+            // maps say sources live at. Taking it is not the `dist`-mirrors-
+            // `src` inference: the path came from the map's own statement, and
+            // the file is only used when it is actually there. `immer` ships
+            // `src/internal.ts` this way and five imports resolve to nothing
+            // without it.
+            .or_else(|| std::fs::read_to_string(package_dir.join(&at)).ok())
+        else {
             continue;
         };
         visited.push(at.clone());
@@ -595,7 +640,9 @@ fn walk_recovered(entry: &Utf8Path, index: &MapIndex, written: &mut FxHashMap<Ut
             if !specifier.starts_with('.') {
                 continue;
             }
-            if let Some(next) = resolve_in_index(&at, &specifier, index) {
+            if let Some(next) = resolve_in_index(&at, &specifier, index)
+                .or_else(|| resolve_on_disk(&at, &specifier, package_dir))
+            {
                 queue.push(next);
             }
         }
@@ -747,6 +794,7 @@ fn flatten(value: &serde_json::Value, into: &mut SourceMap) {
 fn harvest(
     map: &SourceMap,
     generated: &Utf8Path,
+    package_dir: &Utf8Path,
     index: &MapIndex,
     written: &mut FxHashMap<Utf8PathBuf, String>,
 ) -> Harvest {
@@ -794,7 +842,7 @@ fn harvest(
 
     if placed.len() == 1 {
         let entry = placed.remove(0).1;
-        walk_recovered(&entry, index, written);
+        walk_recovered(&entry, package_dir, index, written);
         return Harvest::Recovered(entry);
     }
 
@@ -811,7 +859,7 @@ fn harvest(
     match named {
         Some((_, at)) => {
             let entry = at.clone();
-            walk_recovered(&entry, index, written);
+            walk_recovered(&entry, package_dir, index, written);
             Harvest::Recovered(entry)
         }
         None if placed.is_empty() => Harvest::Nothing,
