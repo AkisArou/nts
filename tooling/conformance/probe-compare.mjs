@@ -458,6 +458,15 @@ const PROBES = [
         try { fsm.accessSync(nope, 0); } catch (e) { enoent = e.errno; }
         out.push({ label: "access_bytes ENOENT", mine: m.probeAccessBytes(nope, 0), theirs: enoent });
         out.push({ label: "realpath_bytes", mine: m.probeRealpathBytes(link), theirs: fsm.realpathSync(link) });
+        // A symlink created through the byte path and read back through the
+        // string one, so a byte-path bug cannot hide behind a byte-path read.
+        const target = "some-target";
+        const at = join(dir, "sb");
+        out.push({ label: "symlink_bytes round trip", mine: m.probeSymlinkBytes(target, at), theirs: target });
+        out.push({ label: "symlink_bytes agrees with node", mine: fsm.readlinkSync(at), theirs: target });
+        const wb = join(dir, "wb");
+        out.push({ label: "write_file_bytes_fd errno", mine: m.probeWriteBytes(wb, "bytes written"), theirs: 0 });
+        out.push({ label: "write_file_bytes_fd landed", mine: readFileSync(wb, "utf8"), theirs: "bytes written" });
         const made = m.probeMkdtempBytes(join(dir, "tXXXXXX"));
         out.push({
           label: "mkdtemp_bytes",
@@ -468,6 +477,53 @@ const PROBES = [
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
+      return out;
+    },
+  },
+  {
+    file: "process-blind.ts",
+    module: "process",
+    // Five bindings whose *result is a mutation* -- they fill a caller-provided
+    // array and answer an errno -- plus hrtime. These looked unprobeable until
+    // it was clear a homogeneous number tuple crosses as `NtsArray *`, so the
+    // array can be handed in and read back.
+    checks(m) {
+      const usage = process.cpuUsage();
+      const mem = process.memoryUsage();
+      const out = [
+        { label: "cpuUsage errno + signs", mine: m.probeCpuUsage(), theirs: "0:true:true" },
+        { label: "memoryUsage all columns", mine: m.probeMemoryShape(), theirs: "0:true:true:true:true:true" },
+        { label: "hrtime monotonic", mine: m.probeHrtimeMonotonic(), theirs: true },
+        { label: "hrtime is nanoseconds", mine: m.probeHrtimeIsNanoseconds(), theirs: true },
+      ];
+      // Figures that move between the two calls: magnitude is what is
+      // comparable, and a tighter check would fail for a reason that is not a
+      // defect. Loose enough not to flake, tight enough that a unit error --
+      // milliseconds for microseconds, kilobytes for bytes -- cannot pass.
+      const cpu = m.probeCpuUserMicros();
+      out.push({
+        label: "cpu user within 10x",
+        mine: cpu > 0 && cpu < usage.user * 10 && cpu > usage.user / 10,
+        theirs: true,
+        detail: `${cpu} vs ${usage.user}`,
+      });
+      for (const [label, mine] of [["rss", m.probeRss()], ["memoryUsage rss", m.probeMemoryRss()]]) {
+        out.push({
+          label: `${label} within 25%`,
+          mine: mine > 0 && Math.abs(mine - mem.rss) < mem.rss * 0.25,
+          theirs: true,
+          detail: `${mine} vs ${mem.rss}`,
+        });
+      }
+      // `umask(m)` answers the *previous* mask, which is node's contract, and
+      // the probe puts the original back before returning. Checked against
+      // node's own reading rather than a constant.
+      const current = process.umask();
+      out.push({
+        label: "umask previous/set/restored",
+        mine: m.probeUmaskRoundTrip(),
+        theirs: `${current}:${0o077}:${current}`,
+      });
       return out;
     },
   },

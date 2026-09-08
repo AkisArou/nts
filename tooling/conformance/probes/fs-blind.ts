@@ -19,6 +19,11 @@ declare function nts_fs_read_file_bytes_fd(fd: number, expectedSize: number): nu
 declare function nts_fs_access_bytes(path: number[], mode: number): number;
 declare function nts_fs_realpath_bytes(path: number[]): number[];
 declare function nts_fs_mkdtemp_bytes(template: number[]): number[];
+declare function nts_fs_symlink_bytes(
+  target: number[], at: number[], flags: number,
+): number;
+declare function nts_fs_write_file_bytes_fd(fd: number, bytes: number[]): number;
+declare function nts_fs_readlink(path: string): string;
 
 function bytesOf(text: string): number[] {
   const out: number[] = [];
@@ -111,4 +116,19 @@ export function probeMkdtempBytes(template: string): string {
     out += String.fromCharCode(made[index] ?? 0);
   }
   return out;
+}
+
+/** A symlink made through the byte path, read back through the string one. */
+export function probeSymlinkBytes(target: string, at: string): string {
+  const errno = nts_fs_symlink_bytes(bytesOf(target), bytesOf(at), 0);
+  if (errno !== 0) return `errno:${errno}`;
+  return nts_fs_readlink(at);
+}
+
+export function probeWriteBytes(path: string, text: string): number {
+  const fd = nts_fs_open(path, 65 | 512, 0o666);
+  if (fd < 0) return fd;
+  const written = nts_fs_write_file_bytes_fd(fd, bytesOf(text));
+  nts_fs_close(fd);
+  return written;
 }
