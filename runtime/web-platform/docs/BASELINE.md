@@ -7107,3 +7107,42 @@ backend, not for the code.
 The control that does mean something is whether the cases are being run at all: removing the
 JSON probes takes the axis from 253 of 322 back to 138 of 142. The 115 cases in between are the
 evidence, and "agreed on every case" over them is the claim.
+
+## Two optimizations, both found by profiling rather than by reading
+
+The plan says measure before optimizing. A CPU profile over the benchmark corpora said the
+largest single cost in the module was not in the parser or the serializer at all.
+
+**`Object.defineProperty` was 16.4% of all time.** `place` uses it because 25.5.2 materializes
+members with `CreateDataPropertyOrThrow`, and assignment is not that: `__proto__` has an
+inherited accessor on `Object.prototype`, so assigning would change the prototype instead of
+creating a property and `JSON.parse('{"__proto__":1}')` would come back with no own key.
+
+That rule applies to one key name, and it was being paid on every member. Assignment produces
+exactly a `CreateDataProperty` on a freshly built object -- own, writable, enumerable,
+configurable -- for every other key, so `__proto__` alone takes the slow path now. **16.4% to
+4.2%, and parse-to-values went 8.74x slower than node to 5.60x on the record corpus and 5.42x
+to 3.05x on the deep one.** The `__proto__` test that motivated the original spelling still
+passes, and still fails when the guard is removed.
+
+**`readNumber` sliced a substring per number.** It validated the ECMA-404 grammar by scanning
+and then handed `Number` a `source.slice(start, at)` -- one allocation per number, twenty
+thousand of them on the number corpus. The digits are already being walked, so an integer can be
+accumulated as they go and the slice skipped entirely.
+
+Exact only while the value stays inside the integers a double holds without rounding, which is
+what the digit-count bound is for; anything longer, or carrying a fraction or an exponent, falls
+through to the slice unchanged.
+
+### The boundary is a constant, so it is tested as one
+
+A digit count is exactly the kind of constant that is right for the corpus and wrong one either
+side of it. The new tests walk every width from one digit to twenty-one, in both signs, with
+leading 1 and leading 9 and all-nines, and name the values around `MAX_SAFE_INTEGER` explicitly.
+`-0` gets its own assertion through `Object.is`, because `assert.equal` does not separate it
+from `0` and the fast path returns it by negating an accumulated zero.
+
+Three sabotages, all caught: the bound one digit too generous, the sign dropped, and the fast
+path taken for fractions.
+
+884/884 host, upstream unchanged at 2,768 of 2,776, compiled axis unchanged at 253 of 322.

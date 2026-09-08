@@ -272,15 +272,25 @@ function containerFor(node: JsonValue): Record<string, unknown> | unknown[] {
 }
 
 function place(target: Record<string, unknown> | unknown[], key: string, value: unknown): void {
-  // `CreateDataPropertyOrThrow`, not assignment. `__proto__` is the case that separates them:
-  // assignment invokes the inherited setter and changes the prototype instead of creating a
-  // property, so `JSON.parse('{"__proto__":1}')` would produce an object with no own key.
-  Object.defineProperty(target, key, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
+  // `CreateDataPropertyOrThrow`. Assignment produces exactly that on a freshly built object --
+  // an own data property, writable, enumerable and configurable -- for every key but one.
+  // `__proto__` is the exception, and the only one: `Object.prototype` declares an accessor for
+  // it, so assigning would invoke the inherited setter and change the prototype instead of
+  // creating a property, and `JSON.parse('{"__proto__":1}')` would come back with no own key.
+  //
+  // The distinction used to be paid for on every member. `defineProperty` was 16% of the time
+  // in a parse-heavy profile -- the largest single cost in the module -- for a rule that
+  // applies to one key name.
+  if (key === "__proto__") {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    return;
+  }
+  (target as Record<string, unknown>)[key] = value;
 }
 
 /**

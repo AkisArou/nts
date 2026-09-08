@@ -208,3 +208,69 @@ suite("a wide object keeps ordinary-own-property-keys order", () => {
   const text = `{${parts.join(",")}}`;
   assert.deepEqual(keyOrder(plain(parseJsonText(text))), keyOrder(JSON.parse(text)));
 });
+
+suite("the integer fast path agrees with node at and past its boundary", () => {
+  // `readNumber` accumulates an integer while it scans and skips the substring, but only while
+  // the value stays inside the integers a double holds exactly. The boundary is a digit count,
+  // and a digit count is exactly the kind of constant that is right in the corpus and wrong one
+  // either side of it -- so this walks every length across it rather than sampling.
+  for (let digits = 1; digits <= 21; digits++) {
+    for (const lead of ["1", "9"]) {
+      const text = lead + "0".repeat(digits - 1);
+      assert.equal(
+        parseJsonText(text).number,
+        JSON.parse(text),
+        `${digits} digits, leading ${lead}`,
+      );
+      assert.equal(parseJsonText("-" + text).number, JSON.parse("-" + text), `negative, ${digits}`);
+    }
+    // The largest and smallest value of each width, which is where an accumulator that has
+    // started to round disagrees first.
+    const nines = "9".repeat(digits);
+    assert.equal(parseJsonText(nines).number, JSON.parse(nines), `${digits} nines`);
+  }
+
+  // The values around `Number.MAX_SAFE_INTEGER`, named rather than generated.
+  for (const text of [
+    "9007199254740991",
+    "9007199254740992",
+    "9007199254740993",
+    "999999999999999",
+    "1000000000000000",
+    "12345678901234567890",
+  ]) {
+    assert.equal(parseJsonText(text).number, JSON.parse(text), text);
+  }
+});
+
+suite("negative zero survives the fast path as negative zero", () => {
+  // `-0` is a number JSON can write, and the fast path returns it by negating an accumulated
+  // zero. `assert.equal` does not separate it from `0`, so this asks the question directly.
+  assert.equal(Object.is(parseJsonText("-0").number, -0), true, "-0 must stay negative zero");
+  assert.equal(Object.is(parseJsonText("0").number, 0), true);
+  assert.equal(Object.is(JSON.parse("-0"), -0), true, "node agrees");
+  // And it serializes back as `0`, which is what 25.5.4.2 and `Number::toString` give.
+  assert.equal(stringifyJsonValue(parseJsonText("-0")), "0");
+});
+
+suite("a number with a fraction or an exponent takes the slow path and still matches node", () => {
+  // The fast path must decline these rather than accumulate a wrong answer, so each is compared
+  // against node exactly.
+  for (const text of [
+    "1.5",
+    "0.1",
+    "1e3",
+    "1E3",
+    "1e+3",
+    "1e-3",
+    "-1.5e-7",
+    "123456789012345.6",
+    "1234567890123456789.5",
+    "0e0",
+    "-0.0",
+    "5e-324",
+    "1.7976931348623157e308",
+  ]) {
+    assert.equal(parseJsonText(text).number, JSON.parse(text), text);
+  }
+});

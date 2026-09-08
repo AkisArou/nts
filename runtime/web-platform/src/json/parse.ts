@@ -225,15 +225,29 @@ class Scanner {
    */
   readNumber(): number {
     const start = this.at;
-    if (this.peek() === MINUS) this.at++;
+    const negative = this.peek() === MINUS;
+    if (negative) this.at++;
     const intStart = this.at;
+    // Accumulated while the digits are scanned, so an integer costs no substring. Exact only
+    // while it stays inside the integers a double represents without rounding, which is what
+    // the digit count below bounds; anything longer, or carrying a fraction or an exponent,
+    // falls through to the slice.
+    let integer = 0;
     if (this.peek() === ZERO) {
       this.at++;
     } else {
       if (!isDigit(this.peek())) throw this.fail(`Unexpected token ${this.describe()}`);
-      while (isDigit(this.peek())) this.at++;
+      while (isDigit(this.peek())) {
+        integer = integer * 10 + (this.source.charCodeAt(this.at) - ZERO);
+        this.at++;
+      }
     }
     if (this.at === intStart) throw this.fail("No number after minus sign");
+    const digits = this.at - intStart;
+    if (this.peek() !== DOT && this.peek() !== LOWER_E && this.peek() !== UPPER_E && digits <= 15) {
+      // `-0` is a number JSON can write and `-integer` gives it, which `Number("-0")` also does.
+      return negative ? -integer : integer;
+    }
     if (this.peek() === DOT) {
       this.at++;
       if (!isDigit(this.peek())) throw this.fail("Unterminated fractional number");
