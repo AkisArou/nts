@@ -33,7 +33,7 @@ not measured clean and should not be quoted.**
 | `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
 | `number-format-double` | 1.10x *busy jit* | 55% our Grisu port vs the JDK's own formatter |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
-| `instanceof` | 3.74x -> **1.08x** | residual is the `uirem` guard branch |
+| `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
 | `in-narrowing` | 1.07x | characterised below: 187 bytecodes against javac's 110 |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
 | `awfy-sieve` | 1.25x -> **1.05x** *busy jit* | moved without being worked on; re-measure clean |
@@ -384,6 +384,34 @@ refuted.** The transcription route is closed as well -- writing a Java version
 with redundant locals prices javac's compilation of my transcription, which is
 what cost me `awfy-queens`. Building it and measuring is the only honest price,
 and three fixes measured 0% today.
+
+### The `uirem` residual, measured on all four rows rather than inferred
+
+I had recorded `optional-chain`, `bytes` and `upcast` as carrying "the same
+`uirem` residual" as `absences` on the strength of their having moved together
+when that fix landed. That was an inference from a shared history, which is the
+weakest kind. Measured, on current emissions:
+
+    instanceof        60.10%     (recorded as 12% before, from the stale tree)
+    absences          33.89%
+    bytes             19.74%
+    optional-chain    19.18%
+    upcast            not in the top frames
+
+**What that number is and is not.** It is the share of *our* profile spent in
+`NtsRuntime.uirem`, and the reference has no frame for it -- but the reference
+does the same remainder, inline, as one `irem`. So the **gap** is the guard,
+the `l2i` of a long counter, and the call shape; it is not the whole 60%. The
+rows bound the available gain honestly: `instanceof` is 1.08x, so at most 8%
+there, and `absences` 1.29x, so at most 29%.
+
+Saying it the other way -- "60% of `instanceof` is a helper the reference does
+not have" -- would be the `array-predicates` mistake, where 37.6% "outside the
+method" turned out to be attribution rather than extra work. The reference
+spending the same time inside its own frame is exactly that shape.
+
+`upcast` at 1.02x has no `uirem` in its top frames at all, so it moved for some
+other reason and should come off this list.
 
 ## Open, and whose
 
