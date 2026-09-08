@@ -118,12 +118,20 @@ static NtsString *nts_zlib_string(const char *text) {
   return nts_string_from_utf8(text, text == NULL ? 0 : strlen(text));
 }
 
-static NtsArray *nts_zlib_bytes(const uint8_t *bytes, size_t length) {
-  NtsArray *result = nts_array_new(&nts_zlib_desc_u8, (double)length);
+/* The bytes every byte-returning binding here hands back.
+ *
+ * A `Uint8Array` in `src/native.d.ts` lowers to `NtsView *`, so this builds a
+ * buffer and a view over the whole of it rather than an `NtsArray` of `u8`. The
+ * two are different structs and the declarations have always said which one. */
+static NtsView *nts_zlib_bytes(const uint8_t *bytes, size_t length) {
+  NtsBuffer *buffer = nts_buffer_new((double)length);
+  if (buffer == NULL)
+    return NULL;
   if (length != 0) {
-    memcpy(NTS_ITEMS(result, uint8_t), bytes, length);
+    memcpy(buffer->bytes, bytes, length);
   }
-  return result;
+  return nts_view_new(buffer, 0.0, (double)length, (double)NTS_ELEMENT_U8,
+                      false);
 }
 
 static const char *nts_zlib_code(int status) {
@@ -218,8 +226,9 @@ static void nts_zlib_sniff_unzip(NtsZlibEngine *engine, const uint8_t *input,
 }
 
 static bool nts_zlib_copy_dictionary(NtsZlibEngine *engine,
-                                     const NtsArray *dictionary) {
-  size_t length = dictionary == NULL ? 0 : dictionary->header.length;
+                                     const NtsView *dictionary) {
+  size_t length =
+      dictionary == NULL ? 0 : (size_t)nts_view_byte_length(dictionary);
   if (length == 0)
     return true;
   engine->dictionary = malloc(length);
@@ -227,13 +236,13 @@ static bool nts_zlib_copy_dictionary(NtsZlibEngine *engine,
     nts_zlib_set_error(engine, Z_MEM_ERROR, "Out of memory", "Z_MEM_ERROR");
     return false;
   }
-  memcpy(engine->dictionary, NTS_ITEMS(dictionary, uint8_t), length);
+  memcpy(engine->dictionary, nts_view_bytes(dictionary), length);
   engine->dictionary_length = length;
   return true;
 }
 
 static NtsZlibEngine *nts_zlib_allocate_engine(int mode, NtsZlibFamily family,
-                                               const NtsArray *dictionary,
+                                               const NtsView *dictionary,
                                                bool reject_garbage_after_end) {
   NtsZlibEngine *engine = calloc(1, sizeof(*engine));
   if (engine == NULL) {
@@ -527,9 +536,10 @@ static void nts_zlib_unlink(NtsZlibEngine *engine) {
 }
 
 static bool nts_zlib_begin_operation(NtsZlibEngine *engine, int flush,
-                                     const NtsArray *input) {
-  size_t length = input == NULL ? 0 : input->header.length;
-  const uint8_t *bytes = input == NULL ? NULL : NTS_ITEMS(input, uint8_t);
+                                     const NtsView *input) {
+  size_t length = input == NULL ? 0 : (size_t)nts_view_byte_length(input);
+  const uint8_t *bytes =
+      input == NULL ? NULL : (const uint8_t *)nts_view_bytes(input);
   if (engine->operation_pending) {
     if (length != 0 || flush != engine->operation_flush) {
       nts_zlib_set_error(engine, Z_STREAM_ERROR,
@@ -879,7 +889,7 @@ static bool nts_zlib_apply_parameters(NtsZlibEngine *engine,
 
 static NtsZlibEngine *nts_zlib_new_zlib(int mode, int level, int window_bits,
                                         int mem_level, int strategy,
-                                        NtsArray *dictionary,
+                                        NtsView *dictionary,
                                         bool reject_garbage_after_end) {
   NtsZlibEngine *engine = nts_zlib_allocate_engine(
       mode, NTS_ZLIB_FAMILY_ZLIB, dictionary, reject_garbage_after_end);
@@ -896,7 +906,7 @@ static NtsZlibEngine *nts_zlib_new_zlib(int mode, int level, int window_bits,
 
 static NtsZlibEngine *
 nts_zlib_new_parameterized(int mode, NtsArray *keys, NtsArray *values,
-                           NtsArray *dictionary, double pledged_source_size,
+                           NtsView *dictionary, double pledged_source_size,
                            bool reject_garbage_after_end) {
   NtsZlibFamily family;
   switch (mode) {
@@ -941,7 +951,7 @@ nts_zlib_new_parameterized(int mode, NtsArray *keys, NtsArray *values,
 }
 
 double nts_zlib_create(double mode, double level, double window_bits,
-                       double mem_level, double strategy, NtsArray *dictionary,
+                       double mem_level, double strategy, NtsView *dictionary,
                        bool reject_garbage_after_end) {
   nts_zlib_clear_global_error();
   NtsZlibEngine *engine =
@@ -951,7 +961,7 @@ double nts_zlib_create(double mode, double level, double window_bits,
 }
 
 double nts_zlib_create_params(double mode, NtsArray *keys, NtsArray *values,
-                              NtsArray *dictionary, double pledged_source_size,
+                              NtsView *dictionary, double pledged_source_size,
                               bool reject_garbage_after_end) {
   nts_zlib_clear_global_error();
   NtsZlibEngine *engine =
@@ -1003,8 +1013,8 @@ static size_t nts_zlib_maximum(double maximum) {
   return (size_t)maximum;
 }
 
-static NtsArray *nts_zlib_run_sync(NtsZlibEngine *engine, int flush,
-                                   NtsArray *input, size_t maximum) {
+static NtsView *nts_zlib_run_sync(NtsZlibEngine *engine, int flush,
+                                  NtsView *input, size_t maximum) {
   NtsZlibBuffer result = {NULL, 0, 0, maximum};
   if (!nts_zlib_begin_operation(engine, flush, input)) {
     return nts_zlib_bytes(NULL, 0);
@@ -1044,12 +1054,12 @@ static NtsArray *nts_zlib_run_sync(NtsZlibEngine *engine, int flush,
     free(result.data);
     return nts_zlib_bytes(NULL, 0);
   }
-  NtsArray *output = nts_zlib_bytes(result.data, result.length);
+  NtsView *output = nts_zlib_bytes(result.data, result.length);
   free(result.data);
   return output;
 }
 
-NtsArray *nts_zlib_write_sync(double handle, double flush, NtsArray *input,
+NtsView *nts_zlib_write_sync(double handle, double flush, NtsView *input,
                               double maximum_output) {
   NtsZlibEngine *engine = nts_zlib_find(handle);
   if (engine == NULL)
@@ -1073,7 +1083,7 @@ static void nts_zlib_work_after(uv_work_t *request, int status) {
                        "Z_ERRNO");
     nts_zlib_end_operation(engine);
   }
-  NtsArray *output = nts_zlib_bytes(work->output, work->output_length);
+  NtsView *output = nts_zlib_bytes(work->output, work->output_length);
   nts_promise_fulfill_reference(work->promise, (NtsHeader *)output);
   nts_release((NtsHeader *)output);
   nts_release((NtsHeader *)work->promise);
@@ -1095,13 +1105,13 @@ static void nts_zlib_work_after(uv_work_t *request, int status) {
 
 static NtsPromise *nts_zlib_fulfilled_empty(void) {
   NtsPromise *promise = nts_promise_new();
-  NtsArray *empty = nts_zlib_bytes(NULL, 0);
+  NtsView *empty = nts_zlib_bytes(NULL, 0);
   nts_promise_fulfill_reference(promise, (NtsHeader *)empty);
   nts_release((NtsHeader *)empty);
   return promise;
 }
 
-NtsPromise *nts_zlib_write(double handle, double flush, NtsArray *input,
+NtsPromise *nts_zlib_write(double handle, double flush, NtsView *input,
                            double output_limit) {
   NtsZlibEngine *engine = nts_zlib_find(handle);
   if (engine == NULL)
@@ -1145,7 +1155,7 @@ NtsPromise *nts_zlib_write(double handle, double flush, NtsArray *input,
     nts_release((NtsHeader *)promise);
     free(output);
     free(work);
-    NtsArray *empty = nts_zlib_bytes(NULL, 0);
+    NtsView *empty = nts_zlib_bytes(NULL, 0);
     nts_promise_fulfill_reference(promise, (NtsHeader *)empty);
     nts_release((NtsHeader *)empty);
   }
@@ -1254,37 +1264,37 @@ void nts_zlib_close(double handle) {
   nts_zlib_free_engine(engine);
 }
 
-NtsArray *nts_zlib_oneshot(double mode, double level, double window_bits,
-                           double mem_level, double strategy,
-                           NtsArray *dictionary, double finish_flush,
-                           double maximum_output, NtsArray *input,
-                           bool reject_garbage_after_end) {
+NtsView *nts_zlib_oneshot(double mode, double level, double window_bits,
+                          double mem_level, double strategy,
+                          NtsView *dictionary, double finish_flush,
+                          double maximum_output, NtsView *input,
+                          bool reject_garbage_after_end) {
   nts_zlib_clear_global_error();
   NtsZlibEngine *engine =
       nts_zlib_new_zlib((int)mode, (int)level, (int)window_bits, (int)mem_level,
                         (int)strategy, dictionary, reject_garbage_after_end);
   if (engine == NULL)
     return nts_zlib_bytes(NULL, 0);
-  NtsArray *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
+  NtsView *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
                                        nts_zlib_maximum(maximum_output));
   nts_zlib_publish_error(engine);
   nts_zlib_free_engine(engine);
   return output;
 }
 
-NtsArray *nts_zlib_oneshot_params(double mode, NtsArray *keys, NtsArray *values,
-                                  NtsArray *dictionary,
-                                  double pledged_source_size,
-                                  double finish_flush, double maximum_output,
-                                  NtsArray *input,
-                                  bool reject_garbage_after_end) {
+NtsView *nts_zlib_oneshot_params(double mode, NtsArray *keys, NtsArray *values,
+                                 NtsView *dictionary,
+                                 double pledged_source_size,
+                                 double finish_flush, double maximum_output,
+                                 NtsView *input,
+                                 bool reject_garbage_after_end) {
   nts_zlib_clear_global_error();
   NtsZlibEngine *engine =
       nts_zlib_new_parameterized((int)mode, keys, values, dictionary,
                                  pledged_source_size, reject_garbage_after_end);
   if (engine == NULL)
     return nts_zlib_bytes(NULL, 0);
-  NtsArray *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
+  NtsView *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
                                        nts_zlib_maximum(maximum_output));
   nts_zlib_publish_error(engine);
   nts_zlib_free_engine(engine);

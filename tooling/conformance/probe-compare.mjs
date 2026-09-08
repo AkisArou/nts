@@ -340,6 +340,49 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "zlib-oneshot.ts",
+    module: "zlib",
+    // The strongest comparison in the tree: not "does this binding answer the
+    // same number", but "does this compressor emit the same bytes". zlib's own
+    // tests round-trip through one implementation, so a compressor that is
+    // self-consistently wrong passes all of them.
+    checks(m) {
+      const zlib = require("node:zlib");
+      const out = [];
+      const eq = (a, b) => Buffer.from(a).equals(Buffer.from(b));
+      const texts = ["", "a", "hello world",
+        "the quick brown fox jumps over the lazy dog".repeat(10), "\u00ff\u00fe "];
+      for (const text of texts) {
+        const buf = Buffer.from(text, "latin1");
+        const tag = JSON.stringify(text.length > 16 ? text.slice(0, 10) + "..." : text);
+        for (const level of [1, 6, 9]) {
+          out.push({
+            label: `deflate L${level} ${tag}`,
+            mine: eq(m.probeDeflate(text, level), zlib.deflateSync(buf, { level })),
+            theirs: true,
+          });
+        }
+        out.push({
+          label: `deflateRaw L6 ${tag}`,
+          mine: eq(m.probeDeflateRaw(text, 6), zlib.deflateRawSync(buf, { level: 6 })),
+          theirs: true,
+        });
+        out.push({ label: `roundtrip ${tag}`, mine: eq(m.probeInflateOfDeflate(text, 6), buf), theirs: true });
+      }
+      // Levels have to actually differ, or every row above passes for a build
+      // that ignores the parameter and always deflates at one setting.
+      const long = "the quick brown fox jumps over the lazy dog".repeat(10);
+      out.push({
+        label: "level is honoured",
+        mine: Buffer.from(m.probeDeflate(long, 1)).length !== Buffer.from(m.probeDeflate(long, 6)).length,
+        theirs: true,
+      });
+      out.push({ label: "status clean", mine: m.probeLastStatus(), theirs: 0 });
+      out.push({ label: "error code empty", mine: m.probeLastErrorCode(), theirs: "" });
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
