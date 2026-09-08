@@ -2816,11 +2816,23 @@ different kinds of failure that a pass/fail column would have flattened:
   compiles, links and loads, and its export table is empty. Nothing refused.
 - `built-exports-partial` — `buffer`. Some names publish and the ones the tests
   need do not.
-- `all-passes-degenerate` — `path`. **Every test passes and the result is
-  worthless**: blank the module and they still pass, so the suite is not
-  reaching the addon at all. This row is the reason the sweep runs sabotage on
-  the compiled lane and not only the interpreted one. A green cell here would
-  have been the most damaging number in the document.
+- `all-passes-degenerate` — `path`. **The name means every *pass* was
+  degenerate, not that every test passes**, and I misread my own label within an
+  hour of writing this table down. Run the same artifact directly and it is
+  `2 passed, 17 failed, 1 skipped`. Both passes are
+  `require('path/posix') === require('path').posix` holding because each side is
+  `undefined`, so `real = pass - degenerate = 0` and the row is correct.
+
+  The addon publishes **4 names** — `_makeLong`, `delimiter`, `sep`,
+  `toNamespacedPath` — and none of `join`, `resolve`, `normalize`, `basename`,
+  `dirname`, `extname`, `parse`, `format`, `relative`, `isAbsolute`. So `path`
+  is a badly incomplete surface whose only two green cells are hollow, not a
+  nearly-working module with a harness bug, which is what my first description
+  of this row implied. The two readings call for opposite work.
+
+  This row is the reason the sweep runs sabotage on the compiled lane and not
+  only the interpreted one: without it, `path` reports two passes and nothing
+  says they are worth nothing.
 
 `c-did-not-compile` covers 15 modules and is the least informative outcome in
 the table — it is one word for at least four distinct compiler refusals plus, in
