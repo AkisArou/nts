@@ -698,7 +698,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # record -- `examples/open-typed-values`, which needs `instanceof` against a
   # typed array, and on a lane with no descriptors is a different mechanism --
   # no longer shows in the count.
-  backend_examples 130 "through the JVM backend" ); }
+  backend_examples 133 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
