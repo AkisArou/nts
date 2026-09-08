@@ -4949,6 +4949,44 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Buffer input forms, and the one thing a test *may* assert about us
+
+Node coerces every `Buffer.from` input in one place, so upstream a test that an
+`ArrayBuffer` works is a test that a `DataView` works. Here each form reaches its
+own branch. Node's coverage of the unusual ones is thin: of 69
+`test-buffer-*.js` files, **3** mention `Symbol.toPrimitive` or `valueOf`, **2**
+construct a `DataView`, and **3** touch `indexOf` at all.
+
+**Thirty of thirty-two match node exactly** — including `Buffer.from` on an
+`Int8Array` of negative values, a `Uint16Array` (which reinterprets rather than
+converts), an `ArrayBuffer` with offset and length, a plain `{length, 0, 1}`
+object, and `indexOf` with a `Uint8Array` needle.
+
+The two that differ are **refusals this compiler makes on purpose**:
+
+    Buffer.from({ valueOf: () => "zz" })              node: Buffer[122,122]
+    Buffer.from({ [Symbol.toPrimitive]: () => "yy" }) node: Buffer[121,121]
+    both here: ERR_INVALID_ARG_TYPE
+
+`ToPrimitive` dispatch and `Symbol.toPrimitive` are both in
+`docs/conformance/typescript.md` §13, *What this compiler is not* — "one decision
+made once", explicitly not a backlog item.
+
+### The rule this pins down
+
+Those two rows are **asserted**, not omitted. That is the opposite of what the
+`fs` byte-path test does with `cpSync`, and the difference is the whole rule:
+
+> A test may not assert what this implementation *happens to do*. It may assert
+> a **declared decision**. The difference is whether the divergence is written
+> down somewhere as intended.
+
+`cpSync` rejecting a Buffer is a defect nobody chose, so asserting it would pin a
+bug as expected behaviour — and that test would pass here and fail against node,
+which is backwards. `Buffer.from({valueOf})` throwing is §13 being applied, so
+asserting it is asserting the decision. **If §13 ever admits `ToPrimitive`, those
+two rows fail and say so**, which is exactly the notification that should happen.
+
 ## 440 StringDecoder cases, and a claim that did not follow
 
 The compiler lane found that a **lone surrogate literal compiles to three
