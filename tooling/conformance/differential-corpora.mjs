@@ -161,6 +161,20 @@ export const CORPORA = {
       { name: "decode", args: (s) => [s] },
       { name: "toASCII", args: (s) => [s] },
       { name: "toUnicode", args: (s) => [s] },
+      // `ucs2` and `version` are published and were not compared, which meant
+      // the module reported "0 divergences" over four of its six names. `ucs2`
+      // is the one that took the most work to publish -- an exported object
+      // literal of functions -- so it is the last export that should have gone
+      // unchecked.
+      { label: "ucs2.decode", call: (m, s) => m.ucs2.decode(s) },
+      {
+        label: "ucs2.encode",
+        // Encode takes code points, so they are derived from the same input
+        // rather than generated separately: this compares the *pair* on one
+        // value, which is what the module is actually used for.
+        call: (m, s) => m.ucs2.encode(m.ucs2.decode(s)),
+      },
+      { label: "version", call: (m) => m.version },
     ],
     // `decode(encode(s))` is the identity on anything `encode` accepts, checked
     // against the implementation alone rather than against node: a round trip

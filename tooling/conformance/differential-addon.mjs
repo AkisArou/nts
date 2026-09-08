@@ -97,6 +97,33 @@ function compare(spec, input) {
   }
 }
 
+// A spec that names nothing real is a spec that tests nothing and says it
+// passed. `invoke` catches, so `m.ucs3.decode(s)` throws the same TypeError on
+// both sides and compares *equal* -- 0 divergences from a corpus with a typo in
+// it. Demonstrated with exactly that typo before this guard was written.
+//
+// So every spec has to produce at least one non-throwing answer from *node*
+// across the fixed inputs. Node is the oracle; if the oracle cannot answer a
+// question, the question is wrong rather than the implementation.
+{
+  const broken = [];
+  for (const spec of corpus.calls) {
+    const label = spec.label ?? spec.name;
+    const answered = corpus.fixed.some((input) => {
+      const r = invoke(upstream, spec, input);
+      return !("threw" in r) && r.missing !== true;
+    });
+    if (!answered) broken.push(label);
+  }
+  if (broken.length > 0) {
+    console.error(
+      `  corpus error: node itself never answers ${broken.join(", ")} -- ` +
+        "these specs compare two failures and report agreement",
+    );
+    process.exit(2);
+  }
+}
+
 const rnd = makeRandom();
 const inputs = [...corpus.fixed];
 for (let i = 0; i < ITERATIONS; i++) inputs.push(corpus.input(rnd));
