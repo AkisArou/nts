@@ -48,7 +48,23 @@ uv_include="${NTS_UV_INCLUDE:-$root/third_party/node/deps/uv/include}"
 }
 
 mkdir -p "$work" "$out"
-compiler="${NTS_COMPILER:-$root/target/release/nts}"
+# `NTS_BIN` as well as `NTS_COMPILER`, because both are in circulation and only
+# one of them used to work here.
+#
+# `build-floor.sh` accepts either and passes `NTS_COMPILER` down, so a floor run
+# was always pinned. A *direct* call written `NTS_BIN=<pin> build.sh <module>`
+# was not: the variable was ignored and the live `target/release/nts` used
+# instead, silently and with no way to tell from the output.
+#
+# That cost a whole attribution on 2026-09-09. `os` had regressed, and the
+# control -- build it with four older pinned binaries -- reported that every one
+# of them failed too, which said the regression was not the compiler's. All four
+# runs had used the same live binary. With the variable honoured, `445ea94b`
+# builds `os` and `fc0df644` does not, which is the opposite conclusion.
+#
+# A pin that is silently ignored is worse than no pin: it produces a control that
+# looks run and is not.
+compiler="${NTS_COMPILER:-${NTS_BIN:-$root/target/release/nts}}"
 [ -x "$compiler" ] || {
   echo "no compiler at $compiler; the compiler session must build it" >&2
   exit 2
