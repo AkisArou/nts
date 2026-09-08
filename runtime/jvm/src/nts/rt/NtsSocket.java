@@ -74,11 +74,21 @@ public final class NtsSocket {
         final Socket socket;
         final InputStream in;
         final OutputStream out;
+        /**
+         * What ALPN selected, or `""` when nothing was negotiated.
+         *
+         * <p>Held rather than asked of the socket on demand, because the two
+         * platforms answer the absent case differently -- JSSE `""`, Conscrypt
+         * `null` -- and normalising at one point beats normalising at every
+         * caller. Read after the handshake, where it is final.
+         */
+        final String protocol;
         volatile boolean closed;
-        Connection(Socket socket, InputStream in, OutputStream out) {
+        Connection(Socket socket, InputStream in, OutputStream out, String protocol) {
             this.socket = socket;
             this.in = in;
             this.out = out;
+            this.protocol = protocol;
         }
     }
 
@@ -458,6 +468,48 @@ public final class NtsSocket {
         return connectVia(env, slot, host, port, secure, timeoutMs, null, 0, DIRECT, ok, failed);
     }
 
+    /**
+     * The negotiated application protocol for an open handle.
+     *
+     * <p>`""` for a plain socket, for a TLS socket where neither side offered,
+     * and for a handle that is not open -- three absences that a caller cannot
+     * act on differently, so they are one answer rather than three.
+     */
+    public static String protocolOf(double handle) {
+        int index = (int) handle - 1;
+        synchronized (TABLE) {
+            if (index < 0 || index >= OPEN.size()) return "";
+            Connection c = OPEN.get(index);
+            return c == null ? "" : c.protocol;
+        }
+    }
+
+    /**
+     * The offer, split.
+     *
+     * <p>A name containing the separator is refused rather than split into two
+     * protocols nobody asked for. ALPN names are opaque byte strings and a
+     * comma is legal in one; it does not appear in any registered name, which
+     * makes this the kind of thing that would be discovered years later by a
+     * handshake failing against one server.
+     */
+    private static String[] offered(String protocols) {
+        if (protocols == null || protocols.isEmpty()) return new String[0];
+        String[] names = protocols.split(",", -1);
+        for (String name : names) {
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "an empty application protocol name in \"" + protocols + "\"");
+            }
+        }
+        return names;
+    }
+
+    /** JSSE answers `""` for no ALPN and Conscrypt answers `null`. One answer. */
+    private static String normalize(String protocol) {
+        return protocol == null ? "" : protocol;
+    }
+
     /** No proxy; the ordinary path. */
     public static final double DIRECT = 0;
     /** An HTTP proxy, reached with `CONNECT` and then tunnelled through. */
@@ -497,6 +549,48 @@ public final class NtsSocket {
         final String proxyHost, final double proxyPort, final double proxyKind,
         final NtsNumberCallback ok, final NtsTextPairCallback failed
     ) {
+        return connectVia(env, slot, host, port, secure, timeoutMs,
+            proxyHost, proxyPort, proxyKind, "", ok, failed);
+    }
+
+    /**
+     * The same, offering a set of application protocols to TLS.
+     *
+     * <p>`protocols` is comma-separated and may be empty, which offers nothing
+     * and is what the overload above passes. Ignored for a plain socket, since
+     * ALPN is a TLS extension and there is nowhere else to carry it.
+     *
+     * <h2>Three things measured rather than assumed</h2>
+     *
+     * <p>**The server's order decides, not this one.** Offering
+     * `http/1.1,h2` against a server offering `h2,http/1.1` selects `h2` on
+     * both JSSE and Conscrypt. So this is a set of protocols the caller is
+     * willing to speak, and a caller that wants a preference honoured has to
+     * get it from the far end rather than from the order it writes here.
+     *
+     * <p>**An unmatched offer fails the connect.** Offering only `h2` to a
+     * server offering only `http/1.1` is a fatal `no_application_protocol`
+     * alert on both platforms, surfacing here as a handshake failure. Offering
+     * a protocol the caller cannot actually speak is therefore not free.
+     *
+     * <p>**Absence has two spellings and this returns one.** After a handshake
+     * with no ALPN, JSSE answers `""` and Conscrypt answers `null`. Normalised
+     * at the one place that reads it, so a program cannot observe which
+     * runtime it is on.
+     *
+     * <p>Client-side only, which is all this seam does. Setting the same
+     * parameters on a *server* socket is silently dropped by Conscrypt on API
+     * 29 -- `getApplicationProtocols()` reads back empty after being set -- and
+     * nothing here accepts a TLS connection.
+     */
+    public static double connectVia(
+        final NtsEnv env, final NtsInbox.Slot slot,
+        final String host, final double port, final boolean secure,
+        final double timeoutMs,
+        final String proxyHost, final double proxyPort, final double proxyKind,
+        final String protocols,
+        final NtsNumberCallback ok, final NtsTextPairCallback failed
+    ) {
         if (slot == null) {
             later(env, failed, "Backpressure", "no completion credit was available");
             return 0;
@@ -506,6 +600,7 @@ public final class NtsSocket {
         submit(env, slot, new Runnable() {
             @Override public void run() {
                 Socket socket = null;
+                String chosen = "";
                 try {
                     int millis = (int) Math.max(0.0, Math.min(timeoutMs, Integer.MAX_VALUE));
                     boolean tunnel = proxyKind == HTTP_PROXY && proxyHost != null;
@@ -585,6 +680,12 @@ public final class NtsSocket {
                                 Collections.<SNIServerName>singletonList(new SNIHostName(host));
                             params.setServerNames(names);
                         }
+                        // ALPN, offered only when there is something to offer:
+                        // setting an empty array is not the same as not setting
+                        // one, and the empty offer is how a caller says it does
+                        // not care.
+                        String[] offer = offered(protocols);
+                        if (offer.length > 0) params.setApplicationProtocols(offer);
                         ssl.setSSLParameters(params);
                         socket = ssl;
                         // Published again: the TLS socket is now the one that
@@ -600,6 +701,7 @@ public final class NtsSocket {
                         // rather than here. Forcing it now puts the failure
                         // where the caller asked for a connection.
                         ssl.startHandshake();
+                        chosen = normalize(ssl.getApplicationProtocol());
                     }
                     socket.setTcpNoDelay(true);
                     // A cancel that arrived while the handshake was running has
@@ -615,7 +717,8 @@ public final class NtsSocket {
                         finish(slot, ok, failed, 0, "Cancelled", "the connect was cancelled");
                         return;
                     }
-                    Connection c = new Connection(socket, socket.getInputStream(), socket.getOutputStream());
+                    Connection c = new Connection(
+                        socket, socket.getInputStream(), socket.getOutputStream(), chosen);
                     double handle = register(c);
                     retire(id);
                     finish(slot, ok, failed, handle, null, null);

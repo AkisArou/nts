@@ -73,6 +73,14 @@ public final class NetworkPrimitives implements AutoCloseable {
         volatile Socket socket = new Socket();
         volatile boolean connected;
         volatile boolean timedOut;
+        /**
+         * What ALPN selected, or `""` when nothing was negotiated.
+         *
+         * <p>Conscrypt answers `null` for the absent case where JSSE answers
+         * `""`; normalised once, on the handshake thread, so the two runtimes
+         * this seam has cannot be told apart by a program.
+         */
+        volatile String protocol = "";
         Connection(int id) { this.id = id; }
     }
     private static final class TimerEntry {
@@ -125,6 +133,36 @@ public final class NetworkPrimitives implements AutoCloseable {
     private static String message(Exception error) {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
     }
+    /**
+     * The offer, split.
+     *
+     * <p>A name containing the separator is refused rather than split into two
+     * protocols nobody asked for. ALPN names are opaque byte strings and a
+     * comma is legal in one; none of the registered names has one, which makes
+     * this the kind of thing found years later by one server saying no.
+     */
+    private static String[] offered(String protocols) {
+        if (protocols == null || protocols.isEmpty()) return new String[0];
+        String[] names = protocols.split(",", -1);
+        for (String name : names) {
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("An empty application protocol name in \"" + protocols + "\"");
+            }
+        }
+        return names;
+    }
+
+    /**
+     * What ALPN selected for an open handle, or `""`.
+     *
+     * <p>One answer for a plain socket, for a TLS socket where neither side
+     * offered, and for a handle that is not open.
+     */
+    public String protocolOf(int handle) {
+        Connection connection = sockets.get(handle);
+        return connection == null ? "" : connection.protocol;
+    }
+
     private static int nextId(AtomicInteger sequence) {
         int id = sequence.getAndIncrement();
         if (id <= 0) throw new IllegalStateException("Handle space exhausted; create a new runtime");
@@ -164,6 +202,28 @@ public final class NetworkPrimitives implements AutoCloseable {
      */
     public int connect(String hostname, int port, boolean secure, int timeoutMs,
                        String proxyHost, int proxyPort, int proxyKind, ConnectCallback callback) {
+        return connect(hostname, port, secure, timeoutMs, proxyHost, proxyPort, proxyKind, "", callback);
+    }
+
+    /**
+     * As above, offering a comma-separated set of application protocols to TLS.
+     *
+     * <p>Client-side, which is all this class does. Measured on API 29 rather
+     * than assumed, because each of these would otherwise surface as a
+     * handshake failing against one server: the **server's** order decides, not
+     * this one; an offer the far end cannot match is a fatal
+     * `no_application_protocol` alert and so a failed connect; and the absent
+     * case reads back `null` here against `""` on the desktop JSSE, which is
+     * why {@link Connection#protocol} normalises.
+     *
+     * <p>Setting the same parameters on a *server* socket is silently dropped
+     * by Conscrypt at this floor -- `getApplicationProtocols()` reads back
+     * empty immediately after being set -- so nothing here should grow a
+     * server side expecting it to work.
+     */
+    public int connect(String hostname, int port, boolean secure, int timeoutMs,
+                       String proxyHost, int proxyPort, int proxyKind, String protocols,
+                       ConnectCallback callback) {
         Objects.requireNonNull(hostname); Objects.requireNonNull(callback);
         if (hostname.isEmpty() || port < 1 || port > 65535 || timeoutMs < 1) throw new IllegalArgumentException("Invalid connect arguments");
         int id = nextId(ids);
@@ -225,10 +285,16 @@ public final class NetworkPrimitives implements AutoCloseable {
                         if (supported.contains("TLSv1.2")) versions.add("TLSv1.2");
                         if (versions.isEmpty()) throw new SSLException("TLS 1.2 or newer is required");
                         parameters.setProtocols(versions.toArray(new String[0]));
+                        // Offered only when there is something to offer: an
+                        // empty array is not the same as not setting one.
+                        String[] offer = offered(protocols);
+                        if (offer.length > 0) parameters.setApplicationProtocols(offer);
                         tls.setSSLParameters(parameters);
                         tls.setSoTimeout(timeoutMs);
                         tls.startHandshake();
                         tls.setSoTimeout(0);
+                        String chosen = tls.getApplicationProtocol();
+                        connection.protocol = chosen == null ? "" : chosen;
                     }
                     if (connection.closed.get()) throw new IOException("Connect canceled");
                     connection.connected = true;

@@ -386,18 +386,61 @@ fn tls_refuses_a_certificate_that_names_another_host() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// ALPN: the server's order decides, an unmatched offer fails, absence is `""`.
+///
+/// Each of those was measured against both JSSE and Conscrypt before it was
+/// written down, because all three are invisible until a handshake fails
+/// against one particular server. `AlpnTest` names its cases rather than
+/// counting them, so a run that stopped early cannot read as agreement.
+#[test]
+fn alpn_negotiates_and_the_servers_order_is_the_one_that_counts() {
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let jar = jar();
+    let dir = std::env::temp_dir().join(format!("nts-alpn-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let (server, trust) = keystores(&keytool, &dir);
+
+    compile(&javac, &jar, &dir, "AlpnTest");
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg(format!("-Djavax.net.ssl.keyStore={}", server.display()))
+        .arg("-Djavax.net.ssl.keyStorePassword=changeit")
+        .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
+        .arg(format!("-Djavax.net.ssl.trustStore={}", trust.display()))
+        .arg("-Djavax.net.ssl.trustStorePassword=changeit")
+        .arg("-Djavax.net.ssl.trustStoreType=PKCS12")
+        .arg("-cp")
+        .arg(format!("{}:{}", jar.display(), dir.display()))
+        .arg("AlpnTest")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(
+        ran.status.success(),
+        "the ALPN test failed:\n{said}\n{}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    // The count as well as the zero, for the reason the drivers above give.
+    assert!(said.ends_with("11 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The pieces composed, and the observable the production adapter must match.
 ///
 /// Each part is tested alone above. This proves they hold together: a response
 /// dribbled seven bytes at a time, decoded by a state machine that never sees a
 /// whole frame, with every completion crossing the inbox.
 ///
-/// And it records what the **reference** adapter exposes. A platform HTTP client
-/// that decompresses transparently strips `Content-Encoding` and rewrites
-/// `Content-Length` while doing it, so the same response yields different
-/// observable headers depending on which adapter fetched it. The reference
-/// hands back the wire headers unchanged; the `OkHttp` adapter has to produce the
-/// same pair, and that cross-adapter assertion is what this half sets up.
+/// And it records what the transport exposes. A platform HTTP client that
+/// decompresses transparently strips `Content-Encoding` and rewrites
+/// `Content-Length` while doing it, so the same response would yield different
+/// observable headers depending on which adapter fetched it. This one hands
+/// back the wire headers unchanged, which is the property the shared
+/// TypeScript's own decoding depends on -- and the reason no adapter below
+/// this seam is allowed to inflate anything on its own.
 #[test]
 fn a_gzip_response_survives_the_socket_and_keeps_its_headers() {
     let (Some(javac), Some(java)) = (tool("javac"), tool("java")) else { return };

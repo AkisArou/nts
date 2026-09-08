@@ -14,10 +14,12 @@
 // Because there is nothing behind it. A class-shaped import promises instance
 // methods and a constructor, and `nts.rt.NtsSocket` is a static-only holder --
 // `new NtsSocket()` would be a type error at best and a link error at worst.
-// The import that *should* exist is `java:okhttp3`, resolved against the pinned
-// jar; that needs a class-file reader and is written up in
+// The import that *should* exist is `java:android.net`, or any type resolved
+// against a real jar; that needs a class-file reader and is written up in
 // `docs/jvm-android-provider.md`. This module is what the ergonomics look like
-// without it, which is most of them.
+// without it, which is most of them. (It said `java:okhttp3` until the floor
+// moved to 29 and that dependency went; the example should not name something
+// the tree no longer pins.)
 //
 // # What is not here
 //
@@ -120,6 +122,43 @@ export function connect(
   return nts_jvm_web_connect(
     host, port, secure, timeoutMs, proxyHost, proxyPort, proxyKind, onOpen, onError,
   );
+}
+
+/**
+ * The same, offering a set of application protocols to TLS.
+ *
+ * `protocols` is comma-separated; empty offers nothing. The **server** picks,
+ * and its order decides rather than this one -- so this is the set the caller
+ * can speak, not a ranking. An offer the far end cannot match is a fatal alert
+ * and arrives as a failed connect, so naming a protocol you cannot speak costs
+ * a connection rather than nothing.
+ */
+export function connectAlpn(
+  host: string,
+  port: number,
+  secure: boolean,
+  timeoutMs: number,
+  proxyHost: string | null,
+  proxyPort: number,
+  proxyKind: number,
+  protocols: string,
+  onOpen: (handle: number) => void,
+  onError: (code: string, message: string) => void,
+): number {
+  return nts_jvm_web_connect_alpn(
+    host, port, secure, timeoutMs, proxyHost, proxyPort, proxyKind, protocols,
+    onOpen, onError,
+  );
+}
+
+/**
+ * What ALPN selected for an open handle, or `""`.
+ *
+ * `""` covers a plain socket, a TLS socket where neither side offered, and a
+ * handle that is not open: a caller cannot act on the difference between them.
+ */
+export function protocolOf(handle: number): string {
+  return nts_jvm_web_protocol(handle);
 }
 
 /**

@@ -734,6 +734,87 @@ fn the_two_tunnels_answer_the_same_through_one_proxy() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// ALPN through both adapters, required to answer the same.
+///
+/// The second thing the two implementations both do and neither can borrow
+/// from the other. Each offers protocols to TLS and each normalises the absent
+/// case from what its platform returns -- `""` on JSSE, `null` on Conscrypt --
+/// so a program must not be able to tell which one carried its connection.
+///
+/// The server is JSSE's and stays on the desktop deliberately: Conscrypt drops
+/// application protocols set on a *server* socket at API 29, so the far end of
+/// this could not be built on this seam even if something wanted it to be.
+#[test]
+fn both_adapters_negotiate_the_same_application_protocol() {
+    let (Some(javac), Some(java), Some(keytool)) = (tool("javac"), tool("java"), tool("keytool"))
+    else {
+        return;
+    };
+    let root = repository();
+    let dir = std::env::temp_dir().join(format!("nts-both-alpn-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    build(&javac, &dir).unwrap_or_else(|error| panic!("the Android primitives did not compile:\n{error}"));
+
+    let jar = std::env::var_os("NTS_JVM_RUNTIME_JAR")
+        .map_or_else(|| root.join("runtime/jvm/nts-runtime.jar"), PathBuf::from);
+    let mine = dir.join("nts-runtime.jar");
+    std::fs::copy(&jar, &mine).unwrap();
+
+    // One store, holding the key and trusted as a root, because both adapters
+    // are handed it explicitly rather than through system properties -- which
+    // is also the only arrangement that would work unchanged on a device.
+    let store = dir.join("server.p12");
+    let ran = Command::new(&keytool)
+        .args(["-genkeypair", "-alias", "nts", "-keyalg", "RSA", "-keysize", "2048",
+               "-validity", "1", "-dname", "CN=nts-alpn", "-ext", "SAN=dns:localhost",
+               "-keystore", store.to_str().unwrap(), "-storetype", "PKCS12",
+               "-storepass", "changeit", "-keypass", "changeit"])
+        .output()
+        .unwrap();
+    assert!(ran.status.success(), "keytool: {}", String::from_utf8_lossy(&ran.stderr));
+
+    let classpath = format!("{}:{}", mine.display(), dir.display());
+    let compiled = Command::new(&javac)
+        .args(["--release", "8", "-Xlint:-options", "-cp"])
+        .arg(&classpath)
+        .arg("-d")
+        .arg(&dir)
+        .arg(root.join("compiler/codegen/jvm/tests/android/BothAlpn.java"))
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "BothAlpn did not compile:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    // **One store, reached two different ways, which is the point.**
+    // `NetworkPrimitives` takes a factory, so `BothAlpn` hands it the store
+    // directly. `NtsSocket` uses `SSLSocketFactory.getDefault()` and can only
+    // be told through system properties -- the same asymmetry a device hits,
+    // where the properties are ignored and only the injected factory works.
+    // Both end up trusting the same self-signed certificate.
+    let ran = Command::new(&java)
+        .arg("-Xverify:all")
+        .arg(format!("-Djavax.net.ssl.keyStore={}", store.display()))
+        .arg("-Djavax.net.ssl.keyStorePassword=changeit")
+        .arg("-Djavax.net.ssl.keyStoreType=PKCS12")
+        .arg(format!("-Djavax.net.ssl.trustStore={}", store.display()))
+        .arg("-Djavax.net.ssl.trustStorePassword=changeit")
+        .arg("-Djavax.net.ssl.trustStoreType=PKCS12")
+        .arg("-cp")
+        .arg(&classpath)
+        .arg("BothAlpn")
+        .arg(&store)
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&ran.stdout).trim().to_owned();
+    assert!(ran.status.success(), "{said}\n{}", String::from_utf8_lossy(&ran.stderr));
+    // The count as well as the zero, for the reason the tunnels test gives.
+    assert!(said.ends_with("10 checks, 0 failures"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// The library compiles against the API level it declares.
 ///
 /// `--min-api 29` through D8 and R8 proves the *bytecode* is acceptable at that

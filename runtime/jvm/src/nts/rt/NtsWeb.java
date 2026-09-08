@@ -86,6 +86,36 @@ public final class NtsWeb {
             proxyHost, proxyPort, proxyKind, onOpen, onError);
     }
 
+    /**
+     * The same, offering a comma-separated set of application protocols to TLS.
+     *
+     * <p>The set is what the caller is willing to speak; the **server** picks,
+     * and its order decides rather than this one. An offer the far end cannot
+     * match is a fatal alert and arrives here as a failed connect, so offering
+     * a protocol the caller cannot speak is not free. See
+     * {@link NtsSocket#connectVia} for the measurements behind all three.
+     */
+    public static double connectAlpn(String host, double port, boolean secure, double timeoutMs,
+                                     String proxyHost, double proxyPort, double proxyKind,
+                                     String protocols,
+                                     NtsNumberCallback onOpen, NtsTextPairCallback onError) {
+        NtsEnv env = NtsEnv.current();
+        return NtsSocket.connectVia(env, NtsEnv.launch(env), host, port, secure, timeoutMs,
+            proxyHost, proxyPort, proxyKind, protocols, onOpen, onError);
+    }
+
+    /**
+     * What ALPN selected for an open handle, or `""`.
+     *
+     * <p>One answer for three absences -- a plain socket, a TLS socket where
+     * neither side offered, and a handle that is not open -- because a caller
+     * cannot act on the difference and a nullable string across this table
+     * would be an ABI question answered as a side effect of a socket call.
+     */
+    public static String protocolOf(double handle) {
+        return NtsSocket.protocolOf(handle);
+    }
+
     /** Idempotent, safe from any lane, and a late success still closes its socket. */
     public static void cancelConnect(double request) {
         NtsSocket.cancelConnect(request);

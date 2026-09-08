@@ -276,8 +276,10 @@ public final class NtsRuntime {
      *
      * <p>{@code --release 8} compiles {@code +} to a {@code StringBuilder}
      * rather than to {@code invokedynamic makeConcatWithConstants}, which is
-     * what keeps the no-{@code invokedynamic} ratchet, and with it the Android
-     * API 26 floor.
+     * what keeps the no-{@code invokedynamic} ratchet green here. That ratchet
+     * is no longer about the Android floor, which is 29 and would dex an
+     * {@code invoke-custom} happily; {@code runtime_jar.rs} says what it does
+     * still catch.
      */
     public static String concat(String a, String b) {
         return a + b;

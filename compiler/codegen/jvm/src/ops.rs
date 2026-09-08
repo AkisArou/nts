@@ -626,12 +626,10 @@ pub struct Intrinsic {
 /// inventing a middle-end concept for four static methods would be a second
 /// answer to a question the FFI path already answers.
 ///
-/// **Four of nine.** The declarations also cover connect, read, write,
-/// random-fill and the two reservation calls, and every one of those takes an
-/// environment handle or a byte view. `ManagedType::View` does not exist and
-/// there is no common environment type, so those five are absent here, marked
-/// GATED where they are declared, and `every_wired_intrinsic_is_declared`
-/// asserts the two lists are complements rather than merely both present.
+/// **All of them, now.** This said "four of nine" for as long as five
+/// declarations were gated on a byte-view type that did not exist; `ManagedType::View`
+/// supplied it and they landed, so the table and the declarations are the same
+/// set and a test asserts it rather than a comment claiming it.
 pub const WEB_INTRINSICS: &[Intrinsic] = &[
     Intrinsic {
         declared: "nts_jvm_web_system_proxy_for",
@@ -666,6 +664,19 @@ pub const WEB_INTRINSICS: &[Intrinsic] = &[
         member: "connect",
         descriptor: "(Ljava/lang/String;DZDLjava/lang/String;DDLnts/rt/NtsNumberCallback;\
                      Lnts/rt/NtsTextPairCallback;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_connect_alpn",
+        owner: types::WEB,
+        member: "connectAlpn",
+        descriptor: "(Ljava/lang/String;DZDLjava/lang/String;DDLjava/lang/String;\
+                     Lnts/rt/NtsNumberCallback;Lnts/rt/NtsTextPairCallback;)D",
+    },
+    Intrinsic {
+        declared: "nts_jvm_web_protocol",
+        owner: types::WEB,
+        member: "protocolOf",
+        descriptor: "(D)Ljava/lang/String;",
     },
     Intrinsic {
         declared: "nts_jvm_web_cancel_connect",

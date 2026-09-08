@@ -87,6 +87,48 @@ declare function nts_jvm_web_connect(
   onError: (code: string, message: string) => void,
 ): number;
 
+/**
+ * The same, offering a comma-separated set of application protocols to TLS.
+ *
+ * Three things about it were measured on both runtimes rather than assumed,
+ * because each would otherwise be discovered by a handshake failing:
+ *
+ * - **The server's order decides.** Offering `http/1.1,h2` to a server
+ *   offering `h2,http/1.1` selects `h2`. This is a set of protocols the caller
+ *   can speak, not a ranking, and a caller wanting a preference honoured has
+ *   to get it from the far end.
+ * - **An unmatched offer fails the connect**, as a fatal
+ *   `no_application_protocol` alert. Offering what you cannot speak is not free.
+ * - **Absence is `""`**, on both. JSSE says `""` and Conscrypt says `null`;
+ *   the runtime normalises so a program cannot tell which it is on.
+ *
+ * Empty offers nothing, which is what {@link nts_jvm_web_connect} passes.
+ *
+ * WIRED.
+ */
+declare function nts_jvm_web_connect_alpn(
+  host: string,
+  port: number,
+  secure: boolean,
+  timeoutMs: number,
+  proxyHost: string | null,
+  proxyPort: number,
+  proxyKind: number,
+  protocols: string,
+  onOpen: (handle: number) => void,
+  onError: (code: string, message: string) => void,
+): number;
+
+/**
+ * What ALPN selected for an open handle, or `""`.
+ *
+ * One answer for three absences -- a plain socket, a TLS socket where neither
+ * side offered, and a handle that is not open. A caller cannot act on the
+ * difference, and a nullable string here would be an ABI question answered as a
+ * side effect of a socket call. WIRED.
+ */
+declare function nts_jvm_web_protocol(handle: number): string;
+
 /** Idempotent, safe from any lane, and a late success still closes its socket. WIRED. */
 declare function nts_jvm_web_cancel_connect(request: number): void;
 
@@ -203,14 +245,16 @@ declare function nts_jvm_web_system_proxy_for(url: string): string;
 // point would be a second answer to a question the middle end has settled.
 //
 // **HTTP.** No `fetch`, no headers, no redirects. The shared TypeScript owns
-// every observable Fetch behaviour, and the production OkHttp provider is
-// configured to do none of it -- the whole reason that provider is mostly a
-// list of things turned off. An intrinsic that returned a parsed response
-// would move policy into the provider, where it would differ per platform.
+// every observable Fetch behaviour. This used to be argued against the OkHttp
+// provider, which was mostly a list of features turned off so it would not
+// take those decisions; the provider is gone and the argument is now simply
+// the rule. An intrinsic that returned a parsed response would move policy
+// below this seam, where it would differ per platform.
 //
-// **Compression.** `NtsGzip` decodes gzip on the JVM, and the OkHttp provider
-// explicitly sets `Accept-Encoding` so OkHttp does not decompress and strip the
-// headers describing what it decompressed. Which side inflates is the shared
+// **Compression.** `NtsGzip` decodes gzip on the JVM. Nothing below this seam
+// decompresses on its own any more -- the platform client that did, and that
+// stripped the headers describing what it had decompressed, was the reason
+// this paragraph named a specific one. Which side inflates is the shared
 // code's decision, and an intrinsic here would take it away.
 
 // ---------------------------------------------------------------------------
