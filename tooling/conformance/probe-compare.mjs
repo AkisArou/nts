@@ -541,6 +541,51 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "zlib-engine.ts",
+    module: "zlib",
+    // The streaming half: a handle with a lifecycle rather than one call.
+    // zlib-oneshot proves the compressor emits node's bytes; this proves the
+    // engine around it -- create, incremental writes, status, reset, params,
+    // close. None of it was reachable before: zlib does not compile and the
+    // interpreted lane's stand-ins are node's own zlib.
+    checks(m) {
+      const zlib = require("node:zlib");
+      const asBytes = (b) => [...Buffer.from(b)].map((x) => `${x},`).join("");
+      const text = "the quick brown fox jumps over the lazy dog";
+      const whole = m.probeDeflateWhole(text, 6);
+      const out = [
+        { label: "handles are distinct", mine: m.probeHandlesAreDistinct(), theirs: true },
+        { label: "deflate whole L6", mine: whole, theirs: asBytes(zlib.deflateSync(Buffer.from(text), { level: 6 })) },
+        { label: "deflate whole L1", mine: m.probeDeflateWhole(text, 1), theirs: asBytes(zlib.deflateSync(Buffer.from(text), { level: 1 })) },
+        // The property a stateful compressor exists to have: three writes with
+        // Z_NO_FLUSH then Z_FINISH must produce the same stream as one call.
+        {
+          label: "stream in three == whole",
+          mine: m.probeDeflateInThree("the quick ", "brown fox jumps ", "over the lazy dog"),
+          theirs: whole,
+        },
+        { label: "bytesWritten counts input", mine: m.probeBytesWritten(text), theirs: text.length },
+        { label: "streamEnded false then true", mine: m.probeStreamEndedTransition(text), theirs: "false:true" },
+        // status, code, message, pending, bytesWritten -- all clean on a new
+        // engine. Checked together because a fresh engine reporting a stale
+        // error from a previous handle is the failure a per-field check misses.
+        { label: "fresh engine is clean", mine: m.probeFreshEngineState(), theirs: "0:::false:0" },
+        { label: "reset restores output", mine: m.probeResetRestores(text), theirs: true },
+        { label: "params accepted", mine: m.probeParamsAccepted(), theirs: 0 },
+        { label: "double close survives", mine: m.probeDoubleClose(), theirs: true },
+      ];
+      // The error path, against node's own errno and code for the same bytes.
+      let nodeErr = "none";
+      try {
+        zlib.inflateSync(Buffer.from([0xde, 0xad, 0xbe, 0xef]));
+      } catch (e) {
+        nodeErr = `${e.errno}:${e.code}`;
+      }
+      out.push({ label: "inflate garbage errno/code", mine: m.probeInflateGarbage(), theirs: nodeErr });
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
