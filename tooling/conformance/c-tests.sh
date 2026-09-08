@@ -28,6 +28,23 @@ trap 'rm -rf "$work"' EXIT
 failures=0
 found=0
 
+# The drift guard for the duplicated library list. A copied list that nobody
+# checks is the thing that made `build.sh` name a `node_all.c` deleted three
+# months earlier, invisible because nothing reached the link step. This makes
+# the copy loud instead.
+for module in zlib; do
+  case "$module" in
+    zlib) mine="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
+  esac
+  if ! grep -qF -- "$mine" tooling/conformance/build.sh; then
+    echo "  DRIFT: build.sh no longer links $module with:"
+    echo "    $mine"
+    echo "  These two lists have to agree or this script tests a different"
+    echo "  binary from the one the module ships. Fix both, then rerun."
+    exit 2
+  fi
+done
+
 for test_c in runtime/node/*/test/*.c; do
   [ -e "$test_c" ] || continue
   found=$((found + 1))
@@ -40,11 +57,22 @@ for test_c in runtime/node/*/test/*.c; do
   # second module's bindings would be testing the wrong seam.
   module_c=$(find "$module_dir" -maxdepth 1 -name '*.c' | tr '\n' ' ')
 
+  # The same libraries `build.sh` links that module against. Duplicated rather
+  # than factored out, because `build.sh` is running in other sessions right now
+  # and editing a script while it executes is its own bug -- but duplicated
+  # *checkably*: the drift guard below fails the run if the two lists stop
+  # agreeing, so this cannot quietly go stale the way a copied list normally
+  # does.
+  module_libraries=""
+  case "$module" in
+    zlib) module_libraries="-lz -lbrotlienc -lbrotlidec -lzstd" ;;
+  esac
+
   if ! clang -std=c11 -D_GNU_SOURCE -Wall -Wextra \
       -I "$root/runtime/c" -I "$module_dir" -I "$root/runtime/node/internal" \
       -I "$root/third_party/node/deps/uv/include" -I "$root/third_party/node/src" \
       $test_c $module_c "$root/runtime/c/nts_runtime.c" \
-      -luv -lm -o "$work/$module-$name" > "$work/build.log" 2>&1; then
+      $module_libraries -luv -lm -o "$work/$module-$name" > "$work/build.log" 2>&1; then
     echo "did not build"
     grep -E 'error:' "$work/build.log" | head -3 | sed 's/^/                                  /'
     failures=$((failures + 1))
@@ -60,6 +88,16 @@ for test_c in runtime/node/*/test/*.c; do
   code=$?
   if [ "$code" -eq 124 ]; then
     echo "HUNG -- 60s timeout"
+    failures=$((failures + 1))
+  elif [ "$code" -gt 128 ]; then
+    # A signal, not a verdict. A test killed by SIGABRT or SIGSEGV prints no
+    # `FAIL` line, so reporting it the same way as a failed check shows an
+    # empty explanation under the word "failed" -- which reads as a broken
+    # harness rather than as the crash it is. Sizing a buffer wrong in
+    # `nts_zlib_bytes` lands here, aborting in the allocator with the checks
+    # that had already passed still on screen.
+    echo "CRASHED -- signal $((code - 128))"
+    printf '%s\n' "$out" | tail -3 | sed 's/^/                                  /'
     failures=$((failures + 1))
   elif [ "$code" -ne 0 ]; then
     echo "failed"
