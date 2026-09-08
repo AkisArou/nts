@@ -4949,6 +4949,37 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## The harness bug that reported a pass
+
+Five self-inflicted comparison bugs today, and the fifth is the only one that
+could report **success**.
+
+`stream`'s survey has two asynchronous cases. The first version resolved each one
+**from its error handler**. But `end()` called twice emits *nothing* on node — so
+that promise never resolved, `Promise.all` never fired, the output file was never
+written, and the comparison read **the previous run's file** and reported a clean
+pass across all fourteen rows.
+
+Every other harness bug today was a false *negative*: a divergence reported that
+was not one. Those get investigated and closed. This one is a false *positive*,
+and a false positive is the failure mode that survives — nobody investigates a
+green row.
+
+Two changes came out of it, both general:
+
+- **Resolve on a timer, not on the event.** "No error arrived" is a real answer,
+  and a harness that can only record errors cannot express it.
+- **Delete the output file before the run.** A comparison that can silently read
+  stale data is worse than one that fails, because the staleness is invisible in
+  the result.
+
+The rest of that survey is clean: 14 cases, 0 divergences — `write()` answering
+`false` once the buffer *reaches* highWaterMark rather than after, `destroy()`
+being idempotent, `push(null)` then `push(x)` giving `ERR_STREAM_PUSH_AFTER_EOF`,
+`read()` on an empty stream being `null` rather than `undefined`,
+`readableFlowing` being `null` before anything and `false` after `pause()`, and
+`cork`/`uncork` routing two writes through `writev` as one call.
+
 ## Two surfaces that came back clean, which is also a result
 
 **`console`, 21 cases, 0 divergences.** Node formats through one
