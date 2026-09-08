@@ -4949,6 +4949,40 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## Two `Buffer` classes in one process — an open divergence
+
+`os.userInfo({ encoding: "buffer" })` answers values that fail
+`Buffer.isBuffer`. In the **same process**, `fs.readFileSync` answers values that
+pass. Their `.constructor` objects are different objects with the same name.
+
+    os.userInfo username   Buffer.isBuffer -> false   ctor name "Buffer"
+    fs.readFileSync        Buffer.isBuffer -> true    ctor name "Buffer"
+    same-ctor              false
+
+What has been ruled out:
+
+- **Not the global.** `globalThis.Buffer === require("node:buffer").Buffer` is
+  `true`, and `Buffer.isBuffer(Buffer.from("x"))` is `true`.
+- **Not the import spelling.** `os` and `fs` both write
+  `import { Buffer } from "../../buffer/src/main.ts"`, character for character.
+- **Not the module under test.** `os` is wrong under `--module os` *and* under
+  `--module fs`, so it is not the harness giving the module being tested its own
+  entry point.
+- **Not a stale build artifact.** `os/node_modules/.tsbuild` holds a
+  `.tsbuildinfo` and no emitted JavaScript.
+
+So there are two instantiations of `buffer/src/main.ts` at run time and `os`
+resolves to the second one. The cause is not yet known.
+
+**It is asserted nowhere.** It is not a §13 decision, and pinning it would fix a
+defect in place — the `cpSync` rule. It is recorded here so that the next person
+to see `Buffer.isBuffer` return `false` for something that is plainly a Buffer
+has somewhere to start.
+
+Worth noting what it would cost if it reached a user: any `instanceof Buffer`
+check on an `os` result is `false`, and `deepStrictEqual` cannot see the
+difference either — the two limits compound.
+
 ## `deepStrictEqual` cannot see a prototype, and that weakens the suite
 
 The most consequential §13 consequence found so far, and it is not in a module —
