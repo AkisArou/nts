@@ -749,6 +749,44 @@ the two places it is visible as a bare array are the two places it can be
 priced. `awfy-permute` being a win makes it upside on a win rather than a second
 losing row, which is worth saying so the item is not oversold.
 
+### `awfy-queens`: six hypotheses dead, and the residual is not reproducible by transcription
+
+Continuing the ladder past the third rung. With the reference wearing both of
+this lane's representational choices it sits at 9107 ns and we sit at 10987 --
+**20.6%, codegen, mine.** Every structural difference I can name has now been
+carried onto the reference and priced, and none of them is it.
+
+    the merge, threaded away in our own emitter          0.16%
+    coalescing the merge parameter's slot                0.4%
+    static-with-receiver against instance methods        -9%, ours is FASTER
+    slot traffic, transcription verified identical       0%   (setRowColumn)
+    frame width, locals 3 -> 9 on the recursive method   0%   (9080 vs 9107)
+    element type `[D`                                    +14.2%, half handed back
+
+**The slot-traffic test is the one worth keeping**, because it is the answered
+list holding up under a better instrument than it was first answered with. I
+transcribed our `setRowColumn` into Java and **checked the bytecode matched
+instruction for instruction before measuring** -- `aload_0 getfield astore aload
+iload_1 iload_3 bastore ...` on both sides, thirty-two opcodes in the same
+order. It costs nothing. C2 removes the round trip, record 0004 was right, and
+the stack-residency revert was right.
+
+**And frame width is not it either.** Our recursive `placeQueen` carries
+`locals=13` where AWFY's carries `locals=3`; a transcription at `locals=9`
+measures identically to the one at 3. On a function recursing eight deep, four
+times the frame is free.
+
+**So the residual is something transcription cannot express.** Six attempts to
+write our shape in Java produced code that runs at the reference's speed, which
+means what is left is not a shape a Java programmer could write -- and the next
+instrument is the assembly, which is what this file said about this row before
+any of this started. `hsdis` is at `~/Projects/hsdis/build/linux-amd64/`.
+
+Not chased tonight. The row is far better posed than it was: 1.25x, of which
+14.2% is an element type upstream, roughly half of that is handed back by a
+choice of ours that is a *gain*, and 20.6% is ours with six named causes ruled
+out.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
