@@ -28,6 +28,21 @@ trap 'rm -rf "$work"' EXIT
 failures=0
 found=0
 
+# Built once, ahead of the loop.
+mkdir -p "$work/internal"
+for source in runtime/node/internal/*.c; do
+  [ -e "$source" ] || continue
+  if ! clang -std=c11 -D_GNU_SOURCE -fPIC -c "$source" \
+      -I "$root/runtime/c" -I "$root/runtime/node/internal" \
+      -I "$root/third_party/node/deps/uv/include" -I "$root/third_party/node/src" \
+      -o "$work/internal/$(basename "$source" .c).o" > "$work/internal.log" 2>&1; then
+    echo "  the shared runtime/node/internal C does not compile:"
+    grep -E 'error:' "$work/internal.log" | head -3 | sed 's/^/    /'
+    exit 2
+  fi
+done
+ar rcs "$work/libnodeinternal.a" "$work"/internal/*.o
+
 # The drift guard for the duplicated library list. A copied list that nobody
 # checks is the thing that made `build.sh` name a `node_all.c` deleted three
 # months earlier, invisible because nothing reached the link step. This makes
@@ -57,6 +72,24 @@ for test_c in runtime/node/*/test/*.c; do
   # second module's bindings would be testing the wrong seam.
   module_c=$(find "$module_dir" -maxdepth 1 -name '*.c' | tr '\n' ' ')
 
+  # Plus the C every module shares -- `nts_node_to_utf8_alloc`,
+  # `nts_node_set_errno` and `nts_node_desc_double` all live there, so `fs.c`
+  # cannot link without it. A module's own directory is not the whole of its C.
+  #
+  # As an *archive* rather than a list of objects, which is the difference
+  # between this working and not. `internal/process.c` calls `napi_get_global`
+  # and half a dozen other Node-API functions that exist only inside a real
+  # addon; naming every object on the command line drags that one in whether or
+  # not anything wants it, and every test here fails to link over symbols it
+  # never mentions. A linker pulls an archive member only when something still
+  # undefined is in it, so `process.o` stays out until a test actually needs
+  # it -- at which point failing to link is the correct answer rather than a
+  # harness artefact.
+  shared_lib=""
+  if [ "$module" != "internal" ]; then
+    shared_lib="$work/libnodeinternal.a"
+  fi
+
   # The same libraries `build.sh` links that module against. Duplicated rather
   # than factored out, because `build.sh` is running in other sessions right now
   # and editing a script while it executes is its own bug -- but duplicated
@@ -71,7 +104,7 @@ for test_c in runtime/node/*/test/*.c; do
   if ! clang -std=c11 -D_GNU_SOURCE -Wall -Wextra \
       -I "$root/runtime/c" -I "$module_dir" -I "$root/runtime/node/internal" \
       -I "$root/third_party/node/deps/uv/include" -I "$root/third_party/node/src" \
-      $test_c $module_c "$root/runtime/c/nts_runtime.c" \
+      $test_c $module_c "$root/runtime/c/nts_runtime.c" $shared_lib \
       $module_libraries -luv -lm -o "$work/$module-$name" > "$work/build.log" 2>&1; then
     echo "did not build"
     grep -E 'error:' "$work/build.log" | head -3 | sed 's/^/                                  /'
