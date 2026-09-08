@@ -93,7 +93,24 @@ like the reference doing less work. It is doing **more** -- unboxing into a
 34% of that profile is a real target, and the shape of a fix is a bulk
 `keys-into-array` helper rather than two calls and index arithmetic per element.
 The obstacle is that the loop is the *lowering's*, not the runtime's, so the
-helper needs someone to call it. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
+helper needs someone to call it.
+
+**And there is a second, independent fix, measured: the cursor is a `double`.**
+The emitted walk is `next(map, D) -> D` and `keyAt(map, D)`, so every element
+pays two `d2i` and an `i2d`, and the base/slot arithmetic twice. The same walk
+with an `int` cursor, identical output element by element:
+
+    double cursor   0.987 / 0.983 us   3.24x / 3.25x
+    int cursor      0.305 / 0.302 us   1.00x
+
+**3.24x** on the 38% of this row that is `keyAt` plus `next`. Doing it needs
+`int` overloads in `NtsMap` and an extension to `intcall`, which today swaps
+only a helper's *return* type -- the cursor needs its **argument** narrowed too,
+and `narrowed`'s rule ("every use is an integral conversion") does not currently
+admit "used as the argument of a helper that has an int overload".
+
+The two fixes are alternatives, not complements: a bulk keys-into-array helper
+removes the loop and makes the cursor moot. Agree which before building either. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
