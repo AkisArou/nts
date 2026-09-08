@@ -4799,12 +4799,34 @@ module, a class with an unrepresentable member, a subclass, a subclass of an
 `abstract` base, and a class whose first field has an index-signature type all
 emit correct accessors. So it is none of those alone.
 
-**The one asymmetry found and not explained**: `Request extends Body`, `Body`
-declares `protected bodyState: BodyState`, and **`NtsObj_Request` does not
-contain a `bodyState` member at all.** A base-class field that is counted when
-indices are assigned and absent when the struct is written would produce exactly
-this shift. That is a reading of the evidence, not a measurement — the reduction
-that would demonstrate it has not been found.
+**The mechanism, which took a wrong first answer to reach.** The first reading
+here was that `NtsObj_Request` "does not contain a `bodyState` member at all".
+It does — at position **21, last**, after every one of `Request`'s own fields.
+Grepping the struct for the member and getting no match from the first twenty
+lines is not the same as the member being absent, and that is the claim that went
+out before it was checked.
+
+So the struct is written **derived-fields-first with the base's field appended
+last**:
+
+    NtsHeader header;
+    NtsString * requestMethod;      <- Request's first own field
+    NtsObj_Headers * requestHeaders;
+    ... eighteen more of Request's own ...
+    NtsObj_BodyState * bodyState;   <- Body's field, last
+
+while the accessors index **base-first**, which is the ordinary layout. Under
+that model `requestMethod` is index 2 and the struct's index 2 is
+`requestHeaders` — every access lands one late, which is exactly what the four
+accessors do.
+
+**Eight reductions fail to produce that ordering.** A plain class; a class in
+another module; a class with an unrepresentable member; a subclass; a subclass of
+an `abstract` base; a subclass whose base is in another module; a class whose
+first field is an index-signature type; and two subclasses of one abstract base —
+all emit the base field **first** and read correctly. So the trigger for
+base-last ordering is something none of those has, and it is not inheritance,
+module boundaries, abstractness, or field-type representability on their own.
 
 Recorded unreduced because the real-world instance is unambiguous and the
 compiler lane is looking at `util` now. A fixture would be better and does not
