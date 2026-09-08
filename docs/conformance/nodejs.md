@@ -2840,6 +2840,30 @@ the totals above understate. Three do not:
     diagnostics_channel   2 errors
     timers                4 errors
 
+### And would they link? Two yes, one no
+
+"One fixture from compiling" is worth nothing if the module then fails to link,
+so I asked the linker rather than assuming. Declared `nts_*` bindings against
+the set that actually has C:
+
+    async_hooks           1 declared /  0 with no C
+    diagnostics_channel   0 declared /  0
+    timers                8 declared /  7 with no C
+
+`runtime/node/timers/` contained **no `.c` file at all**, so no amount of
+compiler work would have produced a loadable addon for it. That half is this
+lane's, and it is now written: one `uv_timer_t` and one `uv_check_t`, the
+bookkeeping left in TypeScript where node keeps it. All seven declared symbols
+resolve; the module still does not compile, so this closes a link gap and
+nothing else.
+
+The third handle in that file is a libuv fact worth recording: `uv_backend_timeout`
+does not consider check handles, so with only a `uv_check_t` started the loop
+blocks in poll and a bare `setImmediate` never runs — the handle is active, the
+loop is alive, and it is asleep. Node overrides the backend timeout itself; an
+addon has no such hook, so a permanently unreferenced `uv_idle_t` is started
+alongside to force the iteration.
+
 ### Two modules are one fixture from compiling
 
 `async_hooks`'s two errors are **the same call site**:
