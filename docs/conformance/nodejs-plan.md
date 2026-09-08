@@ -34,9 +34,11 @@ modules, 0 hollow, 22 of 22 typechecking.** **Compiled artifact: 1 green and 1
 partial** — `punycode` 2 of 2, and `os` 4 of 7 with 17 of the 23 names its shape
 wants.
 
-**A third axis exists and had never been measured: the native half.** 308 native
-bindings are declared across `runtime/node`; **183 have a C implementation and
-125 do not**, existing only as a `declare function` and a stand-in. `dgram` has
+**A third axis exists and had never been measured: the native half.** 309
+distinct native bindings are declared across `runtime/node`; **177 link and 132
+do not**, existing only as a `declare function` and a stand-in. Settled with
+`nm` over every `.c` under `runtime/` rather than a regex, after two regexes
+gave two different answers and the first had never looked in `runtime/c`. `dgram` has
 21 of 21 missing and no `.c` file at all; `net` 28 of 30; `fs` 60 of 133. So
 compiling is necessary and not sufficient — `dgram` would fail to *link* whatever
 the compiler does.

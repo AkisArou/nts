@@ -4871,26 +4871,42 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
-## 125 of 308 bindings have no C at all
+## 132 of 309 bindings have no C at all
 
-The compiled axis is not only blocked by compiler defects. **Of 308 declared
-native bindings, 183 have a C implementation and 125 do not** — they exist as
+The compiled axis is not only blocked by compiler defects. **Of 309 distinct
+declared native bindings, 177 link and 132 do not** — they exist as
 `declare function` in TypeScript and as a stand-in in `bindings.node.mjs`, and
 nowhere else.
+
+**This said 125 of 308 for most of a day and understated the gap by seven**, in
+the direction that flattered the work. Two mistakes, and the second only showed
+up because of the first. The count came from a regex over `runtime/node/<mod>/*.c`,
+which (a) never looked in `runtime/c`, where shared bindings like
+`nts_checkpoint` actually live, and (b) matched six things that are not
+definitions. Noticing (a) while writing a `timers` probe forced a re-run, and the
+re-run disagreed with itself — so neither regex was trusted and the question was
+settled with a linker instead: every `.c` under `runtime/` compiled standalone
+(14 objects, 0 failures) and `nm -g --defined-only` asked for the symbols that
+actually exist. **That is the number below, and it is the one a link would
+agree with**, which is the only opinion that matters here.
+
+The row that was missing entirely is `internal`: 22 declared, 7 with no symbol.
+It had been folded into "the rest" as complete.
 
 | module | declared | in C | no C |
 | --- | ---: | ---: | ---: |
 | `fs` | 133 | 73 | **60** |
-| `process` | 55 | 47 | 8 |
 | `net` | 30 | 2 | **28** |
 | `dgram` | 21 | 0 | **21** |
-| `zlib` | 20 | 20 | 0 |
-| `os` | 18 | 18 | 0 |
-| `util` | 10 | 10 | 0 |
+| `process` | 55 | 47 | **8** |
+| `internal` | 22 | 15 | **7** |
 | `timers` | 8 | 1 | **7** |
-| `assert` | 1 | 0 | 1 |
-| the rest | 12 | 12 | 0 |
-| **total** | **308** | **183** | **125** |
+| `assert` | 1 | 0 | **1** |
+| the rest | 60 | 60 | 0 |
+| **distinct** | **309** | **177** | **132** |
+
+The module column sums to 330 rather than 309 because a shared binding is
+declared by every module that uses it; the distinct row is the one to quote.
 
 `runtime/node/dgram/` contains **no `.c` file whatsoever**. `runtime/node/timers/`
 contains none either. Verified by hand on a sample: `nts_udp_new`,
