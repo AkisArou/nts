@@ -4043,6 +4043,25 @@ an allocator expecting it to — with `-DNTS_POISON=1` riding along so a freed
 slot reads `a5d03c3c3c3c3c3c` rather than a zero indistinguishable from a
 legitimate one.
 
+**Run over every module, not the seven that were known to build.** The lane's
+list used to be hardcoded, and the first thing deriving it from `runtime/node`
+produced was an error nobody had seen: `timers` had not been compiled since the
+microtask binding was renamed, so `blockers/callback-binding` lived in a module
+the instrument never built. Complete sheet, twenty-two modules:
+
+| builds and runs | does not build |
+| --- | --- |
+| `buffer` `os` `path` `punycode` | `assert` `async_hooks` `console` `dgram` |
+| `querystring` `string_decoder` `url` | `diagnostics_channel` `events` `fs` `http` |
+| | `net` `process` `readline` `stream` |
+| | `timers` `util` `zlib` |
+
+Seven build, fifteen do not, and **`punycode` is the only one that passes** — 2
+of 2, 55 retain/release sites, 80,128 differential comparisons against node with
+0 divergences. The other six all fail at the export table or the shape rather
+than at anything counting reveals, so the counted lane tells us nothing new about
+them and says so.
+
 | module | result | rc sites, before → after module evaluation |
 | --- | --- | ---: |
 | `buffer` | 0 passed, 54 failed, 41 n/a | 271 → 271 |
@@ -4382,7 +4401,43 @@ number. The compiler lane is publishing it as `nts_closure_call_slot`; until it
 appears in `nts_runtime.h`, `microtask.c` carries `0` behind a `TODO` and those
 three modules are not to be run against it.
 
-**It is fixtured, and the sentence that stood here said it could not be.** That
+**The slot is the *second* problem, and this document reported it as the only
+one for most of a day.** `internal/microtask.c` does not compile at all. A
+`declare function` taking a callback emits its prototype with a
+**program-specific** closure struct:
+
+    program.c:1864  void nts_node_enqueue_microtask(NtsObj_Closure20 *);
+    microtask.c:47  void nts_node_enqueue_microtask(NtsHeader *callback)
+    error: conflicting types for 'nts_node_enqueue_microtask'
+
+The number is assigned per program — `timers` gets 20, `diagnostics_channel`
+gets 18 — so a `.c` compiled against every module cannot name the parameter type,
+and no other spelling is compatible rather than coercible.
+`blockers/callback-binding` reduces it to eight lines.
+
+**It stayed invisible because the instrument never built the module.** `timers`
+had not been compiled since the binding was renamed, and the counted lane's list
+was hardcoded to the seven modules that built the night it was written — which
+does not include `timers`. The error belonged to a module the lane could not
+see. It surfaced within minutes of the lane being changed to derive its set from
+`runtime/node` rather than recall it.
+
+And the reasoning error underneath is worth naming: this lane traced the original
+`NtsTask` mismatch, found the binding collision, renamed it, and reasoned forward
+to the slot — correctly, and one step too far. **Nothing ever asked whether the
+file compiled.** The blocker reported was the one gone looking for rather than
+the one in front of it.
+
+Two measured facts sit under it. `nts_schedule_unreferenced_immediate` and
+`nts_on_collected` also take callbacks and **neither has a C implementation at
+all** — they exist only as stand-ins in `bindings.node.mjs` for the interpreted
+lane, so no callback-taking binding in this profile has ever had a working
+compiled implementation. And what would fix it is a *stable* parameter type at
+the runtime boundary — `NtsHeader *`, or the `NtsTask` shape `nts_callback_task`
+already takes — which would also make the slot moot if the stable form carried
+the call site with it.
+
+**The slot is fixtured, and the sentence that stood here said it could not be.** That
 sentence read: "there is no fixture for this and there cannot usefully be one",
 on the grounds that nothing refuses, `emit-c` succeeds, clang succeeds, and the
 addon links and loads. All of that is true and none of it is a reason. It was a
