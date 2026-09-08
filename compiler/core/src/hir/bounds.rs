@@ -29,7 +29,7 @@
 
 use super::facts::Facts;
 use super::flow::Analysis;
-use super::{BlockId, Func, OpKind, ValueId};
+use super::{BlockId, Func, HirType, OpKind, ValueId};
 
 /// Turn off the checks that cannot fail, and report how many.
 pub fn eliminate_checks(
@@ -66,10 +66,32 @@ pub fn eliminate_checks(
                 continue;
             }
             match &mut func.values[value.0 as usize].kind {
-                OpKind::ArrayGet { checked, .. }
-                | OpKind::ArraySet { checked, .. }
-                | OpKind::StringUnitAt { checked, .. } => {
+                OpKind::ArrayGet { checked, .. } | OpKind::ArraySet { checked, .. } => {
                     *checked = false;
+                    removed += 1;
+                }
+                // A code unit is retyped where it stops being able to be NaN.
+                //
+                // `charCodeAt` is `f64` because out of range it answers NaN, and
+                // that is the whole of why: in range it is a `uint16`, and
+                // `nts_unit` returns one. This is the line that proves the index
+                // is in range, so it is the line where the double stops being
+                // the honest type.
+                //
+                // `specialize` already believes this -- its `usable` arm says a
+                // `checked: false` read "is a `uint16`: integral, in range, and
+                // not NaN" -- but it can only act through a class that *pays*,
+                // and a comparison does not pay. `quoteJSONString` classifies
+                // every unit against `92`, `32`, `34` and `55296` and does no
+                // arithmetic at all, so the class was declined and every
+                // comparison stayed floating point. The fact does not depend on
+                // what the value is later used for.
+                OpKind::StringUnitAt { checked, .. } => {
+                    *checked = false;
+                    func.values[value.0 as usize].ty = HirType::Int {
+                        bits: 32,
+                        signed: true,
+                    };
                     removed += 1;
                 }
                 _ => {}
