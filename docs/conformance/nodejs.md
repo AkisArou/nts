@@ -2879,6 +2879,56 @@ because it is a measurement of *this* profile that nobody had taken, and because
 a module that compiles and is slow is a different problem from one that does not
 compile — this axis will reach the first kind eventually.
 
+## Why the compiling modules publish nothing: two causes, nearly equal
+
+Ten modules that compile and publish nothing or almost nothing, counted by the
+reason `emit-c` gives for each export it cannot wrap:
+
+    module                 cannot name   not compiled   other
+    assert                     21             2           2
+    console                     4             1           0
+    events                      7             7           0
+    stream                     11            16           2
+    url                         3            10           2
+    zlib                       30            23           0
+    querystring                 1             7           0
+    string_decoder              2             0           0
+    diagnostics_channel         2             5           0
+    dgram                       1             1           0
+    -----------------------------------------------------------
+                               82            74           6
+
+**Not one cause. Two, and they are the same size.**
+
+*is not a function this backend can name* — 82 sites — is a **backend
+capability**: a class, or a value, or a `const` alias. `assert` is the extreme
+case at 21 of 25, and the shape is
+`export const deepEqual = looseAssertions.deepEqual` — an alias to a property of
+an object, which is the same thing the ledger already records for `os`'s four
+native-binding aliases.
+
+*no function of that name was compiled* — 74 sites — is a **refusal**, and those
+are the fixtures already filed.
+
+### This makes `export-class` the largest lever on the axis
+
+It was sized at three modules — `string_decoder`, `async_hooks`,
+`diagnostics_channel` — when the twelve behind `duplicate-type-name` could not
+be measured at all. Now that they compile, it is **82 export sites across ten
+modules**, and it is half of everything standing between this profile and a
+green module.
+
+It also keeps the ordering argument that put it last: publishing a class whose
+methods are refused is worse than the refusal. Both halves have to move, and the
+74 refusals are the other half.
+
+**The question this answers is one I asked in the wrong shape.** "Nine modules
+at zero exports — if a single cause put nine there, it is the largest lever
+left" assumed a single cause because nine identical outcomes suggested one.
+They are two causes in a 50/50 split, and the only reason to know that rather
+than guess is that the reasons were counted per module instead of read off one
+of them.
+
 ## Eleven modules started compiling and not one gained a passing test
 
 Measured on `target/release/nts` at 15:39, pinned to scratch, from a worktree at
