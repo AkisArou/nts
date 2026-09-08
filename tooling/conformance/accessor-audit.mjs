@@ -61,6 +61,7 @@ const accessor = /^[A-Za-z_][\w *]*?\s(\w+)__get_(\w+)\((\w+) \* v0\)\s*\{\n([\s
 
 let suspicious = 0;
 let checked = 0;
+const names = new Set();
 for (const file of files) {
   if (!existsSync(file)) {
     console.log(`  ${file}: absent`);
@@ -76,7 +77,10 @@ for (const file of files) {
     // a getter that delegates -- `get ok()` compiles to a call taking `v0` --
     // uses the receiver without dereferencing it. That first draft would have
     // sent a number four times too large to another lane.
-    if (body.includes("(void)v0;")) hits.push(`${type}.${name}`);
+    if (body.includes("(void)v0;")) {
+      hits.push(`${type}.${name}`);
+      names.add(name);
+    }
   }
   if (hits.length > 0) {
     suspicious += hits.length;
@@ -85,9 +89,57 @@ for (const file of files) {
   }
 }
 
+// A count of *instances* is not a count of defects: the same accessor is emitted
+// into every module whose program contains its class, so `Event.eventPhase`
+// alone appears in a dozen. Reporting instances gave 2,442, which reads as a
+// catastrophe and is really 51 names seen many times each.
+//
+// And a getter may legitimately ignore its receiver -- `WebSocket.CONNECTING` is
+// a `static readonly = 0`. So the names are classified against the source: a
+// getter whose body reads `this.` and whose C ignores `v0` is wrong; one whose
+// body reads no state is correct to be a constant.
+const getterBodies = new Map();
+const getterPattern =
+  /^\s*(?:public |private |protected |static )*get ([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?::[^{]+)?\{([^}]*)\}/gm;
+for (const dir of [join(ROOT, "runtime/node"), join(ROOT, "runtime/web-platform/src")]) {
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".tsbuild") continue;
+      const full = join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".ts")) {
+        const text = readFileSync(full, "utf8");
+        for (const m of text.matchAll(getterPattern)) {
+          const list = getterBodies.get(m[1]) ?? [];
+          list.push(m[2]);
+          getterBodies.set(m[1], list);
+        }
+      }
+    }
+  };
+  if (existsSync(dir)) walk(dir);
+}
+
+const wrong = [];
+const constant = [];
+const unclassified = [];
+for (const name of [...names].sort()) {
+  const found = getterBodies.get(name);
+  if (found === undefined) unclassified.push(name);
+  else if (found.some((b) => b.includes("this.") || b.includes("this["))) wrong.push(name);
+  else constant.push(name);
+}
+
 console.log(
-  `\n  ${checked} accessor(s) examined, ${suspicious} emitted with the receiver unused`,
+  `\n  ${checked} accessor(s) examined, ${suspicious} emitted with the receiver unused` +
+    `\n  ${names.size} distinct name(s) among them:` +
+    `\n    ${String(wrong.length).padStart(4)} whose source getter reads \`this.\` -- wrong` +
+    `\n    ${String(constant.length).padStart(4)} whose source getter reads no state -- correct` +
+    `\n    ${String(unclassified.length).padStart(4)} with no getter found in source`,
 );
+if (wrong.length > 0) {
+  console.log(`\n  miscompiled: ${wrong.join(", ")}`);
+}
 // Not an exit code anything gates on: a getter may legitimately ignore `this`.
 // The number is the signal, and a new one appearing is the thing to look at.
 process.exitCode = 0;
