@@ -18,7 +18,7 @@ lane has moved.
 | `node-utf8` | 6.86x | blocked: 62% is `toInt32`, `narrow.rs` owns it |
 | `symbol-keyed-map` | 2.95x | blocked: 52% is `toInt32` |
 | `array-from` | 2.14x | **priced: 5.9x on the set walk** -- the lowering's, below |
-| `array-predicates` | 1.74x | probed: the reference preallocates, see below |
+| `array-predicates` | 1.74x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 2.66x -> **1.32x** | unsigned remainder |
 | `optional-chain` | 3.00x -> **1.26x** | unsigned remainder |
 | `awfy-sieve` | 1.25x | narrowing family -- blocked, not an assembly row |
@@ -164,6 +164,58 @@ Each cost a measurement. The number in brackets is what the fix was worth.
   the benchmark does not have. One JVM per arm, chosen by argv, fixed it. And
   the first clean run still had one 21,991 outlier against a 12,620 median, so
   five samples rather than two is what makes this readable.
+
+- **Removing `NtsArrayD.keepFirst`'s zero-fill of the discarded tail.**
+  `filter` calls it eight times an operation on `array-predicates`, and a
+  `double` pins nothing, so the fill releases nothing. **[0%, and the premise
+  was wrong twice over.]**
+
+  Wrong the first time because **the fill is not garbage-collection hygiene**.
+  `runtime_regression` failed in one run -- `array content: 315.0 != 0.0` --
+  because its operation 5 writes past the end, and `set` extends `length` over
+  whatever the capacity is still holding, where JS says a hole reads as `0`.
+  The clear is there so a slot above `length` cannot become *readable* stale.
+  `NtsArrayL` has both reasons and keeps it; this class has only the second,
+  and the second is enough. No profile could have shown that.
+
+  Wrong the second time because moving it to `set` -- the only moment a hole
+  becomes readable, and a thing `array-predicates` never does -- keeps the
+  invariant, does strictly less work, and measures as nothing:
+
+      head  min 3980.9   p25 4099.1   median 4233.3   (n=14)
+      new   min 3977.4   p25 4128.1   median 4174.2   (n=14)
+
+  **The two earlier readings that said 2.4% and 5.0% were noise**, and the tell
+  is that their minima -- 4212 and 4159 -- are *higher* than this run's 3981.
+  A run whose floor is worse than another run's floor was more contended, so
+  its "effect" was contention landing unevenly on two arms. Comparing minima
+  across runs is what caught it; comparing an effect within one run did not.
+
+  Reverted to a comment, because the thing worth keeping is why the fill exists.
+  The patch is at `~/.cache/nts-arrayd-fill`.
+
+  **And a trap for anyone editing `runtime/jvm`: this was a comment-only change
+  and it still broke `the_jar_matches_the_sources_it_was_built_from`.** Twenty
+  four lines of doc comment shift every later method's `LineNumberTable`, so the
+  class bytes move. The jar is a function of the file, not of the semantics.
+  Regenerate on any source edit.
+
+- **Where `array-predicates` actually stands: at its floor for this backend.**
+  Rule 1 first, and it disposed of the obvious reading. The profile shows 37.6%
+  of our samples outside `predicates$whole` -- `push` 15.5%, `of` 11.0%,
+  `Arrays.copyOf` 6.2%, `fill` 3.0% -- against the reference's **92.6% in one
+  frame**, which looks like call overhead and is not. `PrintInlining` says
+  `push`, `of`, `keepFirst`, `count` and `Arrays.fill` all inline **hot** into
+  `predicates$whole`. The split frames are attribution; the reference's
+  allocation and zeroing are inside its 92.6% for the same reason ours are
+  outside.
+
+  So what is left is the growable wrapper against a bare `double[]`, which
+  `ref.java`'s own comment already settled by writing the program nine ways:
+  hand-written Java over `nts.rt.NtsArrayD` lands **within 0.3%** of what we
+  emit. There is no codegen gap in this row. It is `arrays_can_grow` being
+  whole-program -- one `push` anywhere puts every array behind the wrapper --
+  and per-array growability is `hir::elements`', not this lane's.
 
 ## Open, and whose
 

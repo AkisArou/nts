@@ -220,6 +220,30 @@ public final class NtsArrayD {
         a.length = n;
         return a;
     }
+    /**
+     * Truncate, clearing the slots given up.
+     *
+     * <p>**The fill is not garbage-collection hygiene, and reading it as that
+     * is wrong.** A `double` pins nothing, so on this class the clear releases
+     * nothing -- which is exactly the reasoning that led me to delete it. It is
+     * there so that a slot above `length` cannot become *readable* with a stale
+     * value in it: `set` past the end extends `length` over whatever the
+     * capacity is holding, and JS says those holes read as 0.
+     * `runtime_regression`'s operation 5 is that program, and it failed in one
+     * run with `array content: 315.0 != 0.0`.
+     *
+     * <p>{@link NtsArrayL#keepFirst} fills with `null` and has both reasons.
+     * This one has only the second, and the second is enough.
+     *
+     * <p>Moving the fill to `set`, where the hole actually becomes readable,
+     * keeps the invariant and does strictly less work for a program that
+     * truncates and never writes past the end -- which `array-predicates` is,
+     * eight `filter`s an operation. **It is worth nothing: 3980.9 against
+     * 3977.4 ns at the minimum over fourteen runs each.** The two earlier
+     * readings that said 2.4% and 5.0% were taken on a busier machine than
+     * they looked -- their minima were *higher* than this run's, which is how
+     * they were caught. The patch is at `~/.cache/nts-arrayd-fill`.
+     */
     public static void keepFirst(NtsArrayD a, double count) {
         int keep = Math.max(0, Math.min((int) count, a.length));
         Arrays.fill(a.items, keep, a.length, 0.0);
