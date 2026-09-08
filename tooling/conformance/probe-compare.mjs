@@ -586,6 +586,59 @@ const PROBES = [
       return out;
     },
   },
+  {
+    file: "fs-dir.ts",
+    module: "fs",
+    // Directory reading and positional I/O -- what readdirSync, opendirSync and
+    // the positional read/write forms are built on. The opendir trio is a handle
+    // lifecycle, which is the kind of binding that goes wrong on the third call
+    // rather than the first, so it is walked at three batch sizes.
+    checks(m) {
+      const fsm = require("node:fs");
+      const dir = mkdtempSync(join(tmpdir(), "nts-dir-"));
+      const out = [];
+      try {
+        writeFileSync(join(dir, "alpha"), "0123456789");
+        writeFileSync(join(dir, "beta"), "x");
+        fsm.mkdirSync(join(dir, "gamma"));
+        fsm.symlinkSync("alpha", join(dir, "delta"));
+        // UV_DIRENT_FILE 1, UV_DIRENT_DIR 2, UV_DIRENT_LINK 3.
+        const nodeRows = fsm.readdirSync(dir, { withFileTypes: true })
+          .map((d) => `${d.isDirectory() ? 2 : d.isSymbolicLink() ? 3 : 1}:${d.name}`)
+          .sort().join("|");
+        // readdir order is unspecified, so the comparison sorts. It sorts here
+        // rather than in the probe because `sort` on an array of strings is
+        // itself refused -- blockers/sort-array-of-references.
+        const sorted = (v) => v.split("|").filter(Boolean).sort().join("|");
+        out.push({ label: "scandir rows and types", mine: sorted(m.probeScandir(dir)), theirs: nodeRows });
+        out.push({ label: "scandir count", mine: m.probeScandirCount(dir), theirs: fsm.readdirSync(dir).length });
+        for (const batch of [1, 2, 32]) {
+          out.push({ label: `opendir walk batch=${batch}`, mine: sorted(m.probeOpendirWalk(dir, batch)), theirs: nodeRows });
+        }
+        out.push({ label: "dir close then close", mine: m.probeDirCloseTwice(dir), theirs: "0:-9" });
+        let enoent = 0;
+        try { fsm.opendirSync(join(dir, "nope")); } catch (e) { enoent = e.errno; }
+        out.push({ label: "opendir missing errno", mine: m.probeOpendirMissing(join(dir, "nope")), theirs: enoent });
+        const f = join(dir, "alpha");
+        out.push({ label: "read at 0 length 4", mine: m.probeReadAt(f, 4, 0), theirs: "0123" });
+        out.push({ label: "read at 4 length 3", mine: m.probeReadAt(f, 3, 4), theirs: "456" });
+        out.push({ label: "write at offset 2", mine: m.probeWriteAt(f, "ABC", 2), theirs: 3 });
+        // The bytes before the offset have to survive, which the write's own
+        // return value cannot show.
+        out.push({ label: "write left the prefix", mine: readFileSync(f, "utf8"), theirs: "01ABC56789" });
+        // Eight columns, not node's seven public StatFs properties: stats.ts:246
+        // reads indices 0 through 7.
+        out.push({ label: "statfs column count", mine: m.probeStatfsCount(dir), theirs: 8 });
+        out.push({ label: "statfs bsize", mine: m.probeStatfsBsize(dir), theirs: fsm.statfsSync(dir).bsize });
+        out.push({ label: "fchmod sets mode", mine: m.probeFchmod(f, 0o640), theirs: 0o640 });
+        out.push({ label: "futimes sets mtime", mine: m.probeFutimes(f, 1000, 2000), theirs: 2000000 });
+        out.push({ label: "errno clean after success", mine: m.probeErrnoAfterSuccess(dir), theirs: 0 });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+      return out;
+    },
+  },
 ];
 
 const only = process.argv.slice(2).find((a) => !a.startsWith("-"));
