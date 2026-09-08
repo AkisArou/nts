@@ -2816,6 +2816,37 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## The compiled axis has not moved all day, and that is the finding
+
+Re-measured at 11:16 on the current binary, after the closure-merge fix, the
+materialize repair and the signature-layout fix landed:
+
+    green                  1   punycode, 2 of 2
+    partial                1   os, 4 of 7
+    built-exports-nothing  3   querystring, string_decoder, url
+    built-exports-partial  1   buffer
+    every-pass-hollow      1   path
+    c-did-not-compile     15
+
+**Identical to the morning's table.** Three compiler fixes landed between them
+and none touched this. That is worth stating rather than re-measuring hopefully:
+the fixes were for wrong *answers*, and what stops these modules is *refusals*.
+A wrong answer outranks a refusal — that ordering has been right all day — but it
+means this axis stays where it is until the refusals are taken.
+
+**`os` is two fixtures from green and they must go together.** It fails three of
+seven and all three are `os.constants` being undefined:
+
+    computed-member-write        `table[name] = value`, os/src/main.ts:541
+    heterogeneous-tuple-return   nts_os_constants(): [string[], string[], number[]]
+
+Fixing the first alone moves `os` from a refusal to a *build failure*, which is
+why they are one piece of work rather than two. `string_decoder` is the fourth
+module and wants `arraybufferview-parameter` plus `export-class`.
+
+All four still reproduce on the newest binary. The compiler lane has taken the
+first pair.
+
 ## The whole compiled axis, measured in one run
 
 This table had been owed for a long time and was started four times: twice
