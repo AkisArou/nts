@@ -1191,6 +1191,46 @@ fn collect_function_values(
             }
         }
     }
+    // A shorthand property is a use as a value that the loop above cannot see.
+    //
+    // It tests `node.symbol` for `FUNCTION`, and `{ lowers }` is one node whose
+    // symbol is the *property's* -- so a function named there is never wrapped,
+    // and the reference has nothing to resolve to. The same fact that makes
+    // `shorthand_value_symbol` resolve by name makes this have to.
+    //
+    // By name against the function symbols, and only those: a shorthand naming
+    // a local or a global needs no wrapper, and this list is the one that
+    // decides which programs carry a closure table at all.
+    let spelled: Vec<&str> = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.kind == NodeKind::Syntax(syntax::SHORTHAND_PROPERTY_ASSIGNMENT))
+        .filter_map(|(index, _)| {
+            let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+            let [name] = probe.children(id)[..] else {
+                return None;
+            };
+            snapshot.nodes.get(name.0 as usize)?.text.as_deref()
+        })
+        .collect();
+    if !spelled.is_empty() {
+        for record in &snapshot.symbols {
+            if !record.flags.contains(SymbolFlags::FUNCTION)
+                || !spelled.contains(&record.name.as_str())
+            {
+                continue;
+            }
+            for declaration in &record.declarations {
+                if probe.kind_of(*declaration) == Some(syntax::FUNCTION_DECLARATION)
+                    && !wrapped.contains(declaration)
+                {
+                    wrapped.push(*declaration);
+                }
+            }
+        }
+    }
+
     for declaration in wrapped {
         closures.push(ClosureInfo {
             node: declaration,
@@ -3703,6 +3743,20 @@ fn erasable(ty: &HirType) -> bool {
                     // a question the runtime can answer, and the value is
                     // sitting right there.
                     | ManagedType::Symbol
+                    // And a view whose element type the declaration does not
+                    // name, which is the *fifth* time this list has gone stale
+                    // and the first where the omission was made the same hour
+                    // the variant was. `AnyView` is one `NtsView *` with an
+                    // `NTS_TAG_OBJECT`, exactly as `View` beside it is, and the
+                    // C backend's `erased_tag` was taught both at once.
+                    //
+                    // `unknown` in parameter position is what node's validators
+                    // are declared with -- `ERR_INVALID_ARG_TYPE`'s third
+                    // parameter is one, `internal/validators.ts` is imported by
+                    // every module, and `blob.ts` hands it the view it just
+                    // rejected. So a representation that cannot be boxed is a
+                    // representation that cannot be reported on.
+                    | ManagedType::AnyView
             )
     )
 }
@@ -14483,6 +14537,15 @@ impl<'a> FuncBuilder<'a> {
             //
             // That is sound only while the name is unambiguous, so a shadowed
             // one is refused rather than guessed at.
+            //
+            // What the name is resolved *against* is everything a name can
+            // denote, and `lower_named_value` is what it means by that. This
+            // used to be a two-line lookup in the local bindings and nothing
+            // else, which got both halves wrong: a narrowed local was found and
+            // handed over unnarrowed, so `{ first }` refused where
+            // `{ first: first }` compiled; and a module-scope function was not
+            // found at all, so `{ lowers }` read as naming nothing in scope for
+            // a function declared in the same file.
             Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
                 let children = self.children(id);
                 let [name] = children.as_slice() else {
@@ -14494,21 +14557,8 @@ impl<'a> FuncBuilder<'a> {
                     .clone()
                     .ok_or_else(|| self.unsupported(*name, "a shorthand without a name"))?;
 
-                let mut found = self.bindings.iter().filter(|(symbol, _)| {
-                    self.snapshot
-                        .symbols
-                        .get(**symbol as usize)
-                        .is_some_and(|record| record.name == text)
-                });
-                let value = match (found.next(), found.next()) {
-                    (Some((_, value)), None) => *value,
-                    (Some(_), Some(_)) => {
-                        return Err(
-                            self.unsupported(*name, "a shorthand naming a shadowed binding")
-                        );
-                    }
-                    _ => return Err(self.unsupported(*name, "a shorthand naming nothing in scope")),
-                };
+                let symbol = self.shorthand_value_symbol(*name, &text)?;
+                let value = self.lower_named_value(*name, symbol)?;
                 Ok((text, value))
             }
             // Named, for the reason the statement dispatch is: a spread, an
@@ -22075,6 +22125,112 @@ impl<'a> FuncBuilder<'a> {
             .node(id)
             .symbol
             .ok_or_else(|| self.unsupported(id, "an unresolved name"))?;
+        self.lower_named_value(id, symbol)
+    }
+
+    /// The symbol a shorthand property's name refers to, found by name.
+    ///
+    /// The only lookup in this file that is not the checker's, and it exists
+    /// because the checker cannot answer this one from the node: `{ x }` is a
+    /// single node whose symbol is the *property's*, and the value's symbol
+    /// comes from `getShorthandAssignmentValueSymbol`, which the snapshot does
+    /// not carry. So the name is matched against what a name can denote, in the
+    /// order a scope chain would: a local first, because a local shadows.
+    ///
+    /// A shadowed name is refused rather than guessed at. Two bindings of one
+    /// name in scope means this lookup cannot tell which the checker chose, and
+    /// picking either is a coin toss that compiles.
+    ///
+    /// Module scope is every map a module-scope symbol can be in -- a constant,
+    /// a global, one whose initializer was refused, one still deferred -- plus
+    /// the named functions, which are in none of them because a function is not
+    /// a variable. Leaving the last group out is what made `{ lowers }` read as
+    /// naming nothing in scope while `lowers` on its own lowered fine.
+    fn shorthand_value_symbol(
+        &mut self,
+        at: NodeId,
+        text: &str,
+    ) -> Result<nts_semantic_schema::SymbolId, Diagnostic> {
+        let spelled = |snapshot: &SemanticSnapshot, symbol: u32| {
+            snapshot
+                .symbols
+                .get(symbol as usize)
+                .is_some_and(|record| record.name == text)
+        };
+
+        let mut local = self
+            .bindings
+            .keys()
+            .copied()
+            .filter(|symbol| spelled(self.snapshot, *symbol));
+        match (local.next(), local.next()) {
+            (Some(symbol), None) => return Ok(nts_semantic_schema::SymbolId(symbol)),
+            (Some(_), Some(_)) => {
+                return Err(self.unsupported(at, "a shorthand naming a shadowed binding"));
+            }
+            _ => {}
+        }
+
+        let module = self
+            .module
+            .constants
+            .keys()
+            .chain(self.module.variables.keys())
+            .chain(self.module.unsupported.keys())
+            .chain(self.module.deferred.keys())
+            .copied()
+            .find(|symbol| spelled(self.snapshot, *symbol));
+        if let Some(symbol) = module {
+            return Ok(nts_semantic_schema::SymbolId(symbol));
+        }
+
+        // A named function used as a value. Matched the way `lower_named_value`
+        // matches it -- from the symbol to its declarations, not the other way
+        // -- because a `FUNCTION_DECLARATION` node does not carry the symbol;
+        // its name child does, and the symbol is what holds the list.
+        let function = self.snapshot.symbols.iter().enumerate().find(|(_index, record)| {
+            record.flags.contains(SymbolFlags::FUNCTION)
+                && record.name == text
+                && record.declarations.iter().any(|declaration| {
+                    self.closures
+                        .iter()
+                        .any(|closure| closure.wraps && closure.node == *declaration)
+                })
+        });
+        if let Some((index, _)) = function {
+            return Ok(nts_semantic_schema::SymbolId(
+                u32::try_from(index).unwrap_or(u32::MAX),
+            ));
+        }
+
+        Err(self.unsupported(at, "a shorthand naming nothing in scope"))
+    }
+
+    /// Everything a name can denote, keyed by the symbol rather than by the
+    /// node that spells it.
+    ///
+    /// Split out because one node kind cannot get its symbol from itself. A
+    /// shorthand property -- `{ x }` -- is a single node serving as both the
+    /// property name and a reference to a variable, and the checker gives it
+    /// the *property's* symbol; `getShorthandAssignmentValueSymbol` answers the
+    /// other one and the snapshot does not carry it. So that path resolves the
+    /// name by hand and arrives here with what it found, and everything after
+    /// the lookup -- the narrowing, the imports, the constants, the refused
+    /// initializers, the globals, the functions used as values, the provided
+    /// classes -- is shared rather than written twice.
+    ///
+    /// Written twice is what it was. The shorthand path had its own two-line
+    /// lookup against the local bindings, which found a narrowed local and
+    /// handed it over **unnarrowed** -- `{ first }` refused where
+    /// `{ first: first }` compiled, on the same value in the same function --
+    /// and did not look at module scope at all, so `{ lowers }` naming a
+    /// function declared twenty lines above read as "a shorthand naming nothing
+    /// in scope".
+    fn lower_named_value(
+        &mut self,
+        id: NodeId,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> Result<ValueId, Diagnostic> {
         if let Some(value) = self.bindings.get(&symbol.0).copied() {
             let value = self.read_cell(symbol.0, value, id).unwrap_or(value);
             return self.narrowed(id, value);
