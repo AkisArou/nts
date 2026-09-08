@@ -361,7 +361,30 @@ export function callbackify(
 }
 
 
-export const isArray: (value: unknown) => value is unknown[] = Array.isArray;
+/**
+ * `util.isArray`, deprecated as `DEP0044`.
+ *
+ * Node wraps this in `deprecate`, so calling it emits a `DeprecationWarning`
+ * once per process. We exported `Array.isArray` bare, which meant the warning
+ * never fired -- a behavioural difference, not a cosmetic one, and invisible
+ * upstream because node ships no test that calls a deprecated `util` API and
+ * asserts the warning.
+ *
+ * It surfaced as a *name*: `test/export-surface-static.js` compares each
+ * function's `name` against node's, and node's is `"deprecated"` because that
+ * is what the wrapper is called. The name was the symptom; the missing warning
+ * was the defect.
+ *
+ * The type is no longer a guard, and that is not a weakening: node's wrapped
+ * `util.isArray` returns a boolean and narrows nothing, so a guard here would
+ * be claiming something the module it mirrors does not do. Everything inside
+ * this file that needs narrowing uses `Array.isArray` directly.
+ */
+export const isArray: (value: unknown) => boolean = deprecate(
+  (value: unknown): boolean => Array.isArray(value),
+  "The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.",
+  "DEP0044",
+);
 
 export default {
   inspect,
