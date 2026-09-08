@@ -109,8 +109,26 @@ only a helper's *return* type -- the cursor needs its **argument** narrowed too,
 and `narrowed`'s rule ("every use is an integral conversion") does not currently
 admit "used as the argument of a helper that has an int overload".
 
-The two fixes are alternatives, not complements: a bulk keys-into-array helper
-removes the loop and makes the cursor moot. Agree which before building either. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
+**But the int overloads cannot apply on their own, checked before building
+them.** The cursor is an `f64` *block parameter* incremented by an `f64` add:
+
+    b13(%50: f64, %52: f64):
+      %58 = call.extern nts_map_key_at(%14, %50) : erased
+    b15(%51: f64, %53: f64):
+      %64 = add %51, %81 : f64
+      %65 = call.extern nts_map_next(%14, %64) : f64
+
+That is the same integer-in-a-double-slot as `node-utf8`'s `%7`, so the 3.24x
+above is what the walk costs *once the cursor is an int* -- a hand-written loop
+that had already assumed the narrowing. Holding it as one needs a fixpoint over
+the cycle {block parameters, `add 1`, `next`'s result}, which is either
+`narrow.rs`'s range work or a backend-local extension of `intcall` from a single
+value to a cycle.
+
+So this row is blocked on the same thing as `node-utf8` and `symbol-keyed-map`,
+and the JVM half is the int overloads, which are worth nothing until the cursor
+narrows. **The scope of that upstream fix is wider than one row**: every `for
+(const x of set)` in every program lowers to this pair. `instanceof`'s residual 12% is the `uirem` guard branch; the agreed
 fix is `specialize` typing a provably non-negative `rem : u32` as `i32`, which
 is the middle end's, so ask rather than re-deriving a range in the backend.
 
