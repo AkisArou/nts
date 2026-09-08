@@ -127,6 +127,43 @@ for (const name of modules) {
     }
   }
 
+  // The same argument as the precondition above, one level down: a *spec* that
+  // names nothing real compares two identical failures and reports agreement.
+  // `m.ucs3.decode(s)` throws the same TypeError on both sides, and a corpus
+  // with that typo in it reported 574 comparisons and 0 divergences while
+  // testing nothing. Demonstrated with exactly that typo before this was
+  // written, in the addon lane, which has the same guard.
+  //
+  // Node is the oracle, so the question is put to node: if it cannot answer a
+  // spec for any fixed input, the spec is wrong rather than the implementation.
+  {
+    const broken = [];
+    for (const spec of corpus.calls) {
+      const label = spec.label ?? spec.name;
+      const answered = corpus.fixed.some((input) => {
+        try {
+          if (typeof spec.call === "function") {
+            spec.call(upstream, input);
+            return true;
+          }
+          const fn = upstream[spec.name];
+          if (typeof fn !== "function") return false;
+          fn(...spec.args(input));
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      if (!answered) broken.push(label);
+    }
+    if (broken.length > 0) {
+      console.error(`${name}: node itself never answers ${broken.join(", ")};`);
+      console.error(`  those specs compare two failures, which agree and mean nothing.`);
+      failed = true;
+      continue;
+    }
+  }
+
   let compared = 0;
   let diverged = 0;
   const absent = new Set();
