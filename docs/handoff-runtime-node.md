@@ -8,7 +8,7 @@ repository without stepping on each other.
 
 - `runtime/node/**` — the modules themselves.
 - `tooling/conformance/**` — the harness that runs node's own tests against
-  them. It is *not* a gate step, so it is yours to change.
+  them. It is _not_ a gate step, so it is yours to change.
 
 ## What you must not touch
 
@@ -17,7 +17,7 @@ repository without stepping on each other.
 - `examples/**`, `benches/**`, `docs/conformance/typescript.md`,
   `docs/records/**` — the compiler session's.
 - Never run `cargo build`, `cargo test` or `cargo clippy`, and **never** `cargo
-  fmt`: nothing gates Rust formatting here and one run rewrote twenty-seven
+fmt`: nothing gates Rust formatting here and one run rewrote twenty-seven
   files.
 
 ## The loop
@@ -59,7 +59,7 @@ expected — they are counted elsewhere and are not a failure.
 ## Machine etiquette
 
 Thirty-two cores, shared. The compiler session runs the full gate (~15 minutes,
-saturating) and benchmarks (~25 minutes, needing a *quiet* machine — a noisy
+saturating) and benchmarks (~25 minutes, needing a _quiet_ machine — a noisy
 neighbour makes the numbers wrong, not merely slow).
 
 The marker is a directory, held for both:
@@ -85,7 +85,7 @@ three sessions on thirty-two cores:
         taskset -c 24-31 <command>
 
 **Pinning does not make a benchmark run safe.** A benchmark needs the machine
-*quiet*, not merely a lane: cores share last-level cache, memory bandwidth and
+_quiet_, not merely a lane: cores share last-level cache, memory bandwidth and
 turbo headroom, so a neighbour saturating 8–31 changes the numbers on 0–7. The
 lock is the mechanism for that, and it is the one to respect. Pinning is a
 courtesy on top of it for builds and test sweeps.
@@ -102,6 +102,62 @@ courtesy on top of it for builds and test sweeps.
   growable wrapper. Measured by source proxy, **20 of the 23 directories** here
   trip it against **2 of 93** examples. If you remove the last growing call from
   a module, say so — it changes that module's representation entirely.
+
+## The instruments here, and how each of them has lied
+
+Every tool in `tooling/conformance/` has been wrong at least once, and in each
+case the output looked exactly like a correct run. These are the specific ways.
+
+**A baseline list nobody updates manufactures progress.** `build-floor.sh` held
+nine modules while twenty built, so a run printed `11 newly building` — against a
+binary carrying an in-progress compiler change, where it read exactly like that
+change's doing. A stale floor does not merely miss a regression. Re-derive the
+list, or check the date on it.
+
+**A verdict word can be the reassuring one for the alarming case.**
+`blockers-check.mjs` printed `FIXED` when a *guard* stopped holding — the outcome
+that needs a person fastest, labelled with the word that stops them looking. It
+prints `REGRESSED` now. When you add a check, ask which of its outcomes is the
+one you would least like to be quiet.
+
+**A fixture that reproduces can still be about the wrong thing.** `emits-c` is a
+substring match, and a substring taken from broken output can appear in correct
+output; five fixtures were in that state at once. Worse, a fixture can reproduce
+the *text* without ever having had the *condition* — the stopping rule "the
+smallest program that produces the error I saw" is wrong, because **the smallest
+program producing the text is not the smallest program having the defect**.
+
+**So every fixture carries a control that must stay clean**, written into the
+file, with prose saying what it means if it ever starts failing. One control
+tells you the defect is present; a second tells you what the defect *is*. Three
+fixtures were named for the wrong construct until their controls were added —
+one was "narrowed into an object literal" and is really about one *spelling* of
+them. A fourth kind exists, found by the compiler lane: a control that
+*suppresses* the defect it controls for, which makes the fixture green rather
+than merely uninformative.
+
+**Guard forms need controls too.** `compiles`, `once-c` and `lowers` were each
+pointed at something false to confirm they said so.
+
+**Write down which checks have never fired.** The `NOT ITS OWN` check shipped
+with a comment saying it was uncontrolled and guarded a state that did not yet
+exist. It fired for the first time months later and was **wrong**. The note is
+the only reason that was a minute's diagnosis.
+
+**Say which lane a number is from, and what it is a count of.** A refusal count
+over a module's whole tsconfig cone is not a count of what blocks that module —
+most of it is shared code. `AnyView` was 2–7% of every module's cone and three of
+four of `string_decoder`'s *own* refusals; both true, not interchangeable, and
+the cone-wide table got quoted against the question it was not built for.
+
+**A fix's refusal delta is not a measure of the fix.** `buffer` went 79 to 79
+across a real improvement: five refusals cleared and five appeared behind them.
+A cone sizes a queue rather than a step. Show what replaced them.
+
+**Do not extrapolate a diagnostic population from a sample.** Asked what share of
+a 141-site message came from one cause, four sites were sampled and two matched —
+which points at seventy. The measured answer was **nine**. Report `N certain,
+plus an unmeasured share of M`, and leave the second number unsummed.
 
 ## Git
 
@@ -125,6 +181,6 @@ index was reaching for, and a partial commit solves it without the hazard:
 `git commit -- <paths>` never consults staged state, so nothing another session
 has in flight can be swept in.
 
-One thing naming paths does *not* protect against, learned the same day: a named
+One thing naming paths does _not_ protect against, learned the same day: a named
 file can still be dirty with somebody else's work in it. Run `git diff <path>`
 first and confirm the hunks are yours.
