@@ -4949,6 +4949,61 @@ happened to name an export after it.
 Found by `tooling/conformance/binding-probe.sh` on its first run, in `fs`, a
 module that does not compile.
 
+## The shape of every `fs` error, which was wrong in three ways
+
+Node builds these in one C++ helper, so upstream `code`, `errno`, `syscall`,
+`path` and the message cannot disagree with each other and there is nothing a
+test could catch. Here every call site passes its own arguments to
+`uvException`, and all three findings were in that passing.
+
+**Every single-path error carried two own keys node does not have.** `path`,
+`dest` and `filename` were declared as optional class fields, and under
+`useDefineForClassFields` a *declaration* is emitted as an own property whether
+or not it holds anything:
+
+    Object.keys(err)   was: code,dest,errno,filename,path,syscall
+                      node: code,errno,path,syscall
+
+Visible through spread, `JSON.stringify` and `util.inspect`. `filename` is read
+nowhere at all — only `fs/src/watchers.ts` *sets* it, on errors it has already
+caught. Both are attached at the call site now and the class declares neither.
+
+**`err.constructor` was `UVExceptionError`.** Node's `fs` errors are a plain
+`new Error(...)` with fields attached, so `constructor` is `Error` and
+`constructor.name` is `"Error"`. Fixed with the same `override get
+["constructor"]` the `ERR_*` classes in `internal/errors.ts` already use.
+
+**Node's synchronous `opendir` error carries no path at all** — not in the
+message, not as a property; own keys exactly `code`, `errno`, `syscall`. Its
+*asynchronous* and *promises* forms **do** carry it, on the same failure, for the
+same directory. That asymmetry is node's, nothing upstream pins it, and it is
+matched rather than improved: a path there would be more useful and would be a
+divergence.
+
+### The row that is deliberately not asserted
+
+`Object.getPrototypeOf(err) === Error.prototype` is `true` on node and `false`
+here, because node's really *is* an `Error` and this is a subclass. Reaching it
+needs an unchecked assertion, which this profile does not do.
+
+So it is **recorded here and not asserted** — the same rule as `cpSync`. §13 does
+not cover it, so it is not a declared decision either; it is a known limit, and
+the honest place for a known limit is a document rather than a test that pins it.
+
+### Four harness bugs, all in normalisation
+
+The first run of this survey reported **all 25 rows divergent**. `String.replace`
+with a *string* argument replaces only the first occurrence, and a two-path
+message names the temp directory twice — the second half kept a random directory
+name that could never match across two runs.
+
+That is the fourth self-inflicted comparison bug of the day, and they are all in
+the **normalisation** step rather than the comparison: a working directory that
+differs between runs, a separator that also appears in the data, a transport that
+loses a property, and a replace that stops after one. Deciding whether two
+strings are equal is not where this kind of harness goes wrong. Reducing two runs
+to comparable form is.
+
 ## Buffer input forms, and the one thing a test *may* assert about us
 
 Node coerces every `Buffer.from` input in one place, so upstream a test that an
