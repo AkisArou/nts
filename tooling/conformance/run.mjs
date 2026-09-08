@@ -375,4 +375,24 @@ if (asJson) {
       `${tally.skip} skipped, ${tally["n/a"]} not applicable`,
   );
 }
-process.exitCode = tally.fail > 0 ? 1 : 0;
+// A sabotage run where *nothing* failed is almost never the finding it looks
+// like. Blanking a module should break essentially every file that was really
+// measuring it, so "every file still passed" reads as "every test is hollow" --
+// a catastrophic conclusion -- when the likelier cause is that the flag never
+// reached the child and no module was blanked at all. Those are opposite facts
+// and the output cannot currently tell them apart.
+//
+// The web-platform lane hit the same shape from a different angle: a patch whose
+// regex did not match, scored as a passing test, reporting a survivor against an
+// unmodified tree. A mutation harness has to check that the mutation *happened*,
+// not only that something ran afterwards.
+if (sabotage && tally.pass > 0 && tally.fail === 0) {
+  console.log(
+    "\n  SABOTAGE DID NOT APPLY: every file passed with the module blanked, which" +
+      "\n  means it was probably not blanked. Check that NTS_CONFORMANCE_SABOTAGE" +
+      "\n  reached the child before reading this as hollow coverage.",
+  );
+  process.exitCode = 2;
+} else {
+  process.exitCode = tally.fail > 0 ? 1 : 0;
+}
