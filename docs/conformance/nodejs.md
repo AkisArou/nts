@@ -2816,6 +2816,37 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## A prediction, written down before the fix so it can be wrong
+
+Measured 2026-09-08, the same modules on both lanes:
+
+    module           interpreted        compiled
+    path             20 of 21           2 of 21
+    os                8 of 8            4 pass, 4 fail
+    string_decoder    4 of 4            0 of 5
+    fs              344 of 344          does not compile
+
+`path` has **no native half** — it declares no binding that is missing, and it
+is pure TypeScript over `internal`. So the gap between 20 and 2 is not behaviour
+and cannot be: it is that eleven functions are absent from the export table,
+for the single reason traced above.
+
+**The prediction: when `narrowed-bigint` lands, `path` compiled goes from 2 of
+21 to about 20 of 21, without any change to `runtime/node/path`.** Not exactly
+20 — a compiled module can still differ from an interpreted one, and this
+document exists largely because it does — but the direction and the magnitude
+are a claim, and a result of 5, or of 20 with three new failures, refutes the
+reasoning rather than merely disappointing it.
+
+`string_decoder` carries the same shape with a different fix: 4 of 4
+interpreted, 0 of 5 compiled, and the only thing between them is `export-class`.
+
+This is written before the fix deliberately. Every other number in this document
+was recorded after the fact, which makes them measurements but not tests of the
+reasoning that produced them. `fs` at 344 passed and **0 failed** is the control
+for a different question — that the byte-path and error-shape work landed today
+did not regress the lane it was written for.
+
 ## What the building modules are missing, in exports rather than tests
 
 Seven modules build. Only one passes. Asking each addon what it actually
