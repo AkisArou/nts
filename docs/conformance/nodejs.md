@@ -2816,6 +2816,58 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `duplicate-type-name` worked completely, and nothing newly builds
+
+Measured on the compiler lane's 14:18 probe binary, from a pinned tree:
+
+    build floor: 9 of 9 still build, 0 regressed, 0 newly building
+
+    stream 0 redefinitions   fs 0   events 0   assert 0   timers 0
+
+Every name collision is gone in every module checked. **And not one of the
+twelve compiles.** Both facts are the result.
+
+What the fix did was uncover the layer clang's twenty-error limit had been
+hiding. Those modules were never twelve-modules-from-compiling; they were
+twelve-modules-from-being-**measurable**, which is the caveat attached to the
+reach number when it was reported — and it turned out to be the whole story
+rather than a hedge.
+
+    stream    8 operand of type NtsValue    4 incompatible pointer types
+    fs        8 operand of type NtsValue    3 incompatible pointer types
+    events    4 incompatible pointer types  3 operand of type NtsValue
+    assert    6 static assertion expression is not an integral constant
+    timers    1 undeclared identifier       1 operand of type NtsValue
+
+**This is the clang-level form of "a cone sizes a queue rather than a step."**
+The first time it was a refusal chain inside one function; here it is an error
+limit hiding the errors behind the ones it printed. Two different mechanisms,
+the same shape of wrong expectation, and the second was predicted by having
+written the first one down.
+
+### `timers` is two errors and both are exact
+
+**A closure reaches the descriptor emitter and not the body emitter.**
+
+    program.c:1964  nts_vtable_NtsObj_Closure54[] = { ..., (void *)Closure54__call };
+    error: use of undeclared identifier 'Closure54__call'
+
+    forward declarations   Closure0  Closure19  Closure20
+    definitions            Closure0  Closure19  Closure20
+    vtables reference      Closure0  Closure19  Closure20  Closure54
+
+`Closure54__call` occurs exactly once in the file — that vtable line. Three
+closures get all three artefacts and the fourth gets one.
+
+**A truthiness test on an erased value is a cast rather than a tag check.**
+
+    program.c:3684  v47 = (bool)v10;   // v10 is NtsValue
+    error: operand of type 'NtsValue' where arithmetic or pointer type is required
+
+One site in `timers`, eight each in `stream` and `fs`, three in `events` and
+`assert` — **the most common remaining error in the corpus** now that the
+collisions are cleared, and it needs no new `ManagedType`.
+
 ## A test comparing node with node, and passing for it
 
 `events/test/prototype-surface-static.js` asserted that every name on node's
