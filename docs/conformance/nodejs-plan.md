@@ -267,8 +267,32 @@ regression guard, and the annotated-const one exists because that repair landed
 twice — the first laid the object out as the declared type and broke
 `instanceof`, one relation recorded and a narrower one walked.
 
-**Both of those blockers now have fixtures, and the profile they described has
-changed.** Re-measured on the 11:16 binary, building every module with
+**Both named blockers now have fixtures in `blockers/`, and both were measured
+rather than transcribed.**
+
+- The `NtsTask` microtask struct is **`blockers/callback-binding`**, and it is
+  not a struct. It asserts the emitted C itself —
+  `emits-c void nts_take_callback(NtsObj_Closure` — so it reproduces the clang
+  error the three modules actually hit rather than an `hir`-level paraphrase of
+  it.
+- The `void` struct fields are **`blockers/void-struct-fields`**, and it is a
+  **regression guard**: staged as this plan described the shape — a generic
+  interface of optional callbacks over its own type parameter — and run for the
+  first time on 2026-09-08, when it **did not reproduce**. No `void` field is
+  emitted for it or for anything else in the corpus. The shape now produces a
+  clean diagnostic, `a parameter of unrepresentable type (Sink)`, which is a
+  refusal rather than invalid C.
+
+  The guard asserts *absence*, because `emits-c` cannot state this: correct
+  output has no `void` field either, so an expectation phrased that way would
+  pass for the wrong reason forever. It carries a function that compiles, since
+  without one every function is refused, `program.c` comes out zero bytes, and
+  an absence check against an empty file passes for the wrong reason too — the
+  harness caught precisely that and reported `NO OUTPUT` instead of a green
+  tick. Controlled by asserting the absence of something the emitter certainly
+  writes, which flips it to `FIXED`.
+
+**The profile these two described has changed.** Re-measured on the 11:16 binary, building every module with
 `NTS_COMPILER` pinned:
 
     120  no member named X in X          <- now the dominant kind
