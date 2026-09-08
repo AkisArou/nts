@@ -23,6 +23,12 @@ double nts_write_stderr(NtsString *text);
 double nts_debug_write(NtsString *text);
 bool nts_stdout_is_tty(void);
 bool nts_stderr_is_tty(void);
+
+/* Async context and collection. `nts_async_context_get` is absent on purpose:
+ * it returns an object, so its prototype names a per-program struct that no
+ * shared translation unit can spell. See `async.c`. */
+void nts_async_context_set(NtsHeader *frame);
+void nts_on_collected(NtsValue resource, NtsHeader *on_collected);
 void nts_process_really_exit(double code);
 /* `warning` is `NtsHeader *` rather than `struct NtsObj_Error *`.
  *
