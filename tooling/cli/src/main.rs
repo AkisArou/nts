@@ -100,17 +100,12 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
                 package.route.describe()
             );
         }
-        // Said here because the refusal that follows cannot say it. A name
-        // imported from one of these resolves to a declaration and no body, and
-        // the lowerer reports that as `a builtin this compiler does not
-        // provide` -- which sends its reader to `hir::builtin`, where nothing is
-        // missing. Until that diagnostic can name the package, this line is what
-        // connects the two.
-        eprintln!(
-            "  a name imported from one of these will refuse below as \
-             \"a builtin this compiler does not provide\"; the implementation \
-             is what is missing, not the builtin"
-        );
+        // The lowerer names the *kind* of failure — "an imported name whose
+        // implementation is not in this program" — and this names the package
+        // it came from, which the lowerer cannot: a module specifier's text is
+        // not in the snapshot. Two halves of one sentence, printed by the two
+        // layers that each hold half.
+        eprintln!("  a name imported from one of these will refuse below.");
     }
     Ok(acquisition.tsconfig.unwrap_or_else(|| tsconfig.to_owned()))
 }
