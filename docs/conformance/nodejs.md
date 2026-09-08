@@ -4985,6 +4985,30 @@ eight-function family typed on `string`, and it carries a design question this
 change was not the place to answer: node hands the user's `filter` callback
 strings, so a byte-path `cp` has to decide what the filter sees.
 
+### And eleven more in `fs.promises`
+
+Fixing the synchronous half raised the obvious next question. **Eleven of
+twenty-one `fs.promises` functions rejected a Buffer path too** — `chmod`,
+`chown`, `utimes`, `unlink`, `mkdir`, `rmdir`, `copyFile`, `rename`, `link`,
+`readlink` and `rm`.
+
+Seven are fixed: the ones that route straight to a single `_async` binding.
+`mkdir`, `rmdir` and `rm` are recursive composites and `readlink` has to answer
+bytes as well; those four remain, and the promises test **omits them rather than
+asserting their current behaviour** — for the reason immediately below.
+
+The async family has no C at all — the entire asynchronous half of `fs` is
+stand-in only — so the byte variants are declarations and stand-ins matching
+their string twins. That keeps the pair consistent rather than leaving one
+spelling of the same call working and the other not.
+
+The test also asserts the **errno survives the byte route**, not only the success
+path: `unlink` on a missing Buffer path still reports `ENOENT`. A byte-path fix
+that lost the error mapping would pass every success assertion above it.
+
+`fs` interpreted is **341 of 341**, up from 338 before any of this. Sabotage
+fails all 341.
+
 ### A test may assert what node does, never what this implementation does
 
 The first draft of the family test asserted that `cpSync` **throws** — pinning
