@@ -2816,6 +2816,37 @@ node's carry and the message reads the same:
 ENOENT: no such file or directory, stat '/nope/x'
 ```
 
+## `ArrayBufferView` as a parameter type: 17 modules, 621 sites
+
+Measured on the gate binary, every module through `emit-c`:
+
+    zlib      127      fs        64      process   54
+    dgram      43      http      43      readline  43
+    stream     43      net       42      assert    34
+    console    34      util      34      events    31
+    string_decoder 9   buffer     5      os         5
+    querystring 5      url        5
+
+    none: async_hooks, diagnostics_channel, path, punycode, timers
+
+`Buffer#toString` is the concentrated form — six sites each in eight modules,
+one each in four more. **One method, refused for one parameter type, reached
+from everywhere.** `blockers/arraybufferview-parameter` already exists.
+
+This is why `export-class` moved behind it, and the reason is stronger than
+reach. A class published while its methods are refused is **worse than the
+refusal**: an export table entry for a `StringDecoder` whose `write` and `end`
+do not exist is an artifact that looks loadable and fails at the first call. The
+refusal at least says so. That argument came from the compiler lane and it is
+the one I should have reached myself when I called `export-class` "the entire
+module".
+
+The measured order on the compiled axis is now:
+
+1. `duplicate-type-name` — twelve modules cannot compile at all
+2. `arraybufferview-parameter` — 17 modules, 621 sites
+3. `export-class` — three modules, and only useful after 2
+
 ## How far each building module actually is, measured
 
 After being wrong about `string_decoder` by reading an export line instead of
