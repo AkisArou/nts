@@ -14027,7 +14027,7 @@ wrongly at run time. `napi_define_class` is emitted, the constructor runs, the
 methods work, and `blockers-check.mjs` reads emitted text. This is the second
 case this week for a guard form that runs an expression against a loaded addon.
 
-## The compiled axis: 11 modules, 24 behaviour-dependent, 0 hollow
+## The compiled axis: 11 modules, 25 behaviour-dependent, 0 hollow
 
 Isolated artifacts, one pinned compiler, three controls on every pass, and the
 machine quiet. Where the day started, and where it ended:
@@ -14035,7 +14035,7 @@ machine quiet. Where the day started, and where it ended:
     start (contaminated)   27 raw across 7 modules, no hollow check on the addon
     isolated               26 pass: 17 behaviour,  4 shape-only, 5 hollow,  7 modules
     hollow driven to zero  22 pass: 18 behaviour,  4 shape-only, 0 hollow,  5 modules
-    end                    31 pass: 24 behaviour,  7 shape-only, 0 hollow, 11 modules
+    end                    32 pass: 25 behaviour,  7 shape-only, 0 hollow, 11 modules
 
     module        pass   behaviour   shape-only   hollow
     path            13          12            1        0
@@ -14046,13 +14046,13 @@ machine quiet. Where the day started, and where it ended:
     net              1           1            0        0
     readline         1           1            0        0
     stream           1           1            0        0
-    fs               1           0            1        0
+    fs               2           1            1        0
     buffer           1           0            1        0
     zlib             1           0            1        0
 
-`fs`'s row predates `local/stats-mode-static.js`, which was controlled
-separately -- passes plain, fails all three -- and is being re-measured. It
-takes `fs` to 2 pass, 1 behaviour.
+`fs` re-measured after `local/stats-mode-static.js` landed: 2 pass, 1 behaviour,
+1 shape-only, 0 hollow. **The total is 32 pass: 25 behaviour-dependent, 7
+shape-only, 0 hollow, across 11 of 22 modules.**
 
 ### Six modules joined, and none of them because the compiler moved
 
