@@ -14266,6 +14266,71 @@ the environment was unreachable from every test -- the same correction `stream`
 needed. It is shape-only, and labelled so: `env` is a data table and survives
 `--mutate-addon`.
 
+## A fixture form for defects whose emitted text is correct
+
+Three findings this week could not be filed as blockers, for one reason:
+
+    util.types              publishes 31 predicates, none askable about a reference
+    executionAsyncResource  publishes, is called, throws on every call
+    a class's fields        publish nothing, while its methods publish and work
+
+`blockers-check.mjs` reads emitted text, and all three emit well-formed text.
+The wrapper is there, the names are there, `napi_define_class` is there. What is
+wrong only appears when something calls it.
+
+    // expect: emit-c --napi -> calls <expression>
+    // control: <expression>
+
+The form links the emitted C plus `runtime/node/internal/*.c` into an addon,
+loads it with `RTLD_NOW`, and evaluates both expressions with the addon bound to
+`exports`. Nothing else is linked: a fixture is self-contained by construction,
+so anything else being needed is a fact about the fixture rather than about the
+compiler.
+
+The expression must be **true**, so a blocker asserts the defect as it stands
+and stops holding when it is fixed -- the same direction as the diagnostic
+forms, and it prints `reproduces` rather than `guard ok`.
+
+### The control line is required, and it is why the form means anything
+
+Every expression about a name that is not published is false. Without a control
+that must hold, `instance.latitude === undefined` is equally satisfied by a
+class that never compiled, and the fixture would report the defect on a tree
+where the defect had been replaced by a worse one.
+
+`class-fields-do-not-cross` controls with
+`new exports.Reading(1, 2).distance() === 3`: the constructor ran, the prototype
+is there, and the fields were populated. Only then does `latitude === undefined`
+mean what it says.
+
+### Three failure paths, and the quietest one was made the loudest
+
+Controlled on the day it was written, with a throwaway fixture pointed at each:
+
+    control false     CONTROL FAILED, quoting the control and what it gave
+    call false        FIXED, quoting the expression and `got: false`
+    nothing emitted   NOTHING EMITTED -- "the compiler wrote no C, so the call
+                      was never made. This is not the expression answering
+                      false. Read the diagnostics above before reading anything
+                      else."
+
+The third was asked for by name by the compiler lane, and both lanes had paid
+for it separately in the same week: an empty diagnostic list reading as a clean
+bill cost me three reductions in one afternoon, and cost them a guard that saw
+text naming what it never defined and called it success.
+
+### What converting `class-fields-do-not-cross` cost and bought
+
+It was filed as `lacks-addon "latitude"`, and that expectation is sound --
+`latitude` appears four times in `program.c`, zero times in `addon.c`, and zero
+times in three unrelated fixtures' addons. The weakness was not the text but the
+classification: **every absence form is a guard**, so the file printed
+`guard ok` while the defect was present. Green, in a directory where green means
+fixed.
+
+Now it prints `reproduces`, and the two boundary blockers are filed beside it.
+110 fixtures, 110 as expected.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
