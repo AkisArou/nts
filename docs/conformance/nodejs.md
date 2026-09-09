@@ -9512,6 +9512,49 @@ reproduce in isolation: the wrapper's check is correct in general and the
 divergence only exists against a specific node API whose runtime is more
 permissive than its published type.
 
+## What crosses the wrapper, measured in both directions
+
+**Inward, four types: `number`, `string`, `boolean`, `number[]`.** Fourteen
+functions, one parameter each, differing in nothing else
+(`blockers/parameter-boundary-carries-four-types`):
+
+    number        ok        Uint8Array     takes TypedArray, outward only
+    string        ok        Uint8Array[]   takes TypedArray[]
+    boolean       ok        Row            takes an object, outward only
+    number[]      ok        Row[]          takes an object[]
+                            string[]       takes string[]
+                            boolean[]      takes bool[]
+                            v?: number     takes unknown
+                            number|string  takes unknown
+
+**Outward, `number[]` is the only array**
+(`blockers/array-return-only-carries-numbers`). A single object crosses out; an
+array of them does not.
+
+Two consequences worth having in one place.
+
+`Uint8Array` crosses **outward only**, so `StringDecoder#write(buf)` cannot be
+called even once the class publishes and its accessors work. That is a fourth
+requirement on the module beside the class arm, the accessors and `lastChar`
+answering `.equals` — and it was on nobody's list.
+
+`v?: number` declines as **`takes unknown`**, identically to a genuine
+`unknown`. An optional number is the shape node uses everywhere:
+`timers.setTimeout(after?: number)`, `fs.cp(suppliedCallback?: Callback)`.
+
+### The populations, and how far to trust them
+
+    71 signatures      return an array whose element is not a number
+   ~335 functions      take at least one parameter that cannot cross
+    66 signatures      return a view in return position (view-returns.py)
+
+The first and third are counted from a return annotation and are firm. **The
+middle one is a characterisation and not a count**: the classifier reads any
+capitalised annotation as an object, and some are aliases for unions or views,
+so the split between categories moves while the total does not. The view-return
+figure went 99 → 104 → 66 across three refinements, which is the reason to
+label the uncertainty rather than let the number be quoted as exact.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
