@@ -120,6 +120,113 @@ fn elements_helper(inner: &Cross, layouts: &[hir::Layout]) -> String {
 // join a list rather than be decided about -- which is what the wildcard this
 // replaced was doing.
 #[allow(clippy::match_same_arms)]
+/// Whether an object layout can be copied out to JavaScript as a plain object.
+///
+/// Lifted out of [`cross`]'s object arm when it stopped being one level deep.
+/// Everything it refuses, it refused there first.
+///
+/// A class instance is more than its fields: its methods are how it is used, and
+/// a plain object of the data would answer `stats.isDirectory` with `undefined`
+/// rather than with an error. Better to have no wrapper than a wrapper that
+/// loses behaviour.
+///
+/// `any(is_some)` rather than `!is_empty()`, and the difference is not pedantic:
+/// `Layout::methods` is one slot per *dispatch slot* and `None` is "this layout
+/// implements that slot" -- so a table can be six entries long and hold nothing.
+/// `path`'s `ParsedPath` is exactly that, `[None, None, None, None, None, None]`
+/// over five string fields and no methods of its own, and the length test
+/// refused it as though copying it would lose behaviour there is none of. That
+/// refusal was `parse` -- 26 of the 54 remaining divergences in `path`'s edge
+/// table, declined by a table of nulls.
+///
+/// A **table** field is a plain object on the other side and so is no more
+/// nested than a string is: its entries are erased values and
+/// `nts_to_napi_entries` needs nothing but the table. `os.constants` is a number
+/// and four of them.
+///
+/// A nested **object** field used to be the wall, and is not one any more.
+/// `os.cpus()` returns `CpuInfo[]`, and `CpuInfo` holds a `CpuTimes` -- so the
+/// refusal was one level of nesting, on the last function keeping `os` from
+/// whole. `emit_object_helper` already calls itself for an array of objects;
+/// a field is the same call without the loop.
+fn object_crosses(
+    at: usize,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+    path: &mut Vec<usize>,
+) -> bool {
+    // The cycle guard, and it is the current *chain* rather than a visited set
+    // on purpose. A layout reached twice down two different fields is fine and
+    // has to stay allowed; a layout that reaches itself has no finite JavaScript
+    // object to build and no terminating helper to emit. Only the chain tells
+    // those apart, and a visited set would refuse the first as though it were
+    // the second.
+    //
+    // A `Vec` because these chains are two or three deep -- `CpuInfo` ->
+    // `CpuTimes` and stop -- and scanning three is cheaper than hashing one.
+    if path.contains(&at) {
+        return false;
+    }
+    let layout = &layouts[at];
+    if classes.contains(&layout.name)
+        || layout.base.is_some()
+        || layout.methods.iter().any(Option::is_some)
+    {
+        return false;
+    }
+    // A layout with no fields at all, which is refused for a reason the class
+    // rule above should have covered and cannot.
+    //
+    // `export const ucs2 = { decode, encode }` gives each function-typed field
+    // an ordinary layout with a `Fn2__2#call`, and `classes` is built from the
+    // `#` in that name -- so the class rule is exactly right about it. But
+    // nothing calls `Fn2__2#call`, so **it is dead-code eliminated before this
+    // runs**, and `class_names` over the prepared program has never heard of it.
+    // The only evidence that the layout was callable is a function that is gone.
+    //
+    // So this is conservative rather than precise, and the imprecision is worth
+    // naming: a genuinely empty object would cross as `{}` correctly and is
+    // refused here too. What it buys is that a layout with nothing to copy can
+    // never be copied, and a function crossing as `{}` -- publishing `ucs2`
+    // whose `decode` is an empty object -- is exactly the wrong-value failure
+    // the boundary refuses everywhere else. Losing `{}` is not a loss; shipping
+    // a callable as a plain object is.
+    //
+    // The precise rule wants a `Layout` that says whether its type is callable,
+    // which survives elimination because it is a property of the type rather
+    // than of a function body. That is a `compiler/core` change every backend
+    // reads, so it is coordinated rather than taken here.
+    if layout.fields.is_empty() {
+        return false;
+    }
+    path.push(at);
+    let crosses = layout.fields.iter().all(|field| match &field.ty {
+        HirType::Bool | HirType::Float { .. } | HirType::Int { .. } => true,
+        HirType::Managed(ManagedType::String | ManagedType::Table(_, _)) => true,
+        // A closure is a synthetic object layout whose JavaScript value is a
+        // function, excluded here for the reason `cross` excludes it one level
+        // up: copying captured fields into a plain object would silently change
+        // what the value is.
+        HirType::Managed(ManagedType::Object(id)) if !hir::is_closure_type(*id) => layouts
+            .iter()
+            .position(|nested| nested.types.contains(id))
+            .is_some_and(|nested| object_crosses(nested, layouts, classes, path)),
+        _ => false,
+    });
+    path.pop();
+    crosses
+}
+// Nine arms answer `None`, and they stay nine rather than becoming one.
+//
+// Each carries the reason its own type cannot cross -- a `Date` would have to
+// become a JavaScript date and lose identity, a `Promise` has no settled value
+// to hand over, a `Map` is not a plain object. Folding them into an or-pattern
+// keeps the behaviour and deletes the only place any of that is written down,
+// and the next person to ask "why not a Date?" would have nowhere to look.
+//
+// The lint began firing when the object arm shrank from fifty lines to three,
+// which is to say it is a distance heuristic and not a claim about the code.
+#[allow(clippy::match_same_arms)]
 fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> Option<Cross> {
     match ty {
         HirType::Void => Some(Cross::Void),
@@ -233,57 +340,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         HirType::Managed(ManagedType::Object(id)) if hir::is_closure_type(*id) => None,
         HirType::Managed(ManagedType::Object(id)) => {
             let at = layouts.iter().position(|l| l.types.contains(id))?;
-            // A class instance is more than its fields: its methods are how it
-            // is used, and a plain object of the data would answer
-            // `stats.isDirectory` with `undefined` rather than with an error.
-            // Better to have no wrapper than a wrapper that loses behaviour.
-            //
-            // `any(is_some)` rather than `!is_empty()`, and the difference is
-            // not pedantic: `Layout::methods` is one slot per *dispatch slot*
-            // and `None` is "this layout implements that slot" -- so a table can
-            // be six entries long and hold nothing. `path`'s `ParsedPath` is
-            // exactly that, `[None, None, None, None, None, None]` over five
-            // string fields and no methods of its own, and the length test
-            // refused it as though copying it would lose behaviour there is
-            // none of. That refusal was `parse` -- 26 of the 54 remaining
-            // divergences in `path`'s edge table, declined by a table of nulls.
-            if classes.contains(&layouts[at].name)
-                || layouts[at].base.is_some()
-                || layouts[at].methods.iter().any(Option::is_some)
-            {
-                return None;
-            }
-            // One level. A field that is itself a record needs the same
-            // treatment recursively, and the wrapper does not implement that
-            // recursive object construction yet.
-            layouts[at]
-                .fields
-                .iter()
-                .all(|f| {
-                    matches!(
-                        f.ty,
-                        HirType::Bool
-                            | HirType::Float { .. }
-                            | HirType::Int { .. }
-                            | HirType::Managed(
-                                ManagedType::String
-                            // A **table** field, which is a plain object on the
-                            // other side and so is no more nested than a string
-                            // is. `os.constants` is a number and four of them,
-                            // and it is the one export that would make `os` the
-                            // second whole module on the compiled axis.
-                            //
-                            // Still no nested *object*: that needs the layout's
-                            // descriptor recursively, which is the wall this
-                            // arm's comment above describes and which a table
-                            // does not meet -- its entries are erased values
-                            // and `nts_to_napi_entries` needs nothing but the
-                            // table.
-                                | ManagedType::Table(_, _)
-                            )
-                    )
-                })
-                .then_some(Cross::Object(at))
+            object_crosses(at, layouts, classes, &mut Vec::new()).then_some(Cross::Object(at))
         }
         // A `never` return means the call does not come back, so there is
         // nothing for a wrapper to hand back.
@@ -2201,7 +2258,26 @@ fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::La
             HirType::Managed(ManagedType::Table(_, _)) => {
                 format!("nts_to_napi_entries(env, result->{member}, &value)")
             }
-            _ => unreachable!("nested object layouts are refused by cross"),
+            // A nested object: the same call this function is, one level down.
+            // `object_crosses` has already proved the chain is acyclic and that
+            // every layout on it can be built, so the only thing left is to find
+            // the layout and name its helper.
+            //
+            // `unreachable!` below is load-bearing and stays: the two functions
+            // have to agree about what crosses, and a field shape that reached
+            // here without an arm is a disagreement rather than a shape to
+            // approximate.
+            HirType::Managed(ManagedType::Object(id)) => {
+                let nested = layouts
+                    .iter()
+                    .find(|l| l.types.contains(&id))
+                    .expect("a nested object layout cross checked without a layout");
+                format!(
+                    "{}(env, result->{member}, &value)",
+                    object_helper(nested)
+                )
+            }
+            _ => unreachable!("a field shape `object_crosses` admits and this does not build"),
         };
         let _ = write!(
             out,
@@ -2443,7 +2519,19 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
     if global.deferred && !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX)) {
         return None;
     }
-    let crossing = cross(&global.ty, &program.layouts, &FxHashSet::default())?;
+    // `class_names(program)` and not an empty set, which is what this passed
+    // until an object value export could publish. `cross` refuses a layout whose
+    // name owns a `#` function, because such a value is more than its fields --
+    // and with the set empty that guard is simply off.
+    //
+    // `export const ucs2 = { decode, encode }` is the case: a declared function
+    // type gets an ordinary layout with a `Fn2__2#call`, so it is caught by the
+    // class rule and by nothing else. `is_closure_type` does not see it -- that
+    // asks about the synthetic band and this id is a declared type. With the set
+    // empty the wrapper published `ucs2` whose `decode` was `{}`: an empty
+    // JavaScript object where a function belongs, which is the wrong-value
+    // failure the refusal exists to prevent, arriving as a *new export*.
+    let crossing = cross(&global.ty, &program.layouts, &class_names(program))?;
     if matches!(crossing, Cross::Object(_) | Cross::Void) {
         return None;
     }
@@ -2480,6 +2568,7 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
 /// pointer rather than a default -- the same ordering that had `punycode`'s
 /// `const delimiter = "-"` null when `decode` read it.
 fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
+    let classes = class_names(program);
     let mut published = Vec::new();
     for (emitted, name) in &program.public_api {
         if program.public_functions.iter().any(|at| at == name) {
@@ -2522,7 +2611,7 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
         }
         // The same crossing a return value gets, and for the same reason: what
         // leaves is a copy, so nothing has to decide who owns the storage.
-        let Some(crossing) = cross(&global.ty, &program.layouts, &FxHashSet::default()) else {
+        let Some(crossing) = cross(&global.ty, &program.layouts, &classes) else {
             continue;
         };
         // An object *value* export publishes now: `os.constants` is a number
@@ -2793,6 +2882,91 @@ fn value_export_text(program: &hir::Program) -> (String, String) {
     (declarations, publishing)
 }
 
+/// The structs the wrappers read fields out of, and the helpers that build them.
+///
+/// `program.c` defines these too, and both derive them from the same `Layout` --
+/// which is what that type is for: "the compiler's answer to where is this
+/// field, decided once and consumed by every backend". A header emitted by
+/// `codegen/c` would be better still, and would remove this repetition entirely.
+fn emit_layouts(out: &mut String, program: &hir::Program, mut needed: Vec<usize>) {
+    // And every layout those reach through an object field. `os.cpus()` returns
+    // `CpuInfo[]`, `CpuInfo` holds a `CpuTimes`, and nothing named `CpuTimes`:
+    // the wrapper published `cpus`, emitted a helper that called
+    // `nts_to_napi_obj_CpuTimes`, and declared neither the struct nor the
+    // function. Text that names what it never defines, which is the shape
+    // `addon-compiles` exists to catch and did.
+    //
+    // A queue rather than recursion because the closure is over a graph, and
+    // `object_crosses` has already refused the cyclic ones -- so this
+    // terminates for a reason stated somewhere else, and the `contains` check
+    // is what makes that true here rather than assumed.
+    let mut at = 0;
+    while at < needed.len() {
+        let layout = &program.layouts[needed[at]];
+        let nested: Vec<usize> = layout
+            .fields
+            .iter()
+            .filter_map(|field| match &field.ty {
+                HirType::Managed(ManagedType::Object(id)) => {
+                    program.layouts.iter().position(|l| l.types.contains(id))
+                }
+                _ => None,
+            })
+            .collect();
+        for one in nested {
+            if !needed.contains(&one) {
+                needed.push(one);
+            }
+        }
+        at += 1;
+    }
+    needed.sort_unstable();
+    needed.dedup();
+
+    // Three passes over the same list, because C reads forwards and this graph
+    // does not. A struct whose field points at a layout declared later needs the
+    // typedef first; a helper that calls a helper declared later needs its
+    // prototype. Emitting each layout complete before the next worked only while
+    // nothing nested.
+    for at in &needed {
+        let name = format!("NtsObj_{}", c_identifier(&program.layouts[*at].name));
+        let _ = writeln!(out, "typedef struct {name} {name};");
+    }
+    if !needed.is_empty() {
+        out.push('\n');
+    }
+    for at in &needed {
+        let layout = &program.layouts[*at];
+        let name = format!("NtsObj_{}", c_identifier(&layout.name));
+        let _ = writeln!(out, "struct {name} {{");
+        out.push_str("    NtsHeader header;\n");
+        for field in &layout.fields {
+            let _ = writeln!(
+                out,
+                "    {} {};",
+                c_type(&field.ty, &program.layouts),
+                c_identifier(&field.name)
+            );
+        }
+        out.push_str("};\n\n");
+    }
+    for at in &needed {
+        let layout = &program.layouts[*at];
+        let _ = writeln!(
+            out,
+            "static napi_status {}(napi_env env, const NtsObj_{} *result, napi_value *into);",
+            object_helper(layout),
+            c_identifier(&layout.name)
+        );
+    }
+    if !needed.is_empty() {
+        out.push('\n');
+    }
+    for at in &needed {
+        emit_object_helper(out, &program.layouts[*at], &program.layouts);
+    }
+}
+
 #[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let mut out = preamble();
@@ -2806,7 +2980,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     // type is for: "the compiler's answer to where is this field, decided once
     // and consumed by every backend". A header emitted by `codegen/c` would be
     // better still, and would remove this repetition entirely.
-    let mut needed: Vec<usize> = program
+    let needed: Vec<usize> = program
         .funcs
         .iter()
         .filter(|f| !published(program, f).is_empty())
@@ -2827,24 +3001,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             _ => None,
         })
         .collect();
-    needed.sort_unstable();
-    needed.dedup();
-    for at in needed {
-        let layout = &program.layouts[at];
-        let name = format!("NtsObj_{}", c_identifier(&layout.name));
-        let _ = writeln!(out, "typedef struct {name} {name};\nstruct {name} {{");
-        out.push_str("    NtsHeader header;\n");
-        for field in &layout.fields {
-            let _ = writeln!(
-                out,
-                "    {} {};",
-                c_type(&field.ty, &program.layouts),
-                c_identifier(&field.name)
-            );
-        }
-        out.push_str("};\n\n");
-        emit_object_helper(&mut out, layout, &program.layouts);
-    }
+    emit_layouts(&mut out, program, needed);
 
     let runs_module_init = emit_module_init_prototype(program, &mut out);
 
