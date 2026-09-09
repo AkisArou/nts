@@ -4,22 +4,43 @@
 #   tooling/conformance/reference-boundary.sh
 #   NTS_BIN=<a pinned copy> tooling/conformance/reference-boundary.sh
 #
-# Two directions, because they came apart. `unknown` crosses **outward** -- that
-# is `blockers/unknown-return-at-the-boundary`, fixed and kept as a guard -- and
-# does not cross inward. And the outward side has its own hole, which is not
-# `unknown` at all but the bare `object` type:
+# Two directions, because they came apart.
 #
-#     returnsUnknown(): unknown        -> 7             crosses
-#     returnsShaped(): { a: number }   -> {"a":7}       crosses
-#     returnsObject(): object          -> THREW         the compiled function returned
-#                                                       a value with no JavaScript
-#                                                       representation
+# # Outward: it is the value, not the declaration
 #
-# **The more specific type is the one that fails.** `object` is narrower than
-# `unknown` and narrower than nothing, and it is the only one of the three that
-# cannot come back. That is why `async_hooks.executionAsyncResource` is the one
-# unusable name in its module: `internal/async-hooks.ts:236` declares it
-# `(): object`, the wrapper publishes it, and every call throws.
+# **This file shipped with the wrong reading of its own output**, and the fix is
+# the fourth cell of a 2x2 nobody had filled in. It said "the more specific type
+# is the one that fails", from three functions:
+#
+#     returnsUnknown(): unknown       -> 7          crosses
+#     returnsShaped(): { a: number }  -> {"a":7}    crosses
+#     returnsObject(): object         -> THREW
+#
+# Two variables move across those three rows -- the declared type *and* what the
+# body returns -- so the conclusion could have been about either. It was about
+# the other one. Filling in the cell:
+#
+#     unknownScalar(): unknown        -> 7          crosses
+#     unknownString(): unknown        -> "s"        crosses
+#     unknownReference(): unknown     -> THREW      <- the missing row
+#     objectReference(): object       -> THREW
+#     shapedReference(): { a: number} -> {"a":7}    crosses
+#
+# `unknown` and `object` both lower to `erased` and get a byte-identical
+# wrapper; `nts_to_napi_value` switches on the **tag** and converts UNDEFINED,
+# NULL, BOOLEAN, NUMBER and STRING, defaulting to the throw. So:
+#
+#   **An erased value carrying a reference cannot cross outward, whatever its
+#   declaration says. A statically shaped object can.**
+#
+# A string is the one reference that converts, which is what made a value-shaped
+# boundary look type-shaped. `async_hooks.executionAsyncResource` is behind this
+# wall rather than behind its `(): object` declaration -- it publishes, it is
+# called, and it throws.
+#
+# Found by the compiler lane, who emitted the missing function rather than
+# accepting the reading. The cost of the error was nearly an arm added to `cross`
+# for `object`, which would have done nothing.
 #
 # # Why this is not a blocker fixture
 #
@@ -90,10 +111,11 @@
 # still reports the finding -- correctly. The boundary refuses before any body
 # runs, so what the body would have done is not a variable here.
 #
-# The outward guard was controlled the same way: declaring `returnsShaped` as
-# bare `object` instead of `{ a: number }` makes both outward controls fail and
-# the run reports INSTRUMENT FAILURE rather than "the narrower type is the one
-# that fails", which would then have been a claim about nothing.
+# The outward guards are two now, and the second is the lesson: if `unknown` and
+# `object` ever disagree, the run stops rather than reporting it. They lower to
+# the same erased type and get a byte-identical wrapper, so a disagreement means
+# the instrument is wrong, and that is exactly the reading this file shipped
+# with once.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -126,9 +148,15 @@ export function classifyScalar(value: unknown): boolean {
 // The outward direction. `held` is a module-level binding so the three
 // functions differ in their declared return type and in nothing else.
 const held: { a: number } = { a: 7 };
-export function returnsUnknown(): unknown { return 7; }
-export function returnsShaped(): { a: number } { return held; }
-export function returnsObject(): object { return held; }
+export function unknownScalar(): unknown { return 7; }
+export function unknownString(): unknown { return "s"; }
+export function unknownReference(): unknown { return held; }
+export function objectReference(): object { return held; }
+export function shapedReference(): { a: number } { return held; }
+
+// Inbound, statically shaped -- the mirror of `shapedReference`, which crosses.
+export function shapedInbound(p: { a: number }): number { return p.a; }
+export function dateInbound(d: Date): number { return d.getTime(); }
 EOF
 
 NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
@@ -165,24 +193,51 @@ show("C classifyScalar(\"x\")", C1);
 show("C classifyScalar(1)", C2);
 show("B classifyInbound(new Map())", B1);
 show("B classifyInbound(\"x\")", B2);
-const O1 = call(m.exports.returnsUnknown);
-const O2 = call(m.exports.returnsShaped);
-const O3 = call(m.exports.returnsObject);
-show("D returnsUnknown()", O1);
-show("D returnsShaped()", O2);
-show("D returnsObject()", O3);
+const D1 = call(m.exports.unknownScalar);
+const D2 = call(m.exports.unknownString);
+const D3 = call(m.exports.unknownReference);
+const D4 = call(m.exports.objectReference);
+const D5 = call(m.exports.shapedReference);
+show("D unknownScalar()", D1);
+show("D unknownString()", D2);
+show("D unknownReference()", D3);
+show("D objectReference()", D4);
+show("D shapedReference()", D5);
 console.log();
-if (!(O1.ok && O2.ok)) {
-  console.log("  INSTRUMENT FAILURE: control D does not hold -- neither `unknown`");
-  console.log("  nor a concrete object type comes back, so `object` failing says");
-  console.log("  nothing about `object` in particular.");
+if (!(D1.ok && D5.ok)) {
+  console.log("  INSTRUMENT FAILURE: control D does not hold -- a scalar through");
+  console.log("  `unknown` or a statically shaped object does not come back, so the");
+  console.log("  rows below are not about references.");
   process.exit(3);
 }
-if (!O3.ok) {
-  console.log("  Outward: `unknown` and a concrete object type both cross, and the");
-  console.log("  bare `object` type does not. The narrower type is the one that");
-  console.log("  fails. async_hooks.executionAsyncResource is declared `(): object`");
-  console.log("  and is the one unusable name in its module.");
+if (D3.ok !== D4.ok) {
+  console.log("  INSTRUMENT FAILURE: `unknown` and `object` disagree. They lower to");
+  console.log("  the same erased type and get a byte-identical wrapper, so this");
+  console.log("  cannot happen -- read the emitted wrapper before believing it.");
+  process.exit(3);
+}
+const E1 = m.exports.shapedInbound;
+const E2 = m.exports.dateInbound;
+console.log("  E shapedInbound({a:1})       -> " +
+  (typeof E1 === "function" ? String(E1({ a: 1 })) : "NOT PUBLISHED"));
+console.log("  E dateInbound(new Date(0))   -> " +
+  (typeof E2 === "function" ? String(E2(new Date(0))) : "NOT PUBLISHED"));
+console.log();
+if (typeof E1 !== "function") {
+  console.log("  Inbound is total, and not a property of erasure. `shapedReference`");
+  console.log("  crosses outward and `shapedInbound` is not published at all --");
+  console.log("  `takes an object, which crosses outward only`. So the asymmetry is");
+  console.log("  the direction, not the type: outward a shaped object converts and");
+  console.log("  an erased one does not; inward nothing object-shaped is carried,");
+  console.log("  declared or erased.");
+  console.log();
+}
+if (!D3.ok) {
+  console.log("  Outward: an erased value carrying a reference cannot cross, and");
+  console.log("  the declaration makes no difference -- `unknown` and `object`");
+  console.log("  behave identically because they are the same erased type. A");
+  console.log("  statically shaped object crosses; a string crosses, which is what");
+  console.log("  makes a value-shaped boundary look type-shaped.");
   console.log();
 }
 if (!(A.ok && A.v === true)) {

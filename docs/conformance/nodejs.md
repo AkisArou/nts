@@ -13685,6 +13685,71 @@ it. So `os.constants` works in a compiler this measurement does not include --
 these numbers are one landing behind, in the conservative direction, and are
 labelled by their pin rather than adjusted.
 
+### Correction: "the narrower type cannot come back" was wrong, and the error was mine
+
+This ledger recorded:
+
+> `object` is narrower than `unknown` and it is the only one of the three that
+> cannot come back.
+
+From three functions:
+
+    returnsUnknown(): unknown       -> 7          crosses
+    returnsShaped(): { a: number }  -> {"a":7}    crosses
+    returnsObject(): object         -> THREW
+
+**Two variables move across those rows** -- the declared type and what the body
+returns -- so the conclusion could have been about either, and it was about the
+other one. The compiler lane emitted the missing function rather than accepting
+the reading. Filling the cell in:
+
+    unknownScalar(): unknown         -> 7          crosses
+    unknownString(): unknown         -> "s"        crosses
+    unknownReference(): unknown      -> THREW      <- the row nobody ran
+    objectReference(): object        -> THREW
+    shapedReference(): { a: number } -> {"a":7}    crosses
+
+`unknown` and `object` lower to the same `erased` type and get a **byte-identical
+wrapper**; `nts_to_napi_value` switches on the tag, converting UNDEFINED, NULL,
+BOOLEAN, NUMBER and STRING and throwing on the rest. The rule is:
+
+**An erased value carrying a reference cannot cross outward, whatever its
+declaration says. A statically shaped object can.**
+
+A string is the one reference that converts, which is what made a value-shaped
+boundary look type-shaped. `async_hooks.executionAsyncResource` is behind this
+wall, not behind its `(): object` declaration.
+
+What the error nearly cost: an arm added to `cross` for `object`, which would
+have done nothing, because there is no arm to add. The crossing exists and the
+runtime refuses.
+
+### And the inbound half is total
+
+Asked the mirror question, the direction turns out not to be symmetric at all:
+
+    shapedReference(): { a: number }        crosses outward
+    shapedInbound(p: { a: number })         NOT PUBLISHED
+    dateInbound(d: Date)                    NOT PUBLISHED
+    classifyInbound(v: unknown)             published, throws on a reference
+
+`no wrapper for shapedInbound: takes an object, which crosses outward only`.
+**Nothing object-shaped crosses inward** -- not `unknown`, not `object`, not a
+declared interface, not a builtin class, not an array of them. So inbound is not
+an erasure problem the way outbound is; it is the whole direction.
+
+That matters for what a fix has to be. Outward, the descriptor exists and the
+question is which of three existing conversions to read it with. Inward, the
+question is what to build, and there is no partial version already working to
+extend.
+
+### The instrument now stops rather than reporting this
+
+`reference-boundary.sh` gained a guard that has nothing to do with references:
+if `unknown` and `object` ever disagree, the run prints INSTRUMENT FAILURE and
+exits. They are the same erased type with the same wrapper, so a disagreement
+means the probe is wrong -- which is exactly the state this file shipped in.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
