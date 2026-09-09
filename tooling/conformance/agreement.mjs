@@ -116,32 +116,37 @@ for (const name of names) {
     continue;
   }
 
-  // The compiled answers, in a child so a crash is a finding rather than the
-  // end of this run.
-  const probe = `
-    const flags = require("node:os").constants.dlopen;
-    const m = { exports: {} };
-    try { process.dlopen(m, ${JSON.stringify(addon)}, flags.RTLD_NOW); }
-    catch (e) { console.log(JSON.stringify({ loaded: false, why: String(e.message).slice(0, 90) })); process.exit(0); }
-    const answers = {};
-    for (const c of ${JSON.stringify(cases.map((c) => c.call))}) {
-      try { answers[c] = typeof m.exports[c] === "function" ? m.exports[c]() : "(not published)"; }
-      catch (e) { answers[c] = "threw: " + String(e && e.message).slice(0, 60); }
+  // **One export per child.** A compiled function can take the process down --
+  // the first run of `optional-fields-through-erased-slots` exited on a signal
+  // and lost all six answers, when five of them had something to say. A crash
+  // is the strongest finding this instrument can produce and it must not cost
+  // the others.
+  const answerOf = (call) => {
+    const probe = `
+      const flags = require("node:os").constants.dlopen;
+      const m = { exports: {} };
+      try { process.dlopen(m, ${JSON.stringify(addon)}, flags.RTLD_NOW); }
+      catch (e) { console.log(JSON.stringify({ ok: false, why: "did not load: " + String(e.message).slice(0, 70) })); process.exit(0); }
+      const fn = m.exports[${JSON.stringify(call)}];
+      if (typeof fn !== "function") { console.log(JSON.stringify({ ok: false, why: "not published" })); process.exit(0); }
+      try { console.log(JSON.stringify({ ok: true, value: fn() })); }
+      catch (e) { console.log(JSON.stringify({ ok: false, why: "threw: " + String(e && e.message).slice(0, 60) })); }
+    `;
+    const run = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8", timeout: 60_000 });
+    const line = `${run.stdout ?? ""}`.trim().split("\n").filter((l) => l.startsWith("{")).pop();
+    if (line === undefined) {
+      // 128+n is a signal; this is the case the per-child split exists for.
+      const how = run.status === null || run.status > 128
+        ? `CRASHED, signal ${run.signal ?? (run.status ?? 0) - 128}`
+        : `no answer (exit ${run.status})`;
+      return { ok: false, why: how };
     }
-    console.log(JSON.stringify({ loaded: true, answers }));
-  `;
-  const run = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8", timeout: 60_000 });
-  const line = `${run.stdout ?? ""}`.trim().split("\n").filter((l) => l.startsWith("{")).pop();
-  if (line === undefined) {
-    console.log(`  DID NOT LOAD    ${name}: the addon produced no answer (exit ${run.status})`);
-    unbuilt += 1;
-    continue;
-  }
-  const compiledSide = JSON.parse(line);
-  if (compiledSide.loaded !== true) {
-    console.log(`  DID NOT LOAD    ${name}: ${compiledSide.why}`);
-    unbuilt += 1;
-    continue;
+    return JSON.parse(line);
+  };
+  const compiledSide = { loaded: true, answers: {} };
+  for (const c of cases) {
+    const answer = answerOf(c.call);
+    compiledSide.answers[c.call] = answer.ok === true ? answer.value : answer.why;
   }
 
   // Node's answers, from the same source.
