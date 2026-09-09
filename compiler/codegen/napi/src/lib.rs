@@ -509,6 +509,31 @@ fn set_property_call(name: &str) -> String {
 /// Everything the per-function wrappers call. Written once, not per function,
 /// so a marshalling decision has one home.
 const SUPPORT: &str = r#"
+/* Give a published function the `length` node's has.
+ *
+ * `napi_create_function` takes no arity at all -- the `NAPI_AUTO_LENGTH` beside
+ * the name is the *name string's* length -- so every function this addon
+ * published reported `length` 0. The Node lane measured 95 of them across
+ * sixteen modules, including everything one level in like `path.posix.join`,
+ * and the only three with a real arity were JavaScript wrappers a `shape.mjs`
+ * builds.
+ *
+ * `writable: false, enumerable: false, configurable: true` is what a function's
+ * own `length` is in the specification, so this is `napi_configurable` and
+ * nothing else. A descriptor that added `napi_writable` would produce a
+ * `length` that assignment can change, which no ordinary function has.
+ *
+ * Failure is reported and not fatal: a function with the wrong `length` is a
+ * worse export than one with the right one and a far better export than none. */
+static bool nts_napi_set_length(napi_env env, napi_value fn, uint32_t arity) {
+    napi_value length = NULL;
+    if (napi_create_uint32(env, arity, &length) != napi_ok) return false;
+    napi_property_descriptor descriptor = {
+        "length", NULL, NULL, NULL, NULL, length, napi_configurable, NULL
+    };
+    return napi_define_properties(env, fn, 1, &descriptor) == napi_ok;
+}
+
 /* Turn a Node-API failure into a pending JavaScript exception. Node-API reports
  * conversion failures as status values; ignoring one silently substituted a
  * zero, false, or empty string for an invalid JavaScript argument. */
@@ -1275,20 +1300,48 @@ fn crossings_of(
 }
 
 
+/// The `length` a published wrapper should report.
+///
+/// The specification counts parameters before the first one with a **default
+/// value** or a rest element. A TypeScript `?` is neither: `suffix?: string`
+/// compiles to a plain parameter, and node's own `basename(path, ext)` reports
+/// `length` 2 with the second one optional in its `.d.ts`.
+///
+/// That is why this counts `Optional` and stops only at `Defaulted` and `Rest`,
+/// and the first version did not -- `take_while(Ordinary)` gave `basename` a
+/// `length` of 1 against node's 2, which was the one row of eleven that
+/// disagreed after the fix and the reason to check rather than to ship.
+fn published_arity(func: &hir::Func) -> u32 {
+    u32::try_from(
+        func.params
+            .iter()
+            .take_while(|p| {
+                matches!(p.shape, hir::ParamShape::Ordinary | hir::ParamShape::Optional)
+            })
+            .count(),
+    )
+    .unwrap_or(0)
+}
+
 /// One `napi_create_function` per exported name, beside the class fragments.
 ///
 /// One wrapper can publish under several names: `export const upper = impl.upper`
 /// and `export const alias = impl.upper` are one function and two properties,
 /// and a loop that asked each function for *a* name published it once under
 /// whichever came first.
-fn publish_functions(wrapped: &[(&str, &str)]) -> String {
+fn publish_functions(program: &hir::Program, wrapped: &[(&str, &str)]) -> String {
     let mut out = String::new();
     for (name, publish) in wrapped {
         let symbol = c_identifier(name);
         let property = c_string_literal(publish);
+        let arity = program
+            .funcs
+            .iter()
+            .find(|func| func.name == *name)
+            .map_or(0, published_arity);
         let _ = write!(
             out,
-            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
+            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
         );
     }
     out
@@ -2461,9 +2514,17 @@ fn emit_namespaces(
             carried += 1;
             let symbol = c_identifier(name_of);
             let key = c_string_literal(property);
+            // A namespace member is where the arity count tripled: `path.posix`
+            // and `path.win32` hold most of `path`, `util.types` most of
+            // `util`, and a walk that stopped at the top level never saw them.
+            let arity = program
+                .funcs
+                .iter()
+                .find(|func| func.name == *name_of)
+                .map_or(0, published_arity);
             let _ = write!(
                 out,
-                "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
+                "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
             );
         }
         // Not an empty one, though. A namespace object with no members at all
@@ -3290,7 +3351,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             c_identifier(nts_core::hir::lower::MODULE_INIT)
         );
     }
-    out.push_str(&publish_functions(&wrapped));
+    out.push_str(&publish_functions(program, &wrapped));
     out.push_str(&class_inits);
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
     out.push_str(&value_publishing);
