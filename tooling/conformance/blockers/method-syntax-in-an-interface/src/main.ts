@@ -56,6 +56,30 @@
 // which is a design step and not a member-kind check. The count above is what
 // it is worth, not how long it takes.
 //
+// # And it is worth more than 24 things
+//
+// `internal/abort.ts:23` declares
+//
+//     interface AbortSignalLike {
+//       addEventListener(type: "abort", listener: AbortListener,
+//                        options?: { once?: boolean }): void;
+//     }
+//
+// in method syntax. `dgram`'s `Socket` constructor spans 302-380 and reads
+// `signal.addEventListener` at line 360, and that is the **only** root inside
+// it. `createSocket` cascades off the constructor:
+//
+//     dgram/src/main.ts:1193  `createSocket` cannot be compiled because it calls
+//                             `Socket@dgram_src_main#constructor`, which was refused above
+//
+// Against the compiled `dgram` addon: 77 failing test files, **68 of them
+// stopping at `dgram.createSocket is not a function`**.
+//
+// So the design step has 68 test files behind it in one module, which is worth
+// knowing before deciding it is not tonight's work. The usual caveat applies --
+// that is what stands in front of them, not what they would gain, and `Socket`
+// has more roots outside its constructor.
+//
 // # A call cascades, so the refusal is on the declaration
 //
 //     interface Sink { read(n: number): void }
