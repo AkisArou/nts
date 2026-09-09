@@ -11492,6 +11492,65 @@ knowing their symbols read as missing.
 A missing binding is a link failure waiting for the lowering to arrive rather
 than one happening now: a module only fails to link once something calls it.
 
+
+## The `code` on a thrown error had two halves, and I measured the wrong one
+
+2026-09-10. I reported that `ERR_OUT_OF_RANGE` arrives as a plain `Error` with
+the code moved into `name`, measured in `os` and `buffer` with `path`'s
+`ERR_INVALID_ARG_TYPE` as the control, and I could not reduce it — a fixture
+with a `TypeError` subclass and a `RangeError` subclass written the same way
+failed its own control.
+
+**It failed its own control because the fixture had one modifier and the real
+code has two.** MainClaude found it:
+
+    class A { a = "1"; }                     store emitted
+    class B { readonly a = "22"; }           store emitted
+    class C { public readonly a = "333"; }   no store, and no diagnostic
+
+A property declaration with **two or more modifiers lost its initialiser**. The
+modifiers occupy one slot with any number of children and the slot walk took
+one, so every slot after them shifted, the name read back as `readonly`, the
+lowering looked for a field of that name, found none, and continued — which is
+right for a member that is not a field and exactly wrong for a field whose name
+it has misread.
+
+`internal/errors.ts` writes `override readonly code = "ERR_…"` on **ninety-four**
+classes. So `code` was never set inside the compiled program at all, and nothing
+at the boundary could have carried it. Every fixture in the tree used at most one
+modifier, which is why it survived.
+
+The boundary half I did measure was real and is also fixed: `nts_thrown_class`
+answered with the class's own name, so the wrapper's comparisons against
+`RangeError`/`TypeError` missed and it built a generic error with `name` set to
+the class — the right string under the wrong property.
+
+**Verified here rather than taken.** `os.getPriority` on eight range inputs:
+
+    8 of 8 agree on `code`, on `name`, and on `instanceof RangeError`
+
+None agreed before, on any of the three.
+
+### What this cost me, and it is the fixture rule again
+
+My deleted fixture was right to be deleted — it did not reproduce. But the
+*reason* it did not is the finding: a reduction that simplifies away a modifier
+simplifies away the defect. That is [[reduction-removes-the-precondition]] in a
+new place, and the tell was there in the failing control, which I read as "my
+minimal shape does not reproduce what `path` does" and stopped at rather than
+asking why one modifier differs from two.
+
+MainClaude's own `a-thrown-code-at-the-boundary` has the mirror problem and they
+labelled it rather than widening it: its class writes `code = "ERR_FIXTURE"` with
+no modifiers, so it only ever reproduced the boundary half and **would have gone
+green on that fix alone while every error in the tree still arrived without a
+code**.
+
+> The three module measurements in the `os` section above stand as measurements
+> and their stated cause was the wrong half. Corrected here rather than edited
+> there, so the wrong reading stays visible next to what replaced it.
+
+
 ## Both lanes, 2026-09-10
 
 Re-derived end to end tonight, one module per invocation so a lost run costs one
