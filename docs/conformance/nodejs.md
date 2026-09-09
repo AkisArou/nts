@@ -10023,6 +10023,49 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### There is a third stage, and this document had not been counting it
+
+Refusals come in three kinds and only two have been measured here. `NTS1001` is
+the lowering refusing an expression. `no wrapper for X` is the Node-API wrapper
+declining a signature. Between them sits **`NTS2xxx`, the backend refusing to
+emit**, and across sixteen modules re-emitted on one compiler there are 311 of
+them:
+
+| code | form | count |
+| --- | --- | --- |
+| NTS2006 | `no declaration for X to take a signature from` | 59 |
+| NTS2009 | `X cannot be emitted because it calls X, which this backend refused above` | 56 |
+| NTS2006 | `an object type with no layout: type NNNN` | ~50 |
+| NTS2008 | `a value of type Erased cannot be erased yet; a reference payload needs retain and release` | 15 |
+| NTS2006 | `closure class X reached code generation with no method to call` | 13 |
+
+Only `an object type with no layout` is filed, as
+`array-of-object-literals-has-no-layout`. The other three forms have no fixture,
+and the largest of them has 59 occurrences across thirteen modules.
+
+**It closes an open question from earlier tonight.** The ranked blocker table has
+`EventEmitter#emit` at 28 distinct blocked functions with a dash in the root
+column, because tracing it through NTS1001 and NTS1003 found nothing. Its root
+is
+
+```
+events/src/main.ts:444:56  NTS2006 no declaration for `EventEmitter#emit`
+                                   to take a signature from
+```
+
+which no NTS1001 search could ever have found. Every "root not determined" in
+this document was searched with a grep that could not see this stage.
+
+**And it does not overturn `asRequest`.** That one was called unreportable
+because `fs/src/request.ts` carries no NTS1001 or NTS1003 anywhere. Re-checked
+against every diagnostic code in the fresh log: still zero. The file has no
+diagnostic of any kind, and `asRequest` still blocks 21 distinct functions with
+nothing printed about it.
+
+The lesson is the one this document keeps relearning in new places. A search
+scoped to the codes you already know about returns the blockers you already know
+about, and reports the rest as absent.
+
 ### Every wrapper decline in the profile, and 59% of them are not the wrapper's
 
 282 declines across the twenty-two modules, by reason:
