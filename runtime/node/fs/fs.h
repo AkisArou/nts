@@ -114,4 +114,19 @@ double nts_fs_copyfile_bytes(NtsArray *from, NtsArray *to, double flags);
 double nts_fs_link_bytes(NtsArray *from, NtsArray *to);
 NtsArray *nts_fs_readlink_bytes(NtsArray *path);
 
+/* Watchers. `fs.watch` is uv_fs_event_t and reports events; `fs.watchFile` is
+ * uv_fs_poll_t and reports two stat snapshots. One handle table for both, so a
+ * handle number is unambiguous across them. */
+double nts_fs_watch_start(NtsString *path, bool recursive, bool persistent,
+                          bool throw_if_no_entry, NtsHeader *callback);
+void nts_fs_watch_stop(double handle);
+void nts_fs_watch_ref(double handle);
+void nts_fs_watch_unref(double handle);
+double nts_fs_watchfile_start(NtsString *path, double interval,
+                              bool persistent, bool bigint,
+                              NtsHeader *callback);
+void nts_fs_watchfile_stop(double handle);
+void nts_fs_watchfile_ref(double handle);
+void nts_fs_watchfile_unref(double handle);
+
 #endif

@@ -1398,3 +1398,248 @@ double nts_fs_write_file_bytes_fd(double fd, NtsArray *bytes) {
   free(data);
   return simple(error);
 }
+
+/* ------------------------------------------------------------- watchers
+ *
+ * `fs.watch` and `fs.watchFile` are two different mechanisms and node keeps
+ * them apart for a reason worth restating: `watch` asks the platform to tell it
+ * (inotify, kqueue, ReadDirectoryChangesW) and reports *events*, while
+ * `watchFile` polls `stat` on an interval and reports *two stat snapshots*. One
+ * is edge-triggered and cheap, the other is level-triggered and always works.
+ * libuv spells them `uv_fs_event_t` and `uv_fs_poll_t`.
+ *
+ * One table for both, with the kind in the entry, so a handle number is
+ * unambiguous across them -- the same shape `net.c` uses and for the same
+ * reason: the module holds an integer and must not have to know which pool it
+ * came from. */
+
+typedef enum { WATCH_FREE = 0, WATCH_EVENT, WATCH_POLL } WatchKind;
+
+typedef struct {
+    WatchKind kind;
+    union {
+        uv_fs_event_t event;
+        uv_fs_poll_t poll;
+        uv_handle_t any;
+    } h;
+    NtsHeader *callback;
+    bool bigint;
+} Watcher;
+
+static Watcher *watchers = NULL;
+static size_t watcher_capacity = 0;
+
+static Watcher *watcher_at(double handle, WatchKind kind) {
+    if (!(handle >= 1.0)) return NULL;
+    size_t index = (size_t)handle - 1;
+    if (index >= watcher_capacity) return NULL;
+    Watcher *found = &watchers[index];
+    if (found->kind == WATCH_FREE) return NULL;
+    if (kind != WATCH_FREE && found->kind != kind) return NULL;
+    return found;
+}
+
+static Watcher *watcher_claim(void) {
+    size_t index = 0;
+    while (index < watcher_capacity && watchers[index].kind != WATCH_FREE) {
+        index++;
+    }
+    if (index == watcher_capacity) {
+        size_t grown = watcher_capacity == 0 ? 4 : watcher_capacity * 2;
+        Watcher *moved = realloc(watchers, grown * sizeof(Watcher));
+        if (moved == NULL) return NULL;
+        memset(moved + watcher_capacity, 0,
+               (grown - watcher_capacity) * sizeof(Watcher));
+        watchers = moved;
+        watcher_capacity = grown;
+    }
+    Watcher *entry = &watchers[index];
+    memset(entry, 0, sizeof(*entry));
+    return entry;
+}
+
+static double watcher_index(const Watcher *entry) {
+    return (double)((entry - watchers) + 1);
+}
+
+static NtsString *watch_utf8(const char *text) {
+    return nts_string_from_utf8(text, text == NULL ? 0 : strlen(text));
+}
+
+/* The filename as bytes, which is what the declaration asks for and is not an
+ * accident: a path is not always valid UTF-8, and node hands back a Buffer for
+ * exactly that reason. Handing back a string here would decide an encoding the
+ * caller has not asked for and cannot undo. */
+static NtsArray *filename_bytes(const char *name) {
+    if (name == NULL) return NULL;
+    size_t length = strlen(name);
+    NtsArray *out = nts_array_new(&nts_node_desc_double, (double)length);
+    double *items = NTS_ITEMS(out, double);
+    for (size_t i = 0; i < length; i++) {
+        items[i] = (double)(unsigned char)name[i];
+    }
+    return out;
+}
+
+static void call_watch_event(NtsHeader *callback, double status,
+                             NtsString *event, NtsArray *filename) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, NtsString *, NtsArray *))
+         callback->descriptor->methods[nts_closure_call_slot])(callback, status,
+                                                               event, filename);
+}
+
+static void call_watch_stats(NtsHeader *callback, NtsArray *current,
+                             NtsArray *previous) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, NtsArray *, NtsArray *))
+         callback->descriptor->methods[nts_closure_call_slot])(callback, current,
+                                                               previous);
+}
+
+static void on_fs_event(uv_fs_event_t *handle, const char *filename,
+                        int events, int status) {
+    Watcher *entry = (Watcher *)handle->data;
+    if (entry == NULL) return;
+    /* libuv reports rename and change as a bitmask and can set both. Node
+     * reports one event name, preferring `rename`, because a rename is the
+     * stronger statement: the entry the caller was watching is not the entry
+     * that is there now. */
+    const char *name = (events & UV_RENAME) != 0 ? "rename" : "change";
+    call_watch_event(entry->callback, (double)status, watch_utf8(name),
+                     filename_bytes(filename));
+}
+
+static void on_fs_poll(uv_fs_poll_t *handle, int status,
+                       const uv_stat_t *previous, const uv_stat_t *current) {
+    Watcher *entry = (Watcher *)handle->data;
+    if (entry == NULL) return;
+    if (status != 0) {
+        /* A poll that cannot stat reports zeroed snapshots, which is node's
+         * behaviour: `watchFile` on a path that does not exist yet fires with
+         * an all-zero `Stats` rather than an error, and fires again properly
+         * when the path appears. */
+        uv_stat_t zero;
+        memset(&zero, 0, sizeof(zero));
+        call_watch_stats(entry->callback, stat_columns(&zero),
+                         stat_columns(&zero));
+        return;
+    }
+    call_watch_stats(entry->callback, stat_columns(current),
+                     stat_columns(previous));
+}
+
+double nts_fs_watch_start(NtsString *path, bool recursive, bool persistent,
+                          bool throw_if_no_entry, NtsHeader *callback) {
+    (void)throw_if_no_entry; /* the module raises; this reports the errno */
+    char *native = native_path(path);
+    if (native == NULL) return (double)UV_ENOMEM;
+
+    Watcher *entry = watcher_claim();
+    if (entry == NULL) {
+        free(native);
+        return (double)UV_ENOMEM;
+    }
+    int status = uv_fs_event_init(uv_default_loop(), &entry->h.event);
+    if (status == 0) {
+        entry->h.any.data = entry;
+        entry->callback = callback;
+        if (callback != NULL) nts_retain(callback);
+        status = uv_fs_event_start(&entry->h.event, on_fs_event, native,
+                                   recursive ? UV_FS_EVENT_RECURSIVE : 0);
+    }
+    free(native);
+    if (status != 0) {
+        if (callback != NULL) nts_release(callback);
+        entry->kind = WATCH_FREE;
+        return (double)status;
+    }
+    entry->kind = WATCH_EVENT;
+    if (!persistent) uv_unref(&entry->h.any);
+    return watcher_index(entry);
+}
+
+double nts_fs_watchfile_start(NtsString *path, double interval, bool persistent,
+                              bool bigint, NtsHeader *callback) {
+    char *native = native_path(path);
+    if (native == NULL) return (double)UV_ENOMEM;
+
+    Watcher *entry = watcher_claim();
+    if (entry == NULL) {
+        free(native);
+        return (double)UV_ENOMEM;
+    }
+    int status = uv_fs_poll_init(uv_default_loop(), &entry->h.poll);
+    if (status == 0) {
+        entry->h.any.data = entry;
+        entry->callback = callback;
+        entry->bigint = bigint;
+        if (callback != NULL) nts_retain(callback);
+        /* libuv takes the interval in milliseconds and treats zero as "as fast
+         * as possible", which node's default of 5007 deliberately is not. The
+         * module supplies the default; a zero here is a caller's choice. */
+        status = uv_fs_poll_start(&entry->h.poll, on_fs_poll, native,
+                                  (unsigned int)interval);
+    }
+    free(native);
+    if (status != 0) {
+        if (callback != NULL) nts_release(callback);
+        entry->kind = WATCH_FREE;
+        return (double)status;
+    }
+    entry->kind = WATCH_POLL;
+    if (!persistent) uv_unref(&entry->h.any);
+    return watcher_index(entry);
+}
+
+static void on_watcher_closed(uv_handle_t *handle) {
+    Watcher *entry = (Watcher *)handle->data;
+    if (entry == NULL) return;
+    if (entry->callback != NULL) nts_release(entry->callback);
+    entry->callback = NULL;
+    entry->kind = WATCH_FREE;
+}
+
+static void watcher_stop(Watcher *entry) {
+    if (entry == NULL) return;
+    if (uv_is_closing(&entry->h.any)) return;
+    if (entry->kind == WATCH_EVENT) {
+        uv_fs_event_stop(&entry->h.event);
+    } else {
+        uv_fs_poll_stop(&entry->h.poll);
+    }
+    /* Closed rather than freed: libuv owns the handle until its close callback
+     * runs, and releasing the callback before then would drop it while an event
+     * already queued still names it. */
+    uv_close(&entry->h.any, on_watcher_closed);
+}
+
+void nts_fs_watch_stop(double handle) {
+    watcher_stop(watcher_at(handle, WATCH_EVENT));
+}
+
+void nts_fs_watchfile_stop(double handle) {
+    watcher_stop(watcher_at(handle, WATCH_POLL));
+}
+
+static void watcher_ref(Watcher *entry, bool keep_alive) {
+    if (entry == NULL) return;
+    if (keep_alive) {
+        uv_ref(&entry->h.any);
+    } else {
+        uv_unref(&entry->h.any);
+    }
+}
+
+void nts_fs_watch_ref(double handle) {
+    watcher_ref(watcher_at(handle, WATCH_EVENT), true);
+}
+void nts_fs_watch_unref(double handle) {
+    watcher_ref(watcher_at(handle, WATCH_EVENT), false);
+}
+void nts_fs_watchfile_ref(double handle) {
+    watcher_ref(watcher_at(handle, WATCH_POLL), true);
+}
+void nts_fs_watchfile_unref(double handle) {
+    watcher_ref(watcher_at(handle, WATCH_POLL), false);
+}
