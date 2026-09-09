@@ -256,15 +256,58 @@ pub(crate) fn cursors(func: &Func) -> FxHashSet<ValueId> {
                 _ => {}
             }
         }
+        // The `from` a cursor helper is *given* is a cursor too, and the loop's
+        // first one is a literal. `nts_map_next(map, 0)` pushes that literal
+        // per its `f64` type while the call declares `I`, and the emitter's own
+        // accounting caught it: `depth 0 -> 3 -> 2` where the descriptor says
+        // two words go in and one comes back.
+        for op in &func.values {
+            let OpKind::Call { callee: Callee::External(name), args, .. } = &op.kind else {
+                continue;
+            };
+            let Some((Some(position), _, _)) = cursor_helper(name) else { continue };
+            if let Some(argument) = args.get(position)
+                && whole_constant(func, *argument)
+            {
+                grew |= class.insert(*argument);
+            }
+        }
+        // The literal a cursor is *compared* against, for the same reason: the
+        // loop header tests `cursor >= 0`, and a class member loaded as an int
+        // beside a literal spelled as a double is a comparison of three words
+        // where two or four were wanted. `b13 ended with 1 word(s) on the
+        // operand stack` is what that looks like from the block's end.
+        for op in &func.values {
+            let OpKind::Binary {
+                op: BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne,
+                lhs,
+                rhs,
+            } = op.kind
+            else {
+                continue;
+            };
+            for (side, other) in [(lhs, rhs), (rhs, lhs)] {
+                if class.contains(&side) && whole_constant(func, other) {
+                    grew |= class.insert(other);
+                }
+            }
+        }
         for (at, op) in func.values.iter().enumerate() {
             let OpKind::Binary { op: BinOp::Add, lhs, rhs } = op.kind else { continue };
             if !matches!(op.ty, HirType::Float { bits: 64 }) {
                 continue;
             }
-            let stepped = (class.contains(&lhs) && whole_constant(func, rhs))
-                || (class.contains(&rhs) && whole_constant(func, lhs));
-            if stepped {
-                grew |= class.insert(ValueId(u32::try_from(at).unwrap_or(0)));
+            // The step's literal joins too, and forgetting it produced `a
+            // `Add` whose operands are Int and Double but whose result is Int`
+            // -- the emitter refusing a mixed addition it would have had to
+            // balance by guessing. Three literals in one loop, each admitted
+            // separately: the one a cursor starts from, the one it is compared
+            // against, and the one it steps by.
+            for (member, literal) in [(lhs, rhs), (rhs, lhs)] {
+                if class.contains(&member) && whole_constant(func, literal) {
+                    grew |= class.insert(literal);
+                    grew |= class.insert(ValueId(u32::try_from(at).unwrap_or(0)));
+                }
             }
         }
         if !grew {

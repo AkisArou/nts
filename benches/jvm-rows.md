@@ -115,7 +115,7 @@ different problem from the four rows losing by a lot.
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
 | `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
-| `array-from` | 2.12x | **MINE, and priced: the `f64` cursor is 3.05x of the walk** and the walk is ~1.84ms of 2.09ms, so about **0.86x** if `intcall` learns cursors. Runtime targets landed; the pass is not written. Below |
+| `array-from` | 2.12x -> **0.95x** | the cursor is held as an `int`; eight runs, 0.94x-0.97x. **Moved.** Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 1.27x | the same `uirem` residual |
@@ -2076,6 +2076,47 @@ the walk on seven cases including deletions, head advancement, refill and past
 the linear limit. **It is unreachable until the lowering emits one call instead
 of the open-coded loop**, which is `hir`'s. Filed with MainClaude with the
 number and the reproducer.
+
+### `array-from` moved: 2.12x to 0.95x, and the cursor was the whole of it
+
+Priced first at 3.05x on the walk, then built. Eight `nts-bench` runs after,
+each already a best-of-five:
+
+    0.96  0.96  0.95  0.96      before the pass was simplified
+    0.94  0.97  0.96  0.94      after
+
+**0.94x-0.97x, from 2.12x.** Checksums agree across variants, floor 134,
+46 tests, clippy clean.
+
+`intcall` now finds a **cursor class**: values seeded by `nts_map_next`, closed
+over block-parameter edges in both directions, over addition by a whole
+constant, and over the three literals such a loop carries -- the one the cursor
+starts from, the one it is compared against, and the one it steps by. The class
+is refused whole unless every use of every member is one of the four shapes the
+pass understands.
+
+**Four sites had to learn that a value can be held narrower than its declared
+type**, and finding them is the story:
+
+    conversion's result     widened `nextI`'s `I` straight back to a double
+    place's discard         popped `types::kind` words, not what is on the stack
+    load's rematerialisation spelled a cursor's literal as a double
+    the call site           `or_else` on an already-Some table entry, so the
+                            override never ran at all
+
+**Three of the four I guessed at and fixed without confirming, and none was the
+one that mattered.** What found it was printing `code.depth()` around the call:
+
+    nts_map_next -> nextI(Lnts/rt/NtsMap;I)I   depth 0 -> 3 -> 2
+
+Three words pushed where the descriptor declares two. That named the argument in
+one run, after three rounds of reasoning about which pass had claimed the value.
+It is the same lesson as reading `javap` on `array-methods` this morning: **the
+artefact says in one look what inference takes three rounds to get wrong.**
+
+The `place` fix is worth keeping separately from all of this -- a discarded
+value popped its *declared* width rather than its held one, which was right by
+accident for as long as the only narrowing was of results somebody wanted.
 
 ## Open, and whose
 

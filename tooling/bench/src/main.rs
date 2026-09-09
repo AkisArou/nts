@@ -1876,6 +1876,11 @@ fn prepared_program(
             specialize_numbers: specialize,
             provider,
             roots: hir::reachable::Roots::Entry(entry),
+            // Empty, which is what a project with only `include` has and what
+            // this harness synthesises for every case. It is also what this
+            // call passed before the field existed, so the columns keep
+            // measuring the program they measured yesterday.
+            entry_files: &[],
         },
     ) {
         Ok(prepared) => prepared,

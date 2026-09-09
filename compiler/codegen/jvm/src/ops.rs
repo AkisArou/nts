@@ -4028,6 +4028,27 @@ impl Emitter<'_> {
                 // An index this backend holds as an `int`; see `intcall`. The
                 // descriptor is the table's with its return replaced, so the
                 // argument spelling stays the one place it is decided.
+                // A cursor helper, and this **replaces** the table's answer
+                // rather than filling in for it. `nts_map_next` is already in
+                // `value_external`, so an `or_else` here never ran: the call
+                // emitted the `(D)D` form while the value was held as an `int`
+                // and `place` stored one word of the two it pushed. That is
+                // exactly "moved the operand stack from 0 to 1", and it named
+                // the operation rather than leaving it to be bisected -- which
+                // is what that check was added for.
+                let cursor_form = crate::intcall::cursor_helper(name).and_then(|(position, _, narrow)| {
+                    let cursor_held = position
+                        .and_then(|at| args.get(at))
+                        .is_some_and(|arg| self.narrowed.contains(arg));
+                    if !cursor_held && !self.narrowed.contains(&value) {
+                        return None;
+                    }
+                    Some(match narrow {
+                        "nextI" => (types::MAP, "nextI", "(Lnts/rt/NtsMap;I)I".to_owned()),
+                        _ => (types::MAP, "keyAtI", "(Lnts/rt/NtsMap;I)Lnts/rt/NtsValue;".to_owned()),
+                    })
+                });
+                let found = cursor_form.or(found);
                 if self.narrowed.contains(&value)
                     && let Some(narrow) = crate::intcall::integral_helper(name)
                     && let Some((owner, _, descriptor)) = &found
@@ -4087,7 +4108,14 @@ impl Emitter<'_> {
                 // asymmetry `conversion` had: the mark has to be honoured on
                 // the way out as well as on the way in, or the emitter puts a
                 // double where its own accounting says an int.
-                self.narrow_result(code, pool, result, returns, origin)?;
+                // Not when the value is held as an `int`: `narrow_result`
+                // reconciles the descriptor's return with the HIR type, and a
+                // cursor's HIR type is the `f64` `hir::runtime` declares -- so
+                // it would widen the answer straight back and undo the
+                // representation this lane chose.
+                if !(self.narrowed.contains(&value) && returns == "I") {
+                    self.narrow_result(code, pool, result, returns, origin)?;
+                }
                 return Ok(Placed::OnStack);
             }
             // `invokevirtual` on the receiver's *static* class, by name. The
