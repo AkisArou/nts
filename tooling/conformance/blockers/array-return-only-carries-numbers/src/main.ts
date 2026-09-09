@@ -1,41 +1,40 @@
-// expect: emit-c --napi -> emits-addon napi_set_named_property(env, exports, "nums"
+// expect: emit-c --napi -> emits-addon napi_set_named_property(env, exports, "texts"
 //
-// Spelled `emits-addon` and not `publishes nums`, which would be the natural
+// Spelled `emits-addon` and not `publishes texts`, which would be the natural
 // form and cannot state this: `publishes X` also requires the module to have no
-// wrapper declines at all, and five declines are the point. The same conflation
+// wrapper declines at all, and the declines are the point. The same conflation
 // `lowers` was added for -- an expectation about one export should not be
 // answerable by the state of the others.
 //
-// **`number[]` is the only array the wrapper can return.** Six functions
-// differing in nothing but their element type:
+// **Two of the five now cross.** The expectation moved from `nums` to `texts`
+// deliberately: `nums` was the control saying the array machinery exists, and
+// `texts` is the first thing that machinery was extended to carry, so guarding
+// it is what catches a regression. `nums` stays below as the control it was.
 //
-//     number[]        published
-//     string[]        no wrapper for texts: returns string[]
-//     boolean[]       no wrapper for bools: returns bool[]
-//     Row[]           no wrapper for rows:  returns an object[]
-//     Fn[]            no wrapper for fns:   returns an object[]
-//     Uint8Array[]    no wrapper for views: returns TypedArray[]
+//     number[]        published        Row[]          returns an object[]
+//     string[]        published        Fn[]           returns an object[]
+//     boolean[]       published        Uint8Array[]   returns TypedArray[]
 //
-// The expectation is `publishes nums`, which is the control rather than the
-// subject: it says the array machinery exists and works, so the other five are
-// element kinds it was not given rather than arrays being unsupported. If
-// `nums` ever stops publishing, this fixture is about something much larger and
-// the diagnosis in it is wrong.
+// `Cross::Numbers` was `number[]` and nothing else, which made one case the
+// shape of the whole boundary -- 71 signatures across ten of node's modules
+// differing in nothing but element type. It is `Cross::Elements(Box<Cross>)`
+// now: an array crosses when the thing in it does, so the refusal belongs to
+// the element and moves when the element does.
 //
-// **What it costs: 71 signatures across ten modules** -- `fs` 18, `util` 11,
-// `stream` 10, `events` 8, `url` 5, `assert` 4, `path` 4, `http` 3, `dgram` 2,
-// `net` 2. By element: `string` 24, `Dirent` 8, `Listener` 7, `Uint8Array` 5,
-// `unknown` 5, and a long tail.
+// The three that remain are the three whose *elements* still refuse. An object
+// needs its layout's descriptor to be rebuilt and a view carries the ownership
+// question, both of which are refusals this file does not own.
 //
-// It is how `os.cpus` fails at the wrapper -- `no wrapper for cpus: returns an
-// object[]` -- which is a *second* blocker behind `NTS2010` on the same export,
-// and it is why fixing the heterogeneous-tuple representation alone would not
-// publish it. `os` is the module closest to green: 17 of node's 23 names.
+// **Outward only for the new kinds.** An array of references has to be
+// allocated on this side to be filled, and allocation needs a descriptor
+// `program.c` keeps -- the same wall an object parameter meets. `number[]` is
+// the one that does not, because `nts_from_napi_numbers` takes its descriptor
+// from the runtime.
 //
-// Distinct from `view-returns.py`'s 66, which is a *view* in return position --
-// `Uint8Array`, not `Uint8Array[]`. The five `TypedArray[]` here are behind
-// both.
-
+// Verified by running it rather than by reading the emitted C:
+//
+//     nums()  [ 1 ]     texts()  [ 'a' ]     bools()  [ true ]
+//
 interface Row {
   name: string;
   size: number;

@@ -72,6 +72,25 @@ diagnostic improved, and I stopped — while the body still emitted the assignme
 clang rejects, so the module was no better off. I had fixed the head of the
 thing I was looking at, and the thing I was looking at was the message.
 
+## A test whose name was narrower than its assertion
+
+`an_array_is_not_guessed_to_be_a_rest_parameter` asserted
+
+    assert!(cross(&string_array, ...).is_none());
+
+Its name is about rest parameters. Its assertion is that `string[]` does not
+cross the boundary **at all** — which was true only because `number[]` was the
+only array that crossed, and which the rest question never needed. When arrays
+were generalised, the test went red for the thing the change was *for*.
+
+Nothing was wrong with the assertion when it was written; it was simply much
+stronger than the property it was named after, so it held a second fact by
+accident and nobody knew the second fact was load-bearing until it moved.
+
+The repair is not a weaker test. It now asserts what the name claims *and*
+carries a control — `Uint8Array[]` still refuses, because its element does —
+so it says both that the element decides and which elements still cannot.
+
 ## A suite that skips without saying it skipped
 
 `compiler/codegen/c/tests/execute.rs` builds and *runs* generated C. Without

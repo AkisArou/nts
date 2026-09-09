@@ -1419,11 +1419,11 @@ fn field_load(
             op.origin.location,
         )
     })?;
-    let read = format!(
-        "{}->{}",
-        value_name(object),
-        c_identifier(&declared.name)
-    );
+    // `c_member`, which is what the read used before this function existed.
+    // `field_store` spells the same slot with `c_identifier`; the two agree on
+    // every name in the corpus and that is luck rather than design, and not a
+    // thing to change while fixing something else.
+    let read = format!("{}->{}", value_name(object), c_member(&declared.name));
     if declared.ty == op.ty || !matches!(declared.ty, HirType::Erased) {
         return Ok(format!("{name} = {read};"));
     }

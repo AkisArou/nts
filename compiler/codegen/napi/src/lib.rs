@@ -50,15 +50,23 @@ enum Cross {
     Number,
     Bool,
     Str,
-    /// A `number[]`. Crosses as a JavaScript array of numbers, copied in both
-    /// directions -- a handle would mean deciding who owns the storage
-    /// afterwards, which is the question `ArrayBuffer` is refused over.
-    Numbers,
+    /// An array, by how its elements cross. A JavaScript array, copied.
+    ///
+    /// It was `Numbers` and it was `number[]` only, which made it the shape of
+    /// the whole boundary rather than one case in it: **`number[]` was the only
+    /// array that could return at all**, across 71 signatures in ten of node's
+    /// modules -- `fs` 18, `util` 11, `stream` 10 -- where the elements differ
+    /// in nothing but their type.
+    ///
+    /// A copy in both directions, for the reason the old comment gave: a handle
+    /// would mean deciding who owns the storage afterwards, which is the
+    /// question `ArrayBuffer` is refused over.
+    Elements(Box<Cross>),
     /// A record, by index into the program's layouts. Crosses as a plain
     /// JavaScript object of its fields.
     Object(usize),
     /// A typed array. Crosses **outward only**, as a copy, for the reason
-    /// [`Cross::Numbers`] is copied: a handle would hand out this heap's
+    /// [`Cross::Elements`] is copied: a handle would hand out this heap's
     /// storage and make ownership a question both sides answer. Copying does
     /// not ask it.
     ///
@@ -67,6 +75,22 @@ enum Cross {
     /// has, and refused in the same place with the same words.
     Bytes,
     Void,
+}
+
+/// Which array-building helper an element kind uses.
+///
+/// One per kind rather than one generic loop taking a function pointer: the
+/// slots differ in *width* -- a `double` array and a reference array are not
+/// the same memory -- so a shared loop would need the width as data anyway and
+/// would read each slot through a cast the compiler could not check.
+fn elements_helper(inner: &Cross) -> &'static str {
+    match inner {
+        Cross::Str => "nts_to_napi_strings",
+        Cross::Bool => "nts_to_napi_booleans",
+        // Every other kind is refused in `cross`, so reaching one is a bug
+        // there rather than a shape to handle here.
+        _ => "nts_to_napi_numbers",
+    }
 }
 
 // Several types answer `None` and each answers it for its own reason. Merged
@@ -124,12 +148,20 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // need marshalling and whose ownership question is per element, and an
         // array of anything narrower than a double is the same work again with
         // a width; neither is answered by the same rule.
-        HirType::Managed(ManagedType::Array(element))
-            if matches!(**element, HirType::Float { bits: 64 }) =>
-        {
-            Some(Cross::Numbers)
+        HirType::Managed(ManagedType::Array(element)) => {
+            // The elements decide it, which is the whole of the change: an
+            // array crosses when the thing in it does. An element this cannot
+            // marshal one at a time still refuses -- an object needs its
+            // layout's descriptor to rebuild and a view has the ownership
+            // question -- but the refusal is now the element's rather than the
+            // array's, so it moves when the element does.
+            let inner = cross(element, layouts, classes)?;
+            matches!(
+                inner,
+                Cross::Number | Cross::Bool | Cross::Str
+            )
+            .then(|| Cross::Elements(Box::new(inner)))
         }
-        HirType::Managed(ManagedType::Array(_)) => None,
         // A promise has no synchronous crossing: its value does not exist yet.
         // Handing one to JavaScript means creating a napi deferred and resolving
         // it when the promise settles, which is a threadsafe-function design
@@ -574,6 +606,50 @@ static napi_status nts_to_napi_view(napi_env env, const NtsView *view,
                                   buffer, 0, out);
 }
 
+/* A `string[]` as a JavaScript array of strings. The same copy the numbers
+ * above are, one level in: the array is copied and so is each element, so
+ * nothing on either side holds storage the other can free. */
+static napi_status nts_to_napi_strings(napi_env env, const NtsArray *array,
+                                       napi_value *out) {
+    if (array == NULL) return napi_get_undefined(env, out);
+
+    uint32_t length = array->header.length;
+    napi_status status = napi_create_array_with_length(env, (size_t)length, out);
+    if (status != napi_ok) return status;
+
+    NtsString *const *slots = NTS_ITEMS(array, NtsString *);
+    for (uint32_t at = 0; at < length; at++) {
+        napi_value element = NULL;
+        status = nts_to_napi_string(env, slots[at], &element);
+        if (status != napi_ok) return status;
+        status = napi_set_element(env, *out, at, element);
+        if (status != napi_ok) return status;
+    }
+    return napi_ok;
+}
+
+/* A `boolean[]`. Its slots are one byte each, not a double and not a pointer,
+ * which is the whole reason this is a third function rather than a width
+ * passed to one loop. */
+static napi_status nts_to_napi_booleans(napi_env env, const NtsArray *array,
+                                        napi_value *out) {
+    if (array == NULL) return napi_get_undefined(env, out);
+
+    uint32_t length = array->header.length;
+    napi_status status = napi_create_array_with_length(env, (size_t)length, out);
+    if (status != napi_ok) return status;
+
+    const bool *slots = NTS_ITEMS(array, bool);
+    for (uint32_t at = 0; at < length; at++) {
+        napi_value element = NULL;
+        status = napi_get_boolean(env, slots[at], &element);
+        if (status != napi_ok) return status;
+        status = napi_set_element(env, *out, at, element);
+        if (status != napi_ok) return status;
+    }
+    return napi_ok;
+}
+
 /* Raise what compiled code threw as a catchable JavaScript exception.
  *
  * A compiled program's own `try` is fully lowered, so this is reached only at
@@ -721,8 +797,20 @@ fn crossings_of(
         .iter()
         .zip(&crossings)
         .find_map(|(parameter, crossing)| {
-            matches!(crossing, Cross::Object(_) | Cross::Bytes | Cross::Void)
-                .then_some(parameter)
+            matches!(
+                crossing,
+                Cross::Object(_) | Cross::Bytes | Cross::Void
+            )
+            .then_some(parameter)
+            .or_else(|| {
+                // An array of *references* has to be allocated on this side to
+                // be filled, and allocation needs a descriptor `program.c`
+                // keeps -- the same wall an object parameter meets. A
+                // `number[]` is the one that does not: `nts_from_napi_numbers`
+                // takes its descriptor from the runtime.
+                matches!(crossing, Cross::Elements(inner) if !matches!(**inner, Cross::Number))
+                    .then_some(parameter)
+            })
         })
     {
         return Err(Skipped {
@@ -917,7 +1005,7 @@ fn member_callback(
     out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(args.iter().skip(1)) {
-            if matches!(crossing, Cross::Str | Cross::Numbers) {
+            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
                 let _ = writeln!(
                     out,
                     "    if ({name} != NULL) nts_release((NtsHeader *){name});"
@@ -1005,7 +1093,7 @@ fn constructor_callback(
     );
     if release_managed {
         for (crossing, name) in ctor_crossings.iter().zip(args.iter().skip(1)) {
-            if matches!(crossing, Cross::Str | Cross::Numbers) {
+            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
                 let _ = writeln!(
                     out,
                     "    if ({name} != NULL) nts_release((NtsHeader *){name});"
@@ -1229,7 +1317,7 @@ fn wrapper(
     out.push_str("nts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n");
     if release_managed {
         for (crossing, name) in crossings.iter().zip(&args) {
-            if matches!(crossing, Cross::Str | Cross::Numbers) {
+            if matches!(crossing, Cross::Str | Cross::Elements(_)) {
                 let _ = writeln!(
                     out,
                     "    if ({name} != NULL) nts_release((NtsHeader *){name});"
@@ -1289,7 +1377,7 @@ fn declare_argument(
         ),
         Cross::Bool => format!("    bool {name} = false;\n"),
         Cross::Str => format!("    NtsString *{name} = NULL;\n"),
-        Cross::Numbers => format!("    NtsArray *{name} = NULL;\n"),
+        Cross::Elements(_) => format!("    NtsArray *{name} = NULL;\n"),
         Cross::Bytes => format!("    NtsView *{name} = NULL;\n"),
         Cross::Object(_) | Cross::Void => String::new(),
     }
@@ -1321,7 +1409,7 @@ fn unmarshal(
         // A `number[]` is copied element by element. The descriptor comes from
         // the runtime rather than from `program.c`, which keeps its own to
         // itself -- see `nts_array_of_numbers`.
-        Cross::Numbers => format!(
+        Cross::Elements(_) => format!(
             "    if (!nts_napi_expect(env, nts_from_napi_numbers(env, argv[{index}], &{name}), \"expected an array of numbers\")) goto nts_napi_cleanup;\n"
         ),
         // An object argument would have to be *allocated*, and allocation needs
@@ -1427,9 +1515,10 @@ fn marshal(
             );
             text
         }
-        Cross::Numbers => {
+        Cross::Elements(inner) => {
+            let helper = elements_helper(inner);
             let mut text = format!(
-                "    NtsArray *result = {call};\n{after_call}    napi_status result_status = nts_to_napi_numbers(env, result, &out);\n"
+                "    NtsArray *result = {call};\n{after_call}    napi_status result_status = {helper}(env, result, &out);\n"
             );
             if release_result {
                 text.push_str("    nts_release((NtsHeader *)result);\n");
@@ -1737,7 +1826,9 @@ fn publish_value_exports(
             Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
             Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
             Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
-            Cross::Numbers => format!("nts_to_napi_numbers(env, {symbol}, &value)"),
+            Cross::Elements(inner) => {
+                format!("{}(env, {symbol}, &value)", elements_helper(inner))
+            }
             Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
             // `value_exports` refuses these, so reaching one is a bug in it
             // rather than a shape to handle here.
@@ -1947,11 +2038,30 @@ mod tests {
     }
 
     #[test]
-    fn an_array_is_not_guessed_to_be_a_rest_parameter() {
-        let ty = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
+    fn an_array_crosses_by_what_its_elements_are() {
+        // Was `an_array_is_not_guessed_to_be_a_rest_parameter`, and it asserted
+        // that `string[]` does not cross **at all** -- true while `number[]`
+        // was the only array, and a far stronger claim than its name made. The
+        // rest question belongs to `Param::shape`, which `wrapper` asks
+        // directly; this test never reached it.
+        let strings = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
             ManagedType::String,
         ))));
-        assert!(cross(&ty, &[], &FxHashSet::default()).is_none());
+        assert!(matches!(
+            cross(&strings, &[], &FxHashSet::default()),
+            Some(Cross::Elements(inner)) if matches!(*inner, Cross::Str)
+        ));
+
+        // The control, and the point of the change: an element that cannot be
+        // marshalled one at a time still refuses, so the refusal is the
+        // element's and moves when the element does.
+        let views = HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
+            ManagedType::View(Box::new(HirType::Int {
+                bits: 8,
+                signed: false,
+            })),
+        ))));
+        assert!(cross(&views, &[], &FxHashSet::default()).is_none());
     }
 
     #[test]
