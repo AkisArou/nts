@@ -59,12 +59,39 @@ assert.deepStrictEqual(
 );
 
 // The direction the shim cannot fake: a name present but bound to nothing.
+//
+// Collected rather than asserted in the loop. Asserting inside it reported
+// `AsyncLocalStorage` and stopped, which hid both of the checks below -- and the
+// `extra` one is, by this file's own comment, the direction this module's raw
+// addon actually goes wrong in. A file that reports its first finding and stops
+// is a file whose other findings do not exist until the first is repaired.
+const wrongType = [];
 for (const name of expected) {
-  assert.strictEqual(
-    typeof asyncHooks[name],
-    nodeTypes[name],
-    `async_hooks.${name} is ${typeof asyncHooks[name]}, node's is ${nodeTypes[name]}`,
-  );
+  const ours = typeof asyncHooks[name];
+  if (ours !== nodeTypes[name]) wrongType.push(`${name}: ${ours}, node's ${nodeTypes[name]}`);
+}
+
+// **And that each published function can be called.**
+//
+// Node has no reason to assert this: there, a name of type `function` is always
+// callable. Here it is not. `executionAsyncResource` publishes and throws `the
+// compiled function returned a value with no JavaScript representation` -- an
+// outbound failure, where `buffer.isUtf8`'s is inbound. `typeof` cannot see
+// either, and a surface test that stops at `typeof` reports a module in better
+// shape than it is.
+const uncallable = [];
+for (const [name, want] of [
+  ["executionAsyncId", "number"],
+  ["triggerAsyncId", "number"],
+  ["executionAsyncResource", "object"],
+]) {
+  if (typeof asyncHooks[name] !== "function") continue;
+  try {
+    const got = typeof asyncHooks[name]();
+    if (got !== want) uncallable.push(`${name}() answered a ${got}, node answers an ${want}`);
+  } catch (error) {
+    uncallable.push(`${name}() threw: ${error.message}`);
+  }
 }
 
 // And that nothing internal reached the public surface. Node exports seven
@@ -72,8 +99,16 @@ for (const name of expected) {
 // in the direction nobody looks, and it is the direction this module's raw
 // addon actually goes wrong in.
 const extra = [...actual].filter((name) => !expected.includes(name)).sort();
+
+// All three findings at once, so none hides the others.
+const surface = [
+  ...wrongType.map((line) => `absent or wrong type -- ${line}`),
+  ...uncallable.map((line) => `published but not callable -- ${line}`),
+  ...extra.map((name) => `published and node has no such name -- ${name}`),
+];
 assert.deepStrictEqual(
-  extra,
+  surface,
   [],
-  `async_hooks publishes name(s) node does not: ${extra.join(", ")}`,
+  `${wrongType.length} wrong type, ${uncallable.length} uncallable, ` +
+    `${extra.length} published that node does not have:\n  ${surface.join("\n  ")}`,
 );
