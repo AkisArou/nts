@@ -58,7 +58,7 @@
 // place to start reducing rather than a defect. Every reduction has to be
 // controlled against the real site before it is filed.
 
-import { existsSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -148,10 +148,36 @@ console.log(`  ${scanned} module(s), ${roots.length} distinct root messages, ` +
   `${rootThings} distinct named things behind ${rootSites} sites.`);
 console.log(`  ${cascadeThings} further things refuse only because something they call was ` +
   `refused.\n`);
+// Which roots already have a fixture, so the list reads as work rather than as
+// a report. A fixture's `expect:` line is matched against the message either
+// way round, because a fixture usually names a fragment of one.
+//
+// Crude on purpose, and one-sided: a fixture naming the same defect in
+// different words reads as absent here, so `filed` is trustworthy and blank is
+// not. It saves re-deriving `??` twice, which is what it was written after.
+const filings = [];
+const fixtures = join(ROOT, "tooling/conformance/blockers");
+if (existsSync(fixtures)) {
+  for (const d of readdirSync(fixtures).sort()) {
+    const src = join(fixtures, d, "src", "main.ts");
+    if (!existsSync(src)) continue;
+    const first = readFileSync(src, "utf8").split("\n")[0].trim();
+    const m = /^\/\/\s*expect:\s*(.+)$/.exec(first);
+    if (m !== null) filings.push([d, shape(m[1].trim()).toLowerCase()]);
+  }
+}
+const filedAs = (message) => {
+  const text = message.replace(/^NTS1001 /, "").toLowerCase();
+  const hit = filings.find(([, e]) => e.includes(text) || text.includes(e));
+  return hit === undefined ? "" : hit[0];
+};
+
 console.log(`  ${"things".padStart(6)} ${"sites".padStart(6)} ${"mods".padStart(5)}  root`);
 for (const [key, v] of roots.slice(0, 25)) {
+  const filed = filedAs(key);
   console.log(`  ${String(v.things.size).padStart(6)} ${String(v.sites.size).padStart(6)} ` +
-    `${String(v.modules.size).padStart(5)}  ${key.replace(/^NTS1001 /, "").slice(0, 78)}`);
+    `${String(v.modules.size).padStart(5)}  ${key.replace(/^NTS1001 /, "").slice(0, 62)}` +
+    (filed === "" ? "" : `\n  ${" ".repeat(19)}filed as ${filed}`));
 }
 console.log("\n  Ranked by things, because fixing a property clears every use of it.");
 console.log("  A row is a place to start reducing, not a defect: the location names the");
