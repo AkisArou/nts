@@ -60,6 +60,25 @@
 // `.mode`, `.mtimeMs`, `.nlink` or `.ino` off a stat.** `stats.size` is the
 // point of the object; `isFile()` is the convenience.
 //
+// # And a prediction, labelled as one
+//
+// `process/src/main.ts:512` is `_fatalException = fatalException;` -- a **class
+// field** on `class Process extends EventEmitter`, not a prototype method.
+// `_fatalException` is the name in 73 of the 88 `process` files that pass
+// interpreted and fail compiled, which is the largest single pile in that
+// module.
+//
+// **Today those 73 fail for a different reason**: `process` publishes no
+// instance at all, so the name is missing rather than fieldless. This gap is
+// the wall *behind* that one, and it is written down as a prediction because
+// the distinction is exactly the kind that turns into a wrong attribution --
+// the fixture would otherwise read as claiming 73 files it does not currently
+// block.
+//
+// When `Process` publishes, `_fatalException` crosses as a method or not at
+// all. If it arrives on the prototype instead, this prediction was wrong and
+// the reason is worth knowing.
+//
 // Measured on `Stats` and on this reduction, which is two cases and not one --
 // `Stats` could have been peculiar, and it is not.
 
