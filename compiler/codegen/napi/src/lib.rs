@@ -74,6 +74,13 @@ enum Cross {
     /// would have to be allocated here -- the same asymmetry [`Cross::Object`]
     /// has, and refused in the same place with the same words.
     Bytes,
+    /// A value whose type the declaration did not fix.
+    ///
+    /// `unknown` crossing in either direction, carrying its tag. Primitives
+    /// only: an object has no representation on this side and a reference on
+    /// the way out has an identity the far side cannot reproduce, so both are
+    /// refused loudly rather than answered with `undefined`.
+    Erased,
     Void,
 }
 
@@ -228,11 +235,15 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // A `never` return means the call does not come back, so there is
         // nothing for a wrapper to hand back.
         HirType::Never => None,
-        // An erased value is a tag beside a payload, and crossing it would mean
-        // building whichever JS value the tag currently names -- a switch, not
-        // a conversion. Answering `None` keeps that decision out of this file
-        // until an erased value can actually reach a boundary.
-        HirType::Erased => None,
+        // An erased value is a tag beside a payload, and crossing it is the
+        // switch that decision was deferred over. It is here now because
+        // `unknown` is the parameter type that makes a module's own validation
+        // live: 23 exported functions in the profile call `validateString` or a
+        // sibling on a parameter their declaration types as `string`, and the
+        // check folds to nothing because `typeof path !== "string"` is
+        // statically false. The wrapper's arity error stands in for a guard the
+        // declaration deleted.
+        HirType::Erased => Some(Cross::Erased),
     }
 }
 
@@ -475,6 +486,64 @@ static inline napi_status nts_from_napi_string(napi_env env, napi_value value,
     return status;
 }
 
+/* A value whose type the declaration did not fix, arriving from JavaScript.
+ *
+ * `unknown` is the one parameter type where node's runtime contract and
+ * `@types/node`'s declaration usually disagree, and the disagreement is not
+ * academic: 23 exported functions in the profile validate a parameter at run
+ * time with a check the *declaration* deletes. `validateString(path, "path")`
+ * inside a function whose parameter is declared `string` folds to nothing,
+ * because `typeof path !== "string"` is statically false. Declaring the
+ * parameter `unknown` is what makes those guards live again, and this is what
+ * lets one cross.
+ *
+ * Primitives only, and the refusal is loud. An object, a function, a symbol or
+ * a bigint has no representation on this side, and answering `undefined` for
+ * one would be a wrong value where the caller passed a real thing -- the
+ * failure mode this compiler refuses everywhere else. `napi_pending_exception`
+ * after a thrown `TypeError` is the same shape every other conversion failure
+ * takes here. */
+static napi_status nts_from_napi_value(napi_env env, napi_value value,
+                                       NtsValue *out) {
+    *out = nts_value_of_undefined();
+    napi_valuetype kind;
+    napi_status status = napi_typeof(env, value, &kind);
+    if (status != napi_ok) return status;
+    switch (kind) {
+    case napi_undefined:
+        return napi_ok;
+    case napi_null:
+        *out = nts_value_of_null();
+        return napi_ok;
+    case napi_boolean: {
+        bool flag = false;
+        status = napi_get_value_bool(env, value, &flag);
+        if (status == napi_ok) *out = nts_value_of_boolean(flag);
+        return status;
+    }
+    case napi_number: {
+        double number = 0;
+        status = napi_get_value_double(env, value, &number);
+        if (status == napi_ok) *out = nts_value_of_number(number);
+        return status;
+    }
+    case napi_string: {
+        NtsString *text = NULL;
+        status = nts_from_napi_string(env, value, &text);
+        if (status == napi_ok) {
+            *out = nts_value_of_reference((NtsHeader *)text, NTS_TAG_STRING);
+        }
+        return status;
+    }
+    default:
+        break;
+    }
+    napi_throw_type_error(
+        env, NULL,
+        "an argument of this type has no representation in the compiled runtime");
+    return napi_pending_exception;
+}
+
 static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
                                              napi_value *out) {
     if (s == NULL) {
@@ -492,6 +561,36 @@ static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
         env, (const char *)NTS_ELEMENTS(s, unsigned char),
         (size_t)s->length, out);
 }
+
+/* The same crossing outward: whichever JavaScript value the tag names.
+ *
+ * A reference that is not a string is refused rather than handed over as an
+ * opaque number, for the reason `cross` refuses one everywhere else -- an
+ * object's identity on this side is an address, and the far side cannot
+ * reproduce what it means. */
+static napi_status nts_to_napi_value(napi_env env, NtsValue value,
+                                     napi_value *out) {
+    switch (nts_value_tag(value)) {
+    case NTS_TAG_UNDEFINED:
+        return napi_get_undefined(env, out);
+    case NTS_TAG_NULL:
+        return napi_get_null(env, out);
+    case NTS_TAG_BOOLEAN:
+        return napi_get_boolean(env, nts_value_boolean(value), out);
+    case NTS_TAG_NUMBER:
+        return napi_create_double(env, nts_value_number(value), out);
+    case NTS_TAG_STRING:
+        return nts_to_napi_string(env, (const NtsString *)nts_value_reference(value),
+                                  out);
+    default:
+        break;
+    }
+    napi_throw_type_error(
+        env, NULL,
+        "the compiled function returned a value with no JavaScript representation");
+    return napi_pending_exception;
+}
+
 
 /* A JavaScript array of numbers, copied into a `number[]` compiled code can
  * read. Rejects a non-array and a non-numeric element rather than coercing:
@@ -1567,6 +1666,8 @@ fn absent_argument(crossing: &Cross, name: &str) -> String {
         }
         Cross::Number => format!("{name} = 0.0;"),
         Cross::Bool => format!("{name} = false;"),
+        // The one crossing that can *say* absent rather than stand in for it.
+        Cross::Erased => format!("{name} = nts_value_of_undefined();"),
         Cross::Void => "(void)0;".to_owned(),
     }
 }
@@ -1610,6 +1711,9 @@ fn declare_argument(
     name: &str,
 ) -> String {
     match crossing {
+        // Undefined until read, which is also what an omitted optional argument
+        // leaves it as -- so the two paths need no separate initialisation.
+        Cross::Erased => format!("    NtsValue {name} = nts_value_of_undefined();\n"),
         Cross::Number if matches!(ty, HirType::Float { bits: 64 }) => {
             format!("    double {name} = 0;\n")
         }
@@ -1634,6 +1738,9 @@ fn unmarshal(
     index: usize,
 ) -> String {
     match crossing {
+        Cross::Erased => format!(
+            "    if (!nts_napi_expect(env, nts_from_napi_value(env, argv[{index}], &{name}), \"could not read an argument of unknown type\")) goto nts_napi_cleanup;\n"
+        ),
         Cross::Number if matches!(ty, HirType::Float { bits: 64 }) => format!(
             "    if (!nts_napi_expect(env, napi_get_value_double(env, argv[{index}], &{name}), \"expected a number argument\")) goto nts_napi_cleanup;\n"
         ),
@@ -1735,6 +1842,23 @@ fn marshal(
         Cross::Bool => format!(
             "    bool result = {call};\n{after_call}    if (!nts_napi_check(env, napi_get_boolean(env, result, &out), \"could not create a boolean\")) goto nts_napi_cleanup;\n"
         ),
+        // A reference inside an erased result is released the same way a
+        // `Cross::Str` one is: the callee handed back a count, and the value
+        // that leaves is a copy the far side owns.
+        Cross::Erased => {
+            let mut text = format!(
+                "    NtsValue result = {call};\n{after_call}    napi_status result_status = nts_to_napi_value(env, result, &out);\n"
+            );
+            if release_result {
+                text.push_str(
+                    "    if (NTS_TAG_IS_REFERENCE(nts_value_tag(result)) && nts_value_reference(result) != NULL) nts_release(nts_value_reference(result));\n",
+                );
+            }
+            text.push_str(
+                "    if (!nts_napi_check(env, result_status, \"could not create a value of unknown type\")) goto nts_napi_cleanup;\n",
+            );
+            text
+        }
         Cross::Number => format!(
             "    {} result = {call};\n{after_call}    if (!nts_napi_check(env, napi_create_double(env, (double)result, &out), \"could not create a number\")) goto nts_napi_cleanup;\n",
             c_type(return_type, layouts)
@@ -2232,6 +2356,7 @@ fn publish_value_exports(
                 format!("{}(env, {symbol}, &value)", elements_helper(inner, layouts))
             }
             Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
+            Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
             // `value_exports` refuses these, so reaching one is a bug in it
             // rather than a shape to handle here.
             Cross::Object(_) | Cross::Void => continue,

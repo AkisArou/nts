@@ -1,37 +1,42 @@
-// expect: emit-c --napi -> no wrapper for takesUnknown: takes unknown
+// expect: emit-c --napi -> publishes takesUnknown
 //
-// `unknown` does not cross inward. The subject lowers -- its body is emitted --
-// and the wrapper declines it:
+// FIXED, kept as a guard. `unknown` crosses inward.
 //
-//     no wrapper for takesUnknown: takes unknown
+// It was filed separately from the return direction because the two came apart
+// once before -- `view-parameter-crosses-outward-only` is a case where they
+// did -- and this time they did not: both landed together, deliberately, and
+// the reason is worth keeping.
 //
-// The return direction is `unknown-return-at-the-boundary`. It was a second
-// subject here until an audit found that this fixture's *expectation* named
-// only the inward half, so a fix landing only inward would have turned it green
-// with the outward half still declined -- the exact failure this file's own
-// comment warned about.
+// `win32.toNamespacedPath` returns its argument. Widening its parameter to
+// `unknown` with only the inward crossing built would have taken that export
+// from "publishes and throws on a non-string" to "does not publish at all",
+// and `path` from 15 published to 11. A number going down for a change
+// somebody chose is the trade this ledger exists to refuse, so neither half
+// shipped alone.
 //
-// `takesNumber` and `returnsNumber` are the controls and must keep crossing.
+// # What it is for, which is not `unknown` as such
 //
-// `parameter-boundary-carries-four-types` surveys what a parameter can be --
-// number, string, boolean, their arrays, views, objects, functions, optionals,
-// unions, nullables -- and has no `unknown` among them. There is no
-// return-direction survey with one either. So this is the form that survey did
-// not cover, in both directions, with the return side stated separately because
-// a fix for one does not imply the other: `view-parameter-crosses-outward-only`
-// is already a case where the two directions came apart.
+// **23 exported functions in the profile validate a parameter at run time with
+// a check their own declaration deletes.** `validateString(path, "path")`
+// inside a function whose parameter is declared `string` folds to nothing,
+// because `typeof path !== "string"` is statically false. `path` alone has 16
+// of them.
 //
-// Where it bites: `async_hooks` publishes thirteen exports and passes nothing,
-// and four of its fifteen declines are this --
+// So the wrapper's arity error is not a wrapper being wrong -- it is standing
+// in for a guard the declaration removed. `path.dirname()` answers
+// `ERR_MISSING_ARGS` where node answers `ERR_INVALID_ARG_TYPE`, and removing
+// the arity check without widening the declaration would not produce node's
+// error: it would dereference a null pointer.
 //
-//     pushAsyncContext        takes unknown
-//     emitBefore              takes unknown
-//     registerDestroyHook     takes unknown
-//     executionAsyncResource  returns unknown
+// # Primitives, and a loud refusal for the rest
 //
-// which is most of the profile's six `takes unknown` and its only
-// `returns unknown`. `unknown` is what `async_hooks` passes around, because an
-// async resource is whatever the caller made it.
+// A string, number, boolean, `null` and `undefined` cross carrying their tag.
+// An object, array, function, symbol or bigint raises a `TypeError` naming the
+// limitation, because answering `undefined` for a value the caller really
+// passed is the wrong-value failure this compiler refuses everywhere else.
+//
+// Verified by loading an addon and calling it: nine primitive cases round-trip
+// exactly, `{}` and `[]` raise the TypeError.
 
 export function takesNumber(value: number): number {
   return value;

@@ -1,20 +1,22 @@
-// expect: emit-c --napi -> no wrapper for returnsUnknown: returns unknown
+// expect: emit-c --napi -> publishes returnsUnknown
 //
-// The return half of `unknown-at-the-boundary`, split out because that fixture
-// asserted only the parameter half.
+// FIXED, kept as a guard. `unknown` crosses outward.
 //
-// It carried both subjects and a comment saying "a fix for one does not imply
-// the other" -- and then named `takes unknown` in its expectation, so a fix
-// landing only inward would have turned it green with `returns unknown` still
-// declined underneath. The comment claimed a property the fixture did not
-// enforce. Found by auditing which wrapper forms any expectation actually
-// asserts, rather than which appear in fixture text.
+// The other half of `unknown-at-the-boundary`, and they landed together on
+// purpose -- see that fixture for why shipping the inward half alone would
+// have *reduced* `path`'s published count.
 //
-// `returnsNumber` is the control and crosses.
+// Outward is the switch the boundary had been deferring: an `NtsValue` is a tag
+// beside a payload, so handing one to JavaScript means building whichever value
+// the tag names. Undefined, null, boolean, number and string each become
+// themselves. A reference that is not a string is refused with a `TypeError`,
+// for the reason `cross` refuses one everywhere else: an object's identity here
+// is an address, and the far side cannot reproduce what it means.
 //
-// `returns unknown` is the profile's only one, `async_hooks`'s
-// `executionAsyncResource`. An async resource is whatever the caller made it,
-// so `unknown` is the honest return type and not a shortcut.
+// The release is the part that is easy to get wrong and is stated in the
+// emitter: a reference inside an erased result is released exactly as a
+// `Cross::Str` result is, because the callee handed back a count and the value
+// that leaves is a copy the far side owns.
 
 export function returnsNumber(flag: boolean): number {
   return flag ? 1 : 0;
