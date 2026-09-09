@@ -9702,6 +9702,39 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### `querystring` is 0 of 8, and every one of its eight declines is filed
+
+```
+QueryString     is not a function this backend can name   export-object-shorthand
+escape          <- hexTable's initializer <- a closure <- `toString` on a number
+parse           <- addKeyVal <- `key`, which ParsedUrlQuery does not declare
+unescapeBuffer  <- Buffer#slice
+decode, encode, stringify, unescape   the same three own roots
+```
+
+Own roots, unchanged at three: `decodeURIComponent` (`missing-builtin`) at
+`main.ts:110`, and the computed-member pair at `:189` and `:248`.
+
+**`hexTable` is worth its own line.** It is `internal/querystring.ts:9`, an IIFE
+building `%00`…`%FF` once:
+
+```ts
+export const hexTable: string[] = (() => {
+  const table = new Array<string>(256);
+  for (let i = 0; i < 256; ++i) {
+    table[i] = `%${((i < 16 ? "0" : "") + i.toString(16)).toUpperCase()}`;
+```
+
+`i.toString(16)` is `toString` on a number, which is `number-tostring-radix` --
+the same root as `buffer/src/encodings.ts:279`, where `byte.toString(16)` holds
+`decodeIn` and through it `Buffer#toString` and six `StringDecoder` methods. One
+expression, two modules, and in this one it reaches `escape` through a refused
+closure and a lost initializer.
+
+So `querystring` needs five things and has a fixture for each: the
+object-literal export form, `number-tostring-radix`, `computed-member-read`,
+`computed-member-write`, and `missing-builtin`. Nothing here is undiagnosed.
+
 ### `string_decoder` is 0 of 5, and all five say the same thing
 
 ```
