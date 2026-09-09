@@ -11543,6 +11543,57 @@ than one happening now: a module only fails to link once something calls it.
 
 
 
+
+## Every compiled pass classified: 41 = 31 behaviour + 10 shape-only + 0 hollow
+
+2026-09-10, post-`code`-fix pin. **The classification reconciles exactly with
+the axis** — 41 passes counted by the runner, 41 accounted for here — which is
+the check that neither number was assembled by hand.
+
+| module | pass | behaviour | shape-only | hollow |
+| --- | ---: | ---: | ---: | ---: |
+| `path` | 15 | 13 | 2 | 0 |
+| `os` | 5 | 3 | 2 | 0 |
+| `punycode` | 3 | 3 | 0 | 0 |
+| `async_hooks` | 2 | 1 | 1 | 0 |
+| `buffer` | 2 | 1 | 1 | 0 |
+| `fs` | 2 | 1 | 1 | 0 |
+| `net` | 2 | 2 | 0 | 0 |
+| `timers` | 2 | 2 | 0 | 0 |
+| `util` | 2 | 2 | 0 | 0 |
+| `http` | 1 | 0 | 1 | 0 |
+| `process` | 1 | 0 | 1 | 0 |
+| `querystring` | 1 | 1 | 0 | 0 |
+| `readline` | 1 | 1 | 0 | 0 |
+| `stream` | 1 | 1 | 0 | 0 |
+| `zlib` | 1 | 0 | 1 | 0 |
+| **15** | **41** | **31** | **10** | **0** |
+
+**`0 hollow` across every module that has a pass**, under all three controls —
+`--sabotage`, `--empty-exports`, `--mutate-addon`. Nothing in the compiled lane
+passes because a test could not fail.
+
+Three modules — `http`, `process`, `zlib` — have **only** a shape-only pass. Their
+single pass each is a statement about a surface rather than about behaviour,
+and reporting them in a bare "15 of 22 modules have a pass" makes them sound
+like the others. They are not the same claim.
+
+### The first version of this table was wrong and the arithmetic said so
+
+The run before this one covered fourteen modules and summed to **39 against an
+axis of 40**. Two separate errors, and neither was visible in any single row:
+
+- **`fs` was missing from my own module list.** Not skipped with a reason, not
+  reported as unmeasurable — simply absent from the loop I wrote, and a table
+  of fourteen plausible rows says nothing about the fifteenth.
+- **`timers` read 2 where the sweep read 1**, because the two ran on different
+  pins. That one was real drift rather than an error, and it is why the sum was
+  39 and not 38.
+
+The sum not matching the axis is what surfaced both. **A per-module table that
+is never added up cannot catch a missing module**, and this one is now stated
+with its total beside the independent count it has to equal.
+
 ## What `fs` is actually waiting on: two items are 35% of it
 
 2026-09-10, post-`code`-fix pin. `fs` is **2 passed, 344 failed** of 395 files,
