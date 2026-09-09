@@ -1383,6 +1383,74 @@ fn null_comparison(
 /// the analysis proved whole and in range, so the cast is the identity on every
 /// value the program can produce -- but C should be told rather than left to
 /// convert implicitly.
+/// Reading a field whose slot is wider than the value read out of it.
+///
+/// `field_store` has coerced *to* the slot for as long as it has existed and
+/// the read never coerced *from* it, so a capture stored erased and read back
+/// concrete emitted `v2 = v0->callback;`
+/// with `callback` an `NtsValue` and `v2` an `NtsObj_Fn675__3 *`. clang rejects
+/// assigning a struct to a pointer, and this was the one error `process` had
+/// left after everything else in this file was fixed.
+///
+/// The read is the one [`OpKind::Unerase`] emits, and it is unchecked for the
+/// same reason that one is: the lowering decided this value's type when it
+/// typed the read, and reading the union member is what the program means by
+/// it. **Why the slot is wider than the read in the first place is a lowering
+/// question and is not answered here** -- a `FieldGet` typed from its use
+/// rather than from its slot is a disagreement the emitter can only paper over,
+/// and this papers over it in the one direction that is sound today.
+fn field_load(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    object: ValueId,
+    field: u32,
+    name: &str,
+    context: &Context<'_>,
+) -> Result<String, Diagnostic> {
+    let layout = layout_of(
+        context.program,
+        &func.values[object.0 as usize].ty,
+        &op.origin,
+    )?;
+    let declared = layout.fields.get(field as usize).ok_or_else(|| {
+        Diagnostic::error(
+            "NTS2006",
+            "a field index outside its layout",
+            op.origin.location,
+        )
+    })?;
+    let read = format!(
+        "{}->{}",
+        value_name(object),
+        c_identifier(&declared.name)
+    );
+    if declared.ty == op.ty || !matches!(declared.ty, HirType::Erased) {
+        return Ok(format!("{name} = {read};"));
+    }
+    let widened = match erased_tag(&op.ty) {
+        Some((_, "reference")) => {
+            let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+            format!("({ty})nts_value_reference({read})")
+        }
+        Some((_, "boolean")) => format!("nts_value_boolean({read})"),
+        Some((_, "number")) => format!("nts_value_number({read})"),
+        // A type this cannot read back out of an erased slot. Named rather
+        // than assigned, which is what produced the clang error above.
+        _ => {
+            return Err(Diagnostic::error(
+                "NTS2011",
+                format!(
+                    "a field held as an erased value is read back as a type this backend \
+                     cannot narrow it to: `{}`",
+                    declared.name
+                ),
+                op.origin.location,
+            ));
+        }
+    };
+    Ok(format!("{name} = {widened};"))
+}
+
 fn field_store(
     func: &Func,
     op: &nts_core::hir::Op,
@@ -2331,27 +2399,6 @@ fn object_type_name(layout: &nts_core::hir::Layout) -> String {
     )
 }
 
-/// The C name of a field, by index into its type's layout.
-fn field_of(
-    program: &Program,
-    func: &Func,
-    object: ValueId,
-    field: u32,
-    origin: &Origin,
-) -> Result<String, Diagnostic> {
-    let layout = layout_of(program, &func.values[object.0 as usize].ty, origin)?;
-    layout
-        .fields
-        .get(field as usize)
-        .map(|field| c_member(&field.name))
-        .ok_or_else(|| {
-            Diagnostic::error(
-                "NTS2006",
-                "a field index outside its layout",
-                origin.location,
-            )
-        })
-}
 
 /// The C spelling of an array's element type.
 /// Which addressing an element access uses.
@@ -3466,8 +3513,7 @@ fn managed_op(
             }
         }
         OpKind::FieldGet { object, field } => {
-            let field = field_of(context.program, func, *object, *field, &op.origin)?;
-            format!("{name} = {}->{field};", value_name(*object))
+            field_load(func, op, *object, *field, &name, context)?
         }
         OpKind::FieldSet {
             object,
