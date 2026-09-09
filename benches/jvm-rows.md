@@ -136,8 +136,8 @@ different problem from the four rows losing by a lot.
 | `fib` | 1.04x / 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
 | `upcast` | 1.03x / 1.05x | bytecode identical to the tree that measured 0.99x; a between-sitting difference, not a change |
 | `checksum` | 1.00x | parity, twice |
-| `closure-merge` | 1.01x | 1.01x twice |
-| `growth-grown` | 1.01x | 1.01x twice |
+| `closure-merge` | **1.01x** | six runs, all 1.01x. Losing by one percent, reproducibly |
+| `growth-grown` | **1.01x** | six runs, all 1.01x |
 | `substrings` | **0.40x** | was 0.95x. **The largest real movement in the table** and unflagged |
 | `map-and-set` | **0.79x** | was 0.86x |
 | `dispatch` | 0.67x-1.14x *not clean* | six runs land in two places. Neither P-core pinning nor 13x the warmup touches it. **Not a number** |
@@ -1942,6 +1942,39 @@ be reproducible while the spread is wide, and for four of these five rows it
 was. `dispatch` is the one where it is not -- 0.67x to 1.14x across six --
 and record 0132 already established why: its modes are chosen per JVM and
 belong to the code this backend emits.
+
+### The band is real: three rows reproduce to two decimals across six runs
+
+Six rows had just come off the losing list because two runs were not enough to
+place them, so the ten sitting at 1.01x-1.05x got the same treatment before
+anyone concluded anything about them. The run was killed partway and what it
+returned is enough:
+
+    closure-merge    1.01  1.01  1.01  1.01  1.01  1.01
+    growth-grown     1.01  1.01  1.01  1.01  1.01  1.01
+    fib              1.04  1.03  1.03  1.03  1.03  1.04
+    generator        1.01  1.00  0.98  1.02  1.04  1.01
+    arrays           0.98  1.04  1.00  1.00  1.02  1.09
+
+**`closure-merge` and `growth-grown` report the same two decimal places six
+times, and `fib` moves by one percent.** That is not a row that cannot be
+placed; it is a row losing by one to three percent, reproducibly, in six
+independent processes. The band survives the treatment that dissolved
+`case-convert`, `awfy-sieve`, `awfy-bounce` and `objects`.
+
+`generator` and `arrays` are the other kind -- 0.98x to 1.04x and 0.98x to
+1.09x -- and cannot be called from this. They need the six runs the others got,
+which this run did not finish.
+
+**So the two questions separate cleanly.** Whether a row loses is now answered
+for `closure-merge`, `growth-grown` and `fib`: it does, by a little, and the
+number is trustworthy. *Why* is unanswered, and eleven hypotheses died looking
+for it -- five in the emission, the harness's call depth, the inline threshold,
+core placement, and warmup twice.
+
+`in-narrowing` and `strings` returned one reading each rather than six, so they
+are not included above. That is the harness's row-name match rather than the
+rows, and it is worth fixing before this is repeated.
 
 ## Open, and whose
 

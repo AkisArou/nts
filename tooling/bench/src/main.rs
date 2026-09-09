@@ -1151,8 +1151,8 @@ fn finish_row(
         {
             eprintln!(
                 "note: {} {} varied {:.2}x across {} runs of the same binary -- \
-                 this row reports which shape the JIT settled into, not how fast \
-                 the program is",
+                 the figure here is the minimum, which may still be reproducible; \
+                 take six invocations before reading this as unquotable",
                 shown, label, measured.spread, RUNS
             );
             row.varied.push((label.to_owned(), measured.spread));
@@ -2094,8 +2094,31 @@ fn measure(command: &mut std::process::Command) -> Result<Measured> {
     Ok(best)
 }
 
-/// A run whose passes disagree by more than this is reporting which shape the
-/// JIT settled into, not how fast the program is.
+/// A run whose passes disagree by more than this has something to say about
+/// itself. **What it says is not "this row has no number".**
+///
+/// This threshold's message used to be that such a row "reports which shape the
+/// JIT settled into, not how fast the program is", and that is true of
+/// `dispatch` and was written from it. Generalised to every row that trips the
+/// threshold it is wrong, and it cost five rows their status:
+///
+///     objects                0.99x six times out of six
+///     case-convert           0.92x-1.01x, median 0.955
+///     awfy-bounce            0.97x-1.03x, median 0.99
+///     awfy-sieve             0.92x-1.02x, median 0.94
+///     number-format-double   1.15x-1.17x, a spread of 1.7%
+///
+/// All five carried this note and four of them were at or under 1.00x while
+/// being described as unquotable. `number-format-double` never varied at all --
+/// its flag was raised on the *Java* side, so a note about the reference's
+/// instability was suppressing our own stable number, and that number is 1.15x
+/// rather than the 1.08x it had been listed at.
+///
+/// **What is measured here is the spread; what is reported is the minimum, and
+/// those are different claims.** A minimum can be reproducible across
+/// processes while the spread around it is wide -- that is what best-of-N is
+/// for. The flag should send a reader to six invocations, not away from the
+/// row, and it now says so.
 ///
 /// `dispatch` reported 1.06, 1.24, 0.72, 1.06 and 1.05 on five consecutive
 /// locked runs of one binary, and 1.04, 0.71, 0.70, 1.10 on four more after
