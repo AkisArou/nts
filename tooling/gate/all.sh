@@ -160,6 +160,7 @@ concurrently() {
   cmd_examples="./tooling/gate/gate.sh"
   cmd_rc="./tooling/gate/rc.sh"
   cmd_bench_agree="./tooling/gate/bench-agree.sh"
+  cmd_addons="./tooling/gate/addons.sh"
   running=""
   chosen=""
   for name in "$@"; do
@@ -852,7 +853,24 @@ step "benches"  ./tooling/gate/benches.sh
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm bench-agree examples rc memory
+concurrently profile sweep llvm llvm-rc jvm bench-agree examples rc memory addons
+# Every node module built as an addon and *loaded*, under eager binding.
+#
+# The gap this fills was open for the whole of 2026-09-09 and had a crash in it.
+# `profile` emits C for all twenty-two modules and compiles none of it; the
+# build floor compiles them and loads none of them; the addon sweep loads them
+# and takes thirty-five minutes. So an `os.node` that segfaulted node during
+# `require` -- every `os` test failing as a crashed child -- sat between two
+# thorough instruments for an hour while "22 of 22 still build" stayed true.
+#
+# Eager binding is the second half and was a second hole: `require` resolves a
+# symbol lazily, so an addon whose wrapper names a body the backend refused
+# *loads*, publishes the name, and dies on the first call. `loads.sh` uses
+# `RTLD_NOW` for that reason.
+#
+# Five and a half minutes, nearly all of it the twenty-two builds, and it is in
+# the concurrent group so the wall clock is the group's slowest member rather
+# than the sum.
 # And the same fifty cases *run*, against node, on the hostile pool. `benches`
 # above compiles them and says so -- "Nothing runs" -- `examples` runs the
 # examples, and `nts-bench` runs each case with one seed and compares a
