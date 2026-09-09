@@ -8594,6 +8594,157 @@ Both counts were reproduced independently from the other session's tree at
 
 ## What stops `path` compiling
 
+### 2026-09-10: fifteen of seventeen publish, and the two that do not are named
+
+> This supersedes *Measured end to end: seventeen exports, two published, one
+> chain* below, which is kept for the chain it found. That measurement is no
+> longer true in its headline number: the `validateString` chain has been closed
+> and `path` now publishes **15 of node's 17 names**. Re-derived today against a
+> pinned compiler with `NTS_ADDON_OUT` set, so this is not `target/node`.
+
+Missing from the addon: **`format` and `matchesGlob`**. They have different
+causes and only one of them is a lowering gap.
+
+| name | decline | whose |
+| --- | --- | --- |
+| `format` | `no wrapper for format@posix: takes an object` (and `@win32`) | wrapper generator |
+| `matchesGlob` | `is exported and no function of that name was compiled` | a cascade, below |
+
+Both are written in my source — `internal.ts:117` and `posix.ts:31` — so neither
+is an absence I can close by writing TypeScript.
+
+`matchesGlob` cascades from four roots in `glob-matcher.ts`, and the split
+matters because two of them are one known thing:
+
+| site | construct | |
+| --- | --- | --- |
+| `glob-matcher.ts:28` | `new RegExp(...)` — a `new` with arguments and no constructor | RegExp |
+| `glob-matcher.ts:41` | `this.expression.test(value)` — a method with no declaration in the hierarchy | RegExp |
+| `glob-matcher.ts:453` | `parts.indexOf("**", globstar + 1)` — an array method with this many arguments | |
+| `glob-matcher.ts:596` | `patternIndex * columns` — a name from an enclosing scope | |
+
+**Rewriting my own source would not unblock it.** Lines 28 and 41 are `RegExp`
+construction and `RegExp.prototype.test`; either alone stops the chain, and
+neither has a supported form to rewrite into. The remaining two are separately
+fixable and separately pointless while the first two stand. `globStar` appears
+in the emitted C and `matchesGlobPattern` does not, which is the cascade
+boundary made visible.
+
+The build carries **22 `NTS1001` and 7 wrapper declines**.
+
+#### The one failure that is mine, and what it costs to fix
+
+`test-path-resolve.js` fails compiled and **passes interpreted**. It is not a
+`resolve` defect: compiled `resolve` agrees with node on fourteen inputs across
+the default, `posix` and `win32` entry points, and both namespaces cross
+correctly (`typeof posix === "object"`, `posix.resolve` a function,
+`posix.sep === "/"`).
+
+The failing line is `test-path-resolve.js:87`:
+
+    process.cwd = () => '';
+    assert.strictEqual(path.resolve(), '.');
+
+Node's own `lib/path.js` calls `process.cwd()`, so the patch is honoured there.
+Ours resolves the cwd differently per lane:
+
+- **interpreted** — `nts_process_cwd` is shimmed to JS `process.cwd()`, sees the
+  assignment, returns `''`, and `resolve()` degrades to `'.'`;
+- **compiled** — `runtime/node/internal/process.c:19` calls `uv_cwd()` in C and
+  never consults the JS binding.
+
+So the class is **native code bypassing a JS-patchable host binding**, not
+anything about paths. The machinery to fix it already exists in the same file:
+`process.c:203` holds a `napi_env` and `nts_emit_warning_through_node` already
+reaches `global.process` and calls a named method through it.
+
+**Done, and the trade I expected was not there.** I wrote the paragraph that
+used to sit here before measuring: that routing the cwd through JS would add a
+Node-API round trip to every `resolve` of a relative path to satisfy one test of
+a degenerate cwd. That reasoning was wrong in the direction that mattered.
+
+    node   process.cwd()                11.3 ns/op
+    ours   resolve("a","..")  [cwd]    907.0 ns/op
+    node   resolve("a","..")  [cwd]    296.9 ns/op
+    ours   resolve("/a","b")  [no cwd] 312.2 ns/op
+    node   resolve("/a","b")  [no cwd]  57.8 ns/op
+
+Node's `process.cwd()` is **11.3 ns** — node caches the cwd and invalidates on
+`chdir`. `uv_cwd()` is a `getcwd` syscall every time. Calling *into JS* is the
+cheap side and the C shortcut was the expensive one.
+
+The number I had not looked for is the one that matters: **we are 5.4x slower
+than node on `resolve` with no cwd involved at all** (312.2 vs 57.8 ns). The cwd
+hop was never what made that row slow.
+
+`nts_process_cwd` now asks `global.process.cwd` first and falls through to
+`uv_cwd` whenever there is no host, the member is not a function, or the call
+fails — which is every standalone binary. `test-path-resolve.js` passes
+compiled, taking `path` from **13 passed / 7 failed to 14 / 6**, and the
+interpreted lane is unchanged at 20 / 0.
+
+Two things about the change worth keeping:
+
+- **The recursion guard is real, not defensive decoration.**
+  `runtime/node/process/src/control.ts:68` defines our own `cwd()` as
+  `nts_process_cwd()`. In the addon lane the host global is real node's
+  `process`, so it does not loop — but that is a fact about the harness rather
+  than a property of the code, so a re-entry flag falls through to `uv_cwd`.
+- **The first version of this compiled, linked, ran, and did nothing.**
+  `NTS_HAVE_NODE_API` is defined by `process.c` itself from an `__has_include`
+  probe that sat at line 206, below my uses at 9 and 17, so the preprocessor
+  deleted them. Nothing warned. `nm` on the artifact showed the new symbol
+  absent and `U uv_cwd` still there; hoisting the probe above its first use was
+  the whole fix.
+
+#### Where `path` stands after both fixes: 15 passed, 5 failed
+
+Two changes landed in this module today, and the module went **13 passed / 7
+failed to 15 / 5** compiled while the interpreted lane held at **20 / 0**.
+
+The second was `_makeLong`. `local/legacy-make-long.js` asserts
+`path._makeLong === path.toNamespacedPath` with `strictEqual`, and node means it
+literally — `lib/path.js:1710` is `win32._makeLong = win32.toNamespacedPath`,
+the same function object. `runtime/node/path/shape.mjs` was reading
+`exports._makeLong`, which is a *second* wrapper over the same body: deep-equal
+in behaviour and never reference-equal. Pointing the shim at the shaped member,
+as node does, is the whole change. Worth noting it is a one-off — a sweep of
+`path`, `util`, `os`, `buffer`, `string_decoder`, `querystring`, `events` and
+`assert` for `x.a = x.b` alias lines in node's `lib/` found this pattern in
+`path` and nowhere else.
+
+**All five remaining failures have named causes and none of them are mine:**
+
+| file | cause |
+| --- | --- |
+| `test-path-glob.js` | `matchesGlob` — the `RegExp` cascade above |
+| `test-path-parse-format.js` | `format` — `no wrapper: takes an object` |
+| `local/edge-inputs-static.js` | the same `format`, 2 of 183 cases |
+| `local/export-surface-static.js` | the same two, across the top level and both namespaces |
+| `test-path-makelong.js` | an object argument at the wrapper boundary |
+
+The last one deserves its own line because I read it wrong first. The stack
+points at `test-path-makelong.js:51`, which is `toNamespacedPath(true)`, and I
+wrote that a boolean had no representation. Surveying every type says
+otherwise:
+
+    ""  "abc"  null  undefined  100  0  false  true   ->  identity, ours and node
+    {}  []                                            ->  ours throws, node returns identity
+
+**Every primitive crosses by identity; objects and arrays do not.** The failing
+call is line 49, `path.toNamespacedPath(path)`, passing the module object.
+Node's contract is `if (typeof path !== 'string') return path`, so matching it
+needs `unknown` at the boundary — already filed as
+`blockers/unknown-at-the-boundary`, and not something to reach for with an
+assertion.
+
+`process.cwd` is reassigned by two files in node's suite —
+`test-path-resolve.js` and `test-util-inspect.js` — so the class is small and
+now closed for both. Two more (`test-util-styletext.js`,
+`test-util-styletext-hex.js`) replace `process.env` wholesale, which
+`nts_process_env` would need the same treatment to see; that one is **not** done
+and the caching argument above does not transfer to it unmeasured.
+
 > Re-derived from a type graph that is no longer truncated. See the note under
 > *Modules* for why the earlier version of this section could not be trusted.
 

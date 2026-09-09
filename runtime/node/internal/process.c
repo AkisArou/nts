@@ -6,8 +6,31 @@
 #include "nts_node.h"
 #include "shared.h"
 
+/* Hoisted above its first use: the addon half of this file is guarded on it from
+ * `nts_process_cwd` onward, and the probe used to sit below that. */
+#if defined(__has_include)
+#  if __has_include(<node_api.h>)
+#    define NTS_HAVE_NODE_API 1
+#  endif
+#endif
+
+
+#ifdef NTS_HAVE_NODE_API
+/* Defined in the Node-API section below. True when the host answered, in which
+ * case `*answer` is set and `uv_cwd` is not consulted. */
+static bool nts_cwd_through_node(NtsString **answer);
+#endif
+
 /* Transcribed from node `src/node_process_methods.cc:159` (`Cwd`). */
 NtsString *nts_process_cwd(void) {
+#ifdef NTS_HAVE_NODE_API
+    /* Node's own `lib/path.js` calls `process.cwd()`, so replacing it is
+     * observable there -- `test-path-resolve.js:87` relies on exactly that.
+     * Ask the host first and fall through to `uv_cwd` whenever it cannot
+     * answer, which is every standalone binary. */
+    NtsString *hosted = NULL;
+    if (nts_cwd_through_node(&hosted)) return hosted;
+#endif
     size_t capacity = 256;
     for (;;) {
         char *buffer = malloc(capacity);
@@ -189,12 +212,6 @@ bool nts_stderr_is_tty(void) { return uv_guess_handle(2) == UV_TTY; }
 
 void nts_process_really_exit(double code) { _Exit((int)code); }
 
-#if defined(__has_include)
-#  if __has_include(<node_api.h>)
-#    define NTS_HAVE_NODE_API 1
-#  endif
-#endif
-
 #ifdef NTS_HAVE_NODE_API
 #include <node_api.h>
 
@@ -203,6 +220,60 @@ void nts_process_really_exit(double code) { _Exit((int)code); }
 static napi_env nts_host_env = NULL;
 
 void nts_napi_set_env(void *env) { nts_host_env = (napi_env)env; }
+
+/* `process.cwd()` through the host, so a JS-level replacement is honoured.
+ *
+ * A compiled addon that calls `uv_cwd` directly cannot see `process.cwd = f`,
+ * and `test-path-resolve.js` fails compiled while passing interpreted for that
+ * reason alone -- `resolve` itself agrees with node on every input tried.
+ *
+ * Every failure path returns false and leaves the caller on `uv_cwd`, which is
+ * the right answer for a standalone binary and a safe one everywhere else. */
+static bool nts_cwd_in_progress = false;
+
+static bool nts_cwd_through_node(NtsString **answer) {
+    napi_env env = nts_host_env;
+    if (env == NULL) return false;
+    /* `runtime/node/process/src/control.ts:68` defines our own `cwd()` as
+     * `nts_process_cwd()`. A host whose `process` is that compiled module would
+     * loop through here; the second entry falls through to `uv_cwd` instead. */
+    if (nts_cwd_in_progress) return false;
+
+    napi_value global, host_process, cwd_fn;
+    if (napi_get_global(env, &global) != napi_ok) return false;
+    if (napi_get_named_property(env, global, "process", &host_process) != napi_ok) {
+        return false;
+    }
+    napi_valuetype kind;
+    if (napi_typeof(env, host_process, &kind) != napi_ok || kind != napi_object) {
+        return false;
+    }
+    if (napi_get_named_property(env, host_process, "cwd", &cwd_fn) != napi_ok) return false;
+    if (napi_typeof(env, cwd_fn, &kind) != napi_ok || kind != napi_function) return false;
+
+    nts_cwd_in_progress = true;
+    napi_value result;
+    napi_status called = napi_call_function(env, host_process, cwd_fn, 0, NULL, &result);
+    nts_cwd_in_progress = false;
+    /* A throwing `process.cwd` leaves the exception pending for the addon
+     * boundary to surface, which is what node does with it. */
+    if (called != napi_ok) return false;
+    if (napi_typeof(env, result, &kind) != napi_ok || kind != napi_string) return false;
+
+    size_t length = 0;
+    if (napi_get_value_string_utf8(env, result, NULL, 0, &length) != napi_ok) return false;
+    char *buffer = malloc(length + 1);
+    if (buffer == NULL) return false;
+    size_t written = 0;
+    if (napi_get_value_string_utf8(env, result, buffer, length + 1, &written) != napi_ok) {
+        free(buffer);
+        return false;
+    }
+    *answer = nts_string_from_utf8(buffer, written);
+    free(buffer);
+    nts_node_set_errno(0);
+    return true;
+}
 
 /* `process.emitWarning(message, name, code)`.
  *

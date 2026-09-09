@@ -17,11 +17,17 @@ export function shape(exports) {
   // while the legacy `_makeLong` alias is last.
   posix.win32 = win32;
   posix.posix = posix;
-  posix._makeLong = exports._makeLong;
+  // `lib/path.js:1710` is `win32._makeLong = win32.toNamespacedPath` — the
+  // legacy name is the *same function object*, not a second one that behaves
+  // alike, and `local/legacy-make-long.js` asserts exactly that with
+  // `strictEqual`. Reading `exports._makeLong` gave a second wrapper over the
+  // same body: deep-equal in behaviour, never reference-equal. Point at the
+  // shaped member, as node does.
+  posix._makeLong = posix.toNamespacedPath;
   if (win32) {
     win32.win32 = win32;
     win32.posix = posix;
-    win32._makeLong = exports.win32._makeLong;
+    win32._makeLong = win32.toNamespacedPath;
   }
   return posix;
 }
