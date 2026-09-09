@@ -1,40 +1,36 @@
-// expect: emit-c --napi -> NTS2010 `heterogeneous` cannot be emitted because it
-//          calls `nts_probe_heterogeneous`
+// expect: emit-c --napi -> emits-c NtsArray * nts_probe_heterogeneous(void);
 //
-// Now a **named refusal that drops the calling body**, rather than a
-// conflicting prototype, which is a smaller claim than it looks and the honest
-// one. Refusing the prototype alone was not enough: the body still emitted an
-// assignment clang rejects, so `os` lost every export over `nts_os_cpus` alone.
-// Dropping the one function that reads it leaves the other twenty-two, and `os`
-// builds again. The type was never the whole
-// problem: the C side *builds* this value, and it builds a two-element
-// `NtsArray` of references where the compiler wants a struct with two fields.
+// FIXED, kept as a guard. **Both shapes emit `NtsArray *` now**, which is the
+// type every array-returning C function in this tree already returns.
 //
-// The `NtsHeader *` escape that fixed `binding-returns-program-type` made both
-// declarations agree here and would have let the program read struct fields out
-// of an array header -- a build failure turned into a silently wrong program.
-// The clang error was doing useful work; this refuses in its place and says
-// why. The two cases differ by **who built the value**: `nts_async_context_get`
-// hands back a pointer the program gave it and never constructs one.
+// A tuple whose elements are all pointer-sized references is an `NtsArray` of
+// references: `[string[], number[]]` is two pointers, and a struct of two and
+// an array of two are the same bytes. The array is the one a C binding can
+// build, and `nts_os_cpus` builds exactly that today. Mixed *storage* still
+// needs the struct -- `[string, number]` is a pointer beside a double and no
+// array of one width holds both.
 //
-// This fixture reported FIXED when the escape landed, and it was not fixed. Its
-// own note says to read a `Tuple7` -> `Tuple8` shift as renumbering rather than
-// a fix; the general form is that a fixture going green because the emitted
-// *text* changed is not the defect being gone. Nothing here was asking whether
-// the value was still correct, and `emits-c` cannot ask it.
+// The slots then agree on width and disagree on type, so a read restores the
+// declared one: position 1 comes back as the array's element type, which is
+// position 0's, and `element_of` converts it. In C that is a pointer cast and
+// costs nothing:
 //
-// **`os` is where this is real**, and it is three bindings rather than one:
-// `nts_os_cpus` `[string[], number[]]`, `nts_os_network_interfaces` and
-// `nts_os_constants` -- all the same form, an array of columns whose columns
-// have different element types, and `os.c` returns `NtsArray *` for all of
-// them. Two are unreached today and will hit this the moment their callers
-// lower, so a fix aimed at `nts_os_cpus` alone meets the same wall twice more.
+//     v2 = NTS_ITEMS(v0, NtsArray *)[nts_index(v0, v1)];
+//     v3 = (NtsArray *)v2;
+//     v5 = NTS_ITEMS(v3, double)[nts_index(v3, v4)];
 //
-// The remaining question is a *representation* one and is not settled here: a
-// tuple whose elements are all pointer-sized references could be an `NtsArray`
-// of references, which is exactly what the C already builds, and that would
-// settle all three at once. `[string, number]` could not -- mixed storage
-// genuinely needs a struct.
+// On the JVM it is a `checkcast`, which the JVM lane wrote as `2b2d7adf` --
+// and their diagnosis was worse than the one I asked them to check for. Two
+// managed types matched `a == b` in `Convert`'s table and emitted **nothing at
+// all**: a silent no-op, not a missing arm. A missing arm fails the first time
+// it is reached; a no-op that type-checks does not.
+//
+// **This does not publish `os.cpus`.** That export has a second blocker behind
+// this one -- `no wrapper for cpus: returns an object[]`, since `number[]` is
+// the only array the wrapper can return -- so `os` goes from 17 names to 17.
+// The Node lane priced that before this landed, which is the only reason this
+// commit does not claim a module it did not move. See
+// `array-return-only-carries-numbers`: 71 signatures across ten modules.
 //
 // A native function returning a tuple gets one of two completely different C
 // return types depending on whether its elements happen to have the same type,

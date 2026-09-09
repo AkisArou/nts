@@ -72,6 +72,22 @@ diagnostic improved, and I stopped — while the body still emitted the assignme
 clang rejects, so the module was no better off. I had fixed the head of the
 thing I was looking at, and the thing I was looking at was the message.
 
+## A suite that skips without saying it skipped
+
+`compiler/codegen/c/tests/execute.rs` builds and *runs* generated C. Without
+`NTS_TSGO` it has no frontend, `run()` answers `None`, and every test returns
+early — reporting **31 passed in 0.00s**.
+
+The tuple representation change broke one of those tests. Run on its own it
+said `ok`; run under the gate, which exports the variable, it failed on a
+linker error. Two runs of one test, one green and one red, and the difference
+was an environment variable — the green one having been "31 passed" is what
+makes it dangerous, because a count that high reads as coverage.
+
+`tsgo::locate`'s own doc says exactly this: a suite run with the variable unset
+"is green whatever it would have found". Knowing that and still reading a local
+`ok` as a pass is the same gap as the rest of this record.
+
 ## And one that fired on something nobody wrote
 
 The reverse case, twice in one session. An indented block inside a `///`

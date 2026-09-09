@@ -4208,7 +4208,38 @@ fn tuple_representation(
             _ => shared = Some(element),
         }
     }
-    if mixed || shared.is_none() {
+    if mixed {
+        // Elements that disagree but are **all references** are an array of
+        // references, which is what a pointer-sized slot holds either way.
+        // `[string[], number[]]` is two pointers; a struct with two fields and
+        // an `NtsArray` of two are the same bytes, and the array is the one a
+        // C binding can build -- `nts_os_cpus` builds exactly that today and
+        // could not be declared against the struct.
+        //
+        // The element type is the **first**, and any of them would do: in C a
+        // managed element descriptor is `nts_desc_ref` whatever it holds, and
+        // on the JVM `wrapper` sends every non-`double`, non-`boolean` element
+        // to `NtsArrayL`, which holds `Ljava/lang/Object;`. So both backends
+        // produce one representation and the read restores the static type.
+        //
+        // Mixed *storage* still needs the struct: `[string, number]` is a
+        // pointer beside a double, and no array of one width holds both.
+        let first = elements
+            .first()
+            .and_then(|element| representation_within(snapshot, *element, path, subst));
+        if let Some(first @ HirType::Managed(_)) = first
+            && elements.iter().all(|element| {
+                matches!(
+                    representation_within(snapshot, *element, path, subst),
+                    Some(HirType::Managed(_))
+                )
+            })
+        {
+            return Some(HirType::Managed(ManagedType::Array(Box::new(first))));
+        }
+        return Some(HirType::Managed(ManagedType::Object(ty)));
+    }
+    if shared.is_none() {
         return Some(HirType::Managed(ManagedType::Object(ty)));
     }
     Some(HirType::Managed(ManagedType::Array(Box::new(shared?))))
@@ -17060,7 +17091,52 @@ impl<'a> FuncBuilder<'a> {
         if matches!(ty, HirType::Int { .. } | HirType::Float { bits: 32 }) {
             return Ok(self.push(OpKind::Convert(read), HirType::NUMBER, origin));
         }
+        // A heterogeneous tuple is an `NtsArray` of references, so its slots
+        // agree on width and disagree on type: reading position 1 of
+        // `[string[], number[]]` gives the *array's* element type, which is
+        // position 0's. The access node's type is the declared one and this
+        // restores it.
+        //
+        // Guarded on both being managed and on the access having a
+        // representation at all, because the comment above says what the
+        // access type is for an ordinary array under
+        // `noUncheckedIndexedAccess`: `T | undefined`, which represents to
+        // nothing. Where it does represent, a homogeneous array's access type
+        // equals its element type and this is the identity, which
+        // `hir::simplify` drops.
+        if self.reads_a_tuple(id)
+            && let Some(declared @ HirType::Managed(_)) = self.type_of(id)
+            && declared != ty
+        {
+            return Ok(self.push(OpKind::Convert(read), declared, origin));
+        }
         Ok(read)
+    }
+
+    /// Whether this element access reads a **tuple**, which is the only
+    /// receiver whose slots disagree about type.
+    ///
+    /// The guard is the receiver rather than the access's own type, and the
+    /// first version had it the other way round. Under
+    /// `noUncheckedIndexedAccess` an ordinary `people[i]` is typed
+    /// `Person | undefined`, whose representation is an object type with no
+    /// layout -- so converting to it refused `examples/objects` with
+    /// `NTS2006 an object type with no layout`, and the test that catches that
+    /// is one the suite skips when `NTS_TSGO` is unset.
+    ///
+    /// A tuple's index is in bounds by construction, so its access type is the
+    /// declared element type and nothing widens it.
+    fn reads_a_tuple(&self, id: NodeId) -> bool {
+        let Some(receiver) = self.children(id).first().copied() else {
+            return false;
+        };
+        let Some(ty) = self.snapshot.node_types.get(&receiver) else {
+            return false;
+        };
+        self.snapshot
+            .types
+            .get(ty.0 as usize)
+            .is_some_and(|record| matches!(record.kind, TypeKind::Tuple(_)))
     }
 
     /// An array literal with a spread somewhere in it: `[...a, x, ...b]`.
