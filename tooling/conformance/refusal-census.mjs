@@ -160,7 +160,24 @@ if (scanned === 0) {
 // in the ranking it heads it by a factor of twenty and says nothing: its size
 // is a measure of how much calls how much, not of anything to fix. Its total is
 // worth one line, because that line is the prize for fixing the roots.
-const isCascade = (key) => key.startsWith("NTS1003");
+// **The code is not the test, and two of the top four unfiled roots were
+// cascades because of it.** `a module-scope variable whose initializer was
+// refused above` carries NTS1001 and is what every module-scope initializer
+// says when the thing it initialises was refused -- 27 distinct things across
+// 21 modules, second by count among roots with no fixture, and not a cause.
+// Reduced and confirmed: `const marker: object = {}` produces
+// `an object literal that is not an object` at the literal and that message at
+// the variable, and the same declaration inside a function produces only the
+// first.
+//
+// So a message that says a thing was refused elsewhere is a cascade whatever
+// code it wears. Narrow on purpose: it matches the wording, not a guess about
+// which messages feel derived. `a declaration outside every walk` (19 things,
+// 16 modules) is probably the same shape and is **not** matched here, because
+// five attempts to reduce it failed and a classifier should not encode a
+// suspicion.
+const isCascade = (key) =>
+  key.startsWith("NTS1003") || /was refused above/.test(key);
 const cascades = [...causes.entries()].filter(([k]) => isCascade(k));
 const roots = [...causes.entries()].filter(([k]) => !isCascade(k))
   .sort((a, b) => b[1].things.size - a[1].things.size);
