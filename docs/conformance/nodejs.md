@@ -15242,6 +15242,18 @@ function arity from those needs more than a regular expression. The honest
 figure is the one above: 22 published functions report 0 where node reports 1,
 4 where node reports 2, and one where node reports 14.
 
+### The first count was the top level only
+
+Those figures are the **top-level** exports. Folding the same check into
+`surface-diff.mjs`, which walks two levels, gives
+
+    16 modules compared, 95 function(s) with the wrong arity
+
+because `path.posix.*`, `path.win32.*` and `util.types.*` are all functions one
+level in, and the ad-hoc script that produced the first number never looked at
+them. 27 and 95 are the same finding at two depths, and the second is the one to
+quote.
+
 It is also the second thing today that is invisible to every name-counting
 instrument here. `loads.sh` counts the name, `unusable-exports.mjs` calls it,
 `surface-diff.mjs` compares its value -- and a function with the wrong `length`
