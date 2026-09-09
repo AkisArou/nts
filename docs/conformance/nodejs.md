@@ -9643,6 +9643,46 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## The profile's blockers, ranked by how many functions each one stops
+
+Every NTS1003 names one callee: "cannot be compiled because it calls X, which
+was refused above". Counting distinct blocked sites per X, across all twenty-two
+emit logs, deduplicated because modules share cones:
+
+| immediate callee | distinct functions it blocks | its own root |
+| --- | --- | --- |
+| `ERR_INVALID_ARG_TYPE#constructor` | 67 | `JSON.stringify` — `errors.ts:70` |
+| `uvException` | 32 | `` `dest`, which `UVExceptionError` does not declare `` — `uv.ts:102` |
+| `EventEmitter#emit` | 28 | — |
+| `checkedOffset` | 28 | `boundsError` → `ERR_INVALID_ARG_TYPE` |
+| `validateString` | 22 | `ERR_INVALID_ARG_TYPE` |
+| `checkedIntegerWrite` | 21 | `ERR_INVALID_ARG_TYPE` |
+| `asRequest` | 21 | — |
+| `Socket##healthCheck` | 16 | — |
+| `displayBytePath` | 15 | — |
+| `coerceToUSVString` | 14 | — |
+| `Buffer.from` | 13 | `objectToBuffer` → `instanceof` with no class |
+| `validateInteger` | 12 | `ERR_INVALID_ARG_TYPE` |
+
+Four of the top six reduce to the same constructor. Taking the union of every
+site whose immediate callee is `ERR_INVALID_ARG_TYPE#constructor`, any
+`validate*`, `checkedOffset`, `boundsError`, `checkedIntegerWrite` or
+`checkedBigIntWrite`:
+
+**198 distinct functions sit one or two hops from `ERR_INVALID_ARG_TYPE`**, and
+its own root is a single expression — `JSON.stringify` in
+`determineSpecificType`, `internal/errors.ts:70`.
+
+The second entry is already filed too: `uvException`'s root is the same
+undeclared-property form as the fixture that spells it `` `dest`, which
+`Carrier` does not declare ``.
+
+**What this table is not.** It counts immediate causes, so the transitive set is
+larger than any row. It does not predict pass counts: a function can have more
+than one refused callee, and clearing a root reveals whatever stood behind it --
+`buffer` went 79 to 79 with five cleared and five revealed. A refusal delta is
+not a measure of a fix. The table says where the weight sits, and nothing more.
+
 ## `JSON.stringify` is under eighty refused functions, including all of `path`
 
 `path` owns six root refusals, all in `src/glob-matcher.ts`, and publishes four
