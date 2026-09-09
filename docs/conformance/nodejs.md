@@ -14781,6 +14781,61 @@ Published names went 86 to 98 across those three, and `NTS1003` fell by a fifth
 on the last one. The behaviour count did not move. Every module added to the
 axis today was added by finding what an artifact already did and asking it.
 
+## Two stand-ins compensating for each other, and neither doing what node does
+
+`net`'s attempt-timeout default reads **250** on the compiled lane and **2500**
+on the interpreted one. Node reads 2500 to any file that requires `../common`.
+None of the three numbers is a fact about the module.
+
+    third_party/node/test/common/index.js:182
+      net.setDefaultAutoSelectFamilyAttemptTimeout(
+        platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10));
+
+Node's harness **calls the setter**, so the module's state is scaled before any
+test body runs.
+
+    tooling/conformance/common.mjs:260
+      defaultAutoSelectFamilyAttemptTimeout: 2500,
+
+Ours exposes the number node would have computed, as a constant, and never
+touches the module.
+
+    runtime/node/net/bindings.node.mjs:26
+      globalThis.nts_net_default_auto_select_family_attempt_timeout = () =>
+        net.getDefaultAutoSelectFamilyAttemptTimeout() * 10;
+
+And the binding stand-in multiplies by ten to compensate -- documented there,
+and correct given the line above it. The compiled lane has no equivalent
+compensation, because its binding is C: `net.c:16` returns `250.0`.
+
+So the interpreted lane is right by a second wrong, and the compiled lane is
+wrong plainly.
+
+### How it was found, which is the part worth keeping
+
+A test of mine asserted the value was 250 and **passed compiled, failed
+interpreted**. That is the `INVERTED` direction `prize.mjs` had no column for
+until this afternoon, and the column was added because of it.
+
+The first reading was that the compiled lane was wrong and the setter was
+missing. The setter published two pins later and the test still failed, which is
+what sent me to `common.mjs` rather than to the module.
+
+**Neither reading was about the module.** The test now asks the module something
+the module owns -- set a value, read it back, check the floor, put it back --
+and passes on both lanes.
+
+### The gap is real and is not fixed here
+
+Making `common.mjs` call the setter and dropping the compensating multiply has
+to be one change, since either alone moves the interpreted lane to 250 or to
+25,000. It touches every module's harness for the benefit of one module's
+default, and the tests it would change are the `autoSelectFamily` ones, none of
+which pass on either lane yet.
+
+Recorded rather than done, with the two line numbers, so the next person to read
+a timeout out of this harness knows which of the three numbers they are holding.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

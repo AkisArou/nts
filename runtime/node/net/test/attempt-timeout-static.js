@@ -1,34 +1,33 @@
-// `common` scales the attempt timeout, and the compiled lane cannot be scaled.
+// The attempt-timeout default, and a write observed by the next read.
 //
-// `test/common/index.js:182` runs on load, in node and here:
+// The compiled `net` publishes all four `autoSelectFamily` names now. The
+// boolean pair is `default-family-static.js`; this is the timeout pair.
 //
-//     net.setDefaultAutoSelectFamilyAttemptTimeout(
-//       platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10));
+// # This file used to assert a number, and the number was the harness's
 //
-// So node reports **2500** to any test that requires `../common`, and 250 only
-// to a program that does not. Checked directly: `node -e 'require("../common");
-// require("net").getDefaultAutoSelectFamilyAttemptTimeout()'` answers 2500.
+// It asserted that the value was **greater than 250** -- node's unscaled
+// default -- on the reasoning that `test/common/index.js:182` scales it by ten
+// on load, so any file requiring `../common` sees 2500 in node. That is true of
+// node and was the wrong thing to assert here, for a reason that took two
+// findings to see:
 //
-// The compiled addon publishes the *getter* and not the setter, so `common`'s
-// call cannot land and the value stays at the unscaled 250. This file fails on
-// the compiled lane for that reason and passes on the interpreted one.
+//   * `tooling/conformance/common.mjs:260` exposes
+//     `defaultAutoSelectFamilyAttemptTimeout: 2500` as a **constant** and never
+//     calls the setter, so the module's state is not scaled at all.
+//   * `net/bindings.node.mjs` multiplies the binding's answer by ten to
+//     compensate, which is documented there -- so the *interpreted* lane reads
+//     2500 and the *compiled* lane reads 250.
 //
-// # It is asserted as a relation, not as 2500
+// Two stand-ins compensating for each other, and neither doing what node does.
+// The assertion was reading that difference and calling it the module.
 //
-// `platformTimeout` scales again on slow or instrumented builds, so the literal
-// is not stable across machines. What is stable is that `common` moved it: the
-// scaled value is strictly greater than the unscaled default. A lane where the
-// setter is missing cannot satisfy that however the platform scales.
+// So this asks the module something the module owns: **set a value, read it
+// back, put it back.** That answer does not depend on which lane, which
+// stand-in, or what `common` did before the file ran.
 //
-// # How this got its own file
-//
-// `default-family-static.js` asserted `=== 250` and **passed on the compiled
-// lane and failed on the interpreted one**. The compiled lane was the wrong
-// one: it agreed with the documented default only because the missing setter
-// stopped `common` doing what node does. An assertion that holds because of the
-// defect is the fourth failure mode in the fixture rules -- a control that
-// suppresses the thing it controls for -- and it was worth splitting out rather
-// than deleting.
+// The fidelity gap is real and is recorded in the ledger; it is not this file's
+// to assert, because a test that fails when a harness constant is wrong is a
+// test of the harness.
 "use strict";
 
 require("../common");
@@ -36,16 +35,42 @@ require("../common");
 const assert = require("assert");
 const net = require("net");
 
-const scaled = net.getDefaultAutoSelectFamilyAttemptTimeout();
+for (const name of [
+  "getDefaultAutoSelectFamilyAttemptTimeout",
+  "setDefaultAutoSelectFamilyAttemptTimeout",
+]) {
+  assert.strictEqual(typeof net[name], "function", `net.${name} is missing`);
+}
 
-assert.strictEqual(typeof scaled, "number", "the attempt timeout is not a number");
-assert.ok(Number.isInteger(scaled), `the attempt timeout is not an integer: ${scaled}`);
+const original = net.getDefaultAutoSelectFamilyAttemptTimeout();
+assert.strictEqual(typeof original, "number", "the attempt timeout is not a number");
+assert.ok(Number.isInteger(original), `the attempt timeout is not an integer: ${original}`);
+assert.ok(original > 0, `the attempt timeout is not positive: ${original}`);
 
-// Node's unscaled default. `common` multiplies it by ten before any test body
-// runs, so a lane that reports this value is a lane `common` could not reach.
-const UNSCALED = 250;
-assert.ok(
-  scaled > UNSCALED,
-  `the attempt timeout is ${scaled}; common scales it above ${UNSCALED}, ` +
-    "so this lane does not publish setDefaultAutoSelectFamilyAttemptTimeout",
+try {
+  net.setDefaultAutoSelectFamilyAttemptTimeout(1234);
+  assert.strictEqual(
+    net.getDefaultAutoSelectFamilyAttemptTimeout(),
+    1234,
+    "the write was not observed by the next read",
+  );
+
+  // Node clamps to a floor of 10 rather than rejecting a small positive value.
+  // `runtime/node/net/src/main.ts:2529` is `Math.max(10, value)`, which is
+  // node's, and a setter that stored the argument unchanged passes the line
+  // above and fails this one.
+  net.setDefaultAutoSelectFamilyAttemptTimeout(1);
+  assert.strictEqual(
+    net.getDefaultAutoSelectFamilyAttemptTimeout(),
+    10,
+    "a value below the floor was not clamped to 10",
+  );
+} finally {
+  net.setDefaultAutoSelectFamilyAttemptTimeout(original);
+}
+
+assert.strictEqual(
+  net.getDefaultAutoSelectFamilyAttemptTimeout(),
+  original,
+  "the original was not restored",
 );
