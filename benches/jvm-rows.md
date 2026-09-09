@@ -74,6 +74,7 @@ meets them. This is the map; the row table below it is the current state.
   - The object count beside the byte count, and why it should have been there first
   - `growth-grown` is at its floor, and the count proves it in one line
   - `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
+  - The seven headers, read: six of them argue, and one row is genuinely missing a reference
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2888,6 +2889,45 @@ embedded in the compiler by `include_bytes!`, so regenerating
 `nts-runtime.jar` and re-running without rebuilding `nts-cli` measures the
 runtime you just replaced. `nts-bench does not follow the CLI` is the same
 sentence one level down.
+
+### The seven headers, read: six of them argue, and one row is genuinely missing a reference
+
+This file said of the nine JSON rows that two had a written argument against a
+reference and "the remaining seven say nothing either way, which is the honest
+state: unexamined, not argued". Reading them, that is wrong in the direction
+that costs least but is still wrong. **Six of the seven argue**, and the
+arguments are better than the one I would have made for them.
+
+**`json-build-append` and `json-build-join` are a pair, and the pair is the
+measurement.** Their headers say so outright -- "Read the pair, not either row.
+The number that means something is the ratio between them" -- because the two
+produce identical output from identical input and differ only in `+=` against
+`join`. A host answers with a shrug, since V8 and JavaScriptCore rope their
+concatenations; a flat-string target does not. A `ref.java` would answer a third
+question nobody asked.
+
+**`json-stringify-doc`, `-typed`, `-inline` and `-fused` are a series of four**,
+meant to be read against each other -- 7.20ms, 1.26ms, 0.99ms, 0.707ms, byte-
+identical output, no compiler change at any step. And they already have an
+outside reference that is not a `ref.java`: `native.mjs` beside them times
+node's and bun's *built-in* `JSON.stringify` on the same document, because the
+harness's own `node` column runs our TypeScript rather than the engine's JSON.
+That is the distinction a reference exists for, and it is already made.
+
+**`json-serialize` is the one that is genuinely missing one**, and its own
+header is what says so: "Real TypeScript, timed. Like `node-utf8`, nobody
+writing this was thinking about a benchmark." `node-utf8` is its stated sibling
+and `node-utf8` **has** a `ref.java`. Same argument, same shape of workload -- a
+character-at-a-time scan with a branchy classification and a number formatter --
+and one of the two is priced against a person while the other is not.
+
+It is also the only one of sixty not driven on ART, because `case.ts` exports
+nothing and its workload comes from `provider`. Two instruments are blind to the
+same row for two unrelated reasons, which is the kind of coincidence worth
+naming rather than fixing twice.
+
+So the count is **eight of nine argued and one open**, not two and seven. Mine,
+and the actionable half is one file.
 
 ## Open, and whose
 

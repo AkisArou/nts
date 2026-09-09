@@ -115,7 +115,19 @@ public final class H {
         ThreadMXBean mx = (ThreadMXBean) ManagementFactory.getThreadMXBean();
         long id = Thread.currentThread().getId();
         double seed = nts.gen.Program.seed;
-        for (int i = 0; i < 20000; i++) { sink += nts.gen.Program.$entry(seed); }
+        // Warm up by *time*, not by a fixed count. Twenty thousand iterations
+        // of awfy-mandelbrot is twenty thousand times twenty-two milliseconds,
+        // and on an emulator that is over an hour for one row -- for a
+        // measurement that is deterministic and does not need it.
+        //
+        // The warmup exists so ART has compiled the hot path rather than
+        // interpreted it, since an interpreted run boxes differently. Five
+        // seconds reaches that on an expensive case and a cheap one still gets
+        // its full count.
+        long until = System.nanoTime() + 5000000000L;
+        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) {
+            sink += nts.gen.Program.$entry(seed);
+        }
         int n = Integer.parseInt(a[0]);
         long before = mx.getThreadAllocatedBytes(id);
         for (int i = 0; i < n; i++) { sink += nts.gen.Program.$entry(seed); }
@@ -137,7 +149,19 @@ public final class Main {
         double seed = nts.gen.Program.seed;
         // ART has a JIT above its AOT image; a cold run would report the
         // interpreter's boxing rather than the program's.
-        for (int i = 0; i < 20000; i++) { sink += nts.gen.Program.$entry(seed); }
+        // Warm up by *time*, not by a fixed count. Twenty thousand iterations
+        // of awfy-mandelbrot is twenty thousand times twenty-two milliseconds,
+        // and on an emulator that is over an hour for one row -- for a
+        // measurement that is deterministic and does not need it.
+        //
+        // The warmup exists so ART has compiled the hot path rather than
+        // interpreted it, since an interpreted run boxes differently. Five
+        // seconds reaches that on an expensive case and a cheap one still gets
+        // its full count.
+        long until = System.nanoTime() + 5000000000L;
+        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) {
+            sink += nts.gen.Program.$entry(seed);
+        }
         int n = Integer.parseInt(a[0]);
         start.invoke(null);
         long before = ((Number) size.invoke(null)).longValue();
