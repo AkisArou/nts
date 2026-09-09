@@ -192,9 +192,19 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
             // is used, and a plain object of the data would answer
             // `stats.isDirectory` with `undefined` rather than with an error.
             // Better to have no wrapper than a wrapper that loses behaviour.
+            //
+            // `any(is_some)` rather than `!is_empty()`, and the difference is
+            // not pedantic: `Layout::methods` is one slot per *dispatch slot*
+            // and `None` is "this layout implements that slot" -- so a table can
+            // be six entries long and hold nothing. `path`'s `ParsedPath` is
+            // exactly that, `[None, None, None, None, None, None]` over five
+            // string fields and no methods of its own, and the length test
+            // refused it as though copying it would lose behaviour there is
+            // none of. That refusal was `parse` -- 26 of the 54 remaining
+            // divergences in `path`'s edge table, declined by a table of nulls.
             if classes.contains(&layouts[at].name)
                 || layouts[at].base.is_some()
-                || !layouts[at].methods.is_empty()
+                || layouts[at].methods.iter().any(Option::is_some)
             {
                 return None;
             }
