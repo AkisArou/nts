@@ -9643,6 +9643,60 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## The table re-derived after tonight's three fixes
+
+Every number below is from the compiler as of `d3378707`, emitted module by
+module and deduplicated the same way as before. Root refusals only.
+
+| module | own | cone | own before | cone before |
+| --- | --- | --- | --- | --- |
+| `punycode` | 0 | 0 | 0 | 0 |
+| `string_decoder` | 0 | 71 | 0 | 74 |
+| `querystring` | 3 | 75 | 3 | 78 |
+| `os` | 4 | 77 | 4 | 80 |
+| `path` | 6 | 28 | 6 | 31 |
+| `dgram` | 13 | 1518 | 13 | 1521 |
+| `diagnostics_channel` | 19 | 52 | 19 | 55 |
+| `async_hooks` | 20 | 51 | 20 | 54 |
+| `console` | **21** | 1244 | 24 | 1250 |
+| `timers` | 25 | 56 | 25 | 59 |
+| `events` | 31 | 1134 | 31 | 1137 |
+| `url` | 40 | 155 | 40 | 158 |
+| `buffer` | 43 | 71 | 43 | 74 |
+| `net` | 45 | 1499 | 45 | 1502 |
+| `process` | 45 | 1964 | 45 | 1967 |
+| `assert` | 45 | 1217 | 45 | 1220 |
+| `readline` | 71 | 1340 | 71 | 1343 |
+| `util` | 88 | 1196 | 88 | 1199 |
+| `zlib` | 98 | 1755 | 98 | 1758 |
+| `http` | **147** | 1951 | 148 | 1955 |
+| `fs` | 214 | 2079 | 214 | 2082 |
+| `stream` | 472 | 1657 | 472 | 1660 |
+
+Three roots were cleared tonight: `length` after `Array.isArray` at
+`internal/errors.ts:518`, and `JSON.stringify` at `internal/errors.ts:70` and
+`:1470`. All three are in `internal/`, so all three are in every module's cone,
+and every cone falls by exactly 3 -- **except two**.
+
+`console` falls by 6 and `http` by 4, and their *own* counts move too, from 24
+to 21 and from 148 to 147. The four extra are `console/src/main.ts:451`, `:485`,
+`:595` and `http/src/outgoing.ts:190`, and all four are the same `length` of
+something without one. The fix cleared that form wherever it appeared, not only
+at the site it was filed from -- five sites, not one.
+
+**Which is the useful reading of this table.** A root filed from one module is
+not a fact about that module. The two own-count changes are the only evidence in
+the profile that the fix reached past `internal/`, and a cone-only view would
+have shown a uniform -3 and said nothing about it.
+
+**What did not move.** `string_decoder` is still 0 own and still publishes
+nothing; `os` is still 17 of 23 with the same six names absent; `path` still
+publishes four; `querystring` still publishes nothing. The axis is unchanged.
+Twenty-two of twenty-two still build. Zero of twenty-four wrappers call
+`nts_to_napi_view` or `napi_create_typedarray` -- counted excluding the helper's
+own definition, which is emitted into every `addon.c` and which a plain grep
+reports as twenty-two modules building typed arrays.
+
 ## `http` gained two exports and neither of them is a value
 
 After tonight's rebuild the addon key counts moved in exactly one place:
