@@ -40,7 +40,7 @@ not measured clean and should not be quoted.**
 | `array-methods` | 1.14x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
-| `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
+| `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
 | `awfy-sieve` | **1.03x or 1.27x** | two modes, and "two JIT shapes" was wrong -- below |
@@ -1424,6 +1424,38 @@ about it.
 The script reports and does not fail, deliberately: `fib` showed that a
 narrower reference can be *slower*, so a mismatch is a question with a
 measurement attached and not a defect to ratchet on.
+
+### `instanceof`, priced the same way: the width is invisible here, and the row is still `uirem`
+
+The third width mismatch, and the only one both losing and unpriced. One
+variable, exactly the one the emission names: `run$whole` is `(I)D` with `total`
+in `dstore_1`, the reference has `int total`, and the loop counter is an `int` on
+both sides -- so `int total` became `double total` and nothing else moved.
+
+    run 1     RunI 44115     RunD 42586     -3.5%
+    run 2     RunI 44736     RunD 44047     -1.5%
+
+**Two runs that do not agree with each other, over distributions that overlap
+almost entirely** -- RunI spans 44115-44775 and RunD 42586-44755, and RunD's
+42586 is one sample in ten. Against `fib`, where the wide reference won by 4.4%
+and 3.0% with no overlap at all, this is the null result that shape looks like
+when it is real.
+
+**Which makes sense, and is the point.** `instanceof`'s round allocates a shape,
+takes `i % 3` twice and runs two type tests; `total + 1` is a rounding error
+next to that. `fib`'s round is a compare, two subtractions, two calls and *one
+addition* -- the accumulator is most of the arithmetic there and almost none of
+it here. The same correction is worth 3-4% on one row and nothing on the other,
+which is an argument for pricing each rather than applying the rule by analogy.
+
+So the reference here can be made rule-conformant for about nothing, and **it
+would still not move the row**, because the row is what it already said it was:
+60% `uirem`, bounded at 8%, and waiting on the middle end.
+
+**Neither correction is a win, and neither is being counted as one.** Both make
+the reference faster and our ratio worse -- by 3-4% on `fib` and by roughly
+nothing here. Obeying the rule is a fairness action, and this is the second time
+tonight that reading it as an optimisation was the mistake.
 
 ## Open, and whose
 
