@@ -1996,7 +1996,87 @@ fn compile(
 /// enough to see the good one.
 const RUNS: usize = 5;
 
+/// The CPUs a timed run is allowed on, or `None` to leave it to the scheduler.
+///
+/// # Two arms of one comparison, measured on different hardware
+///
+/// This machine is an i9-14900K: eight P-cores at 5700-6000MHz and sixteen
+/// E-cores at 4400. Nothing here pinned, so every row was two processes the
+/// scheduler could put on either kind, and `in-narrowing` measured **1362ns
+/// free, 1340 pinned to P, and 2474 pinned to E** -- the same binary, 1.8x
+/// apart, which is more than the 1.295 clock ratio because the IPC differs too.
+///
+/// A ratio survives that only when both arms happen to land the same way. When
+/// they do not, the row is wrong by up to 1.8x in whichever direction it fell,
+/// and `nts-bench` reports it with a variance note rather than a reason:
+/// `dispatch` varied **1.93x across five runs of one binary**, `objects` 1.17x
+/// and 1.22x, `awfy-bounce` 1.41x. Those rows have been unquotable and this is
+/// why.
+///
+/// `perf stat` is what gave it away, by answering with a `cpu_core` line and a
+/// `cpu_atom` line for every event.
+///
+/// # Why P-cores and not "the same core either way"
+///
+/// Pinning both arms to E-cores would also make the ratio meaningful, and would
+/// measure a machine nobody ships on. The P-cores are what a benchmark is
+/// about. The session contract already assigns cores 8-15 to this lane for
+/// isolation between sessions -- a different concern, and those happen to be
+/// P-cores, which is why the numbers were usually right.
+///
+/// `NTS_BENCH_CPUS` overrides the set, and `NTS_BENCH_CPUS=off` disables
+/// pinning for anyone who wants the old behaviour back to compare against.
+fn timed_cpus() -> Option<String> {
+    match std::env::var("NTS_BENCH_CPUS") {
+        Ok(value) if value == "off" => return None,
+        Ok(value) if !value.is_empty() => return Some(value),
+        _ => {}
+    }
+    // The kernel names the performance cores on a hybrid part. A machine that
+    // is not hybrid has no such file and needs no pinning: every core is the
+    // same core, which is the assumption the rest of this harness was written
+    // under.
+    let cpus = std::fs::read_to_string("/sys/devices/cpu_core/cpus").ok()?;
+    let cpus = cpus.trim();
+    if cpus.is_empty() { None } else { Some(cpus.to_owned()) }
+}
+
+/// The same command, confined to `cpus`.
+///
+/// Rebuilt rather than mutated because `Command` has no way to prepend a
+/// program. Everything the caller set has to be carried over by hand, and the
+/// environment is the part that would fail silently -- `NTS_TSGO` and the
+/// provider variables all arrive that way.
+fn confine(command: &std::process::Command, cpus: &str) -> std::process::Command {
+    let mut pinned = std::process::Command::new("taskset");
+    pinned.arg("-c").arg(cpus).arg(command.get_program());
+    pinned.args(command.get_args());
+    for (key, value) in command.get_envs() {
+        match value {
+            Some(value) => {
+                pinned.env(key, value);
+            }
+            None => {
+                pinned.env_remove(key);
+            }
+        }
+    }
+    if let Some(dir) = command.get_current_dir() {
+        pinned.current_dir(dir);
+    }
+    pinned
+}
+
 fn measure(command: &mut std::process::Command) -> Result<Measured> {
+    let confined = timed_cpus().map(|cpus| confine(command, &cpus));
+    let mut owned;
+    let command: &mut std::process::Command = match confined {
+        Some(pinned) => {
+            owned = pinned;
+            &mut owned
+        }
+        None => command,
+    };
     let mut best: Option<Measured> = None;
     let mut worst = f64::MIN;
     for _ in 0..RUNS {

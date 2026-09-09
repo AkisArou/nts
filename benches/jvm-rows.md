@@ -1824,12 +1824,23 @@ ratio, so IPC differs too.
 pinned, because both arms get the same treatment when they run next to each
 other. That hypothesis is dead and it is the ninth tonight.
 
-**It is very probably the variance.** A row is measured as two processes, and
-nothing makes them land on the same kind of core. A sweep where one arm gets P
-and the other E is reporting a number that is 1.8x wrong in whichever direction
-it fell, and `nts-bench`'s own "varied 1.93x across 5 runs of the same binary"
-on `dispatch` is exactly the size of that. So is `objects` at 1.17x and 1.22x,
-and `awfy-bounce` at 1.41x.
+**And it is not the variance either, which I predicted it was and then built
+the fix for.** `nts-bench` now confines a timed run to the performance cores --
+`/sys/devices/cpu_core/cpus`, with `NTS_BENCH_CPUS` to override or `off` to
+disable -- and the flags do not go away:
+
+    objects      unpinned  1.51x / 1.36x       pinned  1.32x / 1.28x
+    dispatch                                   pinned  1.23x / 1.56x
+
+Slightly tighter, nowhere near quiet, and both rows still carry the note. So the
+1.8x is a real hazard that pinning removes, and **the thing that makes these
+rows unquotable is something else.** The variance is *within* one `nts-bench`
+invocation -- five runs of one binary in one process set -- and confining them
+all to the same core type does not touch whatever varies between them.
+
+The change stays: two arms of one comparison must not be measured on different
+hardware, and that was possible until now. It is not a fix for the flagged rows
+and is not recorded as one.
 
 **What this does not explain, said plainly:** `awfy-sieve`'s two modes are
 1.23x apart and sticky across consecutive runs, which is neither the 1.8x here
