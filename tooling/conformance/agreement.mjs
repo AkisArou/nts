@@ -90,6 +90,19 @@ for (const name of names) {
   const emit = spawnSync(compiler, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--napi"], {
     encoding: "utf8", env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
   });
+  // **The refusal messages, so a refused case says why rather than only which.**
+  // The name of a case tells a reader nothing on its own: `toFixedRounding`
+  // refused could be `toFixed`, the rounding, or the literal. Reporting the
+  // distinct diagnostics beside the names turns a list of names into a list of
+  // reasons, and it costs nothing -- the emit output is already in hand.
+  const reasons = [...new Set(
+    `${emit.stdout ?? ""}${emit.stderr ?? ""}`
+      .split("\n")
+      .map((l) => /NTS100[0-9] (.+?)(?: is not supported by this lowering yet)?$/.exec(l.trim()))
+      .filter((m) => m !== null)
+      .map((m) => m[1].trim()),
+  )];
+
   const sources = existsSync(out) ? readdirSync(out).filter((f) => f.endsWith(".c")).map((f) => join(out, f)) : [];
   if (sources.length === 0) {
     console.log(`  DID NOT EMIT    ${name}`);
@@ -185,11 +198,19 @@ for (const name of names) {
   const refusedNote = compiledSide.refused.length === 0
     ? ""
     : `, ${compiledSide.refused.length} refused (${compiledSide.refused.join(", ")})`;
+  const showReasons = () => {
+    if (compiledSide.refused.length === 0) return;
+    for (const reason of reasons.slice(0, 4)) {
+      console.log(`      refused: ${reason.slice(0, 76)}`);
+    }
+  };
   if (rows.length === 0) {
     console.log(`  agrees          ${name}  (${asked} case(s)${refusedNote})`);
+    showReasons();
     continue;
   }
   console.log(`  DISAGREES       ${name}  (${asked} asked${refusedNote})`);
+  showReasons();
   for (const r of rows) {
     console.log(`      ${r.call}: compiled ${JSON.stringify(r.ours)}, node ${JSON.stringify(r.theirs)}`);
     console.log(`          ${r.why}`);
