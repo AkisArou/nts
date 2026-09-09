@@ -27,6 +27,15 @@ set -uo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 
+# `target/node` is shared with the other sessions in this tree, so a run that
+# names it reads whatever they last wrote. `NTS_ADDON_OUT` is the variable
+# `build.sh` and `axis-controls.mjs` take; the default is unchanged.
+#
+# This check is the one that has contradicted a wrong table before -- it caught
+# thirteen false `did not build` rows from a deleted pin -- so it is worth it
+# being able to answer about the same artifacts the rest of a run measures.
+addon_dir="${NTS_ADDON_OUT:-$root/target/node}"
+
 # `node` may be a version-manager shim; resolve it so the signal is the child's.
 node_bin="$(command -v node)"
 
@@ -47,7 +56,7 @@ fi
 
 ok=0; crashed=0; absent=0
 for module in "${modules[@]}"; do
-  addon="$root/target/node/$module.node"
+  addon="$addon_dir/$module.node"
   if [ ! -f "$addon" ]; then
     printf '  %-22s no addon built\n' "$module"
     absent=$((absent + 1))
