@@ -11320,10 +11320,12 @@ run as a differential rather than as new hand-written assertions.
 | `async_hooks` | 4,030 | 4,030 | 0 |
 | `process` | 4,015 | 4,015 | 0 |
 | `stream` | 4,030 | 4,030 | 0 |
+| `net` | 16,120 | 4,030 | 0 |
 
-**17 modules measured, 507,211 comparisons, 0 divergences** — `console`,
-`diagnostics_channel`, `readline`, `async_hooks`, `process` and `stream` were
-all added tonight and contribute 24,155 of them.
+**18 modules measured, 523,331 comparisons, 0 divergences** — `console`,
+`diagnostics_channel`, `readline`, `async_hooks`, `process`, `stream` and `net`
+were all added tonight and contribute 40,275 of them. `net` is the one that
+found a real defect; see the section above it.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11428,15 +11430,16 @@ answer, not the same answer twice.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Seventeen of twenty-two
+That number means nothing without this beside it. **Eighteen of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **four never appeared in the run at all** — `dgram`, `http`, `net` and
-`timers`. The first three are sockets, whose surfaces answer over time to a
-peer; `timers` is ordering, which `fuzz-timer-order.mjs` already asks. These are the modules whose surfaces are sockets, streams and timers
+and **three never appeared in the run at all** — `dgram`, `http` and `timers`.
+`net` was in that list until tonight on the reasoning that sockets answer over
+time, which was a generalisation from the module's name and cost a real defect
+its discovery; `dgram` and `http` have pure surfaces too and are next. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven
@@ -11583,6 +11586,57 @@ than one happening now: a module only fails to link once something calls it.
 
 
 
+
+
+## A real defect, found by the assertion the oracle had no reason to make
+
+2026-09-10. `net.BlockList` raised the wrong error code for an invalid address,
+on **every** input, and nothing in the tree noticed.
+
+    ours   add-ipv4:ERR_INVALID_ARG_VALUE
+    node   add-ipv4:ERR_INVALID_ADDRESS
+
+430 of 430 generated addresses diverged. The interpreted lane was **150 passed /
+0 failed** for `net` throughout — node's pinned tests never assert this code,
+which is the whole point of the directive that produced it.
+
+### Why it was there to find
+
+I had written `dgram`, `http`, `net` and `timers` off as "sockets answer over
+time to a peer, which a value-compare corpus has no way to hold", and that was a
+generalisation from the module's *name*. Each of them has a pure surface:
+`net.isIP`/`isIPv4`/`isIPv6` are address parsers with no I/O, and `BlockList` is
+rules in, boolean out. Dismissing a module as asynchronous is not the same as
+checking whether any of it is.
+
+### One control said it was there, a second said what it was
+
+`addressFromInput` and `normaliseFamily` sit fourteen lines apart in
+`block-list.ts` and both threw `ERR_INVALID_ARG_VALUE`. Only one of them was
+wrong, and node's contract had to be read for each separately:
+
+| input | node | ours before |
+| --- | --- | --- |
+| bad address | `ERR_INVALID_ADDRESS`, an **`Error`** | `ERR_INVALID_ARG_VALUE` |
+| bad family string | `ERR_INVALID_ARG_VALUE`, a `TypeError` | correct already |
+| bad family type | `ERR_INVALID_ARG_TYPE` | correct already |
+| family `undefined` | accepted | correct already |
+
+**Changing both sites would have fixed one case and broken three.**
+
+### The fix
+
+`ERR_INVALID_ADDRESS` did not exist in `internal/errors.ts`, and it is absent
+from node's `lib/internal/errors.js` too — node raises it from C++, which is why
+grepping node's JavaScript for it finds nothing and only running node finds it.
+Added as a `NodeError` with the fixed message `Invalid socket address`, matching
+the observed shape: an `Error`, not a `TypeError`, carrying `code` and nothing
+else.
+
+After: **`net` 16,120 comparisons, 0 divergences**, and the whole suite 18
+modules, 523,331 comparisons, 0 divergences. Interpreted unchanged — `net`
+150/0, `path` 20/0, `os` 9/0 — which matters because `internal/errors.ts` is
+shared by every module in the tree.
 
 ## The counted lane got to 10 of 22 and stopped there
 

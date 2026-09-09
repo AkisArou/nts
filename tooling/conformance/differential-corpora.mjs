@@ -729,6 +729,74 @@ export const CORPORA = {
     ],
   },
 
+  net: {
+    // The pure surface of `net`, which I first dismissed as "sockets answer
+    // over time" and then found is three address parsers and a value-shaped
+    // class. `isIP`, `isIPv4` and `isIPv6` take a string and answer a number or
+    // a boolean with no I/O at all, and an address parser is exactly the kind
+    // of thing a reimplementation gets almost right.
+    //
+    // The edges that matter and that no pinned test sweeps: leading zeros
+    // (`01.2.3.4`), a trailing dot, `::` in every position, an IPv4-mapped
+    // IPv6 address, a zone id (`%eth0`), more than eight groups, an empty
+    // group, and full-width digits.
+    //
+    // Excluded: `connect`, `createServer`, `Socket` and everything else on the
+    // module. They answer over time to a peer and belong to a different
+    // harness. This corpus covers the part that does not, and says so.
+    fixed: [
+      "", "0", "1.2.3.4", "01.2.3.4", "1.2.3.4.", "1.2.3", "1.2.3.4.5",
+      "255.255.255.255", "256.1.1.1", "-1.2.3.4", "1.2.3.04", " 1.2.3.4",
+      "::", "::1", "1::", "::ffff:1.2.3.4", "1:2:3:4:5:6:7:8",
+      "1:2:3:4:5:6:7:8:9", "1:2:3:4:5:6:7", "fe80::1%eth0", "::%1",
+      "1::2::3", "gggg::1", "0:0:0:0:0:0:0:0", "２.２.２.２", "1.2.3.4/24",
+      "[::1]", "1.2.3.4:80", "\t1.2.3.4", "1.2.3.4\n",
+    ],
+    input: (rnd) => {
+      const PARTS = ["1", "0", "01", "255", "256", "-1", "a", "", "ffff", "::", ":", ".", "%eth0", "g", "２"];
+      const sep = rnd() < 0.5 ? "." : ":";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 8);
+      for (let i = 0; i < k; i++) {
+        out += PARTS[Math.floor(rnd() * PARTS.length)];
+        if (i < k - 1 && rnd() < 0.8) out += sep;
+      }
+      return out;
+    },
+    calls: [
+      { name: "isIP", args: (s) => [s] },
+      { name: "isIPv4", args: (s) => [s] },
+      { name: "isIPv6", args: (s) => [s] },
+      {
+        // `BlockList` is value-shaped: rules go in, a boolean comes out, and
+        // the interesting part is which address family a rule applies to.
+        label: "blocklist",
+        call: (m, s) => {
+          let bl;
+          try {
+            bl = new m.BlockList();
+          } catch (e) {
+            return `NO-BLOCKLIST:${e && e.name}`;
+          }
+          const out = [];
+          for (const family of ["ipv4", "ipv6"]) {
+            try {
+              bl.addAddress(s, family);
+              out.push(`add-${family}:ok`);
+            } catch (e) {
+              out.push(`add-${family}:${(e && e.code) || (e && e.name)}`);
+            }
+            try {
+              out.push(`chk-${family}:${bl.check(s, family)}`);
+            } catch (e) {
+              out.push(`chk-${family}:${(e && e.code) || (e && e.name)}`);
+            }
+          }
+          return out;
+        },
+      },
+    ],
+  },
   stream: {
     // The **synchronous** half of a stream, which is more than it sounds and is
     // the half a value-compare corpus can hold.

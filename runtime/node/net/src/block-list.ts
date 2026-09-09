@@ -9,6 +9,7 @@
 
 import {
   ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ADDRESS,
   ERR_INVALID_ARG_VALUE,
   ERR_OUT_OF_RANGE,
 } from "../../internal/errors.ts";
@@ -327,7 +328,13 @@ function addressFromInput(
   validateString(input, name);
   const normalisedFamily = normaliseFamily(family, "family");
   const parsed = parseAddress(input, normalisedFamily);
-  if (parsed === undefined) throw new ERR_INVALID_ARG_VALUE(name, input);
+  // Node raises `ERR_INVALID_ADDRESS` here, an `Error` with the fixed message
+  // "Invalid socket address", not `ERR_INVALID_ARG_VALUE`. The *family*
+  // validation below is a different contract and does use
+  // `ERR_INVALID_ARG_VALUE` as a `TypeError`, so the two are not
+  // interchangeable -- checking both against node before changing either is
+  // what kept the family case from being broken along with this fix.
+  if (parsed === undefined) throw new ERR_INVALID_ADDRESS();
   return parsed;
 }
 

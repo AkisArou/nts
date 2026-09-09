@@ -166,6 +166,24 @@ abstract class NodeURIError extends URIError {
   }
 }
 
+/** `Invalid socket address`.
+ *
+ * Node throws this from C++ rather than from `lib/internal/errors.js`, which is
+ * why it does not appear in that file's `E(...)` table. `BlockList`'s three
+ * add methods raise it for an address that does not parse, and the observable
+ * shape is an `Error` -- not a `TypeError` -- carrying only `code`.
+ *
+ * A differential against node found ours raising `ERR_INVALID_ARG_VALUE` here,
+ * on every one of 430 generated addresses.
+ */
+export class ERR_INVALID_ADDRESS extends NodeError {
+  override readonly code = "ERR_INVALID_ADDRESS";
+
+  constructor() {
+    super("Invalid socket address");
+  }
+}
+
 /** `Directory handle was closed`. */
 export class ERR_DIR_CLOSED extends NodeError {
   override readonly code = "ERR_DIR_CLOSED";
