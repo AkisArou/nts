@@ -37,8 +37,15 @@ const functions = [
   "join", "matchesGlob", "normalize", "parse", "relative", "resolve",
   "toNamespacedPath",
 ];
+// Collected, not asserted in the loop. Asserting here reported `format` and
+// stopped -- which hid every check below it, including the one that finds
+// `path.posix.sep` undefined. The compiler lane flagged exactly that: a test
+// whose real finding sits behind an earlier one in the same file.
+const findings = [];
 for (const name of functions) {
-  assert.strictEqual(typeof path[name], "function", `path.${name}`);
+  if (typeof path[name] !== "function") {
+    findings.push(`path.${name} is ${typeof path[name]}, node's is function`);
+  }
 }
 
 // The two scalars. `sep` and `delimiter` are string constants, which is the
@@ -54,25 +61,40 @@ assert.strictEqual(path.delimiter, ":");
 // `path.posix.normalize`, and `path.win32` is still reachable, because a program
 // that manipulates Windows paths should not have to run on Windows.
 for (const ns of ["posix", "win32"]) {
-  assert.strictEqual(typeof path[ns], "object", `path.${ns}`);
-  assert.notStrictEqual(path[ns], null);
-  for (const name of functions) {
-    assert.strictEqual(
-      typeof path[ns][name],
-      "function",
-      `path.${ns}.${name}`,
-    );
+  if (typeof path[ns] !== "object" || path[ns] === null) {
+    findings.push(`path.${ns} is ${typeof path[ns]}, node's is object`);
+    continue;
   }
-  assert.strictEqual(typeof path[ns].sep, "string");
-  assert.strictEqual(typeof path[ns].delimiter, "string");
+  for (const name of functions) {
+    if (typeof path[ns][name] !== "function") {
+      findings.push(`path.${ns}.${name} is ${typeof path[ns][name]}`);
+    }
+  }
+  if (typeof path[ns].sep !== "string") {
+    findings.push(`path.${ns}.sep is ${typeof path[ns].sep}, node's is a string`);
+  }
+  if (typeof path[ns].delimiter !== "string") {
+    findings.push(`path.${ns}.delimiter is ${typeof path[ns].delimiter}, node's is a string`);
+  }
 }
 
 // And that the two namespaces are actually different implementations rather
 // than one object exported twice -- which would satisfy every check above.
-assert.strictEqual(path.posix.sep, "/");
-assert.strictEqual(path.win32.sep, "\\");
-assert.strictEqual(path.posix.join("a", "b"), "a/b");
-assert.strictEqual(path.win32.join("a", "b"), "a\\b");
+for (const [label, got, want] of [
+  ["path.posix.sep", path.posix && path.posix.sep, "/"],
+  ["path.win32.sep", path.win32 && path.win32.sep, "\\"],
+  ["path.posix.join(\"a\", \"b\")", path.posix && typeof path.posix.join === "function" ? path.posix.join("a", "b") : undefined, "a/b"],
+  ["path.win32.join(\"a\", \"b\")", path.win32 && typeof path.win32.join === "function" ? path.win32.join("a", "b") : undefined, "a\\b"],
+]) {
+  if (got !== want) findings.push(`${label} is ${JSON.stringify(got)}, node's is ${JSON.stringify(want)}`);
+}
+
+// Every finding at once, so none hides the others.
+assert.deepStrictEqual(
+  findings,
+  [],
+  `${findings.length} surface finding(s):\n  ${findings.join("\n  ")}`,
+);
 
 // On this host the top level is the posix half, which is node's arrangement and
 // is the thing `namespace-identity-static.js` covers from the other direction.
