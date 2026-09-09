@@ -9702,6 +9702,49 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### The six functions that started crossing are correct, and one test was hiding it
+
+`path/test/edge-inputs-static.js` compares 183 edge cases against node. It
+asserted inside its comparison loop, so it stopped at the first mismatch --
+`basename("")`, case 2 of 183 -- and reported one line about six functions whose
+other 180 results had already been computed. It now collects every divergence
+and summarises by operation before listing them, because a 66-line list is
+truncated in the harness output and 66 lines nobody sees is the same one-bit
+signal in a longer form.
+
+The bar is unchanged: any divergence still fails the file.
+
+```
+operation    cases  diverging
+dirname         26      0   all match
+extname         26      0   all match
+isAbsolute      26      0   all match
+normalize       26      0   all match
+relative        11      0   all match
+basename        28     26
+parse           26     26
+join            11     11
+format           2      2
+resolve          1      1
+```
+
+**117 of 183 match, and every one of the 66 divergences is a filed wrapper
+blocker.** `parse` returns an object, `join` and `resolve` take rest parameters,
+`format` takes an object, and `basename` diverges on exactly the 26 cases that
+call it with one argument -- the two that match are `basename("a/b.txt",
+".txt")` and `basename("a/.txt", ".txt")`, the only two-argument calls in the
+table.
+
+That is the optional-parameter diagnosis confirmed from the other side: the
+function computes node's answer whenever it is allowed to run, and throws
+whenever the optional argument is omitted.
+
+And it is the first behavioural evidence that the functions which started
+crossing this evening are right. Five of the six match node on every case they
+are given -- 115 cases across `dirname`, `extname`, `isAbsolute`, `normalize`
+and `relative` -- which no lane could say while one early assertion was stopping
+the comparison.
+
 ### "66 signatures in nine modules" cannot be re-derived, because it never said what it counted
 
 The typed-array gap is carried in this profile's standing description as "66

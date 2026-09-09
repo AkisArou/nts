@@ -254,7 +254,44 @@ attempt("format/empty", () => path.format({}));
 attempt("format/base-wins", () => path.format({ dir: "/d", base: "b", name: "n", ext: ".e" }));
 
 assert.strictEqual(results.length, EXPECTED.length, "every case was reached");
+
+// Every divergence, not the first one.
+//
+// `assert.strictEqual` inside the loop stops at the earliest mismatch, and all
+// 183 results have already been computed by the time it runs -- so one early
+// case hid whatever the other 180 had to say. `basename("")` throwing
+// `ERR_MISSING_ARGS` is case 2, which made this file a one-bit signal about six
+// functions that had just started crossing.
+//
+// The bar is unchanged: any divergence still fails the file. What changed is
+// that the failure names all of them, which is the same lesson as a lowering
+// that reports one refused class per function -- an instrument that names one
+// thing at a time cannot tell you whether it is one thing.
+const diverged = [];
 for (let i = 0; i < EXPECTED.length; i++) {
-  assert.strictEqual(results[i][0], EXPECTED[i][0], `case ${i} label`);
-  assert.strictEqual(results[i][1], EXPECTED[i][1], results[i][0]);
+  if (results[i][0] !== EXPECTED[i][0]) {
+    diverged.push(`case ${i}: label ${results[i][0]}, expected ${EXPECTED[i][0]}`);
+    continue;
+  }
+  if (results[i][1] !== EXPECTED[i][1]) {
+    diverged.push(`${results[i][0]}: ${results[i][1]}, expected ${EXPECTED[i][1]}`);
+  }
 }
+// Summarised by operation before the list, because the list is what gets
+// truncated. 66 lines of detail that a reader never sees is the same one-bit
+// signal in a longer form.
+const byOperation = new Map();
+for (const line of diverged) {
+  const op = line.split("/")[0].replace(/^case \d+: label /, "");
+  byOperation.set(op, (byOperation.get(op) ?? 0) + 1);
+}
+const summary = [...byOperation.entries()]
+  .sort((a, b) => b[1] - a[1])
+  .map(([op, n]) => `${op} ${n}`)
+  .join(", ");
+assert.strictEqual(
+  diverged.length,
+  0,
+  `${diverged.length} of ${EXPECTED.length} cases diverge (${summary}):\n  ` +
+    diverged.join("\n  "),
+);
