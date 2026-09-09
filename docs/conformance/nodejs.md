@@ -15178,6 +15178,28 @@ compiler**, and every module added to the axis today was added by finding
 behaviour an artifact already had and asking it -- not by fixing an
 implementation.
 
+**Re-measured against artifacts this session built** -- 22 modules compiled with
+one pinned compiler into a private directory, 22 loading under `RTLD_NOW`, none
+crashing -- the figure is the same: 38 pass, 29 behaviour-dependent, 9
+shape-only, **0 hollow**, 15 of 22 modules. That is the right answer for a
+rebuild with no compiler change in between, and it is now attributable to a tree
+this lane owns rather than to whatever the shared directory happened to hold.
+
+**And the lever that added seven of the last eight modules is empty.**
+`hidden-exports.mjs` against the same artifacts reports **0 node-own names
+published and not delivered** -- seven names reach no test at all
+(`fs.flagsOf`, `http.getHTTPParserPoolLimit`, four `readline` key constants,
+`util.styles`) and not one of them is a name node has. So there is no more
+behaviour sitting in an artifact waiting to be wired up: `fs` publishes three
+names because three are all it compiles, not because the shim withholds the
+rest.
+
+That closes the cheap half of the work and says plainly what the expensive half
+is. The four roots filed this afternoon -- `.then` on a promise, an iterator as
+a declared return type, a getter returning `undefined`, a generic rest
+forwarded to its callback -- are the form the remaining distance takes, and
+each is a compiler change rather than a wiring one.
+
 ### One instrument error, named
 
 The survey walked every directory under `runtime/node` with a `test/` folder,
