@@ -9702,6 +9702,35 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### `string_decoder` is 0 of 5, and all five say the same thing
+
+```
+test-string-decoder-end.js     SD is not a constructor
+test-string-decoder-fuzz.js    StringDecoder is not a constructor
+local/core-static.js           StringDecoder is not a constructor
+local/export-surface-static.js typeof StringDecoder: 'undefined', expected 'function'
+local/split-sequences-static.js THROW:TypeError on the first case
+```
+
+Not four of five, not nearly anything. Zero, with one reason: the class has no
+constructor, because `ERR_UNKNOWN_ENCODING#constructor` calls `inspectValue`
+which calls `inspectValueWithin`, refused at `errors.ts:533` for `indexing an
+array of any`. `core-static.js` is untouched and stays untouched; the bar it
+sets is node's.
+
+**Two tests were reporting less than they knew.** `split-sequences-static.js`
+and `fs/test/encoding-aliases-static.js` recorded a throw as
+`THROW:${error.code ?? "?"}`, so any error without a `code` -- every plain
+`TypeError` -- arrived as `THROW:?`. `path/test/edge-inputs-static.js` had the
+better form all along, `error.code ?? error.constructor.name`, which is why its
+66 divergences could be read as 26 `ERR_MISSING_ARGS` and 26 `TypeError` rather
+than 66 question marks. Both now use it. Interpreted lane unchanged: both still
+pass.
+
+That is the third instrument this evening that knew more than it said, after the
+lowering that names one refused class per function and the assertion loop that
+stops at the first mismatch.
+
 ### Nothing that crosses answers wrongly
 
 Swept every module that publishes anything, reading the *reason* each local test

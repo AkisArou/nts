@@ -495,7 +495,7 @@ for (const encoding of encodings) {
           decoder.write(buffer.subarray(split)) +
           decoder.end();
       } catch (error) {
-        actual = `THROW:${error.code ?? "?"}`;
+        actual = `THROW:${error.code ?? error.constructor.name}`;
       }
       assert.strictEqual(actual, EXPECTED[key], key);
       checked++;

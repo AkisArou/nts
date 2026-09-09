@@ -160,7 +160,7 @@ try {
           ? `[${typeof value[0]}]`
           : typeof value;
       } catch (error) {
-        outcome = `THROW:${error.code ?? "?"}`;
+        outcome = `THROW:${error.code ?? error.constructor.name}`;
       }
       rows.push(`${label}/${encoding}=${outcome}`);
     }
