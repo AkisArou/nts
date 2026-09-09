@@ -1406,19 +1406,32 @@ fn wrapper(
         .params
         .iter()
         .position(|parameter| parameter.shape == hir::ParamShape::Rest);
-    let required = gathered.unwrap_or(func.params.len());
-    if func.params.is_empty() {
-        out.push_str("    (void)info;\n");
-    } else if required == 0 {
-        // Only a rest parameter: nothing to read positionally, and
-        // `nts_napi_rest` does its own `napi_get_cb_info`.
-        out.push_str("    (void)info;\n");
-    } else {
-        let _ = write!(
-            out,
-            "    size_t argc = {required};\n    napi_value argv[{required}];\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, NULL, NULL), \"could not read callback arguments\")) return NULL;\n    if (argc < {required}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the compiled function requires {required} arguments\");\n        return NULL;\n    }}\n"
-        );
-    }
+    let positional = gathered.unwrap_or(func.params.len());
+    // How many a caller must actually supply.
+    //
+    // `basename(path: string, suffix?: string)` published with **two** required
+    // arguments, so `path.basename("/a/b.txt")` -- the way that function is
+    // almost always called -- threw `ERR_MISSING_ARGS` where node returns
+    // `"b"`. Not a corner: 316 exported functions in the node profile take an
+    // optional or defaulted parameter, among them `net.createServer` and
+    // `dgram.createSocket`, whose own tests call them with fewer arguments
+    // seventeen times over. It was found by the first differential ever run
+    // against a compiled addon, and by nothing in node's own test files, which
+    // call each function the way their author wrote them.
+    //
+    // A **defaulted** parameter stays required, and that is not an oversight.
+    // `ParamShape::Defaulted`'s contract is that "the initializer is evaluated
+    // by each caller that omits the argument" -- the lowering inlines it at
+    // every call site and the HIR does not carry the expression. A wrapper is a
+    // caller with nowhere to get it from, so passing a zero would be inventing
+    // a value the source never wrote.
+    let required = func
+        .params
+        .iter()
+        .take(positional)
+        .rposition(|parameter| parameter.shape != hir::ParamShape::Optional)
+        .map_or(0, |at| at + 1);
+    out.push_str(&read_arguments(func.params.len(), positional, required));
 
     let mut args: Vec<String> = Vec::new();
     for (index, (crossing, parameter)) in crossings.iter().zip(&func.params).enumerate() {
@@ -1444,7 +1457,19 @@ fn wrapper(
             );
             continue;
         }
-        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
+        let read = unmarshal(crossing, &parameter.ty, layouts, name, index);
+        if index < required {
+            out.push_str(&read);
+            continue;
+        }
+        // An argument the caller may have left out. Absent is `undefined`,
+        // spelled the way the callee's parameter type spells it: a reference
+        // parameter tests against the null pointer already -- that is how
+        // `suffix === undefined` compiles inside `basename` -- and an erased one
+        // carries the tag, which is why the lowering types an optional `number`
+        // parameter `erased` and an optional `string` parameter as an ordinary
+        // pointer.
+        out.push_str(&optional_argument(&read, &absent_argument(crossing, name), index));
     }
 
     // The landing pad, so a `throw` that reaches the edge becomes a catchable
@@ -1487,6 +1512,63 @@ fn wrapper(
     }
     out.push_str("    return out;\n}\n\n");
     Ok(out)
+}
+
+/// The preamble that reads the callback's arguments and checks how many there
+/// are.
+///
+/// `positional` is how many the wrapper can receive, `required` how many the
+/// caller must supply. They differ by the optional tail, and the check is
+/// omitted entirely when nothing is required -- a function of only optional
+/// parameters is legal to call with none.
+fn read_arguments(declared: usize, positional: usize, required: usize) -> String {
+    if declared == 0 || positional == 0 {
+        // No parameters, or only a rest one: nothing to read positionally, and
+        // `nts_napi_rest` does its own `napi_get_cb_info`.
+        return "    (void)info;\n".to_owned();
+    }
+    let mut out = format!(
+        "    size_t argc = {positional};\n    napi_value argv[{positional}];\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, NULL, NULL), \"could not read callback arguments\")) return NULL;\n"
+    );
+    if required > 0 {
+        let plural = if required == 1 { "" } else { "s" };
+        let _ = write!(
+            out,
+            "    if (argc < {required}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the compiled function requires {required} argument{plural}\");\n        return NULL;\n    }}\n"
+        );
+    }
+    out
+}
+
+/// One argument read, guarded by whether the caller supplied it.
+///
+/// Split out because `wrapper` is already at the line limit and this is the
+/// only part of it that is a shape rather than a decision.
+fn optional_argument(read: &str, absent: &str, index: usize) -> String {
+    let mut out = format!("    if (argc > {index}) {{\n");
+    for line in read.lines() {
+        let _ = writeln!(out, "    {line}");
+    }
+    let _ = write!(out, "    }} else {{\n        {absent}\n    }}\n");
+    out
+}
+
+/// What an omitted argument is, in C.
+///
+/// Every crossing but the two reference-shaped ones is unreachable rather than
+/// approximate: a *scalar* parameter that may be omitted is `erased` in the
+/// HIR, because `undefined` is a tag and not a zero, so `Number` and `Bool`
+/// never arrive here optional. They answer anyway, and separately, so that the
+/// next crossing to be added is decided about instead of joining a list.
+fn absent_argument(crossing: &Cross, name: &str) -> String {
+    match crossing {
+        Cross::Str | Cross::Bytes | Cross::Elements(_) | Cross::Object(_) => {
+            format!("{name} = NULL;")
+        }
+        Cross::Number => format!("{name} = 0.0;"),
+        Cross::Bool => format!("{name} = false;"),
+        Cross::Void => "(void)0;".to_owned(),
+    }
 }
 
 /// Stop cleanup from releasing references whose ownership the compiled callee
