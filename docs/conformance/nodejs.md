@@ -15210,6 +15210,45 @@ infrastructure gaps, weak listener registration through the canonical
 None of them is a defect waiting to be fixed. All of them are infrastructure or
 a stated non-goal.
 
+### The standing figures, re-derived 2026-09-09 late
+
+The goal text this lane works from carries numbers and says they are historical
+the moment they are read. Re-derived against a pin taken at 21:35 and the
+`addons-v26` build:
+
+    stated                              re-derived
+    ---------------------------------   ------------------------------------------
+    1 of 22 whole -- punycode           holds: punycode, 3 files, 3 passed, 0 failed
+    20 of 22 build and load             **22 of 22**, 0 crashed
+    fs and process do not build         both build and load
+    os is 17 of 23                      **21 of 23**
+    querystring is 0 of 7               **2 of 7**
+    string_decoder: 0 own refusals,     holds: five lines name its own source and
+      two wrapper declines                all five are NTS1003 cascades; the two
+                                          declines are `default` and `StringDecoder`
+    ~125 of 309 bindings have no C      **3 of 352** -- see the section above
+    dgram 21 of 21 missing              **0 of 21 missing**
+    net 28 of 30 missing                **0 of 30**
+    fs 60 of 133 missing                **0 of 155**
+    no wrapper builds a typed array     **two do** -- `buffer` and `querystring`,
+      -- zero across 24 addons            outbound only; inbound is still zero,
+                                          `napi_get_typedarray_info` appears nowhere
+
+**What has not moved is the coarse number.** 1 of 22 whole at the start of the
+day and 1 of 22 now.
+
+**What string_decoder is waiting on has changed even though its description has
+not.** Zero own-source refusals and two declines are still exactly right, and
+the cascades behind them now run:
+
+    StringDecoder#constructor -> Buffer.alloc -> Buffer#fill -> Uint8Array#fill
+    StringDecoder#write/#text -> bytesOf -> Buffer.from -> objectToBuffer
+                              -> `in` on a bare `object`
+
+Both heads are filed -- `in-on-an-undeclared-object` and the missing
+`Uint8Array#fill`. So "two wrapper declines left" is a true description of a
+module whose distance is two compiler defects rather than two wrapper arms.
+
 ### The native half, re-derived: 349 of 352, and the gap is three internal bindings
 
 `native-half.mjs` compiles every `.c` under `runtime/node` and `runtime/c` with
