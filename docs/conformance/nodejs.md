@@ -15321,6 +15321,12 @@ declaration that makes it, with the fixture that names it:
                 an-empty-object-literal, and the second unfiled
                 -> http.createServer 241 of 405, net.createServer 91 of 148
 
+     59 files   a computed member read whose key is held in a variable, where
+                the interface declares that key: `options[duplexKey]` at
+                stream/src/state.ts:64
+                a-key-held-in-a-variable
+                -> stream Readable 59 of 249, and Writable off the same function
+
      68 files   method syntax in an interface: `addEventListener` declared on
                 `AbortSignalLike` at internal/abort.ts:23, the only root inside
                 dgram's Socket constructor
@@ -15339,6 +15345,13 @@ declaration that makes it, with the fixture that names it:
       6 files   `decodeURIComponent`, unimplemented
                 missing-builtin
                 -> querystring.parse
+
+     16 files   a constructor taking an object parameter, which the wrapper
+                cannot carry: `no wrapper for EventEmitter#constructor: takes an
+                object`. Its constructor compiles; the boundary declines it.
+                object-parameter-at-the-wrapper
+                -> events publishes **nothing at all**, 16 of 32 failing files
+                   stop at `EventEmitter is not a constructor`
 
 `process` at 75 of 90 is unreduced: its main export is declined outright with
 `is exported and is not a function this backend can name`, and the obvious
