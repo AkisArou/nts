@@ -110,3 +110,81 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     candidates.retain(|value| read.contains(value) && !refused.contains(value));
     candidates
 }
+
+/// The map helper whose key is compared *through* its box and never kept, and
+/// the form that takes the reference itself.
+///
+/// The mirror of `scalar_form` above: that one is about an answer nobody wants
+/// boxed, this one about an argument nobody wants boxed. Both exist because
+/// ART does not scalar-replace across the call boundary C2 inlines away, and
+/// neither is worth anything on `HotSpot`.
+#[must_use]
+pub(crate) fn object_key_form(name: &str) -> Option<(&'static str, &'static str)> {
+    Some(match name {
+        "nts_map_get" => ("getObject", "(Lnts/rt/NtsMap;Ljava/lang/Object;)Lnts/rt/NtsValue;"),
+        "nts_map_has" => ("hasObject", "(Lnts/rt/NtsMap;Ljava/lang/Object;)Z"),
+        _ => return None,
+    })
+}
+
+/// Where the key sits in one of those calls.
+pub(crate) const KEY_AT: usize = 1;
+
+/// Erasures of a reference whose every use is such a key, and the reference
+/// each one erases.
+///
+/// # Why the string case is excluded rather than handled
+///
+/// `Erase` picks its constructor from the type: `Managed(String)` becomes
+/// `ofString` and tags `STRING`, everything else `ofObject` and tags `OBJECT`.
+/// `sameKey` compares a `STRING` by `equals` and an `OBJECT` by reference, so
+/// an unboxed lookup that assumed `OBJECT` would silently stop finding string
+/// keys that are equal without being identical. The excluded case is the one
+/// where the box is doing work.
+#[must_use]
+pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId> {
+    let mut candidates = rustc_hash::FxHashMap::default();
+    for (at, op) in func.values.iter().enumerate() {
+        let OpKind::Erase { value } = op.kind else { continue };
+        let source = func.values.get(value.0 as usize);
+        if matches!(
+            source.map(|it| &it.ty),
+            Some(HirType::Managed(managed)) if !matches!(managed, nts_core::hir::ManagedType::String)
+        ) {
+            candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)), value);
+        }
+    }
+    if candidates.is_empty() {
+        return candidates;
+    }
+
+    // Every use, or none -- `fused`'s rule, for the same reason: the box is not
+    // built, so a use that wants one has nothing to want.
+    let mut refused = FxHashSet::default();
+    for op in &func.values {
+        if let OpKind::Call { callee: Callee::External(name), args, .. } = &op.kind
+            && object_key_form(name).is_some()
+        {
+            for (at, operand) in args.iter().enumerate() {
+                if at != KEY_AT && candidates.contains_key(operand) {
+                    refused.insert(*operand);
+                }
+            }
+            continue;
+        }
+        for operand in operands_of(&op.kind) {
+            if candidates.contains_key(&operand) {
+                refused.insert(operand);
+            }
+        }
+    }
+    for block in &func.blocks {
+        for operand in nts_core::hir::operands_of_terminator(&block.terminator) {
+            if candidates.contains_key(&operand) {
+                refused.insert(operand);
+            }
+        }
+    }
+    candidates.retain(|value, _| !refused.contains(value));
+    candidates
+}

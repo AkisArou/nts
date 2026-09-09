@@ -212,6 +212,7 @@ struct Held {
     unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     fused: rustc_hash::FxHashSet<ValueId>,
+    object_keys: rustc_hash::FxHashMap<ValueId, ValueId>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Index helpers whose answer every use converts to an integer; see `intcall`.
@@ -250,6 +251,7 @@ fn held_values(program: &Program, func: &Func, plan: &crate::widen::Plan) -> Hel
     Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
+        object_keys: crate::fuse::object_keys(func),
         accumulated: crate::builder::accumulators(func),
         narrowed: {
             let mut held = crate::intcall::narrowed(func);
@@ -283,6 +285,7 @@ pub struct Emitter<'a> {
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     pub(crate) fused: rustc_hash::FxHashSet<ValueId>,
+    pub(crate) object_keys: rustc_hash::FxHashMap<ValueId, ValueId>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Helper results declared `f64` and held as an `int`; see `intcall`.
@@ -420,6 +423,7 @@ impl<'a> Emitter<'a> {
             scratch: None,
             unboxed: plans.unboxed,
             fused: plans.fused,
+            object_keys: plans.object_keys,
             accumulated: plans.accumulated,
             narrowed: plans.narrowed,
             joined: plans.joined,

@@ -508,6 +508,88 @@ public final class NtsMap {
         }
     }
 
+    /**
+     * The hash of a reference key, reached with or without an {@link NtsValue}
+     * around it.
+     *
+     * <p>Called from {@link #hash}'s default arm and from {@link #findObject},
+     * so the two cannot disagree -- which they would silently, as a lookup that
+     * simply never finds anything.
+     */
+    private static int hashObject(Object ref) {
+        int h = System.identityHashCode(ref);
+        h *= 0x9e3779b1;
+        return h ^ (h >>> 16);
+    }
+
+    /**
+     * {@link #find}, for a key that has not been boxed.
+     *
+     * <p>Exactly {@code find(NtsValue.ofObject(key))} and nothing else:
+     * {@code ofObject} tags a non-null reference {@code OBJECT}, {@code hash}
+     * sends that tag to {@link #hashObject}, and {@code sameKey} reaches its
+     * default arm -- {@code a.ref == b.ref} -- only once {@code a.tag != b.tag}
+     * has ruled out every other tag. So the stored key matches when it is
+     * tagged {@code OBJECT} and holds the same reference, and the box the
+     * comparison would have been made through never has to exist.
+     *
+     * <p>A null key is not an {@code OBJECT} at all -- {@code ofObject(null)}
+     * is {@code NULL_VALUE} -- so it delegates rather than being special-cased
+     * wrongly.
+     */
+    private int findObject(Object key) {
+        if (key == null) { return find(NtsValue.NULL_VALUE); }
+        if (count == 0) { return -1; }
+        if (buckets.length == 0) {
+            for (int i = head; i < used; i++) {
+                NtsValue candidate = keys[i];
+                if (candidate != null && candidate.tag == NtsValue.OBJECT && candidate.ref == key) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+        int h = hashObject(key);
+        int mask = buckets.length - 1;
+        int p = h & mask;
+        for (;;) {
+            long cell = buckets[p];
+            if (cell == 0L) { return -1; }
+            int slot = (int) cell - 1;
+            NtsValue candidate = keys[slot];
+            if ((int) (cell >>> 32) == h && candidate.tag == NtsValue.OBJECT && candidate.ref == key) {
+                return slot;
+            }
+            p = (p + 1) & mask;
+        }
+    }
+
+    /**
+     * {@code m.get(k)} where {@code k} is a reference the caller holds unboxed.
+     *
+     * <p>**This is an ART optimisation and is worth nothing on HotSpot**, which
+     * is the same shape as `fuse` and was measured the same way. `benches/cases/symbol-keyed-map`
+     * looks a symbol up 8,192 times an operation, and each lookup built an
+     * {@link NtsValue} purely to be compared through and discarded:
+     *
+     * <pre>
+     * symbol-keyed-map    HotSpot 368    ART 196,912
+     * </pre>
+     *
+     * and {@code 8192 * 24 = 196,608} of that is this box. C2 inlines the
+     * helper and scalar-replaces the key; ART's escape analysis does not see
+     * through the call boundary.
+     */
+    public static NtsValue getObject(NtsMap map, Object key) {
+        int at = map.findObject(key);
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];
+    }
+
+    /** {@code m.has(k)} for an unboxed reference key; see {@link #getObject}. */
+    public static boolean hasObject(NtsMap map, Object key) {
+        return map.findObject(key) >= 0;
+    }
+
     private static int hash(NtsValue value) {
         int h;
         switch (value.tag) {
@@ -526,8 +608,11 @@ public final class NtsMap {
                 h = 0;
                 break;
             default:
-                h = System.identityHashCode(value.ref);
-                break;
+                // Returns rather than breaking to the mix below, because
+                // `hashObject` applies it: one implementation, so a key looked
+                // up without its box cannot hash differently from the same key
+                // stored with one.
+                return hashObject(value.ref);
         }
         // One multiply, and no tag mix. A profile of `map-and-set` put 20% of
         // the row in this method -- not from collisions, which were already
