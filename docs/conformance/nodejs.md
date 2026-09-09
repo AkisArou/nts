@@ -12774,6 +12774,49 @@ boundary is reached. So the typed-array gap is real and is not currently the
 thing costing those signatures -- which is the difference between a blocker and
 a blocker that is next.
 
+## The nine names the erased crossing published: six work, three cannot be called
+
+Each newly published export, called with the argument node accepts and compared
+against `node:`:
+
+| export | ours | node |
+| --- | --- | --- |
+| `util.toUSVString("ab")` | `"ab"` | same |
+| `stream.getDefaultHighWaterMark(false)` | `65536` | same |
+| `stream.getDefaultHighWaterMark(true)` | `16` | same |
+| `async_hooks.executionAsyncId()` | `1` | same |
+| `async_hooks.triggerAsyncId()` | `0` | same |
+| `timers.clearImmediate(undefined)` | `undefined` | same |
+| **`buffer.isUtf8(new Uint8Array([97,98]))`** | **throws** `an argument of this type has no representation in the compiled runtime` | `true` |
+| **`buffer.isAscii(new Uint8Array([97]))`** | **throws**, same | `true` |
+| **`async_hooks.executionAsyncResource()`** | **throws** `the compiled function returned a value with no JavaScript representation` | an object |
+
+Six agree with node exactly. **Three publish and cannot be used at all.**
+
+`isUtf8` and `isAscii` are declared `(input: Uint8Array | ArrayBuffer)`. The
+erased parameter path accepts them at the boundary and then finds it has no
+inbound representation for a typed array -- which is the same 64-signature gap
+measured elsewhere in this document, now reached from the other side. Every
+argument node accepts, including a `Buffer`, throws.
+
+`executionAsyncResource` fails outbound rather than inbound: the value exists
+and has no JavaScript representation.
+
+**This is worse than not publishing, and worth saying plainly.** Before the
+crossing, `buffer` published three names and `typeof buffer.isUtf8` was
+`"undefined"`. Now it is `"function"` and every call throws. A presence check
+passes where it used to fail, and only a call finds out -- which is exactly the
+shape `vacuous-lane.mjs` exists to catch one level up, and exactly what
+`prize.mjs`'s second gate warns about: **appearing is not the same as being
+callable.**
+
+It is not an argument against the crossing, which bought six working exports and
+is a precondition for the rest. It is an argument for the boundary declining
+what it cannot carry instead of accepting it and failing at the call -- the same
+judgement the compiler lane already made for `{}` inbound, where a loud
+`TypeError` was chosen over a wrong `undefined`. Here the loudness arrives one
+call too late to stop the name being published.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
