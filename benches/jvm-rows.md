@@ -228,6 +228,23 @@ row is **1.03x** on time, so the hoist is worth at most 3% there, and the whole
 
 ## Asked and answered -- do not spend a second evening on these
 
+**This list is not the whole list, and finding that out cost me two
+measurements tonight.** The other two places are:
+
+- **`docs/records/0132`**, *Five hypotheses died and the reference stayed
+  still*, on `dispatch`'s modes. Warmup, compilation, SMT placement, address
+  randomisation and allocation are all refuted there, and record 0130 refuted
+  warmup before it. **I re-tested warmup and core placement anyway**, because I
+  read this file first as the goal says and neither was in it.
+- **The comment on `SPREAD_WORTH_SAYING` in `tooling/bench/src/main.rs`**, which
+  carries the twelve-row spread survey that set the 1.10 threshold, and the fact
+  that the modes are chosen once per JVM and held for its life.
+
+A lead that dies belongs wherever the next person will meet it, and for a
+benchmark that is sometimes the harness rather than this file. So: **check all
+three before pricing anything about variance.** What is written below is what
+this lane's rows cost, not everything that has been ruled out about them.
+
 Each cost a measurement. The number in brackets is what the fix was worth.
 
 **Read this class of lead first, because it is now four for four.** "The
