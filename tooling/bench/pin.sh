@@ -133,6 +133,16 @@ fi
 # So: keep the error, and *verify the tree moved* rather than trust the exit
 # status alone. `docs/records/0077` is the same argument -- where two things
 # must agree and only one can be checked, assert rather than compute.
+#
+# **Both halves tested, because "it refused" alone does not say it refused for
+# the right reason.** A clean worktree must still pin -- otherwise the refusal
+# is unconditional and the script is merely broken the other way -- and a dirty
+# one must refuse *and* leave the stamp naming where the tree really is:
+#
+#     control 1   clean tree   pinned to 4a5ccc47, tree really at 4a5ccc47
+#     control 2   dirty tree   refused, and stamp and tree both still 4a5ccc47
+#
+# Before this, control 2 stamped `e7342345` over a tree sitting at `4a5ccc47`.
 if ! failure=$(git -C "$tree" checkout --detach "$sha" 2>&1); then
   echo "refusing: the worktree would not move to $short" >&2
   echo "$failure" | sed 's/^/  /' >&2
