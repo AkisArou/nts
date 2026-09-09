@@ -239,6 +239,7 @@ zero every time:
     the (D)D closure ABI's i2d/d2i per call          0.1%   priced first
     the store/load round trip on every value           0%   record 0004
     the arrayAtValue allocation per round              0    C2 scalar-replaces it
+    1.7x the bytecode blocking a hot inline          0.1%   FreqInlineSize=800
 
 C2 folds identity conversions, sinks stores, and scalar-replaces non-escaping
 objects, and it does all three through our emission specifically. **The bytecode
@@ -502,9 +503,28 @@ and reverted, because C2 already removes it. Slot reuse by live range is the
 other route and it costs the eighty-line StackMapTable design, which
 `awfy-queens` established this afternoon is not worth paying for a merge.
 
-So the honest position is: **this row is 1.07x, the cause is not found, and the
-one visible difference is a lead two separate measurements have already
-refuted.** The transcription route is closed as well -- writing a Java version
+**And the one argument that survived those two refutations is now dead too.**
+Both of them priced the slot traffic's *direct* cost, which C2 removes. Neither
+asked what 1.7x the bytecode does to **inlining**, and the numbers make that
+look decisive: `work$whole` is **365 bytes against a `FreqInlineSize` of 325**,
+so it sits just over the ceiling where the reference's ~110 sits far under, and
+`-XX:+PrintInlining` says `hot method too big` about it.
+
+Priced with the ceiling raised past our size, interleaved:
+
+    minimum   default 1313    -XX:FreqInlineSize=800  1314    +0.1%
+
+**Nothing.** Because `work$whole` *is* the hot method rather than a callee
+inside one -- inlining it into `work` would move the code, not remove it. The
+message names a call site, and a method that C2 compiles on its own account
+loses nothing by not being pasted into its caller. That is the same shape as
+`module-closures`, where the identical message meant nothing for the identical
+reason, and it is the second time tonight `PrintInlining` has offered a precise
+mechanistic story that priced at zero.
+
+So the honest position is: **this row is 1.01x/1.02x on two runs -- it was
+listed at 1.07x from a contaminated sweep -- the cause is not found, and all
+three visible leads are now refuted.** The transcription route is closed as well -- writing a Java version
 with redundant locals prices javac's compilation of my transcription, which is
 what cost me `awfy-queens`. Building it and measuring is the only honest price,
 and three fixes measured 0% today.
