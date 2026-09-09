@@ -15210,6 +15210,42 @@ infrastructure gaps, weak listener registration through the canonical
 None of them is a defect waiting to be fixed. All of them are infrastructure or
 a stated non-goal.
 
+### os is four failures from whole, and every one is behind something named
+
+The goal is counted in whole modules and `os` is nearest: **5 passed, 4 failed**
+of 9 applicable. Each failure traced:
+
+    networkInterfaces   -> getCIDR (internal/net.ts) -> `Number.parseInt`
+                           filed: the-number-parsing-builtins
+    userInfo            -> userInfoString -> Buffer.from -> objectToBuffer
+                           -> `in` on a bare `object`
+                           filed: in-on-an-undeclared-object
+    export-surface      the same two exports, absent
+    process-priority    the boundary's message replacing the module's
+                           filed: a-boundary-message-replacing-the-modules
+
+Two roots and one boundary defect. **Nothing in os is waiting on a reduction
+that has not been written**, and two of the three are shared: `Number.parseInt`
+is 14 sites across 6 modules, and the `in` root is also the whole of
+`string_decoder`.
+
+The last one is the scalar case of a substitution already fixed for rest
+elements. The wrapper's argument check rejects before the module's validator
+runs:
+
+    compiled   expected a number argument     code ERR_INVALID_ARG_TYPE, TypeError
+    node       The "value" argument must be of type number.
+
+The code and the name are right, so it is neither the missing-code defect nor a
+lost error type -- only the wording, because `napi_get_value_double` fails and
+the module's `typeof` check is never reached.
+
+**And it could not be written as an agreement case.** Reading the message means
+catching the throw, an exception does not cross a call frame, so the `try` never
+catches and the case reports the exception defect instead. It is a `calls`
+fixture, which catches in JavaScript outside the addon. A defect that blocks the
+instrument you would use to measure another defect is worth recording as such.
+
 ### The standing figures, re-derived 2026-09-09 late
 
 The goal text this lane works from carries numbers and says they are historical
