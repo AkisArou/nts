@@ -9461,6 +9461,57 @@ trailing summary was in the shifted region. That is luck rather than design, and
 the totals above were recomputed from the rows rather than read off a line the
 script never got to print.
 
+## The wrapper enforces a declared type where node does not, and it costs a test
+
+`path.posix.toNamespacedPath` is a no-op on POSIX. Node's implementation is the
+whole of `return path;`, with no validation, and node's own test asserts that:
+
+    assert.strictEqual(path.posix.toNamespacedPath(null), null);
+    assert.strictEqual(path.posix.toNamespacedPath(true), true);
+
+Ours is typed the way node's own `.d.ts` types it —
+`toNamespacedPath(path: string): string` — and the emitted wrapper enforces
+that:
+
+    if (!nts_napi_expect(env, nts_from_napi_string(env, argv[0], &a0),
+                         "expected a string argument")) goto nts_napi_cleanup;
+
+So the compiled module **throws for the two arguments the test checks**, while
+the interpreted lane passes — by type erasure, since `path: string` disappears
+and the body returns whatever it was handed. `test-path-makelong.js` is the only
+failure in `path` that is not a missing export, and it is this.
+
+### It is the mirror of the literal-parameter unsoundness
+
+That one is the wrapper **not** enforcing a declared fact: `walk(rounds: 64)`
+called with `2147483647` enters an integer body proven small from `[64, 64]` and
+answers a wrong number. This one is the wrapper **enforcing** a declared type
+that node's runtime does not. Both come from the same gap between what a
+signature says and what node does, and they fail in opposite directions —
+silently wrong, and loudly wrong.
+
+That matters for the fix under consideration on the compiler side, which is to
+have the wrapper enforce declared facts. Enforcement is right and it is not
+free: it makes the profile disagree with node exactly where node's own types are
+narrower than its behaviour.
+
+### Not fixable from this side
+
+Widening the declaration is the obvious move and it is worse. Measured:
+
+    export function narrow(value: string): string   -> published
+    export function wide(value: unknown): unknown   -> no wrapper for wide:
+                                                       returns unknown
+
+`unknown` in return position has no wrapper at all, so matching node's leniency
+in the type costs the export entirely — one failing assertion becomes a missing
+function and every other test of it fails too.
+
+So this is filed as a diagnosis rather than a fixture. There is nothing to
+reproduce in isolation: the wrapper's check is correct in general and the
+divergence only exists against a specific node API whose runtime is more
+permissive than its published type.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
