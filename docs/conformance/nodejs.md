@@ -11793,6 +11793,52 @@ The cheapest useful subset is `querystring.parse`: one outbound table of
 is 0 of 8 on the compiled axis and `parse` is the export its shape is built
 around.
 
+## `os` is one export from being the second whole module
+
+`os.node` loads and publishes 17 of 23 names. On the compiled axis it is 4 of 9
+applicable files. **Every one of the five failures is `constants`:**
+
+    test-os-process-priority.js        Cannot read properties of undefined (reading 'priority')
+    local/constants-signals-static.js  Expected values to be strictly equal
+    local/constants-table-static.js    Cannot read properties of undefined (reading 'signals')
+    local/core-static.js               Cannot read properties of undefined (reading 'priority')
+    local/export-surface-static.js     os.constants is undefined, node's is object
+
+**The control is the interpreted lane, which passes 9 of 9 on the same files.**
+There `constants` is present through the module's own stand-in, and the five
+files that fail compiled all pass. So the difference between 4 and 9 is one
+export and nothing else -- not a behaviour divergence anywhere in the module, and
+not the other five missing names, which no test reaches.
+
+That makes `os` the only module in the profile where a single export decides
+whether it is whole. `punycode` is 3 of 3; `os` would be the second, and the
+compiled axis would read 2 of 22.
+
+**What `constants` costs is more than the index-signature representation.** It
+is declared
+
+    export interface OsConstants {
+      UV_UDP_REUSEADDR: number;
+      signals: Record<string, number>;
+      errno: Record<string, number>;
+      priority: Record<string, number>;
+      dlopen: Record<string, number>;
+    }
+
+-- an object with four map fields and a number, exported as a value. It needs
+the object-return path, a map representation, and that map crossing the
+boundary. Its builder is refused twice at `os/src/main.ts:541`,
+`table[name] = value`, which is `computed-member-write`.
+
+**This is a better ranking signal than reach.** `internal/errors.ts:547` was
+reached by fifteen modules and clearing it moved none of them. `os.constants` is
+reached by one module and would take it from 4 to 9. Reach counts how many
+chains pass through a point; it does not say what is on the other side. The
+question worth asking of a blocker is not how many modules touch it but **what
+becomes true when it clears**, and that is answerable only where the other lane
+already shows the answer -- which is exactly what a module at 9 of 9 interpreted
+and 4 of 9 compiled provides.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
