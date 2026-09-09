@@ -48,6 +48,19 @@
 // weaker and often legitimate -- `readline` publishes four `kClear*` constants
 // that reach tests through no path, and node has no such public names either.
 //
+// # A shim that throws is a finding, not a limitation
+//
+// The first version called that case `NOT ASKED` and moved on, and it cost
+// hours. `http/shape.mjs` had an unguarded `class HTTPParser extends
+// RawHTTPParser`; the compiled `http` publishes two names, so the heritage
+// clause was `undefined` and `internals()` threw while being *built*. Every
+// http test failed with `Class extends value undefined is not a constructor or
+// null` before its first line ran, and this tool said it could not probe the
+// module.
+//
+// Whatever a shim throws for here, some test is meeting it too. The line says
+// `SHIM THROWS` now, quotes the message, and says so.
+//
 // # It cannot prove the opposite
 //
 // A name present in the shaped object may still be `undefined` there, and this
@@ -134,8 +147,20 @@ for (const module of modules) {
           ? shapeModule[fn]({ ...m.exports }, {})
           : shapeModule[fn]({ ...m.exports });
       } catch (error) {
-        console.log("  NOT ASKED       " + module + ": " + fn + "() throws on the addon's exports (" +
-          error.message.split("\n")[0].slice(0, 44) + ")");
+        // A shim that throws on its own addon's exports is a **defect**, not a
+        // limitation of this instrument, and it was read as the latter for
+        // hours. `http/shape.mjs` did `class HTTPParser extends RawHTTPParser`
+        // unguarded; the compiled `http` publishes two names, so
+        // `exports.HTTPParser` was `undefined`, `internals()` threw while being
+        // built, and **every http test failed with "Class extends value
+        // undefined" before its first line ran**. This tool printed
+        // `NOT ASKED http` and I filed that under "cannot probe it".
+        //
+        // So it is worded as what it is. Whatever this throws for, some test is
+        // meeting it too.
+        console.log("  SHIM THROWS     " + module + ": " + fn + "() throws on this addon's own exports");
+        console.log("                  " + error.message.split("\n")[0].slice(0, 70));
+        console.log("                  Every test that loads this module meets the same throw.");
         if (fn === "shape") unaskable = true;
         continue;
       }
