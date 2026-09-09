@@ -207,6 +207,24 @@ function addon(module) {
   // clean hollow count. Keeping the addon's names and destroying its behaviour
   // is the question sabotage cannot ask: did this pass depend on what the
   // module *does*?
+  //
+  // **`degenerate` is not the same as hollow, and this subtraction says it is.**
+  // `os/test/constants-signals-static.js` survives `--mutate-addon` -- mutation
+  // keeps the addon's names and destroys its *behaviour*, and a frozen data
+  // table has none to destroy -- yet it fails `--empty-exports` and it fails
+  // `--sabotage`. It measures the addon. Subtracting it here calls it hollow.
+  //
+  // `run.mjs` says as much in its own comment: values agreeing is "the one
+  // comparison neither sabotage nor `--mutate-addon` can express". The
+  // arithmetic built on top of that comment forgot it.
+  //
+  // Left as it is on purpose. `real` here still means "passes that depend on
+  // what the module does", which is the right quantity for the `green` /
+  // `partial` / `every-pass-hollow` decision -- a module whose every pass is a
+  // data-shape check has not been shown to compute anything, and this row
+  // should not read `partial`. What it must not be read as is a count of passes
+  // that measure nothing. `axis-controls.mjs` splits the three outcomes --
+  // hollow, shape-only, behaviour -- and is what to quote for that.
   const degenerate = runAddon(module, artifact, true)?.pass ?? 0;
   const real = tally.pass - degenerate;
   const stage = applicable > 0 && real === applicable
@@ -216,7 +234,7 @@ function addon(module) {
     // his own table -- `path` is 2 passed and 17 failed, and the row means both
     // passes were hollow. The two readings call for opposite work, so the label
     // says which noun it quantifies.
-    : real > 0 ? "partial" : "every-pass-hollow";
+    : real > 0 ? "partial" : "no-pass-behaviour-dependent";
 
   // Passing every test is not the same as being complete, and this axis is
   // about to have a row where the difference matters. `punycode` publishes

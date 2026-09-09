@@ -38,7 +38,8 @@
 // A module whose passes are all `shape-only` publishes a correct surface and has
 // not been shown to compute anything. That is a result and not a blank -- it is
 // exactly what `os` was for its first two passes -- but it is not the axis
-// advancing, and the sweep's `every-pass-hollow` label does not distinguish it.
+// advancing, and the sweep's label -- `no-pass-behaviour-dependent`, renamed
+// from `every-pass-hollow` for exactly this reason -- does not distinguish it.
 
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";

@@ -13520,6 +13520,32 @@ The `os` breakdown is kept: 3 behaviour, 2 shape-only, 0 hollow, derived
 file-by-file and reproduced by hand against a stable addon before the sweep
 started.
 
+### `every-pass-hollow` is now `no-pass-behaviour-dependent`
+
+The stage label `sweep.mjs` gives a module with `real === 0` said the passes
+were hollow. It does not know that.
+
+`real` is `pass - degenerate`, and `degenerate` is the pass count under
+`--mutate-addon`. Mutation keeps the addon's names and destroys its behaviour,
+so a test of a **frozen data table** survives it while still requiring the
+module to exist. `os/test/constants-signals-static.js` is exactly that, and it
+fails `--empty-exports` and `--sabotage`. Calling it hollow is wrong in the
+direction that matters: hollow means "would pass with no module at all", and
+this one would not.
+
+The arithmetic is unchanged and the stage decision is unchanged -- a module
+whose every pass is a data-shape check has not been shown to compute anything,
+and that row should not read `partial`. Only the name moved, so it stops
+claiming something the measurement cannot support.
+
+Rows in this document from before this change carry the old label. They are
+records of runs that emitted it and are left alone; `every-pass-hollow` and
+`no-pass-behaviour-dependent` are the same condition, `real === 0`.
+
+For the three-way split -- hollow, shape-only, behaviour -- run
+`axis-controls.mjs`, which asks `--sabotage` and `--empty-exports` of the
+compiled lane as well. `sweep.mjs` only ever asked those of the interpreted one.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
