@@ -1803,6 +1803,47 @@ look strong. It should not be quoted as one.
 So: our emission runs 1313 against this body's 1292, about 1.6%, and none of it
 is the harness. The gap is in the emitted code, where five leads are now dead.
 
+### The machine is hybrid, nothing pins, and an E-core run is 1.8x slower
+
+Every number in this file was taken unpinned on an **i9-14900K: eight P-cores at
+5700-6000MHz and sixteen E-cores at 4400**. `perf stat` gives it away by
+reporting each event twice, once for `cpu_core` and once for `cpu_atom`,
+because the JVM's threads were on both.
+
+    in-narrowing, same binaries, three runs each
+
+                  ref     ours    ratio
+      free       1362     1395    1.024
+      P-cores    1340     1401    1.046
+      E-cores    2474     2592    1.048
+
+**An E-core run is 1.8x slower than a P-core one** -- more than the 1.295 clock
+ratio, so IPC differs too.
+
+**It is not the band.** The ours/ref ratio is 1.02-1.05 whichever way the run is
+pinned, because both arms get the same treatment when they run next to each
+other. That hypothesis is dead and it is the ninth tonight.
+
+**It is very probably the variance.** A row is measured as two processes, and
+nothing makes them land on the same kind of core. A sweep where one arm gets P
+and the other E is reporting a number that is 1.8x wrong in whichever direction
+it fell, and `nts-bench`'s own "varied 1.93x across 5 runs of the same binary"
+on `dispatch` is exactly the size of that. So is `objects` at 1.17x and 1.22x,
+and `awfy-bounce` at 1.41x.
+
+**What this does not explain, said plainly:** `awfy-sieve`'s two modes are
+1.23x apart and sticky across consecutive runs, which is neither the 1.8x here
+nor something placement would clump by time. That section rules out compilation
+and the collector by measurement and this does not displace it.
+
+**The pinning that exists is about isolation, not core type.** The session
+contract assigns cores 8-15 to this lane, which happen to be P-cores, and the
+goal text's warning -- "pinning does not make a benchmark safe, cores share
+last-level cache and turbo headroom" -- is about interference between sessions.
+Nobody was pinning at all here, and on a hybrid part that is a different and
+larger problem: not noise between neighbours but two arms measured on different
+hardware.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
