@@ -15311,6 +15311,50 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### The ordered list, by test files rather than by diagnostics
+
+Each of the four largest concentrations traced to the constructor or the
+declaration that makes it, with the fixture that names it:
+
+    332 files   `options = {}` at net/src/main.ts:1778, plus `IncomingMessage`
+                used as a value at http/src/server.ts:252
+                an-empty-object-literal, and the second unfiled
+                -> http.createServer 241 of 405, net.createServer 91 of 148
+
+     68 files   method syntax in an interface: `addEventListener` declared on
+                `AbortSignalLike` at internal/abort.ts:23, the only root inside
+                dgram's Socket constructor
+                method-syntax-in-an-interface
+                -> dgram.createSocket 68 of 77
+
+     41 files   a generic function whose rest parameter is read, not lowered and
+                emitting no diagnostic at all
+                a-generic-rest-that-is-used
+                -> timers setTimeout 25, setImmediate 11, setInterval 5
+
+     14 files   the `code` argument to napi_create_type_error, passed NULL
+                a-thrown-code-at-the-boundary
+                -> fs, where message, name and constructor already match
+
+      6 files   `decodeURIComponent`, unimplemented
+                missing-builtin
+                -> querystring.parse
+
+`process` at 75 of 90 is unreduced: its main export is declined outright with
+`is exported and is not a function this backend can name`, and the obvious
+reduction -- export a class instance, export a plain object -- compiles and
+publishes both. Recorded as unreduced rather than guessed at.
+
+**Every entry above is ordered by test files, and none of them would be near the
+top of a ranking by diagnostics.** `an object literal that is not an object` is
+13 distinct things across 16 modules and sits eighteenth by that measure; ranked
+by test files it is first, by a factor of five. The rankings answer different
+questions and this profile is counted in test files.
+
+The caveat that belongs on all of them: a count is what stands in front of those
+files, not what they would gain. `class Server` carries eleven roots and only
+one is in its constructor.
+
 ### 332 test files behind two roots, and one of them is `options = {}`
 
 The two largest concentrations in the tree are `http.createServer` at 241 of
