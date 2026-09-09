@@ -14836,6 +14836,56 @@ which pass on either lane yet.
 Recorded rather than done, with the two line numbers, so the next person to read
 a timeout out of this harness knows which of the three numbers they are holding.
 
+## Every compiled error reaches the host with no `code`
+
+    node   name "RangeError"          code "ERR_OUT_OF_RANGE"   instanceof RangeError
+    ours   name "ERR_OUT_OF_RANGE"    code undefined
+
+`internal/errors.ts:405` is faithful to node:
+
+    export class ERR_OUT_OF_RANGE extends NodeRangeError {
+      override get ["constructor"](): unknown { return RangeError; }
+      override readonly code = "ERR_OUT_OF_RANGE";
+
+`code` is a **class field** and the `constructor` override is an **accessor**.
+Neither crosses the wrapper, so the code is lost and the class name leaks into
+`name`. Both halves of the divergence are one gap:
+`blockers/class-fields-do-not-cross`.
+
+### The number, and which gate it is
+
+**792 of node's `parallel` tests assert `code: 'ERR_...'`.** For the modules
+here:
+
+    fs      91      stream  49      http    41      buffer  33
+    net     27      zlib    19      process 19      dgram   15
+
+That is the wall **behind** the current one for nearly all of them -- an `fs`
+test asserting a code fails long before the code, on a function that does not
+publish. Saying so explicitly, because the last time this ledger counted a
+marker across a suite it read the second gate as the live one and had to be
+corrected within the hour.
+
+What the number does support: when the bodies compile, this is what they meet,
+and it is one gap rather than 792.
+
+### How it was found, and what nearly hid it
+
+Comparing `getTimerDuration` against node's, twelve cases, with the probe
+printing `e.code ?? e.name` on both sides. **Zero differed.** The `??` was doing
+the hiding: ours has no `code`, so it fell through to `name`, which happens to
+be the code string -- and node's has a `code`, so it printed that. Two different
+properties, printed identically, reported as agreement.
+
+It surfaced only when the assertion was written the way a test writes it,
+`assert.throws(fn, { code: "ERR_OUT_OF_RANGE" })`, and failed on an artifact the
+probe had just called identical.
+
+**A fallback in a comparison is a place where two different things can print the
+same.** `e.code ?? e.name` is the same shape as `plain - degenerate` and as
+`reachable through any of four paths`: a reduction that loses the distinction it
+was built to find.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
