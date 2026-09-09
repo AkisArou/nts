@@ -1886,6 +1886,20 @@ impl Emitter<'_> {
                 self.adapt_to(code, Kind::Int, result, origin)?;
                 Ok(Placed::OnStack)
             }
+            OpKind::Unerase { value } if self.fused.contains(value) => {
+                self.load(code, pool, *value)?;
+                let target = types::kind(ty)
+                    .ok_or_else(|| refuse(self.func, "unerasing to an unrepresentable type"))?;
+                if target != Kind::Double {
+                    let opcode = match target {
+                        Kind::Long => insn::D2L,
+                        Kind::Float => insn::D2F,
+                        _ => insn::D2I,
+                    };
+                    code.convert(origin, opcode, Kind::Double, target);
+                }
+                Ok(Placed::OnStack)
+            }
             OpKind::Unerase { value } if self.unboxed.contains(value) => {
                 // The reference is already the value; the narrowing the middle
                 // end proved still has to be spelled for the verifier.
@@ -3979,6 +3993,11 @@ impl Emitter<'_> {
         let name = match callee {
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                let name = &if self.fused.contains(&value) {
+                    crate::fuse::scalar_form(name).unwrap_or(name).to_owned()
+                } else {
+                    name.clone()
+                };
                 // The array whose element type picks the overload. For most
                 // helpers that is the first argument; `Promise.all` takes the
                 // promises first and the values second, and it is the values
@@ -4126,12 +4145,27 @@ impl Emitter<'_> {
                 // asymmetry `conversion` had: the mark has to be honoured on
                 // the way out as well as on the way in, or the emitter puts a
                 // double where its own accounting says an int.
-                // Not when the value is held as an `int`: `narrow_result`
-                // reconciles the descriptor's return with the HIR type, and a
-                // cursor's HIR type is the `f64` `hir::runtime` declares -- so
-                // it would widen the answer straight back and undo the
-                // representation this lane chose.
-                if !(self.narrowed.contains(&value) && returns == "I") {
+                // **Not when the value is held differently from its
+                // declaration**, in either of the two ways this backend does
+                // that. `narrow_result` reconciles the descriptor's return with
+                // the HIR type, which is right whenever the two are talking
+                // about the same representation and wrong when they are not:
+                //
+                //   a cursor is declared `f64` and held as an `int`, so this
+                //   would widen `nextI`'s answer straight back
+                //
+                //   a fused answer is declared `Erased` and held as a `double`,
+                //   so this emits `checkcast NtsValue` against a `double` on
+                //   the stack -- which the verifier reports as `Type
+                //   double_2nd is not assignable to 'java/lang/Object'` at the
+                //   `checkcast`, and which is how `examples/arrays`' `nth`
+                //   failed.
+                //
+                // Both were found the same way: read the listing at the offset
+                // the verifier named, rather than reason about which pass had
+                // claimed the value.
+                let held_as_int = self.narrowed.contains(&value) && returns == "I";
+                if !held_as_int && !self.fused.contains(&value) {
                     self.narrow_result(code, pool, result, returns, origin)?;
                 }
                 return Ok(Placed::OnStack);

@@ -61,7 +61,6 @@ use rustc_hash::FxHashSet;
 /// like "returns `erased`, read as a float" would also catch a map lookup,
 /// whose absence is a real answer a caller may be testing for.
 #[must_use]
-#[allow(dead_code, reason = "the analysis is measured; the emitter wiring is not done")]
 pub(crate) fn scalar_form(name: &str) -> Option<&'static str> {
     Some(match name {
         "nts_array_at_value" => "nts_array_at",
@@ -71,7 +70,6 @@ pub(crate) fn scalar_form(name: &str) -> Option<&'static str> {
 
 /// Calls whose erased answer is only ever read as a float.
 #[must_use]
-#[allow(dead_code, reason = "see `scalar_form`")]
 pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     let mut candidates = FxHashSet::default();
     for (at, op) in func.values.iter().enumerate() {

@@ -210,6 +210,8 @@ pub(crate) enum Placed {
 struct Held {
     /// Erased values a bare `java/lang/Object` can carry; see `unbox`.
     unboxed: rustc_hash::FxHashSet<ValueId>,
+    /// Erased answers read only as a float; see `fuse`.
+    fused: rustc_hash::FxHashSet<ValueId>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Index helpers whose answer every use converts to an integer; see `intcall`.
@@ -221,9 +223,33 @@ struct Held {
     widened_fields: rustc_hash::FxHashSet<(String, String)>,
 }
 
+/// How a value is held, when this backend holds it as something other than its
+/// declared type says.
+///
+/// Six passes answer this and they are asked in one place, because a value
+/// loaded as one representation and stored as another is not a wrong number --
+/// it is a frame the verifier rejects, and it took five separate sites tonight
+/// to learn that once.
+fn held_differently(plans: &Held, value: ValueId) -> Option<nts_jvm_emitter::VType> {
+    // `fuse` first: its values are declared `Erased` and held as a `double`,
+    // and `unbox` would otherwise claim the same declaration for a reference.
+    plans
+        .fused
+        .contains(&value)
+        .then_some(nts_jvm_emitter::VType::Double)
+        .or_else(|| crate::unbox::held_as(&plans.unboxed, value))
+        .or_else(|| crate::intcall::held_as(&plans.narrowed, value))
+        .or_else(|| crate::builder::held_as(&plans.accumulated, value))
+        .or_else(|| crate::closures::held_as(&plans.joined, value))
+        .or_else(|| {
+            plans.widened.contains(&value).then_some(nts_jvm_emitter::VType::Double)
+        })
+}
+
 fn held_values(program: &Program, func: &Func, plan: &crate::widen::Plan) -> Held {
     Held {
         unboxed: crate::unbox::unboxable(func),
+        fused: crate::fuse::fused(func),
         accumulated: crate::builder::accumulators(func),
         narrowed: {
             let mut held = crate::intcall::narrowed(func);
@@ -255,6 +281,8 @@ pub struct Emitter<'a> {
     pub(crate) scratch: Option<u16>,
     /// Erased values held as a bare reference rather than an `NtsValue`.
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
+    /// Erased answers read only as a float; see `fuse`.
+    pub(crate) fused: rustc_hash::FxHashSet<ValueId>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Helper results declared `f64` and held as an `int`; see `intcall`.
@@ -292,8 +320,7 @@ impl<'a> Emitter<'a> {
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
-        let Held { unboxed, accumulated, narrowed, joined, widened, widened_fields } =
-            held_values(program, func, plan);
+        let plans = held_values(program, func, plan);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let Some(vtype) = types::vtype(types::Shape::of(program), &param.ty) else {
@@ -334,11 +361,7 @@ impl<'a> Emitter<'a> {
             if rematerialised(func, value) {
                 continue;
             }
-            let held = crate::unbox::held_as(&unboxed, value)
-                .or_else(|| crate::intcall::held_as(&narrowed, value))
-                .or_else(|| crate::builder::held_as(&accumulated, value))
-                .or_else(|| crate::closures::held_as(&joined, value))
-                .or_else(|| widened.contains(&value).then_some(nts_jvm_emitter::VType::Double));
+            let held = held_differently(&plans, value);
             let Some(vtype) = held.or_else(|| types::vtype(types::Shape::of(program), ty)) else {
                 return Err(refuse(
                     func,
@@ -395,12 +418,13 @@ impl<'a> Emitter<'a> {
             locals,
             max_locals: u16::try_from(next).unwrap_or(u16::MAX),
             scratch: None,
-            unboxed,
-            accumulated,
-            narrowed,
-            joined,
-            widened,
-            widened_fields,
+            unboxed: plans.unboxed,
+            fused: plans.fused,
+            accumulated: plans.accumulated,
+            narrowed: plans.narrowed,
+            joined: plans.joined,
+            widened: plans.widened,
+            widened_fields: plans.widened_fields,
             temps: FxHashMap::default(),
             labels: FxHashMap::default(),
             uses,
@@ -543,6 +567,9 @@ impl<'a> Emitter<'a> {
         // One place, so a widened value cannot be loaded as a double and stored
         // as an int. Everything that moves or operates on a value asks here.
         if self.widened.contains(&value) {
+            return Ok(Kind::Double);
+        }
+        if self.fused.contains(&value) {
             return Ok(Kind::Double);
         }
         // A helper answer held as an `int`; see `intcall`. Here rather than at
