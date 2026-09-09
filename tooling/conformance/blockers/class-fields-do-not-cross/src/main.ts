@@ -60,6 +60,29 @@
 // `.mode`, `.mtimeMs`, `.nlink` or `.ino` off a stat.** `stats.size` is the
 // point of the object; `isFile()` is the convenience.
 //
+// # The largest instance, measured rather than predicted
+//
+// **Every error this profile throws reaches the host with no `code`.**
+//
+//     node   name "RangeError"         code "ERR_OUT_OF_RANGE"
+//     ours   name "ERR_OUT_OF_RANGE"   code undefined
+//
+// `internal/errors.ts:409` is `override readonly code = "ERR_OUT_OF_RANGE"`, a
+// class field, and `:406` overrides the `constructor` getter so the error
+// reports as `RangeError` -- both node's own devices. Neither a field nor an
+// accessor crosses, so the code is lost and the class name leaks into `name`.
+//
+// **792 of node's `parallel` tests assert `code: 'ERR_...'`** -- 91 in `fs`, 49
+// in `stream`, 41 in `http`, 33 in `buffer`. For nearly all of them this is the
+// wall behind the current one, since a test asserting a code fails long before
+// the code on a function that does not publish. It is the largest thing this
+// gap sits in front of, and unlike the `_fatalException` note below it was
+// measured on a live artifact rather than reasoned from a declaration.
+//
+// `runtime/node/timers/test/duration-errors-static.js` is the standing case:
+// it asserts the two codes `getTimerDuration` raises, passes interpreted, and
+// fails compiled on exactly this.
+//
 // # And a prediction, labelled as one
 //
 // `process/src/main.ts:512` is `_fatalException = fatalException;` -- a **class
