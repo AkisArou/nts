@@ -153,6 +153,29 @@ function ascendingByIndex(indexOrder: readonly number[]): readonly number[] {
   return current;
 }
 
+/**
+ * The empty payloads a scalar node carries, allocated once.
+ *
+ * Every scalar wrote `[], [], []` at its constructor, so a `null`, a `boolean`, a `number` and a
+ * `string` each allocated **three arrays it can never put anything in** -- and a document is
+ * mostly scalars. On the compiled axis that was the single largest cost in the parse profile:
+ * `nts_array_new` at 13.9%, `nts_array_grow` at 5.4% and `malloc` at 2.9%, against
+ * `parseJsonText` itself at 23%.
+ *
+ * Sharing them is sound because the fields are `readonly` and nothing writes through them: the
+ * parser accumulates into a `Frame`'s own arrays and hands the finished ones to a container
+ * node, so a scalar's three are never the target of a `push`. That is checked rather than
+ * assumed -- every `.items.push`, `.keys.push` and `.values.push` in this module is on a frame.
+ *
+ * `readonly` is the type system's claim and not the runtime's, so this is a shared mutable
+ * array on a host. It is the same trade the specification makes for a frozen empty array, and
+ * the alternative is three allocations per scalar to defend against a write that no code in
+ * this module performs.
+ */
+const NO_ITEMS: readonly JsonValue[] = [];
+const NO_KEYS: readonly string[] = [];
+const NO_VALUES: readonly JsonValue[] = [];
+
 export class JsonValue {
   readonly kind: JsonKind;
   /** `boolean` values. */
@@ -201,19 +224,19 @@ export class JsonValue {
   }
 
   static nullValue(start: number, end: number): JsonValue {
-    return new JsonValue("null", start, end, false, 0, "", [], [], []);
+    return new JsonValue("null", start, end, false, 0, "", NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   static booleanValue(value: boolean, start: number, end: number): JsonValue {
-    return new JsonValue("boolean", start, end, value, 0, "", [], [], []);
+    return new JsonValue("boolean", start, end, value, 0, "", NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   static numberValue(value: number, start: number, end: number): JsonValue {
-    return new JsonValue("number", start, end, false, value, "", [], [], []);
+    return new JsonValue("number", start, end, false, value, "", NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   static stringValue(value: string, start: number, end: number): JsonValue {
-    return new JsonValue("string", start, end, false, 0, value, [], [], []);
+    return new JsonValue("string", start, end, false, 0, value, NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   /**
@@ -223,7 +246,7 @@ export class JsonValue {
    * already valid JSON denoting a string, number, boolean or null.
    */
   static rawValue(text: string): JsonValue {
-    return new JsonValue("raw", 0, text.length, false, 0, text, [], [], []);
+    return new JsonValue("raw", 0, text.length, false, 0, text, NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   /**
@@ -234,7 +257,7 @@ export class JsonValue {
    * produce a different document.
    */
   static holeValue(): JsonValue {
-    return new JsonValue("hole", 0, 0, false, 0, "", [], [], []);
+    return new JsonValue("hole", 0, 0, false, 0, "", NO_ITEMS, NO_KEYS, NO_VALUES);
   }
 
   static arrayValue(items: readonly JsonValue[], start: number, end: number): JsonValue {

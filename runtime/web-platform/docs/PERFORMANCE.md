@@ -35,7 +35,8 @@ them:
 
 | row | nts C | nts LLVM | nts JVM | node | bun | nts/node |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `json-parse` | 2.47ms | 2.48ms | **891.82us** | 908.00us | 1.50ms | 2.74x |
+| `json-parse`, first measured | 2.47ms | 2.48ms | 891.82us | 908.00us | 1.50ms | 2.74x |
+| `json-parse`, empty payloads shared | **1.83ms** | 1.83ms | **793.36us** | 800.01us | 1.26ms | 2.29x |
 
 **This is a first measurement, not an improvement.** The parse direction had never been measured
 because it had never compiled: `Number(string)`, and beneath it a constructor named from the
@@ -44,8 +45,23 @@ called `Frame` dropped both callers as refused when nothing was. Every backend a
 checksum, so the compiled parser is correct through C, LLVM and JVM.
 
 The JVM backend is **at parity with node on this row**, which is the first time any JSON row has
-been, and it is 2.8x ahead of our own C. That gap between our two backends on one program is the
-interesting number here, not the ratio against node.
+been, and it was 2.8x ahead of our own C. That gap between our two backends on one program was
+the interesting number, not the ratio against node -- and profiling it found the second line.
+
+**1.35x on the compiled parser from three lines of TypeScript.** The profile said allocation:
+`nts_array_new` 13.9%, `nts_array_grow` 5.4%, `malloc` 2.9%, against `parseJsonText` itself at
+23%. Every scalar node wrote `[], [], []` at its constructor, so a `null`, a `boolean`, a
+`number` and a `string` each allocated **three arrays it can never put anything in** -- and a
+document is mostly scalars. They are shared now, which is sound because the fields are `readonly`
+and every `push` in the module is on a parser `Frame` rather than on a finished node.
+
+Read the absolute numbers and not the ratio: **everything got faster**, node by 1.13x and bun by
+1.19x, because sharing an immutable empty array helps a host too. Ours moved by more, which is
+why the ratio improved as well -- but the ratio improving is a coincidence of the two magnitudes
+here, not the result.
+
+2,772 of 2,772 upstream web-platform tests pass and all three backends agree on every
+differential case, which is the check that matters for a change to a spec-bearing module.
 
 One row is faster than node. None is faster than bun, though `json-scan` is level with it.
 
