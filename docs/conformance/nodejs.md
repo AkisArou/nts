@@ -14331,6 +14331,83 @@ fixed.
 Now it prints `reproduces`, and the two boundary blockers are filed beside it.
 110 fixtures, 110 as expected.
 
+## The prize, per module, and the one name behind each pile
+
+Both lanes over the twelve modules with a compiled pass, on one pinned compiler
+and one private artifact directory:
+
+    module          interp  compiled  to gain  inverted   most-named
+    fs                 346         2      344         0   mkdirSync (57)
+    stream             250         1      249         0   Readable (80)
+    net                150         1      149         0   createServer (96)
+    async_hooks        117         2      115         0   createHook (65)
+    process             89         1       88         0   _fatalException (73)
+    zlib                68         1       67         0   it (6)
+    buffer              55         1       54         0   from (19)
+    readline            27         1       26         0   createInterface (9)
+    util                25         2       23         0   inspect (3)
+    path                20        13        7         0   posix (1)
+    os                   9         5        4         0   userInfo (1)
+    punycode             3         3        0         0
+
+    1,159 interpreted    33 compiled    1,126 to gain
+
+**`punycode` is whole**: three of three on both lanes, nothing to gain. It is the
+only module in that state.
+
+`os` at 4 and `path` at 7 are the only other modules within single figures, and
+they are the two that have had the most compiler work.
+
+### The `most-named` column is the prioritisation
+
+It counts the names appearing in the compiled-lane failure messages of the files
+that pass interpreted. One name accounts for most of several piles:
+
+    createServer   96 of net's 149
+    Readable       80 of stream's 249
+    _fatalException 73 of process's 88
+    createHook     65 of async_hooks' 115
+    mkdirSync      57 of fs's 344
+
+These are not 1,126 separate problems. Five names stand in front of 371 files.
+
+`createServer` also carries `[optional-param]`: it takes an optional parameter
+and the wrapper publishes it as required, which is
+`blockers/optional-parameter-at-the-wrapper` rather than anything about `net`.
+
+### `inverted` is zero, and it was not free
+
+The column reports files that pass **compiled** and fail **interpreted**, which
+cannot be a compiled capability the TypeScript lacks -- the compiled lane is
+built from that TypeScript. It is an assertion holding for a reason other than
+the one it states.
+
+Zero across all twelve. The column exists because there was one: a test of mine
+asserted node's documented `getDefaultAutoSelectFamilyAttemptTimeout` of 250,
+passed compiled, failed interpreted, and was right on neither lane --
+`test/common/index.js:182` scales that default by ten on load, and the compiled
+addon does not publish the setter, so the scaling could not land. It held
+because of the defect.
+
+    put back, the column reports it     INVERTED  local/default-family-static.js
+    removed again                       0
+
+A column that has never been seen with a row in it is a claim about a tree
+rather than a measurement of one.
+
+### What is not in the table
+
+`http`. Its shim threw on its own addon's exports -- an unguarded
+`class HTTPParser extends RawHTTPParser` where the addon publishes two names --
+so **every http test failed at load with one message** and the module had no
+compiled pass to compare. That is fixed and `test-http-max-header-size.js`
+passes now, shape-only; the row will appear in the next sweep.
+
+Related and clean: all **39** shim entry points across the 22 modules were called
+with an empty exports object and none threw, so `--empty-exports` and
+`--sabotage` are sound everywhere and the hollow counts they produced are not
+distorted by a shim falling over under the control.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
