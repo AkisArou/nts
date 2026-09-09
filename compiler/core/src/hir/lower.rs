@@ -4656,6 +4656,54 @@ fn provided_representation(
         return Some(HirType::Managed(ManagedType::Set(Box::new(element))));
     }
 
+    // `Record<string, V>`, and every other spelling of a string-keyed table.
+    //
+    // `SemanticSnapshot::index_signatures` has been recorded since the frontend
+    // was written and read by nothing, and its own documentation says what for:
+    // "the single fact that decides representation -- a type with an index
+    // signature cannot be a flat struct with fixed field offsets, because its
+    // keys are not known at compile time. Missing it means emitting a struct
+    // for something that needs a map, and every dynamic key silently misses."
+    // That is what was happening: `table["alpha"] = n` on a `Record` refused as
+    // "`alpha`, which `an anonymous type` does not declare", because the type
+    // had become an object layout with no fields.
+    //
+    // A map is what it is, and the runtime already has one with a hash chosen
+    // per key type.
+    //
+    // # Only when the signature is the whole of it
+    //
+    // A type with named members *and* an index signature is both things at
+    // once -- `stream`'s `StreamState` has eight optional fields beside its
+    // signature -- and a map would lose the fields' offsets while a struct
+    // loses the dynamic keys. Refused rather than half-represented, which is
+    // the same rule `cross` applies to a nested object at the boundary.
+    if let Some(signatures) = snapshot.index_signatures.get(&ty)
+        && let Some(signature) = signatures.first()
+    {
+        let named_members = match &snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Object { properties } => properties.len(),
+            // A named interface carrying a signature decomposes elsewhere; only
+            // the anonymous forms reach here as a whole type.
+            _ => return None,
+        };
+        if named_members > 0 || signatures.len() > 1 {
+            return None;
+        }
+        let key = representation_within(snapshot, signature.key, path, subst)?;
+        // Only a string key. A numeric index signature is what an array *is*,
+        // and giving one a hash table would be a slower array with worse
+        // locality and no `length`.
+        if !matches!(key, HirType::Managed(ManagedType::String)) {
+            return None;
+        }
+        let value = representation_within(snapshot, signature.value, path, subst)?;
+        return Some(HirType::Managed(ManagedType::Map(
+            Box::new(key),
+            Box::new(value),
+        )));
+    }
+
     None
 }
 
@@ -10579,7 +10627,21 @@ impl<'a> FuncBuilder<'a> {
     fn decide_object_keys(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         // Lowered for its effects even though the answer does not depend on it:
         // `Object.keys(f())` calls `f`.
-        let _ = self.lower_expression(argument)?;
+        let table = self.lower_expression(argument)?;
+        if matches!(
+            self.values[table.0 as usize].ty,
+            HirType::Managed(ManagedType::Map(_, _))
+        ) {
+            // The runtime has `nts_map_next` and `nts_map_key_at`, so this is a
+            // loop rather than a missing capability -- named separately from
+            // `hasOwn` because a fix for one is not a fix for the other, which
+            // is the distinction `blockers/computed-member-read` was split out
+            // to keep visible.
+            return Err(self.unsupported(
+                id,
+                "`Object.keys` of a string-keyed table, which needs a walk over its entries",
+            ));
+        }
         let names = self.own_names(id, argument)?;
         let origin = self.origin(id);
         let element = HirType::Managed(ManagedType::String);
@@ -10625,7 +10687,28 @@ impl<'a> FuncBuilder<'a> {
         argument: NodeId,
         key: NodeId,
     ) -> Result<ValueId, Diagnostic> {
-        let _ = self.lower_expression(argument)?;
+        let table = self.lower_expression(argument)?;
+        // A table answers this at run time, and it is the only receiver that
+        // can: a layout's names are fixed when it is laid out, and a `Record`'s
+        // are whatever was put in it. So the computed key that a struct has to
+        // refuse is ordinary here.
+        if matches!(
+            self.values[table.0 as usize].ty,
+            HirType::Managed(ManagedType::Map(_, _))
+        ) {
+            let origin = self.origin(id);
+            let key = self.lower_expression(key)?;
+            let key = self.erased_for_table(key, &origin);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_map_has".to_owned()),
+                    args: vec![table, key],
+                    frame: None,
+                },
+                HirType::Bool,
+                origin,
+            ));
+        }
         let Some(wanted) = self.literal_name(key) else {
             // A computed key is a question about a *value*, and a layout cannot
             // answer it. Named rather than guessed.
@@ -13802,6 +13885,16 @@ impl<'a> FuncBuilder<'a> {
 
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             let (array, index) = self.element_access_parts(target)?;
+            // `table[key] = value` on a string-keyed table. The key crosses
+            // erased, as every other table operation's key does.
+            if matches!(
+                self.values[array.0 as usize].ty,
+                HirType::Managed(ManagedType::Map(_, _))
+            ) {
+                let origin = self.origin(target);
+                let key = self.erased_for_table(index, &origin);
+                return Ok(Place::Entry { table: array, key });
+            }
             // `element_access_parts` now admits a receiver the checker proved
             // is an array and the representation left erased, because a *read*
             // of one can ask the descriptor what it holds. A write cannot: the
@@ -13895,6 +13988,18 @@ impl<'a> FuncBuilder<'a> {
                     *element,
                     origin,
                 )
+            }
+            Place::Entry { table, key } => {
+                let read = self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_map_get".to_owned()),
+                        args: vec![table, key],
+                        frame: None,
+                    },
+                    HirType::Erased,
+                    origin,
+                );
+                self.narrowed(id, read)?
             }
             Place::Global(global) => {
                 let ty = self.module.types[global as usize].clone();
@@ -14231,6 +14336,12 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A setter is not a slot -- it is a call, and its parameter is converted
     /// where every other argument is.
+    ///
+    /// Two arms answer `None` for two different reasons and are kept apart for
+    /// the reason [`super::super::codegen`]'s `cross` keeps its own apart: with
+    /// the reasons merged, the next place to arrive would join a list instead
+    /// of being decided about.
+    #[allow(clippy::match_same_arms)]
     fn coerce_to_slot(&mut self, id: NodeId, place: &Place, value: ValueId) -> ValueId {
         let want = match *place {
             Place::Element { array, .. } => return self.coerce_element(id, array, value),
@@ -14248,6 +14359,9 @@ impl<'a> FuncBuilder<'a> {
                     Err(_) => None,
                 }
             }
+            // A table has no slot until a key is written, so there is no
+            // declared width to coerce toward -- `write_place` erases instead.
+            Place::Entry { .. } => None,
             Place::Global(global) => self.module.types.get(global as usize).cloned(),
             // A binding is an SSA value rather than a slot, and it still has a
             // declared type that every assignment has to keep: `let held:
@@ -14297,6 +14411,18 @@ impl<'a> FuncBuilder<'a> {
                         index,
                         value,
                         checked: true,
+                    },
+                    HirType::Void,
+                    origin,
+                );
+            }
+            Place::Entry { table, key } => {
+                let erased = self.erased_for_table(value, &origin);
+                self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_map_set".to_owned()),
+                        args: vec![table, key, erased],
+                        frame: None,
                     },
                     HirType::Void,
                     origin,
@@ -14988,6 +15114,59 @@ impl<'a> FuncBuilder<'a> {
     /// order rather than source order, so two literals of one type produce the
     /// same stores — which is what lets a later pass recognize them as the same
     /// shape.
+    /// An object literal whose contextual type is a string-keyed table.
+    ///
+    /// The allocation is `nts_map_new`, and each property written in the
+    /// literal is a `set`. A literal's keys are written down, so they are
+    /// string constants and the table is filled in source order for the same
+    /// reason an object literal is: an initializer may have effects.
+    ///
+    /// A computed key -- `{ [name]: 1 }` -- is refused rather than lowered,
+    /// because the name is not the identifier it looks like and taking it as
+    /// one would build a table keyed by the *spelling* of a variable.
+    fn lower_table_literal(
+        &mut self,
+        id: NodeId,
+        ty: HirType,
+        key: &HirType,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let kind = self.push(
+            OpKind::ConstFloat(f64::from(key_kind_of(key))),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let table = self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_map_new".to_owned()),
+                args: vec![kind],
+                frame: None,
+            },
+            ty,
+            origin.clone(),
+        );
+        for property in self.children(id) {
+            let (name, value) = self.property_parts(property)?;
+            let value = self.erased_for_table(value, &origin);
+            let key = self.push(
+                OpKind::ConstString(name),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            );
+            let key = self.erased_for_table(key, &origin);
+            self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_map_set".to_owned()),
+                    args: vec![table, key, value],
+                    frame: None,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(table)
+    }
+
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // The *declared* type where there is one, not the literal's own.
         //
@@ -15002,9 +15181,24 @@ impl<'a> FuncBuilder<'a> {
         // property is a type error the checker reported before this ran.
         let ty = self
             .contextual_type(id, 0)
-            .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Object(_))))
+            .filter(|ty| {
+                matches!(
+                    ty,
+                    HirType::Managed(ManagedType::Object(_) | ManagedType::Map(_, _))
+                )
+            })
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
+        // `const table: Record<string, number> = {}` is an allocation of a
+        // *table*, and the contextual type is the only thing that says so: the
+        // literal's own type is `{}`, an object with no fields, which is what
+        // made `table["k"] = v` refuse as a property the type does not declare.
+        //
+        // The same reasoning as the comment above, one representation along.
+        if let HirType::Managed(ManagedType::Map(key, _)) = &ty {
+            let key = (**key).clone();
+            return self.lower_table_literal(id, ty.clone(), &key);
+        }
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "an object literal that is not an object"));
         };
@@ -17416,6 +17610,29 @@ impl<'a> FuncBuilder<'a> {
         // storage, which is what lets the bounds check, its elimination and the
         // verifier go on working unchanged. The backends decide the addressing
         // from the receiver's type.
+        // `table[key]` on a string-keyed table, which is a lookup rather than
+        // an addressed slot. `V | undefined` is what the language says it
+        // answers and what `nts_map_get` returns, so the erased result is the
+        // honest one and `narrowed` puts it back where the checker has already
+        // taken the `undefined` away.
+        if matches!(
+            self.values[array.0 as usize].ty,
+            HirType::Managed(ManagedType::Map(_, _))
+        ) {
+            let origin = self.origin(id);
+            let key = self.erased_for_table(index, &origin);
+            let read = self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_map_get".to_owned()),
+                    args: vec![array, key],
+                    frame: None,
+                },
+                HirType::Erased,
+                origin,
+            );
+            return self.narrowed(id, read);
+        }
+
         // An array the checker proved and the representation did not. There is
         // no element type to read a width from, so the width comes from the
         // descriptor at run time and the answer is erased -- which is also the
@@ -17697,7 +17914,9 @@ impl<'a> FuncBuilder<'a> {
         let array_value = self.lower_expression(*array)?;
         if !matches!(
             self.values[array_value.0 as usize].ty,
-            HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))
+            HirType::Managed(
+                ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Map(_, _)
+            )
         ) && !self.erased_but_proven_an_array(id, array_value)
         {
             return Err(self.not_an_array(id));
@@ -24151,6 +24370,17 @@ enum Place {
     Element {
         array: ValueId,
         index: ValueId,
+    },
+    /// `table[key] = value` on a string-keyed table.
+    ///
+    /// A separate place from `Element` because the write is a *call* rather
+    /// than a store: a table has no slot at a computed key until something puts
+    /// one there, which is the whole difference between a `Record` and a
+    /// struct. Both keys and values cross erased, as every other table
+    /// operation's do.
+    Entry {
+        table: ValueId,
+        key: ValueId,
     },
     Global(u32),
     /// A name bound in the function, with the type its declaration gives it.

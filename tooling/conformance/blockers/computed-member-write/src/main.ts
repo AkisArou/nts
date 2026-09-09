@@ -1,3 +1,55 @@
+// expect: lowers
+//
+// FIXED, kept as a guard. A type whose keys are not known until run time is a
+// table, and the runtime already had one.
+//
+// `SemanticSnapshot::index_signatures` was recorded by the frontend from the
+// day it was written and read by **nothing**. Its own documentation says what
+// for: "the single fact that decides representation -- a type with an index
+// signature cannot be a flat struct with fixed field offsets, because its keys
+// are not known at compile time. Missing it means emitting a struct for
+// something that needs a map, and every dynamic key silently misses."
+//
+// That is exactly what happened. An index-signature type became an object
+// layout with zero fields, so `table[name] = value` refused as "`name`, which
+// `an anonymous type` does not declare" -- a message about the lowering's model
+// wearing the grammar of a message about the type.
+//
+// A fact gathered for a decision nobody made looks like coverage from the
+// outside, which is the same failure as a check that cannot go red.
+//
+// # What it is now
+//
+// `Record<string, V>`, `{ [k: string]: V }` and a named interface with only an
+// index signature all become `ManagedType::Map(String, V)`. A literal is
+// `nts_map_new` plus one `set` per property written; a write is `nts_map_set`;
+// a read is `nts_map_get`, whose `V | undefined` is what the language says the
+// access answers and what a struct slot could never have said.
+//
+// **Only when the signature is the whole of the type.** `stream`'s `StreamState`
+// has eight named optional fields beside its signature, and it is both things
+// at once: a map loses the fields' offsets, a struct loses the dynamic keys.
+// Refused rather than half-represented.
+//
+// **Only a string key.** A numeric index signature is what an array *is*, and a
+// hash table for one would be a slower array with worse locality and no
+// `length`.
+//
+// # Checked by running it
+//
+// `examples/string-keyed-table` compares ten functions against node over 290
+// cases: the three spellings, a literal with entries, an absent key, a computed
+// key, overwriting, sixty-four keys, string values, and a table through a
+// parameter. All agree.
+//
+// # What it cleared, and what it did not
+//
+// `os`'s two `table[name] = value` sites are gone -- `main.ts:340`, the
+// `networkInterfaces` builder, and `:541`, the `constants` builder. `os` still
+// publishes 17 of 23, because `constants` is an object with four map fields and
+// crossing it needs the object-return path *and* a map crossing outward.
+// Neither is this.
+
 // expect: `name`, which `an anonymous type` does not declare
 //
 // Writing a computed member into a `Record<string, number>` refuses.

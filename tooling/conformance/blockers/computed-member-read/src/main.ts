@@ -1,33 +1,41 @@
-// expect: `key`, which `ParsedQuery` does not declare
+// expect: lowers
 //
-// The *read* half of `computed-member-write`, split out because the two can be
-// fixed independently and a single fixture could not tell them apart.
+// FIXED, kept as a guard. The read half, and it needed one thing the write half
+// did not.
 //
-// Same underlying representation decision -- an index-signature type has no
-// members and its keys are not known until run time, so access has to route
-// through a typed `NtsMap` -- and that fixture's comment already scopes the fix
-// to "property access and `Object.keys`", plural. This one exists so that a fix
-// which lands writes and not reads is *visible* rather than reported as done:
-// `computed-member-write` would flip to `guard ok` and nothing would say the
-// other half was still open.
+// This fixture was split from `computed-member-write` so that a fix landing
+// only writes would be *visible* rather than reported as done. It earned that:
+// when the table representation landed, the write fixture went green and this
+// one moved to a different refusal instead --
 //
-// Where it bites, which is not `os`: `querystring` builds a loadable addon that
-// **exports nothing at all**, and this is one of four reasons. `main.ts:248` is
+//     an `Object` static over something that is not an object here
+//
+// `bag[key]` was reading correctly and `Object.hasOwn(bag, key)` was not.
+// `Object.keys` and `Object.hasOwn` over a *struct* are compile-time answers,
+// because a layout's names are fixed when it is laid out; over a table they are
+// questions about what is in it. `hasOwn` is `nts_map_has`, and the computed
+// key a struct has to refuse is ordinary here.
+//
+// So the split did the job it was filed to do, one step later than expected.
+//
+// # Still refused, by name
+//
+// `Object.keys` of a table. The runtime has `nts_map_next` and
+// `nts_map_key_at`, so it is a walk rather than a missing capability, and it is
+// named separately for the reason this fixture exists: a fix for `hasOwn` is
+// not a fix for `keys`.
+//
+// # Where it bites
+//
+// `querystring` builds a loadable addon that exports nothing, and this was one
+// of four reasons. `main.ts:248` is
 //
 //     const current = Object.hasOwn(obj, key) ? obj[key] : undefined;
 //
-// on a `ParsedUrlQuery`, which is an interface whose whole purpose is an index
+// on a `ParsedUrlQuery`, an interface whose whole purpose is an index
 // signature. The other three are `decodeURIComponent` (`missing-builtin`), an
-// `unknown` narrowed to BigInt (`narrowed-bigint`), and an object shorthand that
-// is a cascade from the first -- `export const QueryString = { parse, escape,
-// ... }` names things whose lowering was already refused, so it reports "a
-// shorthand naming nothing in scope" and looks like a fifth problem.
-//
-// The diagnostic is worth reading twice. `ParsedQuery` **does** declare this
-// access -- `[name: string]: string | string[]` is exactly what an index
-// signature is for -- so "which `ParsedQuery` does not declare" describes the
-// lowering's model rather than the type. That wording is what made the same
-// message on the write side look like a small missing-member gap for hours.
+// `unknown` narrowed to BigInt (`narrowed-bigint`), and an object shorthand
+// that is a cascade from the first.
 
 interface ParsedQuery {
   [name: string]: string | string[];
