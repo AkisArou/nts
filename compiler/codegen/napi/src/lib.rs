@@ -22,7 +22,7 @@
 //! again here, because two spellings of one name is how a linker finds out the
 //! two disagree.
 
-use nts_codegen_c::{c_global, c_identifier};
+use nts_codegen_c::{c_global, c_identifier, c_member};
 use std::fmt::Write as _;
 
 use nts_core::hir::{self, HirType, ManagedType};
@@ -1540,7 +1540,7 @@ fn constructor_callback(
     }
     let _ = write!(
         out,
-        "    {instance} *nts_self = ({instance} *)nts_construct_{instance}();\n    if (nts_self == NULL) {{\n        napi_throw_error(env, NULL, \"could not allocate the instance\");\n        goto nts_napi_cleanup;\n    }}\n    if (setjmp(nts_landing.frame) != 0) {{\n        nts_napi_raise(env, &nts_landing);\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    nts_landing_push(&nts_landing);\n    {ctor_symbol}({});\n    if (!nts_napi_check(env, napi_wrap(env, self, nts_self, nts_finalize_{instance}, NULL, NULL), \"could not attach the instance\")) {{\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    out = self;\nnts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n",
+        "    {instance} *nts_self = ({instance} *)nts_construct_{instance}();\n    if (nts_self == NULL) {{\n        napi_throw_error(env, NULL, \"could not allocate the instance\");\n        goto nts_napi_cleanup;\n    }}\n    if (setjmp(nts_landing.frame) != 0) {{\n        nts_napi_raise(env, &nts_landing);\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    nts_landing_push(&nts_landing);\n    {ctor_symbol}({});\n    if (!nts_napi_check(env, napi_wrap(env, self, nts_self, nts_finalize_{instance}, NULL, NULL), \"could not attach the instance\")) {{\n        nts_release((NtsHeader *)nts_self);\n        goto nts_napi_cleanup;\n    }}\n    if (!nts_napi_define_{instance}_fields(env, self)) {{\n        goto nts_napi_cleanup;\n    }}\n    out = self;\nnts_napi_cleanup:\n    nts_landing_pop(&nts_landing);\n",
         args.join(", ")
     );
     if release_managed {
@@ -1607,7 +1607,11 @@ fn class_definition(
         .trim_end_matches(" *")
         .to_owned();
 
-    let mut out = format!("typedef struct {instance} {instance};\nNtsHeader *nts_construct_{instance}(void);\n");
+    // The field definer is emitted below the constructor and called from it, so
+    // its prototype goes here with the other two.
+    let mut out = format!(
+        "typedef struct {instance} {instance};\nNtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
+    );
 
     // The finalizer, which is the whole of the ownership story: the instance is
     // this heap's, the JavaScript object merely points at it, and when that
@@ -1674,6 +1678,18 @@ fn class_definition(
             }
             Err(why) => skipped.push(why),
         }
+    }
+
+    // The data, which is not in `program.funcs` and so was never reached by the
+    // loop above. Appended after the methods so a class reads the way it is
+    // declared: behaviour first, then state.
+    if let Some(at) = layouts
+        .iter()
+        .position(|candidate| c_type_is(candidate, &instance))
+    {
+        let (bodies, fields) = field_accessors(&layouts[at], &instance, layouts, classes, skipped);
+        out.push_str(&bodies);
+        descriptors.extend(fields);
     }
 
     let property = c_string_literal(publish);
@@ -2800,6 +2816,135 @@ fn declare_value_exports(
     out
 }
 
+/// Whether this layout is the one whose C struct is named `instance`.
+///
+/// By the emitted spelling rather than by the layout's own name, because the
+/// class emitter takes `instance` from the *constructor's receiver type* --
+/// deliberately, so the struct the factory allocates and the struct the wrapper
+/// unwraps cannot disagree about spelling. Matching on `layout.name` would
+/// reintroduce exactly the disagreement that was designed out.
+fn c_type_is(layout: &hir::Layout, instance: &str) -> bool {
+    format!("NtsObj_{}", c_identifier(&layout.name)) == instance
+}
+
+/// A getter per instance field, and the descriptors that publish them.
+///
+/// A class crossed with its prototype methods and **none of its data**:
+/// `napi_define_class` was handed a descriptor list built only from
+/// `program.funcs`, and a field is not a function, so `Object.keys(instance)`
+/// was `[]` and every declared field read `undefined`. The methods that read
+/// those fields answered correctly the whole time -- the fields were populated
+/// and unreachable, not unset, which is why nothing noticed.
+///
+/// The Node lane measured it twice rather than once, on `fs.Stats` and on a
+/// three-field reduction, so `Stats` could not be peculiar. `stats.size` is the
+/// point of the object and `isFile()` is the convenience; 24 of node's
+/// `test-fs-*.js` read a field off a stat.
+///
+/// **Getters, not data properties, and not setters.** The value lives in this
+/// heap and the JavaScript object only points at it, so a data property would be
+/// a copy taken at construction that stops tracking the object it came from --
+/// wrong for anything a method mutates. A setter is the inbound direction, which
+/// for a reference field has no representation at all; a scalar one could be
+/// written and is deliberately not, because publishing setters for the scalars
+/// and not the references would make the same class writable in some fields and
+/// silently not in others. `stats.size = 1` is a no-op here and throws in strict
+/// mode under node, and that difference is named rather than papered over.
+///
+/// A field whose type cannot cross is skipped rather than refusing the class:
+/// the alternative loses the methods too, and a class with most of its data is
+/// worth more than no class. `Skipped` records each one, so `sweep.mjs` can
+/// still say what is missing.
+fn field_accessors(
+    layout: &hir::Layout,
+    instance: &str,
+    layouts: &[hir::Layout],
+    classes: &FxHashSet<String>,
+    skipped: &mut Vec<Skipped>,
+) -> (String, Vec<String>) {
+    let mut out = String::new();
+    let mut descriptors = Vec::new();
+    for field in &layout.fields {
+        let Some(crossing) = cross(&field.ty, layouts, classes) else {
+            skipped.push(Skipped {
+                function: format!("{}.{}", layout.name, field.name),
+                reason: format!("is a field of type {} and does not cross", spell(&field.ty)),
+            });
+            continue;
+        };
+        let member = c_member(&field.name);
+        let symbol = format!(
+            "nts_napi_get_{}_{}",
+            c_identifier(&layout.name),
+            c_identifier(&field.name)
+        );
+        let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
+            continue;
+        };
+        let _ = write!(
+            out,
+            "static napi_value {symbol}(napi_env env, napi_callback_info info) {{\n                 napi_value self;\n                 if (!nts_napi_check(env, napi_get_cb_info(env, info, NULL, NULL, &self, NULL), \"could not read callback arguments\")) return NULL;\n                 {instance} *nts_self = NULL;\n                 if (!nts_napi_check(env, napi_unwrap(env, self, (void **)&nts_self), \"could not read the instance\")) return NULL;\n                 napi_value value = NULL;\n                 if (!nts_napi_check(env, {make}, \"could not read a field\")) return NULL;\n                 return value;\n}}\n"
+        );
+        let property = c_string_literal(&field.name);
+        descriptors.push(format!(
+            "{{ {property}, NULL, NULL, {symbol}, NULL, NULL, napi_enumerable, NULL }}"
+        ));
+    }
+    // Defined on the *instance* as well as on the prototype, which is the
+    // difference between reading and behaving.
+    //
+    // `napi_define_class` puts its descriptors on the prototype, so the fields
+    // read correctly and `Object.keys(stat)` was still `[]`, `JSON.stringify`
+    // still `{}`, and `Object.hasOwn(stat, "size")` still false -- against
+    // node's fourteen own enumerable properties. Node's `Stats` constructor
+    // assigns fourteen own fields, so this is the same work in the same place
+    // rather than an extra pass: the cost is per construction either way.
+    //
+    // Accessors rather than values, for the reason the prototype ones are
+    // accessors: the data lives in this heap and a snapshot taken at
+    // construction would stop tracking whatever a method does to it.
+    let _ = writeln!(
+        out,
+        "static bool nts_napi_define_{instance}_fields(napi_env env, napi_value self) {{"
+    );
+    if descriptors.is_empty() {
+        let _ = write!(out, "    (void)env;\n    (void)self;\n    return true;\n}}\n");
+    } else {
+        let _ = write!(
+            out,
+            "    napi_property_descriptor own[] = {{\n        {}\n    }};\n    return nts_napi_check(env, napi_define_properties(env, self, sizeof(own) / sizeof(own[0]), own), \"could not define the instance fields\");\n}}\n",
+            descriptors.join(",\n        ")
+        );
+    }
+
+    (out, descriptors)
+}
+
+/// Turning one already-read C value into a `napi_value` called `value`.
+///
+/// The same expression a value export needs and a class field needs, written
+/// once. They were one `match` inside `publish_value_exports` until a field
+/// wanted it too, and two copies of a per-crossing table is how the erasure
+/// pair in `lower.rs` and `emit.rs` drifted seven times.
+///
+/// `Cross::Void` has no expression, which is why this answers `Option` rather
+/// than `String`: a value with nothing to read has nothing to convert.
+fn conversion(crossing: &Cross, symbol: &str, layouts: &[hir::Layout]) -> Option<String> {
+    Some(match crossing {
+        Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
+        Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
+        Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
+        Cross::Elements(inner) => {
+            format!("{}(env, {symbol}, &value)", elements_helper(inner, layouts))
+        }
+        Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
+        Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
+        Cross::Entries => format!("nts_to_napi_entries(env, {symbol}, &value)"),
+        Cross::Object(at) => format!("{}(env, {symbol}, &value)", object_helper(&layouts[*at])),
+        Cross::Void => return None,
+    })
+}
+
 /// The publication, which goes *after* `module__init()` and the ordering is the
 /// whole of it: a deferred global holds its zero until module evaluation
 /// assigns it, and for a reference that zero is a null pointer rather than a
@@ -2816,22 +2961,10 @@ fn publish_value_exports(
             value_reader(&c_global(&global.name, functions.iter().map(String::as_str)))
         );
         let key = c_string_literal(publish);
-        let make = match crossing {
-            Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
-            Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
-            Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
-            Cross::Elements(inner) => {
-                format!("{}(env, {symbol}, &value)", elements_helper(inner, layouts))
-            }
-            Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
-            Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
-            Cross::Entries => format!("nts_to_napi_entries(env, {symbol}, &value)"),
-            Cross::Object(at) => {
-                format!("{}(env, {symbol}, &value)", object_helper(&layouts[*at]))
-            }
-            // `value_exports` refuses this, so reaching it is a bug in it
-            // rather than a shape to handle here.
-            Cross::Void => continue,
+        // `value_exports` refuses `Void`, so a `None` here is a bug in it
+        // rather than a shape to handle.
+        let Some(make) = conversion(crossing, &symbol, layouts) else {
+            continue;
         };
         let _ = write!(
             out,
@@ -2888,7 +3021,12 @@ fn value_export_text(program: &hir::Program) -> (String, String) {
 /// which is what that type is for: "the compiler's answer to where is this
 /// field, decided once and consumed by every backend". A header emitted by
 /// `codegen/c` would be better still, and would remove this repetition entirely.
-fn emit_layouts(out: &mut String, program: &hir::Program, mut needed: Vec<usize>) {
+fn emit_layouts(
+    out: &mut String,
+    program: &hir::Program,
+    mut needed: Vec<usize>,
+    structs_only: &[usize],
+) {
     // And every layout those reach through an object field. `os.cpus()` returns
     // `CpuInfo[]`, `CpuInfo` holds a `CpuTimes`, and nothing named `CpuTimes`:
     // the wrapper published `cpus`, emitted a helper that called
@@ -2928,14 +3066,50 @@ fn emit_layouts(out: &mut String, program: &hir::Program, mut needed: Vec<usize>
     // typedef first; a helper that calls a helper declared later needs its
     // prototype. Emitting each layout complete before the next worked only while
     // nothing nested.
-    for at in &needed {
+    // A class's struct is needed too, and for a different reason: its field
+    // getters dereference the instance. It gets no `nts_to_napi_obj_` helper --
+    // a class does not cross as a plain object, which is what `object_crosses`
+    // refuses it for -- so the two lists are separate and only the first two
+    // passes see both.
+    //
+    // Without this the addon carried `typedef struct NtsObj_Reading
+    // NtsObj_Reading;` and no body, and the getters were `incomplete definition
+    // of type`. The class emitter wrote that typedef itself, which is why the
+    // *methods* linked: they pass the pointer through without reading it.
+    let mut structs: Vec<usize> = needed.iter().copied().chain(structs_only.iter().copied()).collect();
+    structs.sort_unstable();
+    structs.dedup();
+
+    // Every struct any of these *mentions*, which needs a typedef and no body.
+    //
+    // A class's fields are the reason: `fs`'s `Stats` sits in a program whose
+    // classes hold `Blob` and `ReadableStream` pointers, and emitting a body
+    // that names a type nothing declared is `unknown type name
+    // 'NtsObj_Blob5395'` -- nineteen of them in one module. A pointer field
+    // needs the name to exist and never the layout, so the closure stops at one
+    // step and does not recurse.
+    let mut mentioned: Vec<usize> = structs
+        .iter()
+        .flat_map(|at| program.layouts[*at].fields.iter())
+        .filter_map(|field| match &field.ty {
+            HirType::Managed(ManagedType::Object(id)) => {
+                program.layouts.iter().position(|l| l.types.contains(id))
+            }
+            _ => None,
+        })
+        .collect();
+    mentioned.extend(structs.iter().copied());
+    mentioned.sort_unstable();
+    mentioned.dedup();
+
+    for at in &mentioned {
         let name = format!("NtsObj_{}", c_identifier(&program.layouts[*at].name));
         let _ = writeln!(out, "typedef struct {name} {name};");
     }
-    if !needed.is_empty() {
+    if !mentioned.is_empty() {
         out.push('\n');
     }
-    for at in &needed {
+    for at in &structs {
         let layout = &program.layouts[*at];
         let name = format!("NtsObj_{}", c_identifier(&layout.name));
         let _ = writeln!(out, "struct {name} {{");
@@ -3001,7 +3175,22 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             _ => None,
         })
         .collect();
-    emit_layouts(&mut out, program, needed);
+    // Every class this addon defines, by the layout its constructor receives.
+    // Taken from the receiver rather than from the name for the reason the class
+    // emitter takes `instance` that way: the struct the factory allocates and
+    // the struct the wrapper unwraps must not be able to disagree.
+    let class_layouts: Vec<usize> = program
+        .funcs
+        .iter()
+        .filter(|func| func.name.ends_with("#constructor"))
+        .filter_map(|func| match &func.params.first()?.ty {
+            HirType::Managed(ManagedType::Object(id)) => {
+                program.layouts.iter().position(|l| l.types.contains(id))
+            }
+            _ => None,
+        })
+        .collect();
+    emit_layouts(&mut out, program, needed, &class_layouts);
 
     let runs_module_init = emit_module_init_prototype(program, &mut out);
 

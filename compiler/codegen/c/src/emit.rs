@@ -13,8 +13,8 @@
 //! a function touching a managed type is refused. RFC §4.1 again: the failure has
 //! to be visible.
 
-pub use nts_codegen_common::symbols::{c_global, c_identifier};
-use nts_codegen_common::symbols::{c_member, unspellable_in_c};
+pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
+use nts_codegen_common::symbols::unspellable_in_c;
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
