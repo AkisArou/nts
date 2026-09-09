@@ -31,6 +31,21 @@
 // The source of the promise does not matter. `Promise.resolve(...)` and an
 // `async function`'s return value refuse identically, so the fixture uses both
 // and neither is load-bearing on its own.
+//
+// # Two routes, and they differ in where the continuation lives
+//
+// Recorded from the compiler lane's reading, because a fixture that names a gap
+// without naming the choice invites the cheaper of the two by default:
+//
+//     desugar `p.then(f)` into the async machinery that already works
+//     add `nts_promise_then(p, closure)` to the runtime's job queue
+//
+// The first reuses what `await` already compiles to; the second gives the
+// promise a method and puts the continuation in the runtime. That is a decision
+// about where suspension is represented, not a patch, which is why this stayed
+// open after being confirmed.
+//
+// The 20 things are what it is worth. They are not an estimate of it.
 
 async function fromAnAsyncFunction(): Promise<number> {
   return 1;
