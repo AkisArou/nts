@@ -37,6 +37,51 @@ const ROOT = resolvePath(HERE, "../..");
 const NODE_ROOT = join(ROOT, "third_party/node");
 const PARALLEL_SUITE = join(NODE_ROOT, "test/parallel");
 
+
+// **A variable that quiets the output is part of the subject.**
+//
+// `NODE_NO_WARNINGS=1`, set to keep the punycode deprecation line out of a log,
+// suppresses the warnings node's own tests assert on:
+//
+//     test-url-parse-invalid-input.js   assert.match(stderr, /\[DEP0170\] DeprecationWarning:/)
+//     test-http-debug.js                the NODE_DEBUG warning in a child's stderr
+//
+// Both fail with it set and pass without. On 2026-09-09 that produced two
+// failures in a lane whose headline was "nothing failing", and the failures
+// survived three runs on an idle machine and a bisect into a pinned worktree at
+// two earlier commits -- because the variable came along each time. A ledger
+// entry was corrected on the strength of it before the cause was found. **A
+// contaminant present in both arms is not controlled by comparing them.**
+//
+// So a run refuses rather than warns: a warning in a 2,300-line log is exactly
+// what gets missed. `NTS_ALLOW_OUTPUT_ENV=1` overrides, which makes carrying one
+// in a deliberate act rather than an inherited default.
+// Two lists, because refusing on everything refuses on everything. This box
+// exports `NODE_OPTIONS=--max-old-space-size=8192 --disable-warning=ExperimentalWarning`
+// as a standing setting, and it was present for the 1,859 baseline -- a guard
+// blocking it would block every run in the profile's history, which is a worse
+// answer than the problem.
+//
+// So: refuse the two that demonstrably suppress what a test reads, and *print*
+// the rest, so a log records the environment it was taken in and a later reader
+// can tell one run from another.
+const REFUSE = ["NODE_NO_WARNINGS", "NODE_DEBUG"];
+const REPORT = ["NODE_OPTIONS", "NO_COLOR", "FORCE_COLOR"];
+if (process.env.NTS_ALLOW_OUTPUT_ENV === undefined) {
+  const carried = REFUSE.filter((name) => process.env[name] !== undefined);
+  if (carried.length > 0) {
+    console.error(`refusing to run: ${carried.join(", ")} changes what the tests read.`);
+    console.error("Node's own tests assert on warnings and on stderr. Filter the log after");
+    console.error("the run instead, where the filtering is visible in the command, or set");
+    console.error("NTS_ALLOW_OUTPUT_ENV=1 if you mean it.");
+    process.exit(2);
+  }
+}
+for (const name of REPORT) {
+  if (process.env[name] !== undefined) {
+    console.log(`  inherited ${name}=${process.env[name]}`);
+  }
+}
 const argv = process.argv;
 const arg = (name, fallback = null) => {
   const at = argv.indexOf(name);
