@@ -11316,9 +11316,11 @@ run as a differential rather than as new hand-written assertions.
 | `events` | 8,040 | 4,020 | 0 |
 | `console` | 4,030 | 4,030 | 0 |
 | `diagnostics_channel` | 4,020 | 4,020 | 0 |
+| `readline` | 4,030 | 4,030 | 0 |
 
-**13 modules measured, 491,106 comparisons, 0 divergences** — `console` and
-`diagnostics_channel` were both added tonight and contribute 8,050 of them.
+**14 modules measured, 495,136 comparisons, 0 divergences** — `console`,
+`diagnostics_channel` and `readline` were all added tonight and contribute
+12,080 of them.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11353,7 +11355,17 @@ twice. The channel name was derived from the program text, which is not unique �
 `"sp"` is in the `fixed` seeds *and* the generator emits it, so the second
 occurrence inherited the first's subscriber. A per-invocation counter fixed it.
 
-The tell in both was the **shape** of the divergence rather than the count:
+`readline` fuzzes the four cursor functions over argument shapes the pinned
+tests do not reach — `NaN`, `Infinity`, `undefined`, a fractional column, a
+negative count, a `dir` outside -1..1 — and compares the **return value**
+alongside the bytes, because each answers a boolean saying whether the stream
+took the write and a reimplementation can emit the right escape with the wrong
+boolean. It was clean on its first run, so it was controlled before being
+believed: **23 of its 30 fixed inputs write bytes, they produce 21 distinct
+results, and a sabotage that makes `clearLine` ignore its direction argument is
+caught by 5 of 30.** A corpus with no demonstrated failure is a claim.
+
+The tell in the other two was the **shape** of the divergence rather than the count:
 every input diverging with an empty oracle means the oracle is not wired up, and
 an output that is the right output *repeated* means state leaking between
 iterations. A real defect is usually a minority of inputs and a *different*
@@ -11361,14 +11373,14 @@ answer, not the same answer twice.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Thirteen of twenty-two
+That number means nothing without this beside it. **Fourteen of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **eight never appeared in the run at all** — `async_hooks`, `dgram`,
-`http`, `net`, `process`, `readline`, `stream`, `timers`. These are the modules whose surfaces are sockets, streams and timers
+and **seven never appeared in the run at all** — `async_hooks`, `dgram`,
+`http`, `net`, `process`, `stream`, `timers`. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven

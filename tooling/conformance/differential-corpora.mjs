@@ -729,6 +729,69 @@ export const CORPORA = {
     ],
   },
 
+  readline: {
+    // The cursor functions, fuzzed over argument shapes the pinned tests do not
+    // reach. `local/cursor-static.js` covers the documented calls and their
+    // exact bytes; what it does not cover is what happens on `NaN`, a negative
+    // count, a fractional column, `undefined` where a number is expected, or a
+    // `dir` outside -1..1 -- and node has a specific answer for each, including
+    // "write nothing and return true".
+    //
+    // The return value is compared alongside the bytes because these four
+    // return a boolean that says whether the stream took the write, and a
+    // reimplementation can emit the right escape and answer the wrong boolean.
+    //
+    // `emitKeypressEvents` and `createInterface` are not here: both attach to a
+    // stream and answer over time, which is a different corpus and not one that
+    // a single call can compare.
+    fixed: [
+      "c0,0", "c1,1", "c-1,0", "c0,-1", "cN,0", "c0,N", "c1.5,2", "cI,0",
+      "m0,0", "m1,1", "m-1,-1", "m5,-5", "mN,1", "m1,N", "m1.5,-2.5", "mI,I",
+      "l-1", "l0", "l1", "l2", "l-2", "lN", "lI", "lU",
+      "s", "c0", "cU,0", "c0,U", "m0", "mU,U",
+    ],
+    input: (rnd) => {
+      const NUMS = ["0", "1", "-1", "2", "-2", "5", "N", "I", "U", "1.5", "-1.5", "1e21"];
+      const pick = () => NUMS[Math.floor(rnd() * NUMS.length)];
+      const kind = Math.floor(rnd() * 4);
+      if (kind === 0) return `c${pick()},${pick()}`;
+      if (kind === 1) return `m${pick()},${pick()}`;
+      if (kind === 2) return `l${pick()}`;
+      return "s";
+    },
+    calls: [
+      {
+        label: "cursor-op",
+        call: (m, spec) => {
+          const num = (t) => {
+            if (t === "N") return NaN;
+            if (t === "I") return Infinity;
+            if (t === "U") return undefined;
+            return Number(t);
+          };
+          let written = "";
+          const stream = new Writable({
+            write(chunk, _enc, cb) {
+              written += String(chunk);
+              cb();
+            },
+          });
+          const op = spec[0];
+          const args = spec.slice(1).split(",");
+          let returned;
+          try {
+            if (op === "c") returned = m.cursorTo(stream, num(args[0]), num(args[1]));
+            else if (op === "m") returned = m.moveCursor(stream, num(args[0]), num(args[1]));
+            else if (op === "l") returned = m.clearLine(stream, num(args[0]));
+            else returned = m.clearScreenDown(stream);
+          } catch (e) {
+            return [`THREW:${e && e.name}`, e && e.code ? String(e.code) : ""];
+          }
+          return [written, String(returned)];
+        },
+      },
+    ],
+  },
   diagnostics_channel: {
     // A state-machine fuzz, third of its kind here after `events` and
     // `console`, and for the same reason: nothing about a channel is a value
