@@ -597,6 +597,35 @@ if (!withCompiles && modules.length > 1) {
     }
   }
 
+  // And whether the artifacts the floor just counted survive `require`.
+  //
+  // **Building is not loading, and for one hour nothing between them checked.**
+  // After the index-signature representation landed, `os.node` built cleanly,
+  // reported 17 published names to every static reading, and segfaulted inside
+  // `nts_map_set` during `module__init` -- an object literal's `Record` field
+  // was never given a table because `contextual_type` had no arm for
+  // `PROPERTY_ASSIGNMENT`, so the field's declared type never reached the value.
+  // The floor said "22 of 22 still build" throughout, and it was true.
+  //
+  // Placed here rather than beside the fixtures because it needs the artifacts
+  // the floor has just rebuilt. One `require()` each, under a second, and the
+  // cheapest question that cannot be answered by reading emitted text.
+  {
+    const loads = spawnSync("bash", [join(HERE, "loads.sh")], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: 600_000,
+      env: process.env,
+    });
+    const text = `${loads.stdout ?? ""}${loads.stderr ?? ""}`;
+    const summary = text.split("\n").filter((l) => /crashed or failed/.test(l)).join("").trim();
+    if (summary !== "") console.log(`addons load: ${summary}`);
+    for (const line of text.split("\n").filter((l) => /CRASHED|failed to load/.test(l))) {
+      console.log(`  ${line.trim()}`);
+    }
+    if (loads.status !== 0) process.exitCode = 6;
+  }
+
   // The `uses` files, against what the modules actually import. One of them was
   // already right about a bug that took an afternoon: `dgram/uses` names `net`,
   // `dgram` calls `nts_net_default_auto_select_family`, and the build consulted
