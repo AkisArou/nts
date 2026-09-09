@@ -729,6 +729,73 @@ export const CORPORA = {
     ],
   },
 
+  process: {
+    // The value-shaped half of `process`, which is smaller than it looks and
+    // is the only half a value-compare corpus can hold.
+    //
+    // Excluded and named rather than normalised: `hrtime`, `uptime`,
+    // `memoryUsage`, `cpuUsage`, `resourceUsage` and `pid` all answer
+    // differently every call or every process by design, and `exit`,
+    // `abort`, `kill` and `chdir` change the host rather than answer about it.
+    // What is left is argument validation and the pure conversions, and that
+    // is where a reimplementation actually differs.
+    //
+    // `emitWarning` was here through its validation only and has been removed.
+    // A valid call *emits*, and 400 iterations put hundreds of warnings on the
+    // process's stderr -- side effects a comparison corpus has no business
+    // producing. Quieting them was not an option: `NODE_NO_WARNINGS` once hid a
+    // difference two pinned tests depend on. The validation slice alone was not
+    // worth the noise, and the emitted warning itself is asynchronous and
+    // belongs to a timing harness.
+    fixed: [
+      "hrtime|", "hrtime|0", "hrtime|1,2", "hrtime|N", "hrtime|s",
+      "uid|", "env|PATH", "env|__nts_absent__", "env|", "env|=",
+      "cwdrel|.", "cwdrel|..", "cwdrel|x", "cwdrel|", "umaskread|",
+    ],
+    input: (rnd) => {
+      const KINDS = ["hrtime", "env", "cwdrel"];
+      const ARGS = ["", "0", "1,2", "N", "s", "o", "PATH", ".", "..", "x", "=", "__nts_absent__", "1e21", "-1"];
+      return `${KINDS[Math.floor(rnd() * KINDS.length)]}|${ARGS[Math.floor(rnd() * ARGS.length)]}`;
+    },
+    calls: [
+      {
+        label: "process-op",
+        call: (m, spec) => {
+          const bar = spec.indexOf("|");
+          const kind = spec.slice(0, bar);
+          const arg = spec.slice(bar + 1);
+          const asValue = (t) => {
+            if (t === "") return undefined;
+            if (t === "N") return NaN;
+            if (t === "s") return "str";
+            if (t === "o") return { a: 1 };
+            if (t.includes(",")) return t.split(",").map(Number);
+            const n = Number(t);
+            return Number.isNaN(n) ? t : n;
+          };
+          try {
+            if (kind === "hrtime") {
+              // The *shape* and validation, never the elapsed value: a valid
+              // call answers a two-element array of finite numbers and that is
+              // all this compares.
+              const v = m.hrtime(asValue(arg));
+              return ["ok", Array.isArray(v), v.length, typeof v[0], typeof v[1]];
+            }
+            if (kind === "env") {
+              const v = m.env[arg];
+              return ["ok", typeof v, v === undefined ? "undef" : "present"];
+            }
+            // `cwd()` is absolute and machine-specific, so only its invariants
+            // are compared -- absoluteness and that it has no trailing sep.
+            const c = m.cwd();
+            return ["ok", c.startsWith("/"), c.length > 1 && c.endsWith("/")];
+          } catch (e) {
+            return ["THREW", e && e.name, (e && e.code) || ""];
+          }
+        },
+      },
+    ],
+  },
   async_hooks: {
     // `AsyncLocalStorage` as a state machine: the input is a program of nested
     // `run` calls, `enterWith`, `exit` and reads, and the result is the

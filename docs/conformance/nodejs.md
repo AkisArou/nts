@@ -11318,10 +11318,11 @@ run as a differential rather than as new hand-written assertions.
 | `diagnostics_channel` | 4,020 | 4,020 | 0 |
 | `readline` | 4,030 | 4,030 | 0 |
 | `async_hooks` | 4,030 | 4,030 | 0 |
+| `process` | 4,015 | 4,015 | 0 |
 
-**15 modules measured, 499,166 comparisons, 0 divergences** — `console`,
-`diagnostics_channel`, `readline` and `async_hooks` were all added tonight and
-contribute 16,110 of them.
+**16 modules measured, 503,181 comparisons, 0 divergences** — `console`,
+`diagnostics_channel`, `readline`, `async_hooks` and `process` were all added
+tonight and contribute 20,125 of them.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11382,6 +11383,21 @@ asynchronous half is uncompared and is named as such in the corpus itself.
 Its controls: 30 distinct results over 30 fixed inputs across 135 log lines, and
 a sabotage where `exit` does not clear the store is caught.
 
+`process` is the thinnest of the five and is recorded as thin: **5 distinct
+results over 15 fixed inputs**, because its value-shaped surface really is small
+once the rest is excluded. `hrtime`, `uptime`, `memoryUsage`, `cpuUsage`,
+`resourceUsage` and `pid` answer differently every call by design; `exit`,
+`abort`, `kill` and `chdir` change the host rather than answer about it. What
+remains is argument validation and pure conversion — `hrtime` compared for
+shape and validation only, `env` for presence and type, `cwd()` for its
+invariants rather than its value. A sabotage returning a one-element array from
+`hrtime` is caught by 5 of 15.
+
+`emitWarning` was in it and was removed rather than quieted. A valid call
+*emits*, and 400 iterations put hundreds of warnings on the process's stderr —
+side effects a comparison corpus has no business producing. `NODE_NO_WARNINGS`
+was not an option: it once hid a difference two pinned tests depend on.
+
 The tell in the other two was the **shape** of the divergence rather than the count:
 every input diverging with an empty oracle means the oracle is not wired up, and
 an output that is the right output *repeated* means state leaking between
@@ -11390,14 +11406,15 @@ answer, not the same answer twice.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Fifteen of twenty-two
+That number means nothing without this beside it. **Sixteen of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **six never appeared in the run at all** — `dgram`, `http`, `net`,
-`process`, `stream`, `timers`. These are the modules whose surfaces are sockets, streams and timers
+and **five never appeared in the run at all** — `dgram`, `http`, `net`,
+`stream`, `timers`. Every one is a socket or a stream: their surfaces answer
+over time to a peer, which a value-compare corpus has no way to hold. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven
