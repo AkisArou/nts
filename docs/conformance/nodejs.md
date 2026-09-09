@@ -10052,6 +10052,16 @@ assigning-to-array-length               1   url's URLSearchParams
 
 Declined rather than filed, each with what was ruled out:
 
+- **`a rest parameter that is not an array`**, 38 sites, the largest form left
+  unfiled. Two probes produce a *different* message -- `a rest parameter of
+  unrepresentable type`, which is already filed as
+  `rest-parameter-of-unrepresentable-elements` -- for both a generic rest
+  (`<A extends unknown[]>(...args: A)`, which is `internal/tick.ts:39`'s
+  `nextTick`) and a call to one. And the reported location does not contain the
+  construct: `dgram/src/main.ts:988` is `this.#contextFrame = undefined;`. Two
+  spellings that ought to produce it produce something else, and the sites point
+  somewhere else, so anything filed here would reproduce a neighbour.
+
 - **buffer's bigint into `unknown`.** Four probes: a literal, a typed
   parameter, a class method with buffer's own bounds, a narrowed value into a
   constructor argument. All four lower. Deleted rather than kept as a near-miss.
