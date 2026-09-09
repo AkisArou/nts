@@ -12111,6 +12111,96 @@ five files and only when `constants` *crosses*, `querystring` gains eight and
 only when `parse` does. Neither names a refusal count.
 
 
+## The wrapper enforces TypeScript's types; node's runtime does not
+
+Three divergences found in `path` on the compiled axis are one family. Measured
+against `node:path` with `path.node` **built here from a pin**, after a first
+reading was taken from an artifact another session had rebuilt with a newer
+compiler -- which reported `basename` agreeing and sent me looking for a fix
+that had not landed on my pin.
+
+| call | ours (v12) | node |
+| --- | --- | --- |
+| `basename("/a/b.txt")` | `TypeError: the compiled function requires 2 arguments` | `"b.txt"` |
+| `toNamespacedPath(null)` | `TypeError: expected a string argument` | `null` |
+| `_makeLong(100)` | `TypeError: expected a string argument` | `100` |
+| `resolve(42)` | `Error: could not gather the rest arguments` | `TypeError`, `ERR_INVALID_ARG_TYPE` |
+| `join("a", 1)` | `Error: could not gather the rest arguments` | `TypeError`, `ERR_INVALID_ARG_TYPE` |
+
+`dirname`, `normalize`, `extname` and `isAbsolute` agree.
+
+**One cause in three shapes:** an optional parameter published as required; a
+parameter declared `string` rejected where node passes the value through; and a
+rest element rejected with the wrapper's own bare `Error` in place of the
+module's coded one.
+
+**The general statement**: the boundary derives its argument checks from the
+TypeScript signature, and node's runtime does not enforce those signatures.
+`@types/node` declares `toNamespacedPath(path: string): string`; node returns
+`100` for `toNamespacedPath(100)` and `test-path-makelong.js` asserts the looser
+contract nine times. Where the two disagree, node is the oracle.
+
+`win32.toNamespacedPath` is the sharpest case: our body **already** reads
+`if (typeof path !== "string" || path.length === 0) return path`, transcribed
+from node. The implementation is right and the boundary never lets it run.
+
+**On pin v13 the arity shape is closed.** `basename` agrees with node in both
+forms. `path` moves **11 passes to 12** on the compiled axis and its control
+moves with it -- 3 degenerate under `--mutate-addon` either way, so **8
+behaviour-dependent becomes 9**. That is the first divergence closed on this
+axis, and the first axis movement from fixing a *behaviour* rather than
+publishing an export. Four of eight probed calls now agree, up from three.
+
+A *defaulted* parameter deliberately stays required: the lowering inlines the
+initializer at each call site and the HIR does not carry the expression, so the
+wrapper has nowhere to read it. Thirty-one exported functions keep throwing,
+correctly, until there is a shim.
+
+**Widening is not available yet, and the set is smaller than it looks.** Exactly
+one exported function in `runtime/node` guards a parameter against the type its
+own signature declares -- `win32.toNamespacedPath` -- which with the posix half
+and the `_makeLong` alias is four published names. Everything else that guards a
+non-string already declares `unknown` honestly. But `toNamespacedPath` returns
+its argument, so widening the parameter widens the return, and both
+`unknown-at-the-boundary` and `unknown-return-at-the-boundary` still reproduce:
+the export would go from "publishes and throws on non-strings" to **not
+publishing at all**, taking `path` from 15 to 11. The erased crossing has to
+land in both directions before this is a trade worth making.
+
+### And a fourth, which is the stand-in and not the wrapper
+
+`test-path-resolve.js` sets `process.cwd = () => ''` and expects
+`path.resolve()` to answer `'.'`. Our `resolve` calls the native binding
+`nts_process_cwd`, so the compiled artifact reads `getcwd(3)` and never sees the
+patch. The **interpreted lane passes only because its stand-in is
+`globalThis.nts_process_cwd = () => process.cwd()`** -- a live closure over the
+patchable property.
+
+Every shared stand-in is written that way: `nts_process_env`,
+`nts_stdout_is_tty`, `nts_platform`, `nts_process_pid`, `nts_hrtime_ns`. So any
+pinned test that mutates node state and expects our module to observe it passes
+interpreted **by construction** and can never pass compiled.
+
+`--sabotage` cannot see that class -- such a test still fails when the module is
+blanked, so it is not hollow by the definition this lane uses. It means
+**`prize.mjs`'s "to gain" includes files that are not winnable at all**, and one
+of `path`'s ten is this. Second caveat on that instrument.
+
+It is left red and explained rather than reclassified. A number that goes up
+because a test was moved to `not-applicable` is the thing this ledger exists to
+refuse.
+
+### How this section came to be written twice
+
+The first copy was lost. The heredoc that wrote it failed while `/tmp` was full,
+the insert script read an empty file, replaced the anchor with nothing, and
+printed `recorded`. The commit was one blank line and the message described sixty.
+**The record step had no control on it**: nothing checked that the text it was
+about to insert existed. An audit of every section written this session found
+this one missing and the other fourteen present, which is the only reason it is
+here. A step that reports success without checking its own output is the same
+defect as a test that cannot fail, one level further out.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
