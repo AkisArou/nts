@@ -28,6 +28,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it reads whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` take; the default is unchanged.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? resolve(ROOT, "target/node");
 const require = createRequire(import.meta.url);
 const ABSENCE = /absent|not published|missing|does not publish/i;
 
@@ -40,7 +45,7 @@ for (const entry of readdirSync(resolve(ROOT, "runtime/node"), { withFileTypes: 
 
   let published = new Set();
   try {
-    const addon = require(resolve(ROOT, "target/node", `${entry.name}.node`));
+    const addon = require(resolve(ADDON_DIR, `${entry.name}.node`));
     published = new Set(Object.keys(addon).filter((k) => addon[k] !== undefined));
   } catch {
     // No addon yet: nothing it names can have become present.

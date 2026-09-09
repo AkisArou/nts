@@ -46,6 +46,11 @@ import { spawnSync } from "node:child_process";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it reads whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` take; the default is unchanged.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
+
 const argv = process.argv.slice(2);
 const all = argv.includes("--all");
 const modules = all
@@ -148,7 +153,7 @@ function namesIn(reason) {
 
 const rows = [];
 for (const module of modules) {
-  const addon = join(ROOT, "target/node", `${module}.node`);
+  const addon = join(ADDON_DIR, `${module}.node`);
   if (!existsSync(addon)) {
     console.log(`\n${module}: no addon built -- absent, which is not zero`);
     continue;

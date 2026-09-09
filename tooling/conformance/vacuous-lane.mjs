@@ -23,6 +23,11 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
+
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it reads whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` take; the default is unchanged.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? resolve(ROOT, "target/node");
 const require = createRequire(import.meta.url);
 
 const argv = process.argv.slice(2);
@@ -100,7 +105,7 @@ let checked = 0;
 let undefinedNames = 0;
 console.log("module               exports   pass   fail   verdict");
 for (const module of modules) {
-  const addon = resolve(ROOT, "target/node", `${module}.node`);
+  const addon = resolve(ADDON_DIR, `${module}.node`);
   if (!existsSync(addon)) continue;
   const counted = exportCount(addon);
   const exports = counted === null ? null : counted.defined;
