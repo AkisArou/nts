@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
-# Can a reference cross *inward* into an `unknown` parameter?
+# Which references can cross the wrapper, in each direction?
 #
-#   tooling/conformance/inbound-reference.sh
-#   NTS_BIN=<a pinned copy> tooling/conformance/inbound-reference.sh
+#   tooling/conformance/reference-boundary.sh
+#   NTS_BIN=<a pinned copy> tooling/conformance/reference-boundary.sh
+#
+# Two directions, because they came apart. `unknown` crosses **outward** -- that
+# is `blockers/unknown-return-at-the-boundary`, fixed and kept as a guard -- and
+# does not cross inward. And the outward side has its own hole, which is not
+# `unknown` at all but the bare `object` type:
+#
+#     returnsUnknown(): unknown        -> 7             crosses
+#     returnsShaped(): { a: number }   -> {"a":7}       crosses
+#     returnsObject(): object          -> THREW         the compiled function returned
+#                                                       a value with no JavaScript
+#                                                       representation
+#
+# **The more specific type is the one that fails.** `object` is narrower than
+# `unknown` and narrower than nothing, and it is the only one of the three that
+# cannot come back. That is why `async_hooks.executionAsyncResource` is the one
+# unusable name in its module: `internal/async-hooks.ts:236` declares it
+# `(): object`, the wrapper publishes it, and every call throws.
 #
 # # Why this is not a blocker fixture
 #
@@ -72,6 +89,11 @@
 # A third, breaking B itself (`typeof value === "object"` for `instanceof Map`),
 # still reports the finding -- correctly. The boundary refuses before any body
 # runs, so what the body would have done is not a variable here.
+#
+# The outward guard was controlled the same way: declaring `returnsShaped` as
+# bare `object` instead of `{ a: number }` makes both outward controls fail and
+# the run reports INSTRUMENT FAILURE rather than "the narrower type is the one
+# that fails", which would then have been a claim about nothing.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -100,6 +122,13 @@ export function classifyInbound(value: unknown): boolean {
 export function classifyScalar(value: unknown): boolean {
   return typeof value === "string";
 }
+
+// The outward direction. `held` is a module-level binding so the three
+// functions differ in their declared return type and in nothing else.
+const held: { a: number } = { a: 7 };
+export function returnsUnknown(): unknown { return 7; }
+export function returnsShaped(): { a: number } { return held; }
+export function returnsObject(): object { return held; }
 EOF
 
 NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$compiler" \
@@ -136,7 +165,26 @@ show("C classifyScalar(\"x\")", C1);
 show("C classifyScalar(1)", C2);
 show("B classifyInbound(new Map())", B1);
 show("B classifyInbound(\"x\")", B2);
+const O1 = call(m.exports.returnsUnknown);
+const O2 = call(m.exports.returnsShaped);
+const O3 = call(m.exports.returnsObject);
+show("D returnsUnknown()", O1);
+show("D returnsShaped()", O2);
+show("D returnsObject()", O3);
 console.log();
+if (!(O1.ok && O2.ok)) {
+  console.log("  INSTRUMENT FAILURE: control D does not hold -- neither `unknown`");
+  console.log("  nor a concrete object type comes back, so `object` failing says");
+  console.log("  nothing about `object` in particular.");
+  process.exit(3);
+}
+if (!O3.ok) {
+  console.log("  Outward: `unknown` and a concrete object type both cross, and the");
+  console.log("  bare `object` type does not. The narrower type is the one that");
+  console.log("  fails. async_hooks.executionAsyncResource is declared `(): object`");
+  console.log("  and is the one unusable name in its module.");
+  console.log();
+}
 if (!(A.ok && A.v === true)) {
   console.log("  INSTRUMENT FAILURE: control A does not hold -- `unknown` cannot");
   console.log("  hold a reference even inside the program, so B says nothing about");
