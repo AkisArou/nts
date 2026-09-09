@@ -11,11 +11,33 @@ export function shape(exports) {
   // These operations are implemented and typed in resources.ts. Only their
   // unusual CommonJS location -- a property of another function -- belongs in
   // this public-object shape layer.
-  // A compiled module may not publish this yet. Reaching through an absent
-  // export turns "one export is missing" into "the module did not load" -- one
-  // message for every test, naming nothing. See the same guard in buffer,
-  // console, events, http, net, querystring, stream, timers, url, util, zlib.
-  if (instance === undefined) return {};
+  // A compiled module may not publish the instance yet, and when it does not,
+  // the rest of what it publishes is still real.
+  //
+  // This used to `return {}`. The compiled `process` publishes **`env` and
+  // nothing else** -- 105 keys, all matching node -- and neither `default` nor
+  // `process` is published, so the shape handed back an empty object and the
+  // environment was unreachable from every test. `hidden-exports.mjs` reported
+  // it as `NOT PUBLIC env: object`, which is what that instrument is for.
+  //
+  // `stream/shape.mjs` carries the same correction, and `os/shape.mjs` records
+  // the throwing version of it: "a shape that throws on a missing export
+  // reports one fact about the addon and hides seven." The guard is right and
+  // its scope was wrong -- it did not distinguish "cannot build the public
+  // object" from "cannot build any of it".
+  //
+  // The wiring below genuinely needs the instance, so the early exit stays and
+  // hands back the published names instead of nothing. `installGlobals` then
+  // installs that partial object, which is strictly more than the empty one it
+  // installed before.
+  if (instance === undefined) {
+    const partial = {};
+    for (const [name, value] of Object.entries(exports)) {
+      if (name === "default" || name === "process") continue;
+      partial[name] = value;
+    }
+    return partial;
+  }
   if (instance.hrtime !== undefined) {
     instance.hrtime.bigint = exports._hrtimeBigInt;
   }
