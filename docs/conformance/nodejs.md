@@ -14725,7 +14725,7 @@ somebody else's problem to clear first.
 in that near group. `string_decoder` at 0 and 59 is the clearest case of the
 pattern: nothing of its own left, and 59 things in front of it.
 
-## Where the compiled axis ended: 14 of 22 modules
+## Where the compiled axis ended: 27 behaviour-dependent across 14 of 22 modules
 
 Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
 
@@ -14736,7 +14736,7 @@ Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
     async_hooks        2           1            1        0
     fs                 2           1            1        0
     util               2           2            0        0
-    net                1           1            0        0
+    net                2           2            0        0
     querystring        1           1            0        0
     readline           1           1            0        0
     stream             1           1            0        0
@@ -14745,7 +14745,7 @@ Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
     process            1           0            1        0
     zlib               1           0            1        0
 
-    35 pass: 26 behaviour-dependent, 9 shape-only, 0 hollow, 14 of 22 modules
+    36 pass: 27 behaviour-dependent, 9 shape-only, 0 hollow, 14 of 22 modules
 
 Where it started this morning, on the same instrument once it existed:
 
