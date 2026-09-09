@@ -61,10 +61,29 @@ BLOCKED="fs process"
 # translation unit can spell. See
 # `blockers/binding-returns-program-type`. The other two in that trio take
 # rather than return and are ordinary missing C.
-KNOWN_UNRESOLVED="nts_async_context_get nts_async_context_set nts_on_collected
-nts_net_get_tos nts_net_read_start nts_net_ref nts_net_server_ref
-nts_net_set_keepalive nts_net_set_no_delay nts_net_set_tos
-nts_udp_recv_stop nts_udp_ref"
+KNOWN_UNRESOLVED=""
+
+# **Empty, and it was seventeen names this morning.**
+#
+# The native half is complete: 331 declared bindings and none without C.
+# `nm -D` on every artifact the floor just built finds no undefined `nts_`
+# symbol at all, which is why every row above reads "builds and loads" with no
+# count beside it.
+#
+# The last one to go was `nts_async_context_get`, which could not be written
+# until the return-position escape landed -- its prototype named a per-program
+# struct no shared translation unit could spell. Thirteen modules carried it,
+# each loading and waiting to abort on first call.
+#
+# An empty pin is the strongest form of this check: anything undefined is now
+# unpinned by definition and reports loud.
+#
+# Controlled rather than assumed, against `target/node/process.node` -- a stale
+# artifact that still carries eight undefined symbols, which makes it the one
+# real subject left. With the empty pin it reports
+# `UNPINNED: nts_async_context_get nts_async_context_set ...`; with a pin
+# covering those eight it reports `[8 undefined, all pinned]`; and `punycode`
+# and `timers` stay clean under both.
 
 # The first version of this list also carried `nts_os_homedir`,
 # `nts_os_hostname`, `nts_os_tmpdir`, `nts_os_uptime` and
