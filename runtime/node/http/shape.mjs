@@ -209,6 +209,21 @@ export function shape(exports) {
  * conformance boundary without putting dynamic properties in runtime source.
  */
 function internalHTTPParser(RawHTTPParser) {
+  // A compiled module may not publish this yet, and `class X extends undefined`
+  // is a TypeError at *definition* time -- not at use, not at first call.
+  //
+  // Every other reach-through in this file is guarded and says why: "reaching
+  // through an absent export turns one export is missing into the module did
+  // not load -- one message for every test, naming nothing." This one was not,
+  // and it did exactly that: the compiled `http` publishes two names, so
+  // `exports.HTTPParser` is `undefined`, `internals()` threw while being built,
+  // and **every http test failed with `Class extends value undefined is not a
+  // constructor or null` before its first line ran**.
+  //
+  // `os/shape.mjs` records the same lesson from the same week. The difference
+  // here is that the throw is in a class heritage clause, which no amount of
+  // reading the calling code makes visible.
+  if (RawHTTPParser === undefined) return undefined;
   const callbacks = new WeakMap();
 
   class HTTPParser extends RawHTTPParser {
