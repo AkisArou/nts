@@ -12392,6 +12392,53 @@ was written to ask**, and the first one was written to find inline guards.
 A lower bound in two ways: it counts only the first validator call per function,
 and only parameters declared with a primitive type.
 
+## Re-derived on pin v14: 22 of 22 build and load, and eleven publish something
+
+The standing description says "twenty of twenty-two build and load; `fs` and
+`process` do not". **Re-derived by building both from v14 and requiring them:
+they build, and they load.**
+
+    fs        loads, 1 name(s) published
+    process   loads, 0 name(s) published
+
+So it is **22 of 22**, and the sentence that replaces it has to separate three
+things the old one ran together -- building, loading, and publishing:
+
+| published names | modules |
+| ---: | --- |
+| 17 | `os` |
+| 15 | `path` |
+| 13 | `async_hooks` |
+| 7 | `readline` |
+| 6 | `punycode` |
+| 3 | `net`, `buffer` |
+| 2 | `timers`, `http` |
+| 1 | `util`, `fs` |
+| **0** | `assert`, `console`, `dgram`, `diagnostics_channel`, `events`, `process`, `querystring`, `stream`, `string_decoder`, `url`, `zlib` |
+
+**Eleven of twenty-two publish nothing at all**, and they still build and load --
+which is why "builds" was never the interesting number and why `loads.sh`
+reports the published count beside the verdict rather than a bare `ok`.
+
+The axis, re-derived on the same artifacts with its control:
+
+    punycode    3 passed,  0 degenerate  ->  3 behaviour-dependent
+    path       12 passed,  3 degenerate  ->  9
+    os          4 passed,  1 degenerate  ->  3
+
+**15 behaviour-dependent passes across 3 modules, and still 1 of 22 whole.**
+99 fixtures, 99 as expected on v14.
+
+Three of the standing numbers in the session brief are now stale and this is
+what they read instead:
+
+| standing | re-derived |
+| --- | --- |
+| "roughly 125 of 309 declared bindings have no C" | **3 of 331**; `dgram` 21/21, `net` 30/30, `fs` 155/155 |
+| "twenty of twenty-two build and load; `fs` and `process` do not" | **22 of 22** |
+| "no emitted wrapper builds a typed array at all -- zero across 24 addons" | `string_decoder`'s wrapper emits `napi_create_arraybuffer` and `napi_create_typedarray` |
+| "`os` is 17 of 23" | still 17 of 23 published; 4 of 9 applicable tests, 3 behaviour-dependent |
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
