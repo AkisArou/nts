@@ -93,3 +93,30 @@ emitter.on("probe", (n) => { seen += n; });
 emitter.emit("probe", 2);
 assert.strictEqual(seen, 2, "emit did not reach the listener");
 assert.strictEqual(emitter.listenerCount("probe"), 1);
+
+// `usingDomains` is a value, and the key comparison above only proves a name.
+//
+// It was supplied by `shape.mjs` until 2026-09-09, which meant the name was
+// present, the value was right, and neither came from the module -- the
+// compiled addon could have published anything, or nothing, and every check in
+// this file would still have passed. `shape-blindspot.mjs` is what noticed;
+// the class now carries `static usingDomains = false` as node does in
+// `lib/events.js:222`.
+//
+// Node has no reason to assert any of this: on node the property cannot be
+// absent, cannot hold another value, and cannot be non-writable.
+assert.strictEqual(
+  events.usingDomains,
+  fromRealNode('require("node:events").usingDomains'),
+  "usingDomains does not match node's value",
+);
+
+// Writable, because `domain` assigns `true` to it. A `readonly` field or an
+// accessor without a setter satisfies the value check above and then throws or
+// silently discards here.
+const descriptor = Object.getOwnPropertyDescriptor(events, "usingDomains");
+assert.notStrictEqual(descriptor, undefined, "usingDomains is not an own property");
+assert.strictEqual(descriptor.writable, true, "usingDomains is not writable");
+events.usingDomains = true;
+assert.strictEqual(events.usingDomains, true, "usingDomains did not accept a write");
+events.usingDomains = false;

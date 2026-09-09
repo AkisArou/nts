@@ -12,7 +12,6 @@ export function shape(exports) {
   // still fails; they fail saying which export they wanted.
   if (EventEmitter === undefined) return {};
   EventEmitter.EventEmitter = EventEmitter;
-  EventEmitter.usingDomains = false;
   // `getEventListeners` and the module-level `listenerCount` are node's
   // module-level helpers. `addAbortListener` and `setMaxListeners` are not
   // copied because their module exports are already the class's static values.

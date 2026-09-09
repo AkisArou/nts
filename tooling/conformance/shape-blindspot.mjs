@@ -113,6 +113,15 @@ function leaves(value, path, seen, out, depth = 0) {
     out.push([path, value]);
     // Descend into what the shim wrote onto it. The sentinel itself is the
     // module's answer and is not a finding; a value assigned over it is.
+    //
+    // `seen` has to cover sentinels, not just plain objects. `events` sets
+    // `EventEmitter.EventEmitter = EventEmitter`, so the same sentinel is
+    // reachable at every depth and one supplied value -- `usingDomains` --
+    // was reported four times, once per level until the depth cap stopped it.
+    // Four findings that are one finding is the same error as one finding
+    // reported as none.
+    if (seen.has(value)) return;
+    seen.add(value);
     for (const [key, child] of sentinelWrites.get(value) ?? []) {
       if (typeof key === "symbol") continue;
       leaves(child, `${path}.${String(key)}`, seen, out, depth + 1);

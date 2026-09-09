@@ -277,6 +277,17 @@ export class EventEmitter {
   /** `events.captureRejectionSymbol`, on the class as node has it. */
   static readonly captureRejectionSymbol: typeof captureRejectionSymbol = captureRejectionSymbol;
 
+  /**
+   * `EventEmitter.usingDomains`, which node sets in `lib/events.js:222`.
+   *
+   * Not `readonly`: node's `domain` module assigns `true` to it, and a
+   * property that cannot be written is not the one node exposes. Nothing here
+   * implements domains, so the value stays `false` -- which is node's value
+   * too, and is exactly why it needed writing down. `shape.mjs` supplied it
+   * for long enough that no test could tell whether the module had it at all.
+   */
+  static usingDomains = false;
+
   /** Module helpers are the same function values on Node's exported class. */
   static readonly addAbortListener = addAbortListener;
   static readonly getEventListeners = getEventListeners;
