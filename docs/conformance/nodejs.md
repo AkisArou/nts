@@ -11293,6 +11293,51 @@ already filed:
 
 
 
+
+## `hidden-exports.mjs`'s six findings are six non-defects, and here is why
+
+2026-09-10. Chased all six because the goal text points at this instrument —
+"those found `http` publishing internals node lacks and `process` publishing a
+binding as public API" — and that was true when it was written. It is not true
+of the six standing tonight.
+
+    0 node-own name(s) published and not on the module, 6 reaching no test at all
+        http      getHTTPParserPoolLimit
+        readline  kClearLine kClearScreenDown kClearToLineBeginning kClearToLineEnd
+        util      styles
+
+All six are absent from node's public surface, which is what makes them look
+like the old defect. **Every one is already corrected by its shim**, and the
+instrument reads the module's *raw exports* rather than the object node's tests
+receive:
+
+| name | what the shim does |
+| --- | --- |
+| `util.styles` | `util.inspect.styles = exports.styles` and then `delete util.styles` — node has it at `inspect.styles`, and that is where ours lands |
+| `http.getHTTPParserPoolLimit` | `delete http.getHTTPParserPoolLimit`, and it is read at `shape.mjs:304` to serve the internal stand-in |
+| `readline`'s four `kClear*` | placed on the `internal/readline/utils` stand-in's `CSI`, not on the public surface |
+
+**The four `readline` constants are not untested either**, which is the second
+thing worth writing down. `hidden-exports.mjs` says so itself — *"reachability is
+the question here, not usability"* — and it means no test reads them **by name**.
+Their values are pinned behaviourally by `local/cursor-static.js`:
+
+    [-1, '\x1b[1K'],   [0, '\x1b[2K'],   [1, '\x1b[0K'],   and '\x1b[0J'
+
+so `clearLine(stream, 0)` writing the wrong bytes fails there. A by-name
+assertion would restate a weaker claim than the one already held, so none was
+added.
+
+Node's own `test-readline-csi.js` asserts the same four against the same
+literals and is **not applicable** here for a documented §13 reason: its `CSI`
+must be a callable template tag *and* carry observable function-object
+properties at once. The applicability rule is right and stays; the values it
+would have checked are checked anyway.
+
+> The instrument is not wrong — it answers reachability and says so. It is worth
+> a section because six findings that each need a shim read to dismiss is
+> exactly the shape that gets re-chased every few weeks.
+
 ## Typed arrays cross outward now, and the module count for it is zero for the wrong reason
 
 Re-derived 2026-09-10 on a pin taken at 01:29, with a standalone probe rather
