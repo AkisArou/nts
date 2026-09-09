@@ -70,6 +70,7 @@ meets them. This is the map; the row table below it is the current state.
   - The sentence for the whole day, and it is the Node lane's
   - The ART allocation axis, actually closed: seven parities to the byte, four wins, five ours
   - `node-utf8` allocates 4.22x its reference on ART, and nothing on HotSpot says so
+  - `node-utf8`: the fusion built the string it was written to avoid, and C2 hid it
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2763,6 +2764,53 @@ the wrapper costs nothing here -- it is the growth strategy inside it, which is
 parity to the byte, so it is the *double* formatter and not the integer one.
 `array-predicates` at 1.34x on ART matches its 1.33x on HotSpot, which is the
 growable-wrapper finding already recorded and already upstream.
+
+### `node-utf8`: the fusion built the string it was written to avoid, and C2 hid it
+
+Priced first, on the artefact, and the pricing is the whole story.
+
+The row allocates 285,376 bytes/op on ART against its reference's 67,632. Split
+it and `utf8Write` is free on both runtimes -- 680 and 704 -- so `utf8Decode` is
+all of it. Counted rather than reasoned about, using ART's own
+`getGlobalAllocCount` beside `getGlobalAllocSize`:
+
+    bytes/op 354,496    objects/op 15,366    avg 23
+
+**Two objects per character, at 23 bytes**, which is a `String` and its backing
+array. `javap` says where:
+
+    321: invokestatic  NtsRuntime.stringFromCharCode:(D)Ljava/lang/String;
+    324: astore        27
+    326: aload         9
+    328: dload         21
+    330: invokestatic  NtsRuntime.appendCharCode:(...)
+
+The string is built, stored to slot 27, and **never read**. `ops` decided at
+emission time to fuse `out += String.fromCharCode(c)` into `appendCharCode`, and
+`block` did not know, so it emitted the call as well.
+
+**The fusion's own comment claims about a hundred allocations a decode saved.
+That saving was C2's.** On HotSpot the dead allocation is deleted and the
+measurement looked right; on ART nothing deletes it and the fusion had been
+worth nothing since it was written. This is the goal's premise in one site --
+"C2 handles it, therefore it is free" -- and it was not a lead that went
+nowhere, it was a *fix* that was already in the tree and had never worked.
+
+    node-utf8   ART   285,376 -> 83,136     against the reference's 67,632
+    node-utf8   HotSpot 98,472 -> 75,432
+
+4.22x over the reference becomes **1.23x**. And HotSpot moved by 23,040 too, so
+C2 was not removing all of it even there -- which is worth saying because I
+expected zero on that column and said so before measuring.
+
+**The same omission as the object key, and older.** Both are a fusion that
+replaced a consumer and left the producer emitting. `ops` now asks
+`builder::char_code_appends` rather than re-deriving the condition, so the two
+places cannot disagree again -- which is the rule 0077 states and which this
+site had been quietly breaking.
+
+Two of the four `stringFromCharCode` calls in `utf8Decode` fuse; the other two
+have real readers and stay.
 
 ## Open, and whose
 

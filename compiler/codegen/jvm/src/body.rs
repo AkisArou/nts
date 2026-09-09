@@ -301,6 +301,7 @@ pub struct Emitter<'a> {
     pub(crate) temps: FxHashMap<(u32, u8), u16>,
     pub(crate) labels: FxHashMap<BlockId, Label>,
     pub(crate) uses: Vec<u32>,
+    pub(crate) char_codes: rustc_hash::FxHashSet<ValueId>,
     pub(crate) order: Vec<BlockId>,
 }
 
@@ -413,6 +414,10 @@ impl<'a> Emitter<'a> {
             }
         }
 
+        // Asked once, so `ops` and `block` cannot disagree about it; see
+        // `builder::char_code_appends` for what happened when they did.
+        let char_codes = crate::builder::char_code_appends(func, &uses, &plans.accumulated);
+
         Ok(Self {
             program,
             shape: types::Shape::of(program),
@@ -425,6 +430,7 @@ impl<'a> Emitter<'a> {
             fused: plans.fused,
             object_keys: plans.object_keys,
             accumulated: plans.accumulated,
+            char_codes,
             narrowed: plans.narrowed,
             joined: plans.joined,
             widened: plans.widened,

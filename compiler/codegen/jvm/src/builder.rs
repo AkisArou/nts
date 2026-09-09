@@ -66,6 +66,7 @@
 
 use nts_codegen_common::destruct::outgoing;
 use nts_core::hir::{
+    Callee,
     BinOp, Func, HirType, ManagedType, OpKind, Terminator, ValueId, operands_of,
 };
 use rustc_hash::FxHashSet;
@@ -236,4 +237,52 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
         }
     }
     keep
+}
+
+/// `out += String.fromCharCode(c)` where `out` is a builder: the one-character
+/// string that `appendCharCode` makes unnecessary.
+///
+/// # This set exists so that two places cannot disagree
+///
+/// `ops` decided this at emission time and `block` did not know, so the call
+/// was emitted *and* the fused append was emitted -- the string was built,
+/// stored to a slot and never read:
+///
+/// ```text
+/// 321: invokestatic  NtsRuntime.stringFromCharCode:(D)Ljava/lang/String;
+/// 324: astore        27
+/// 326: aload         9
+/// 328: dload         21
+/// 330: invokestatic  NtsRuntime.appendCharCode:(...)
+/// ```
+///
+/// **C2 deletes the dead allocation, so on `HotSpot` the fusion measured as a
+/// saving it was not making.** ART does not, and `node-utf8` allocates two
+/// objects per character for it -- a `String` and its backing array, 15,366 an
+/// operation at 23 bytes. That is the goal's premise exactly: "C2 handles it,
+/// therefore it is free" was the whole of the original measurement.
+///
+/// So `ops` asks this set rather than re-deriving the condition, and `block`
+/// asks the same one.
+#[must_use]
+pub(crate) fn char_code_appends(
+    func: &Func,
+    uses: &[u32],
+    accumulated: &FxHashSet<ValueId>,
+) -> FxHashSet<ValueId> {
+    let mut fused = FxHashSet::default();
+    for op in &func.values {
+        let OpKind::Binary { op: BinOp::Concat, lhs, rhs } = &op.kind else { continue };
+        if !accumulated.contains(lhs) || uses.get(rhs.0 as usize).copied() != Some(1) {
+            continue;
+        }
+        let Some(source) = func.values.get(rhs.0 as usize) else { continue };
+        if let OpKind::Call { callee: Callee::External(name), args, .. } = &source.kind
+            && name == "nts_string_from_char_code"
+            && args.len() == 1
+        {
+            fused.insert(*rhs);
+        }
+    }
+    fused
 }

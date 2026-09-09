@@ -987,6 +987,14 @@ impl Emitter<'_> {
             if self.object_keys.contains_key(&value) {
                 continue;
             }
+            // The one-character string an `appendCharCode` makes unnecessary.
+            // Same omission as the object key above and older: the fusion was
+            // emitted and the call was too, so the string was built, stored and
+            // never read. C2 deleted it, which is why it measured as a saving
+            // on HotSpot and cost two objects a character on ART.
+            if self.char_codes.contains(&value) {
+                continue;
+            }
             // Every operation loads its operands, operates, and stores or
             // discards the result -- so the depth after must be the depth
             // before. That is not an incidental property: it is the reason
@@ -3013,10 +3021,9 @@ impl Emitter<'_> {
                     //
                     // `appendCharCode` rather than a cast emitted here, so the
                     // coercion has one spelling; see its note in `NtsRuntime`.
-                    if self.uses.get(rhs.0 as usize).copied() == Some(1)
-                        && let OpKind::Call { callee: Callee::External(name), args, .. } =
+                    if self.char_codes.contains(&rhs)
+                        && let OpKind::Call { args, .. } =
                             &self.func.values[rhs.0 as usize].kind
-                        && name == "nts_string_from_char_code"
                         && let [unit] = args.as_slice()
                     {
                         let unit = *unit;
