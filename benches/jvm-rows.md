@@ -30,7 +30,7 @@ not measured clean and should not be quoted.**
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.25x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
-| `array-methods` | 1.14x | 25% is `toInt32` on an `f64` accumulator -- blocked |
+| `array-methods` | 1.14x | **would be 0.86x without the coercion** -- helpers already beat the reference |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
@@ -1095,6 +1095,35 @@ about **1.45x**, which is a large move on the second-biggest losing row and not
 the bar. Unlike `node-utf8` this row *can* reach the bar -- its reference is an
 ordinary `IdentityHashMap` -- so the coercion work has somewhere to go here that
 it does not have there.
+
+### `array-methods` is the row the coercion fix takes *under* the bar, and our helpers already beat hand-written Java
+
+Re-profiled on a current emission, because its 25% predated the stale-worktree
+correction. It holds at **24.82%**, and the rest of the profile says something
+better than that number does:
+
+    ours   arrayIndexOfI 28.62%  toInt32 24.82%  arrayReverse 18.84%
+           arrayLastIndexOfI 10.33%  arrayIndexOf 0.72%
+    ref    indexOf 34.48%  lastIndexOf 23.59%  reverse 23.59%
+
+The reference's own header is explicit that Java gives a `double[]` none of
+these methods, so a person writes four loops and it writes them. **Ours are
+faster than those loops**, and the shares can be turned into units because the
+row's ratio is known:
+
+    our helpers      58.51% of a 1.14x row  =  0.667
+    their loops      81.66% of a 1.00x row  =  0.817
+
+**18% faster than hand-written Java at the operation this row is named for.**
+The row loses anyway, and it loses entirely on the coercion the reference does
+not perform.
+
+**Removing every `toInt32` puts it at 0.86x.** So this is the row where the
+narrowing work does not merely improve a ratio but crosses the bar -- there is
+no in-lane residual behind it, because the in-lane part is already winning.
+That makes it the best case for that fix in the table: `symbol-keyed-map` gets a
+large move to 1.45x and stops short, `node-utf8` cannot be reached at all, and
+this one lands.
 
 ## Open, and whose
 
