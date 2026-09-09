@@ -1,4 +1,4 @@
-// expect: an `in` naming `port` on an `object`, which `Opts` declares optionally
+// expect: an `in` naming `timeout` on an `object`, which `Opts` declares optionally
 //
 // `"port" in given` where `given` is typed `object`, in a program where some
 // type declares `port` **optionally**. The refusal is correct in what it says --
