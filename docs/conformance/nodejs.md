@@ -13142,6 +13142,49 @@ fix.
 `matchesGlob` 1, `process.cwd` 1 (unwinnable), and its surface test, which now
 reports six findings at once instead of one.
 
+## The rest parameters are `paths`, and `resolve`'s message now matches node
+
+`posix.ts` and `win32.ts` declared `resolve(...args)` and `join(...args)`;
+node's are `...paths`. The wrapper's rest gatherer reports the **TypeScript
+parameter name**, so ours said `args[0]` where node says `paths[0]`.
+
+Renamed in all four -- 22 occurrences, 0 type errors, interpreted 21 of 21
+unchanged:
+
+    ours resolve: The "paths[0]" argument must be of type string. Received type number
+    node resolve: The "paths[0]" argument must be of type string. Received type number (42)
+
+Identical except that node appends the value.
+
+**`join` still differs and the reason is not naming.**
+
+    ours join: The "paths[1]" argument must be of type string. Received type number
+    node join: The "path" argument   must be of type string. Received type number (1)
+
+Node's `join` is `...paths` too, and its message says `"path"` because **its own
+loop validates each element** as `validateString(arg, "path")` -- which is
+exactly what `posix.ts:120` does. The gatherer cannot know that; it reports the
+parameter it gathered into. So `join`'s remaining difference is the
+wrapper-pre-empts-validation class, one instance further along, and not
+something a rename reaches.
+
+### And a third artifact measured that was not mine
+
+The reading before this one said `path` was **14 of 21 on v17**. It is 12 on
+v17. The 14 was the other session's gate, which now builds addons and had
+rebuilt `path.node` between my build and my measurement -- so I measured their
+binary and attributed it to my pin. The rename then looked like a two-test
+regression, which is how it was caught.
+
+Third time tonight: once with `basename` appearing to agree, once with the
+mixed-artifact published counts, now this. **`build.sh` writing into
+`target/node` means any measurement there is a measurement of whoever built
+last**, and the only defence is to rebuild immediately before reading and to
+treat a surprising improvement as a provenance question first.
+
+On v18 -- rebuilt and read in the same minute -- `path` is 14 of 21 with the
+rename in place, so the rename costs nothing and buys `resolve`'s message.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

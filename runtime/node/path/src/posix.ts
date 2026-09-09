@@ -39,8 +39,8 @@ function isPosixPathSeparator(code: number): boolean {
 }
 
 /** Upstream `lib/path.js:1245`. */
-export function resolve(...args: string[]): string {
-  if (args.length === 0 || (args.length === 1 && (args[0] === "" || args[0] === "."))) {
+export function resolve(...paths: string[]): string {
+  if (paths.length === 0 || (paths.length === 1 && (paths[0] === "" || paths[0] === "."))) {
     const cwd = nts_process_cwd();
     if (cwd.charCodeAt(0) === CHAR_FORWARD_SLASH) {
       return cwd;
@@ -50,8 +50,8 @@ export function resolve(...args: string[]): string {
   let resolvedPath = "";
   let resolvedAbsolute = false;
 
-  for (let i = args.length - 1; i >= 0 && !resolvedAbsolute; i--) {
-    const path = args[i];
+  for (let i = paths.length - 1; i >= 0 && !resolvedAbsolute; i--) {
+    const path = paths[i];
     validateString(path, `paths[${i}]`);
 
     if (path.length === 0) {
@@ -109,14 +109,14 @@ export function isAbsolute(path: string): boolean {
 }
 
 /** Upstream `lib/path.js:1332`. */
-export function join(...args: string[]): string {
-  if (args.length === 0) {
+export function join(...paths: string[]): string {
+  if (paths.length === 0) {
     return ".";
   }
 
   let joined: string | undefined;
-  for (let i = 0; i < args.length; ++i) {
-    const arg = args[i];
+  for (let i = 0; i < paths.length; ++i) {
+    const arg = paths[i];
     validateString(arg, "path");
     if (arg.length > 0) {
       if (joined === undefined) {

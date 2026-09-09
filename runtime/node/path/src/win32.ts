@@ -123,15 +123,15 @@ export function format(pathObject: FormatInputPathObject): string {
  * @param {...string} args
  * @returns {string}
  */
-export function resolve(...args: string[]): string {
+export function resolve(...paths: string[]): string {
   let resolvedDevice = "";
   let resolvedTail = "";
   let resolvedAbsolute = false;
 
-  for (let i = args.length - 1; i >= -1; i--) {
+  for (let i = paths.length - 1; i >= -1; i--) {
     let path: string;
     if (i >= 0) {
-      const argument = args[i];
+      const argument = paths[i];
       validateString(argument, `paths[${i}]`);
       path = argument;
 
@@ -143,9 +143,9 @@ export function resolve(...args: string[]): string {
       path = nts_process_cwd();
       // Fast path for current directory
       if (
-        args.length === 0 ||
-        (args.length === 1 &&
-          (args[0] === "" || args[0] === ".") &&
+        paths.length === 0 ||
+        (paths.length === 1 &&
+          (paths[0] === "" || paths[0] === ".") &&
           isPathSeparator(path.charCodeAt(0)))
       ) {
         if (!isWindows) {
@@ -427,12 +427,12 @@ export function isAbsolute(path: string): boolean {
  * @param {...string} args
  * @returns {string}
  */
-export function join(...args: string[]): string {
-  if (args.length === 0) return ".";
+export function join(...paths: string[]): string {
+  if (paths.length === 0) return ".";
 
   const path: string[] = [];
-  for (let i = 0; i < args.length; ++i) {
-    const arg = args[i];
+  for (let i = 0; i < paths.length; ++i) {
+    const arg = paths[i];
     validateString(arg, "path");
     if (arg.length > 0) {
       path.push(arg);
