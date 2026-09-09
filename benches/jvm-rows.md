@@ -136,6 +136,29 @@ row is **1.03x** on time, so the hoist is worth at most 3% there, and the whole
 
 Each cost a measurement. The number in brackets is what the fix was worth.
 
+**Read this class of lead first, because it is now four for four.** "The
+emission carries visible redundancy, therefore removing it wins" has been
+believed and priced four separate times on this lane, and has come back at
+zero every time:
+
+    intcall's i2l/l2i on every helper result        0.04%   built, then measured
+    the (D)D closure ABI's i2d/d2i per call          0.1%   priced first
+    the store/load round trip on every value           0%   record 0004
+    the arrayAtValue allocation per round              0    C2 scalar-replaces it
+
+C2 folds identity conversions, sinks stores, and scalar-replaces non-escaping
+objects, and it does all three through our emission specifically. **The bytecode
+being ugly is not evidence that it is slow**, and on this backend the JIT is the
+reason. A redundancy is worth pricing only where something stops C2 seeing it --
+a real call it will not inline, an object that genuinely escapes, a value that
+crosses a method boundary in the wrong representation *and is not inlined back*.
+None of the four were.
+
+The corollary, which is the useful half: **the wins on this lane have all been
+representation, never instruction count.** `intcall` itself was worth 22.8% by
+changing what a value *is*; `widen` was worth `generator`'s whole 3.41x the same
+way. Ask what a value is held as, not how many instructions move it.
+
 - **Conversion CSE** on `node-utf8`'s nine `toInt32` of one value. **[8% of a
   2.4x gap.]** The cost is the value living in a double slot, not the count of
   conversions. One conversion per iteration measured 2.20x against 2.39x.
