@@ -13872,6 +13872,98 @@ All four now take the same blanked input.
 are `undefined` on both sides either way, `timers` is `{}` on both sides, and
 webstreams is node's own on both sides. All five stand.
 
+## What a compiled-axis number has to be measured with, after today
+
+Four things changed about how this figure is produced, each because a number
+produced without it turned out to be about something else.
+
+**A private artifact directory.** `target/node` is shared with the other
+sessions. A 22-module run reported `buffer 0 passed` while another session
+rebuilt the directory underneath it; a re-run minutes later on the same md5 said
+`1 passed`. `build.sh`, `loads.sh` and `axis-controls.mjs` take
+`NTS_ADDON_OUT`, so a run builds into its own directory and measures what it
+built.
+
+**A quiet machine.** `run.mjs` sets a 60-second per-test timeout. Measurements
+taken while this session was also compiling -- `blockers-check.mjs` is 104
+compiler invocations -- disagreed with the same measurement taken alone, twice:
+`buffer` and `util` each gained a pass that had previously timed out. Neither
+was a change in the artifact.
+
+**Three controls, not one.** `plain - mutate` was reported for weeks as
+"behaviour-dependent". It calls a frozen data table hollow and it misses a pass
+that survives with no module at all. The split is `hollow` (passes under
+`--empty-exports` or `--sabotage`), `shape-only` (survives `--mutate-addon`),
+`behaviour` (fails all three).
+
+**A control that reaches the facade.** `--empty-exports` blanked what `shape()`
+was given and handed the real exports to `subpaths()`, `internals()` and
+`testBindings()`. So a test reaching `internal/async_hooks` saw a working module
+with an empty public surface, and passed. Fixing that immediately exposed a
+sixth hollow pass in `util` that had been classified `shape-only`.
+
+### The order these were found in is the argument for all four
+
+Each was found by a measurement disagreeing with another measurement, never by
+review:
+
+    the shared directory      loads.sh contradicted a table built minutes earlier
+    the quiet machine         a re-run on an identical md5 gave a different number
+    the three controls        my own os test was about to be recorded as hollow
+    the facade                the hollow check flagged my own async_hooks test
+
+**Three of the four were found by an instrument reporting something wrong about
+my own work.** That is the argument for pointing them at it.
+
+## An instrument that could not see the bug it was built from
+
+`stream/shape.mjs` discarded a working `getDefaultHighWaterMark` because an
+unrelated export was missing. That was found by accident. `hidden-exports.mjs`
+was written so it would be found on purpose: for each module, compare what the
+addon publishes against what the shim hands to a test.
+
+The first version asked **"is this name reachable through any of the four
+paths"** -- `shape()`, `subpaths()`, `internals()`, `testBindings()`. Run against
+the fixed tree it reported five hidden names, none of them node's, which read
+like a clean bill.
+
+Then it was controlled by putting the defect back. With `return {}` restored in
+`stream/shape.mjs`, it still reported **`0 of them node's own`**.
+
+`stream/internals()` maps `getDefaultHighWaterMark` under
+`internal/streams/state`, so by the "reachable anywhere" rule the name was never
+hidden -- while a test asking `require("stream")` for it got `undefined`. The
+instrument was asking a question whose answer did not change when the defect
+came back.
+
+### Two questions, and only one of them is serious
+
+    NOT PUBLIC   node has this name on its public surface, the addon publishes
+                 it, and the object `shape()` returns does not carry it
+    hidden       published and reachable through none of the four paths
+
+`NOT PUBLIC` is the one that matters: node's own tests reach for the name on the
+module, and this profile computes it and does not deliver it. That is what
+`stream` was, and the reachable-anywhere rule could not express it because the
+facade counted.
+
+`hidden` is weaker and usually legitimate. On the fixed tree it is five names:
+`readline`'s four `kClear*` constants and `util`'s `styles`, none of which node
+has publicly either.
+
+### What the control cost, and the rule it confirms
+
+Restoring the defect meant editing a file the axis run was about to read, and
+`axis-controls.mjs` was three modules away from `stream` when I checked. It was
+held until the run finished -- **a control that contaminates a measurement in
+flight is not free**, and this session has already withdrawn one set of numbers
+for exactly that.
+
+The restore itself is worth a line: `cp` is aliased here and prompts on
+overwrite, which hung the command until it timed out and left the tree patched.
+`git checkout -- <path>` restored it, which is safe only because the change
+under test was already committed.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
