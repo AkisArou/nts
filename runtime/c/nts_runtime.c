@@ -5479,6 +5479,32 @@ void nts_view_copy_within(NtsView *view, double target, double from,
           (size_t)count * view->width);
 }
 
+double nts_value_number_or(NtsValue value, double fallback) {
+  switch (nts_value_tag(value)) {
+  case NTS_TAG_UNDEFINED:
+  case NTS_TAG_NULL:
+    return fallback;
+  case NTS_TAG_NUMBER:
+    return nts_value_number(value);
+  case NTS_TAG_BOOLEAN:
+    return nts_value_boolean(value) ? 1.0 : 0.0;
+  default:
+    return (double)NAN;
+  }
+}
+
+void nts_view_fill(NtsView *view, double value, double from, double to) {
+  if (!nts_view_bytes(view)) {
+    return;
+  }
+  uint32_t length = (uint32_t)nts_view_length(view);
+  uint32_t start = nts_str_clamp(from, length, 1);
+  uint32_t end = nts_str_clamp(to, length, 1);
+  for (uint32_t at = start; at < end; at++) {
+    nts_view_put(view, (double)at, value);
+  }
+}
+
 void nts_view_set(NtsView *view, const NtsView *source, double offset) {
   unsigned char *bytes = nts_view_bytes(view);
   const unsigned char *from = nts_view_bytes(source);

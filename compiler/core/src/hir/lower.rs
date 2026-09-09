@@ -20396,6 +20396,64 @@ impl<'a> FuncBuilder<'a> {
         let name = self
             .literal_name(member)
             .unwrap_or_else(|| "a computed name".to_owned());
+        self.lower_view_builtin(id, receiver, &name, arguments)
+    }
+
+    /// One number an argument to a view method supplies, with its default.
+    ///
+    /// An *optional parameter* is erased here, and `Buffer#subarray(start?,
+    /// end?)` forwards both to `super.subarray(start, end)` -- so the argument
+    /// arriving at a view method is routinely an erased value rather than a
+    /// number. Coercing it refused with "an erased value where a concrete
+    /// representation is wanted", which is true and is not the question: an
+    /// absent optional means the default.
+    ///
+    /// Decided in the runtime rather than by a branch here, because a merge
+    /// needs a type and `lower_branching_value` takes it from the *node*, which
+    /// at this point is the call and not the endpoint.
+    fn view_number(
+        &mut self,
+        id: NodeId,
+        argument: Option<&NodeId>,
+        fallback: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(node) = argument else {
+            return Ok(fallback);
+        };
+        let value = self.lower_expression(*node)?;
+        if self.values[value.0 as usize].ty != HirType::Erased {
+            return self.coerce(value, &HirType::NUMBER, id);
+        }
+        let origin = self.origin(id);
+        Ok(self.call_runtime(
+            "nts_value_number_or",
+            vec![value, fallback],
+            HirType::NUMBER,
+            &origin,
+        ))
+    }
+
+    /// The typed-array methods themselves, with the receiver already lowered.
+    ///
+    /// Split from [`Self::lower_view_method`] so that `super.fill(...)` can
+    /// reach them. `Buffer extends Uint8Array` and declares no storage of its
+    /// own, so `this` inside `Buffer#fill` is already a `view<u8>` -- but the
+    /// call went through `lower_super`, which builds the name `Uint8Array#fill`
+    /// and looks for a compiled function of that name. There is none, and there
+    /// never will be: the method is the runtime's.
+    ///
+    /// Three of `buffer`'s own methods were stopped that way -- `fill`,
+    /// `subarray` and `slice` -- and `subarray` was *already implemented* here.
+    /// So the missing piece was never the method; it was that one spelling of
+    /// the call could reach this and another could not.
+    fn lower_view_builtin(
+        &mut self,
+        id: NodeId,
+        receiver: ValueId,
+        name: &str,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let name = name.to_owned();
         let origin = self.origin(id);
         let ty = self.values[receiver.0 as usize].ty.clone();
         // The relative-index pair, which the runtime clamps the way
@@ -20403,17 +20461,13 @@ impl<'a> FuncBuilder<'a> {
         // is not an error. `to` defaults to the length, read back rather than
         // spelled, because a tracking view's length is not known here.
         let endpoints = |me: &mut Self| -> Result<(ValueId, ValueId), Diagnostic> {
-            let from = match arguments.first() {
-                Some(node) => {
-                    let value = me.lower_expression(*node)?;
-                    me.coerce(value, &HirType::NUMBER, id)?
-                }
-                None => me.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
-            };
+            let zero = me.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+            let from = me.view_number(id, arguments.first(), zero)?;
             let to = match arguments.get(1) {
                 Some(node) => {
-                    let value = me.lower_expression(*node)?;
-                    me.coerce(value, &HirType::NUMBER, id)?
+                    let length =
+                        me.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin);
+                    me.view_number(id, Some(node), length)?
                 }
                 None => {
                     me.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin)
@@ -20445,6 +20499,40 @@ impl<'a> FuncBuilder<'a> {
                 Ok(view)
             }
             "copyWithin" | "set" => self.lower_view_move(id, receiver, &name, arguments),
+            // `fill(value, start, end)`, whose endpoints are arguments *one and
+            // two* -- so it cannot use the `endpoints` closure above, which
+            // reads zero and one for the methods that take only a range.
+            //
+            // It is what held `string_decoder`: `StringDecoder#constructor`
+            // calls `Buffer.alloc`, `alloc` calls `Buffer#fill`, and that calls
+            // this. One missing method, three cascades, and a module with no
+            // exports at all.
+            //
+            // Returns the receiver, as the specification says, so
+            // `new Uint8Array(4).fill(0)` is an expression rather than a
+            // statement.
+            "fill" => {
+                let Some(node) = arguments.first() else {
+                    return Err(self.unsupported(
+                        id,
+                        "`fill` on a typed array with no value to fill it with",
+                    ));
+                };
+                let value = self.lower_expression(*node)?;
+                let value = self.coerce(value, &HirType::NUMBER, id)?;
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let from = self.view_number(id, arguments.get(1), zero)?;
+                let length =
+                    self.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin);
+                let to = self.view_number(id, arguments.get(2), length)?;
+                self.call_runtime(
+                    "nts_view_fill",
+                    vec![receiver, value, from, to],
+                    HirType::Void,
+                    &origin,
+                );
+                Ok(receiver)
+            }
             // `join`, which is a *read* of every element rather than a window
             // onto them -- so unlike `subarray` and `slice` it does not have to
             // answer what the result shares with the receiver. The runtime
@@ -23390,6 +23478,29 @@ impl<'a> FuncBuilder<'a> {
         let receiver = self
             .this
             .ok_or_else(|| self.unsupported(id, "`super` outside a method"))?;
+
+        // A base that is a typed array. `Buffer extends Uint8Array` and
+        // declares no storage, so `this` inside `Buffer#fill` is already a
+        // `view<u8>` -- and there is no compiled `Uint8Array#fill` for the name
+        // built below to find, nor will there ever be: the method is the
+        // runtime's.
+        //
+        // `subarray` was already implemented and `Buffer#subarray` still
+        // refused, which is what says this is about the *spelling* of the call
+        // rather than the method. Three of `buffer`'s methods stopped here, and
+        // behind them `Buffer.alloc`, and behind that
+        // `StringDecoder#constructor` and a module with no exports at all.
+        //
+        // Before the name is built rather than after, so a base class that
+        // happens to share a method name with the runtime's cannot be shadowed:
+        // if the receiver is a view, the base *is* the typed array.
+        if matches!(
+            self.values[receiver.0 as usize].ty,
+            HirType::Managed(ManagedType::View(_))
+        ) && member != "constructor"
+        {
+            return self.lower_view_builtin(id, receiver, member, arguments);
+        }
 
         // Which class above this one actually has the thing being called. Not
         // necessarily the immediate base: a method declared on a grandparent

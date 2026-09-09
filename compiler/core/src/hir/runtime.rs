@@ -372,6 +372,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_thrown_class",
     "nts_to_index",
     "nts_value_is_view",
+    "nts_value_number_or",
     "nts_value_to_number",
     "nts_view_byte_length",
     "nts_view_byte_offset",

@@ -1075,6 +1075,31 @@ NTS_ALLOCATES_OR_NULL NtsView *nts_view_slice(const NtsView *view, double from,
  * over the same bytes reads elements it has just written. The source is
  * snapshotted when the two share a buffer. */
 void nts_view_copy_within(NtsView *view, double target, double from, double to);
+/* `fill(value, start, end)` on a typed array.
+ *
+ * The element write is `nts_view_put`'s, once per slot rather than a `memset`:
+ * the value is narrowed to the view's element type by the same conversion an
+ * ordinary store uses, and a `memset` would only be right for the one-byte
+ * kinds. Correctness first here -- the callers in this tree fill a decoder's
+ * four-byte scratch buffer, and none of them is a hot loop.
+ *
+ * `Buffer.alloc` is what wanted it: `alloc` calls `Buffer#fill`, which calls
+ * this, and `StringDecoder#constructor` calls `alloc`. One missing method held
+ * a whole module's class. */
+void nts_view_fill(NtsView *view, double value, double from, double to);
+
+/* An erased value as a number, with a fallback for `undefined` and `null`.
+ *
+ * `subarray(start?: number, end?: number)` forwarding its optionals to
+ * `super.subarray(start, end)` is the shape: an optional parameter is erased
+ * here, and unerasing it to a double reads the payload -- which for `undefined`
+ * is zero, indistinguishable from an explicit `0`. `end` defaults to the
+ * length, so the two are not the same answer.
+ *
+ * A branch in the lowering would need a merge whose type is not the call
+ * node's, so the decision is made here where the tag already is. NaN for
+ * anything else, which every clamp in this file treats as absent. */
+NTS_READS_ONLY double nts_value_number_or(NtsValue value, double fallback);
 void nts_view_set(NtsView *view, const NtsView *source, double offset);
 /* A view over the whole of what remains, which shortens when the buffer does.
  */
