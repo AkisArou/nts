@@ -15311,6 +15311,46 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### In seven of the nine, the diagnostic describes something other than the cause
+
+Tracing all nine of the largest concentrations to a named construct produced one
+result that was not on the list of things being looked for:
+
+    the message                                        the cause
+    ------------------------------------------------  -----------------------------------
+    `duplexKey`, which `HighWaterMarkOptions`          the type declares both keys; the
+    does not declare                                   condition is the key being in a variable
+
+    is exported and is not a function this             it is a value and that is fine; one
+    backend can name                                   field's initialiser was refused
+
+    `createServer`, a declaration outside              a cascade -- the class it returns
+    every walk                                         was refused, so the walk stopped
+
+    returns an object                                  a class whose members are all methods,
+                                                       so there is no scalar field to carry
+
+    a module-scope variable whose initializer          a cascade, wearing an NTS1001 code
+    was refused above
+
+    `null` or `undefined` where what it stands         a getter, where the identical method
+    in for is not a reference                          compiles; a reference refuses too
+
+    a rest parameter of unrepresentable type /         one construct, two messages by context,
+    that is not an array                               and a third case with no message at all
+
+Two more were accurate: `decodeURIComponent, a builtin this compiler does not
+provide`, and `takes an object`.
+
+**Three of this directory's instruments rank by those strings**, and the ranking
+they produce is not the ranking by what is in the way. `refusal-census.mjs` says
+so in its own header now, and `next-pass.mjs` exists because it does.
+
+The practical form: **read the enclosing construct, not the message, and reduce
+before believing either.** Every one of the seven was placed by a control that
+removed one element and watched the refusal move -- not by reading what the
+compiler said about itself.
+
 ### The ordered list, by test files rather than by diagnostics
 
 Each of the four largest concentrations traced to the constructor or the
