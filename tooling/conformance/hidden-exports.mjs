@@ -72,9 +72,15 @@ function keysOf(value, into) {
   }
   for (const k of Object.keys(value)) {
     into.add(k);
-    const child = value[k];
+    // Per key, because a shaped object carries accessors. `http` defines a
+    // getter for `kHighWaterMark` that dereferences `this`, and reading it off
+    // the object rather than an instance throws -- which the first version
+    // attributed to `shape()` "calling into the module". `shape()` is fine;
+    // the walk was not.
+    let child;
+    try { child = value[k]; } catch { continue; }
     if (child !== null && typeof child === "object") {
-      for (const k2 of Object.keys(child)) into.add(k2);
+      try { for (const k2 of Object.keys(child)) into.add(k2); } catch { /* opaque */ }
     }
   }
 }
@@ -119,20 +125,23 @@ for (const module of modules) {
   } else {
     for (const fn of ["shape", "subpaths", "internals", "testBindings"]) {
       if (typeof shapeModule[fn] !== "function") continue;
+      // The call and the walk are separate, and reported separately. Blaming
+      // the shim for a failure in this file's own traversal is how `http` was
+      // reported as unaskable when only `internals()` is.
+      let out;
       try {
-        const out = fn === "subpaths"
+        out = fn === "subpaths"
           ? shapeModule[fn]({ ...m.exports }, {})
           : shapeModule[fn]({ ...m.exports });
-        keysOf(out, reachable);
-        if (typeof out === "function") for (const k of Object.keys(out)) reachable.add(k);
-        if (fn === "shape") keysOf(out, publicKeys);
-      } catch {
-        // A shim that calls into the module cannot be asked this way. Say so
-        // rather than reporting everything as hidden, which is the failure this
-        // directory exists against.
-        console.log("  NOT ASKED       " + module + ": " + fn + "() calls into the module");
-        unaskable = true;
+      } catch (error) {
+        console.log("  NOT ASKED       " + module + ": " + fn + "() throws on the addon's exports (" +
+          error.message.split("\n")[0].slice(0, 44) + ")");
+        if (fn === "shape") unaskable = true;
+        continue;
       }
+      keysOf(out, reachable);
+      if (typeof out === "function") for (const k of Object.keys(out)) reachable.add(k);
+      if (fn === "shape") keysOf(out, publicKeys);
     }
   }
   if (unaskable) { unreadable += 1; continue; }
