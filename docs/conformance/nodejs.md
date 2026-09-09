@@ -10023,6 +10023,42 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### Every module's compiled lane, measured rather than inferred
+
+All twenty-two run against their own addon on the current pin, addons rebuilt
+after the entry change:
+
+```
+punycode              3p    0f     <- the only module with no failures
+os                    4p    5f
+path                  3p   18f
+stream                2p  248f
+util                  1p   24f
+timers                1p   55f
+fs                    1p  344f
+assert 0p 12f   async_hooks 0p 116f   buffer 0p 55f   console 0p 19f
+dgram 0p 77f    diagnostics_channel 0p 33f   events 0p 32f   http 0p 410f
+net 0p 148f     process 0p 90f   querystring 0p 8f   readline 0p 26f
+string_decoder 0p 5f   url 0p 50f   zlib 0p 68f
+```
+
+**Fifteen passes across seven modules, and seven of the fifteen depend on
+behaviour.** The other eight are accounted for individually and none is a
+mystery: `fs` 1, `stream` 2 and `timers` 1 are vacuous -- `undefined` compared
+with `undefined` -- `util` 1 and two of `path`'s 3 are presence checks that
+survive `--mutate-addon`, and one of `os`'s 4 reads a constant the mutation lane
+cannot poison.
+
+So the axis is 1 of 22 by the strictest reading and by every weaker one. No
+module other than `punycode` passes everything it is given, and no module other
+than `punycode`, `os` and `path` holds a single pass that depends on what the
+module does.
+
+**This is the inventory in its measured form.** The per-module blocker tables
+above say what each module is waiting on; this says what each currently
+achieves. They are different questions and the second is the one that answers
+"which modules can pass" without inference.
+
 ### Which modules are waiting on the wrapper, and which on the lowering
 
 Splitting each module's declines into the wrapper's own type boundary and
