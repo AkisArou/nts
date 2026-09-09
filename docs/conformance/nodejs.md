@@ -14408,6 +14408,78 @@ with an empty exports object and none threw, so `--empty-exports` and
 `--sabotage` are sound everywhere and the hollow counts they produced are not
 distorted by a shim falling over under the control.
 
+## What a class actually carries across the wrapper
+
+Measured on a three-member reduction and on `fs.Stats` separately:
+
+    constructor         crosses      new Holder(7) works
+    prototype methods   crosses      .get() answers 7, Stats' eight predicates answer
+    instance fields     **no**       Object.keys(instance) is [], every field undefined
+    static methods      **no**       Holder.make is undefined
+    static fields       **no**       Holder.LIMIT is undefined
+
+`napi_define_class` is emitted, the constructor allocates, the prototype is
+wired, and the descriptor list holds the prototype methods and nothing else.
+
+Two fixtures, because the Node-API mechanisms differ -- a static is a descriptor
+carrying `napi_static`, an instance field is not:
+
+    blockers/class-fields-do-not-cross
+    blockers/class-statics-do-not-cross
+
+Whether one change adds both is the compiler lane's question. The evidence is
+separate, so the fixtures are.
+
+### The controls are what make either mean anything
+
+Every expression about an absent name is `undefined`, so `Holder.make ===
+undefined` is equally satisfied by a class that never compiled. Both fixtures
+control with `new Holder(7).get() === 7` -- the constructor ran, the prototype is
+there, the field was populated. Only then does the absence mean absence.
+
+That control also carries the diagnosis: **the fields are populated and
+unreachable, not unset.** `Stats` classifies seven mode kinds correctly from a
+`mode` that reads `undefined` from the host.
+
+### Where it costs, counted rather than guessed
+
+    Buffer.from         19 of buffer's 54 gainable files    a static method
+    stats.size et al    24 of node's test-fs-*.js           instance fields
+
+and a prediction written into the fields fixture as a prediction:
+`process/src/main.ts:512` is `_fatalException = fatalException`, a class field,
+and `_fatalException` is the name in **73 of process's 88** gainable files.
+Today those 73 fail because `process` publishes no instance at all, so this gap
+is the wall *behind* that one and the fixture says so rather than claiming them.
+
+This wall is specific to the modules whose public surface is a class --
+`buffer`, `stream`, `url`, `string_decoder`. `path`, `os` and the rest reach the
+host as plain functions and values, which is why they are the modules on the
+axis.
+
+## `http` joins the axis, and the reason it was not on it
+
+    http: 1 pass -- 0 behaviour, 1 shape-only, 0 hollow
+
+    32 pass  ->  33 pass: 25 behaviour-dependent, 8 shape-only, 0 hollow,
+                 12 of 22 modules
+
+`http/shape.mjs` had `class HTTPParser extends RawHTTPParser` unguarded, and the
+compiled `http` publishes two names, so the heritage clause was `undefined`.
+`class X extends undefined` throws at **definition** time, so `internals()` threw
+while being built and **every http test failed with one message before its first
+line ran**.
+
+`os/shape.mjs` records this exact lesson -- "a shape that throws on a missing
+export reports one fact about the addon and hides seven" -- and every other
+reach-through in `http/shape.mjs` is guarded. This one was in a class heritage
+clause, where no amount of reading the calling code makes it visible.
+
+**`hidden-exports.mjs` had been reporting it all afternoon** as
+`NOT ASKED http: internals() calls into the module`, and I read that as a
+limitation of the probe. It says `SHIM THROWS` now, quotes the message, and adds
+that every test loading the module meets the same throw.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
