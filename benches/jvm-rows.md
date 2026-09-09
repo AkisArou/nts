@@ -84,9 +84,28 @@ largest apparent improvement in the table.
     map-and-set   0.86x -> 0.79x    clean
     objects       0.99x -> bimodal  1.00x and 0.91x, both lanes varying
 
-**What moved against us, and reproduces:** `symbol-keys` 0.98x -> 1.04x twice,
-`upcast` 0.99x -> 1.03x/1.05x, `generator` 0.99x -> 1.01x twice. Small, real,
-and none of them has a cause yet.
+**What looked like it moved against us, and did not.** I published
+`symbol-keys` 0.98x -> 1.04x, `upcast` 0.99x -> 1.03x/1.05x and `generator`
+0.99x -> 1.01x as real regressions on the strength of each reading twice.
+**Both of those runs were in the same sitting.** Two runs an hour apart do not
+establish a change from a number taken on a different day, and rule 4 says so
+in the words "compare MINIMA across runs rather than an effect within one".
+
+Two checks, either of which is enough:
+
+    emitted bytecode, e7342345 against HEAD -- 106 commits apart
+        symbol-keys   IDENTICAL
+        upcast        IDENTICAL
+        generator     IDENTICAL
+
+and this file, 200 lines further down, already carrying the number:
+
+    Run-to-run movement on the same binary was 0.20x on `awfy-sieve`,
+    0.07x on `symbol-keys`, 0.05x on `growth-grown`, 0.04x on `generator`.
+
+**`symbol-keys` moves 0.07x between sittings and I called a 0.06x change a
+regression. `generator` moves 0.04x and I called 0.02x one.** Byte-identical
+code cannot regress; what changed is which sitting the number came from.
 
 **Ten rows sit at 1.01x-1.05x on both runs.** That band is not noise around
 parity -- it reproduces. They are losing by a little, consistently, which is a
@@ -111,11 +130,11 @@ different problem from the four rows losing by a lot.
 | `awfy-sieve` | 1.07x *not clean* | two modes, and "two JIT shapes" was wrong -- below |
 | `bytes` | 1.05x | the `uirem` residual |
 | `objects` | 1.00x / 0.91x *not clean* | **bimodal on both lanes** -- ours varied 1.17x and the reference 1.22x across five runs of one binary. Neither reading is the row |
-| `generator` | 1.01x | 1.01x twice; the "not losing" this note used to claim was one run at 0.99x |
-| `symbol-keys` | 1.04x | 1.04x twice, up from 0.98x. **A real move against us**, not noise -- it reproduces |
+| `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
+| `symbol-keys` | 1.04x | reads 1.04x twice against a 0.98x from another sitting -- and this row's own between-sitting movement is **0.07x**. Bytecode identical across the window; not a regression |
 | `arrays` | 1.03x / 1.02x | both runs above; small and real |
 | `fib` | 1.04x / 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
-| `upcast` | 1.03x / 1.05x | up from 0.99x and it reproduces; no `uirem` in its profile, so the cause is unfound |
+| `upcast` | 1.03x / 1.05x | bytecode identical to the tree that measured 0.99x; a between-sitting difference, not a change |
 | `checksum` | 1.00x | parity, twice |
 | `closure-merge` | 1.01x | 1.01x twice |
 | `growth-grown` | 1.01x | 1.01x twice |
