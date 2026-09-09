@@ -21,9 +21,12 @@
 // state, which is the thing worth demonstrating.
 //
 // So the file asserts node's documented defaults *and* that a write is visible
-// to the next read *and* that restoring puts the original back. The last one
-// matters for the suite as much as for the assertion -- this runs in the same
-// process as everything after it.
+// to the next read *and* that restoring puts the original back.
+//
+// The restore is not process hygiene -- `run.mjs` spawns `run-one.mjs` per
+// file, so nothing here outlives this test. It is a third observation: a
+// setter that only ever moves one way would satisfy both writes above and fail
+// to come back.
 //
 // Node 24.20.0, checked directly before writing this:
 //

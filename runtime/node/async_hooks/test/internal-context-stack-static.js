@@ -31,9 +31,15 @@
 // observation in between, and two pops in order is not -- it needs the stack to
 // be a stack. That is the shape of the defect this would otherwise miss.
 //
-// This runs in the same process as the rest of the suite, so the file has to
-// leave the stack exactly as it found it. The final assertions are that check
-// rather than a formality.
+// The file leaves the stack exactly as it found it, and the final assertions
+// are that check.
+//
+// **Not because the suite shares a process** -- `run.mjs` spawns `run-one.mjs`
+// per file, so nothing here outlives this test. The restore is asserted because
+// it is evidence: a stack that pops back to the base id is a stack, and one
+// that does not is a slot that was overwritten twice. Correcting the reason
+// rather than deleting the check, because the check earns its place on the
+// second reading and not the first.
 "use strict";
 
 require("../common");
@@ -91,7 +97,7 @@ try {
 
   hooks.popAsyncContext(outer);
 } finally {
-  // Whatever happened above, the suite continues in this process.
+  // Whatever happened above, the assertions below need a known base state.
   while (hooks.hasAsyncIdStack()) hooks.popAsyncContext(hooks.executionAsyncId());
 }
 
