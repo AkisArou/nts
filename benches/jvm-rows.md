@@ -2379,9 +2379,33 @@ the case was *found* -- it is a good screen, because a case that allocates on
 one runtime and not the other is always worth a look. It is not the verdict,
 and three of four times here it would have been the wrong one.
 
-Still unexamined and small: `number-format` 4608 to 6456, `growth-fixed` 16400
-to 20480, `map-and-set` 65952 to 74144. All under 8KB an operation and none of
-them screened against their reference yet.
+**And the three that were left are screened now, by a tool rather than by hand.**
+`tooling/android/ref-bytes-on-device.sh` compiles the case's own `ref.java`
+against a stub `Bench` carrying only the abstract `Work`, so the reference's
+source is measured unmodified instead of transcribed. It reproduced both hand
+transcriptions exactly -- 81920 and 80000 -- which is what earns it.
+
+    case               ours ART    ref ART
+    case-convert          23152      29304    we win 21%
+    array-mutations       21600      36600    we win 41%
+    number-format          6456       6456    parity, exactly
+    growth-fixed          20480      20480    parity, exactly
+    map-and-set           74144      68016    +9%
+    array-predicates      25136      18792    +34%
+
+`number-format` and `growth-fixed` are **exactly** the reference, so their
+HotSpot-to-ART jump was the platform and nothing else.
+
+**And the two we lose are not ART's doing.** `array-predicates` is 1.34x here
+and the bytes/op table above already records it at **1.33x on HotSpot** --
+24,992 against 18,792, the same ratio on both runtimes. An allocation gap that
+travels unchanged between two collectors is a property of what this backend
+emits, not of either one.
+
+**So the ART allocation axis has no ART-specific defect left.** `array-methods`
+was the only one, and `fuse` closed it. Everything else is either parity, a win,
+or a gap that HotSpot has in the same proportion and that the existing bytes/op
+section already carries.
 
 ## Open, and whose
 
