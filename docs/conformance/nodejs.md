@@ -10023,6 +10023,47 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### Ranking refusal forms, and the denominator that ranked web-platform
+
+Choosing what to file next needs an ordering. The obvious one -- how often each
+refusal form appears -- gives this:
+
+```
+1300  assigning to this property
+ 971  a member of `X`, a class this compiler has no type for
+ 490  indexing `X`, which stands for `X` here
+```
+
+Every one of those is a per-module cone count summed over twenty-two modules. On
+distinct sites *inside `runtime/node`*, `assigning to this property` is **13
+sites, one of which is in this profile**: the other twelve are in
+`web-platform`, which every cone contains, so it inflates by roughly a hundred
+rather than by the profile's average of nine.
+
+Ranked correctly -- distinct sites, `runtime/node` only:
+
+| form | sites |
+| --- | --- |
+| a property of unrepresentable type (`AsyncIterableIterator \| undefined`) | 62 |
+| a property of unrepresentable type (the `ArrayBuffer` family union) | 58 |
+| `X`, which `X` does not declare | 66 |
+| an `in` naming a key the type declares optionally | 52 |
+| a method with no declaration in the hierarchy | 42 |
+| a name from an enclosing scope | 41 |
+| a field on a union whose members lay out differently | 40 |
+| a rest parameter that is not an array | 38 |
+| captured above its own declaration | 37 |
+
+The four unrepresentable-property types together are 169 of the 315 sites of
+that form and were the largest unfiled group in the profile; the ordering that
+ranked `assigning to this property` first had them nowhere near the top.
+
+**The lesson is not that the denominator was wrong.** It is that the denominator
+was written up as wrong -- the 9.4x note is a few sections above this one -- and
+then used anyway, an hour later, to choose what to work on. Knowing a number is
+inflated does not stop it being the number you reach for when you need an
+ordering.
+
 ### 61 exports are declared, not published, and not declined by name
 
 `tooling/conformance/unaccounted-exports.sh` subtracts what a module publishes
