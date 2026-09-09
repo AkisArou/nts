@@ -15311,6 +15311,47 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### A compiled program that runs and is wrong had nowhere to be written down
+
+Every instrument in this directory measures a refusal, a publication or a test
+result. None of them measures **a program that compiles, runs, and answers
+something node does not** -- and on 2026-09-09 that gap cost a fix.
+
+The compiler lane fixed `options = {}`, the empty object literal under 332 of
+this profile's failing test files, measured it, and reverted it. With the fix
+in, an object assigned into an erased slot came back as the wrong shape:
+`Optional.limit` is optional so its field is erased and the absence is a tag,
+the literal `{ limit: 19 }` has the checker type `{ limit: number }` whose field
+is a plain `f64`, and `unerase` reads one as the other. A refusal had become a
+wrong answer, on exactly the files the fix was worth.
+
+**The four candidates each miss it for a different reason.** `blockers/` asserts
+a refusal and this is not one. `differential-ts.mjs` runs the TypeScript on
+node, so both sides are node. `differential-addon.mjs` needs a whole module and
+its node counterpart. And an `examples/` case is written because it *agrees*
+with node, so a disagreeing one is never written at all.
+
+`agreement.mjs` compiles a fixture-sized program to an addon, calls each named
+export, imports the same source on node, and compares. Its first case, on the
+current compiler with that fix reverted:
+
+    optionalThroughErasedSlot   compiled 4.26722180037931e+115, node 19
+    requiredThroughErasedSlot   agrees      -- so it is the optionality
+    optionalThroughNullable     agrees      -- so it is the erasure
+
+Eight bytes of a tagged value read as a double. It needs no empty literal: the
+defect is not new, it was unwritten.
+
+**Every case takes nothing and answers a scalar, and that is a rule.** The
+defect lives in how an object crosses an erased slot, so calling through the
+boundary with an object would add a second erasure and a disagreement could then
+be either one. The work happens inside the compiled program and a number comes
+out.
+
+A case that fails to compile is reported as "did not build" and counted apart
+from agreement, because those are opposite findings and this profile has
+confused them in both lanes.
+
 ### In seven of the nine, the diagnostic describes something other than the cause
 
 Tracing all nine of the largest concentrations to a named construct produced one
