@@ -15408,6 +15408,40 @@ Neither was on the list of things being looked for, which is the argument for
 sweeps over targeted probes: **the sweep's own eight questions gave six
 agreements and three refusals, and the two findings were things nobody asked.**
 
+### The suite as it stands
+
+Six case files, **48 questions compared, 8 disagreeing, 7 refused, 0 that did
+not build**:
+
+    an-optional-field-across-an-erased-slot     1 of 3 disagree
+    optional-fields-through-erased-slots        5 of 5 disagree, one a SIGSEGV
+    an-indexed-write-at-or-past-the-length      2 of 4 disagree, both SIGABRT
+    number-and-string-seams                    10 agree
+    erasure-and-layout-seams                    7 agree
+    control-flow-and-method-seams               6 agree, 2 refused
+    coercion-and-object-seams                   9 agree, 1 refused
+    async-and-array-seams                       4 agree, 3 refused
+
+**The clean files are the ones that took the longest to write and are worth the
+most.** Grisu's shortest round-trip, int32 coercion, shift masking, unsigned
+shift, remainder sign, UTF-16 length, surrogate halves, NaN, negative zero, a
+derived instance through its base, a field after an upcast, two required fields
+through the same erased slot, a narrowing outliving its branch, virtual
+dispatch, `finally` after a return, a `return` inside `finally`, closure
+capture, short-circuiting, the nearest catch, `typeof null`, object identity,
+template stringification, a default parameter per call, a destructuring default.
+All correct.
+
+That list is what makes the eight disagreements mean something. A profile where
+half of everything is wrong needs no instrument to find a defect; one where
+forty of forty-eight questions are answered exactly as node answers them has
+eight specific things wrong with it, and they are named.
+
+One case was **removed rather than reported**: it asked whether subtraction
+coerces a numeric string using `(s as unknown as number)`, and a double
+assertion is the unchecked assertion this profile forbids. The invalid C it
+produced is a fact about a construct nobody here may write.
+
 ### In seven of the nine, the diagnostic describes something other than the cause
 
 Tracing all nine of the largest concentrations to a named construct produced one
