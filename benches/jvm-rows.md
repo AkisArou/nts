@@ -2149,42 +2149,49 @@ So the honest answer to "did their landing move a row" is **no**, on every row i
 could have -- and the useful part is that saying so cost two greps rather than
 an evening of bisecting a regression that was not there.
 
-### The verifier caught what the C lane answered wrongly, which is what this backend was promised to be for
+### A fixture added in the same commit as its fix cannot be run against an older binary
 
-Not a row, but it belongs where the lane's value is argued. `c269e3bd` added
-`tableInsideAnObjectLiteral` and the HIR it lowers to disagrees with itself:
+I reported that `c269e3bd` broke `string-keyed-table` in both lanes, quoted the
+HIR disagreeing with itself, quoted the verifier, and wrote that the JVM lane
+had caught what the C lane answered wrongly. **All of it was true of the binary
+I ran and none of it is true of the tree.** At HEAD, freshly built, both lanes:
 
-    %3 = object.new frame : managed<obj#102>                 produces an OBJECT
-    field.set %1.1 = %3
-    %5 = field.get %1.1 : managed<map<managed<str>, f64>>    consumes it as a MAP
+    667 cases across 23 functions, agreed on every case
 
-`{ count: n, signals: {} }` lowers the empty literal to `object.new` even where
-the field's type is a table. Producer and consumer disagree inside one function,
-before any backend sees it.
+`c269e3bd` is the commit that **fixed** it -- the missing `PROPERTY_ASSIGNMENT`
+arm in `contextual_type`, which is the "the contextual type is not reaching the
+literal" I had diagnosed -- **and the same commit added the four cases that
+exercise it.** So a binary from before it, run against the example at it,
+reproduces exactly the defect it closed.
 
-    JVM   VerifyError: Bad type on operand stack
-          Program.tableInsideAnObjectLiteral(D)D @23: putfield
-          Type 'nts/gen/Type102' is not assignable to 'nts/rt/NtsMap'
+**This is a new shape and the sharpest one in this file.** The stale-pin entry
+above is about numbers being from the wrong tree; those are wrong in a way a
+date or a commit count exposes. This is different:
 
-    C     tableFieldThroughAReturn   nts bff0000000000000   node bfe0000000000000
-                                     -1.0 against -0.5
+- the failure is *real* -- a genuine VerifyError with a correct backtrace
+- the analysis is *correct* -- the HIR I quoted is what that binary produced
+- the diagnosis is *right* -- and it names the very bug the commit fixed
+- and every word of it is worthless, because the artefact moved
 
-**The JVM refuses; C answers a wrong number.** C stores a pointer and reads a
-pointer, so the lookup misses and `?? -1` supplies an answer that `typeof` agrees
-with. RFC 13 predicted exactly this -- "the one place the JVM backend is a
-better bug-finding instrument than the other two" -- and this is the first time
-I have watched it earn the claim rather than repeat it.
+Nothing in the output says so. A stale `nts-bench` says "N commits behind"
+because `pin.sh` was made to; a stale `nts` says nothing at all, and the example
+it is being run against came from the future.
 
-Worth recording how it was found, because the fast way was not the first way:
-twenty entries emitted and verified one at a time, which named the single
-failing function in one pass. `Class.forName` over the whole program said
-`verified`, because the differential emits per entry and the broken one is a
-*specialised* copy.
+**The rule: rebuild before diagnosing a failure in an example you did not write.**
+Not before measuring -- before *diagnosing*. I had rebuilt several times last
+night and the habit that saved me on `array-methods` -- read the artefact -- is
+the same habit that betrayed me here, because I read the artefact and never
+asked how old it was.
 
-Filed with MainClaude. **The jvm floor line stays at 137 while the tree is at
-136** -- a floor moved down for another lane's in-flight change is a floor that
-has stopped meaning anything, and their own gate sees the same failure from the
-C side.
+The `verify` argument in the message stands and is the salvageable half: a
+producer/consumer mismatch of that shape is checkable now that `Table` is a
+variant, and would be caught before any backend runs rather than by one
+backend's verifier two layers later.
+
+**And the floor was never red.** 137 at HEAD, matching the committed line. I had
+declined to lower it on the grounds that a floor moved for another lane's
+in-flight change stops meaning anything -- which was the right call for the
+wrong reason, since there was no regression to accommodate.
 
 ## Open, and whose
 
