@@ -1870,16 +1870,33 @@ fn emit_namespaces(
             out,
             "    napi_value {object};\n    if (!nts_napi_check(env, napi_create_object(env, &{object}), \"could not create an exported namespace\")) return NULL;"
         );
-        let mut whole = true;
+        // Published with the members that crossed, rather than withheld until
+        // every member does.
+        //
+        // It used to be all-or-nothing, and that is a rule the *top level* does
+        // not apply to itself: `path` publishes twelve of its own exports and
+        // declines five, and nobody argues it should therefore publish none.
+        // A namespace is the same export table one level down, and holding back
+        // twelve working functions because `format` takes an object and
+        // `matchesGlob` was refused in the lowering means `path.win32` stays
+        // `undefined` -- which is what eight of that module's test files
+        // dereference before they reach anything else.
+        //
+        // The half that made all-or-nothing look right is real and is kept:
+        // every absent member is still named, one line each, so the namespace
+        // is never quietly smaller than it looks. What changes is that a
+        // reader gets `path.win32.join` *and* the list of what is missing,
+        // instead of neither.
+        let mut carried = 0usize;
         for (property, name_of) in properties {
             if !emitted.contains(&name_of.as_str()) {
-                whole = false;
                 skipped.push(Skipped {
                     function: format!("{name}.{property}"),
                     reason: "is a namespace member whose function has no wrapper".to_owned(),
                 });
                 continue;
             }
+            carried += 1;
             let symbol = c_identifier(name_of);
             let key = c_string_literal(property);
             let _ = write!(
@@ -1887,7 +1904,11 @@ fn emit_namespaces(
                 "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
             );
         }
-        if whole {
+        // Not an empty one, though. A namespace object with no members at all
+        // is a name bound to `{}`, which answers every presence check and no
+        // call -- the same wrong-answer shape as a binding published as
+        // `undefined`, and worse for being harder to see.
+        if carried > 0 {
             let key = c_string_literal(name);
             let _ = writeln!(
                 out,

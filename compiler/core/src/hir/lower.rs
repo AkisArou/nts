@@ -2521,6 +2521,83 @@ fn initializer_function(
         .map(|at| (at, name))
 }
 
+/// The functions a *module namespace* export re-exports, if it is one.
+///
+/// `export * as posix from "./posix.ts"` publishes a module under a name, and
+/// `node:path` is built out of nothing else -- `export * from "./posix.ts"` for
+/// the platform's own half and `export * as posix` / `export * as win32` so both
+/// are reachable, which is upstream's structure rather than a choice made here.
+///
+/// The same shape as [`namespace_of`] and a different source: that one reads an
+/// object literal's properties, this one reads a module's export list. They
+/// produce the same pairs because the wrapper builds both the same way -- an
+/// object of functions, made on the JavaScript side, which is what node's own
+/// addons do.
+///
+/// # Finding the module, and what does not identify one
+///
+/// The symbol's declaration *is* the module's root node -- the field
+/// [`ModuleRecord::root`] holds -- so the module is the one whose root this
+/// symbol declares. No path resolution, no re-reading of the specifier: two
+/// facts already in the snapshot, matched against each other.
+///
+/// **Not `SymbolFlags::MODULE`.** The obvious test, and it is `SymbolFlags(0)`
+/// for both of `path`'s: measured, `posix` declares `NodeId(14877)` and `win32`
+/// declares `NodeId(17028)`, and both are module roots, with no flag set on
+/// either. The frontend maps tsgo's `MODULE` bit when it sees one and a
+/// namespace-export symbol arrives without it. Testing the flag first was one
+/// line and published nothing.
+///
+/// So the root match is the whole test rather than a confirmation of it. That
+/// is also the stronger claim: a symbol declared by a module's root node *is*
+/// that module, whatever any flag says.
+fn module_namespace_of(
+    snapshot: &SemanticSnapshot,
+    naming: &Naming,
+    record: &SymbolRecord,
+) -> Option<Vec<(String, String)>> {
+    let module = snapshot
+        .modules
+        .iter()
+        .find(|module| record.declarations.contains(&module.root))?;
+    let mut properties = Vec::new();
+    for (published, symbol) in &module.exports {
+        let Some(member) = snapshot.symbols.get(symbol.0 as usize) else {
+            continue;
+        };
+        let member = member
+            .aliased
+            .and_then(|to| snapshot.symbols.get(to.0 as usize))
+            .unwrap_or(member);
+        let Some(&declaration) = member.declarations.first() else {
+            continue;
+        };
+        // A function, however it was written: a declaration, or a `const` bound
+        // to one. `_makeLong = toNamespacedPath` is the second, and it is the
+        // reason this asks `initializer_function` rather than only the kind --
+        // resolving by name alone published `_makeLong` under a function that
+        // does not exist.
+        let resolved = initializer_function(snapshot, declaration);
+        let is_function = resolved.is_some()
+            || probe_kind(snapshot, declaration) == Some(syntax::FUNCTION_DECLARATION);
+        if !is_function {
+            // A value member -- `export const sep = "/"` -- is a global rather
+            // than a function, and the wrapper builds a namespace out of
+            // wrappers. Left out here rather than half-carried; the backend
+            // reports the member by name.
+            continue;
+        }
+        let (declaration, name) = resolved.unwrap_or((declaration, member.name.clone()));
+        let emitted = naming
+            .qualified
+            .get(&declaration)
+            .cloned()
+            .unwrap_or(name);
+        properties.push((published.clone(), emitted));
+    }
+    (!properties.is_empty()).then_some(properties)
+}
+
 /// The functions an exported object literal's properties name, if all of them
 /// are functions.
 ///
@@ -2594,23 +2671,71 @@ fn probe_kind(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
     }
 }
 
-/// Note a module whose exports the fallback rule passed over.
+/// Note a module whose exports the fallback rule passed over -- when passing
+/// it over was a *guess* rather than the rule working.
 ///
-/// Only under the fallback, and only for a module that had something to lose.
-/// A library module excluded because a sibling imports it is the rule working,
-/// and the caller cannot tell that case from `fs`'s -- which is the whole
-/// difficulty, and why the backend reports a count and a few names rather than
-/// a verdict on each.
+/// Only for a module inside an import cycle, and that restriction is the whole
+/// of what makes this readable. Under the fallback, every library module in
+/// every project is excluded because something imports it, which is correct and
+/// is most modules; reporting those buried the case that matters in a list of
+/// the case that does not. It was measured doing exactly that: a two-module
+/// fixture whose `main.ts` re-exports its `posix.ts` reported `posix.ts` as a
+/// lost surface, and nothing was lost -- `main.ts` publishes its names.
+///
+/// A cycle is different in kind. When a module imports something that imports
+/// it back, "nothing imports it" is true of *neither* of them, so the rule has
+/// no answer rather than a wrong one, and both surfaces disappear. `fs` is
+/// exactly that and it costs 303 exports.
+///
+/// # What this deliberately does not catch
+///
+/// `util`, whose `width.ts` imports `main.ts` while `main.ts` never mentions
+/// `width.ts`. No cycle: the rule has an answer, it is decidable, and it is
+/// wrong -- `width.ts` is an orphan helper and wins on being unimported. That
+/// is a fact about intent, and nothing in the graph distinguishes it from
+/// `path`'s `main.ts` legitimately winning over `posix.ts`. Naming roots is
+/// what fixes it, and reporting every excluded module in the hope of catching
+/// it would report every project's every helper.
 ///
 /// The importer is the first module found importing it. There may be several
-/// and the first is enough: the point is to name something concrete to look at,
-/// and a reader who has one edge of the cycle can find the rest.
+/// and the first is enough: a reader who has one edge of the cycle can find the
+/// rest.
+/// Whether a module is reachable from itself through imports.
+///
+/// The condition under which "a module nothing imports is the entry" has no
+/// answer at all: in a cycle, every member is imported, so every member is
+/// disqualified and the project publishes nothing.
+///
+/// Breadth-first over `ModuleRecord::imports`, bounded by the module count
+/// because `seen` admits each module once -- a cycle is what this is looking
+/// for, so recursing without one would not terminate.
+fn in_a_cycle(
+    snapshot: &SemanticSnapshot,
+    module: &nts_semantic_schema::schema::ModuleRecord,
+) -> bool {
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut queue: Vec<nts_semantic_schema::schema::ModuleId> = module.imports.clone();
+    while let Some(at) = queue.pop() {
+        let Some(reached) = snapshot.modules.get(at.0 as usize) else {
+            continue;
+        };
+        if reached.file == module.file {
+            return true;
+        }
+        if !seen.insert(at.0) {
+            continue;
+        }
+        queue.extend(reached.imports.iter().copied());
+    }
+    false
+}
+
 fn record_unpublished(
     snapshot: &SemanticSnapshot,
     module: &nts_semantic_schema::schema::ModuleRecord,
     unpublished: &mut Vec<(String, String, usize)>,
 ) {
-    if module.exports.is_empty() {
+    if module.exports.is_empty() || !in_a_cycle(snapshot, module) {
         return;
     }
     let Some(source) = snapshot.sources.get(module.file.0 as usize) else {
@@ -2730,6 +2855,14 @@ fn public_api(
                 continue;
             }
             if let Some(properties) = namespace_of(snapshot, naming, declaration) {
+                namespaces.push((published.clone(), properties));
+                continue;
+            }
+            // And the other kind of namespace, which is a module rather than an
+            // object literal. Asked second because the literal form is decided
+            // by the *declaration* and this one by the symbol's flags, and a
+            // declaration that is a variable can never be a module.
+            if let Some(properties) = module_namespace_of(snapshot, naming, record) {
                 namespaces.push((published.clone(), properties));
                 continue;
             }
