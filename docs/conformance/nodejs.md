@@ -13964,6 +13964,64 @@ overwrite, which hung the command until it timed out and left the tree patched.
 `git checkout -- <path>` restored it, which is safe only because the change
 under test was already committed.
 
+## `fs.Stats` crosses with its methods and without its fields
+
+`fs.Stats` is the compiled `fs`'s only computation a test can reach, and it
+works: constructed with a mode, it classifies correctly.
+
+    0o040755  isDirectory() true    0o100644  isFile() true
+    0o120777  isSymbolicLink() true
+
+Eight prototype methods, all present, all right. And:
+
+    Object.keys(stats)   []
+    stats.dev            undefined      stats.mode      undefined
+    stats.nlink          undefined      stats.uid       undefined
+    stats.gid            undefined      stats.rdev      undefined
+    stats.blksize        undefined      stats.ino       undefined
+    stats.size           undefined      stats.blocks    undefined
+
+**Ten declared fields, none of them on the instance.** `fs/src/stats.ts:23`
+declares them as ordinary instance fields -- `dev: number`, `mode: number` --
+and the constructor fills them, because the methods that read them answer
+correctly. They are there; they are not reachable from the host.
+
+### It is not the class-export gap
+
+`blockers/export-class` is fixed and is about the other half: "a Node-API class
+needs a constructor that allocates the instance, a prototype carrying the
+methods, and a finalizer". All three of those work here. Nothing in that fixture
+mentions fields, and nothing in the blockers directory does.
+
+### What it costs
+
+Every `fs` test that reads a stat reads a field. `stats.size`, `stats.mtimeMs`
+and `stats.mode` are the point of the object; `isFile()` is the convenience.
+`fs` has 394 upstream files and one pass.
+
+The same shape will meet `buffer`, `url` and `stream` as their classes land --
+`export-class` names all three as wanting the class export next, and a class
+whose fields do not cross is a class whose tests cannot read anything it
+computed.
+
+### One class, and the generality is not measured
+
+This is `fs.Stats`. It is the **only** class instance any compiled module hands
+back today -- `buffer`, `url` and `stream` do not publish theirs yet -- so there
+is no second case to compare and no reduction has been run. Whether every class
+crosses this way, or `Stats` does for a reason of its own, is open.
+
+Saying so because the tempting sentence is "a class crosses with its methods and
+without its fields", and one instance does not measure that. A sample of one is
+the same error as four sites pointing at seventy.
+
+### Why it is not a blocker fixture
+
+The same reason as the reference boundary: it publishes cleanly and answers
+wrongly at run time. `napi_define_class` is emitted, the constructor runs, the
+methods work, and `blockers-check.mjs` reads emitted text. This is the second
+case this week for a guard form that runs an expression against a loaded addon.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
