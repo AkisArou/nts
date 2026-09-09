@@ -40,6 +40,25 @@
 // That is why the absent case agrees: `false` is the right answer there, and it
 // is the same `false`.
 //
+// # Scoped by receiver: one type answers wrong and the rest are right or refused
+//
+//     "a" in o    o: Record<string, number>   compiled 0, node 1   <- wrong
+//     "a" in o    o: a class instance         compiled 1, node 1      right
+//     "b" in o    o: an interface, b optional refused -- "its slot exists here
+//                                             whether or not it was written"
+//     1 in xs     xs: number[]                refused -- "an `in` whose key is
+//                                             not a literal the compiler can see"
+//
+// **A class instance answers correctly.** So the operator is implemented, and
+// implemented right, for one receiver; the `Record` path is the one that
+// lowered to a constant. The two refusals are both filed --
+// `in-on-an-object-with-an-optional-declarer` and the key-literal one -- and
+// both are honest.
+//
+// That makes this the narrowest defect in the suite: one operator, one receiver
+// type, one line of emitted C, with a correct implementation of the same
+// operator a few types away.
+//
 // # The controls are three ways of asking the same question
 //
 // A defect where a single operator disagrees and three neighbours agree is the
