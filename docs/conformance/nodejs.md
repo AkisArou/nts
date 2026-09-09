@@ -9643,6 +9643,46 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## `JSON.stringify` is under eighty refused functions, including all of `path`
+
+`path` owns six root refusals, all in `src/glob-matcher.ts`, and publishes four
+exports: `_makeLong`, `toNamespacedPath`, `delimiter`, `sep`. Every function a
+caller actually wants is absent, and all of them cascade the same way:
+
+```
+posix.ts:119  `join@posix` cannot be compiled because it calls `validateString`
+validators.ts:21  `validateString` ... calls `ERR_INVALID_ARG_TYPE#constructor`
+errors.ts:372     `ERR_INVALID_ARG_TYPE#constructor` ... calls `determineSpecificType`
+errors.ts:70      `JSON.stringify`, a global member with no definition here
+```
+
+Counted across all twenty-two emit logs, deduplicated by site because modules
+share cones:
+
+```
+80  distinct functions whose immediate refusal cause is a `validate*` call
+67  distinct functions whose immediate cause is ERR_INVALID_ARG_TYPE
+```
+
+Every node module validates its arguments, so the validators are load-bearing
+everywhere: `fs` 67 such sites, `process` 60, `http` 49, `url` 24, `path` 23.
+
+**This is reach, not a promise.** These are *immediate* causes; the transitive
+set is larger, and clearing a root does not green what stood behind it -- a
+function can have more than one refused callee, and `buffer` went 79 to 79 once
+with five cleared and five revealed. What can be said is where the weight sits.
+
+So the two candidates for "fix one thing" are different in kind, and both are
+already filed:
+
+- `json-stringify` has the widest reach. It is under `validateString`, and
+  through it under most of `path`'s public surface and part of
+  `string_decoder#write`.
+- `length-after-array-isarray` is the shortest path to a module changing state.
+  It is the only one of `string_decoder`'s four roots that lands on the
+  *constructor*, and without a constructor the class has no wrapper and the
+  addon publishes nothing at all.
+
 ## `os` is 4 of 9, and four of the five failures name one export
 
 Compiled lane, `target/node/os.node`, 2026-09-09:
