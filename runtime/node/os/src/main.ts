@@ -459,8 +459,21 @@ function validateInt32(value: number, name: string, min = -2147483648, max = 214
   }
 }
 
-/** Upstream `lib/os.js:271`. `pid` of 0 means the calling process. */
-export function getPriority(pid = 0): number {
+/**
+ * Upstream `lib/os.js:271`. `pid` of 0 means the calling process.
+ *
+ * `pid?: number` with the default in the body, not `pid = 0` in the signature,
+ * because the two differ in `Function.prototype.length` and node's is 1:
+ *
+ *     function getPriority(pid) { if (pid === undefined) pid = 0; … }   node
+ *
+ * TypeScript erases `?`, so this emits `function getPriority(pid)` and reports
+ * 1. A default in the signature emits a real default parameter and reports 0,
+ * which is what this said before and what a differential against node's arity
+ * caught.
+ */
+export function getPriority(pid?: number): number {
+  if (pid === undefined) pid = 0;
   validateInt32(pid, "pid");
   const priority = nts_os_get_priority(pid);
   const errno = nts_errno();
