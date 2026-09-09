@@ -15333,6 +15333,12 @@ declaration that makes it, with the fixture that names it:
                 method-syntax-in-an-interface
                 -> dgram.createSocket 68 of 77
 
+     54 files   a function returning a class whose members are all methods: an
+                object return carries scalar fields only, and such a class has
+                none, so the function is declined rather than flattened
+                object-return-carries-scalar-fields-only
+                -> async_hooks.createHook 54 of 115
+
      41 files   a generic function whose rest parameter is read, not lowered and
                 emitting no diagnostic at all
                 a-generic-rest-that-is-used
