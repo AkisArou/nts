@@ -12460,6 +12460,9 @@ what they read instead:
 | "twenty of twenty-two build and load; `fs` and `process` do not" | **22 of 22** |
 | "no emitted wrapper builds a typed array at all -- zero across 24 addons" | **still true** -- see the correction below |
 | "`os` is 17 of 23" | still 17 of 23 published; 4 of 9 applicable tests, 3 behaviour-dependent |
+| "TypeScript-on-node stays 100% with 0 hollow" | **holds**: 1,851 of node's own test files pass across 22 modules, 0 hollow, 22 of 22 typecheck |
+| "`string_decoder`: zero own refusals, two wrapper declines" | both still true, and it publishes **0** -- the declines are consequences of three lowering chains |
+| "roughly 125 of 309 declared bindings have no C" (re-run) | **331 declared, 328 with C, 3 without** -- identical to the earlier derivation, on 15 freshly compiled objects |
 
 ### Correction: the typed-array claim is not stale, and I misread a helper as a call
 
