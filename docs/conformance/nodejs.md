@@ -11290,6 +11290,41 @@ already filed:
 
 
 
+
+## Both lanes, 2026-09-10
+
+Re-derived end to end tonight, one module per invocation so a lost run costs one
+row rather than the sweep. All 22 rows present in both lanes — a module that
+produces no row is indistinguishable from one that was never run, so the count
+of rows is stated beside the count of passes.
+
+**Interpreted — TypeScript on node: 1,859 passed, 0 failed, 22 of 22 rows.**
+
+    assert 12   async_hooks 117   buffer 56    console 19   dgram 77
+    diagnostics_channel 33         events 32   fs 346       http 405
+    net 150     os 9              path 20      process 89   punycode 3
+    querystring 8                 readline 27  stream 250   string_decoder 5
+    timers 58   url 50            util 25      zlib 68
+
+Unchanged from the last confirmed figure, which is the point: `process.c` and
+`path/shape.mjs` both changed today and neither cost anything here.
+
+**Compiled — Node-API addon: 40 passed, 1,822 failed, 15 of 22 modules with at
+least one pass, 1 whole.** All 22 build.
+
+The two lanes are not comparable as ratios and the gap is not a defect count.
+The interpreted lane runs the same TypeScript through node, so it measures
+whether the source is right; the compiled lane measures whether this compiler
+can express it. Everything in the gap is the second question.
+
+`punycode` remains the only whole module. `path` is the nearest at 15 of 20
+applicable, and `string_decoder` is the nearest by work remaining rather than by
+passes — see the root table above.
+
+> Every number here is from 2026-09-10 and is historical the moment it is read.
+> The compiled figures come from a pin taken at 00:59; the interpreted lane has
+> no compiler in it.
+
 ## Ranking the 22 by roots in their own source
 
 2026-09-10. Pass counts say which modules are furthest along. They do not say
