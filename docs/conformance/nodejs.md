@@ -12817,6 +12817,62 @@ judgement the compiler lane already made for `{}` inbound, where a loud
 `TypeError` was chosen over a wrong `undefined`. Here the loudness arrives one
 call too late to stop the name being published.
 
+## A test that reports its first finding and stops, and the assertion node never needs
+
+Two defects in this lane's own surface tests, fixed in `buffer`, `async_hooks`,
+`os` and `path`.
+
+### `typeof` is not enough, because a published name can be uncallable
+
+Every `export-surface-static.js` asserted that a name is a `function`. **None
+asserted that it can be called.** Node has no reason to: there, a name of type
+`function` is always callable.
+
+Here it is not. The erased-parameter crossing published `buffer.isUtf8` and
+`isAscii`, both declared `(input: Uint8Array | ArrayBuffer)`, and the boundary
+has no inbound representation for a typed array -- so `typeof buffer.isUtf8`
+became `"function"` while every argument node accepts throws, `Buffer` included.
+`async_hooks.executionAsyncResource` fails the other way, on the return.
+
+**Scalars do not catch it.** `isUtf8("")` reaches the module's own validation and
+answers node's error exactly. Only the argument the function actually takes finds
+the boundary, which is why the assertion has to name a real argument rather than
+probe generically.
+
+`os` is where the check passes: **15 published functions, 0 uncallable, 0 with
+the wrong `.name`**. A check that cannot pass is not worth having, and that row
+is what says this one can.
+
+### A file that stops at its first finding has no other findings
+
+All four asserted inside a `for` loop, so the first divergence ended the file.
+What that hid:
+
+| module | reported | hidden behind it |
+| --- | --- | --- |
+| `buffer` | `Blob is undefined` | eight more absent names, and both uncallable functions |
+| `async_hooks` | `AsyncLocalStorage is undefined` | three more, the uncallable return, and the `extra` sweep the file's own comment calls "the direction this module's raw addon actually goes wrong in" |
+| `os` | `constants is undefined` | the `extra` sweep, the function-name sweep, and all of `constants`'s shape |
+| `path` | `format is undefined` | eight more, including **`win32.sep` and `win32.delimiter` absent** |
+
+Every one now collects and asserts once. `path`'s hidden finding is the one that
+mattered most: `path.posix.sep` is `"/"` and `path.win32.sep` is **undefined**,
+because `shape.mjs` builds `posix` from the flat exports -- which carry the
+top-level `sep` -- and `win32` from the namespace object, which publishes no
+value members. That asymmetry is exactly the gap the compiler lane is about to
+close, and no test could see it.
+
+**This is the same shape as two findings on the compiler side**: reach counting,
+where a construct blocking fifteen modules moved none of them; and the
+stationary refusal count, where a fix cleared one head and revealed the next. In
+all three the instrument reported the first thing it met and called it the
+answer.
+
+Interpreted stays green throughout -- `buffer` 55 of 55, `async_hooks` 116 of
+116, `os` 9 of 9, `path` 21 of 21 -- so the new assertions pass where the
+implementation works and fail only at the compiled boundary, which is what they
+are for.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
