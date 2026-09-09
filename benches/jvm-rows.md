@@ -23,7 +23,7 @@ not measured clean and should not be quoted.**
 | row | jvm/Java | note |
 | --- | --- | --- |
 | `node-utf8` | **6.33x** | **a codec against an intrinsic**: floor is 2.40x, below |
-| `symbol-keyed-map` | 2.92x *jit* | blocked: 52% is `toInt32` |
+| `symbol-keyed-map` | 2.93x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
 | `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
@@ -1068,6 +1068,33 @@ So this half of `array-from` is **at its floor and should not be chased**. The
 timing half is still open and still worth 5.9x, and it is the lowering's; the
 allocation half is closed by arithmetic that matches the measurement to three
 decimal places, which is a better kind of certainty than a ratio.
+
+### `symbol-keyed-map`, re-profiled: the 52% is 50.5% and the mechanism is the accumulator
+
+The 52% in this file predates the stale-worktree correction, so it was worth
+re-taking on a current emission. It holds, and the shape is now pinned:
+
+    ours   toInt32 50.54%   findLinear 19.38%   sameKey 4.76%   get 4.04%   set 2.26%
+    ref    Ref.work 81.45%  IdentityHashMap.hash 5.91%   .get 4.84%
+
+The case is `total = (total + (events.get(key) ?? 0)) | 0`, twice an iteration,
+4096 iterations -- and the emission holds `total` in an **`f64`**, with `dload`,
+`dadd`, `dstore` around each `toInt32`. That is the identical shape
+`array-methods` carries, and it is `narrow.rs`'s: an integer accumulator behind
+`| 0` living in a double slot. The reference writes `int total` and converts
+nothing.
+
+**The map machinery is not the row and is already answered.** Ours totals 30.4%
+against the reference's 10.75%, which looks like a gap until the parts are
+named: `findLinear`'s 19.38% was measured at **2% removable** -- always hashing
+moved 3.35x to 3.29x -- and `sameKey` already fast-paths identity with `a == b`,
+which is the only comparison a symbol key ever needs. Nothing there is open.
+
+**The bound, so it is not oversold.** Removing every coercion takes 2.93x to
+about **1.45x**, which is a large move on the second-biggest losing row and not
+the bar. Unlike `node-utf8` this row *can* reach the bar -- its reference is an
+ordinary `IdentityHashMap` -- so the coercion work has somewhere to go here that
+it does not have there.
 
 ## Open, and whose
 
