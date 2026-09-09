@@ -155,13 +155,27 @@ looked at is a record of attention rather than of the lane. `in-narrowing` at
 1.07x is the largest of them.
 
 At or under 1.00x, best first: `exceptions` 0.01, `bigint` 0.17,
-`array-mutations` 0.67, `awfy-permute` 0.72, `loop` 0.75, `awfy-mandelbrot`
-0.84, `closures` 0.85, `map-and-set` 0.86, `user-iterable` 0.90, `awfy-list`
-0.93, `case-convert` 0.94, `logical-assignment` 0.94, `substrings` 0.95,
-`erasure-stored-unknown` 0.96, `awfy-bounce` 0.97, `awfy-towers` 0.98,
-`erasure-stored-typed` 0.98, `dispatch` 0.99, `pipeline` 0.99, and at 1.00
+`substrings` **0.40**, `array-mutations` 0.67, `awfy-permute` 0.72, `loop` 0.75,
+`map-and-set` **0.79**, `awfy-mandelbrot` 0.84, `closures` 0.85,
+`user-iterable` 0.90, `awfy-list` 0.93, `awfy-sieve` **0.94**,
+`logical-assignment` 0.94, `case-convert` **0.955**, `array-from` **0.96**,
+`erasure-stored-unknown` 0.96, `awfy-bounce` 0.99, `awfy-towers` 0.98,
+`erasure-stored-typed` 0.98, `objects` **0.99**, `pipeline` 0.99, and at 1.00
 exactly: `accumulate`, `awfy-nbody`, `erasure-typed`, `erasure-unknown`,
 `growth-fixed`, `number-format`, `strings`.
+
+**`dispatch` is not in that list and is not in the losing one either.** Six runs
+put it between 0.67x and 1.14x and neither pinning nor thirteen times the warmup
+narrows it; record 0132 has the rest. It is the one row in the table with no
+number.
+
+**The count, recounted from the table rather than carried forward.** The
+headline below says 25 above 1.00x and it was true when it was written. It is
+**21 above, 13 at or under and one unquotable** now -- `objects`, `case-convert`,
+`awfy-sieve` and `awfy-bounce` came off the losing side by being measured six
+times instead of two, `array-from` came off by being fixed, and
+`number-format-double` went the other way from 1.08x to 1.15x. Every one of
+those is a paragraph below rather than a number changed quietly.
 
 **Five AWFY rows at or under hand-written Java, one at 1.05 pending a clean
 run, two above.** `loop` at 0.75x is worth noting against its own history: it
