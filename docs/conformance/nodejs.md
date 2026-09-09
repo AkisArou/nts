@@ -9419,6 +9419,19 @@ It honours both now, controlled after the change rather than declared. **A pin
 that is silently ignored is worse than no pin: it produces a control that looks
 run and is not**, and four copies of one measurement look like agreement.
 
+## The counted lane over all twenty-two, with its control
+
+Re-run once `fs`, `process` and `os` started building: **22 rows, 0 differing.**
+Every module behaves identically counted and uncounted, with between 26 and
+2,157 retain/release sites against a handful uncounted. The allocator sees no
+defect these tests can reach.
+
+`punycode`'s row had to be measured twice. The first read four files instead of
+three, because a probe for the hollow lane went into `punycode/test` **while
+this was running** — the same mistake as editing a script mid-execution, in
+different clothes. Clean: `3 files, 3 passed, 0 failed, 55 rc sites`, identical
+in both columns.
+
 ## The counted lane over every building module, with its control
 
 `tooling/conformance/counted-vs-uncounted.sh`, 2026-09-09:
