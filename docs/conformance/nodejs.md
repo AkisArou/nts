@@ -12351,6 +12351,47 @@ call differently from node. The differential's corpus always supplies an
 argument, and node's own tests never call these with none. **Whole means whole
 on every question anyone has asked**, and this is a question nobody had.
 
+## The wrapper's argument check is load-bearing, because the declaration deleted the module's own
+
+`path.dirname()` answering `ERR_MISSING_ARGS` where node answers
+`ERR_INVALID_ARG_TYPE` reads as the wrapper being wrong. It is not.
+`dirname(path: string)` lowers `path` to `NtsString *`, so the module's own
+`validateString(path, "path")` is **dead code** -- `typeof path !== "string"` is
+statically false for a parameter the type says is a string, and it folds away.
+Remove the wrapper's check and `dirname()` does not produce node's error; it
+dereferences a null pointer.
+
+So the wrapper is standing in for a check the type system deleted. That is the
+same cause as `win32.toNamespacedPath`, whose transcribed
+`if (typeof path !== "string") return path` never runs.
+
+**Two symptoms, one cause: where `@types/node` is stricter than node's runtime,
+the declaration deletes the guard and the boundary enforces the declaration.**
+
+### How much validation the declaration currently deletes
+
+Surveyed across every exported function whose parameter is declared `string`,
+`number` or `boolean` *and* validated at runtime:
+
+| | count | modules |
+| --- | ---: | --- |
+| validation the declaration deletes **entirely** -- type-only validators (`validateString`, `validateBoolean`, `validateFunction`, `validateObject`, `validateArray`, `validateBuffer`) | **23** | `path` 16, `fs` 2, `util` 2, `net` 1, `process` 1, `url` 1 |
+| validation that keeps live work -- range and value validators (`validateInteger`, `validateInt32`, `validatePort`, `validateOneOf`, `validateEncoding`) | 9 | `os` 3, `fs` 2, `http` 1, `net` 1, `stream` 1, `util` 1 |
+
+The second row still folds its *type* test and keeps its range test, so those
+nine are half-deleted rather than dead.
+
+**This is the number the erased-parameter crossing is worth**, and it is not the
+four names an earlier survey here scoped it at. That survey asked which
+functions guard against their own declared type with an inline `typeof`, and
+found exactly one -- `win32.toNamespacedPath`. The larger set is the functions
+whose guard is a *call* to a validator, which the same fold deletes just as
+completely and which no `typeof` search finds. **A survey answers the question it
+was written to ask**, and the first one was written to find inline guards.
+
+A lower bound in two ways: it counts only the first validator call per function,
+and only parameters declared with a primitive type.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
