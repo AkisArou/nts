@@ -304,6 +304,12 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         }
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_data_view" => (types::VALUE, "isDataView", "(Lnts/rt/NtsValue;)Z"),
+        "nts_is_date" => (types::VALUE, "isDate", "(Lnts/rt/NtsValue;)Z"),
+        // One class serves both, so these two read a bit rather than test a
+        // type; see `NtsValue.isMap`. The C lane spells it the same way --
+        // `nts_is_map_like(value, holds_values)` -- for the same reason.
+        "nts_is_map" => (types::VALUE, "isMap", "(Lnts/rt/NtsValue;)Z"),
+        "nts_is_set" => (types::VALUE, "isSet", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
         "nts_to_index" => (types::BUFFER, "toIndexNumber", "(D)D"),

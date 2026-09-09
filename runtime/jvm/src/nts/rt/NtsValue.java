@@ -134,6 +134,19 @@ public final class NtsValue {
     }
 
     /**
+     * `instanceof Date`.
+     *
+     * <p>One class, one form, and no bit to read beside it -- `isBuffer`'s
+     * shape rather than `isMap`'s. `NtsDate` is `final` and stands alone, so
+     * unlike `DataView` there is no sibling to be confused with and unlike
+     * `Map` there is no second thing sharing the class.
+     */
+    public static boolean isDate(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        return ref instanceof NtsDate;
+    }
+
+    /**
      * `instanceof Map` and `instanceof Set`, which are **one class here**.
      *
      * <p>This is the pair `isBuffer`'s one-line shape does not survive.

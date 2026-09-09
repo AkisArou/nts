@@ -905,7 +905,34 @@ fn variants(
                 continue;
             }
             Generated::JavaReference => {
-                results.push(java_reference(root, case, out, name).ok().flatten());
+                // **`.ok().flatten()` used to be the whole of this line**, and
+                // it made two different facts print the same character. A case
+                // with no `ref.java` has no Java column and should say `--`. A
+                // case *with* one that will not build has no Java column
+                // either -- and that is a broken instrument, not a missing
+                // reference.
+                //
+                // A fresh worktree does not carry `third_party/are-we-fast-yet`,
+                // which the eight `awfy-*` references construct their classes
+                // from, so a sweep taken in one reports `--` for all eight and
+                // reads exactly like the nine `json-*` cases that genuinely
+                // have no reference. It cost a whole sweep before I looked.
+                //
+                // So the reason is printed. Rule 6, in the harness that the
+                // rule is about: a dash that means "not measured" has to say
+                // so.
+                match java_reference(root, case, out, name) {
+                    Ok(measured) => results.push(measured),
+                    Err(error) => {
+                        println!(
+                            "note: {:<16} has a ref.java that could not be measured, so its \
+                             Java column is `--` for a reason that is not \"no reference\": {}",
+                            name,
+                            error.to_string().lines().next().unwrap_or("?"),
+                        );
+                        results.push(None);
+                    }
+                }
                 continue;
             }
             Generated::Specialized => c.push(specialized.to_owned()),
