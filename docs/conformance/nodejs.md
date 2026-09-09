@@ -15381,6 +15381,33 @@ So the defect is not general to erasure and not general to layout.
 first run of that case exited on a signal and lost all six answers when five had
 something to say.
 
+**Two further defects came from a sweep that was asking about something else.**
+A case file of eight ordering and array-method questions -- does a statement
+after an `await` run later, does `indexOf` find `NaN` -- reported DID NOT LINK,
+and then, once that was resolved, took the process down.
+
+`xs[xs.length] = v` **aborts**:
+
+    const xs: number[] = [1];  xs[1] = 2;  xs.length
+    nts: refused: index 1 is outside [0, 1)   SIGABRT
+    node: 2
+
+That is the append, and it is one of its two spellings -- `xs.push(v)` answers
+correctly, and a write inside the bounds answers correctly. `xs[3] = 4` aborts
+too, where node gives 4. Not a thrown error a program could catch and not a
+compile-time refusal: `emit-c` is happy, clang is happy, the addon loads, and
+the answer arrives as a signal. The check appears to read the length as the
+capacity, and `xs[xs.length] = v` is not out of bounds in JavaScript.
+
+And an async arrow with an expression body emits C that clang rejects --
+`v2 = (NtsPromise *)v1` with `v1` a double. The identical `async function`
+compiles, and so does the arrow declared and never awaited. Filed in `blockers/`
+as `an-async-arrow-with-an-expression-body`.
+
+Neither was on the list of things being looked for, which is the argument for
+sweeps over targeted probes: **the sweep's own eight questions gave six
+agreements and three refusals, and the two findings were things nobody asked.**
+
 ### In seven of the nine, the diagnostic describes something other than the cause
 
 Tracing all nine of the largest concentrations to a named construct produced one
