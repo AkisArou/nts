@@ -15359,10 +15359,18 @@ declaration that makes it, with the fixture that names it:
                 -> events publishes **nothing at all**, 16 of 32 failing files
                    stop at `EventEmitter is not a constructor`
 
-`process` at 75 of 90 is unreduced: its main export is declined outright with
-`is exported and is not a function this backend can name`, and the obvious
-reduction -- export a class instance, export a plain object -- compiles and
-publishes both. Recorded as unreduced rather than guessed at.
+     75 files   a class instance exported as a value, one of whose field
+                initialisers was refused. The wrapper declines it with a
+                sentence about what kind of thing it is.
+                a-value-export-with-a-refused-field
+                -> process publishes **nothing**, 75 of 90 failing files
+
+`process` was recorded as unreduced for an hour and then reduced. Four controls
+place it: a named export of an instance publishes, a default export publishes,
+one holding an object field publishes, and one holding a field whose initialiser
+was refused is declined. `class Process` has `readonly env = env`, imported from
+`./env.ts`, and that import's module-scope initialiser is refused. Neither the
+export form nor being an instance nor holding an object decides it.
 
 **Half of it is the boundary, not the lowering.** Four of the eight entries are
 the wrapper declining something it cannot carry rather than the lowering
