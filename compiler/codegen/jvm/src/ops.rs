@@ -2655,6 +2655,30 @@ impl Emitter<'_> {
                     code.new_object(origin, pool, crate::builder::BUILDER);
                     code.dup(origin);
                     if text.is_empty() {
+                        // **A capacity was priced here and refused.** Java's
+                        // default is 16 and an accumulator that ends up long
+                        // regrows several times; `new StringBuilder(128)` takes
+                        // `node-utf8` from 98,472 bytes an operation to 79,528,
+                        // a 19% cut, and moves no other row at all --
+                        // `case-convert`, `number-format`, `json-serialize` and
+                        // `substrings` are unchanged to the byte.
+                        //
+                        // It is not taken, because 128 is not a compiler's
+                        // number: that case decodes to about 110 characters, and
+                        // 512 makes the same row **worse** than the default at
+                        // 153,256. A constant that helps exactly one row and
+                        // was chosen by knowing that row's string length is
+                        // fitted to the benchmark rather than derived from the
+                        // program.
+                        //
+                        // What would justify one is a *bound*. The seed already
+                        // supplies it when there is one -- a non-empty seed
+                        // constructs from the string and Java sizes to
+                        // `length + 16`. An accumulator with no seed has no
+                        // hint here, and the place a hint could come from is
+                        // the middle end knowing what the accumulator is built
+                        // out of. If that ever exists, this is worth 19% of
+                        // `node-utf8`'s allocation.
                         code.invoke_special(origin, pool, crate::builder::BUILDER, "<init>", "()V");
                     } else {
                         code.const_string(origin, pool, text);

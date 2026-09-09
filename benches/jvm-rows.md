@@ -935,6 +935,38 @@ work before calling a ratio a gap" is in my goal text, I have applied it to
 apply it to the largest number in the table -- because 6.3x was too big to look
 like a reference artefact. The size of a gap is not evidence about its cause.
 
+- **Pre-sizing the string builder.** Java's default `StringBuilder()` holds 16
+  characters and an accumulator that ends up long regrows several times;
+  `node-utf8` builds a decoded string 64 times an operation and is the worst
+  `bytes/op` row in the table at **1.50x**. **[19% of one row's allocation, and
+  refused anyway.]**
+
+  Measured, deterministically, by emitting each case at several capacities and
+  reading `NTS_BENCH_ALLOC`:
+
+      row                default    cap=128     cap=512
+      node-utf8           98,472     79,528     153,256
+      case-convert        10,232     10,232
+      number-format        4,608      4,608
+      json-serialize     112,216    112,216
+      substrings               0          0
+
+  **128 is worth 19% on `node-utf8` -- 1.50x to 1.21x on that axis -- and moves
+  nothing else to the byte.** It is still refused, and the two numbers that
+  refuse it are in the table: that case decodes to about 110 characters, and 512
+  makes the same row **worse than the default**. A constant that helps exactly
+  one row, chosen by knowing that row's string length, is fitted to the
+  benchmark rather than derived from the program.
+
+  **What would justify one is a bound rather than a guess.** A non-empty seed
+  already supplies it -- the builder is constructed from the string and Java
+  sizes to `length + 16`. An accumulator with no seed has no hint at the
+  emitter, and the place a hint could come from is the middle end knowing what
+  the accumulator is built out of. If that ever exists this is worth 19% of
+  `node-utf8`'s allocation, and the reasoning is in `ops.rs` beside the `<init>`
+  so the next person to notice the default finds the measurement rather than
+  repeating it.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
