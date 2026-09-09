@@ -2295,7 +2295,7 @@ Twice for the rows that differ.
 
     case                     HotSpot        ART
     in-narrowing                   0      81920      <- and so does ref.java
-    generator                      0      80000      <- reference not yet asked
+    generator                      0      80000      <- and so does ref.java
     case-convert               10232      23152      +126%
     number-format               4608       6456      +40%
     map-and-set                65952      74144      +12%
@@ -2348,6 +2348,40 @@ a 64-bit counter -- to keep the total under 1.5e9, and prints `overflow` rather
 than a number if one still comes back negative. With that, `array-from` is
 8,342,832 against 8,280,864: **they agree, and the 43.7x I would have reported
 was the counter.**
+
+### The ART allocation axis, closed: one was ours, two are parity, one we win
+
+Every case the survey flagged has now been asked the only question that
+separates a backend defect from a platform one -- **what does the hand-written
+reference allocate on the same runtime**:
+
+    case            ours ART    ref.java ART   verdict
+    array-methods       6288    nothing of the kind   OURS -- `fuse` closed it, now 144
+    in-narrowing       81920           81920          parity, exactly
+    generator          80000           80000          parity, exactly
+    case-convert       23152           29304          we allocate 21% LESS
+    array-from       8342832    (agrees with HotSpot)  the counter had wrapped
+
+**One of four was ours.** The other three are ART not doing escape analysis,
+which costs the reference exactly what it costs us -- `in-narrowing` and
+`generator` agree to the byte, because both programs allocate the same objects
+for the same reason. `case-convert` we win, because our case tables allocate
+less than `String.toLowerCase(Locale.ROOT)` does.
+
+**So the ART finding is smaller than it first looked and better founded.** The
+headline "ART allocates 43.7x more" was one real defect and three cases where
+the platform is simply weaker at everyone's expense. The real defect is fixed
+and the survey is the instrument that would find the next one.
+
+**And the bar's third number should read "no worse than the reference on the
+same runtime", not "no worse than on HotSpot".** The HotSpot comparison is how
+the case was *found* -- it is a good screen, because a case that allocates on
+one runtime and not the other is always worth a look. It is not the verdict,
+and three of four times here it would have been the wrong one.
+
+Still unexamined and small: `number-format` 4608 to 6456, `growth-fixed` 16400
+to 20480, `map-and-set` 65952 to 74144. All under 8KB an operation and none of
+them screened against their reference yet.
 
 ## Open, and whose
 
