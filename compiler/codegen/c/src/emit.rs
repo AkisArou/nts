@@ -249,6 +249,18 @@ pub struct Emitted {
     /// body exists, and kept beside the text scan below rather than replacing
     /// it -- see [`Emitted::needs_unicode`].
     pub(crate) unicode: bool,
+    /// The functions whose bodies this backend declined to emit.
+    ///
+    /// A *name* list rather than the diagnostics, because the consumer is the
+    /// Node-API wrapper and it needs to answer "did the body get emitted" per
+    /// function. It has no other way to ask: `emit` reports what went wrong and
+    /// not who it happened to, so the wrapper published a name whose symbol the
+    /// backend had refused, and the link failed with an undefined symbol.
+    ///
+    /// That is a correct report and a poor one. `no addon built` reads as the
+    /// module being far away when it is one function's body, and the honest
+    /// version is a decline naming the function before the link is attempted.
+    pub refused: Vec<String>,
 }
 
 impl Emitted {
@@ -363,11 +375,13 @@ pub fn emit(program: &Program) -> Emitted {
     let mut diagnostics = Vec::new();
     let unicode = uses_unicode(program);
 
+    let mut refused = Vec::new();
     let Some(first) = program.funcs.first() else {
         return Emitted {
             writer,
             diagnostics,
             unicode,
+            refused,
         };
     };
     let origin = first.origin.clone();
@@ -416,7 +430,7 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
 
-    let mut bodies = emit_bodies(program, &literals, &mut diagnostics);
+    let mut bodies = emit_bodies(program, &literals, &mut diagnostics, &mut refused);
     drop_orphaned_bodies(&mut bodies, &mut diagnostics);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
@@ -497,6 +511,7 @@ pub fn emit(program: &Program) -> Emitted {
         writer,
         diagnostics,
         unicode,
+        refused,
     }
 }
 
@@ -735,6 +750,7 @@ fn emit_bodies<'a>(
     program: &'a Program,
     literals: &[String],
     diagnostics: &mut Vec<Diagnostic>,
+    refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
     // The bindings whose return this backend cannot declare, and the bodies
     // that call them. Computed before anything is emitted, because a body that
@@ -746,6 +762,7 @@ fn emit_bodies<'a>(
     for func in &program.funcs {
         if let Some((binding, origin)) = calls_unspellable(func, &unspellable) {
             diagnostics.push(unspellable_refusal(&func.name, binding, origin));
+            refused.push(func.name.clone());
             continue;
         }
         // An `abstract` method is a signature and no body. It is in `funcs` so
@@ -766,7 +783,10 @@ fn emit_bodies<'a>(
         };
         match emit_func(&mut body, func, &context) {
             Ok(signature) => bodies.push((signature, body, func)),
-            Err(diagnostic) => diagnostics.push(diagnostic),
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                refused.push(func.name.clone());
+            }
         }
     }
 

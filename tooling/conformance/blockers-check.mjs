@@ -173,6 +173,26 @@ for (const name of names) {
   // `napi_create_function` over one implementation -- which publishes both names
   // and still breaks an identity node guarantees.
   const emitsAddon = /^emits-addon\s+(.+)$/.exec(wanted);
+  // A **fourth** guard form, and the counterpart of `emits-addon`: a name that
+  // must *not* be in the wrapper.
+  //
+  // `lowers` and `publishes` say what is there; nothing said what is absent
+  // from the addon, and absence is what one class of correctness looks like. A
+  // function whose body the C backend refused leaves its `Func` in place, so a
+  // wrapper naming its symbol is well-formed C that fails at the *linker* --
+  // and worse, the addon loads and dies on the first call with
+  // `undefined symbol`, at whatever later moment somebody calls it.
+  //
+  // Read from a file that must exist, for the reason `lacks-c` gives: `""`
+  // contains nothing, so a fixture whose emission failed outright would
+  // otherwise report the absence as holding.
+  //
+  // **Controlled on the day it was written**, like the other three: pointed at
+  // `nts_napi_passthrough`, which the same fixture's addon does contain, it
+  // reported `REGRESSED  wrapper-for-a-refused-body: the wrapper names it now`.
+  // A guard form that has never been seen to fail is worth as little as a
+  // fixture that has never been seen to reproduce.
+  const lacksAddon = /^lacks-addon\s+(.+)$/.exec(wanted);
   // Three guard forms, each the counterpart of a blocker form that had none.
   //
   // A fixed blocker with no way to state its fixed state either stays loud
@@ -307,6 +327,9 @@ for (const name of names) {
     ? program.includes(emitsC[1])
     : emitsAddon !== null
     ? readEmitted(output, "addon.c").includes(emitsAddon[1])
+    : lacksAddon !== null
+    ? readEmitted(output, "addon.c").length > 0 &&
+      !readEmitted(output, "addon.c").includes(lacksAddon[1])
     : expectsClean
     ? isClean
     : output.includes(wanted);
@@ -324,6 +347,7 @@ for (const name of names) {
   // regression. Deciding this from the form rather than from the prose means a
   // guard cannot be mislabelled by someone forgetting to write FIXED.
   const isGuard = expectsClean || compiles || onceC !== null || lowersOnly ||
+    lacksAddon !== null ||
     /^\/\/\s+FIXED\b/m.test(source);
   // A `hir` expectation is a substring of the whole run, and a fixture's
   // tsconfig can pull in more than its own `src`. If the only lines carrying the
@@ -387,6 +411,8 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: emitted once now, not twice. Expected duplicates of:`);
   } else if (lacksC !== null) {
     console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
+  } else if (lacksAddon !== null) {
+    console.log(`  ${verdict}  ${name}: the wrapper names it now. Expected absence of:`);
   } else if (compiles) {
     console.log(`  ${verdict}  ${name}: the emitted C stopped compiling. Errors:`);
     for (const line of (compileErrors ?? []).slice(0, 2)) {

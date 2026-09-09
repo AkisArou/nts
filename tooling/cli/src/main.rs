@@ -1901,7 +1901,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
     // test suite run against it. Node is a harness here, not a runtime: nothing
     // this writes enters a shipped binary.
     if std::env::args().any(|arg| arg == "--napi") {
-        let addon = nts_codegen_napi::emit(&program);
+        let addon = nts_codegen_napi::emit_with(&program, &emitted.refused);
         let addon_path = out.join(nts_codegen_napi::ADDON_SOURCE_NAME);
         std::fs::write(&addon_path, &addon.source)
             .with_context(|| format!("writing {addon_path}"))?;
