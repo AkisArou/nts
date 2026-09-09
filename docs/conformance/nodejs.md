@@ -5460,8 +5460,8 @@ what `punycode/shape.mjs` does and says it does. Measured against node for all
 | `util` | node `_errnoException, …` — ours `TextDecoder, TextEncoder, …` |
 
 **Exported function arity diverges too, and is recorded on the same terms.**
-`fn.length` is observable and node's suite does assert it in places, though not
-on any of these:
+`fn.length` is observable and node's suite does assert it in places. As
+measured, that list was:
 
     querystring.unescapeBuffer     1  node 2
     url.URL                        0  node 1
@@ -5473,10 +5473,44 @@ on any of these:
     util.isDeepStrictEqual         2  node 3
     events.EventEmitterAsyncResource  1  node 0
 
-Several have visible causes — node's `_errnoException` is bound, so its `length`
-is 0 where a plain declaration reports its parameters — and none is reached by a
-pinned test, or the sweep would not be where it is. Listed so the next person to
-find one knows it was seen rather than missed.
+**Superseded 2026-09-09.** The wrapper now sets `length` from the signature
+rather than leaving it 0, and seven of those nine are gone: `querystring` and
+`url` report **0 wrong arity**, and the tree-wide figure fell from 95 to 21.
+Controlled on eight signature forms — required, optional, defaulted, erased,
+two required, required-then-optional, rest, none — the wrapper emits
+`1,1,0,1,2,2,0,0`, which is what JavaScript reports for the same eight
+functions. All eight correct.
+
+What is left is one family and one name, and the family is not a defect in the
+usual sense:
+
+    util._errnoException         ours 3  node 0    node's is bound
+    util.types.* (19 of them)    ours 1  node 0    node's are native bindings
+
+Every one of the nineteen is ours 1 / node 0, checked rather than assumed. A
+native binding reports 0 because it declares no JavaScript parameters; a
+declaration that says what it takes reports 1. Ours is the more informative
+number and node's is the bar, so it stays on the list.
+
+**A separate question the same fix opened: `length` and the wrapper's argument
+check can disagree.** Against 22 freshly built artifacts, two functions demand
+more arguments than their own `length` reports — `async_hooks.emitBefore`
+(length 3, demands 4) and `emitAfter` (length 1, demands 2). Both are
+harness-only raw exports that node does not have and `shape.mjs` omits, so no
+node test can reach them: real, and inert.
+
+That figure was **10** before it was 2, and the difference is why this paragraph
+names its artifacts. `unusable-exports.mjs` named `target/node` literally and
+ignored `NTS_ADDON_OUT`, so it measured whatever another lane had last built
+while appearing to measure a private directory — `os.getPriority` length 0
+demanding 1, all of punycode, `url.isURL`, every row of it stale. Rebuilding
+`os` into a private directory made them vanish. Three other instruments had the
+same defect — `accessor-audit.mjs`, `sweep.mjs`, which also *wrote* into the
+shared directory, and `check.sh` — and all four take the variable now.
+
+**An output-directory variable is a claim about a script until that script is
+the one you checked.** The ten rows were written up as a consequence of the
+length fix and were three sentences from being sent as evidence against it.
 
 **Exactly one pinned test in node's whole `parallel/` suite enumerates a
 module's keys** (`test-permission-fs-supported.js`, and the permission model is
