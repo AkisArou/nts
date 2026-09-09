@@ -14551,6 +14551,59 @@ cross. The number to watch when this lands is the axis, not the name count --
 the last compiler landing added published names in six modules and moved the
 axis by nothing.
 
+## What actually refuses the five biggest modules
+
+The `most-named` column says which name a test failed on. It does not say what
+refused that name's body. `last-mile.mjs` over the five modules with the largest
+prize:
+
+    module        own roots   top construct
+    stream              467   33x  #pendingEnd: PromiseWithResolvers | undefined
+    fs                  195   43x  #closeCapability: PromiseWithResolvers | undefined
+    net                  45    7x  `this` outside a method
+    buffer               35    7x  a method without a body
+    async_hooks          20   10x  a member of AsyncLocalStorage, a class this
+                                   compiler has no type for
+
+    762 own roots, 214 distinct constructs
+
+### One type accounts for 76 of them
+
+    43  a property `#closeCapability` of unrepresentable type
+        (a union of `PromiseWithResolvers` | undefined)      fs/src/promises.ts:584
+    33  a property `#pendingEnd` of unrepresentable type
+        (a union of `PromiseWithResolvers` | undefined)      stream
+
+**Each is one declaration.** `#closeCapability` is declared once, on
+`FileHandle`, and refused at 43 sites because 43 places touch it. The same type
+in `stream` is refused at 33. So 76 root sites are two field declarations and
+one representation question: `PromiseWithResolvers<T> | undefined` as a class
+field.
+
+Next after it, and the same family:
+
+    27  a property `#source` of unrepresentable type (`AsyncIterable`)
+    22  a `for await` loop
+    21  `reject`, captured above its own declaration, where it has no value yet
+
+`AsyncIterable` as a field plus `for await` is **49 sites** and one subject.
+`reject`/`resolve` captured above their declaration is the `new Promise((resolve,
+reject) => …)` executor, which `fs` alone writes at four sites in three files.
+
+So the shape of the remaining work in the two biggest modules is: **promises as
+data, and async iteration.** Not 762 problems, and not the 214 distinct
+constructs either -- the head of the distribution is very short.
+
+### The reading this replaces
+
+The `[optional-param]` count said 51 names with `fs` holding 29, and reading it
+as the blocker was wrong: 50 of the 51 never compile, so the wrapper never sees
+them. This table is what is in front of those bodies, and it is a different
+subject entirely.
+
+Both numbers are real. The difference is which gate they describe, and only one
+of them is the gate that is live.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
