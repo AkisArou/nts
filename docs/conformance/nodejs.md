@@ -10023,6 +10023,48 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### The profile on one binary, and the 9.4x that summing cones costs
+
+All twenty-two modules emitted with one compiler, so the numbers are comparable
+end to end for the first time in this document.
+
+| measure | value |
+| --- | --- |
+| NTS1001 summed over the twenty-two cones | 19,034 |
+| **NTS1001 distinct sites** | **2,020** |
+| of those, inside `runtime/node` | 1,469 |
+| **NTS2xxx distinct sites** | **65** |
+| NTS2xxx summed over cones | 316 |
+| wrapper declines | 283 |
+
+**Summing per-module cone counts inflates by 9.4x.** Every module imports
+`internal/`, so every refusal in `internal/errors.ts` is counted twenty-two
+times. The per-module cone column elsewhere in this document is the right number
+for "what stands between this module and its exports"; it is the wrong number to
+add up, and 19,034 is what adding it up produces. The same applies to NTS2xxx:
+316 summed, 65 distinct.
+
+The 283 wrapper declines decompose as before, and the shape holds on the fresh
+measurement:
+
+```
+131  is exported and no function of that name was compiled   lowering
+ 99  is exported and is not a function this backend can name  export form
+ 30  is a class whose constructor was not compiled            lowering
+ 10  takes an object                                          the wrapper
+  8  takes unknown                                            the wrapper
+  2  returns an object                                        the wrapper
+  1  takes an object[], which crosses outward only            the wrapper
+  1  returns unknown                                          the wrapper
+  1  returns an object[]                                      the wrapper
+```
+
+161 of 283 are lowering, 99 are export forms, and **23 are the wrapper's own
+type boundary** -- up from 21 because `path` now reaches the wrapper with two
+more signatures than it did.
+
+`path` itself reads 5 declines, down from 7: `join` and `resolve` cross now.
+
 ### There is a third stage, and this document had not been counting it
 
 Refusals come in three kinds and only two have been measured here. `NTS1001` is
