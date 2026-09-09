@@ -9568,6 +9568,144 @@ so the split between categories moves while the total does not. The view-return
 figure went 99 → 104 → 66 across three refinements, which is the reason to
 label the uncertainty rather than let the number be quoted as exact.
 
+## Four roots stand between `string_decoder` and the axis, and it owns none of them
+
+Measured 2026-09-09 with `tooling/conformance/own-refusals.sh` and a compiler
+copied to a scratch path. Root refusals only -- NTS1001. NTS1003 is cascade: of
+`querystring`'s 151, 149 say "calls X, which was refused above", so counting
+them measures how far a root travels rather than how many roots there are.
+
+| module | own | cone | buffer | internal |
+| --- | --- | --- | --- | --- |
+| `punycode` | 0 | 0 | - | - |
+| `string_decoder` | 0 | 74 | 43 | 31 |
+| `querystring` | 3 | 78 | 43 | 32 |
+| `os` | 4 | 80 | 44 | 32 |
+| `path` | 6 | 31 | - | 25 |
+| `buffer` | 43 | 74 | - | - |
+| `fs` | 214 | 2082 | - | - |
+| `stream` | 472 | 1660 | - | - |
+
+`punycode` is the only module with an empty cone, and it is the only module on
+the axis. That is one observation, not a law, but it is the shape the rest of
+this section explains.
+
+**A cone-wide count is not a per-module one.** `string_decoder` reports 74 and
+owns nothing. Every refusal standing between it and a published export belongs
+to something it imports, and `path` is the control that makes this legible: it
+does not import `buffer`, and its cone is 25 rather than 74.
+
+### The chain, one link at a time
+
+`emit-c --napi` ends with `no wrapper for StringDecoder: is a class whose
+constructor was not compiled`, which is why the addon publishes **zero** exports
+and every one of node's tests fails on an absent class. Four roots produce that:
+
+| root | at | reaches |
+| --- | --- | --- |
+| `` `toString` on a number `` | `buffer/src/encodings.ts:279` | `decodeIn` → `Buffer#toString` → six `StringDecoder` methods |
+| `` an `instanceof` against something this compiler has no class for `` | `buffer/src/main.ts:194` | `objectToBuffer` → `Buffer.from` → `bytesOf` |
+| `` `JSON.stringify`, a global member with no definition here `` | `internal/errors.ts:70` | `determineSpecificType` → `ERR_INVALID_ARG_TYPE#constructor` → `StringDecoder#write` → `#end` |
+| `` `length` of something without one `` | `internal/errors.ts:518` | `inspectValueWithin` → `inspectValue` → `ERR_UNKNOWN_ENCODING#constructor` → `StringDecoder#constructor` |
+
+The first three were already filed: `number-tostring-radix`,
+`instanceof-no-class`, `json-stringify`. The fourth is new and is
+`length-after-array-isarray` -- `Array.isArray` narrows an `unknown` to `any[]`,
+which has no layout, so the `.length` the narrowing existed to reach is refused.
+It is the one that matters most, because it is the link that lands on the
+*constructor* and so decides whether the class exists at all.
+
+**The fourth root was wrong on the first pass.** The cascade line for
+`inspectValue` truncates at "calls \`inspectValu..." in a terminal, and the next
+NTS1001 after `inspectValue`'s own line 558 is at 640 -- which is inside a
+different class further down the file, reporting `map` on a typed array. Reading
+the chain link by link instead of pattern-matching the nearest line number gave
+`length`. A fixture filed on the first answer would have reproduced a real
+refusal that blocks nothing here.
+
+### Seven of `buffer`'s forty-three are one form
+
+`constructor-overload-signatures`: bodiless overload signatures, four on
+`Buffer` and four on `Blob`. `new Buffer(size)` and `new Buffer(str, enc)` are
+genuinely different calls, so there is no spelling of those classes that is both
+correct and free of the form. The fixture's overloads differ in arity rather
+than in type deliberately -- the obvious `number | string` spelling refuses a
+second time for an unrepresentable union, and a fixture with two causes cannot
+say which one a fix addressed.
+
+**One filing was withdrawn.** Seven more of buffer's roots read "a value of type
+BigInt where `unknown` is expected", all on `checkedBigIntWrite(this, value,
+...)`. Four probes failed to reproduce it: a bigint literal into an `unknown`
+parameter, a `bigint`-typed parameter into one, the same call from a method of a
+class extending `Uint8Array` with buffer's own literal bounds, and a narrowed
+bigint into a constructor argument typed `unknown`. All four lower cleanly, and
+both tsconfigs extend the same base, so it is not a compiler-option difference.
+The fixture was deleted rather than kept as a near-miss. What is ruled out is
+recorded here; the cause is still unknown.
+
+## A pass on a module that publishes nothing is measuring something else
+
+Twelve of the twenty-two addons publish **zero** exports. `--sabotage` blanks a
+module and `--mutate-addon` keeps its names while destroying their behaviour;
+both interrogate exports, so both are silent on an addon that has none. Nothing
+to blank, nothing to poison, and an assertion comparing two absent values agrees
+with itself under every lane we have.
+
+`vacuous-lane.mjs` does no mutation. It states the arithmetic: an addon
+publishing nothing cannot be the subject of a passing test.
+
+```
+fs      1 pass, 0 exports   test-fs-promises-exists.js
+stream  2 pass, 0 exports   test-global-webstreams.js, test-stream-aliases-legacy.js
+```
+
+Both trace to the absent-export guards. Those guards are right -- one missing
+export should report as one missing export, not as "the module did not load" for
+every test in the module -- but they turn absence into `undefined` on *both*
+sides of an identity assertion. `stream.Readable` is `undefined` because
+`shape()` returned `{}`; `require('_stream_readable')` is `undefined` because
+`callableConstructor` guards the same way; five such comparisons pass in a row.
+`test-global-webstreams.js` is the other form: the `stream/web` subpath hands
+back node's own `node:stream/web`, so both sides of every assertion are node's.
+
+Neither moves the axis -- `stream`'s `export-surface-static.js` already fails,
+and two passes sit inside 248 failures -- but the lane exists so that they
+cannot be counted as progress as a module approaches green.
+
+**The first draft could not have found them.** It used `execFileSync`, which
+throws on the non-zero exit `run.mjs` gives whenever a test fails, so it reported
+"not measurable" for `events`, `querystring` and `url` at once and would have
+concluded "0 vacuous" while blind to exactly the population it searches.
+`spawnSync` fixed it; 1 module measurable became 4.
+
+### The blind-spot probe had two blind spots of its own
+
+`shape-blindspot.mjs` reported `SUPPLIES 131 fs` the first time `fs` became
+probeable. All 131 were `[object Undefined]`: the probe counted `undefined` as a
+value the shim invented. A shim answering `undefined` is not answering for the
+module, it is saying the module has nothing there. Absence is now reported as
+absence -- `passes through fs (131 name(s) absent from the addon)` -- and
+"supplies a value" keeps meaning what it says. Absence is still worth printing,
+because it is the surface `vacuous-lane` searches.
+
+The second was found by controlling the probe rather than reading it. Assigning
+`qs.__probeControl = 42` inside `querystring`'s shim changed nothing in the
+output. `querystring` returns `QueryString` itself rather than a copy -- so that
+a test replacing `querystring.unescape` replaces the property `parse` will read
+-- which means everything the shim adds is added to a sentinel, and the sentinel
+proxy answered every key with a fresh sentinel and had no `set` trap. Writes
+landed on the hidden function target and were masked on read. The shim could
+have invented any value it liked and the probe would have said `passes through`.
+
+With writes recorded, the control fires (`SUPPLIES 1 querystring`) and a real
+finding appears that was never visible before: **`events` supplies 4**.
+
+The traps must delegate to `Reflect` rather than answer `true`. Written the
+short way they violate the proxy invariants for the non-configurable
+`prototype`, `length` and `name` the function target carries, and `stream` went
+from probeable to "shape() calls into the module" -- a regression in the
+instrument that would have been read as a fact about the shim.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

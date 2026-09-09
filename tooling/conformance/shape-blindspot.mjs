@@ -43,15 +43,50 @@ const sentinels = new Set();
  * value the shim invented. Eleven false positives in `path` alone, each of them
  * exactly the shape of a real finding. An instrument whose failure mode is
  * *fabricating* the thing it looks for is worse than none. */
+/**
+ * What a shim assigned *onto* a sentinel, per sentinel.
+ *
+ * Without this the probe cannot see a whole class of shim. `querystring`
+ * returns `QueryString` itself rather than a copy -- deliberately, because
+ * `parse` reads `unescape` off that object at call time -- so everything the
+ * shim adds is added to a sentinel. The `get` trap answers every key with a
+ * fresh sentinel and there was no `set` trap, so an assignment landed on the
+ * hidden function target and was masked on read: the shim could invent any
+ * value it liked and the probe reported `passes through`.
+ *
+ * Found by controlling the probe rather than by reading it. Assigning
+ * `qs.__probeControl = 42` in the shim changed nothing in the output, which is
+ * the answer a probe gives when it is not looking.
+ */
+const sentinelWrites = new WeakMap();
+
 function sentinelExports(label) {
   const cache = new Map();
+  const written = new Map();
   const proxy = new Proxy(function sentinel() {}, {
     get(_target, key) {
       if (key === "__sentinelPath") return label;
       if (typeof key === "symbol") return undefined;
+      if (written.has(key)) return written.get(key);
       const next = `${label}.${String(key)}`;
       if (!cache.has(key)) cache.set(key, sentinelExports(next));
       return cache.get(key);
+    },
+    // Both delegate to `Reflect` rather than answering `true`. A trap that
+    // always succeeds violates the proxy invariants for the non-configurable
+    // `prototype`, `length` and `name` the function target carries, and
+    // `stream` went from probeable to "shape() calls into the module" the
+    // moment this was written the short way -- a regression in the instrument
+    // reported as a fact about the shim.
+    set(target, key, value) {
+      const ok = Reflect.set(target, key, value);
+      if (ok) written.set(key, value);
+      return ok;
+    },
+    defineProperty(target, key, descriptor) {
+      const ok = Reflect.defineProperty(target, key, descriptor);
+      if (ok && "value" in descriptor) written.set(key, descriptor.value);
+      return ok;
     },
     // A shim may read a name and then a name off *that*; both are the module's
     // to answer, and neither is invented here.
@@ -67,13 +102,23 @@ function sentinelExports(label) {
     construct() { return sentinelExports(`new ${label}`); },
   });
   sentinels.add(proxy);
+  sentinelWrites.set(proxy, written);
   return proxy;
 }
 
 /** Every leaf of `value`, with the path that reached it. */
 function leaves(value, path, seen, out, depth = 0) {
   if (depth > 4) return;
-  if (sentinels.has(value)) { out.push([path, value]); return; }
+  if (sentinels.has(value)) {
+    out.push([path, value]);
+    // Descend into what the shim wrote onto it. The sentinel itself is the
+    // module's answer and is not a finding; a value assigned over it is.
+    for (const [key, child] of sentinelWrites.get(value) ?? []) {
+      if (typeof key === "symbol") continue;
+      leaves(child, `${path}.${String(key)}`, seen, out, depth + 1);
+    }
+    return;
+  }
   if (value === null || typeof value !== "object") { out.push([path, value]); return; }
   if (seen.has(value)) return;
   seen.add(value);
@@ -145,17 +190,38 @@ for (const name of modules) {
     }
     return false;
   };
-  const invented = out.filter(([, v]) => {
+  // `undefined` is absence, not invention, and conflating them cost this probe
+  // its whole signal. When `fs` became probeable it reported `SUPPLIES 131` --
+  // every one of them `[object Undefined]`, because the absent-export guards in
+  // the shims return `undefined` for a name the compiled addon does not publish
+  // yet. A shim that answers `undefined` is not answering for the module; it is
+  // saying the module has nothing there, which is true and is what the guards
+  // are for.
+  //
+  // They are still worth counting, separately: an absent leaf is the surface
+  // `vacuous-lane.mjs` searches, because `undefined === undefined` is the one
+  // comparison that passes without either side existing. So absence is reported
+  // as absence, and "supplies a value" keeps meaning what it says -- the shim
+  // hands back an answer nobody checked against the module.
+  const candidates = out.filter(([, v]) => {
     if (sentinels.has(v)) return false;
     if (typeof v === "function" && delegates(v)) return false;
     return true;
   });
+  const invented = candidates.filter(([, v]) => v !== undefined);
+  const absent = candidates.length - invented.length;
   if (invented.length === 0) {
-    console.log(`  passes through  ${name}`);
+    console.log(
+      `  passes through  ${name}` +
+        (absent > 0 ? `  (${absent} name(s) absent from the addon)` : ""),
+    );
     continue;
   }
   supplying++;
-  console.log(`  SUPPLIES ${String(invented.length).padStart(2)}     ${name}`);
+  console.log(
+    `  SUPPLIES ${String(invented.length).padStart(2)}     ${name}` +
+      (absent > 0 ? `  (and ${absent} absent)` : ""),
+  );
   // Describing a value must not itself throw. A proxy over a function has no
   // `Symbol.toPrimitive` and `String(...)` on it raises -- which killed the run
   // mid-module and lost every result after `http`.
