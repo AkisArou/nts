@@ -15210,6 +15210,53 @@ a declared return type, a getter returning `undefined`, a generic rest
 forwarded to its callback -- are the form the remaining distance takes, and
 each is a compiler change rather than a wiring one.
 
+### Every root in the census's top 25 is filed, or recorded as unreduced
+
+`refusal-census.mjs` ranks lowering roots by **distinct named things** rather
+than by sites, because sites count uses: `stream/src/iter/push.ts` reports
+`#pendingEnd` at three lines and `fs` has 104 sites behind four things. Across
+22 modules with the post-coalesce compiler: 149 root messages, 872 things, 1,449
+sites, and 1,438 further things that refuse only because something they call
+was refused.
+
+Eight roots were reduced and filed on 2026-09-09, each from a real site with
+controls that say what the defect is *not*:
+
+    an-erased-value-coalesced-with-a-default  `??` with an erased left operand
+    then-on-a-promise                         `.then`, `.catch`, `.finally`
+    a-function-returning-an-iterator          a declared iterator return type
+    a-getter-returning-undefined              a getter, where a method compiles
+    a-generic-rest-forwarded-to-its-callback  a rest parameter typed by a type parameter
+    in-on-an-undeclared-object                `in` on a bare `object`
+    method-syntax-in-an-interface             a method where a property compiles
+    an-empty-object-literal                   `{}` with no members
+    an-async-generator                        `async function*`
+
+The first was closed by the compiler lane the same afternoon and is a guard now.
+
+**Three of them found the same shape: a diagnostic that reads as a whole feature
+being absent, where a specific spelling or surface is.** `await` compiles and
+`.then` does not. A method compiles and the identical getter does not. An
+interface member compiles as a property and refuses in method syntax. In each
+case the representation exists and one spelling reaches it, which is a different
+piece of work from building the representation and the message does not say so.
+
+**And two of the top four unfiled roots were not causes.** `a module-scope
+variable whose initializer was refused above` -- 27 things across 21 modules,
+second by count -- carries an NTS1001 code and is what every module-scope
+initializer says when what it initialises was refused. Reduced to
+`const marker: object = {}`, which produces the real root at the literal and
+that message at the variable, and produces only the first inside a function. The
+census classifies on the wording now rather than the code.
+
+`a declaration outside every walk`, 19 things across 16 modules, is probably the
+same shape and is deliberately still counted as a root: five attempts to reduce
+it failed, and a classifier should not encode a suspicion. The one root that
+resisted reduction entirely is `a rest parameter that is not an array` -- 37
+things, the largest unfiled -- and the five reductions that missed it are
+written into the fixture that names its neighbour, so the next person does not
+repeat them.
+
 ### The seven modules with nothing on the axis are not seven pieces of work
 
 Each traced to its head with `cascade-reach.mjs`, which ranks a primary refusal
