@@ -24,7 +24,13 @@ src="$root/runtime/node/$module"
 # the artifact built. The default is unchanged, so every existing caller and
 # every other lane behaves exactly as before -- this is the addon half of the
 # rule that already exists for the compiler: copy it and pass `NTS_BIN`.
-out="${NTS_ADDON_OUT:-$root/target/node}"
+# `NTS_CONFORMANCE_OUT` as well, because it was here first and did not work.
+# `build-floor.sh:130` reads `${NTS_CONFORMANCE_OUT:-$PWD/target/node}` and then
+# looks for `$out_dir/$module.node` -- but this script wrote to `target/node`
+# unconditionally, so setting that variable made the floor search a directory
+# nothing writes to and report every module as failing to load. One concept with
+# two names is worse than either; both resolve here, `NTS_ADDON_OUT` first.
+out="${NTS_ADDON_OUT:-${NTS_CONFORMANCE_OUT:-$root/target/node}}"
 work="$out/$module.build"
 
 [ -d "$src" ] || { echo "no such module: runtime/node/$module" >&2; exit 2; }

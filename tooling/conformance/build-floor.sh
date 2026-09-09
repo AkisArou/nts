@@ -127,7 +127,11 @@ fi
 
 failures=0
 built=0
-out_dir=${NTS_CONFORMANCE_OUT:-$PWD/target/node}
+# The same resolution `build.sh` uses, in the same order. These were two
+# expressions for one directory and they did not agree: this line honoured
+# `NTS_CONFORMANCE_OUT` and `build.sh` ignored it, so setting it sent the floor
+# looking for addons where none are written.
+out_dir=${NTS_ADDON_OUT:-${NTS_CONFORMANCE_OUT:-$PWD/target/node}}
 for module in $FLOOR; do
   printf '  %-22s ' "$module"
   out=$(NTS_COMPILER="$compiler" NTS_BIN="$compiler" \
