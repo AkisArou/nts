@@ -1,48 +1,43 @@
-// expect: emit-c --napi -> emits-addon could not gather the rest arguments
+// expect: emit-c --napi -> emits-addon nts_napi_rest(env, info, 0, true, "args"
 //
-// A rest parameter crosses -- `rest-parameter-at-the-wrapper` is a guard now --
-// but a **non-conforming element makes the wrapper throw its own error before
-// the function runs**, so the module's own validation never happens and node's
-// error identity is lost.
-//
-// Observed on the real artifact, not reasoned about:
+// FIXED, kept as a guard. A rest element of the wrong type gets node's error
+// code.
 //
 //     path.resolve(42)
-//       compiled   Error: could not gather the rest arguments   e.code undefined
-//       node       TypeError: …                                 e.code 'ERR_INVALID_ARG_TYPE'
+//       before   Error: could not gather the rest arguments    code undefined
+//       now      TypeError: The "args[0]" argument must be of
+//                type string. Received type number             code ERR_INVALID_ARG_TYPE
+//       node     TypeError                                     code ERR_INVALID_ARG_TYPE
 //
-// The compiled error is not a wrong error from our code. It is not from our code
-// at all: `subject` below validates its arguments and throws a coded error, and
-// that line is never reached. The emitted wrapper is
+// Two of `path`'s nine remaining failures were this one line, and
+// `test-path.js` asserts the **code and the name** rather than the text, so
+// this is the assertion node makes.
 //
-//     if (!nts_napi_check(env, nts_napi_rest(env, info, 0, true, &a0),
-//                         "could not gather the rest arguments")) goto …;
+// # The expectation, which had to be replaced rather than kept
 //
-// -- `nts_napi_rest` decides the elements are unacceptable and `nts_napi_check`
-// raises a bare `Error` with that message. `Error` instead of `TypeError`, no
-// `code`, and a message describing the wrapper's internals rather than the
-// argument.
+// It used to be `emits-addon could not gather the rest arguments` -- and that
+// string is the *fallback message of `nts_napi_check`*, written into every
+// addon whether or not anything reaches it. So the fixture would have reported
+// `reproduces` forever, against a compiler that had fixed the defect, for the
+// same reason `optional-parameter-at-the-wrapper`'s expectation matched the
+// output it was written to catch: **the text the fixture named was not the text
+// that changed.**
 //
-// **This is the "preserve error types" rule, not a cosmetic one.** Node's tests
-// assert `e.code`, and every module in this profile routes its argument errors
-// through `internal/errors.ts` precisely so the codes match. A boundary that
-// replaces them makes every such assertion fail for a reason that has nothing to
-// do with the module.
+// It now names the gatherer's call site with this fixture's own parameter name,
+// which is per-fixture and did not exist in that form before.
 //
-// `control` takes one `string` rather than a rest and is published the same way;
-// its own validation runs and its coded error survives. So the difference is the
-// rest gathering and not argument validation in general.
+// # Why the boundary throws at all
 //
-// **What the fixed form looks like**: the wrapper hands the elements through and
-// lets the function's own validation produce the error, or raises the module's
-// error itself. Either way this message stops appearing for a function that
-// validates what it was given, and this fixture goes CHANGED rather than green,
-// which is correct -- a person should read what replaced it.
+// The module's own validation cannot run. `subject(...args: string[])` types
+// every element `string`, so `typeof arg !== "string"` folds to false before
+// the body sees it -- the same fold that deletes `validateString` in 23
+// exported functions, and the reason the arity check is load-bearing rather
+// than officious. The boundary is standing in for a guard the declaration
+// removed, so it has to stand in with node's code.
 //
-// Six published or soon-published rest exports carry this: `path.resolve` and
-// `path.join` in both namespaces, `stream.pipeline` and `stream.compose`.
-// `path.resolve` and `path.join` are two of the eleven `path` currently
-// publishes, so this is live on the axis today rather than latent.
+// `control` is the non-rest half: its coded error survives the boundary
+// untouched, which is what says this was about the gatherer and not about
+// errors crossing at all.
 
 class InvalidArgument extends Error {
   readonly code: string;

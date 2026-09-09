@@ -80,3 +80,26 @@ the same way in the same window and found it by the diff stat looking wrong. A
 write that fails partway and reports success is the same shape as a check that
 cannot go red, one level further out -- so the tell to keep is the **exact page
 boundary**, which no prose ends on by accident.
+
+## Amended: the general form is "unconditional", not "prefix"
+
+A second fixture had the same flaw and it was not a prefix.
+`rest-element-error-replaces-the-modules-own` expected
+
+    emits-addon could not gather the rest arguments
+
+which is the **fallback message of `nts_napi_check`** -- written into every
+addon the emitter produces, whether or not anything reaches it. The defect it
+named was fixed and the fixture would have reported `reproduces` for as long as
+that helper exists.
+
+So the rule is not about prefixes. **An expectation that names something the
+emitter writes unconditionally cannot fail**, and the unconditional thing is
+very often an error message: error text is written once, near the top, and
+reached rarely. Both of these fixtures named a string that was in the output for
+a reason unrelated to the thing under test.
+
+The fix in both cases was to name something *conditional* -- the closing quote
+that only the singular produces, and the gatherer's call site carrying the
+fixture's own parameter name. Both control at zero against the binary they were
+written to catch.
