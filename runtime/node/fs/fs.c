@@ -2663,3 +2663,124 @@ void nts_fs_opendir_async(NtsString *path, NtsHeader *callback) {
 void nts_fs_opendir_bytes_async(NtsArray *path, NtsHeader *callback) {
     opendir_start(native_byte_path(path), callback);
 }
+
+/* The directory pair, async.
+ *
+ * `uv_fs_readdir` fills a buffer the *directory* points at rather than one the
+ * request owns, which is fine synchronously and is not here: the buffer has to
+ * outlive the call and the pointer has to be cleared afterwards, so both are
+ * the request's business. Leaving `dirents` set would hand the next read a
+ * buffer this one already freed. */
+
+typedef struct {
+    uv_fs_t request;
+    NtsHeader *callback;
+    NtsFsDirectory *entry;
+    uv_dirent_t *entries;
+} DirRequest;
+
+static void on_dir_read(uv_fs_t *request) {
+    DirRequest *dir = (DirRequest *)request;
+    ssize_t count = request->result;
+    if (dir->entry != NULL && dir->entry->directory != NULL) {
+        dir->entry->directory->dirents = NULL;
+        dir->entry->directory->nentries = 0;
+    }
+    async_call_columns(dir->callback, count < 0 ? (double)count : 0.0,
+                       count < 0 ? nts_array_new(&nts_desc_ref, 0)
+                                 : dirent_rows(dir->entries, (size_t)count));
+    if (dir->callback != NULL) nts_release(dir->callback);
+    uv_fs_req_cleanup(request);
+    free(dir->entries);
+    free(dir);
+}
+
+void nts_fs_dir_read_async(double identifier, double buffer_size,
+                           NtsHeader *callback) {
+    NtsFsDirectory *entry = find_directory(identifier);
+    if (entry == NULL) {
+        async_call_columns(callback, (double)UV_EBADF,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+    /* The same bounds the sync form applies, and for the same reason: the
+     * buffer is allocated from this number, so a caller's mistake must not
+     * become an allocation. */
+    if (buffer_size < 1.0 || buffer_size > UINT32_MAX ||
+        buffer_size != (double)(uint32_t)buffer_size) {
+        async_call_columns(callback, (double)UV_EINVAL,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+
+    DirRequest *dir = calloc(1, sizeof(DirRequest));
+    if (dir == NULL) {
+        async_call_columns(callback, (double)UV_ENOMEM,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+    size_t capacity = (size_t)buffer_size;
+    dir->entries = calloc(capacity, sizeof(*dir->entries));
+    if (dir->entries == NULL) {
+        free(dir);
+        async_call_columns(callback, (double)UV_ENOMEM,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+    dir->callback = callback;
+    dir->entry = entry;
+    if (callback != NULL) nts_retain(callback);
+    entry->directory->dirents = dir->entries;
+    entry->directory->nentries = capacity;
+
+    int status = uv_fs_readdir(fs_loop(), &dir->request, entry->directory,
+                               on_dir_read);
+    if (status != 0) {
+        entry->directory->dirents = NULL;
+        entry->directory->nentries = 0;
+        async_call_columns(callback, (double)status,
+                           nts_array_new(&nts_desc_ref, 0));
+        if (callback != NULL) nts_release(callback);
+        free(dir->entries);
+        free(dir);
+    }
+}
+
+static void on_dir_close(uv_fs_t *request) {
+    DirRequest *dir = (DirRequest *)request;
+    ssize_t result = request->result;
+    /* Unlinked only once libuv is done with it. Removing the entry before the
+     * close completed would let a second close find nothing and report EBADF
+     * for a directory that was closing perfectly well. */
+    if (dir->entry != NULL) {
+        unlink_directory(dir->entry);
+        free(dir->entry);
+    }
+    async_call_status(dir->callback, result < 0 ? (double)result : 0.0);
+    if (dir->callback != NULL) nts_release(dir->callback);
+    uv_fs_req_cleanup(request);
+    free(dir);
+}
+
+void nts_fs_dir_close_async(double identifier, NtsHeader *callback) {
+    NtsFsDirectory *entry = find_directory(identifier);
+    if (entry == NULL) {
+        async_call_status(callback, (double)UV_EBADF);
+        return;
+    }
+    DirRequest *dir = calloc(1, sizeof(DirRequest));
+    if (dir == NULL) {
+        async_call_status(callback, (double)UV_ENOMEM);
+        return;
+    }
+    dir->callback = callback;
+    dir->entry = entry;
+    if (callback != NULL) nts_retain(callback);
+    int status = uv_fs_closedir(fs_loop(), &dir->request, entry->directory,
+                                on_dir_close);
+    if (status != 0) {
+        async_call_status(callback, (double)status);
+        if (callback != NULL) nts_release(callback);
+        free(dir);
+    }
+}
