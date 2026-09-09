@@ -9660,6 +9660,27 @@ they sit beside does exist -- `internal/microtask.c` implements
 subsystem. `nextTick` is not a microtask: node runs its queue *before* promise
 microtasks, and that ordering is the whole content of the binding.
 
+**Neither of the two kinds is simply unwritten, and the distinction is the
+point of listing them.**
+
+`nts_promise_hook_install` and `nts_promise_hook_uninstall` are **blocked**. A
+Node-API addon cannot install a promise hook: the whole promise surface of
+`js_native_api.h` and `node_api.h` is `napi_create_promise` and
+`napi_is_promise`, and `promise_hook` appears in neither header. `SetPromiseHook`
+is `v8::Isolate`'s, one layer below anything an addon can reach. Writing this C
+is not work that is waiting to be done; it wants an API that is not there.
+
+`nts_next_tick` is **not yet reachable**. No emitted `program.c` in any of the
+twenty-two builds references it -- its callers are refused upstream -- so it
+blocks no link today. Its declaration is generic over a tuple
+(`<Args extends unknown[]>(callback: (...args: Args) => void, args: Args)`), and
+`microtask.c` records at length what happens when a `.c` guesses the prototype
+the compiler will emit for a callback binding: the closure parameter is spelled
+per program (`NtsObj_Closure20 *` in one module, `18` in another), a shared `.c`
+cannot name it, and the mismatch is invisible until a module gets far enough to
+link. Writing this one now would be guessing a signature that nothing has
+emitted yet, which is the same mistake with a longer feedback loop.
+
 **The instruction says derive it with `nm`, and the subtler trap is which `nm`.**
 The first attempt used `nm -D --defined-only`, which reads the *dynamic* symbol
 table, and reported **95** bindings with no C -- including every `nts_udp_*` in
