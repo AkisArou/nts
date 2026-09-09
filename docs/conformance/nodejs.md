@@ -13085,6 +13085,63 @@ Every one of these is a file that passes interpreted by construction. None is a
 defect in a module. They are the shape of the ceiling, and the ceiling is per
 module: `console` 12 of 19, `path` 20 of 21, `os` 9 of 9.
 
+## Re-derived on v17 (`4cbf4cf2`): the axis moves to 17, and three divergence shapes close
+
+Thirteen modules rebuilt from one pin, then measured.
+
+### The axis
+
+    punycode    3 passed,  0 degenerate  ->  3 behaviour-dependent
+    path       14 passed,  3 degenerate  -> 11        (was 12 and 9)
+    os          4 passed,  1 degenerate  ->  3
+    buffer      0 passed,  0 degenerate  ->  0
+
+**17 behaviour-dependent passes across 3 modules**, up from 15. Still 1 of 22
+whole. The two `path` files are the namespace value members: `win32.sep` is
+`"\\"` and `posix.sep` is `"/"`, and both namespaces now carry 13 members
+against node's 17.
+
+**`buffer` 5 published to 3 moved its compiled count by nothing** -- 0 either
+way, as the compiler lane predicted. Both names it lost were uncallable, so
+removing them cost no test and the export count is now honest. That is the sixth
+correct-work-no-movement of the night and the first from *removing* names.
+
+### Published, counted as node's own
+
+    os 17   path 15   punycode 6   async_hooks 3   buffer 3   net 3
+    fs 2    util 2    http 1       stream 1        zlib 1
+    readline 0 of 7   timers 0 of 2   url 0 of 1
+
+**54 of node's own names across 11 modules.** `fs` gained one and `zlib` came
+off zero. `timers` lost `clearImmediate` to the opaque-signature decline and now
+publishes two names, neither node's.
+
+### The divergence family: three of four shapes closed
+
+    basename("/a/b.txt")      agrees    (arity)
+    toNamespacedPath(null)    agrees    (parameter type)
+    resolve(42)               agrees    (rest element, and the error identity with it)
+    join("a", 1)              agrees
+    dirname()                 DIFFERS   ours ERR_MISSING_ARGS, node ERR_INVALID_ARG_TYPE
+
+Both namespaces, member by member, over twenty inputs chosen for what `posix`
+and `win32` disagree about:
+
+    400 case(s) where both returned a value:   0 differ
+     40 case(s) differ only in which error was thrown
+
+All forty are the **missing-argument** case -- `relative("/")`, one argument to a
+two-argument function. That is the arity check firing before the module's own
+validation, and the compiler lane has shown it is load-bearing: `dirname(path:
+string)` compiles `path` to `NtsString *`, so `validateString` is statically
+dead and removing the check dereferences null rather than reproducing node's
+error. It is the last shape of the four and the only one that is not simply a
+fix.
+
+`path` is 14 of 21 with 7 to gain: `format` 2, object representation 2,
+`matchesGlob` 1, `process.cwd` 1 (unwinnable), and its surface test, which now
+reports six findings at once instead of one.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
