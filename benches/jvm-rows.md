@@ -74,7 +74,8 @@ meets them. This is the map; the row table below it is the current state.
   - The object count beside the byte count, and why it should have been there first
   - `growth-grown` is at its floor, and the count proves it in one line
   - `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
-  - The seven headers, read: six of them argue, and one row is genuinely missing a reference
+  - The seven headers, read: six of them argue, and one row is genuinely missing a reference -- WITHDRAWN below
+  - WITHDRAWN: `json-serialize` should not have a `ref.java` either, and its own header said so
   - The bar's second number, read at last: eight rows lose to node and six of them are the platform
   - The partition, re-measured at a fresh pin: same eight rows, same six and two
 - Open, and whose
@@ -2929,7 +2930,8 @@ same row for two unrelated reasons, which is the kind of coincidence worth
 naming rather than fixing twice.
 
 So the count is **eight of nine argued and one open**, not two and seven. Mine,
-and the actionable half is one file.
+and the actionable half is one file. **WITHDRAWN two sections below: it is nine
+of nine, and the one file should not be written.**
 
 ### The bar's second number, read at last: eight rows lose to node and six of them are the platform
 
@@ -3023,6 +3025,53 @@ Of the rows this session touched, `node-utf8` (6.54 to 6.15), `array-methods`
 this file spent a night establishing is not a verdict, so **none of them moved**.
 `symbol-keyed-map` and `number-format-double` were both contaminated and are not
 quotable from this sitting at all.
+
+### WITHDRAWN: `json-serialize` should not have a `ref.java` either, and its own header said so
+
+Two sections above I wrote that `json-serialize` is "the one genuinely missing"
+a reference, on the argument its header makes -- "Like `node-utf8`, nobody
+writing this was thinking about a benchmark" -- and that `node-utf8` is its
+stated sibling and has one.
+
+**Priced before writing it, and the price is a second number formatter.** The
+case serializes ten doubles a round through `numberText`, which is
+`String(value)`. On those ten values:
+
+    value                   Double.toString        String(value)
+    0                       0.0                    0
+    42                      42.0                   42
+    1e21                    1.0E21                 1e+21
+    1e-7                    1.0E-7                 1e-7
+    123456789012345678      1.2345678901234568E17  123456789012345680
+    5e-324                  4.9E-324               5e-324
+    -0                      -0.0                   0
+
+`number-format-double/ref.java` handles this family with one rule -- strip a
+trailing `.0` -- and its own comment says exactly why that is enough *there*:
+"the two languages also disagree about when to switch to exponential -- Java at
+1e7 and 1e-3, JavaScript at 1e21 and 1e-6 -- and this case's values run from
+0.0029296875 to 99, so neither side reaches either threshold". **This case's
+values cross both**, so that fix-up does not transfer.
+
+And one of them is not a formatting rule at all. `Double.parseDouble("5e-324")`
+**is** `Double.MIN_VALUE`, so JavaScript's one-digit answer round-trips and
+Java's `4.9E-324` is simply not the shortest. Reproducing it means generating
+digits, not reshaping a string.
+
+**So the reference would be a second Grisu to keep correct**, which is precisely
+the argument this case's header already makes against a `ref.cpp`: "a second
+implementation to keep correct rather than a reference to divide by". I read
+that paragraph, recorded that it argued about the *escaper*, and did not notice
+it applies at least as strongly to the number form.
+
+**And the sibling does not transfer because of what it is.** `node-utf8`'s
+reference formats **no numbers at all** -- it is a codec, bytes in and a string
+out. Same shape of workload in the sense the header means, and a different
+problem for a reference.
+
+So the count is **nine of nine argued and none open**, not eight and one. The
+useful part of the exercise was the pricing: the measurement that would have
+justified writing the file is the one that says not to.
 
 ## Open, and whose
 
