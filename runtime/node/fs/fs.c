@@ -1643,3 +1643,350 @@ void nts_fs_watchfile_ref(double handle) {
 void nts_fs_watchfile_unref(double handle) {
     watcher_ref(watcher_at(handle, WATCH_POLL), false);
 }
+
+/* ------------------------------------------------------- the async surface
+ *
+ * Every one of these is `uv_fs_*` with a real callback rather than NULL, which
+ * is the only difference from the sync half above: libuv runs it on the thread
+ * pool and calls back on the loop thread. The request owns whatever it had to
+ * allocate -- the paths especially, which libuv does *not* copy and which must
+ * outlive the call.
+ *
+ * Two result shapes cover most of the surface. `FS_STATUS` reports only whether
+ * it worked; `FS_NUMBER` reports a number libuv put in `result`, which is the
+ * descriptor for `open`, the count for `write`, and zero for the rest. libuv
+ * puts a negative errno in the same field, so the split is `result < 0`. */
+
+typedef enum { FS_STATUS, FS_NUMBER } AsyncShape;
+
+typedef struct {
+    uv_fs_t request;
+    NtsHeader *callback;
+    AsyncShape shape;
+    /* libuv keeps the pointer, not the bytes. Freed with the request. */
+    char *first;
+    char *second;
+} AsyncRequest;
+
+static void async_call_status(NtsHeader *callback, double errno_value) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double))
+         callback->descriptor->methods[nts_closure_call_slot])(callback,
+                                                               errno_value);
+}
+
+static void async_call_number(NtsHeader *callback, double errno_value,
+                              double value) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, double))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, errno_value, value);
+}
+
+static void on_async_done(uv_fs_t *request) {
+    AsyncRequest *pending = (AsyncRequest *)request;
+    ssize_t result = request->result;
+    double failed = result < 0 ? (double)result : 0.0;
+
+    if (pending->shape == FS_NUMBER) {
+        async_call_number(pending->callback, failed,
+                          result < 0 ? 0.0 : (double)result);
+    } else {
+        async_call_status(pending->callback, failed);
+    }
+
+    if (pending->callback != NULL) nts_release(pending->callback);
+    uv_fs_req_cleanup(request);
+    free(pending->first);
+    free(pending->second);
+    free(pending);
+}
+
+/* A request, with its callback retained and its paths owned. Returns NULL only
+ * out of memory, and the caller reports that itself: there is no request to
+ * carry the answer back on. */
+static AsyncRequest *async_new(NtsHeader *callback, AsyncShape shape,
+                               char *first, char *second) {
+    AsyncRequest *pending = calloc(1, sizeof(AsyncRequest));
+    if (pending == NULL) {
+        free(first);
+        free(second);
+        return NULL;
+    }
+    pending->callback = callback;
+    pending->shape = shape;
+    pending->first = first;
+    pending->second = second;
+    if (callback != NULL) nts_retain(callback);
+    return pending;
+}
+
+/* Report a failure that happened before libuv was reached. The callback still
+ * runs, and it runs *later* rather than now: a binding that calls back
+ * synchronously on the error path and asynchronously on the success path is the
+ * shape node's own documentation warns about, and the module above would have
+ * to defend against it. `uv_fs_*` on a path that cannot exist gives the same
+ * deferral for free, so this is only for allocation failure. */
+static void async_fail(NtsHeader *callback, AsyncShape shape, double errno_value,
+                       AsyncRequest *pending) {
+    if (pending != NULL) {
+        if (pending->callback != NULL) nts_release(pending->callback);
+        free(pending->first);
+        free(pending->second);
+        free(pending);
+    }
+    if (shape == FS_NUMBER) {
+        async_call_number(callback, errno_value, 0.0);
+    } else {
+        async_call_status(callback, errno_value);
+    }
+}
+
+static uv_loop_t *fs_loop(void) { return uv_default_loop(); }
+
+/* One macro's worth of shape repeated by hand, because the bodies differ in
+ * which `uv_fs_*` they call and in how many arguments it takes, and a macro
+ * that covered all of them would take the call as a token and read worse than
+ * the calls do. */
+
+#define ASYNC_BEGIN(shape_, first_, second_)                                   \
+    AsyncRequest *pending = async_new(callback, (shape_), (first_), (second_)); \
+    if (pending == NULL) {                                                     \
+        async_fail(callback, (shape_), (double)UV_ENOMEM, NULL);               \
+        return;                                                                \
+    }
+
+#define ASYNC_END(shape_, call_)                                               \
+    int status = (call_);                                                      \
+    if (status != 0) async_fail(callback, (shape_), (double)status, pending);
+
+void nts_fs_access_async(NtsString *path, double mode, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_access(fs_loop(), &pending->request,
+                                      pending->first, (int)mode, on_async_done))
+}
+
+void nts_fs_access_bytes_async(NtsArray *path, double mode,
+                               NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_access(fs_loop(), &pending->request,
+                                      pending->first, (int)mode, on_async_done))
+}
+
+void nts_fs_chmod_async(NtsString *path, double mode, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_chmod(fs_loop(), &pending->request,
+                                     pending->first, (int)mode, on_async_done))
+}
+
+void nts_fs_chmod_async_bytes(NtsArray *path, double mode,
+                              NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_chmod(fs_loop(), &pending->request,
+                                     pending->first, (int)mode, on_async_done))
+}
+
+void nts_fs_chown_async(NtsString *path, double uid, double gid,
+                        NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS,
+              uv_fs_chown(fs_loop(), &pending->request, pending->first,
+                          (uv_uid_t)uid, (uv_gid_t)gid, on_async_done))
+}
+
+void nts_fs_chown_async_bytes(NtsArray *path, double uid, double gid,
+                              NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS,
+              uv_fs_chown(fs_loop(), &pending->request, pending->first,
+                          (uv_uid_t)uid, (uv_gid_t)gid, on_async_done))
+}
+
+void nts_fs_close_async(double descriptor, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_close(fs_loop(), &pending->request,
+                                     (uv_file)descriptor, on_async_done))
+}
+
+void nts_fs_copyfile_async(NtsString *from, NtsString *to, double flags,
+                           NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(from), native_path(to))
+    ASYNC_END(FS_STATUS,
+              uv_fs_copyfile(fs_loop(), &pending->request, pending->first,
+                             pending->second, (int)flags, on_async_done))
+}
+
+void nts_fs_copyfile_async_bytes(NtsArray *from, NtsArray *to, double flags,
+                                 NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(from), native_byte_path(to))
+    ASYNC_END(FS_STATUS,
+              uv_fs_copyfile(fs_loop(), &pending->request, pending->first,
+                             pending->second, (int)flags, on_async_done))
+}
+
+void nts_fs_fchmod_async(double fd, double mode, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_fchmod(fs_loop(), &pending->request,
+                                      (uv_file)fd, (int)mode, on_async_done))
+}
+
+void nts_fs_fchown_async(double fd, double uid, double gid,
+                         NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS,
+              uv_fs_fchown(fs_loop(), &pending->request, (uv_file)fd,
+                           (uv_uid_t)uid, (uv_gid_t)gid, on_async_done))
+}
+
+void nts_fs_fdatasync_async(double fd, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_fdatasync(fs_loop(), &pending->request,
+                                         (uv_file)fd, on_async_done))
+}
+
+void nts_fs_fsync_async(double fd, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_fsync(fs_loop(), &pending->request, (uv_file)fd,
+                                     on_async_done))
+}
+
+void nts_fs_ftruncate_async(double fd, double length, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_ftruncate(fs_loop(), &pending->request,
+                                         (uv_file)fd, (int64_t)length,
+                                         on_async_done))
+}
+
+void nts_fs_futimes_async(double fd, double atime, double mtime,
+                          NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, NULL, NULL)
+    ASYNC_END(FS_STATUS, uv_fs_futime(fs_loop(), &pending->request,
+                                      (uv_file)fd, atime, mtime,
+                                      on_async_done))
+}
+
+void nts_fs_lchown_async(NtsString *path, double uid, double gid,
+                         NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS,
+              uv_fs_lchown(fs_loop(), &pending->request, pending->first,
+                           (uv_uid_t)uid, (uv_gid_t)gid, on_async_done))
+}
+
+void nts_fs_lchown_bytes_async(NtsArray *path, double uid, double gid,
+                               NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS,
+              uv_fs_lchown(fs_loop(), &pending->request, pending->first,
+                           (uv_uid_t)uid, (uv_gid_t)gid, on_async_done))
+}
+
+void nts_fs_link_async(NtsString *from, NtsString *to, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(from), native_path(to))
+    ASYNC_END(FS_STATUS, uv_fs_link(fs_loop(), &pending->request,
+                                    pending->first, pending->second,
+                                    on_async_done))
+}
+
+void nts_fs_link_async_bytes(NtsArray *from, NtsArray *to,
+                             NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(from), native_byte_path(to))
+    ASYNC_END(FS_STATUS, uv_fs_link(fs_loop(), &pending->request,
+                                    pending->first, pending->second,
+                                    on_async_done))
+}
+
+void nts_fs_lutimes_async(NtsString *path, double atime, double mtime,
+                          NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_lutime(fs_loop(), &pending->request,
+                                      pending->first, atime, mtime,
+                                      on_async_done))
+}
+
+void nts_fs_rename_async(NtsString *from, NtsString *to, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(from), native_path(to))
+    ASYNC_END(FS_STATUS, uv_fs_rename(fs_loop(), &pending->request,
+                                      pending->first, pending->second,
+                                      on_async_done))
+}
+
+void nts_fs_rename_async_bytes(NtsArray *from, NtsArray *to,
+                               NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(from), native_byte_path(to))
+    ASYNC_END(FS_STATUS, uv_fs_rename(fs_loop(), &pending->request,
+                                      pending->first, pending->second,
+                                      on_async_done))
+}
+
+void nts_fs_rmdir_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_rmdir(fs_loop(), &pending->request,
+                                     pending->first, on_async_done))
+}
+
+void nts_fs_rmdir_async_bytes(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_rmdir(fs_loop(), &pending->request,
+                                     pending->first, on_async_done))
+}
+
+void nts_fs_symlink_async(NtsString *target, NtsString *at, double flags,
+                          NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(target), native_path(at))
+    ASYNC_END(FS_STATUS,
+              uv_fs_symlink(fs_loop(), &pending->request, pending->first,
+                            pending->second, (int)flags, on_async_done))
+}
+
+void nts_fs_symlink_bytes_async(NtsArray *target, NtsArray *at, double flags,
+                                NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(target), native_byte_path(at))
+    ASYNC_END(FS_STATUS,
+              uv_fs_symlink(fs_loop(), &pending->request, pending->first,
+                            pending->second, (int)flags, on_async_done))
+}
+
+void nts_fs_unlink_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_unlink(fs_loop(), &pending->request,
+                                      pending->first, on_async_done))
+}
+
+void nts_fs_unlink_async_bytes(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_unlink(fs_loop(), &pending->request,
+                                      pending->first, on_async_done))
+}
+
+void nts_fs_utimes_async(NtsString *path, double atime, double mtime,
+                         NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_utime(fs_loop(), &pending->request,
+                                     pending->first, atime, mtime,
+                                     on_async_done))
+}
+
+void nts_fs_utimes_async_bytes(NtsArray *path, double atime, double mtime,
+                               NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATUS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATUS, uv_fs_utime(fs_loop(), &pending->request,
+                                     pending->first, atime, mtime,
+                                     on_async_done))
+}
+
+void nts_fs_open_async(NtsString *path, double flags, double mode,
+                       NtsHeader *callback) {
+    ASYNC_BEGIN(FS_NUMBER, native_path(path), NULL)
+    ASYNC_END(FS_NUMBER,
+              uv_fs_open(fs_loop(), &pending->request, pending->first,
+                         (int)flags, (int)mode, on_async_done))
+}
+
+void nts_fs_open_bytes_async(NtsArray *path, double flags, double mode,
+                             NtsHeader *callback) {
+    ASYNC_BEGIN(FS_NUMBER, native_byte_path(path), NULL)
+    ASYNC_END(FS_NUMBER,
+              uv_fs_open(fs_loop(), &pending->request, pending->first,
+                         (int)flags, (int)mode, on_async_done))
+}
