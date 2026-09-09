@@ -9643,6 +9643,56 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## `os` is 4 of 9, and four of the five failures name one export
+
+Compiled lane, `target/node/os.node`, 2026-09-09:
+
+```
+pass  test-os-eol.js            FAIL  test-os-process-priority.js       ...priority
+pass  test-os-fast.js           FAIL  local/constants-signals-static.js
+pass  test-os-homedir-no-envvar FAIL  local/constants-table-static.js   ...signals
+pass  local/binding-name-static FAIL  local/core-static.js              ...priority
+ n/a  test-os-userinfo-...      FAIL  local/export-surface-static.js    os.constants is undefined
+```
+
+Four of the five say the same thing. `os` publishes seventeen exports and
+`constants` is not among them:
+
+```
+hostname type release version machine arch platform homedir tmpdir
+endianness uptime totalmem freemem availableParallelism loadavg EOL devNull
+```
+
+The wrapper's reason is `no wrapper for constants: is exported and no function
+of that name was compiled` -- the same sentence it gives for `getPriority`,
+`networkInterfaces`, `setPriority` and `userInfo`, which are functions that
+cascaded. It is not the `is not a function this backend can name` arm, so this
+is not the value-export family: `punycode` publishes `ucs2`, an object whose
+members are functions, and `version`, a string. Object-valued exports cross.
+
+The initializer is what did not:
+
+```
+os/src/main.ts:547  the initializer of `constants35` was not compiled
+                    because it calls `readConstants`, which was refused above
+os/src/main.ts:541  `name`, which `an anonymous type` does not declare
+                      table[name] = value;
+```
+
+So `os.constants` is behind `computed-member-write`, which is already filed.
+
+**That fixture and its read half are the highest-leverage pair in the profile.**
+`computed-member-write` gates `os.constants`, which four of `os`'s five
+compiled-lane failures name. `computed-member-read` gates `querystring`, whose
+`ParsedUrlQuery` is an interface whose whole purpose is an index signature, and
+which publishes nothing at all across 8 tests. Two modules, one representation
+decision -- an index-signature type has no members and its keys are not known
+until run time.
+
+Both halves are filed separately and deliberately: a fix that lands writes and
+not reads would flip `computed-member-write` to `guard ok` and nothing would say
+the other half was still open.
+
 ## A pass on a module that publishes nothing is measuring something else
 
 Twelve of the twenty-two addons publish **zero** exports. `--sabotage` blanks a
