@@ -50,7 +50,31 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-work=${TMPDIR:-/tmp}/nts-artbytes.$$
+# Work on disk rather than in the tmpfs.
+#
+# `/tmp` here is a 16G tmpfs, and this script's cleanup is an `EXIT INT TERM`
+# trap -- which SIGKILL does not fire. Three killed sweeps left three orphaned
+# work directories, each holding classes and a copy of the runtime jar for up to
+# sixty cases, and the tmpfs filled until the *shell* could not start: every
+# command, `echo` included, failing because there was no room for its own
+# snapshot. Nothing in the repository caused it and nothing in the repository
+# would have found it.
+#
+# `TMPDIR` still wins if it is set, so a caller can put this anywhere. The
+# default is a directory that survives being filled.
+# Work on disk, and deliberately NOT through `TMPDIR`.
+#
+# `TMPDIR` is `/tmp` here and `/tmp` is a 16G tmpfs. This script's cleanup is an
+# `EXIT INT TERM` trap, which SIGKILL does not fire, so three killed sweeps left
+# three orphaned work directories -- each holding classes and a copy of the
+# runtime jar for up to sixty cases. The tmpfs filled until the *shell* could
+# not start: every command, `echo` included, failing because there was no room
+# for its own snapshot.
+#
+# Honouring `TMPDIR` would have read as the fix and changed nothing, which is
+# the worse outcome. `NTS_ART_WORK` overrides for a caller who wants it
+# elsewhere; the default is a filesystem that does not take the machine with it.
+work=${NTS_ART_WORK:-$HOME/.cache/nts-android}/nts-artbytes.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 runs=${NTS_ART_ITERATIONS:-2000}
 
