@@ -9658,14 +9658,31 @@ util         25    zlib          68
 
 **1,851 passed, 0 failed, across all twenty-two.**
 
-**What this establishes and what it does not.** It establishes 100%: no test
-that passed before the import fails after it. It does not re-establish *0
-hollow*, which is a different property -- a file that passes with the module
-blanked -- and which was last measured by the sweep before this change. An
-import that swaps one implementation of string quoting for an equivalent one
-has no path to turning a real pass into a hollow one, but that is an argument
-and not a measurement, and the distinction is exactly the kind this document
-exists to keep.
+**100% and 0 hollow are two measurements, and both were taken.** The counts
+above establish the first: no test that passed before the import fails after
+it. They say nothing about the second -- a file that passes with the module
+*blanked* -- which is a different property and was last measured by the sweep
+before this change.
+
+So it was measured again, `--sabotage` per module, in the same batches:
+
+```
+assert 0   console 0    fs 0     path 0       stream 0
+async_hooks 0  dgram 0  http 0   process 0    string_decoder 0
+buffer 0   diagnostics_channel 0  net 0  punycode 0  timers 0
+events 0   os 0         querystring 0  readline 0   url 0
+util 0     zlib 0
+```
+
+**22 of 22, zero files still passing with the module blanked.** The lane that
+produced it is the one that reported `HOLLOW punycode 1 file(s)` when a test
+asserting `1 + 1 === 2` was planted in it, so the zero is a measurement rather
+than a lane that has never found anything.
+
+The argument -- that swapping one string-quoting implementation for a
+verified-equivalent one cannot turn a real pass hollow -- was correct. It was
+still worth the twenty-two runs, because "correct argument" and "measured" are
+not the same claim and this document is where the difference is kept.
 
 ## The table re-derived after tonight's three fixes
 
