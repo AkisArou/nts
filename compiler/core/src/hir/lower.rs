@@ -3807,6 +3807,12 @@ pub fn erasable(ty: &HirType) -> bool {
                     // cannot get into the thing being tested.
                     | ManagedType::DataView
                     | ManagedType::Date
+                    // A `Map` and a `Set` are ordinary references too, and a
+                    // predicate that cannot be asked of a constructed value is
+                    // half a feature -- which is what `DataView` was until an
+                    // hour ago.
+                    | ManagedType::Map(_, _)
+                    | ManagedType::Set(_)
             )
     )
 }
@@ -12514,6 +12520,32 @@ impl<'a> FuncBuilder<'a> {
         let Some(name) = self.node(rhs).text.clone() else {
             return Ok(None);
         };
+        // A weak collection has **no representation**, so nothing a compiled
+        // program can hold is one: `representation_within` gives `Map` and
+        // `Set` a `ManagedType` and gives `WeakMap` and `WeakSet` none, no
+        // constructor can produce one, and the Node-API boundary lets four
+        // types inward of which none is a collection. So the test is not
+        // unanswerable -- it is answerable, and the answer is `false`.
+        //
+        // Guarded on the fact rather than asserting it, because the day
+        // `WeakMap` gains a representation this stops being true and a constant
+        // `false` becomes a wrong answer. If it ever represents, this falls
+        // through to the refusal it has today.
+        //
+        // Two of the ten classes in `internal/errors.ts`'s `staticObjectName`,
+        // which reports **one refusal per function** -- so it named `DataView`
+        // until `DataView` landed and then named `WeakMap`, and nothing in the
+        // output ever said how many remained.
+        if matches!(name.as_str(), "WeakMap" | "WeakSet")
+            && self
+                .type_named(&name)
+                .and_then(|ty| self.represent(ty))
+                .is_none()
+        {
+            let origin = self.origin(id);
+            let _ = self.lower_expression(lhs)?;
+            return Ok(Some(self.push(OpKind::ConstBool(false), HirType::Bool, origin)));
+        }
         let kind = super::builtin::typed_array_element(&name)
             .as_ref()
             .and_then(super::builtin::element_kind);
@@ -12527,13 +12559,20 @@ impl<'a> FuncBuilder<'a> {
             // A `Date` likewise: one struct and one descriptor, and its whole
             // contents are the specification's time value.
             //
-            // `Map` and `Set` are *not* here, and the reason is the JVM lane's:
-            // `newMap` and `newSet` both return a bare `NtsMap` and drop the
-            // kind they are handed, so `instanceof Set` would answer true for a
-            // `Map` -- a silent wrong answer rather than a refusal, which is
-            // the failure this compiler exists to avoid. They land when that
-            // class carries its kind.
             ("Date", _) => "nts_is_date",
+            // One struct serves both -- a Set is a Map that holds no values --
+            // so `holds_values` is the whole of the difference and the two
+            // predicates are one test and its negation. Two independent tests
+            // could drift into both answering true, which is a wrong answer
+            // rather than a refusal.
+            //
+            // Held back a batch on the JVM lane's word: their `newMap` and
+            // `newSet` both returned a bare `NtsMap` and dropped the kind, so
+            // `instanceof Set` would have been true for a `Map` with no example
+            // to catch it. Their class carries the bit now, at a measured zero
+            // bytes per operation.
+            ("Map", _) => "nts_is_map",
+            ("Set", _) => "nts_is_set",
             ("Promise", _) => "nts_is_promise",
             _ => return Ok(None),
         };

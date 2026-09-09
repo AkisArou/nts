@@ -1585,6 +1585,37 @@ impl Program {
         })
     }
 
+    /// Whether anything in the program ever writes this global.
+    ///
+    /// A global whose initializer was excised has no store left. That is not a
+    /// hypothetical shape: `excise_from_initializer` deliberately removes the
+    /// statements depending on a refused call so the rest of a module's
+    /// evaluation still runs, and it reports each one -- but the *binding*
+    /// survives, zeroed, and an addon published it.
+    ///
+    /// `http` published `METHODS` and `methods` that way. Node has 35 entries
+    /// in `METHODS` and `node.methods !== node.METHODS`; ours compared equal
+    /// because both were nothing. **A name bound to `undefined` is worse than
+    /// an absent one**: it satisfies "the module publishes something", it makes
+    /// any export check that asks only for presence agree, and it is exactly as
+    /// incapable of being a test's subject. Found by the Node lane surveying
+    /// all 23 built addons, where it is the only occurrence.
+    ///
+    /// The sibling of [`Self::global_is_settled`], which asks whether anything
+    /// writes it *after* the module initializer. This asks whether anything
+    /// writes it at all.
+    #[must_use]
+    pub fn global_is_initialized(&self, global: u32) -> bool {
+        self.funcs.iter().any(|func| {
+            func.blocks.iter().flat_map(|block| block.ops.iter()).any(|value| {
+                matches!(
+                    func.values[value.0 as usize].kind,
+                    OpKind::GlobalSet { global: at, .. } if at == global
+                )
+            })
+        })
+    }
+
     /// Where a layout's base lives in the program's layout list.
     ///
     /// Resolved here rather than in each backend, because a base's `TypeId` may

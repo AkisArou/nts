@@ -2658,7 +2658,12 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             // when the tag says there is something to follow -- and none of
             // that is disturbed by a reference to the promise itself being
             // erased, which is an ordinary pointer like the rest of this arm.
-            | ManagedType::Promise(_),
+            | ManagedType::Promise(_)
+            // A `Map` and a `Set` are one struct and one descriptor, told apart
+            // by a field rather than by a tag -- so from here they are the same
+            // ordinary reference everything else in this arm is.
+            | ManagedType::Map(_, _)
+            | ManagedType::Set(_),
         ) => Some(("NTS_TAG_OBJECT", "reference")),
         _ => None,
     }

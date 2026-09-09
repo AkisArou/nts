@@ -4784,6 +4784,33 @@ bool nts_value_is_view(NtsValue value) {
  * The same descriptor comparison, and a `Date` is a class here no more than a
  * `DataView` is: one struct, one descriptor, and its whole contents are the
  * time value the specification names. */
+/* `value instanceof Map` and `instanceof Set`.
+ *
+ * One struct serves both -- a Set is a Map that holds no values -- so the
+ * descriptor alone cannot tell them apart and `holds_values` is the whole of
+ * the difference. Written as one predicate and its negation rather than two
+ * independent tests, because two could drift into both answering true, which is
+ * a wrong answer rather than a refusal.
+ *
+ * The JVM lane's `NtsMap` had exactly that bug until tonight: `newMap` and
+ * `newSet` both returned a bare `NtsMap` and dropped the kind they were handed,
+ * so a Set was a Map and nothing had ever asked which. */
+static bool nts_is_map_like(NtsValue value, bool holds_values) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  if (!object || !object->descriptor ||
+      object->descriptor->kind != NTS_KIND_MAP) {
+    return false;
+  }
+  return ((const NtsMap *)object)->holds_values == holds_values;
+}
+
+bool nts_is_map(NtsValue value) { return nts_is_map_like(value, true); }
+
+bool nts_is_set(NtsValue value) { return nts_is_map_like(value, false); }
+
 bool nts_is_date(NtsValue value) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
     return false;

@@ -1750,13 +1750,41 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
         if program.public_functions.iter().any(|at| at == name) {
             continue;
         }
-        let Some(global) = program
+        let Some((at, global)) = program
             .globals
             .iter()
-            .find(|global| global.name == *emitted && global.exported)
+            .enumerate()
+            .find(|(_, global)| global.name == *emitted && global.exported)
         else {
             continue;
         };
+        // A global nothing writes has no value to publish, and publishing it
+        // anyway binds the name to `undefined`. `excise_from_initializer`
+        // removes the statements that depend on a refused call so the rest of a
+        // module's evaluation still runs -- deliberately, and it reports each
+        // one -- but the binding survives, zeroed.
+        //
+        // **A name bound to `undefined` is worse than an absent one.** It
+        // satisfies "the module publishes something", it makes any export check
+        // that asks only for presence agree, and it is exactly as incapable of
+        // being a test's subject. `http` published `METHODS` and `methods` that
+        // way, and node's `methods !== METHODS` while ours compared equal
+        // because both were nothing.
+        //
+        // Reported rather than dropped silently: `report_unrepresentable_exports`
+        // says which name and why, so the reader is sent to the refusal that
+        // took the initializer instead of to an export table.
+        // `deferred` is the half that makes this precise, and without it this
+        // refused `literal-const-export`: a `const` whose value is a literal
+        // carries it in `initial` and is never stored to, so "nothing writes
+        // it" is true and means the opposite. `Global::deferred`'s own doc
+        // draws the line -- `let x: number;` at zero is what the source asked
+        // for, `const delimiter = "-"` at zero is a null pointer.
+        if global.deferred
+            && !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX))
+        {
+            continue;
+        }
         // The same crossing a return value gets, and for the same reason: what
         // leaves is a copy, so nothing has to decide who owns the storage.
         let Some(crossing) = cross(&global.ty, &program.layouts, &FxHashSet::default()) else {

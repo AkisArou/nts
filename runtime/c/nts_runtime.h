@@ -1697,6 +1697,8 @@ NTS_READS_ONLY bool nts_is_view_kind(NtsValue value, double kind);
 NTS_READS_ONLY bool nts_is_buffer(NtsValue value);
 NTS_READS_ONLY bool nts_is_data_view(NtsValue value);
 NTS_READS_ONLY bool nts_is_date(NtsValue value);
+NTS_READS_ONLY bool nts_is_map(NtsValue value);
+NTS_READS_ONLY bool nts_is_set(NtsValue value);
 
 /* `value instanceof Promise`.
  *
