@@ -10043,18 +10043,34 @@ Only `an object type with no layout` is filed, as
 `array-of-object-literals-has-no-layout`. The other three forms have no fixture,
 and the largest of them has 59 occurrences across thirteen modules.
 
-**It closes an open question from earlier tonight.** The ranked blocker table has
-`EventEmitter#emit` at 28 distinct blocked functions with a dash in the root
-column, because tracing it through NTS1001 and NTS1003 found nothing. Its root
-is
+**Two of the five forms are cascade, and the first reading of this was wrong.**
+
+`NTS2009` says so in its own text. `NTS2006 no declaration for X to take a
+signature from` does not, and it was briefly written up here as
+`EventEmitter#emit`'s long-missing root. It is not. Those 59 occurrences name
+just **six** methods --
 
 ```
-events/src/main.ts:444:56  NTS2006 no declaration for `EventEmitter#emit`
-                                   to take a signature from
+21  Readable#destroy      11  EventEmitter#emit      6  ImmediateHandle#invoke
+12  HttpCacheBody#open     8  Readable#resume        1  EventEmitter#removeListener
 ```
 
-which no NTS1001 search could ever have found. Every "root not determined" in
-this document was searched with a grep that could not see this stage.
+-- and each is refused upstream: `Readable#destroy`, `Readable#resume` and
+`EventEmitter#removeListener` carry an NTS1003 naming them, and `emit` carries
+an NTS1001 *inside its body*. The backend cannot find a signature for a method
+the lowering already refused, and says so once per call site.
+
+So `EventEmitter#emit`'s root is `events/src/main.ts:621` --
+`` `EventEmitter`, a class used as a value `` -- reading a static off the class
+from inside the class. That is `class-as-value`, already filed. The dash in the
+ranked table was right to be a dash, and filling it with the first diagnostic
+that mentioned the name would have pointed at a consequence.
+
+**What is left is genuinely the backend's**, and two of the three forms have no
+fixture: `an object type with no layout` (~50, filed as
+`array-of-object-literals-has-no-layout`), `a value of type Erased cannot be
+erased yet` (15, unfiled), and `closure class X reached code generation with no
+method to call` (13, unfiled).
 
 **And it does not overturn `asRequest`.** That one was called unreportable
 because `fs/src/request.ts` carries no NTS1001 or NTS1003 anywhere. Re-checked
