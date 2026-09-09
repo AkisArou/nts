@@ -590,12 +590,22 @@ moved 4.50 to 4.32 us, 4%, while ours moved 5.74 to 4.48, **22%**, in the same
 direction. So there is a shared environmental component and our code amplifies
 it, which is a fact about the emitted loop rather than about the JIT.
 
-That is a smaller claim than the one it replaces and a better lead: the question
-is no longer "why two shapes" but "why is our sieve five times more sensitive
-than a `boolean[]` loop written by hand", which is answerable by comparing the
-two loops. `NtsArrayZ` puts the bytes behind a wrapper with a length field where
-the reference has a bare array; that is where I would look first, and it is the
-same representation `array-predicates` is at its floor because of.
+That is a smaller claim than the one it replaces. The lead I wrote down with it
+-- that `NtsArrayZ` puts the bytes behind a wrapper where the reference has a
+bare array -- **is wrong, and this row does not use the wrapper at all**:
+
+    ours   Sieve$sieve(nts.gen.Sieve, boolean[], int)
+    ref    sieve(final boolean[] flags, final int size)
+
+No `NtsArray*` call appears anywhere in the emission. Bare `boolean[]`, an `int`
+size, the same signature the reference declares. **The representation is already
+at parity**, which is exactly what `array-predicates` is *not* and is why the
+wrapper explanation borrowed from it does not transfer.
+
+So `awfy-sieve` has: identical representation, identical compilation, identical
+collector behaviour, a sticky mode, and **1.03x in its good mode** -- which is
+at the bar. The row's problem is the mode rather than the code, and nothing
+found so far says the mode is ours.
 
 ### `node-utf8` moved 6.69x to 6.43x between two sittings, and the fix landed in between did not do it
 
