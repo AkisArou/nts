@@ -240,6 +240,19 @@ for (const name of names) {
   //
   // A guard form that has never been seen to fail is worth as little as a
   // fixture that has never been seen to reproduce.
+  // `calls <expression>` -- the runtime form, and the only one that can express
+  // a defect in an addon whose emitted text is correct.
+  //
+  // The expression is evaluated with the loaded addon bound to `exports` and
+  // must be **true**, so a blocker asserts the defect as it stands today and
+  // stops holding when it is fixed, exactly like the diagnostic forms.
+  //
+  // A `// control:` line in the same file is **required**. Without one the form
+  // certifies nothing when the class simply is not published: every expression
+  // about a missing name is false, and "false" would read as fixed. The control
+  // must hold before the call expression is believed either way.
+  const calls = /^calls\s+(.+)$/.exec(wanted);
+  const controlLine = /^\/\/\s*control:\s*(.+)$/m.exec(source);
   const compiles = /^compiles$/.test(wanted);
   const onceC = /^once-c\s+(.+)$/.exec(wanted);
   const lowersOnly = /^lowers$/.test(wanted);
@@ -292,6 +305,81 @@ for (const name of names) {
     ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
     return `${cc.stdout ?? ""}${cc.stderr ?? ""}`.split("\n").filter((l) => l.includes("error:"));
   };
+  /**
+   * Link the emitted C into an addon, load it, and evaluate two expressions.
+   *
+   * The form every other expectation here cannot express: a fixture that
+   * **publishes cleanly and answers wrongly**. `util.types` publishes 31
+   * predicates and none can be asked about a reference;
+   * `async_hooks.executionAsyncResource` publishes and throws on every call; a
+   * class crosses with its methods and without its fields. All three emit
+   * well-formed text, so reading the text says nothing.
+   *
+   * Nothing but the generated C and `runtime/node/internal/*.c` is linked. A
+   * fixture is self-contained by construction, so anything else being needed is
+   * a fact about the fixture rather than about the compiler.
+   *
+   * `RTLD_NOW`, because a wrapper naming a symbol the backend refused links
+   * happily and dies on the first call instead of at load. See `loads.sh`.
+   *
+   * Every failure before the expression is evaluated is reported as itself.
+   * "Emitted nothing" and "answered false" are opposite findings and the first
+   * one has read as the second for both lanes this week.
+   *
+   * **All three paths were controlled on the day this was written**, with a
+   * throwaway fixture pointed at each in turn:
+   *
+   *   control false     `control: exports.answer() === 999` with answer() = 7
+   *                     -> CONTROL FAILED, quoting the control
+   *   call false        `calls exports.answer() === 8` with answer() = 7
+   *                     -> FIXED, quoting the expression and `got: false`
+   *   nothing emitted   a body calling an undeclared function
+   *                     -> NOTHING EMITTED, saying in as many words that this
+   *                        is not the expression answering false
+   *
+   * The third is the one the compiler lane asked for by name, and it is the
+   * loudest of the three rather than the quietest.
+   */
+  const answersAgainstAddon = (dir, callExpr, controlExpr) => {
+    const work = mkdtempSync(join(tmpdir(), "nts-blk-run-"));
+    const addon = join(work, "fixture.node");
+    const sources = readdirSync(dir).filter((f) => f.endsWith(".c")).map((f) => join(dir, f));
+    if (sources.length === 0) return { stage: "emitted-nothing" };
+    const internal = readdirSync(join(ROOT, "runtime/node/internal"))
+      .filter((f) => f.endsWith(".c"))
+      .map((f) => join(ROOT, "runtime/node/internal", f));
+    const link = spawnSync("clang", [
+      "-std=c11", "-O0", "-D_GNU_SOURCE", "-fPIC", "-shared", "-fvisibility=hidden",
+      "-I", dir,
+      "-I", join(ROOT, "third_party/node/src"),
+      "-I", join(ROOT, "third_party/node/deps/uv/include"),
+      "-I", join(ROOT, "runtime/node/internal"),
+      "-o", addon, ...sources, ...internal, "-luv", "-lm",
+    ], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+    if (link.status !== 0) {
+      const text = `${link.stdout ?? ""}${link.stderr ?? ""}`;
+      return { stage: "did-not-link", errors: text.split("\n").filter((l) => l.includes("error:")) };
+    }
+    const probe = `
+      const flags = require("node:os").constants.dlopen;
+      const m = { exports: {} };
+      try { process.dlopen(m, ${JSON.stringify(addon)}, flags.RTLD_NOW); }
+      catch (e) { console.log(JSON.stringify({ stage: "did-not-load", message: String(e.message) })); process.exit(0); }
+      const exports = m.exports;
+      const evaluate = (src) => {
+        try { return { ok: true, value: (0, eval)("(function(exports){ return (" + src + "); })")(exports) }; }
+        catch (e) { return { ok: false, value: String(e && e.message) }; }
+      };
+      console.log(JSON.stringify({
+        stage: "ran",
+        control: evaluate(${JSON.stringify(controlExpr)}),
+        call: evaluate(${JSON.stringify(callExpr)}),
+      }));`;
+    const out = spawnSync(process.execPath, ["-e", probe], { encoding: "utf8", timeout: 60_000 });
+    const line = `${out.stdout ?? ""}`.trim().split("\n").filter((l) => l.startsWith("{")).pop();
+    if (line === undefined) return { stage: "probe-failed", message: `${out.stderr ?? ""}`.slice(0, 160) };
+    return JSON.parse(line);
+  };
   let controlErrors = null;
   if (failsToCompile !== null && extraFlags.length > 0) {
     const dir = mkdtempSync(join(tmpdir(), "nts-blk-ctl-"));
@@ -308,6 +396,13 @@ for (const name of names) {
       : compileEmitted(emitted[1], "addon.c");
   }
 
+  let callResult = null;
+  if (calls !== null) {
+    const emitted = /wrote .* to (\S+)/.exec(output);
+    callResult = emitted === null
+      ? { stage: "emitted-nothing" }
+      : answersAgainstAddon(emitted[1], calls[1], controlLine === null ? "true" : controlLine[1]);
+  }
   let compileErrors = null;
   if ((failsToCompile !== null || compiles) && program.length > 0) {
     const emitted = /wrote .* to (\S+)/.exec(output);
@@ -328,7 +423,11 @@ for (const name of names) {
     }
   }
 
-  const holds = addonCompiles
+  const holds = calls !== null
+    ? callResult?.stage === "ran" &&
+      callResult.control.ok && callResult.control.value === true &&
+      callResult.call.ok && callResult.call.value === true
+    : addonCompiles
     ? addonErrors !== null && addonErrors.length === 0
     : compiles
     ? compileErrors !== null && compileErrors.length === 0
@@ -408,6 +507,40 @@ for (const name of names) {
     }
   }
 
+  // The runtime form reports its own failures, and reports them loudly.
+  //
+  // Every stage before the expression is a different finding from the
+  // expression being false, and the request from the compiler lane was
+  // explicit: make "emitted nothing" the loudest line rather than the quietest.
+  // An empty diagnostic list reading as a clean bill has cost both lanes
+  // separately this week.
+  if (calls !== null && callResult?.stage !== "ran") {
+    unexpected++;
+    const stage = callResult?.stage ?? "unknown";
+    if (stage === "emitted-nothing") {
+      console.log(`  NOTHING EMITTED ${name}: the compiler wrote no C, so the call was never made.`);
+      console.log("                  This is not the expression answering false. Read the");
+      console.log("                  diagnostics above before reading anything else.");
+    } else if (stage === "did-not-link") {
+      console.log(`  DID NOT LINK    ${name}: the emitted C does not link into an addon.`);
+      for (const line of (callResult.errors ?? []).slice(0, 2)) console.log(`                  ${line.trim()}`);
+    } else if (stage === "did-not-load") {
+      console.log(`  DID NOT LOAD    ${name}: ${String(callResult.message).slice(0, 88)}`);
+      console.log("                  RTLD_NOW, so an undefined symbol is named here rather than");
+      console.log("                  on the first call to it.");
+    } else {
+      console.log(`  PROBE FAILED    ${name}: ${String(callResult?.message ?? stage).slice(0, 88)}`);
+    }
+    continue;
+  }
+  if (calls !== null && !(callResult.control.ok && callResult.control.value === true)) {
+    unexpected++;
+    console.log(`  CONTROL FAILED  ${name}: the control expression did not hold, so the`);
+    console.log("                  expectation says nothing either way.");
+    console.log(`                  control: ${controlLine === null ? "(none declared)" : controlLine[1].slice(0, 70)}`);
+    console.log(`                  gave: ${String(callResult.control.value).slice(0, 70)}`);
+    continue;
+  }
   if (holds) {
     console.log(`  ${isGuard ? "guard ok  " : "reproduces"}  ${name}`);
     continue;
@@ -429,6 +562,12 @@ for (const name of names) {
   // guard's regression as accurately as a blocker's fix. Only the word was
   // carrying the wrong meaning.
   const verdict = isGuard ? "REGRESSED " : "FIXED     ";
+  if (calls !== null) {
+    console.log(`  ${verdict}  ${name}: the call answers differently now. Expected true from:`);
+    console.log(`                ${calls[1].slice(0, 88)}`);
+    console.log(`                got: ${callResult.call.ok ? String(callResult.call.value).slice(0, 60) : "threw " + String(callResult.call.value).slice(0, 54)}`);
+    continue;
+  }
   if (failsToCompile !== null) {
     console.log(`  ${verdict}  ${name}: the emitted C compiles now. Expected a clang error:`);
   } else if (duplicatesC !== null) {

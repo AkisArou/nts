@@ -1,4 +1,5 @@
-// expect: emit-c --napi -> lacks-addon "latitude"
+// expect: emit-c --napi -> calls new exports.Reading(1, 2).latitude === undefined
+// control: typeof exports.Reading === "function" && new exports.Reading(1, 2).distance() === 3
 //
 // A class crosses to the host with its methods and without its fields.
 //
@@ -23,33 +24,26 @@
 // those two ever stop working, this fixture is about something else and the
 // expectation below stops meaning what it says.
 //
-// # Why `lacks-addon "latitude"` and not the descriptor spelling
+// # It asks the addon rather than reading the text
 //
-// The absence assertion this wants is "the wrapper does not name the field".
-// Naming the C spelling -- `{ "latitude", NULL,` -- would keep holding after a
-// fix that exposed the field a different way, and an absence assertion that
-// survives its own fix is silent forever.
+// This was first filed as `lacks-addon "latitude"`, because reading emitted
+// text is what `blockers-check.mjs` could do. That expectation is sound --
+// `latitude` appears four times in `program.c` and zero times in `addon.c`,
+// checked against three unrelated fixtures' addons as well -- but it has the
+// weakness written into it: every absence form is classified as a guard, so it
+// printed `guard ok` while the defect was present, green in a directory where
+// green means fixed.
 //
-// `"latitude"` is chosen to be long enough that it cannot appear incidentally.
-// A field called `x` would make this expectation hold or fail on unrelated
-// emitted text.
+// The `calls` form runs the expression against a loaded addon, so this fixture
+// now asserts the defect itself: **the field reads `undefined` on an instance
+// whose method computed from it correctly.** It prints `reproduces`, and it
+// stops the day the field crosses.
 //
-// # It reads `guard ok` while the defect is present, and that is a weakness
-//
-// `blockers-check.mjs` classifies every absence form as a guard, so this file
-// prints `guard ok` today -- green, in a directory where green usually means
-// fixed. It is not fixed; the text it names is absent because the wrapper does
-// not do the thing yet.
-//
-// Written down rather than worked around because the alternative is worse. The
-// forms that print `reproduces` all name a diagnostic, and there is no
-// diagnostic here: the class lowers, publishes and runs. The only static
-// signal available is what the wrapper did not write.
-//
-// **What to watch is the transition.** The moment the wrapper names `latitude`
-// this stops holding and prints a line asking for a person, which is when the
-// fixture has something to say. Until then it is a tripwire, not a report, and
-// the report is the ledger section it points at.
+// The `control:` line is required by the form and is the whole reason it means
+// anything. Every expression about a name that is not published is false, so
+// without a control that must hold, "the field is undefined" would also be
+// satisfied by a class that never compiled. `distance()` returning 3 says the
+// constructor ran, the prototype is there, and the fields were populated.
 //
 // # What it is not
 //
