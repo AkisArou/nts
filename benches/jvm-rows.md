@@ -3109,7 +3109,13 @@ Why the walk costs 5.9x, since a bulk loop and a cursor loop do the same reads:
 derivation and bounds test, and the key is reached through an `NtsValue`
 pointer. The bulk loop increments an `int` and reads the array.
 
-**Blocked on the lowering, and worth more than anything left in this lane.**
+**Blocked on the lowering -- and NO LONGER A BAR ITEM, since `array-from` is
+0.95x.** The operation-level win below is still real and still available; what
+has changed is that the row it was for is under the bar, so this is an
+optimisation somebody may want rather than a queue entry. The cursor half of it
+landed and is what moved the row.
+
+**Originally filed as: blocked on the lowering, and worth more than anything left in this lane.**
 Priced, not built -- the prototype is a scratch copy of `runtime/jvm/src`, and
 `runtime/jvm/nts-runtime.jar` is untouched. It also cannot be taken in the
 backend: recognising this loop as an idiom is a fragile pattern match over
@@ -3250,7 +3256,8 @@ and it costs every generated name its readability in a stack trace, which is the
 one place a person reads one. Worth doing the first time a real program is
 refused, and not before. `c_identifier` on the C lane is the design to copy.
 
-**Mine, and the next thing.** The bar's second number -- decisively faster than
+**Mine -- DONE, and confirmed at a fresh pin: six platform ceilings and two
+ours.** See the two sections above. Originally filed as: the bar's second number -- decisively faster than
 node -- has never been read row by row, and this file says why: the table sorts
 by `jvm/Java`, so a row at parity with its hand-written reference while both
 lose to V8 looks finished. `bytes` is the case that proves the distinction
@@ -3260,7 +3267,8 @@ reference loses to node too and the row is a platform ceiling to report; below
 it, the reference beats node and we do not, and it is ours. Needs one clean
 sitting, which needs the gate lock and a pinned worktree.
 
-**Blocked on housekeeping, and it is mine.** `~/.cache/nts-jvm-sweep` and
+**Blocked on housekeeping -- DONE. Re-pinned to HEAD from 480 commits behind,
+and the dirt was the worktree's own output.** Originally filed as: `~/.cache/nts-jvm-sweep` and
 `~/.cache/nts-jvm-table` are both dirty -- `Cargo.lock` from building and
 `README.md` from `nts-bench` writing its own table -- so `pin.sh` refuses to
 move either. Neither modification is work; both are output. But the worktrees
