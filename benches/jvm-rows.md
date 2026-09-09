@@ -2149,6 +2149,43 @@ So the honest answer to "did their landing move a row" is **no**, on every row i
 could have -- and the useful part is that saying so cost two greps rather than
 an evening of bisecting a regression that was not there.
 
+### The verifier caught what the C lane answered wrongly, which is what this backend was promised to be for
+
+Not a row, but it belongs where the lane's value is argued. `c269e3bd` added
+`tableInsideAnObjectLiteral` and the HIR it lowers to disagrees with itself:
+
+    %3 = object.new frame : managed<obj#102>                 produces an OBJECT
+    field.set %1.1 = %3
+    %5 = field.get %1.1 : managed<map<managed<str>, f64>>    consumes it as a MAP
+
+`{ count: n, signals: {} }` lowers the empty literal to `object.new` even where
+the field's type is a table. Producer and consumer disagree inside one function,
+before any backend sees it.
+
+    JVM   VerifyError: Bad type on operand stack
+          Program.tableInsideAnObjectLiteral(D)D @23: putfield
+          Type 'nts/gen/Type102' is not assignable to 'nts/rt/NtsMap'
+
+    C     tableFieldThroughAReturn   nts bff0000000000000   node bfe0000000000000
+                                     -1.0 against -0.5
+
+**The JVM refuses; C answers a wrong number.** C stores a pointer and reads a
+pointer, so the lookup misses and `?? -1` supplies an answer that `typeof` agrees
+with. RFC 13 predicted exactly this -- "the one place the JVM backend is a
+better bug-finding instrument than the other two" -- and this is the first time
+I have watched it earn the claim rather than repeat it.
+
+Worth recording how it was found, because the fast way was not the first way:
+twenty entries emitted and verified one at a time, which named the single
+failing function in one pass. `Class.forName` over the whole program said
+`verified`, because the differential emits per entry and the broken one is a
+*specialised* copy.
+
+Filed with MainClaude. **The jvm floor line stays at 137 while the tree is at
+136** -- a floor moved down for another lane's in-flight change is a floor that
+has stopped meaning anything, and their own gate sees the same failure from the
+C side.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
