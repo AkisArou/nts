@@ -1560,6 +1560,41 @@ the loop and the call devirtualized". Both happen. The call is already
 than into another evening.** What is excluded: the ABI, the global's mutability,
 the inline threshold, and any explanation a transcription can express.
 
+### `array-from`'s set walk, checked on the runtime side rather than inferred
+
+The timing half of this row was filed as "5.9x, and it is the lowering's",
+which was a classification rather than a check -- the walk runs through
+`NtsMap.next` and `NtsMap.keyAt`, and both of those are mine. So they were read.
+
+**`next` is not the problem, and the obvious worry about it is wrong.**
+
+    public static double next(NtsMap map, double from) {
+        if (map.count == 0) { return -1.0; }
+        int absolute = from < 0.0 ? 0 : (int) from;
+        int at = absolute <= map.base ? map.head : Math.max(map.head, absolute - map.base);
+        while (at < map.used) {
+            if (map.keys[at] != null) { return (double) map.base + at; }
+            at++;
+        }
+        return -1.0;
+    }
+
+The `while` looks like a scan and is not one: it resumes at the caller's cursor
+and only steps over *deleted* slots. A set built by insertion and never deleted
+from has no nulls, so every call returns on its first test. The walk is O(n)
+across n elements, not O(n^2), which was the thing worth ruling out before
+accepting a 5.9x on a 256-element collection.
+
+**What it actually costs is the protocol, and the protocol is upstream.** Per
+element we make two static calls and produce an `NtsValue` -- `next` for the
+cursor, `keyAt` for the key, then an unbox -- where `marks.toArray()` is one
+bulk copy. That is not something either helper can be made cheaper to avoid;
+it is what an index-based `nts_map_next(map, from)` contract *is*, and
+`runtime/jvm` implements that contract rather than choosing it.
+
+So the classification stands, and now it stands on having read the code instead
+of on where the function happened to live. Filed with the lowering, unchanged.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
