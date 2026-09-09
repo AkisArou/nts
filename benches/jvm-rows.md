@@ -1965,11 +1965,27 @@ and an array's element type -- which makes it a representation in **four**
 places: a counter, a signature, an array element, and a helper's argument.
 Only one of them is a loop.
 
-**Blocked on `narrow.rs`** (integer arithmetic held in `f64` slots): `node-utf8`
-62%, `symbol-keyed-map` 52%, `array-from`'s cursor, and `array-methods` at 25%
--- its `total` is an `f64` accumulator behind `| 0` where `ref.java` writes `int
-total`, which is the chain `narrow.rs`' own header names for `i64 -> i32`. The C lane emits the identical defect, so it is
-fixed once, upstream. Do not build a JVM-only half. When it lands, measure the
+**Blocked on `narrow.rs`, and the request is not the one written here for most
+of a day.** The rows are `node-utf8`, `symbol-keyed-map`, `array-from`'s cursor
+and `array-methods`. What this paragraph used to say -- that their `total` is
+"an `f64` accumulator behind `| 0` where `ref.java` writes `int total`" -- is
+**false on both rows it named**, and I sent it to MainClaude as a request before
+reading the emission:
+
+    array-methods       istore_2 / iload_2      an int slot
+    symbol-keyed-map    iload 27                an int slot
+
+`specialize` had already put the accumulator where I was asking for it to be
+put. The widening is the *other* operand: `events.get(key) ?? 0` and
+`xs.at(-1)` arrive as `NtsValue.num`, an f64, because a TypeScript `number` is
+one. So the addition really is f64 + f64 and the `| 0` really does narrow a
+double, and closing it means **proving an f64 from a number-typed map value or
+array element is integral** -- range analysis, not slot selection, and strictly
+harder than what was asked for. MainClaude has re-priced it on that basis.
+
+The percentages above are profile *shares* and not savings: `array-methods`'
+25% priced at 8.9% when measured, so discount the other two accordingly. The C
+lane emits the identical defect, so it is fixed once, upstream. Do not build a JVM-only half. When it lands, measure the
 rows *before* taking any residual -- `narrow.rs` records three earlier attempts
 that each read as zero because two changes moved together.
 
