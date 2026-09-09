@@ -9643,6 +9643,30 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## The interpreted lane after the `errors.ts` import: 22 of 22, 1,851 passing
+
+`internal/errors.ts` is imported by every module, so changing it is a change to
+all twenty-two interpreted lanes at once. Measured module by module afterwards:
+
+```
+assert       12    console       19    fs      345    path       21    stream        250
+async_hooks 116    dgram         77    http    405    process    88    string_decoder  5
+buffer       55    diagnostics_c 33    net     148    punycode    3    timers         56
+events       32    os             9    querystr  8    readline   26    url            50
+util         25    zlib          68
+```
+
+**1,851 passed, 0 failed, across all twenty-two.**
+
+**What this establishes and what it does not.** It establishes 100%: no test
+that passed before the import fails after it. It does not re-establish *0
+hollow*, which is a different property -- a file that passes with the module
+blanked -- and which was last measured by the sweep before this change. An
+import that swaps one implementation of string quoting for an equivalent one
+has no path to turning a real pass into a hollow one, but that is an argument
+and not a measurement, and the distinction is exactly the kind this document
+exists to keep.
+
 ## The table re-derived after tonight's three fixes
 
 Every number below is from the compiler as of `d3378707`, emitted module by
