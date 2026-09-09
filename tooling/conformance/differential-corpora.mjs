@@ -18,6 +18,8 @@
 // named for it.
 
 /** A seeded PRNG. Same seed, same sequence, in every process. */
+import { Writable } from "node:stream";
+
 export function makeRandom(seed = 0x9e3779b9) {
   let state = seed >>> 0;
   return () => ((state = (state * 1664525 + 1013904223) >>> 0) / 0x100000000);
@@ -720,6 +722,98 @@ export const CORPORA = {
       { name: "escape", args: (s) => [s] },
       { name: "unescape", args: (s) => [s] },
       { name: "stringify", args: (s) => [{ [s]: "v", other: ["1", "2"] }] },
+    ],
+  },
+
+  console: {
+    // A state-machine fuzz like `events`, and for the same reason: `console`'s
+    // behaviour is what it *writes*, and the parts worth comparing are stateful.
+    // `group` indentation nests and applies to every subsequent line including
+    // multi-line ones; `count` keeps a tally per label; `countReset` clears one
+    // label and not the others. No single call reaches any of that -- only an
+    // order of calls does.
+    //
+    // **Deterministic operations only.** `time`/`timeEnd` write an elapsed
+    // duration and `trace` writes a stack, so both would diverge on every run
+    // for reasons that are not defects. They are excluded rather than
+    // normalised: normalising them would mean inventing the answer, and a
+    // comparison against an answer this file made up is not a comparison.
+    //
+    // `countReset` is excluded for a different reason and it is worth the line.
+    // Resetting a label that was never counted emits a **process** warning --
+    // "Count for 'k' does not exist" -- rather than writing to the console's own
+    // streams, so this corpus has no channel to compare it on. Suppressing the
+    // warning to keep the output readable is exactly the mistake that once hid a
+    // real difference two tests depended on, so the operation is dropped instead
+    // and named here as uncompared.
+    //
+    // Both streams are captured and returned together, because `warn`, `error`
+    // and a failing `assert` go to stderr while the rest go to stdout, and
+    // which stream a line lands on is exactly the kind of thing a
+    // reimplementation gets wrong without any test noticing.
+    fixed: [
+      "l", "lg", "lgl", "lglG", "lgGl", "cc", "ccc", "ccl", "ew", "a",
+      "lew", "gggl", "GGl", "d", "ld", "gdG", "cgcG", "lgglGGl", "", "n",
+      "ngl", "aew", "lcl", "gcGc", "nnn", "lGl", "gagG", "cdc", "lnd", "gng",
+    ],
+    input: (rnd) => {
+      const OPS = "lnewagGcd";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 10);
+      for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "console-program",
+        call: (m, program) => {
+          let outText = "";
+          let errText = "";
+          // A real `Writable`, not a duck-typed object with a `write`. The
+          // first version of this was the latter and **node's `Console` wrote
+          // nothing to it** while ours wrote correctly -- 423 divergences over
+          // 430 inputs, every one of them this harness rather than the module.
+          // A sink node does not accept turns the whole corpus into a report
+          // that the module under test is right and node is empty.
+          const sink = (append) =>
+            new Writable({
+              write(chunk, _enc, cb) {
+                append(String(chunk));
+                cb();
+              },
+            });
+          const stdout = sink((t) => {
+            outText += t;
+          });
+          const stderr = sink((t) => {
+            errText += t;
+          });
+          let con;
+          try {
+            con = new m.Console({ stdout, stderr });
+          } catch {
+            return "CONSTRUCT-FAILED";
+          }
+          let n = 0;
+          for (const op of program) {
+            n++;
+            try {
+              if (op === "l") con.log(`line${n}`);
+              else if (op === "n") con.log("%d and %s", n, `s${n}`);
+              else if (op === "e") con.error(`err${n}`);
+              else if (op === "w") con.warn(`warn${n}`);
+              else if (op === "a") con.assert(false, `assert${n}`);
+              else if (op === "g") con.group(`g${n}`);
+              else if (op === "G") con.groupEnd();
+              else if (op === "c") con.count("k");
+              else if (op === "d") con.dir({ a: { b: { c: n } } });
+            } catch (e) {
+              outText += `THREW:${e && e.name}\n`;
+            }
+          }
+          return [outText, errText];
+        },
+      },
     ],
   },
 };

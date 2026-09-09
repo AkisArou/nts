@@ -11314,19 +11314,40 @@ run as a differential rather than as new hand-written assertions.
 | `assert` | 20,115 | 4,023 | 0 |
 | `querystring` | 16,076 | 4,019 | 0 |
 | `events` | 8,040 | 4,020 | 0 |
+| `console` | 4,030 | 4,030 | 0 |
 
-**11 modules measured, 483,056 comparisons, 0 divergences.**
+**12 modules measured, 487,086 comparisons, 0 divergences** — `console` was
+added tonight and contributes 4,030 of them.
+
+`console` is a state-machine fuzz like `events`, because its behaviour is what
+it *writes* and the parts worth comparing are stateful: `group` indentation
+nests, `count` tallies per label. Both streams are captured and returned
+together, since `warn`, `error` and a failing `assert` go to stderr while the
+rest go to stdout, and which stream a line lands on is exactly what a
+reimplementation gets wrong unnoticed.
+
+Two operations are excluded and named rather than normalised. `time`/`timeEnd`
+write a duration and `trace` writes a stack, so both diverge every run for
+reasons that are not defects. `countReset` on an unseen label emits a **process**
+warning rather than writing to the console's streams, so this corpus has no
+channel to compare it on — and suppressing the warning to keep the output
+readable is the mistake that once hid a difference two tests depended on.
+
+**The first version of the sink reported 423 divergences over 430 inputs, every
+one of them the harness.** It was a duck-typed object with a `write` method;
+node's `Console` wrote nothing to it while ours wrote correctly, so the run said
+the module under test was right and node was empty. It is a real `Writable` now.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Eleven of twenty-two
+That number means nothing without this beside it. **Twelve of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **ten never appeared in the run at all** — `async_hooks`, `console`,
-`dgram`, `diagnostics_channel`, `http`, `net`, `process`, `readline`, `stream`,
+and **nine never appeared in the run at all** — `async_hooks`, `dgram`,
+`diagnostics_channel`, `http`, `net`, `process`, `readline`, `stream`,
 `timers`. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
