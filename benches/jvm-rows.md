@@ -115,7 +115,7 @@ different problem from the four rows losing by a lot.
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
 | `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
-| `array-from` | 2.12x -> **0.95x** | the cursor is held as an `int`; eight runs, 0.94x-0.97x. **Moved.** Below |
+| `array-from` | 2.12x -> **0.96x** | the cursor is held as an `int`. Thirteen runs across two sittings, 0.94x-0.97x. **Moved.** Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 1.27x | the same `uirem` residual |
@@ -2117,6 +2117,37 @@ artefact says in one look what inference takes three rounds to get wrong.**
 The `place` fix is worth keeping separately from all of this -- a discarded
 value popped its *declared* width rather than its held one, which was right by
 accident for as long as the only narrowing was of results somebody wanted.
+
+### Re-measured after fourteen of the other lane's commits: nothing moved, and I nearly said two rows did
+
+`dd57ceb5` carries a `width_of` miscompile fix -- a remainder's width was read
+off its own result, so a 3.1e10 dividend was truncated to `int32_t` before the
+modulus. That is exactly the `uirem` family's arithmetic, so the rows were
+re-taken.
+
+    array-from       0.97  0.96  0.95  0.96  0.97      five runs, held
+    absences         1.26  1.26  1.26                  was 1.28
+    optional-chain   1.27  1.27  1.27                  unchanged
+    bytes            1.10  1.10                        was 1.05
+    instanceof       1.13  1.13                        was 1.09
+
+**`bytes` and `instanceof` look like regressions and are not.** Their emitted
+arithmetic is unchanged -- `bytes` still has four `uirem:(II)I` and `instanceof`
+two, the same counts as before the landing -- so the code those rows run did not
+move and the numbers are between-sitting difference. The earlier 1.05x and 1.09x
+were each a single reading from the big sweep; 1.10x and 1.13x are two apiece.
+
+That is the **fourth** time tonight a between-sitting difference has presented
+as a regression, after `symbol-keys`, `upcast` and `generator`. The difference
+is that this time the artefact was checked before anyone was told: two `javap`
+greps, and the report changed from "their fix cost us 5%" to "nothing moved".
+
+**`array-from` held through all fourteen commits** at 0.95x-0.97x across five
+runs. One earlier reading of 1.04x was an outlier and is why five were taken.
+
+So the honest answer to "did their landing move a row" is **no**, on every row it
+could have -- and the useful part is that saying so cost two greps rather than
+an evening of bisecting a regression that was not there.
 
 ## Open, and whose
 

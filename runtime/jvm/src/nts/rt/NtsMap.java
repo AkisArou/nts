@@ -349,9 +349,22 @@ public final class NtsMap {
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
             NtsValue key = map.keys[slot];
-            if (key != null) {
-                out[at++] = key.num;
+            if (key == null) {
+                continue;
             }
+            // **A non-number key refuses rather than reading `.num`.**
+            // `.num` on a string key is zero, and a table of zeroes is a wrong
+            // answer that `typeof` agrees with all the way down -- the same
+            // shape as `arrayElement` falling through to `undefined` for an
+            // array kind it had no arm for. The caller is meant to have proved
+            // the key type, exactly as `arrayIndexOfI`'s caller proves the
+            // element type; this makes the failure of that proof loud.
+            if (key.tag != NtsValue.NUMBER) {
+                throw new NtsRefusal(
+                    "a bulk numeric key read over a collection holding a key of tag "
+                        + key.tag);
+            }
+            out[at++] = key.num;
         }
         return at;
     }
