@@ -90,6 +90,17 @@ short=$(git -C "$root" rev-parse --short "$commit")
   git -C "$root" worktree add --detach "$tree" "$sha"
 }
 
+# Named before the attempt rather than discovered in git's error, because three
+# sessions share this tree and whose edit it is matters more than that there is
+# one. Reported, never discarded: a benchmark worktree is scratch to this
+# script and may not be to whoever left something in it.
+dirty=$(git -C "$tree" status --porcelain --untracked-files=no 2>/dev/null | head -5)
+if [ -n "$dirty" ]; then
+  echo "note: the worktree has local changes, which will block a checkout if"
+  echo "  any of them differ between the two commits:"
+  echo "$dirty" | sed 's/^/    /'
+fi
+
 # **Re-stamping the pin it is already on is not a re-pin.** The first thing
 # anyone will want from this script is provenance for a worktree that already
 # has none, and clearing that tree's emissions to record where it already is
@@ -108,6 +119,37 @@ if [ "$at" != "$sha" ] &&
   exit 1
 fi
 
+# **The stamp is written from what the tree IS, not from what was asked for.**
+# This line used to be `checkout ... > /dev/null 2>&1` with the status dropped,
+# and then the stamp was written and "pinned" printed regardless. A worktree
+# with a local edit to a file that differs between the two commits -- which is
+# what `$HOME/.cache/nts-jvm-sweep` had, on `README.md` -- makes git refuse the
+# checkout, and every one of those words was still printed. The provenance file
+# would then name a commit the tree was not at, which is worse than having no
+# provenance file: the whole point of this script is that a number can be
+# traced to a hash, and a stamp that lies breaks that in the direction of false
+# confidence.
+#
+# So: keep the error, and *verify the tree moved* rather than trust the exit
+# status alone. `docs/records/0077` is the same argument -- where two things
+# must agree and only one can be checked, assert rather than compute.
+if ! failure=$(git -C "$tree" checkout --detach "$sha" 2>&1); then
+  echo "refusing: the worktree would not move to $short" >&2
+  echo "$failure" | sed 's/^/  /' >&2
+  echo "  nothing was stamped. Resolve the tree at $tree and run this again." >&2
+  exit 1
+fi
+landed=$(git -C "$tree" rev-parse HEAD)
+if [ "$landed" != "$sha" ]; then
+  echo "refusing: checkout reported success and the tree is at" >&2
+  echo "  $(git -C "$tree" rev-parse --short HEAD), not $short. Nothing stamped." >&2
+  exit 1
+fi
+# **After the checkout, not before.** This block used to run first, so a pin
+# that then failed had already deleted the emissions -- destroying state on
+# behalf of an operation that did not happen, and leaving a tree with neither
+# the old classes nor the new commit. `$at` is read before the checkout, so
+# moving the decision here does not change what it decides.
 if [ "$at" = "$sha" ]; then
   echo "already at $short -- recording provenance, leaving target/bench alone"
 elif [ -d "$tree/target/bench" ] && [ "$keep" != "--keep" ]; then
@@ -118,7 +160,6 @@ elif [ -d "$tree/target/bench" ]; then
   echo "  a sweep across it now compares two programs. Re-emit before trusting it."
 fi
 
-git -C "$tree" checkout --detach "$sha" > /dev/null 2>&1
 subject=$(git -C "$root" log -1 --format=%s "$sha")
 when=$(git -C "$root" log -1 --format=%ci "$sha")
 
