@@ -15132,19 +15132,46 @@ documented shape, matched the file's own comment, and removed an eager
 allocation. Running node's suite after making it is the only thing that said
 otherwise.
 
-## The interpreted lane, every module: 1,859 passing and nothing failing
+## The interpreted lane, every module: 1,857 passing and two failing
 
 `tooling/conformance/interpreted-lane.sh`, all twenty-two modules -- node's own
 tests against the TypeScript running on node:
 
     22 modules, 2,323 files
-    1,859 passed    0 failed    29 skipped    435 not applicable
+    1,857 passed    2 failed    29 skipped    435 not applicable
 
-    http     405 of 451      fs       346 of 395      stream   250 of 269
+    http     404 of 451      fs       346 of 395      stream   250 of 269
     net      150 of 181      async_hooks 117 of 155   process   89 of 153
 
-**Not one module has a failing file.** The implementation passes every
-applicable test it runs, and has no outstanding defect this suite can see.
+**Corrected 2026-09-09, and the correction is the more useful entry.** This
+section first read "1,859 passed, 0 failed" and "not one module has a failing
+file". Re-running the same script over the same corpus -- 2,323 files, 29
+skipped, 435 not applicable, every column identical but two -- gives 1,857 and
+2:
+
+    url    test-url-parse-invalid-input.js   anonymous was called 0 times, expected 1
+    http   test-http-debug.js                the NODE_DEBUG stderr match fails
+
+Neither is new. Both reproduce in a worktree pinned to `9feebf97~1`, before this
+afternoon's runtime changes, and `test-url-parse-invalid-input.js` fails at
+`74a0620e` -- **the commit that restored it to coverage on 09-06.** It has never
+passed. Three consecutive runs on an idle machine fail identically, so it is not
+the flakiness that a spawning test invites.
+
+Both spawn a child process, which is the only thing they have in common; seven
+other `http` tests spawn one and pass, so the mechanism works and these two ask
+something of it that does not.
+
+**What cannot be accounted for is the original figure.** `run.mjs` last changed
+at 06:58 that day and `interpreted-lane.sh` was written at 17:25, one minute
+after the figure was committed. Nothing in the corpus, the exclusions or the
+runner moved between. The 0 is not reproducible and no mechanism for it has been
+found, so it is recorded as unexplained rather than as flakiness, which would be
+a guess.
+
+The lesson is the one this profile keeps relearning from the other direction: a
+headline that reads "nothing failing" is the one worth re-running, because it is
+the one nobody re-runs.
 
 ### Which makes the 435 the number to argue with
 
