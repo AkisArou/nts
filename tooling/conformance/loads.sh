@@ -68,12 +68,30 @@ for module in "${modules[@]}"; do
   #
   #     RTLD_LAZY: Module did not self-register        <- the defect is invisible
   #     RTLD_NOW:  undefined symbol: refused_body      <- named
+  # Both counts, because the raw one has been read as progress and is not.
+  #
+  # `Object.keys(addon)` counts whatever the export table contains, and the
+  # export table contains names node does not export: `async_hooks` publishes
+  # sixteen and **three** are node's -- the other thirteen are `newAsyncId`,
+  # `emitBefore` and the rest of its internals. `readline` publishes seven and
+  # **none** is node's. Reporting only the raw number counts internals as
+  # published surface.
+  #
+  # No surface test catches this: each one runs against what `shape.mjs`
+  # returns, and those shims return node's key set exactly. The shim is right;
+  # the export table is what is wrong, and nothing else here reads it directly.
   out="$("$node_bin" -e "
     const flags = require('node:os').constants.dlopen;
     const m = { exports: {} };
     process.dlopen(m, '$addon', flags.RTLD_NOW);
-    const names = Object.keys(m.exports).filter((k) => m.exports[k] !== undefined).length;
-    console.log('loads, ' + names + ' name(s) published')" 2>&1)"
+    const ours = Object.keys(m.exports).filter((k) => m.exports[k] !== undefined);
+    let theirs = null;
+    try { theirs = new Set(Object.keys(require('node:$module'))); } catch { /* no such node module */ }
+    const shared = theirs === null ? null : ours.filter((k) => theirs.has(k)).length;
+    console.log('loads, ' + ours.length + ' name(s) published' +
+      (shared === null ? ' (node has no such module to compare)'
+       : shared === ours.length ? ' (all of them node\\'s)'
+       : ' (' + shared + ' of them node\\'s)'))" 2>&1)"
   status=$?
   if [ $status -eq 0 ]; then
     printf '  %-22s %s\n' "$module" "$out"
