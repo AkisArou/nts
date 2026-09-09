@@ -2294,8 +2294,8 @@ night to learn once.
 Twice for the rows that differ.
 
     case                     HotSpot        ART
-    in-narrowing                   0      81920      <- HotSpot allocates nothing
-    generator                      0      80000      <- and neither should ART
+    in-narrowing                   0      81920      <- and so does ref.java
+    generator                      0      80000      <- reference not yet asked
     case-convert               10232      23152      +126%
     number-format               4608       6456      +40%
     map-and-set                65952      74144      +12%
@@ -2307,16 +2307,34 @@ Twice for the rows that differ.
     arrays / objects / closures / strings / substrings / module-closures
     erasure-typed / erasure-unknown          0 and 0 on both
 
-**`in-narrowing` and `generator` are the finding**: HotSpot allocates *nothing*
-per operation and ART allocates eighty kilobytes. That is the `array-methods`
-shape again -- C2 removing an allocation entirely, ART not -- and it is the
-shape `fuse` was built for, so there may be a second instance of the same fix.
+**`in-narrowing` looked like the finding and is not.** HotSpot allocates nothing
+an operation and ART allocates eighty kilobytes, which is the `array-methods`
+shape exactly -- so the hand-written reference was asked the same question, on
+the same device, with the same counter:
 
-`in-narrowing` is the sharper of the two because `unbox.rs` exists **for that
-row**: its header records record 0108, "15.48us against hand-written Java's
-1.42us, and 212,944 bytes per operation against zero". The pass removed the box
-from the emission. Something is still allocating on ART and is not on HotSpot,
-so whatever it is, `unbox` is not covering it and C2 is.
+    in-narrowing   ours 81920    ref.java 81920
+
+**Byte for byte.** ART does not scalar-replace the shape objects and the
+reference creates the same ones, so it pays the identical price. We are at
+parity and there is nothing here to fix.
+
+The arithmetic says why it is exact rather than close. `which = i & 3` gives one
+`Circle` and one `Square` at 16 bytes and two `Wide` at 24 per four iterations
+-- 20 bytes an iteration, times 4096, is 81,920. Both programs allocate the same
+objects because they *are* the same objects.
+
+**So the bar's third number needs saying more carefully than I wrote it.**
+"bytes/op on ART no worse than on HotSpot" is the wrong comparison for a row:
+it flags every case where ART simply lacks an optimisation, whether or not this
+backend is responsible. The question that separates them is **no worse than the
+reference on the same runtime**, and `array-methods` passed that test where this
+one does not:
+
+    array-methods   ours 6288   reference allocates nothing of the kind
+    in-narrowing    ours 81920  reference 81920
+
+The first was ours and `fuse` fixed it. The second is ART's and nobody's to fix
+here.
 
 **And the instrument lied first, which is worth more than the survey.**
 `array-from` read **-247102 bytes/op**. `getGlobalAllocSize` answers an `int`,
