@@ -21,6 +21,25 @@
 // `"length" in options` are how node's own source asks whether something is
 // there, and every one of them now answers no.
 //
+// # The mechanism, read from the emitted C
+//
+// The operator is compiled to a literal constant. The map is built correctly
+// and then never consulted:
+//
+//     v1 = nts_map_new(v0);
+//     v4 = ... "a" ...
+//     v5 = nts_value_of_number(v2);
+//     nts_map_set(v1, v4, v5);      <- the key goes in
+//     v7 = false;                   <- and `in` answers this
+//     if (v7) { goto b1; } else { goto b2; }
+//
+// `v7 = false` is unconditional. There is no lookup, no comparison and no use
+// of `v1` after the `nts_map_set`. So it is not a lookup that misses -- the
+// operator does not lower to a lookup at all.
+//
+// That is why the absent case agrees: `false` is the right answer there, and it
+// is the same `false`.
+//
 // # The controls are three ways of asking the same question
 //
 // A defect where a single operator disagrees and three neighbours agree is the
