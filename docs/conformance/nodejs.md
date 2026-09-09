@@ -15210,6 +15210,46 @@ infrastructure gaps, weak listener registration through the canonical
 None of them is a defect waiting to be fixed. All of them are infrastructure or
 a stated non-goal.
 
+### The native half, re-derived: 349 of 352, and the gap is three internal bindings
+
+`native-half.mjs` compiles every `.c` under `runtime/node` and `runtime/c` with
+`build.sh`'s include flags and runs `nm --defined-only` over the objects. A
+binding is a `declare function` in TypeScript whose implementation is a C symbol
+of the same name, and the only thing that knows whether that symbol exists is
+the linker.
+
+    352 declared, 3 with no C anywhere, across 18 modules
+
+    fs 155/155   process 55/55   net 30/30   dgram 21/21   zlib 20/20
+    os 18/18     timers 8/8      buffer 3/3  path 2/2      stream 2/2
+    internal 19/22   <- the entire gap
+
+The three are `nts_next_tick`, `nts_promise_hook_install` and
+`nts_promise_hook_uninstall`.
+
+**So "compiling is necessary and not sufficient" no longer picks a module.**
+`dgram` will link. `net` will link. `fs` will link. Every module that fails to
+reach the axis fails on the lowering alone, and the native half is not a reason
+to prefer one over another.
+
+**Two errors in this instrument before it said that**, and both are in its
+header because they are the kind that recur.
+
+It walked `runtime/node` alone and reported `nts_checkpoint` as having no C. It
+has C, in `runtime/c` -- a binding may be implemented by either tree.
+
+And it filtered the module list on having a `tsconfig.json`, which is the
+correct filter for every other instrument here and is wrong for this one:
+`runtime/node/internal` has no tsconfig, and `internal` is where all three
+missing bindings live. **The first run reported 0 missing and the native half
+complete.** It was caught by a memory recording 328 of 331 with those exact
+three names -- two measurements of one quantity, and the disagreement was the
+finding.
+
+*(Three C files under `test/` do not compile for want of an include path, and
+the run names them: every symbol they would define reads as missing. None of the
+three is among them.)*
+
 ### Two numbers that both describe the compiled axis, and what each counts
 
 **38 pass** is test *files* that pass, across 15 of 22 modules. It is what
