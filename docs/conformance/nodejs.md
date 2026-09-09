@@ -15541,7 +15541,31 @@ is not, and each with its mechanism read out of the source:
     a lone surrogate counts as three            3 cases
     `in` on a record is always false            1 case
     integer-like keys are not promoted          1 case
-    a write past an array's length aborts       1 case -- a stated limit, see above
+    an indexed write at or past the length      1 case -- see below
+
+**The array entry was corrected twice and the second correction is the one to
+read.** This section said the ordinary append `xs[xs.length] = v` had been
+fixed, leaving only the sparse write. **It is not fixed on HEAD.**
+
+The pin was a copy of `target/release/nts`, built by whichever session last ran
+a build **from its own working tree**, and it carried the compiler lane's
+in-progress array work -- unlanded, because their own memory floor was
+rejecting it.
+
+Verified rather than taken: the same program answers `nts: refused: index 1 is
+outside [0, 1)` on a pin taken at 21:00 and `2` on one taken at 21:35, and the
+only two commits in that window are about `super.fill` reaching the runtime and
+a literal's contextual member. Neither touches array growth, so the difference
+came from something not in the history.
+
+**A pin gives stability, not provenance.** Copying the binary stops it changing
+under a measurement; it does not make the measurement about a commit. This lane
+may not run `cargo`, so the honest form is to name the pin and when it was
+taken.
+
+The sparse half remains what it was: `nts_array_grow_slot` refuses a hole
+deliberately, because a dense array cannot hold one, and what is open is only
+whether an abort is the right way to refuse.
 
 **Seventeen files are clean**, and they are what make the twelve mean something:
 
