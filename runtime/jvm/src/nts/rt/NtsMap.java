@@ -245,6 +245,51 @@ public final class NtsMap {
         return -1.0;
     }
 
+    /**
+     * Every key as a `double`, in one pass, without the cursor protocol.
+     *
+     * <p>**6.5x, measured before this was written.** `Array.from(set)` lowers
+     * to `nts_map_next` for a cursor and `nts_map_key_at` for the key, so a
+     * 256-element set costs 512 static calls and index arithmetic per element.
+     * Against the identical output from this:
+     *
+     * <pre>
+     *   walked 918 ns    bulk 140 ns
+     *   walked 918 ns    bulk 144 ns
+     * </pre>
+     *
+     * <p>`benches/cases/array-from` spends about 1.84ms of its 2.09ms in that
+     * walk -- 2000 rounds at 918ns -- against a reference at 986us, so the row
+     * is mostly this and not code generation.
+     *
+     * <p>**It is unreachable until the lowering calls it**, because the loop is
+     * emitted open-coded rather than as one helper, and that is `hir`'s to
+     * change rather than this backend's. Filed with MainClaude with this
+     * number. A helper waiting for its caller is the same shape `isMap` and
+     * `isSet` were in an hour before their lowering landed.
+     *
+     * <p>**The caller must know the keys are numbers**, exactly as
+     * `arrayIndexOfI` must know its array is a `double[]`. Reading `.num` off a
+     * string key answers zero rather than refusing, which is why this is not a
+     * general iteration primitive and should not become one.
+     *
+     * <p>Deletions are the whole risk and are tested: `next` steps over null
+     * slots, so a bulk pass that did not would return holes or the wrong count.
+     * Seven cases -- empty, single, dense, every-other-deleted, head advanced,
+     * emptied and refilled, and five thousand past the linear limit -- agree
+     * element for element with the walk.
+     */
+    public static int keysIntoDoubles(NtsMap map, double[] out) {
+        int at = 0;
+        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+            NtsValue key = map.keys[slot];
+            if (key != null) {
+                out[at++] = key.num;
+            }
+        }
+        return at;
+    }
+
     public static NtsValue keyAt(NtsMap map, double at) {
         int absolute = (int) at;
         if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }

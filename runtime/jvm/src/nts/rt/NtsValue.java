@@ -134,6 +134,110 @@ public final class NtsValue {
     }
 
     /**
+     * `array[index]` where the array is erased and the element type is not
+     * known until run time -- `nts_array_element`.
+     *
+     * <p>**Eight arms, and the first version had six.** A `number[]` is a bare
+     * `double[]` in one program and an `NtsArrayD` in another, because
+     * `arrays_can_grow` is whole-program: one `push` anywhere puts every array
+     * in a wrapper. Both spellings reach here.
+     *
+     * <p>**And a `number[]` is not always eight bytes of `double`.** I told the
+     * other lane their `int64_t`-versus-`double` ambiguity could not arise here
+     * because "a `number[]` is always a `double[]`", and
+     * `examples/dynamic-element` emits `newarray long` for
+     * `[4294967296, 4503599627370495]` -- integers past 2^32 that stay inside
+     * the safe integers, which is exactly the case they described. The
+     * differential caught it: we answered -1 where node answered
+     * 9007199254740990.
+     *
+     * <p>The C lane needs a descriptor field to tell those apart. Here a Java
+     * array carries its own type, so `instanceof` separates `long[]` from
+     * `double[]` for nothing -- but only if the arm exists, and mine did not.
+     *
+     * <p>**An unrecognised representation refuses rather than answering
+     * `undefined`.** That is the whole of what went wrong above: a missing arm
+     * fell through to the out-of-range answer, so a wrong number looked like an
+     * absent element and `typeof` said so consistently. Out of range is a real
+     * `undefined` and a shape this method does not know is not.
+     *
+     * <p>**Length comes from `length()` and not from `items.length`** for the
+     * wrapped forms: the backing store is larger than the count after a
+     * `push`, so the array's own tail would read as real elements.
+     *
+     * <p>Out of range answers `undefined` rather than throwing, which is what
+     * the erased return type is for and what JavaScript does. A non-integral or
+     * negative index answers the same -- `a[1.5]` is a property read in
+     * JavaScript and there is no property here.
+     */
+    public static NtsValue arrayElement(NtsValue array, double index) {
+        Object ref = array == null ? null : array.ref;
+        if (ref == null) {
+            return UNDEFINED_VALUE;
+        }
+        int at = (int) index;
+        if (at < 0 || (double) at != index) {
+            return UNDEFINED_VALUE;
+        }
+        if (ref instanceof NtsArrayD) {
+            NtsArrayD xs = (NtsArrayD) ref;
+            return at < (int) NtsArrayD.length(xs) ? ofNumber(xs.items[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof NtsArrayZ) {
+            NtsArrayZ xs = (NtsArrayZ) ref;
+            return at < (int) NtsArrayZ.length(xs) ? ofBoolean(xs.items[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof NtsArrayL) {
+            NtsArrayL xs = (NtsArrayL) ref;
+            return at < (int) NtsArrayL.length(xs) ? held(xs.items[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof double[]) {
+            double[] xs = (double[]) ref;
+            return at < xs.length ? ofNumber(xs[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof boolean[]) {
+            boolean[] xs = (boolean[]) ref;
+            return at < xs.length ? ofBoolean(xs[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof long[]) {
+            long[] xs = (long[]) ref;
+            return at < xs.length ? ofNumber((double) xs[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof int[]) {
+            int[] xs = (int[]) ref;
+            return at < xs.length ? ofNumber((double) xs[at]) : UNDEFINED_VALUE;
+        }
+        if (ref instanceof Object[]) {
+            Object[] xs = (Object[]) ref;
+            return at < xs.length ? held(xs[at]) : UNDEFINED_VALUE;
+        }
+        throw new NtsRefusal(
+            "an indexed read of an erased array held as "
+                + ref.getClass().getName()
+                + ", which nts_array_element has no arm for");
+    }
+
+    /**
+     * One reference element, tagged for what it is.
+     *
+     * <p>`ofObject` would give a `String` the OBJECT tag, so `typeof` would
+     * answer `"object"` for a string read out of an erased array. The three
+     * cases are separated here rather than at each caller so they cannot drift.
+     */
+    private static NtsValue held(Object element) {
+        if (element == null) {
+            return UNDEFINED_VALUE;
+        }
+        if (element instanceof NtsValue) {
+            return (NtsValue) element;
+        }
+        if (element instanceof String) {
+            return ofString((String) element);
+        }
+        return ofObject(element);
+    }
+
+    /**
      * `instanceof Date`.
      *
      * <p>One class, one form, and no bit to read beside it -- `isBuffer`'s
