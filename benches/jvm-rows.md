@@ -1244,6 +1244,50 @@ round trip that is the array's element type and upstream. Nothing in it is
 in-lane any more, and three of the four things I thought were have now been
 measured away.
 
+### `symbol-keyed-map` reads the same way, so the hand-over was wrong on both rows
+
+Same technique, same result. I had written that this row "holds `total` in an
+**`f64`**, with `dload`, `dadd`, `dstore` around each `toInt32`", and that
+`array-methods` carried "the identical shape". The second half is true. The
+first half is not, on either.
+
+    454: iload  27        <- total, an int slot
+    456: i2d              <- widened here, for the addition
+    459: dload  52
+    461: dload  50        <- NtsValue.num, an f64
+    463: dadd
+    466: dload  54
+    468: invokestatic  NtsRuntime.toInt32:(D)I
+    471: istore 56        <- and straight back to an int
+
+**The accumulator was never the problem; it is already where I was going to ask
+for it to be put.** What forces the widening is the other operand:
+`events.get(key) ?? 0` comes out of an `NtsValue.num`, which is an `f64` because
+the map's value type is `number`. The addition is genuinely f64 + f64 in the
+type system, and the `| 0` genuinely narrows the sum.
+
+So the request to `narrow.rs` is a different one than I made, and harder:
+
+- **What I asked for:** hold an integer accumulator in an int slot instead of a
+  double one. Already done, by `specialize`, on both rows.
+- **What is actually needed:** prove that an `f64` arriving from a `number`-typed
+  map value or array element is integral, so the addition can be an `iadd` and
+  the `| 0` can vanish. That is range analysis over values the middle end only
+  knows as `number`.
+
+**And no allocation survives here either.** 4096 iterations with an
+`NtsValue.ofObject` inside the loop -- if each one reached the heap it would be
+about 260 KB/op:
+
+    empty         0 bytes/op
+    work        240 bytes/op
+
+240 is the map, its four entries and their symbols, built once per call. The
+in-loop `ofObject` is a lookup key that does not escape, and C2 scalar-replaces
+it, exactly as it does the `at()` value on `array-methods`. **Two rows, two
+shapes of erased value, both eliminated.** That is the plan's headline question
+answered twice and it should stop being asked speculatively.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
