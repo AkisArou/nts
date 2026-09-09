@@ -14480,6 +14480,48 @@ clause, where no amount of reading the calling code makes it visible.
 limitation of the probe. It says `SHIM THROWS` now, quotes the message, and adds
 that every test loading the module meets the same throw.
 
+## The optional parameter published as required, counted
+
+`prize.mjs` marks a gainable name `[optional-param]` when the module declares it
+with an optional parameter and the wrapper publishes it as requiring all of
+them. Across the twelve modules with a compiled pass:
+
+    module      opt names   name-mentions   of all named
+    fs                 29             249             38
+    net                 1              96             11
+    zlib                9              16             28
+    stream              2              15             14
+    readline            2              10              5
+    util                6               8             12
+    os                  2               2              2
+
+    51 name(s), 396 name-mentions
+
+**396 is not 396 files.** It counts how many compiled failure messages name one
+of these, and a file that fails naming three of them is counted three times. The
+distinct-file union is smaller and is not measured here -- the sweep prints only
+the first eight rows per module, so the union cannot be recovered from its
+output. Reporting the mention count as a file count is the sampling error this
+ledger has already paid for once, at a factor of eight.
+
+What the table does support: **`fs` has 29 of the 51**, and 38 names are named
+in its gainable failures at all, so more than three quarters of the names
+standing between `fs` and its 344 files take an optional parameter. And `net`'s
+single `createServer` is named in 96 of its 149.
+
+That is `blockers/optional-parameter-at-the-wrapper`, already filed and not
+mine, and it is the largest quantified lever in the profile -- larger than the
+class surface, which is 19 for `Buffer.from` and 24 for the `Stats` fields.
+
+### Why this is a ceiling rather than a promise
+
+A name being published with the right arity does not make its file pass. These
+counts say where the *first* failure is, and behind it are the ordinary reasons
+a test fails: a socket, a stream, a filesystem, a class whose statics do not
+cross. The number to watch when this lands is the axis, not the name count --
+the last compiler landing added published names in six modules and moved the
+axis by nothing.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
