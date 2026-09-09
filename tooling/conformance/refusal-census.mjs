@@ -44,6 +44,16 @@
 // whichever member has no representation, and grouping by the message hides
 // that the cause is somewhere else entirely.
 //
+// **A single site can name several things.** `buffer/src/main.ts:575:54` is
+// `end = this.length` in a default parameter, and it is reported three times --
+// once each for `Dir`, `FSWatcher` and `ReadFileContext`, the classes in some
+// union that do not declare `length`. So `things` is not a lower bound on
+// distinct defects the way it reads. Measured across `fs`, it is still the
+// smaller column in every row (the ratio runs from 26.0 down to 1.2), which is
+// why the ranking uses it; the two columns are both printed so a row where they
+// converge can be spotted, because that is the row where the message is
+// grouping by something other than the defect.
+//
 // So: this ranks **texts**, grouped as carefully as text allows, and a row is a
 // place to start reducing rather than a defect. Every reduction has to be
 // controlled against the real site before it is filed.
