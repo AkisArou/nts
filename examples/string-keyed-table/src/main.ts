@@ -115,3 +115,66 @@ export function tableIsNotAnArray(n: number): number {
   const table: Record<string, number> = { a: n };
   return Array.isArray(table) ? 1 : 0;
 }
+
+// A spread, which is where a copy of a table comes from. `querystring`'s
+// `addKeyVal` is `return { ...obj, ["__proto__"]: value }` and its own comment
+// records why the order matters: node appends the new key where it is
+// encountered, and building the replacement with it first made
+// `parse("a&__proto__")` enumerate as `__proto__, a`. A differential over four
+// thousand generated queries found that; none of the module's pinned files
+// covers key order.
+export function spreadThenSet(n: number): number {
+  const first: Record<string, number> = { a: n, b: n + 1 };
+  const second: Record<string, number> = { ...first, c: n + 2 };
+  return (second["a"] ?? 0) + (second["b"] ?? 0) + (second["c"] ?? 0);
+}
+
+// The copy is a copy: writing the second does not reach the first.
+export function spreadIsACopy(n: number): number {
+  const first: Record<string, number> = { a: n };
+  const second: Record<string, number> = { ...first };
+  second["a"] = n + 100;
+  return (first["a"] ?? 0) * 1000 + (second["a"] ?? 0);
+}
+
+// A spread that overwrites an existing key keeps its position rather than
+// appending, which is what a copy-then-set does and what node does.
+export function spreadOverwrites(n: number): number {
+  const first: Record<string, number> = { a: n, b: n + 1 };
+  const second: Record<string, number> = { ...first, a: n + 50 };
+  return (second["a"] ?? 0) * 1000 + (second["b"] ?? 0);
+}
+
+// A computed key, which a struct has no slot for.
+export function computedInLiteral(n: number): number {
+  const key = n > 0 ? "high" : "low";
+  const table: Record<string, number> = { [key]: n };
+  return table[key] ?? -1;
+}
+
+// `Object.keys` of a table walks what is in it, in insertion order.
+export function keyOrder(n: number): number {
+  const table: Record<string, number> = { zebra: n, alpha: n + 1, mid: n + 2 };
+  const keys = Object.keys(table);
+  let total = 0;
+  for (let index = 0; index < keys.length; index++) {
+    total = total * 31 + (keys[index] ?? "").length + index;
+  }
+  return total;
+}
+
+export function keysAfterSpread(n: number): number {
+  const first: Record<string, number> = { a: n, bb: n };
+  const second: Record<string, number> = { ...first, ccc: n };
+  const keys = Object.keys(second);
+  let total = 0;
+  for (let index = 0; index < keys.length; index++) {
+    total = total * 10 + (keys[index] ?? "").length;
+  }
+  return total;
+}
+
+export function keysOfEmpty(n: number): number {
+  const table: Record<string, number> = {};
+  return Object.keys(table).length + n * 0;
+}

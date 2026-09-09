@@ -187,6 +187,7 @@ pub const NEW_EXPRESSION: u16 = 215;
 pub const CLASS_DECLARATION: u16 = 264;
 pub const PROPERTY_ASSIGNMENT: u16 = 303;
 pub const SHORTHAND_PROPERTY_ASSIGNMENT: u16 = 304;
+pub const SPREAD_ASSIGNMENT: u16 = 305;
 pub const ARRAY_LITERAL_EXPRESSION: u16 = 210;
 /// `const { a, b } = o`. Its children are [`BINDING_ELEMENT`]s.
 pub const OBJECT_BINDING_PATTERN: u16 = 207;

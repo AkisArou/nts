@@ -1243,6 +1243,11 @@ void nts_map_clear(NtsMap *map);
 NTS_READS_ONLY double nts_map_next(const NtsMap *map, double from);
 NtsValue nts_map_key_at(const NtsMap *map, double at);
 NtsValue nts_map_value_at(const NtsMap *map, double at);
+/* A copy of a string-keyed table, in insertion order and with the source's
+ * hash. `{ ...table }` and the object-literal spread. */
+NTS_ALLOCATES NtsMap *nts_map_copy(const NtsMap *map);
+/* `Object.keys` of one, as an array of the keys it holds. */
+NTS_ALLOCATES NtsArray *nts_map_keys_str(const NtsMap *map);
 
 /* How many code units the code point at `at` occupies: 2 for a surrogate pair
  * and 1 otherwise. A string iterates by code point, so this is the step. */

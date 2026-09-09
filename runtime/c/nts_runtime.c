@@ -5900,6 +5900,50 @@ double nts_map_next(const NtsMap *map, double from) {
  * loop body runs after the read, not between it and the step. An out-of-range
  * index would be a compiler bug rather than a program's, so it is not a check
  * this pays for on every element. */
+/* `{ ...table }`, and every other copy of a string-keyed table.
+ *
+ * Insertion order, because that is what a copy of a JavaScript object is: the
+ * walk visits live entries in the order they were written, and `nts_map_set`
+ * appends. `{ ...obj, k: v }` therefore puts `k` where node puts it -- last if
+ * it is new, in place if it is not -- which is the difference a differential
+ * over generated queries found once already and no pinned test covers.
+ *
+ * The new table takes the source's `kind`, so the hash and comparison it was
+ * built with are the ones it keeps. Guessing one would find nothing, which is
+ * the failure that looks like an empty table rather than like a bug.
+ *
+ * Values are retained by `nts_map_set`; the source keeps its own counts. */
+NtsMap *nts_map_copy(const NtsMap *map) {
+  NtsMap *out = nts_map_new((double)map->kind);
+  for (double at = nts_map_next(map, 0); at >= 0;
+       at = nts_map_next(map, at + 1)) {
+    nts_map_set(out, nts_map_key_at(map, at), nts_map_value_at(map, at));
+  }
+  return out;
+}
+
+/* `Object.keys(table)`, as the array of keys in insertion order.
+ *
+ * Strings only, which is what the caller has: a table reaches here from an
+ * index signature, and `hir::lower` admits only a string key for one. A
+ * general map's keys are `NtsValue`s and `Object.keys` of one is `[]` anyway,
+ * since a `Map`'s entries are not own properties.
+ *
+ * Each key is retained: the array owns what it holds, and the table it came
+ * from is still holding its own count. */
+NtsArray *nts_map_keys_str(const NtsMap *map) {
+  NtsArray *out = nts_array_new(&nts_desc_ref, (double)map->header.length);
+  uint32_t written = 0;
+  for (double at = nts_map_next(map, 0); at >= 0;
+       at = nts_map_next(map, at + 1)) {
+    NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
+    nts_retain(key);
+    NTS_ITEMS(out, NtsHeader *)[written] = key;
+    written++;
+  }
+  return out;
+}
+
 NtsValue nts_map_key_at(const NtsMap *map, double at) {
   nts_value_retain(map->keys[(uint32_t)at]);
   return map->keys[(uint32_t)at];

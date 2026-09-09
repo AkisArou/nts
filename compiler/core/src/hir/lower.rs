@@ -10632,14 +10632,23 @@ impl<'a> FuncBuilder<'a> {
             self.values[table.0 as usize].ty,
             HirType::Managed(ManagedType::Map(_, _))
         ) {
-            // The runtime has `nts_map_next` and `nts_map_key_at`, so this is a
-            // loop rather than a missing capability -- named separately from
-            // `hasOwn` because a fix for one is not a fix for the other, which
-            // is the distinction `blockers/computed-member-read` was split out
-            // to keep visible.
-            return Err(self.unsupported(
-                id,
-                "`Object.keys` of a string-keyed table, which needs a walk over its entries",
+            // A table's keys are what is in it, so this is a walk rather than
+            // the layout's field names. Insertion order, which is what
+            // `Object.keys` is specified to give for string keys that are not
+            // array indices -- and for a struct that order is the layout's,
+            // which is why the two paths agree about what they answer while
+            // computing it completely differently.
+            let origin = self.origin(id);
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_map_keys_str".to_owned()),
+                    args: vec![table],
+                    frame: None,
+                },
+                HirType::Managed(ManagedType::Array(Box::new(HirType::Managed(
+                    ManagedType::String,
+                )))),
+                origin,
             ));
         }
         let names = self.own_names(id, argument)?;
@@ -15131,29 +15140,77 @@ impl<'a> FuncBuilder<'a> {
         key: &HirType,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let kind = self.push(
-            OpKind::ConstFloat(f64::from(key_kind_of(key))),
-            HirType::NUMBER,
-            origin.clone(),
-        );
-        let table = self.push(
-            OpKind::Call {
-                callee: Callee::External("nts_map_new".to_owned()),
-                args: vec![kind],
-                frame: None,
-            },
-            ty,
-            origin.clone(),
-        );
-        for property in self.children(id) {
-            let (name, value) = self.property_parts(property)?;
-            let value = self.erased_for_table(value, &origin);
-            let key = self.push(
-                OpKind::ConstString(name),
-                HirType::Managed(ManagedType::String),
+        let properties = self.children(id);
+        // A leading spread is where the table comes from, so the copy *is* the
+        // allocation. `{ ...obj, k: v }` is one copy and one set, and the copy
+        // preserves insertion order -- which is observable: node appends `k`
+        // where it is encountered, and building the replacement with the new
+        // key first made `parse("a&__proto__")` enumerate as `__proto__, a`.
+        // `querystring`'s own comment records a differential over 4,000
+        // generated queries finding that, and none of its four pinned files
+        // covering it.
+        let leading_spread = properties
+            .first()
+            .filter(|first| self.kind_of(**first) == Some(syntax::SPREAD_ASSIGNMENT))
+            .copied();
+        let table = if let Some(spread) = leading_spread {
+            {
+                let Some(source) = self.children(spread).first().copied() else {
+                    return Err(self.unsupported(spread, "a spread with nothing to spread"));
+                };
+                let source = self.lower_expression(source)?;
+                if !matches!(
+                    self.values[source.0 as usize].ty,
+                    HirType::Managed(ManagedType::Map(_, _))
+                ) {
+                    // Spreading a *struct* into a table would have to know the
+                    // layout's names, which is a different feature from copying
+                    // a table and is not this one.
+                    return Err(self.unsupported(
+                        spread,
+                        "a spread of something that is not a table into a table",
+                    ));
+                }
+                self.push(
+                    OpKind::Call {
+                        callee: Callee::External("nts_map_copy".to_owned()),
+                        args: vec![source],
+                        frame: None,
+                    },
+                    ty,
+                    origin.clone(),
+                )
+            }
+        } else {
+            let kind = self.push(
+                OpKind::ConstFloat(f64::from(key_kind_of(key))),
+                HirType::NUMBER,
                 origin.clone(),
             );
-            let key = self.erased_for_table(key, &origin);
+            self.push(
+                OpKind::Call {
+                    callee: Callee::External("nts_map_new".to_owned()),
+                    args: vec![kind],
+                    frame: None,
+                },
+                ty,
+                origin.clone(),
+            )
+        };
+        for property in properties {
+            if Some(property) == leading_spread {
+                continue;
+            }
+            // A *later* spread would have to merge into a table that already
+            // has entries, and `nts_map_copy` allocates rather than merges.
+            // Refused by position rather than silently reordered.
+            if self.kind_of(property) == Some(syntax::SPREAD_ASSIGNMENT) {
+                return Err(self.unsupported(
+                    property,
+                    "a spread after the first property of a table literal",
+                ));
+            }
+            let (key, value) = self.table_property(property, &origin)?;
             self.push(
                 OpKind::Call {
                     callee: Callee::External("nts_map_set".to_owned()),
@@ -15165,6 +15222,45 @@ impl<'a> FuncBuilder<'a> {
             );
         }
         Ok(table)
+    }
+
+    /// One property of a table literal, as an erased key and an erased value.
+    ///
+    /// Separate from [`Self::property_parts`] because a table admits what a
+    /// struct cannot: `{ ["__proto__"]: value }` is a computed name, which a
+    /// layout has no slot for and a table has no difficulty with. The rest is
+    /// the same, so the ordinary forms are delegated.
+    fn table_property(
+        &mut self,
+        property: NodeId,
+        origin: &Origin,
+    ) -> Result<(ValueId, ValueId), Diagnostic> {
+        let computed = (self.kind_of(property) == Some(syntax::PROPERTY_ASSIGNMENT))
+            .then(|| self.children(property))
+            .filter(|children| children.len() == 2)
+            .filter(|children| {
+                self.kind_of(children[0]) == Some(syntax::COMPUTED_PROPERTY_NAME)
+            });
+        if let Some(children) = computed {
+            let Some(expression) = self.children(children[0]).first().copied() else {
+                return Err(self.unsupported(children[0], "a computed name with no expression"));
+            };
+            let key = self.lower_expression(expression)?;
+            let key = self.erased_for_table(key, origin);
+            let value = self.lower_expression(children[1])?;
+            let value = self.erased_for_table(value, origin);
+            return Ok((key, value));
+        }
+        let (name, value) = self.property_parts(property)?;
+        let key = self.push(
+            OpKind::ConstString(name),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        Ok((
+            self.erased_for_table(key, origin),
+            self.erased_for_table(value, origin),
+        ))
     }
 
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
