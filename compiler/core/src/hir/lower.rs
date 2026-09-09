@@ -2491,6 +2491,26 @@ fn initializer_function(
         Some(**child) != name
             && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
     })?;
+    // A call is not an alias for what it calls.
+    //
+    // `= f` and `= ns.f` bind the function; `= f()` binds its *result*, which is
+    // an ordinary value however the callee is spelled. The two are told apart
+    // here and nowhere else, because the fallback below asks the initializer's
+    // last child for a symbol -- and a call with no arguments has exactly one
+    // child, its callee, whose symbol is the function.
+    //
+    // `fs`'s `constants` is what found it: `export const O_CREAT = nts_fs_o_creat()`
+    // resolved to `nts_fs_o_creat`, a native binding with no wrapper, so three
+    // POSIX flags were reported as functions that failed to cross. They are
+    // numbers.
+    //
+    // `NEW_EXPRESSION` for the same reason: `= new Thing()` binds an instance.
+    if matches!(
+        probe.kind_of(*initializer),
+        Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION)
+    ) {
+        return None;
+    }
     // `impl.upper` is a property access and carries no symbol of its own -- the
     // member does. Asking the node and then its last child covers both `= f`
     // and `= ns.f` without asking which one this is.
