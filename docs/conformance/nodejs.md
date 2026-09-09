@@ -12253,6 +12253,49 @@ The build floor says "22 of 22 still build". Building is not loading, and
 nothing between the two was checking. A `require()` of every built addon costs
 under a second each and would have caught this the moment it landed.
 
+## `os`'s last own root: `a declaration outside every walk`, and it is not what it says
+
+With `null-in-a-union-of-references` fixed, `os` has **one** own-source root
+left:
+
+    os/src/main.ts:395  `userInfoString`, a declaration outside every walk
+
+`userInfoString` is called three times, at 443, 444 and 445, inside `userInfo`
+-- and `userInfo`'s own diagnostic is `cannot be compiled because it calls
+userInfoString, which was refused above`. So the compiler treats it as the root
+and says it is outside every walk, while a walk reaches it from an exported
+function twelve lines further down.
+
+**Two hypotheses probed and both refuted**, each on the live binary:
+
+| probe | reported |
+| --- | --- |
+| a helper reached only from an exported function, calling a refused thing **locally** | the real cause at the helper (`a regular expression literal`), and NTS1003 for the caller |
+| the same, with the refused thing **in another module** | the real cause at the root, NTS1003 for the helper, NTS1003 for the caller |
+
+So it is not "a helper whose callee was refused" -- that shape reports the
+callee's actual construct, in one file or across two. Whatever makes
+`userInfoString` different is not reachability from an export and not the
+callee living elsewhere.
+
+`userInfoString` is
+
+    function userInfoString(bytes: number[], encoding: Encoding): string {
+      return Buffer.from(bytes).toString(encoding);
+    }
+
+Both `Buffer.from` and `Buffer#toString` are refused in `buffer`, and both are
+chains this ledger has already traced -- `objectToBuffer` at
+`buffer/src/main.ts:196` and `decodeIn` at `encodings.ts:279`. A third attempt
+at isolating this form; it stays a **labelled diagnosis** rather than a fixture,
+with the two shapes above ruled out.
+
+**What it costs**: `userInfo` is one of `os`'s six declines, and it is the only
+one whose chain ends here rather than at `constants`. So `os` is `constants`
+plus this, and nothing else -- `cpus` needs `returns an object[]`,
+`networkInterfaces` needs `getCIDR`, and `getPriority`/`setPriority` both wait on
+`validateInt32` -> `ERR_OUT_OF_RANGE#constructor`.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
