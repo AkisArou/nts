@@ -1116,6 +1116,15 @@ export const CORPORA = {
     // What is left is argument validation and the pure conversions, and that
     // is where a reimplementation actually differs.
     //
+    // `uid|` and `umaskread|` were in the `fixed` list with **no branch to
+    // handle them**. They fell through to the `cwd()` arm, so two seeds named
+    // after one thing silently measured another, and nothing in the file said
+    // so. Found by enumerating which branch every generated and fixed input
+    // actually takes, after MainClaude hit the same shape from the other side:
+    // a fixture dispatching on `n % 10` where no value in the pool was
+    // congruent to 4, so one receiver was never built and the run reported
+    // "agreed on every case" over 290 of them.
+    //
     // `emitWarning` was here through its validation only and has been removed.
     // A valid call *emits*, and 400 iterations put hundreds of warnings on the
     // process's stderr -- side effects a comparison corpus has no business
@@ -1125,8 +1134,8 @@ export const CORPORA = {
     // belongs to a timing harness.
     fixed: [
       "hrtime|", "hrtime|0", "hrtime|1,2", "hrtime|N", "hrtime|s",
-      "uid|", "env|PATH", "env|__nts_absent__", "env|", "env|=",
-      "cwdrel|.", "cwdrel|..", "cwdrel|x", "cwdrel|", "umaskread|",
+      "env|PATH", "env|__nts_absent__", "env|", "env|=",
+      "cwdrel|.", "cwdrel|..", "cwdrel|x", "cwdrel|",
     ],
     input: (rnd) => {
       const KINDS = ["hrtime", "env", "cwdrel"];
