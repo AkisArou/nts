@@ -22,7 +22,7 @@ not measured clean and should not be quoted.**
 
 | row | jvm/Java | note |
 | --- | --- | --- |
-| `node-utf8` | **6.3-6.6x** | blocked: 62% is `toInt32`; 1% within a sitting, 4% between |
+| `node-utf8` | **6.33x** | **a codec against an intrinsic**: floor is 2.40x, below |
 | `symbol-keyed-map` | 2.92x *jit* | blocked: 52% is `toInt32` |
 | `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
@@ -895,6 +895,46 @@ been shown to have moved at all. The deterministic checks -- coercion counts,
 instruction counts, `bytes/op`, call counts -- are the ones that carry across
 sittings, and every conclusion in this file that rests on one of those is worth
 more than one that rests on a ratio.
+### `node-utf8` cannot reach the bar, and its own reference says why
+
+I put `toInt32` at the top of the other lane's list on the strength of this row
+being 6.3x with 62% of its profile in coercions, and told them that share was
+"overhead in full" because the reference does no conversion at all. **That is
+true and it is not the row.** Reading `ref.java` -- which I should have done
+before setting anyone's priorities -- its header states the position exactly:
+
+    ours       runtime/node/internal/utf8.ts compiled: a 176-line state
+               machine, one code point at a time, with U+FFFD placement
+    reference  String.getBytes(UTF_8) and new String(bytes, UTF_8), which are
+               HotSpot *intrinsics* -- hand-vectorized, ASCII fast path, a
+               machine word at a time
+
+The reference also allocates a fresh array and copies it every round, which we
+do not, and still wins by 6.3x.
+
+**So the ceiling is arithmetic.** Ours is 47.64 us against 7.53:
+
+    every `toInt32` removed        18.10 us    ->  2.40x
+    our decoder made entirely free  0.00 us    ->  0.00x
+
+**Removing every coercion leaves the row at 2.40x**, because what remains is a
+scalar state machine against a vectorised intrinsic. No codegen work and no
+middle-end work reaches 1.00x here; only calling the platform's codec would,
+and that is a `runtime/node` replacement rather than a compiler question.
+
+**The `toInt32` work is still worth doing and this does not withdraw it** -- it
+withdraws the row I used to justify it. `symbol-keyed-map` at 2.92x compares
+against `IdentityHashMap` and `array-methods` at 1.14x against **hand-written
+loops** that its reference is explicit about being loops. Those are ordinary
+code, they carry 52% and 25% of the same coercion, and they *can* approach the
+bar. The case for the fix rests on them.
+
+**And the lesson is rule 4 arriving late.** "Check the reference does the same
+work before calling a ratio a gap" is in my goal text, I have applied it to
+`array-predicates`, `generic-classes` and `number-format-double`, and I did not
+apply it to the largest number in the table -- because 6.3x was too big to look
+like a reference artefact. The size of a gap is not evidence about its cause.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
