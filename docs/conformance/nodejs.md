@@ -14671,6 +14671,60 @@ a root nothing calls clears one cascade -- which is why the useful form is the
 pair, and why `last-mile.mjs` exists to say which roots have anything behind
 them at all.
 
+## Which modules are nearest, by the size of the cone they have to clear
+
+Every refusal in a 22-module build, split into the module's own `src` and the
+whole cone it compiles:
+
+    module                own roots   cone
+    punycode                      0      0
+    path                          4     22
+    async_hooks                  20     45
+    diagnostics_channel          19     46
+    timers                       25     50
+    string_decoder                0     59
+    buffer                       37     59
+    querystring                   1     60
+    os                            1     62
+    url                          39    129
+    console                      20   1221
+    dgram                        13   1489
+    events                       30   1116
+    assert                       47   1200
+    net                          45   1474
+    readline                     71   1312
+    util                         74   1174
+    zlib                         97   1727
+    process                      38   1917
+    http                        149   1919
+    fs                          207   2037
+    stream                      469   1630
+
+**`punycode` is zero and zero**, which is what a module that fully compiles
+looks like, and it is the one module whole on both lanes.
+
+**Nine modules have a cone under 65.** The gap after that is to 129 and then to
+four figures -- there is no middle.
+
+### The two columns say different things and both matter
+
+`dgram` has **13** refusals of its own and a cone of **1,489**. Nothing is wrong
+with `dgram`; it imports `net`, which imports `stream`. `console` is 20 and
+1,221 for the same reason.
+
+`stream` is the opposite: **469 of its own**, more than any other module, and a
+cone smaller than `fs`'s. It is the thing others are waiting on rather than a
+module waiting on others.
+
+So the cone column ranks *how much has to happen*, and the own column ranks
+*whose work it is*. A module low in both -- `path` at 4 and 22, `os` at 1 and 62,
+`querystring` at 1 and 60 -- is near. A module low in own and high in cone is
+somebody else's problem to clear first.
+
+`diagnostics_channel` at 19 and 46 has not been discussed here before and sits
+in that near group. `string_decoder` at 0 and 59 is the clearest case of the
+pattern: nothing of its own left, and 59 things in front of it.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
