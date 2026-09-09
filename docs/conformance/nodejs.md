@@ -11270,6 +11270,91 @@ already filed:
 
 ## `os` is 4 of 9, and four of the five failures name one export
 
+### 2026-09-10: 5 of 9, and the three causes behind the four failures
+
+> Re-derived against a pin taken at 00:59 from `target/release/nts`, with
+> `NTS_ADDON_OUT` set. The section below is 2026-09-09 and reads 4 of 9. The
+> same numbers came from a 00:23 pin and a 00:59 pin, so they do not turn on
+> which of MainClaude's commits was in the tree.
+
+**Interpreted: 9 passed, 0 failed.** Every one of the four compiled failures is
+a boundary or lowering question, not a behaviour I got wrong.
+
+| file | cause |
+| --- | --- |
+| `test-os-process-priority.js` | the wrapper coerces before my validation runs |
+| `local/constants-table-static.js` | `userInfo` — `Buffer` used inside the module |
+| `local/core-static.js` | `networkInterfaces` — `returns Record<string, unknown[]>` |
+| `local/export-surface-static.js` | the two above, as `2 wrong type` |
+
+#### The validation is dead code compiled
+
+`validateInt32(value: number, …)` opens with `if (typeof value !== "number")`,
+and compiled **that branch can never be taken**. The wrapper converts the
+argument to a double before my TypeScript sees it, so node's seven type cases
+arrive as numbers:
+
+    getPriority(null)   ours 0 -> no throw     node ERR_INVALID_ARG_TYPE
+    getPriority(false)  ours 0 -> no throw     node ERR_INVALID_ARG_TYPE
+    getPriority('foo')  ours NaN -> range      node ERR_INVALID_ARG_TYPE
+    getPriority({})     ours "no representation at the boundary"
+
+Node validates in JavaScript and sees the value it was handed. This is the same
+root as `path.toNamespacedPath`, which node defines as
+`if (typeof path !== 'string') return path` — **two modules, one fixture**,
+`blockers/unknown-at-the-boundary`. MainClaude reached the same finding
+independently at 01:12 in `2d544711`, from the `setPriority(1, "y")` side.
+
+#### `userInfo` is blocked by `Buffer`, and the message does not say so
+
+    os/src/main.ts:395:2   NTS1001 `userInfoString`, a declaration outside every walk
+    os/src/main.ts:443:13  NTS1003 `userInfo` … calls `userInfoString`, refused above
+
+`userInfoString` is one line: `Buffer.from(bytes).toString(encoding)`. Two
+experiments place it and neither is a guess:
+
+- **inlining the helper moved the refusal onto `userInfo` itself**, so the
+  helper's declaration was never the thing;
+- **replacing the `Buffer` call with a `String.fromCharCode` loop removed every
+  `os/src/main.ts` decline and published `userInfo`.** That change was reverted
+  immediately — it is a diagnostic, not a fix, because
+  `os.userInfo({ encoding: 'buffer' })` genuinely returns Buffers.
+
+So the cause is using `Buffer` inside a compiled module, and the diagnostic names
+a function and a walk. This is the seventh time in this ledger that the message
+describes something other than the cause. It could not be reduced to a fixture:
+`Buffer` is not ambient in a standalone blockers program, the same wall
+`process` hit earlier today.
+
+#### `ERR_OUT_OF_RANGE` loses its `code` crossing the wrapper
+
+Measured, not reduced. Three modules, and the third is what makes it a claim
+about one class rather than about error identity in general:
+
+| module | thrown | arrives as |
+| --- | --- | --- |
+| `os` | `ERR_OUT_OF_RANGE` | `Error`, own props `[stack, message, name]`, `name = "ERR_OUT_OF_RANGE"`, no `code` |
+| `buffer` | `ERR_OUT_OF_RANGE` | the same, in a build sharing only `internal/errors.ts` |
+| `path` | `ERR_INVALID_ARG_TYPE` | `TypeError`, own props `[stack, message, code]`, `code = "ERR_INVALID_ARG_TYPE"` — node's shape exactly |
+
+The `os` message is byte-identical to node's. Only the identity is wrong, and
+`assert.throws(fn, { code: 'ERR_…' })` is how node's suite states nearly every
+error expectation — so this sits underneath an unknown number of failures that
+currently look like unrelated behaviour differences.
+
+`internal/errors.ts` declares `NodeTypeError extends TypeError` and
+`NodeRangeError extends RangeError` with the same three members, so the
+declaration is not the difference.
+
+**I could not reduce it.** A fixture with a `TypeError` subclass and a
+`RangeError` subclass written the same way — including the
+`override get ["constructor"]()` that `errors.ts` puts on every base — failed
+its own control: the minimal `TypeError` subclass did not cross intact either,
+so it does not reproduce what `path` does. It was deleted rather than left in
+the suite certifying nothing. The reduction is open, and the three module
+measurements above are what stands.
+
+
 Compiled lane, `target/node/os.node`, 2026-09-09:
 
 ```
