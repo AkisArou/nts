@@ -9702,6 +9702,37 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### A frequency table over cones cannot rank roots, and here is why
+
+The obvious way to find the highest-leverage root is to count how many modules
+each one appears in. Done across the four nearest -- `string_decoder`,
+`querystring`, `os`, `path` -- it returns twelve roots tied at four of four:
+
+```
+4  `X` on a union, whose members lay their fields out differently
+4  `X` on a typed array
+4  `X` on a number
+4  indexing an array of any
+4  a regular expression literal
+4  an `instanceof` against something this compiler has no class for
+...
+```
+
+Every one of them appears in every cone, because all four modules import
+`internal/`, and `internal/errors.ts` alone carries most of these forms. The
+table ranks nothing.
+
+**Which is the cone-versus-module rule wearing different clothes.** A count over
+cones tells you what `internal/` contains; it cannot tell you what any module is
+*waiting on*, because a root in a cone may sit under a function nothing calls.
+`indexing an array of any` and `a regular expression literal` are tied at four
+of four here, and only the first one is between `string_decoder` and a
+constructor.
+
+The ranking that worked was following each blocked export to its own root, one
+cascade line at a time -- slower, one module at a time, and the only method that
+distinguished `errors.ts:533` from eleven roots with identical coverage.
+
 ### `querystring` is 0 of 8, and every one of its eight declines is filed
 
 ```
