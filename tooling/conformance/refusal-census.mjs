@@ -44,6 +44,20 @@
 // whichever member has no representation, and grouping by the message hides
 // that the cause is somewhere else entirely.
 //
+// **And one cause splits across several messages, which under-ranks it.** The
+// type `IterableIterator<number>` refuses three different ways depending on
+// where it stands:
+//
+//     as a return type   a function returning `IterableIterator`
+//     as a parameter     a parameter of unrepresentable type (`IterableIterator`)
+//     as a property      a property of unrepresentable type (`IterableIterator`)
+//
+// Grouping by message puts one unrepresentable type in three rows and ranks
+// each a third as urgent as it is. So the two errors run in opposite
+// directions -- a message covering several causes over-ranks, a cause wearing
+// several messages under-ranks -- and no grouping over text alone fixes both.
+// A row is where reducing starts.
+//
 // **A single site can name several things.** `buffer/src/main.ts:575:54` is
 // `end = this.length` in a default parameter, and it is reported three times --
 // once each for `Dir`, `FSWatcher` and `ReadFileContext`, the classes in some
