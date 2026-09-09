@@ -13999,6 +13999,11 @@ Every `fs` test that reads a stat reads a field. `stats.size`, `stats.mtimeMs`
 and `stats.mode` are the point of the object; `isFile()` is the convenience.
 `fs` has 394 upstream files and one pass.
 
+Counted rather than asserted: **24 of node's `test-fs-*.js` read a `.size`,
+`.mode`, `.mtimeMs`, `.nlink` or `.ino` off a stat**. That is the number this
+one gap sits in front of, and it is a floor -- the grep is for five field names
+on any object, so it undercounts files that destructure and overcounts nothing.
+
 The same shape will meet `buffer`, `url` and `stream` as their classes land --
 `export-class` names all three as wanting the class export next, and a class
 whose fields do not cross is a class whose tests cannot read anything it
