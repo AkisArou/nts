@@ -82,7 +82,8 @@ try {
     "setDefaultAutoSelectFamily(true) was not observed by the next read",
   );
 } finally {
-  // This process runs the rest of the suite after this file.
+  // Restored even if an assertion above threw, so the final check below is
+  // about the setter and not about which line failed.
   net.setDefaultAutoSelectFamily(original);
 }
 
