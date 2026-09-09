@@ -35,6 +35,29 @@
 //
 // # Reading it
 //
+// # What it found the first time it ran
+//
+// Five of twenty-six compiled passes were hollow, and the two-way arithmetic
+// had reported none:
+//
+//     path      test-path-posix-exists.js, test-path-win32-exists.js
+//     stream    test-global-webstreams.js, test-stream-aliases-legacy.js
+//     timers    test-timers-promises.js
+//
+// `--empty-exports` is what caught all five, and **no lane was asking it of the
+// compiled axis** -- `sweep.mjs` runs `--sabotage` against the interpreted lane
+// and `--mutate-addon` against the addon. `path`'s pair even fail `--sabotage`,
+// for an unrelated reason (the subpath stops resolving), which is how they
+// survived a lane that looked like it covered them.
+//
+// Three of the five did not need a control at all: `stream.Readable` and
+// `require('_stream_readable')` are both `undefined` in the ordinary run, and
+// `timers.promises` is `undefined` so `deepStrictEqual({}, {})` holds. Nobody
+// had looked.
+//
+// After replacing them: 22 pass, 18 behaviour-dependent, 4 shape-only, 0 hollow,
+// 5 modules. Four fewer passes and one more thing demonstrated.
+//
 // A module whose passes are all `shape-only` publishes a correct surface and has
 // not been shown to compute anything. That is a result and not a blank -- it is
 // exactly what `os` was for its first two passes -- but it is not the axis

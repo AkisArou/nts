@@ -644,6 +644,43 @@ if (!withCompiles && modules.length > 1) {
     if (loads.status !== 0) process.exitCode = 6;
   }
 
+  // Which references can cross the wrapper, in each direction.
+  //
+  // Not a per-module question, so it has no row above -- but it is the ceiling
+  // on several of them at once, and it moves without anything here changing.
+  // `util.types` publishes 31 predicates and not one can be asked about a
+  // reference; `async_hooks.executionAsyncResource` publishes and throws on
+  // every call. Both are this one crossing, and no module's pass count says so.
+  //
+  // Exit 1 is the finding, exit 3 is the instrument saying its own controls did
+  // not hold -- which are different lines here, because a probe that stopped
+  // working reads exactly like a boundary that started.
+  {
+    const refs = spawnSync("bash", [join(HERE, "reference-boundary.sh")], {
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 600_000,
+      env: process.env,
+    });
+    const text = `${refs.stdout ?? ""}${refs.stderr ?? ""}`;
+    if (refs.status === 3 || /INSTRUMENT FAILURE/.test(text)) {
+      console.log("reference boundary: INSTRUMENT FAILURE -- its controls did not hold");
+      for (const line of text.split("\n").filter((l) => /INSTRUMENT|->/.test(l))) {
+        console.log(`  ${line.trim()}`);
+      }
+      process.exitCode = 6;
+    } else if (refs.status === 0) {
+      console.log("reference boundary: references cross in both directions");
+    } else {
+      const inbound = /does not cross inward/.test(text);
+      const outbound = /erased value carrying a reference cannot cross/.test(text);
+      console.log(
+        `reference boundary: ${[inbound ? "inbound refused" : null,
+          outbound ? "outbound refused" : null].filter(Boolean).join(", ") || "refused"}`,
+      );
+    }
+  }
+
   // The `uses` files, against what the modules actually import. One of them was
   // already right about a bug that took an afternoon: `dgram/uses` names `net`,
   // `dgram` calls `nts_net_default_auto_select_family`, and the build consulted
