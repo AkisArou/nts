@@ -11268,6 +11268,78 @@ already filed:
   *constructor*, and without a constructor the class has no wrapper and the
   addon publishes nothing at all.
 
+
+## `Buffer.from` is the largest single item on the compiled axis
+
+2026-09-10. Found by taking `string_decoder` as the smallest remaining module
+and reading what it actually stops at, rather than by ranking diagnostics.
+
+`string_decoder` is **0 of 5 compiled, 5 of 5 interpreted**, and it has **zero
+`NTS1001` roots in its own source**. Every decline is a cascade:
+
+    src/main.ts:32   bytesOf                    calls `Buffer.from`
+    src/main.ts:105  StringDecoder#constructor  calls `Buffer.alloc`
+    src/main.ts:120  StringDecoder#write        calls `bytesOf`
+    src/main.ts:172  StringDecoder#text         calls `bytesOf`
+    src/main.ts:147  StringDecoder#end          calls `StringDecoder#write`
+
+Which is why four of its five failures are one sentence, `StringDecoder is not a
+constructor`, and the wrapper's own words are `no wrapper for StringDecoder: is
+a class whose constructor was not compiled`. Two names hold the module shut.
+
+The root is `Buffer.from`'s polymorphic dispatch, `buffer/src/main.ts:184-218`:
+an `in` on something that is not an object, an `in` naming `length` on an
+`object`, an erased value where a concrete representation is wanted, and `i`
+which `UnknownArrayLike` does not declare.
+
+### Reach, and then what clears
+
+Thirteen of 22 modules carry functions cascading directly from
+`Buffer.from`/`Buffer.alloc` — 101 of them before their own downstream
+cascades:
+
+    fs 14   process 14   http 11   zlib 9   dgram 8   net 8   stream 7
+    readline 6   string_decoder 6   url 6   buffer 4   os 4   querystring 4
+
+Reach is the wrong column and this ledger has said so before. The one that
+answers the question is roots-of-their-own:
+
+| module | own roots | what that means |
+| --- | --- | --- |
+| `string_decoder` | **0** | clears outright on `Buffer.from`/`alloc` |
+| `querystring` | 1 | `decodeURIComponent`, a builtin this compiler does not provide |
+| `os` | 1 | which is the Buffer refusal itself, wearing a different message |
+| `url` | 39 | |
+| `readline` | 71 | |
+| `zlib` | 97 | |
+
+So the honest claim is **one module clears and two are one item away**, not
+"thirteen modules are blocked on Buffer". `string_decoder`'s ceiling afterwards
+is **4 of 5**, not 5 — `local/core-static.js` wants `lastChar`, `lastNeed` and
+`lastTotal` as prototype accessors with `lastChar` a Buffer, which is node's
+shape and stays as it is. Four of five, with the reason.
+
+### The same cause wears two diagnostics
+
+This is the part that cost an hour and belongs beside
+[[one-message-is-not-one-cause]] in the ledger's own terms:
+
+    string_decoder   NTS1003  `bytesOf` … calls `Buffer.from`, which was refused above
+    os               NTS1001  `userInfoString`, a declaration outside every walk
+
+**The `os` message does not contain the word Buffer.** It names a helper and a
+walk, which is why the first hour there went into the helper's declaration
+position and then into `userInfo`'s overload signatures — a fixture for the
+overload theory was written, did not reproduce, and was deleted. The
+`String.fromCharCode` substitution answered it in one build.
+
+Any census that ranks by message text splits this single item in two and ranks
+both too low. The 2026-09-09 ordered list in this file does exactly that.
+
+> Provenance: the 13-module counts are from sweep logs built on a pin taken at
+> 00:23. `string_decoder` and `os` were re-derived on a 00:59 pin and are
+> unchanged.
+
 ## `os` is 4 of 9, and four of the five failures name one export
 
 ### 2026-09-10: 5 of 9, and the three causes behind the four failures
