@@ -15304,6 +15304,20 @@ exception** rather than as a garbage value. One fixture covers both faces.
 So os is still four failures from whole and now three of the four are behind two
 filed roots, with the fourth behind that fixture.
 
+**And then `parseInt` landed, and os stayed at 5 and 4 again.** What replaced it,
+since a refusal delta is not a measure of a fix: `getCIDR` compiles --
+`internal/net.ts` has no refusals at all now -- and `networkInterfaces` compiles
+with it. The wrapper declines it instead:
+
+    was   networkInterfaces cannot be compiled because it calls `getCIDR`
+    now   no wrapper for networkInterfaces: returns Record<string, unknown[]>
+
+A lowering refusal became a boundary decline. That is progress and it is not a
+passing test, and the two are worth telling apart: the function exists in the
+compiled artifact now and cannot be handed to the host.
+
+`userInfo` is unchanged, still behind `userInfoString` and `Buffer.from`.
+
 ### os is four failures from whole, and every one is behind something named
 
 The goal is counted in whole modules and `os` is nearest: **5 passed, 4 failed**
