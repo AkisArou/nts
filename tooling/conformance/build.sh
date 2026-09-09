@@ -30,6 +30,14 @@ src="$root/runtime/node/$module"
 # unconditionally, so setting that variable made the floor search a directory
 # nothing writes to and report every module as failing to load. One concept with
 # two names is worse than either; both resolve here, `NTS_ADDON_OUT` first.
+#
+# Controlled after the fact, since it shipped with the claim read off the code
+# rather than demonstrated. At `dc3a2fb9` this line was
+# `out="${NTS_ADDON_OUT:-$root/target/node}"` and `build-floor.sh:130` was
+# `out_dir=${NTS_CONFORMANCE_OUT:-$PWD/target/node}` -- so setting that variable
+# sent the writer to `target/node` and the reader somewhere else. With this
+# line, `NTS_CONFORMANCE_OUT=<dir> build.sh punycode` puts `punycode.node` in
+# `<dir>`, which is where the floor looks.
 out="${NTS_ADDON_OUT:-${NTS_CONFORMANCE_OUT:-$root/target/node}}"
 work="$out/$module.build"
 
