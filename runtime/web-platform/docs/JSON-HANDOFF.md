@@ -55,6 +55,44 @@ problem** — and it is the one thing a dynamic engine cannot do.
 
 ---
 
+## Closed since this was written — read this before the section below
+
+**Both blockers named below are gone, and there is a parse row.**
+
+    json-parse   nts C 2.47ms   LLVM 2.48ms   JVM 891.82us
+                 node 908.00us  bun 1.50ms    nts/node 2.74x
+
+Every backend agrees on the checksum, so the compiled parser is correct through C, LLVM and
+JVM, and the JVM backend is at parity with node running the same TypeScript. This is a first
+measurement, not an improvement: the direction had never been measured because it had never
+compiled.
+
+`Number(string)` landed as `nts_str_to_number`. This file called it "the *only* remaining
+refusal on that chain" and that was true when written — **underneath it was a second blocker
+neither lane had seen.** A constructor call was named from the *source text of its identifier*,
+so `json/parse.ts` and `json/stringify.ts` each declaring a class called `Frame` emitted
+`Frame#constructor` against definitions called `Frame@parse#constructor` and
+`Frame@stringify#constructor`, and both callers were dropped as "calls something refused" with
+no refusal anywhere in the log. `readValue`, `parseJsonText`, `jsonParse` and
+`stringifyJsonValue` all compile.
+
+**Item 6 below is already built.** `nts_number_to_string` has its integer fast path:
+`nts_digits10` knows the length before a digit is written, so it goes straight into the string
+with no scratch buffer and no copy, and the function is `always_inline` because the caller
+usually knows the value is whole. Do not write it again.
+
+**Items 4 and 5 are not blocked on invention.** Both need a native primitive reachable from
+shared TypeScript, which is the same question as `JSON.stringify` as a global — and
+`src/provider/environment.ts` already shows the pattern: `declare function nts_*` with a host
+shim beside it in `host/`.
+
+`JSON.stringify` and `JSON.parse` as *globals* remain open, and that is the one that decides
+whether any of this reaches a user. Twelve non-test uses across `runtime/node`, and the one
+heading the error cone — `errors.ts:70`, under `determineSpecificType`, under
+`ERR_INVALID_ARG_TYPE`, under every `validate*` — needs only `JSON.stringify(string)`. The
+obstacle is that every precedent maps a global to a **C** runtime function and the escaping rule
+is stated once, in TypeScript. A second copy in C to make it link is the wrong trade.
+
 ## Blocked, and on whom
 
 **`Number(string)`** — `parse.ts:374`, `Number(source.slice(start, end))` in `numberValueOf`.

@@ -29,6 +29,24 @@ then `with-lock.sh`.
 One clean run, all four rows, so the columns are comparable to each other. The ratio column divides
 by whichever nts backend is faster.
 
+**And a fifth row that did not exist when the four above were taken.** `json-parse`, on a single
+filtered run rather than the clean sitting the four had, so it belongs beside them and not in
+them:
+
+| row | nts C | nts LLVM | nts JVM | node | bun | nts/node |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `json-parse` | 2.47ms | 2.48ms | **891.82us** | 908.00us | 1.50ms | 2.74x |
+
+**This is a first measurement, not an improvement.** The parse direction had never been measured
+because it had never compiled: `Number(string)`, and beneath it a constructor named from the
+source text of its identifier, so `json/parse.ts` and `json/stringify.ts` each declaring a class
+called `Frame` dropped both callers as refused when nothing was. Every backend agrees on the
+checksum, so the compiled parser is correct through C, LLVM and JVM.
+
+The JVM backend is **at parity with node on this row**, which is the first time any JSON row has
+been, and it is 2.8x ahead of our own C. That gap between our two backends on one program is the
+interesting number here, not the ratio against node.
+
 One row is faster than node. None is faster than bun, though `json-scan` is level with it.
 
 **The node column is the noisy one, and on `json-scan` it is noisy enough to change the verdict.**

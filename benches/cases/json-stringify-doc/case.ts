@@ -14,9 +14,14 @@
 // Because `work(1)` serializes exactly once, the microseconds-per-op this row reports convert
 // directly to that script's milliseconds-per-serialize.
 //
-// **Why serialization and not parsing.** The parse direction does not compile: `numberValueOf`
-// ends in `Number(text)`, a string-to-number conversion this lowering does not have, and that
-// blocks `Scanner#readNumber`, `readValue` and `parseJsonText`. Serialization needs the opposite
+// **Why serialization and not parsing.** It was that the parse direction did not compile:
+// `numberValueOf` ended in `Number(text)`, a string-to-number conversion this lowering did not
+// have, and that blocked `Scanner#readNumber`, `readValue` and `parseJsonText`. Both that and
+// the constructor-naming bug beneath it are fixed, and `benches/cases/json-parse` measures the
+// other direction now against this same document. The two rows are the same bytes on purpose.
+//
+// What survives of the original reason is narrower and still true: serialization needs
+// `numberText`, which is `String(value)`. Serialization needs the opposite
 // direction -- `numberText` is `String(value)`, which lowers to `nts_number_to_string` -- so it
 // is reachable today and parsing is not. Half an answer, and the half that tests whether the
 // gap survives compilation at all.

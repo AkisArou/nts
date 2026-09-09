@@ -18,6 +18,14 @@
 // the frontier went *up* by one when the conversion stopped being hidden behind the refusal
 // above it, which is a frontier moving forward rather than a regression.
 //
+// **Both of those are closed and `benches/cases/json-parse` is the row they were blocking.**
+// `Number(string)` landed as `nts_str_to_number`; underneath it was a second blocker nobody had
+// seen, a constructor call named from the source text of its identifier, so `json/parse.ts` and
+// `json/stringify.ts` each declaring a class called `Frame` dropped both callers as refused
+// when nothing was. This row keeps its narrow scope on purpose -- it is the number grammar and
+// not the parse -- but the sentence above about `readNumber` being unreachable is history now
+// rather than a description.
+//
 // There is no `ref.cpp`. A C++ number scanner is a plausible reference in a way the escaper was
 // not -- the grammar is small and unambiguous -- but it would be answering "how fast is a
 // hand-written scanner" rather than "what does this compiler do with the one we ship", and the
