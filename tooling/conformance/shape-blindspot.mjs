@@ -63,7 +63,20 @@ const sentinelWrites = new WeakMap();
 function sentinelExports(label) {
   const cache = new Map();
   const written = new Map();
-  const proxy = new Proxy(function sentinel() {}, {
+  // The target is a **bound** function, not a plain one.
+  //
+  // A plain `function sentinel() {}` carries a non-configurable own
+  // `prototype`, so `Reflect.defineProperty(target, "prototype", …)` returns
+  // false -- correctly, and the `defineProperty` trap must pass that on or
+  // violate the invariant. `buffer`'s shim defines `prototype` on something it
+  // is handed, so it was reported "not probeable" for the shape of the target
+  // rather than for anything about the shim.
+  //
+  // A bound function has own `length` and `name` and **no own `prototype`**, so
+  // defining one succeeds, and it is still constructible, which the `construct`
+  // trap needs. Answering `true` from the trap instead would be the invariant
+  // violation this file already learned about once.
+  const proxy = new Proxy(function sentinel() {}.bind(null), {
     get(_target, key) {
       if (key === "__sentinelPath") return label;
       if (typeof key === "symbol") return undefined;
