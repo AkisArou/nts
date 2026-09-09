@@ -9702,6 +9702,40 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### Nothing that crosses answers wrongly
+
+Swept every module that publishes anything, reading the *reason* each local test
+failed rather than the count:
+
+```
+os        os.constants is undefined                       absence
+readline  readline.createInterface is not a function      absence
+net       BlockList is not a constructor                  absence
+util      util.format is not a function                   absence
+timers    setTimeout is not a function                    absence
+buffer    Blob is not a constructor                       absence
+http      Class extends value undefined                   absence
+path      66 divergences, every one a wrapper blocker     absence
+punycode  none                                            --
+```
+
+**Every failure is something not being there.** Not one is a function that
+crossed and returned a wrong answer. `os`'s `constants-signals-static.js` looked
+like a value mismatch -- "Expected values to be strictly equal, + 'undefined' -
+'object'" -- and is `typeof os.constants` against `"object"`, so it is the same
+absent export wearing a comparison. `timers`' "fn was called 0 times" is the
+shape that usually arrives far from its cause, and here it is `setTimeout`
+missing two lines up.
+
+Scoped to what was measured: the local static tests across those nine modules,
+plus `path`'s 183-case edge table against node. It does not cover every one of
+node's pinned tests, and a wrong answer could still be sitting behind an absence
+that fails first -- which is exactly what masked the typed-array count.
+
+What it does say is that the compiled axis has an absence problem and not,
+so far, a correctness problem. That is worth knowing before anyone reads "0
+passed, 410 failed" as 410 things computing the wrong answer.
+
 ### The six functions that started crossing are correct, and one test was hiding it
 
 `path/test/edge-inputs-static.js` compares 183 edge cases against node. It
