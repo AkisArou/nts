@@ -115,7 +115,7 @@ different problem from the four rows losing by a lot.
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
 | `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
-| `array-from` | 2.12x | **priced: 5.9x on the set walk** -- the lowering's, below |
+| `array-from` | 2.12x | **the set walk is 6.5x and is ~1.84ms of the row's 2.09ms**, measured against a bulk helper that is written and waiting on the lowering. Not call overhead -- both helpers inline; it is the `f64` cursor. Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 1.27x | the same `uirem` residual |
@@ -2005,6 +2005,47 @@ the dispatch, not the ABI, not the allocation shape and not anything else in the
 emission that anyone has named. It is the clearest statement of where this lane
 actually stands: **the codegen is not what is losing, and nobody can say what
 is.**
+
+### `array-from`'s set walk priced at 6.5x, and it is the cursor being an `f64`
+
+The bulk helper the "Open, and whose" section has been asking for is written and
+measured. Same map, same output, one variable -- whether the walk goes through
+the cursor protocol per element or one pass inside the runtime:
+
+    walked 918 ns    bulk 140 ns
+    walked 918 ns    bulk 144 ns
+    walked 945 ns    bulk 159 ns
+
+**6.5x**, and `benches/cases/array-from` spends about **1.84ms of its 2.09ms**
+in that walk -- 2000 rounds at 918ns -- against a reference at 986us. The row is
+mostly this and not code generation.
+
+**It is not call overhead, which was the obvious reading.** Rule 1, and both
+helpers inline:
+
+    NtsMap::next  (93 bytes)   inline (hot)   x12
+    NtsMap::keyAt (54 bytes)   inline (hot)   x13
+
+each preceded by exactly one `callee is too large` from before the site was hot,
+which is the reading that has misled me twice tonight already.
+
+**So what is left after inlining is the protocol's arithmetic, and the cursor is
+a `double`.** `nts_map_next(map, from)` takes and returns an `f64` because
+`hir::runtime` types it that way, so per element the inlined walk computes
+`(double) base + at`, the caller adds `1.0` to it, and `keyAt` casts it back
+with `(int) at` -- a double round trip and two bounds-and-null tests, where the
+bulk pass carries an `int` slot and tests nothing twice.
+
+That is a sharper hand-over than "the walk is 5.9x": the cost is not the calls
+and not the `NtsValue` (C2 scalar-replaces it, as it does on `array-methods`),
+it is an `f64` cursor round-tripping through `int` on every element of a
+256-element set, 2000 times an operation.
+
+`NtsMap.keysIntoDoubles` is landed, documented with this number, and agrees with
+the walk on seven cases including deletions, head advancement, refill and past
+the linear limit. **It is unreachable until the lowering emits one call instead
+of the open-coded loop**, which is `hir`'s. Filed with MainClaude with the
+number and the reproducer.
 
 ## Open, and whose
 
