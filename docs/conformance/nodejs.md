@@ -11292,6 +11292,51 @@ already filed:
 
 
 
+
+## Typed arrays cross outward now, and the module count for it is zero for the wrong reason
+
+Re-derived 2026-09-10 on a pin taken at 01:29, with a standalone probe rather
+than a module, because no module can currently ask the question.
+
+    returnsU8(): Uint8Array         crosses -- no decline
+    takesU8(u: Uint8Array): number  REFUSED -- takes TypedArray, which crosses outward only
+    returnsNumberArray(): number[]  crosses
+
+**The standing goal text's "no emitted wrapper builds a typed array at all —
+zero across 24 addons" no longer holds.** The outward direction works;
+`blockers/view-returned-to-the-host` asserts `nts_to_napi_view(env, result,
+&out)` is emitted and reproduces. Only the inward direction refuses, which
+`blockers/view-parameter-crosses-outward-only` states in exactly the words above
+and also reproduces.
+
+### The count is zero and that is not progress
+
+The goal text says "66 signatures in nine modules sit behind that gap". Counted
+across all 22 module build logs tonight:
+
+    wrapper declines naming a typed array, either direction:  0
+    wrapper declines in total across the sweep:             479
+
+**Zero is the wrong number to report as an improvement.** The two lines that
+matched a first, careless grep for `crosses outward only` were
+`registerDestroyHook: takes an object` and `printSimpleMyersDiff: takes an
+object[]` — the same phrase about a different type, which is the trap this
+ledger already records for typed-array counting once before.
+
+The declines are absent because **the affected functions are refused at lowering
+and never reach wrapper generation**. `string_decoder` is the clean example:
+every one of its members cascades from `Buffer.from`, so no signature of its
+gets far enough for the wrapper to have an opinion about a typed array.
+
+So the honest statement of the gap is: the inward half is open, it is filed and
+reproducing as a fixture, and **no module currently demonstrates it** — not
+because it is closed but because those modules stop earlier. A census that reads
+module logs alone would report this gap as gone.
+
+> This is the fourth instrument this month that answered cleanly about the
+> subset it could reach. The rule stands: an absent diagnostic is not a closed
+> defect.
+
 ## The native half is done: 349 of 352
 
 Re-derived 2026-09-10 with `nm --defined-only` against compiled objects, which
