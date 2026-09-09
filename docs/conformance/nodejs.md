@@ -15364,6 +15364,21 @@ declaration that makes it, with the fixture that names it:
 reduction -- export a class instance, export a plain object -- compiles and
 publishes both. Recorded as unreduced rather than guessed at.
 
+**Half of it is the boundary, not the lowering.** Four of the eight entries are
+the wrapper declining something it cannot carry rather than the lowering
+refusing to compile something:
+
+    an object parameter          `EventEmitter#constructor: takes an object`
+    an object return             `createHook: returns an object`
+    the code argument            `napi_create_type_error(env, NULL, …)`
+    a name it never saw          `is exported and no function of that name was compiled`
+
+That is 54 + 16 + 14 + 41 test files against the lowering's 332 + 68 + 59, and
+it is a different body of work from the representation questions the census
+ranks. `blockers/` already held fixtures for three of the four. What was missing
+was any measurement of what they cost, which is what `next-pass.mjs` was written
+for.
+
 **Every entry above is ordered by test files, and none of them would be near the
 top of a ranking by diagnostics.** `an object literal that is not an object` is
 13 distinct things across 16 modules and sits eighteenth by that measure; ranked
