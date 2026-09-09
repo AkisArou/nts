@@ -10030,6 +10030,28 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### No local test exists without running, checked rather than assumed
+
+A test file that exists and never runs reads as coverage in every count while
+measuring nothing -- the same shape as a vacuous pass, one level out. So it was
+checked.
+
+Local discovery in `run.mjs` is `readdirSync(localDir).filter(f =>
+f.endsWith(".js"))`, unfiltered otherwise, so no `.js` file in a module's `test/`
+directory can be missed. Confirmed against four modules by counting files on
+disk against files the harness reported: `punycode` 2 and 2, `os` 5 and 5,
+`path` 5 and 5, `string_decoder` 3 and 3.
+
+The gap that discovery *could* have is a test written with another extension.
+There are five non-`.js` files across every `test/` directory: four C tests --
+`fs/test/bytes.c`, `internal/test/utf8.c`, `timers/test/host.c`,
+`zlib/test/bytes.c` -- which `sweep.mjs` already reports as "module C: 4
+file(s)", and one `.cjs` inside `process/test/fixtures/`, which is a fixture a
+test spawns rather than a test.
+
+179 local `.js` tests, all discovered; 4 C tests, all known to the sweep; 1
+fixture correctly excluded. Nothing is written and unrun.
+
 ### Every module's compiled lane, measured rather than inferred
 
 All twenty-two run against their own addon on the current pin, addons rebuilt
