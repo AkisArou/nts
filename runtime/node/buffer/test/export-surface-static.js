@@ -60,13 +60,57 @@ assert.deepStrictEqual(
   `buffer is missing name(s) node has: ${missing.join(", ")}`,
 );
 
+// Collected rather than asserted one at a time. `shape.mjs` gives every name a
+// key, so `missing` above is empty and every absent export lands here -- and
+// asserting inside the loop reported `Blob` and stopped, which says "one name is
+// wrong" about a surface where twelve are. The whole list is the finding.
+const wrongType = [];
 for (const name of expected) {
-  assert.strictEqual(
-    typeof buffer[name],
-    nodeTypes[name],
-    `buffer.${name} is ${typeof buffer[name]}, node's is ${nodeTypes[name]}`,
-  );
+  const ours = typeof buffer[name];
+  if (ours !== nodeTypes[name]) wrongType.push(`${name}: ${ours}, node's ${nodeTypes[name]}`);
 }
+// Asserted below, together with the callability findings. Asserting here would
+// hide those behind these -- which is the same defect this loop was just fixed
+// for, one level out: a file that reports its first finding and stops is a file
+// whose other findings do not exist until the first is repaired.
+
+// **And that each published function can be called.**
+//
+// Node has no reason to assert this: there, a name of type `function` is always
+// callable. Here it is not. The erased-parameter crossing published `isUtf8` and
+// `isAscii`, both declared `(input: Uint8Array | ArrayBuffer)`, and the boundary
+// has no inbound representation for a typed array -- so `typeof buffer.isUtf8`
+// became `"function"` while every argument node accepts throws, `Buffer`
+// included. A presence check passes where it used to fail honestly.
+//
+// Scalars are not enough to catch it: `isUtf8("")` reaches the module's own
+// validation and answers node's error correctly. Only the argument the function
+// actually takes finds the boundary.
+const callable = [];
+for (const [name, args, want] of [
+  ["isUtf8", [new Uint8Array([0x61, 0x62])], true],
+  ["isUtf8", [new Uint8Array([0xff, 0xfe])], false],
+  ["isAscii", [new Uint8Array([0x61])], true],
+  ["isAscii", [new Uint8Array([0x80])], false],
+]) {
+  if (typeof buffer[name] !== "function") continue;
+  try {
+    const got = buffer[name](...args);
+    if (got !== want) callable.push(`${name} answered ${got}, node answers ${want}`);
+  } catch (error) {
+    callable.push(`${name} threw: ${error.message}`);
+  }
+}
+const surface = [
+  ...wrongType.map((line) => `absent or wrong type -- ${line}`),
+  ...callable.map((line) => `published but not callable -- ${line}`),
+];
+assert.deepStrictEqual(
+  surface,
+  [],
+  `${wrongType.length} name(s) differ in type from node and ` +
+    `${callable.length} published function(s) cannot be called:\n  ${surface.join("\n  ")}`,
+);
 
 // The two numeric constants, pinned by value. They are the export kind the
 // backend was dropping: a literal initializer folded into its readers leaves
