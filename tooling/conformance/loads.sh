@@ -70,16 +70,21 @@ for module in "${modules[@]}"; do
   #     RTLD_NOW:  undefined symbol: refused_body      <- named
   # Both counts, because the raw one has been read as progress and is not.
   #
-  # `Object.keys(addon)` counts whatever the export table contains, and the
-  # export table contains names node does not export: `async_hooks` publishes
-  # sixteen and **three** are node's -- the other thirteen are `newAsyncId`,
-  # `emitBefore` and the rest of its internals. `readline` publishes seven and
-  # **none** is node's. Reporting only the raw number counts internals as
-  # published surface.
+  # `Object.keys(addon)` counts whatever the export table contains, and it
+  # contains more than node's surface: `async_hooks` publishes sixteen and
+  # **three** are node's; `readline` publishes seven and **none** is.
   #
-  # No surface test catches this: each one runs against what `shape.mjs`
-  # returns, and those shims return node's key set exactly. The shim is right;
-  # the export table is what is wrong, and nothing else here reads it directly.
+  # **Those extra names are deliberate and the addon is not wrong.**
+  # `async_hooks/src/main.ts:38` re-exports its thirteen as "raw implementation
+  # exports for the conformance harness's node-internal facade", which
+  # `shape.mjs` omits from the public object -- so the addon publishes what its
+  # entry exports and the shim narrows to node's. Both layers are correct.
+  #
+  # What is wrong is reporting one number for two things. `os` 17 and `path` 15
+  # are entirely node's; `async_hooks` 16 is three of node's and thirteen of the
+  # harness's, and as a single figure they read the same. No surface test
+  # separates them either -- each runs against what `shape.mjs` returns, which is
+  # node's key set by construction.
   out="$("$node_bin" -e "
     const flags = require('node:os').constants.dlopen;
     const m = { exports: {} };
