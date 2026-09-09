@@ -13546,6 +13546,84 @@ For the three-way split -- hollow, shape-only, behaviour -- run
 `axis-controls.mjs`, which asks `--sabotage` and `--empty-exports` of the
 compiled lane as well. `sweep.mjs` only ever asked those of the interpreted one.
 
+## An isolated build: 22 build, 22 load, and where the refusals concentrate
+
+Built with one pinned compiler into a private directory (`NTS_ADDON_OUT`), so
+every number below is about artifacts this run produced and no other session
+touched.
+
+    22 module(s) built
+    22 load, 0 crashed or failed, 0 not built
+
+Published names, and how many are node's:
+
+    os            17 (all)      readline       7 (0 of them node's)
+    path          15 (all)      buffer         3 (all)
+    async_hooks   16 (3)        net            3 (all)
+    punycode       6 (all)      fs             2 (all)
+    http           2 (1)        timers         2 (0)
+    util           2 (all)      url            1 (0)
+    stream         1 (all)      zlib           1 (all)
+
+**Eight modules publish nothing**: `assert`, `console`, `dgram`,
+`diagnostics_channel`, `events`, `process`, `querystring`, `string_decoder`.
+
+### The two nearest are blocked entirely by what they import
+
+    module              NTS1001   own src
+    string_decoder           64         0
+    querystring              66         1
+    diagnostics_channel      49        19
+    events                 1121        30
+    assert                 1205        47
+    process                1928        38
+
+`string_decoder` has no refusals of its own at all, and `querystring` has one --
+`decodeURIComponent`, a builtin the compiler does not provide. Their dependency
+roots are the **same five files in the same counts**: buffer/main 24,
+internal/errors 17, buffer/blob 14, internal/validators 4, internal/uv 4. The
+same work reaches both.
+
+### Ranked by modules blocked, not by refusal count
+
+`blocking-files.mjs`, over the 22 build logs:
+
+    file                        modules  sites  lines
+    internal/errors.ts               21     17    357
+    internal/validators.ts           21      4     80
+    internal/uv.ts                   16      4     64
+    internal/async-hooks.ts          15      7    105
+    buffer/src/main.ts               13     23    342
+    util/src/inspect.ts              13     17    221
+    buffer/src/blob.ts               13     14    182
+    util/src/types.ts                13      9    117
+    internal/tick.ts                 13      4     45
+    util/src/value-shape.ts          13      2     13
+
+**Four sites in `internal/validators.ts` are on the path of 21 of 22 modules**,
+and they are two causes:
+
+    15:26   const LINK_HEADER_VALUE = /^(?:<[^>\r\n]*>)…/   a regex literal
+    166:37  LINK_HEADER_VALUE.test(value)                   downstream of 15
+    232:14  const OCTAL = /^[0-7]+$/                        a regex literal
+    243:16  const given = value ?? byDefault                an erased value
+
+Both columns are printed because the wrong one is four times larger and reads
+like progress. `errors.ts` produces 357 NTS1001 lines and has 17 distinct
+`line:col`; the 357 is 21 modules recompiling the same seventeen constructs.
+
+### The parse was wrong in the direction that hides a blocker
+
+The first version matched `NTS1001 (.*?) is not supported`. **295 lines do not
+end that way** -- `NTS1001 \`atob\`, a declaration outside every walk` has no
+such suffix -- and they were dropped in silence. `internal/uv.ts` came out as 2
+distinct sites when it has 4, and `buffer/src/main.ts` as 21 when it has 23.
+
+Worth the paragraph because of the direction. A parse that drops what it cannot
+match makes a blocking file look *less* blocking, and nothing in the output says
+so. The tool prints its unparsed count on every run now, and says what a nonzero
+one means.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
