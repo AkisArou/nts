@@ -39,7 +39,22 @@
 //     tick.ts:83:63 in timers        no diagnostic at that site at all
 //
 // **The same source line refuses in some importing modules and not others**,
-// and where it refuses it says something this reduction does not reproduce. So
+// and where it refuses it says something this reduction does not reproduce.
+//
+// Five attempts to reach "not an array" from a reduction, all landing on the
+// other message, so nobody repeats them:
+//
+//     one call, empty tuple instantiation          of unrepresentable type
+//     two calls, two instantiations                of unrepresentable type
+//     an arrow capturing a local                   of unrepresentable type
+//     an arrow calling a callback parameter        of unrepresentable type
+//     an arrow calling a method on `this`          of unrepresentable type
+//
+// The fourth and fifth are copied from the shapes at `fs/src/async.ts:640` and
+// `:2804`, which do say "not an array". So the difference is not the call, not
+// the capture, not the instantiation and not the number of them -- it is
+// something about the whole program that a two-file reduction does not carry.
+// Recorded as unreduced rather than guessed at. So
 // what is guarded here is the root the expectation names -- 20 distinct things
 // across `fs` and `stream`, unfiled until now -- and not that site. Anyone
 // fixing `tick.ts:83` should expect this fixture to keep reproducing
