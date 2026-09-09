@@ -115,7 +115,7 @@ different problem from the four rows losing by a lot.
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
 | `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
-| `array-from` | 2.12x | **the set walk is 6.5x and is ~1.84ms of the row's 2.09ms**, measured against a bulk helper that is written and waiting on the lowering. Not call overhead -- both helpers inline; it is the `f64` cursor. Below |
+| `array-from` | 2.12x | **MINE, and priced: the `f64` cursor is 3.05x of the walk** and the walk is ~1.84ms of 2.09ms, so about **0.86x** if `intcall` learns cursors. Runtime targets landed; the pass is not written. Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
 | `optional-chain` | 1.27x | the same `uirem` residual |
@@ -2040,6 +2040,36 @@ That is a sharper hand-over than "the walk is 5.9x": the cost is not the calls
 and not the `NtsValue` (C2 scalar-replaces it, as it does on `array-methods`),
 it is an `f64` cursor round-tripping through `int` on every element of a
 256-element set, 2000 times an operation.
+
+**And that is worth 3.05x on its own, which changes whose the row is.** Same
+protocol, same two calls an element, same tests, same output -- only the
+cursor's representation:
+
+    walked (f64 cursor)      919 ns
+    walkedInt (int cursor)   301 ns
+    bulk (no protocol)       149 ns
+
+**672 of the 770ns is the cursor**, which is 87% of what removing the protocol
+entirely would buy, for a change that keeps it. Carried through the row: the
+walk is ~1.84ms of 2.09ms, so at 301/919 it becomes 0.60ms and the row lands
+near **0.85ms against a reference at 986us -- about 0.86x**.
+
+**This needs no lowering change.** It is `intcall`'s exact business -- the pass
+that already decides `nts_array_index_of`'s answer is exact in an `int` and
+rewrites the call to `arrayIndexOfI`. `NtsMap.nextI` and `keyAtI` are landed as
+the targets, measured, and agreeing element for element with the `f64` pair.
+
+**The pass is the harder half and is not written.** `intcall` holds a value as
+an `int` when *every* use converts it to an integral type; a cursor's uses are
+`+ 1.0` and being handed back to `next`, neither of which is a conversion, and
+the value flows in a **cycle** through the loop's block parameter. This file has
+twice predicted that extension would be needed -- "a backend-local extension of
+`intcall` from a single value to a cycle" -- and this is the first measurement
+saying what it would be worth.
+
+So `array-from` moves from "the lowering's, 5.9x, hand it over" to **mine, 3.05x
+of it, and priced before building**, which is the first time tonight a row's
+cost has landed on this side of the line.
 
 `NtsMap.keysIntoDoubles` is landed, documented with this number, and agrees with
 the walk on seven cases including deletions, head advancement, refill and past

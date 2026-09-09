@@ -290,6 +290,54 @@ public final class NtsMap {
         return at;
     }
 
+    /**
+     * `next` and `keyAt` with an `int` cursor instead of an `f64`.
+     *
+     * <p>**3.05x, measured before either was written into a pass.** Identical
+     * protocol -- two calls an element, the same bounds and null tests, the
+     * same output element for element -- with only the cursor's representation
+     * changed:
+     *
+     * <pre>
+     *   walked (f64 cursor)      919 ns
+     *   walkedInt (int cursor)   301 ns
+     *   bulk (no protocol)       149 ns
+     * </pre>
+     *
+     * <p>So the cursor being a `double` is **672 of the 770ns** that separates
+     * the walk from a bulk pass: 87% of what removing the protocol entirely
+     * would buy, for a change that keeps it.
+     *
+     * <p>`nts_map_next` is an `f64` in `hir::runtime` and must stay one -- that
+     * table is the single answer about conversions for three backends. These
+     * are the `arrayIndexOfI` treatment applied to a cursor: the same latitude
+     * `intcall` already takes deciding a helper's answer is exact in an `int`.
+     *
+     * <p>**Waiting on the pass, which is the harder half.** `intcall` holds a
+     * value as an `int` when *every* use converts it to an integral type, and a
+     * cursor's uses are `+ 1.0` and being handed back to `next` -- neither is a
+     * conversion, and the value flows in a cycle through the loop's block
+     * parameter. That is the extension this file has predicted twice and nobody
+     * has built.
+     */
+    public static int nextI(NtsMap map, int from) {
+        if (map.count == 0) { return -1; }
+        int absolute = from < 0 ? 0 : from;
+        int at = absolute <= map.base ? map.head : Math.max(map.head, absolute - map.base);
+        while (at < map.used) {
+            if (map.keys[at] != null) { return map.base + at; }
+            at++;
+        }
+        return -1;
+    }
+
+    public static NtsValue keyAtI(NtsMap map, int absolute) {
+        if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
+        int slot = absolute - map.base;
+        if (slot >= map.used || map.keys[slot] == null) { return NtsValue.UNDEFINED_VALUE; }
+        return map.keys[slot];
+    }
+
     public static NtsValue keyAt(NtsMap map, double at) {
         int absolute = (int) at;
         if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
