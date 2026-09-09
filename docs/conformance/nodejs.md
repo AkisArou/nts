@@ -9643,6 +9643,61 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## `JSON.stringify` is gone from `errors.ts`, and it did not free `validateString`
+
+`internal/errors.ts` had the only two `JSON.stringify` call sites that mattered,
+both with a `string` argument. `JSON` has no definition in a compiled program
+and giving it one would mean a second statement of 25.5.4.3's escaping rule in
+C. It is already stated once, in TypeScript, and `internal/utf8.ts` already
+re-exports the UTF-8 codec across the same boundary, so the import is the
+established shape here rather than a new coupling:
+
+```ts
+import { quoteJSONString } from "../../web-platform/src/json/text.ts";
+```
+
+**Checked, not assumed.** `quoteJSONString` returns the value with its quotes,
+so it substitutes directly. 65,633 strings -- every UTF-16 code unit including
+lone surrogates, astral pairs, and every pair drawn from the escape-adjacent
+units -- agree with node's `JSON.stringify`. The harness reports 2,161
+differences when handed a quoter that does no escaping, so the zero is a result
+and not a broken comparison. `text.ts` imports nothing and
+`web-platform/src/json` never imports `runtime/node`, so there is no cycle.
+
+Interpreted lanes before and after, unchanged: `path` 21/0, `string_decoder`
+5/0, `os` 9/0, `util` 25/0, `buffer` 55/0.
+
+### What it bought, and what it did not
+
+```
+string_decoder cone roots   73 -> 71
+path cone roots             31 -> 28
+validateString              still refused
+path's public surface       still absent, all thirteen names
+```
+
+`determineSpecificType` had a second root, and clearing the first exposed it:
+
+```
+ERR_INVALID_ARG_TYPE#constructor  <- determineSpecificType
+  <- staticObjectName             <- `instanceof` with no class, errors.ts:102
+                                       if (value instanceof DataView) ...
+```
+
+**It is the same class, in the same form, as `buffer/src/main.ts:194** --
+`objectToBuffer`'s `value instanceof DataView`, which is what holds `Buffer.from`
+and through it `bytesOf`. One missing class now sits under both the widest chain
+in the profile and one of `string_decoder`'s four roots. `instanceof-no-class` is
+already filed and its fixture already names `DataView`.
+
+**Third time tonight that clearing a root revealed the next.** `length` at
+`errors.ts:518` revealed indexing at `:520`, two lines away, on the chain that
+had been named the shortest. `JSON.stringify` at `:70` revealed
+`staticObjectName` at `:102`. "Five cleared and five revealed" was written down
+as a `buffer` observation; it is a property of cones. The ranked table above
+counts immediate causes for exactly this reason, and a refusal delta is still
+not a measure of a fix.
+
 ## The profile's blockers, ranked by how many functions each one stops
 
 Every NTS1003 names one callee: "cannot be compiled because it calls X, which

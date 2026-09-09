@@ -21,6 +21,19 @@
  * The tail of every ERR_INVALID_ARG_TYPE message, and the reason the wording
  * has to be exact: node's tests build the expected string with the same rules.
  */
+// `JSON` has no definition in a compiled program, and giving it one would mean
+// a second statement of the escaping rule of 25.5.4.3 in C. It is already
+// stated once, in TypeScript, and this is the same crossing `internal/utf8.ts`
+// already makes for the UTF-8 codec.
+//
+// `quoteJSONString` returns the value *with* its quotes, so it substitutes for
+// `JSON.stringify` directly at both sites below, where the argument is a
+// `string` in each case. Checked rather than assumed: 65,633 strings -- every
+// UTF-16 code unit including lone surrogates, astral pairs, and pairs of
+// escape-adjacent units -- agree with node's `JSON.stringify`, on a harness
+// that reports 2,161 differences when handed a quoter that does no escaping.
+import { quoteJSONString } from "../../web-platform/src/json/text.ts";
+
 export function determineSpecificType(value: unknown): string {
   if (value === null) {
     return "null";
@@ -67,7 +80,7 @@ export function determineSpecificType(value: unknown): string {
       if (s.indexOf("'") === -1) {
         return `type string ('${s}')`;
       }
-      return `type string (${JSON.stringify(s)})`;
+      return `type string (${quoteJSONString(s)})`;
     }
   }
   // Defensive for a future JavaScript `typeof` category. Every current one is
@@ -1467,7 +1480,7 @@ export class ERR_PARSE_ARGS_UNKNOWN_OPTION extends NodeTypeError {
   constructor(option: string, allowPositionals: boolean) {
     const positionalHint = allowPositionals
       ? ". To specify a positional argument starting with a '-', place it at the end " +
-        `of the command after '--', as in '-- ${JSON.stringify(option)}`
+        `of the command after '--', as in '-- ${quoteJSONString(option)}`
       : "";
     super(`Unknown option '${option}'${positionalHint}`);
   }
