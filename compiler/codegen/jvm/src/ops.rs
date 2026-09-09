@@ -441,6 +441,11 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_to_uint32" => (RUNTIME, "toUint32", "(D)I"),
 
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
+        // `Long.toString(long, int)` is not this: it handles integers, and the
+        // fraction is the whole difficulty. See `numberToStringRadix`.
+        "nts_number_to_string_radix" => {
+            (RUNTIME, "numberToStringRadix", "(DD)Ljava/lang/String;")
+        }
         _ => return None,
     })
 }

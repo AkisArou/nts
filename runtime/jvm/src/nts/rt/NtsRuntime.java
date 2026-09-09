@@ -604,6 +604,128 @@ public final class NtsRuntime {
     /** Forty covers every placement; see {@link #layoutDigits}. */
     private static final byte[] LAYOUT = new byte[40];
 
+    /**
+     * {@code n.toString(radix)}, for a radix other than ten.
+     *
+     * <p>V8's {@code DoubleToRadixCString}, transliterated from the C runtime
+     * so that the three lanes answer the same thing. {@code Long.toString(long,
+     * int)} is not this function: it handles integers, and the fraction is the
+     * whole difficulty.
+     *
+     * <p>The buffer is 2200 chars because that is what V8 uses and the bound is
+     * real rather than generous -- the smallest denormal in radix 2 has about
+     * 1075 fractional digits and the largest double about 1024 integer ones. It
+     * is allocated per call rather than shared, unlike {@link #SHORTEST_DIGITS}
+     * above: this is not a hot path, and a shared 4400-byte buffer would make
+     * the method unusable from two threads for a saving nothing has asked for.
+     *
+     * <p>{@code delta} is the termination argument. It starts at half the
+     * distance to the next representable double and is scaled by the radix
+     * alongside the fraction, so the loop stops as soon as the digits remaining
+     * could not change which double this is.
+     */
+    public static String numberToStringRadix(double x, double radix) {
+        if (radix == 10.0) {
+            return numberToString(x);
+        }
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (x == 0.0) {
+            return "0";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+
+        final int base = (int) radix;
+        final String digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+        final char[] buffer = new char[2200];
+        int integerCursor = buffer.length / 2;
+        int fractionCursor = integerCursor;
+
+        final boolean negative = x < 0.0;
+        if (negative) {
+            x = -x;
+        }
+
+        double integer = Math.floor(x);
+        double fraction = x - integer;
+
+        // Half the gap to the next double, and never zero: the step up from
+        // zero is the smallest denormal, which is the floor a fraction can be
+        // compared against.
+        double delta = 0.5 * (Math.nextUp(x) - x);
+        if (delta < Double.MIN_VALUE) {
+            delta = Double.MIN_VALUE;
+        }
+
+        if (fraction >= delta) {
+            buffer[fractionCursor++] = '.';
+            do {
+                fraction *= radix;
+                delta *= radix;
+                final int digit = (int) fraction;
+                buffer[fractionCursor++] = digits.charAt(digit);
+                fraction -= digit;
+                if ((fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0))
+                        && fraction + delta > 1.0) {
+                    // Round up, carrying back through the digits already
+                    // written. A carry off the front of the fraction lands on
+                    // the integer part, which is why that is computed after.
+                    while (true) {
+                        if (fractionCursor == integerCursor) {
+                            integer += 1.0;
+                            break;
+                        }
+                        final char c = buffer[--fractionCursor];
+                        if (c == '.') {
+                            continue;
+                        }
+                        final int at = c > '9' ? c - 'a' + 10 : c - '0';
+                        if (at + 1 < base) {
+                            buffer[fractionCursor++] = digits.charAt(at + 1);
+                            break;
+                        }
+                    }
+                    break;
+                }
+            } while (fraction >= delta && fractionCursor + 1 < buffer.length);
+        }
+
+        // A double whose ULP exceeds one cannot represent consecutive integers,
+        // so every digit below that point is a zero node writes and this must
+        // not invent. `%` on such a value returns a remainder built from bits
+        // the double does not have, and `1e21` in radix 3 came out
+        // `...2022201202222111` where node writes `...20222` and eleven zeros.
+        //
+        // `Math.getExponent(v) > 52` is V8's `Double::Exponent() > 0`: the
+        // significand is 53 bits, so an exponent above 52 puts the unit in the
+        // last place above one. Divide the exponent out first, writing the
+        // zeros it stands for. Subnormals answer -1023 here where C's `ilogb`
+        // answers the true exponent, and the difference cannot be reached: a
+        // subnormal is never above 52.
+        while (integerCursor > 0 && integer > 0.0 && Math.getExponent(integer / radix) > 52) {
+            integer /= radix;
+            buffer[--integerCursor] = '0';
+        }
+        while (integer > 0.0 && integerCursor > 0) {
+            final double remainder = integer % radix;
+            integer = (integer - remainder) / radix;
+            buffer[--integerCursor] = digits.charAt((int) remainder);
+        }
+        // Against the buffer's middle, not against `fractionCursor`: the
+        // fraction has already moved that one past the '.', so the two are
+        // never equal when there is a fraction.
+        if (integerCursor == buffer.length / 2) {
+            buffer[--integerCursor] = '0';
+        }
+        if (negative) {
+            buffer[--integerCursor] = '-';
+        }
+        return new String(buffer, integerCursor, fractionCursor - integerCursor);
+    }
+
     public static String numberToString(double x) {
         if (Double.isNaN(x)) {
             return "NaN";
