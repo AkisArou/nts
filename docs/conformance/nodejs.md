@@ -11346,6 +11346,35 @@ declines, and its entire published surface refuses with `is exported and is not
 a function this backend can name`. It is a small module by test count and a
 large one by work.
 
+### Distinct constructs, which reorders the middle of the table
+
+Raw root counts overstate a module where one construct is refused at many call
+sites. Counting **distinct** refusal texts instead:
+
+| module | roots | distinct | the one that dominates |
+| --- | ---: | ---: | --- |
+| `string_decoder` | 0 | 0 | — |
+| `os` | 1 | 1 | `userInfoString, a declaration outside every walk` (the Buffer one) |
+| `querystring` | 1 | 1 | `decodeURIComponent`, a builtin this compiler does not provide |
+| `path` | 4 | 4 | nothing repeats; two are `RegExp` |
+| `diagnostics_channel` | 19 | **5** | 12 of 19 are `#map` of type `Map<string \| symbol, WeakRef>` |
+| `async_hooks` | 20 | **6** | 10 of 20 are members of one class, `AsyncLocalStorage` |
+| `dgram` | 13 | 10 | 3 are `a?.b()` |
+| `timers` | 28 | 13 | 6 are a module-scope initializer that was refused |
+| `console` | 20 | 14 | 5 are `this` outside a method |
+| `events` | 30 | 24 | 3 are `null`/`undefined` where what it stands in for has no representation |
+
+**`diagnostics_channel` and `async_hooks` move up several places.** By roots they
+sit behind `dgram`; by distinct constructs they are ahead of it, and each is
+dominated by a single item — a `WeakRef`-valued `Map` in one and one class in
+the other. `events` moves the other way: 30 roots and 24 distinct is the most
+varied work in the near tier, and nothing there concentrates.
+
+Both dominant items are already filed. `weakref-property` expects
+`a property #map of unrepresentable type (Map<string, WeakRef>)` and already
+names `diagnostics_channel` in its own prose; the live message differs only in
+the key being `string | symbol`.
+
 > Provenance: counted from per-module build logs on a pin taken at 00:23.
 > `string_decoder`, `os` and `path` were re-derived on a 00:59 pin unchanged.
 > Roots are counted as reported, so a single construct refused at two call sites
