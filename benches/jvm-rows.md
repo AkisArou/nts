@@ -3114,3 +3114,26 @@ mangling -- `$` escaped as `$$`, forbidden characters as `$` plus a letter --
 and it costs every generated name its readability in a stack trace, which is the
 one place a person reads one. Worth doing the first time a real program is
 refused, and not before. `c_identifier` on the C lane is the design to copy.
+
+**Mine, and the next thing.** The bar's second number -- decisively faster than
+node -- has never been read row by row, and this file says why: the table sorts
+by `jvm/Java`, so a row at parity with its hand-written reference while both
+lose to V8 looks finished. `bytes` is the case that proves the distinction
+necessary at 1.05x against its reference and **1.42x slower than node**. The
+partition is `Java/node`, computed as `(nts/node) / (jvm/Java)`: above 1.00 the
+reference loses to node too and the row is a platform ceiling to report; below
+it, the reference beats node and we do not, and it is ours. Needs one clean
+sitting, which needs the gate lock and a pinned worktree.
+
+**Blocked on housekeeping, and it is mine.** `~/.cache/nts-jvm-sweep` and
+`~/.cache/nts-jvm-table` are both dirty -- `Cargo.lock` from building and
+`README.md` from `nts-bench` writing its own table -- so `pin.sh` refuses to
+move either. Neither modification is work; both are output. But the worktrees
+are shared, so discarding them wants the gate lock first rather than a
+`git checkout --` on a tree someone else may be mid-run in.
+
+**Closed, and worth saying so rather than leaving them on the list.**
+`growth-grown` is at its floor: the count reads eleven objects, which is the
+doubling ladder and the wrapper, and no policy that does not know the final size
+beats 2x. `array-predicates` is `hir::elements` and upstream. `map-and-set` at
+1.09x is inside the band this file spent a night establishing is not a verdict.
