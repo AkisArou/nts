@@ -34,8 +34,22 @@
 // Node deprecated this constructor in DEP0180 and the shim emits the warning,
 // which is why the file installs a handler rather than letting it print.
 //
-// `mode` itself reads `undefined` on the instance -- the field is not published,
-// only the predicates that read it. Not asserted here; a separate gap.
+// # The fields, which this file could not assert when it was written
+//
+// It shipped saying "`mode` itself reads `undefined` on the instance -- the
+// field is not published, only the predicates that read it." That was the whole
+// of `blockers/class-fields-do-not-cross`, and it is fixed: the fourteen
+// columns come back as **own enumerable properties**, in node's order, and
+// `JSON.stringify` round-trips them.
+//
+// So the columns are asserted here now, and they are asserted as *own*
+// properties rather than by reading them. `napi_define_class` puts descriptors
+// on the prototype, and the first version of the fix did exactly that -- every
+// field read correctly while `Object.keys` was `[]`. Reading `stats.size` would
+// have passed on that object; `Object.hasOwn(stats, "size")` does not.
+//
+// The values are the constructor's own columns rather than a real file's, so
+// this stays a test of the crossing and not of the filesystem.
 "use strict";
 
 require("../common");
@@ -58,6 +72,56 @@ const KINDS = [
   ["isFIFO", 0o010666],
   ["isSocket", 0o140666],
 ];
+
+// The columns come back as own properties, in node's order.
+const COLUMNS = [
+  "dev", "mode", "nlink", "uid", "gid", "rdev", "blksize", "ino",
+  "size", "blocks", "atimeMs", "mtimeMs", "ctimeMs", "birthtimeMs",
+];
+const VALUES = [7, 0o100644, 1, 2, 3, 0, 4096, 99, 123, 8, 11, 12, 13, 14];
+const carried = new fs.Stats(...VALUES);
+
+// The fourteen are present and in node's relative order. **Not an exact key
+// list**, and the reason is a lane difference this file should not assert away:
+//
+//     node          14 own keys, growing as its Date getters are first read
+//     interpreted    18 -- `stats.ts` assigns the four Dates in the constructor
+//     compiled       14 -- a `Date` is a reference and cannot cross outward
+//
+// Asserting exactly fourteen passed compiled and failed interpreted, which is
+// the direction `prize.mjs` calls INVERTED: right answer, wrong reason. Node's
+// own `test-fs-stat-date.mjs` asserts only that `Object.keys` *includes*
+// `atime` and `mtime`, after reading them -- so the eager assignment is the
+// closer approximation of what node's suite observes, and a plain getter that
+// never materialises the property fails three of node's tests. Measured, by
+// making the change and running them.
+const keys = Object.keys(carried);
+for (const column of COLUMNS) {
+  assert.ok(keys.includes(column), `${column} is not an own enumerable property`);
+}
+const positions = COLUMNS.map((c) => keys.indexOf(c));
+assert.deepStrictEqual(
+  positions,
+  [...positions].sort((a, b) => a - b),
+  "the fourteen columns are not in node's relative order",
+);
+
+for (let i = 0; i < COLUMNS.length; i++) {
+  assert.ok(
+    Object.hasOwn(carried, COLUMNS[i]),
+    `${COLUMNS[i]} is not an own property -- a prototype accessor reads the same`,
+  );
+  assert.strictEqual(
+    carried[COLUMNS[i]],
+    VALUES[i],
+    `${COLUMNS[i]} did not come back as it was constructed`,
+  );
+}
+
+// And they survive being serialised, which a prototype accessor does not.
+const round = JSON.parse(JSON.stringify(carried));
+assert.strictEqual(round.size, 123, "size did not survive JSON.stringify");
+assert.strictEqual(round.ino, 99, "ino did not survive JSON.stringify");
 
 for (const [kind, mode] of KINDS) {
   // Node's positional order: dev, mode, nlink, uid, gid, rdev, blksize, ino,
