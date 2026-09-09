@@ -15535,11 +15535,33 @@ The last row is the one to note: the empty-literal refusal is gone **and** the
 value that comes back is right, so the literal change and the contextual-member
 change land together without the wrong answer that forced the first revert.
 
-Three defects remain:
+**Four defects remain**, across 19 case files and 125 questions -- 11
+disagreeing, 22 refused, 0 that did not build:
 
     exceptions do not cross a call frame        6 cases, two files
+    a lone surrogate counts as three            3 cases
     an indexed write at or past the length      2 cases, both SIGABRT
     integer-like keys are not promoted          1 case
+
+**A lone surrogate is counted in its encoding's bytes, not in code units:**
+
+    "abc"        compiled 3   node 3
+    "\u00e9"      compiled 1   node 1
+    "\u4e2d"      compiled 1   node 1
+    "\u{1F600}"   compiled 2   node 2     <- a surrogate *pair* is right
+    "\uD800"      compiled 3   node 1     <-
+    "a\uD800b"    compiled 5   node 3     <-
+
+The controls make it precise rather than "strings are measured in bytes": one
+unit and two bytes answers 1, one unit and three bytes answers 1, and an astral
+character is two units and four bytes and answers 2. The length is in code units
+until the string contains something that cannot be encoded, and then it is the
+encoding's length.
+
+`string_decoder` holds partial UTF-8 sequences across chunk boundaries, and a
+partial sequence is what produces a lone surrogate -- `lastChar`, `lastNeed` and
+`lastTotal` are about nothing else. It is one of the seven modules with nothing
+on the axis.
 
 Eleven files are clean, one of them wholly -- twelve numeric formatting
 questions with no disagreement and no refusal: radix 16, radix 16 of a fraction,
