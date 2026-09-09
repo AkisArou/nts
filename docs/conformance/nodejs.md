@@ -12019,6 +12019,51 @@ calls it the way the corpus does not. Three real bugs came out of the
 TypeScript-lane differential for the same reason, and this is the first one from
 the compiled lane -- which had never been run.
 
+## 316 exported functions take an optional parameter, and the top of the prize table is behind two gates
+
+`path.basename` throwing on its one-argument form is not a `path` problem. Every
+exported function with an optional or defaulted parameter publishes with that
+parameter **required**, and the profile has 316 of them:
+
+    fs 143   stream 59   zlib 39   util 16   timers 12   url 8   http 7
+    process 6   readline 6   events 4   os 4   path 4   querystring 4
+    assert 1   async_hooks 1   dgram 1   net 1
+
+The counts do not rank the harm, because **the single entries at the bottom are
+the two most valuable exports in the profile.**
+
+    net.createServer(options?, connectionListener?)   -- both optional
+    dgram.createSocket(type, listener?)               -- listener optional
+
+`prize.mjs` puts `net.createServer` first at **96 test files** and
+`dgram.createSocket` third at **68**. Node's own dgram tests call it
+
+    createSocket("udp4")   14 times
+    createSocket()          3 times
+
+-- so at least seventeen of the calls that would exercise the 68 use fewer than
+two arguments and would throw, *after* the lowering work that publishes it is
+done. `net`'s tests include `createServer()` with no arguments at all.
+
+**So the prize table has a second gate it does not show.** It measures what a
+module gains when the named export appears, and `optional-parameter-at-the-
+wrapper` decides whether an export that appears can be *called the way node
+calls it*. The two are independent and both are required, and the table would
+read the same either way. That is a limitation of the instrument worth writing
+next to it rather than discovering when `createSocket` lands and 17 tests still
+fail.
+
+`os` is the counter-example that shows this is not universal: 15 published
+functions, **0** throwing the arity error, and 85,238 differential comparisons
+with no divergence. Its four optional-parameter functions are among the six that
+do not publish yet.
+
+**How this was found is the point.** Not by counting -- `optional-parameter-at-
+the-wrapper` has been filed for hours and its site count was never taken. It
+turned up because `path` began publishing, the compiled differential ran for the
+first time, and `basename("/a/b.txt")` threw where node returns `"b"`. A blocker
+with a fixture and no cost attached is easy to rank below its worth.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
