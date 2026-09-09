@@ -11319,10 +11319,11 @@ run as a differential rather than as new hand-written assertions.
 | `readline` | 4,030 | 4,030 | 0 |
 | `async_hooks` | 4,030 | 4,030 | 0 |
 | `process` | 4,015 | 4,015 | 0 |
+| `stream` | 4,030 | 4,030 | 0 |
 
-**16 modules measured, 503,181 comparisons, 0 divergences** — `console`,
-`diagnostics_channel`, `readline`, `async_hooks` and `process` were all added
-tonight and contribute 20,125 of them.
+**17 modules measured, 507,211 comparisons, 0 divergences** — `console`,
+`diagnostics_channel`, `readline`, `async_hooks`, `process` and `stream` were
+all added tonight and contribute 24,155 of them.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11393,7 +11394,28 @@ shape and validation only, `env` for presence and type, `cwd()` for its
 invariants rather than its value. A sabotage returning a one-element array from
 `hrtime` is caught by 5 of 15.
 
-`emitWarning` was in it and was removed rather than quieted. A valid call
+`stream` compares the **synchronous** half, which is more than it sounds:
+`write()` answers a boolean saying whether the buffer is under the high water
+mark, `read()` in paused mode answers from the buffer, and
+`readableLength`/`writableLength` are exact byte counts. Those three are what
+backpressure *is*, and a reimplementation that gets the bytes right and the
+booleans wrong looks correct until something upstream honours the return value.
+Events and `pipe` are excluded and named: they answer over time.
+
+**Its first version was clean and nearly vacuous**, which is the failure mode
+worth recording. The writable was `write(_c, _e, cb) { cb(); }`, and calling the
+callback synchronously drains the buffer on every write — so `writableLength`
+never grew, `write()` answered `true` forever, **1 of 30 inputs saw a `false`,
+and a sabotage making `write()` always return `true` was caught by 1 of 30.**
+Holding the callbacks instead keeps the buffer full: 11 of 30 see a `false` and
+the same sabotage is caught by 11.
+
+That shape is worse than a harness that reports false divergences, because it
+**looks like a pass**. The number to read on a new corpus is therefore the
+sabotage count, not the divergence count — 0 divergences is the desired answer
+and 1-of-30 detection is a failing one.
+
+`emitWarning` was in the `process` corpus and was removed rather than quieted. A valid call
 *emits*, and 400 iterations put hundreds of warnings on the process's stderr —
 side effects a comparison corpus has no business producing. `NODE_NO_WARNINGS`
 was not an option: it once hid a difference two pinned tests depend on.
@@ -11406,15 +11428,15 @@ answer, not the same answer twice.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Sixteen of twenty-two
+That number means nothing without this beside it. **Seventeen of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **five never appeared in the run at all** — `dgram`, `http`, `net`,
-`stream`, `timers`. Every one is a socket or a stream: their surfaces answer
-over time to a peer, which a value-compare corpus has no way to hold. These are the modules whose surfaces are sockets, streams and timers
+and **four never appeared in the run at all** — `dgram`, `http`, `net` and
+`timers`. The first three are sockets, whose surfaces answer over time to a
+peer; `timers` is ordering, which `fuzz-timer-order.mjs` already asks. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven

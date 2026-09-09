@@ -729,6 +729,119 @@ export const CORPORA = {
     ],
   },
 
+  stream: {
+    // The **synchronous** half of a stream, which is more than it sounds and is
+    // the half a value-compare corpus can hold.
+    //
+    // `write()` answers a boolean saying whether the buffer is under the high
+    // water mark, `read()` in paused mode answers synchronously from the
+    // buffer, and `readableLength`/`writableLength` are exact byte counts. All
+    // three are observable without waiting for anything, and all three are what
+    // backpressure *is* -- a reimplementation that gets the bytes right and the
+    // booleans wrong looks correct until something upstream honours the return
+    // value.
+    //
+    // Excluded and named: `'data'`, `'end'`, `'drain'`, `'finish'` and every
+    // other event, plus `pipe`. Those answer over time and comparing them means
+    // comparing ordering, which is `fuzz-timer-order.mjs`'s question and not a
+    // value compare's. The asynchronous half of `stream` is uncompared here.
+    //
+    // A small `highWaterMark` is used deliberately so the writes cross it: at
+    // the default of 16384 every `write` in a short program answers `true` and
+    // the boolean under test never changes.
+    fixed: [
+      "w1", "w9", "w1w1", "w9w9", "w9w9w9", "wE", "r", "wr", "w9r", "w1r1",
+      "wLr", "rw1", "wEw1", "w1E", "Erw", "", "rr", "w1rr", "w9rL", "LL",
+      "w1Lw9", "w9Lr", "ww", "w1w9r", "rE", "Ew1", "w9rrL", "Lr", "w1r9", "w9w1L",
+    ],
+    input: (rnd) => {
+      const OPS = ["w1", "w9", "wL", "r", "r1", "r9", "L", "E"];
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 7);
+      for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "stream-program",
+        call: (m, program) => {
+          const log = [];
+          const chunkFor = (c) => {
+            if (c === "1") return Buffer.alloc(1, 0x61);
+            if (c === "9") return Buffer.alloc(9, 0x62);
+            return Buffer.alloc(4, 0x63);
+          };
+          let readable, writable;
+          try {
+            readable = new m.Readable({ highWaterMark: 8, read() {} });
+            // The callback is **held, not called**. Calling it synchronously
+            // drains the buffer on every write, so `writableLength` never grows
+            // and `write()` answers `true` forever -- the first version did
+            // exactly that and only 1 of 30 fixed inputs ever saw a `false`,
+            // which made the corpus nearly vacuous about the one thing it
+            // exists to compare. Holding the callbacks keeps the buffer full
+            // and makes backpressure observable synchronously.
+            const held = [];
+            writable = new m.Writable({
+              highWaterMark: 8,
+              write(_c, _e, cb) {
+                held.push(cb);
+              },
+            });
+            // Required, not defensive. A write after `end()` emits `'error'`
+            // asynchronously with `ERR_STREAM_WRITE_AFTER_END`, and an
+            // unhandled `'error'` on a stream takes the whole process down --
+            // the first run of this corpus died that way mid-sweep. The
+            // handlers swallow it because the event is asynchronous and this
+            // corpus compares synchronous answers only; the error is therefore
+            // **uncompared**, while the synchronous `write()` return value
+            // beside it is compared.
+            writable.on("error", () => {});
+            readable.on("error", () => {});
+          } catch (e) {
+            return `CONSTRUCT-FAILED:${e && e.name}`;
+          }
+          let i = 0;
+          let step = 0;
+          while (i < program.length) {
+            const op = program[i];
+            const arg = program[i + 1];
+            step++;
+            try {
+              if (op === "w") {
+                if (arg === "E") {
+                  writable.end();
+                  log.push(`end${step}`);
+                  i += 2;
+                } else {
+                  log.push(`w${step}:${writable.write(chunkFor(arg))}`);
+                  i += 2;
+                }
+              } else if (op === "r") {
+                const digit = arg >= "0" && arg <= "9" ? Number(arg) : undefined;
+                const got = readable.read(digit);
+                log.push(`r${step}:${got === null ? "null" : got.length}`);
+                i += digit === undefined ? 1 : 2;
+              } else if (op === "L") {
+                log.push(`L${step}:${readable.readableLength},${writable.writableLength}`);
+                i += 1;
+              } else if (op === "E") {
+                readable.push(chunkFor("9"));
+                log.push(`push${step}:${readable.readableLength}`);
+                i += 1;
+              } else {
+                i += 1;
+              }
+            } catch (e) {
+              log.push(`THREW${step}:${e && e.name}:${(e && e.code) || ""}`);
+              i += 1;
+            }
+          }
+          return log;
+        },
+      },
+    ],
+  },
   process: {
     // The value-shaped half of `process`, which is smaller than it looks and
     // is the only half a value-compare corpus can hold.
