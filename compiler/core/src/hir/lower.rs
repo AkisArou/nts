@@ -15428,6 +15428,77 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// The object type a literal is contextually assigned to, through a union.
+    ///
+    /// A union of object types erases, so `contextual_type` answers `Erased` for
+    /// `options: Optional | Listener | undefined` and the literal falls back to
+    /// its *own* checker type. That is where the shapes diverge:
+    /// `Optional.limit` is optional, so its field is `Erased` -- the absence is
+    /// a tag -- while `{ limit: 19 }` has a plain `f64`. Assignable in
+    /// TypeScript and two different structs here, so the object went into the
+    /// erased slot as one shape and `unerase` read it back as the other. Record
+    /// 0244 has the reduction; node answers 19 and this answered -2.
+    ///
+    /// TypeScript picks the member a literal matches when the contextual type is
+    /// a union, and this recovers that choice: the object member whose declared
+    /// property names cover every key the literal writes. **Covers, not equals**
+    /// -- a literal may omit an optional property, which is the whole point of
+    /// `{}` matching `Optional`.
+    ///
+    /// One member or none. Two members that both cover the keys is a choice this
+    /// cannot make on names alone, and guessing would put the wrong layout in an
+    /// erased slot -- which is the defect, not the fix.
+    fn contextual_union_member(&self, id: NodeId) -> Option<TypeId> {
+        let keys: Vec<String> = self
+            .children(id)
+            .into_iter()
+            .filter_map(|property| self.literal_name(*self.children(property).first()?))
+            .collect();
+        if keys.len() != self.children(id).len() {
+            return None;
+        }
+        let parent = self.syntactic_parent(id)?;
+        let target = match self.kind_of(parent) {
+            Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => {
+                let at = self.children(parent).iter().position(|c| *c == id)?;
+                let argument = at.checked_sub(1)?;
+                let signature = self.snapshot.call_targets.get(&parent)?.signature;
+                let signature = self.snapshot.signatures.get(signature.0 as usize)?;
+                signature.parameters.get(argument)?.ty
+            }
+            Some(syntax::BINARY_EXPRESSION) => {
+                let parts = self.children(parent);
+                let [left, operator, right] = parts.as_slice() else {
+                    return None;
+                };
+                if self.kind_of(*operator) != Some(syntax::EQUALS_TOKEN) || *right != id {
+                    return None;
+                }
+                *self.snapshot.node_types.get(left)?
+            }
+            _ => return None,
+        };
+        let TypeKind::Union(members) = &self.snapshot.types.get(target.0 as usize)?.kind else {
+            return None;
+        };
+        let mut fits = members.iter().copied().filter(|member| {
+            match self.snapshot.types.get(member.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Object { properties }) => {
+                    !properties.is_empty()
+                        && keys
+                            .iter()
+                            .all(|key| properties.iter().any(|p| p.name == *key))
+                }
+                _ => false,
+            }
+        });
+        let only = fits.next()?;
+        if fits.next().is_some() {
+            return None;
+        }
+        Some(only)
+    }
+
     fn lower_object_literal(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         // The *declared* type where there is one, not the literal's own.
         //
@@ -15448,6 +15519,16 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
                 )
             })
+            // Before the literal's own type, not after. A union of object
+            // types erases, so the filter above rejects it and the literal
+            // would take its *own* checker type -- which is the shape mismatch
+            // record 0244 is about. The member the literal matches is the type
+            // TypeScript says it has here, and it is the one the reader back
+            // out will assume.
+            .or_else(|| {
+                self.contextual_union_member(id)
+                    .map(|member| HirType::Managed(ManagedType::Object(member)))
+            })
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "an object literal"))?;
         // `const table: Record<string, number> = {}` is an allocation of a
@@ -15460,6 +15541,23 @@ impl<'a> FuncBuilder<'a> {
             let key = (**key).clone();
             return self.lower_table_literal(id, ty.clone(), &key);
         }
+        // A literal contextually typed by a *union*, which erases. Building it
+        // at its own type and erasing puts one shape into a slot that `unerase`
+        // reads as another -- see `contextual_union_member`, and record 0244 for
+        // what that answers.
+        //
+        // `{}` reaches here too, and correctly: its type erases because in
+        // TypeScript it is every value except `null` and `undefined`, while its
+        // *value* is still an object. `options = {}` is node's sentinel for "no
+        // options were passed", and it is under `net.createServer` at 91 of 148
+        // failing files and `http.createServer` at 241 of 405.
+        let (ty, erase_afterwards) = match ty {
+            HirType::Erased => match self.contextual_union_member(id) {
+                Some(member) => (HirType::Managed(ManagedType::Object(member)), true),
+                None => (HirType::Erased, false),
+            },
+            other => (other, false),
+        };
         let HirType::Managed(ManagedType::Object(type_id)) = ty else {
             return Err(self.unsupported(id, "an object literal that is not an object"));
         };
@@ -15489,6 +15587,9 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Void,
                 origin.clone(),
             );
+        }
+        if erase_afterwards {
+            return Ok(self.push(OpKind::Erase { value: object }, HirType::Erased, origin));
         }
         Ok(object)
     }
