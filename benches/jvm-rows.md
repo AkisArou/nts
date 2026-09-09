@@ -30,7 +30,7 @@ not measured clean and should not be quoted.**
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.25x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
-| `array-methods` | 1.14x | **would be 0.86x without the coercion** -- helpers already beat the reference |
+| `array-methods` | 1.14x | helpers beat the reference; the coercion is worth **8.9%**, measured |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
@@ -1118,12 +1118,30 @@ row's ratio is known:
 The row loses anyway, and it loses entirely on the coercion the reference does
 not perform.
 
-**Removing every `toInt32` puts it at 0.86x.** So this is the row where the
-narrowing work does not merely improve a ratio but crosses the bar -- there is
-no in-lane residual behind it, because the in-lane part is already winning.
-That makes it the best case for that fix in the table: `symbol-keyed-map` gets a
-large move to 1.45x and stops short, `node-utf8` cannot be reached at all, and
-this one lands.
+**And then I predicted "0.86x without the coercion" from that 24.82% share, and
+measuring it says 8.9%.** Priced by swapping a jar whose `toInt32` is a bare
+`(int) x` -- unsound, since that saturates where JavaScript wraps, and valid
+here because the case's values are in range. Five interleaved rounds:
+
+    stock       1688 ns    1.183x
+    no-coerce   1537 ns    1.077x
+    ref         1427 ns
+
+**The share overstated the removable cost by about three times**, because most
+of `toInt32` is the `d2i` that any narrowing must do and only the JS-semantics
+guard around it -- `long wide = (long) x; if (wide == x && wide != MAX_VALUE)`
+-- is what disappears. A real narrowing fix removes the call and the `d2i` as
+well, so the true ceiling is better than 1.077x and I cannot measure it from
+here; what I *can* say is that 0.86x was not measured and is withdrawn.
+
+That is the third time tonight a profile share has been read as a removable
+cost, after `array-predicates`' 37.6% and `number-format-double`'s 54%. **A
+share is what a program spends there, not what it would save by not going.** I
+have written that sentence twice already this evening and then predicted 0.86x
+from a share anyway.
+
+The row still has no in-lane residual -- the helpers win -- and it is still the
+best case for the fix, on a smaller and honest number.
 
 ## Open, and whose
 
