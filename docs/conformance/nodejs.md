@@ -15143,6 +15143,57 @@ failed` in a table whose every other row says `0 failed` is exactly the kind of
 thing that gets quoted, and it is an artifact of the loop's directory test
 rather than a fact about anything.
 
+## An absence the control lane creates is not an absence in the build
+
+`stale-exclusions.mjs` looks for `not-applicable` entries whose stated reason
+has stopped being true -- "skipped because `constants` is absent" is correct
+until `constants` publishes, and then it is a test skipped for a reason that no
+longer holds.
+
+Run against the current build it reported one:
+
+    STALE  os/test-os-constants-signals.js
+           reason cites constants as absent; the addon publishes it
+
+**Measured before believing it.** With the entry removed, that test still passes
+under `--sabotage`, `--empty-exports` and `--mutate-addon`. It is as hollow as it
+ever was and the exclusion is still right. Put back.
+
+The entry says why in its own words:
+
+> hollow oracle; an absent `constants` value throws the same TypeError that the
+> test expects from mutating frozen signals, **so it passes empty-module
+> sabotage**
+
+The absence is the one `--sabotage` and `--empty-exports` create on purpose. It
+is true whatever the build publishes, and the tool was asking whether the build
+publishes it -- the wrong question for that entry.
+
+### The fix, and the false negative it accepts
+
+Entries naming a control lane are skipped and **counted separately** rather than
+dropped:
+
+    7 conditional on a real absence, 0 stale
+    6 naming an absence the control lane creates
+
+The cost is a reason mentioning sabotage *and* a real absence, which would hide
+behind the same words. That is why the six are reported rather than silently
+excluded: a reader who sees the count can go and look.
+
+Controlled after the change, since the logic moved: a synthetic entry reading
+`skipped because \`hostname\` is absent` against `os`, which publishes
+`hostname`, is still flagged `STALE`.
+
+### Where the change is committed
+
+In `fbcc60a8`, under the message "Eighty-three error classes each carried an own
+key node does not have", which is not about it. `git add <file>` followed by
+`git commit` without a pathspec, at the same moment another session committed
+into the shared index -- the failure this profile's own notes describe, made
+while the note was loaded. Recorded here because the commit message will not
+lead anyone to this reasoning.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
