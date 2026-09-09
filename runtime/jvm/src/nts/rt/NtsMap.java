@@ -47,10 +47,34 @@ public final class NtsMap {
     private int base;
     private int threshold;
 
-    private NtsMap() {}
+    /**
+     * Whether this was built as a `Map` or as a `Set`.
+     *
+     * <p>**The two are one class here, and nothing recorded which was which.**
+     * `newMap` and `newSet` both answered `new NtsMap()` and both dropped the
+     * argument they were handed -- and that argument is not the distinction
+     * anyway: `kind` is `key_kind_of(key)`, the *key type*, which the C lane
+     * uses to pick a hash and this one does not need because every key is an
+     * `NtsValue`. C carries the map-or-set bit separately, as
+     * `nts_map_alloc(kind, true)` against `(kind, false)`, and this lane
+     * carried it nowhere.
+     *
+     * <p>Nothing has been wrong yet, because nothing asks. `instanceof Map` and
+     * `instanceof Set` are the first things that will, and without this field
+     * both would have to answer `instanceof NtsMap` -- true for the other one,
+     * silently, which is the failure this backend refuses by name everywhere
+     * else. Found while checking what `isSet` could be written as, before the
+     * other lane had built the half that would have depended on it.
+     */
+    private final boolean map;
 
-    public static NtsMap newMap(double kind) { return new NtsMap(); }
-    public static NtsMap newSet(double kind) { return new NtsMap(); }
+    private NtsMap(boolean map) { this.map = map; }
+
+    public static NtsMap newMap(double kind) { return new NtsMap(true); }
+    public static NtsMap newSet(double kind) { return new NtsMap(false); }
+
+    /** Whether `map` was built as a `Map`; see the field. */
+    public static boolean builtAsMap(NtsMap map) { return map.map; }
     public static double size(NtsMap map) { return map.count; }
 
     public static NtsValue get(NtsMap map, NtsValue key) {
