@@ -1,4 +1,36 @@
-// expect: emit-c --napi -> emits-c NtsObj_Tuple7 * nts_probe_heterogeneous
+// expect: emit-c --napi -> NTS2010 `nts_probe_heterogeneous` returns a tuple
+//          whose elements are not all one type
+//
+// Now a **named refusal** rather than a conflicting prototype, which is a
+// smaller claim than it looks and the honest one. The type was never the whole
+// problem: the C side *builds* this value, and it builds a two-element
+// `NtsArray` of references where the compiler wants a struct with two fields.
+//
+// The `NtsHeader *` escape that fixed `binding-returns-program-type` made both
+// declarations agree here and would have let the program read struct fields out
+// of an array header -- a build failure turned into a silently wrong program.
+// The clang error was doing useful work; this refuses in its place and says
+// why. The two cases differ by **who built the value**: `nts_async_context_get`
+// hands back a pointer the program gave it and never constructs one.
+//
+// This fixture reported FIXED when the escape landed, and it was not fixed. Its
+// own note says to read a `Tuple7` -> `Tuple8` shift as renumbering rather than
+// a fix; the general form is that a fixture going green because the emitted
+// *text* changed is not the defect being gone. Nothing here was asking whether
+// the value was still correct, and `emits-c` cannot ask it.
+//
+// **`os` is where this is real**, and it is three bindings rather than one:
+// `nts_os_cpus` `[string[], number[]]`, `nts_os_network_interfaces` and
+// `nts_os_constants` -- all the same form, an array of columns whose columns
+// have different element types, and `os.c` returns `NtsArray *` for all of
+// them. Two are unreached today and will hit this the moment their callers
+// lower, so a fix aimed at `nts_os_cpus` alone meets the same wall twice more.
+//
+// The remaining question is a *representation* one and is not settled here: a
+// tuple whose elements are all pointer-sized references could be an `NtsArray`
+// of references, which is exactly what the C already builds, and that would
+// settle all three at once. `[string, number]` could not -- mixed storage
+// genuinely needs a struct.
 //
 // A native function returning a tuple gets one of two completely different C
 // return types depending on whether its elements happen to have the same type,

@@ -1,4 +1,4 @@
-// expect: emit-c --napi -> emits-c NtsObj_Frame * nts_probe_returns_frame(void);
+// expect: emit-c --napi -> emits-c NtsHeader * nts_probe_returns_frame(void);
 //
 // A `declare function` **returning** an object gets a prototype naming a
 // per-program struct, so no shared translation unit can define it:

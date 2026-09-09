@@ -484,13 +484,23 @@ pub fn emit(program: &Program) -> Emitted {
     // `declare function` is a promise that a symbol exists at link time, and
     // without a prototype the call is an implicit declaration -- which C99
     // removed and clang rejects.
+    // Collected rather than aborted. One binding this cannot declare used to
+    // discard **every** prototype in the program, so a single unspellable
+    // return turned into an implicit declaration for every other binding the
+    // module calls -- a much larger failure than the one being reported, and
+    // reported as something else entirely.
     match external_prototypes(program) {
         Ok(prototypes) => {
             for prototype in prototypes {
                 writer.line(&origin, prototype);
             }
         }
-        Err(diagnostic) => diagnostics.push(diagnostic),
+        Err((prototypes, refusals)) => {
+            for prototype in prototypes {
+                writer.line(&origin, prototype);
+            }
+            diagnostics.extend(refusals);
+        }
     }
     writer.blank(&origin);
 
@@ -528,9 +538,12 @@ pub fn emit(program: &Program) -> Emitted {
 /// the name starts with `nts_`: a program is entitled to write
 /// `declare function nts_process_cwd()`, and a naming convention would silently
 /// leave that one undeclared -- which is the bug this function exists to fix.
-fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
+type Prototypes = Result<Vec<String>, (Vec<String>, Vec<Diagnostic>)>;
+
+fn external_prototypes(program: &Program) -> Prototypes {
     let mut seen: rustc_hash::FxHashMap<&str, String> = rustc_hash::FxHashMap::default();
     let mut prototypes = Vec::new();
+    let mut refusals: Vec<Diagnostic> = Vec::new();
     for func in &program.funcs {
         for op in &func.values {
             let OpKind::Call {
@@ -545,26 +558,72 @@ fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
                 continue;
             }
             let mut parameters = Vec::new();
+            let mut unnameable = false;
             for arg in args {
                 let ty = &func.values[arg.0 as usize].ty;
-                parameters.push(if crosses_as_header(ty) {
-                    "NtsHeader *".to_owned()
-                } else {
-                    c_type_of(program, ty, &op.origin)?
-                });
+                if crosses_as_header(ty) {
+                    parameters.push("NtsHeader *".to_owned());
+                    continue;
+                }
+                match c_type_of(program, ty, &op.origin) {
+                    Ok(named) => parameters.push(named),
+                    Err(why) => {
+                        refusals.push(why);
+                        unnameable = true;
+                        break;
+                    }
+                }
+            }
+            if unnameable {
+                continue;
             }
             if parameters.is_empty() {
                 parameters.push("void".to_owned());
             }
+            // The return takes the same escape the parameters above take, and
+            // did not. A `declare function` returning an object emitted
+            // `NtsObj_AsyncContextFrame * nts_async_context_get(void);` -- a
+            // per-program struct name, which the one hand-written definition
+            // every program links against cannot spell. So the symbol stayed
+            // undefined in **14 of the 20 addons that build**, and a shared
+            // object binds lazily, so each of them loaded, reported "builds and
+            // loads", and would have aborted on the first call.
+            //
+            // Found with `nm -D` on the built artifacts rather than from the
+            // source, by the Node lane, after `build-floor.sh` had been saying
+            // "builds and loads" about all of them.
+            let returns = match returned_shape(program, &op.ty) {
+                Returned::Header => "NtsHeader *".to_owned(),
+                Returned::Tuple => {
+                    refusals.push(Diagnostic::error(
+                        "NTS2010",
+                        format!(
+                            "`{name}` returns a tuple whose elements are not all one type, \
+                             and its layout is numbered per program -- so no C definition \
+                             can name the type this call expects, and one returning an \
+                             `NtsArray` would be read as a struct"
+                        ),
+                        op.origin.location,
+                    ));
+                    continue;
+                }
+                Returned::Own => match c_type_of(program, &op.ty, &op.origin) {
+                    Ok(named) => named,
+                    Err(why) => {
+                        refusals.push(why);
+                        continue;
+                    }
+                },
+            };
             let prototype = format!(
                 "{} {}({});",
-                c_type_of(program, &op.ty, &op.origin)?,
+                returns,
                 c_identifier(name),
                 parameters.join(", ")
             );
             match seen.get(name.as_str()) {
                 Some(existing) if *existing != prototype => {
-                    return Err(Diagnostic::error(
+                    refusals.push(Diagnostic::error(
                         "NTS2007",
                         format!(
                             "`{name}` is called with two different signatures, so there is no \
@@ -582,7 +641,11 @@ fn external_prototypes(program: &Program) -> Result<Vec<String>, Diagnostic> {
         }
     }
     prototypes.sort();
-    Ok(prototypes)
+    if refusals.is_empty() {
+        Ok(prototypes)
+    } else {
+        Err((prototypes, refusals))
+    }
 }
 
 /// Whether the runtime header already declares a name.
@@ -693,6 +756,42 @@ fn literal_name(literals: &[String], text: &str) -> String {
 /// A string, an array, a map and a view are **not** here. Their C types are the
 /// runtime's own -- `NtsString *`, `NtsArray *` -- so a binding can name them,
 /// and `runtime/node`'s bindings do.
+/// What a binding's *return* type can be written as.
+///
+/// The `NtsHeader *` escape that parameters take is right for a value the C
+/// side received and is handing back -- `nts_async_context_get` returns the
+/// pointer `nts_async_context_set` was given, so the C never builds one and the
+/// cast back at the call site is sound.
+///
+/// **It is wrong for a value the C side builds**, and a tuple is always that.
+/// `nts_os_cpus` constructs a two-element `NtsArray` of references while the
+/// compiler represents `[string[], number[]]` as a struct with two fields.
+/// Writing `NtsHeader *` on both makes the declarations agree and lets the
+/// program read struct fields out of an array header -- a build failure turned
+/// into a silently wrong program, which is the worse of the two. The clang
+/// error was doing useful work and this refuses in its place, with a sentence
+/// saying why rather than `conflicting types for 'nts_os_cpus'`.
+enum Returned {
+    /// An object the C side can only have been given: escapes to `NtsHeader *`.
+    Header,
+    /// A tuple, whose layout is per-program and which no binding can build.
+    Tuple,
+    /// Anything a shared definition can already name.
+    Own,
+}
+
+fn returned_shape(program: &Program, ty: &HirType) -> Returned {
+    let HirType::Managed(ManagedType::Object(id)) = ty else {
+        return Returned::Own;
+    };
+    let tuple = program
+        .layouts
+        .iter()
+        .find(|layout| layout.types.contains(id))
+        .is_some_and(|layout| nts_core::hir::is_tuple_layout_name(&layout.name));
+    if tuple { Returned::Tuple } else { Returned::Header }
+}
+
 fn crosses_as_header(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(ManagedType::Object(_)))
 }
@@ -867,7 +966,20 @@ fn call_text(
             c_identifier(target),
             arguments.join(", ")
         )
-    } else if erases_result(target) {
+    } else if erases_result(target)
+        || (matches!(callee, Callee::External(_))
+            && !runtime_declares(target)
+            && matches!(
+                returned_shape(context.program, &func.values[value.0 as usize].ty),
+                Returned::Header
+            ))
+    {
+        // The other half of the prototype's return escape: the binding is
+        // declared to hand back an `NtsHeader *`, and the program wants its own
+        // struct. Symmetrical with the argument cast above, and with the
+        // named-helper list `erases_result` carries -- the difference is only
+        // that this one is decided by the shape rather than by the name,
+        // because a `declare function` can be called anything.
         let wanted = c_type_of(context.program, &func.values[value.0 as usize].ty, origin)?;
         format!(
             "({wanted}){}({})",
