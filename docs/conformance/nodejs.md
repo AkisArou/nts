@@ -12942,6 +12942,49 @@ the module list is what matters rather than the totals. The method correction is
 not provisional: **a published-name count has to be intersected with node's key
 set, or it counts internals as progress.**
 
+## Tests that mutate what a stand-in closes over: 21 candidates, 1 confirmed
+
+`test-path-resolve.js` sets `process.cwd = () => ''` and expects `resolve()` to
+answer `'.'`. Our `resolve` calls the native `nts_process_cwd`, so the compiled
+artifact reads `getcwd(3)` and cannot see the patch. **The interpreted lane
+passes only because its stand-in is `globalThis.nts_process_cwd = () =>
+process.cwd()`** -- a live closure over the patchable property.
+
+Every shared stand-in is written that way. So the question is how many pinned
+tests do the same thing, and the answer is a **candidate list**, not a ceiling:
+
+| module | files searched | mutating | examples |
+| --- | ---: | ---: | --- |
+| `console` | 30 | **7** | `test-console.js`, `test-console-count.js`, `test-console-clear.js` |
+| `process` | 114 | 3 | `test-process-raw-debug.js`, `test-process-really-exit.js` |
+| `http` | 750 | 2 | `test-https-hwm.js` |
+| `internal` | 29 | 2 | `test-internal-errors.js` |
+| `path` | 22 | 2 | **`test-path-resolve.js`** (confirmed), `namespace-identity-static.js` |
+| `dgram`, `net`, `os`, `stream`, `util` | — | 1 each | |
+
+**One of the twenty-one is confirmed.** The rest are candidates and cannot be
+confirmed until their modules publish enough to run: `console` publishes nothing
+node has, so its seven fail today for a reason that has nothing to do with this,
+and whether they would *also* fail for this reason is not measurable yet.
+
+Four sites matching a pattern pointed at seventy once in this ledger and the
+answer was nine, which is why this is a list and not a number. What can be said
+now:
+
+- The mechanism is real and demonstrated once.
+- It is invisible to `--sabotage`: such a test still fails when the module is
+  blanked, so it is not hollow by the definition this lane uses.
+- It means **`prize.mjs`'s "to gain" is an upper bound in a second way** -- some
+  of those files are not winnable by any compiler change.
+- `console` is the module to watch. Seven of its files capture output by
+  reassigning `process.stdout.write` or through node's `hijackStdout`, and our
+  `nts_write_stdout` stand-in forwards to `process.stdout.write` at call time
+  while the C writes to the descriptor. If those seven do diverge when `console`
+  starts publishing, its ceiling is 12 of 19 rather than 19.
+
+The honest form of that last line today is *if*, and it stays *if* until
+`console` publishes something to measure.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
