@@ -9733,6 +9733,48 @@ The ranking that worked was following each blocked export to its own root, one
 cascade line at a time -- slower, one module at a time, and the only method that
 distinguished `errors.ts:533` from eleven roots with identical coverage.
 
+### `url` and `buffer` traced, and four more forms had no fixture
+
+```
+buffer   43 own, 70 cone, 12 declines, publishes 3
+url      40 own, 147 cone, 14 declines, publishes 0
+```
+
+`buffer`'s twelve: `isUtf8` and `isAscii` take `unknown`; `Blob` and `File` are
+classes without constructors; `Buffer`, `default` and `constants` are export
+forms; `SlowBuffer` waits on `Buffer.allocUnsafeSlow`, `transcode` on `decodeIn`
+-- which is `toString` on a number again -- and `atob`/`btoa` on the walk
+diagnosis above.
+
+`url`'s fourteen: ten functions never compiled, three classes without
+constructors (`URL`, `URLSearchParams`, `Url`), one `takes unknown`. Its cone
+fell 155 to 147 on tonight's fixes; its own forty did not move.
+
+Two of `url`'s own forms were the largest in the module and neither was filed:
+
+**`rest-parameter-of-unrepresentable-elements`**, nine of forty, and
+`async_hooks` reports it first as well. A rest parameter lowers when its
+elements have a representation:
+
+```ts
+append(...given: [] | [name: string] | [name: string, value: string]): void
+```
+
+is `searchparams.ts:287`, and a union of tuples has no single element type to
+lay out. Distinct from `rest-parameter-at-the-wrapper`, where the parameter
+lowers and the wrapper declines it -- this one never reaches the wrapper.
+
+**`in-with-a-computed-key`**, seven of forty. `"a" in row` lowers, `key in row`
+does not. The same representation decision as `computed-member-read` and
+`-write`, through a third operator, filed separately because a fix for member
+access need not carry `in`.
+
+Its control had to build its own object rather than take one: an object
+*parameter* draws `takes an object, which crosses outward only`, which would
+have left the control declined for a reason with nothing to do with `in`. That
+is the fourth failure mode from this document's own rules -- a control that
+fails for its own reason says nothing about the subject.
+
 ### A named "declaration outside every walk", handed over unreproduced
 
 `buffer` declines twelve exports. Two of them, `atob` and `btoa`, are refused
