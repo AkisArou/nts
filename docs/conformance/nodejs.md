@@ -9661,6 +9661,27 @@ as `rest-parameter-at-the-wrapper` -- it lowers and does not cross), an object
 parameter on `format`, an object return on `parse`, `matchesGlob` behind
 glob-matcher's own six roots, and the two namespaces.
 
+### The whole surface, rebuilt on the same compiler
+
+All twenty-two addons rebuilt against the compiler carrying tonight's fixes, and
+their published surfaces read against the counts from earlier in the evening:
+
+```
+net    2 -> 3   gained setDefaultAutoSelectFamily
+path   4 -> 10
+                the other twenty are unchanged
+names bound to undefined, across all twenty-two: 0
+```
+
+Two modules moved and twenty did not, which is the useful shape: `validateString`
+compiling is not a general unblocking, it is `path`'s eleven functions and one of
+`net`'s. Everything else is behind a different root.
+
+The zero in the last line is `METHODS` and `methods` staying gone. It is checked
+across the whole profile rather than in `http` alone, because the defect was a
+value-export path publishing a global whose initializer had been excised, and
+nothing about that was specific to `http`.
+
 ### `os` did not move, and tracing why found the convergence
 
 `os` is unchanged at 6 declines. `getPriority` and `setPriority` cascade on
