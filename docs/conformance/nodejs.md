@@ -14027,6 +14027,67 @@ wrongly at run time. `napi_define_class` is emitted, the constructor runs, the
 methods work, and `blockers-check.mjs` reads emitted text. This is the second
 case this week for a guard form that runs an expression against a loaded addon.
 
+## The compiled axis: 11 modules, 24 behaviour-dependent, 0 hollow
+
+Isolated artifacts, one pinned compiler, three controls on every pass, and the
+machine quiet. Where the day started, and where it ended:
+
+    start (contaminated)   27 raw across 7 modules, no hollow check on the addon
+    isolated               26 pass: 17 behaviour,  4 shape-only, 5 hollow,  7 modules
+    hollow driven to zero  22 pass: 18 behaviour,  4 shape-only, 0 hollow,  5 modules
+    end                    31 pass: 24 behaviour,  7 shape-only, 0 hollow, 11 modules
+
+    module        pass   behaviour   shape-only   hollow
+    path            13          12            1        0
+    os               5           3            2        0
+    punycode         3           3            0        0
+    async_hooks      2           1            1        0
+    util             2           2            0        0
+    net              1           1            0        0
+    readline         1           1            0        0
+    stream           1           1            0        0
+    fs               1           0            1        0
+    buffer           1           0            1        0
+    zlib             1           0            1        0
+
+`fs`'s row predates `local/stats-mode-static.js`, which was controlled
+separately -- passes plain, fails all three -- and is being re-measured. It
+takes `fs` to 2 pass, 1 behaviour.
+
+### Six modules joined, and none of them because the compiler moved
+
+The compiler is the same pin all day. What changed is that six modules were
+carrying working behaviour nothing was asking about:
+
+    net          the autoSelectFamily trio, and a write visible to the next read
+    stream       getDefaultHighWaterMark, two arguments giving two answers
+    async_hooks  the async id stack, with a nested push that needs a stack
+    readline     charLengthAt and charLengthLeft, agreeing with node on
+                 surrogate pairs and combining marks
+    fs           Stats decoding seven mode kinds into 49 predicate answers
+    util         a subpath identity with a predicate that has to answer
+
+Each of these modules had **zero** compiled passes this morning, and every
+upstream test for them needs a socket, a stream, a filesystem or an async
+context node creates. The behaviour was published and unreached.
+
+### And five passes went away
+
+`path`'s two subpath-exists files, `stream`'s two, `timers`' one and `util`'s
+one -- six in total -- were assertions between two absences. Three needed no
+control to see: `stream.Readable` and `require('_stream_readable')` are both
+`undefined` in the ordinary run.
+
+`timers` has no compiled passes at all now, which is what it has. It is the only
+module that went backwards, and it went backwards to the truth.
+
+### What the number is not
+
+It is not "24 of node's tests pass". It is 24 files that pass **and** fail
+`--mutate-addon`, `--empty-exports` and `--sabotage`, across 11 of 22 modules,
+against roughly 1,800 applicable upstream files. The interpreted lane is a
+different number and always has been.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
