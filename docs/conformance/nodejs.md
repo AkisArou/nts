@@ -15187,9 +15187,19 @@ this lane owns rather than to whatever the shared directory happened to hold.
 
 **And the lever that added seven of the last eight modules is empty.**
 `hidden-exports.mjs` against the same artifacts reports **0 node-own names
-published and not delivered** -- seven names reach no test at all
-(`fs.flagsOf`, `http.getHTTPParserPoolLimit`, four `readline` key constants,
-`util.styles`) and not one of them is a name node has. So there is no more
+published and not delivered** -- six names reach no test at all
+(`http.getHTTPParserPoolLimit`, four `readline` key constants, `util.styles`)
+and not one of them is a name node has.
+
+Six rather than seven because the instrument was asking the wrong question by a
+hair: it traced **names**, and `fs.flagsOf` is delivered under node's own name
+for it, as `internals()["internal/fs/utils"].stringToFlags`. A shim renaming a
+value to node's name is the shim doing its job, and it was being counted as a
+value nobody can reach. Values are traced by identity now, and the change was
+controlled in both directions -- `fs.flagsOf` clears, and `util.styles` does
+not, because `util/shape.mjs` guards its relocation on `util.inspect` being
+present, the compiled addon does not publish `inspect`, and the `delete
+util.styles` runs anyway. That value really is published and placed nowhere. So there is no more
 behaviour sitting in an artifact waiting to be wired up: `fs` publishes three
 names because three are all it compiles, not because the shim withholds the
 rest.

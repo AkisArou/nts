@@ -132,6 +132,22 @@ for (const module of modules) {
 
   const reachable = new Set();
   const publicKeys = new Set();
+  /* Values delivered anywhere in any facade, by identity. See the note at the
+   * `hidden` computation for why a name is not enough. */
+  const delivered = new Set();
+  const collectValues = (value, depth) => {
+    if (value === null || depth > 2) return;
+    if (typeof value !== "object" && typeof value !== "function") return;
+    if (delivered.has(value)) return;
+    delivered.add(value);
+    let keys = [];
+    try { keys = Object.keys(value); } catch { return; }
+    for (const key of keys) {
+      let child;
+      try { child = value[key]; } catch { continue; }
+      collectValues(child, depth + 1);
+    }
+  };
   let unaskable = false;
   if (shapeModule === null) {
     for (const k of published) { reachable.add(k); publicKeys.add(k); }
@@ -165,6 +181,7 @@ for (const module of modules) {
         continue;
       }
       keysOf(out, reachable);
+      collectValues(out, 0);
       if (typeof out === "function") for (const k of Object.keys(out)) reachable.add(k);
       if (fn === "shape") keysOf(out, publicKeys);
     }
@@ -178,7 +195,26 @@ for (const module of modules) {
   // publishes it, and `shape()` does not put it on the module.
   const notPublic = published.filter((k) => theirs.has(k) && !publicKeys.has(k));
   // The weaker one: reachable through nothing at all.
-  const hidden = published.filter((k) => !reachable.has(k));
+  //
+  // **By name, not by value, and the difference is a whole category.**
+  // `util/shape.mjs` does `util.inspect.styles = exports.styles` and then
+  // `delete util.styles`, so the *name* `styles` reaches no test and the
+  // *object* it names is what every test reading `util.inspect.styles` gets.
+  // Reported as hidden, that is a finding about nothing: node has no top-level
+  // `util.styles` either, and the shim is placing a value exactly where node
+  // keeps it.
+  //
+  // So the value is looked for by identity anywhere in the delivered object
+  // before a name is called hidden. What survives is a name whose value reaches
+  // no test under any name -- which is the thing worth reading.
+  const hidden = published.filter((k) => {
+    if (reachable.has(k)) return false;
+    const value = m.exports[k];
+    // A primitive cannot be traced by identity, so it stays on the old rule
+    // rather than being quietly cleared.
+    if (value === null || (typeof value !== "object" && typeof value !== "function")) return true;
+    return !delivered.has(value);
+  });
   if (notPublic.length === 0 && hidden.length === 0) continue;
   totalHidden += hidden.length;
   totalNodes += notPublic.length;
