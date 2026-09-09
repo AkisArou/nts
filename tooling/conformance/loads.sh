@@ -89,6 +89,13 @@ for module in "${modules[@]}"; do
   # `shape.mjs` omits from the public object -- so the addon publishes what its
   # entry exports and the shim narrows to node's. Both layers are correct.
   #
+  # **Zero names is its own sentence.** With no exports, `shared === ours.length`
+  # is `0 === 0` and the line read `loads, 0 name(s) published (all of them
+  # node's)` -- a vacuous truth in the shape of a positive finding, printed for
+  # six of the seven modules that have nothing on the compiled axis. Nothing was
+  # wrong with the count; the parenthetical was answering a question that does
+  # not arise.
+  #
   # What is wrong is reporting one number for two things. `os` 17 and `path` 15
   # are entirely node's; `async_hooks` 16 is three of node's and thirteen of the
   # harness's, and as a single figure they read the same. No surface test
@@ -102,7 +109,9 @@ for module in "${modules[@]}"; do
     let theirs = null;
     try { theirs = new Set(Object.keys(require('node:$module'))); } catch { /* no such node module */ }
     const shared = theirs === null ? null : ours.filter((k) => theirs.has(k)).length;
-    console.log('loads, ' + ours.length + ' name(s) published' +
+    console.log(ours.length === 0
+      ? 'loads, and publishes nothing'
+      : 'loads, ' + ours.length + ' name(s) published' +
       (shared === null ? ' (node has no such module to compare)'
        : shared === ours.length ? ' (all of them node\\'s)'
        : ' (' + shared + ' of them node\\'s)'))" 2>&1)"
