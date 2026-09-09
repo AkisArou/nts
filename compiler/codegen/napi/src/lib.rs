@@ -1953,6 +1953,83 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
     published
 }
 
+/// Modules whose exports were never considered, said out loud, once.
+///
+/// Every other decline in this file names something the backend *saw* and could
+/// not carry. This names lists that never arrived: `hir::lower::public_api`
+/// skipped those modules, so there is no export to have an opinion about and no
+/// amount of reading `program.public_api` would reveal one.
+///
+/// It has to be here rather than left to a reader, because absence is what it
+/// reports and absence is exactly what a reader cannot see. `fs` emitted an
+/// addon with no publication section at all and no line about any of its 303
+/// exports; the Node lane spent an evening establishing that the list had never
+/// been passed in, which is a fact the compiler knew and did not say.
+///
+/// # One line, not one per module
+///
+/// The first version reported each excluded module. That is right for `fs`,
+/// where the excluded module *is* the product, and it is noise everywhere
+/// else: with no `files` array, every helper module a project has is excluded
+/// by exactly this rule working correctly, and a project with thirty of them
+/// gets thirty lines saying so. Worse, the noisy version cannot be read as a
+/// warning at all, which is the failure mode it was written to fix.
+///
+/// So it says how many and shows the largest few. The count is the signal --
+/// "the tsconfig named no roots and this is what that cost" -- and the names
+/// are there to start from rather than to be complete.
+///
+/// Silent whenever the project named its root files. That is the fix; this is
+/// the diagnostic for a project that has not.
+/// Everything the surface walk did not carry, in the two forms it takes.
+///
+/// One call because they answer one question -- "why is this name not here" --
+/// and a reader who gets the first without the second is told about the exports
+/// that were considered and nothing about the lists that were not.
+fn report_missing(
+    program: &hir::Program,
+    wrapped: &[(&str, &str)],
+    published_classes: &[&str],
+    skipped: &mut Vec<Skipped>,
+) {
+    report_unrepresentable_exports(program, wrapped, published_classes, skipped);
+    report_unpublished_modules(program, skipped);
+}
+
+fn report_unpublished_modules(program: &hir::Program, skipped: &mut Vec<Skipped>) {
+    if program.unpublished_modules.is_empty() {
+        return;
+    }
+    let mut ranked: Vec<&(String, String, usize)> = program.unpublished_modules.iter().collect();
+    // Largest first: the module that lost the most exports is the one most
+    // likely to have been the product.
+    ranked.sort_by(|left, right| right.2.cmp(&left.2).then_with(|| left.0.cmp(&right.0)));
+    let total: usize = ranked.iter().map(|(_, _, exports)| exports).sum();
+    let named: Vec<String> = ranked
+        .iter()
+        .take(3)
+        .map(|(module, importer, exports)| {
+            format!("{module} ({exports}, imported by {importer})")
+        })
+        .collect();
+    let more = ranked.len().saturating_sub(named.len());
+    let tail = if more == 0 {
+        String::new()
+    } else {
+        format!(" and {more} more")
+    };
+    skipped.push(Skipped {
+        function: format!("{} module(s)", ranked.len()),
+        reason: format!(
+            "declare {total} export(s) that were never considered: {}{tail}. With no \
+             `files` array in the tsconfig, a module something imports is taken for a \
+             library rather than the product -- which is wrong for any module its own \
+             dependency imports back. Name the entry in `files` to decide it",
+            named.join(", ")
+        ),
+    });
+}
+
 fn report_unrepresentable_exports(
     program: &hir::Program,
     wrapped: &[(&str, &str)],
@@ -2211,7 +2288,7 @@ pub fn emit(program: &hir::Program) -> Addon {
     out.push_str(&publish_value_exports(&values, &functions, &program.layouts));
     out.push_str("    return exports;\n}\n");
 
-    report_unrepresentable_exports(program, &wrapped, &published_classes, &mut skipped);
+    report_missing(program, &wrapped, &published_classes, &mut skipped);
 
     Addon {
         source: out,
@@ -2342,5 +2419,67 @@ mod tests {
             set_property_call("a\0b"),
             "nts_napi_set_utf8_property(env, out, \"a\\000b\", 3u, value)"
         );
+    }
+
+    /// A module whose exports were never considered is reported, once, with a
+    /// count.
+    ///
+    /// The defect this guards is an *absence*, which is why it is tested here
+    /// rather than left to a fixture: `fs` emitted an addon with no publication
+    /// section and no decline naming any of its 303 exports, and every check
+    /// anyone had asked "is what was emitted correct" rather than "was anything
+    /// skipped before emission began". A silent skip passes all of them.
+    #[test]
+    fn a_module_that_was_never_considered_is_named_once() {
+        let program = hir::Program {
+            unpublished_modules: vec![
+                (
+                    "nts-workspace:///src/main.ts".to_owned(),
+                    "nts-workspace:///src/back.ts".to_owned(),
+                    303,
+                ),
+                (
+                    "nts-workspace:///src/back.ts".to_owned(),
+                    "nts-workspace:///src/main.ts".to_owned(),
+                    1,
+                ),
+            ],
+            ..hir::Program::default()
+        };
+        let mut skipped = Vec::new();
+        report_unpublished_modules(&program, &mut skipped);
+        assert_eq!(
+            skipped.len(),
+            1,
+            "one line, not one per module: with no `files` array every helper a \
+             project has is excluded by the rule working correctly, and a line \
+             each makes the report unreadable exactly where it matters",
+        );
+        assert!(
+            skipped[0].reason.contains("304 export(s)"),
+            "the total is the signal and it is missing: {}",
+            skipped[0].reason
+        );
+        assert!(
+            skipped[0].reason.find("main.ts").unwrap_or(usize::MAX)
+                < skipped[0].reason.find("back.ts").unwrap_or(0),
+            "largest first, so the module most likely to have been the product \
+             is the one a reader sees: {}",
+            skipped[0].reason
+        );
+    }
+
+    /// And says nothing at all when the project named its roots.
+    ///
+    /// The other half, and the one that keeps this from becoming noise: every
+    /// tsconfig that names `files` should see none of this, so a regression
+    /// that reported unconditionally would be caught here rather than by
+    /// somebody reading twenty-two addons.
+    #[test]
+    fn a_project_that_named_its_roots_is_told_nothing() {
+        let program = hir::Program::default();
+        let mut skipped = Vec::new();
+        report_unpublished_modules(&program, &mut skipped);
+        assert!(skipped.is_empty(), "{skipped:?}");
     }
 }

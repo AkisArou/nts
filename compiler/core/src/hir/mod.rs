@@ -1515,6 +1515,28 @@ pub struct Program {
     /// `public_api` carries both: taking one from the other published a
     /// function under whichever name happened to coincide.
     pub public_namespaces: Vec<(String, Vec<(String, String)>)>,
+    /// Modules whose exports were never considered, as
+    /// `(module, the importer that excluded it, how many it declares)`.
+    ///
+    /// Empty whenever the project named its root files, because then there is
+    /// nothing to infer and nothing to get wrong. It fills only under the
+    /// fallback rule in [`lower::public_api`] -- "a module nothing imports is
+    /// an entry" -- which drops a module's whole surface the moment one of its
+    /// own dependencies imports it back.
+    ///
+    /// It exists because that drop was *silent*. `fs` emitted an addon with no
+    /// publication section at all: not an empty one, not a loop over zero
+    /// entries, and not one decline naming any of the 303 exports it declares.
+    /// Every other module accounts for its missing surface by name -- `zlib`
+    /// declines 53, `stream` 28 -- so a reader asking why `fs.readFile` is
+    /// absent got an answer everywhere except the two places the answer was not
+    /// "it was refused".
+    ///
+    /// A count that is wrong is a bug. A count that is *absent* reads as
+    /// nothing having happened, which is why this is carried rather than left
+    /// to be re-derived: the backend cannot see a module that the surface walk
+    /// skipped.
+    pub unpublished_modules: Vec<(String, String, usize)>,
     /// Exported names whose symbol declares a *function*, as opposed to a value.
     ///
     /// The backend cannot tell the two apart from `public_api` alone, and the
@@ -2132,6 +2154,17 @@ pub struct Options<'a> {
     /// Where reachability starts. See [`reachable::Roots`]: an executable and a
     /// library have different public surfaces, so they keep different things.
     pub roots: reachable::Roots<'a>,
+    /// The source files the project named as its roots, as `SourceFile::uri`.
+    ///
+    /// A different question from `roots`, and they are easy to confuse.
+    /// `roots` is what reachability keeps; this is what the *addon publishes*,
+    /// and a project can name one file whose exports are the surface while
+    /// reachability keeps everything any export can call.
+    ///
+    /// Empty means the project named none -- a tsconfig with only `include` --
+    /// and [`lower::public_api`] falls back to inferring it from the import
+    /// graph, which cannot be done correctly and says so.
+    pub entry_files: &'a [String],
 }
 
 impl Default for Options<'_> {
@@ -2143,6 +2176,10 @@ impl Default for Options<'_> {
             // any export called from outside. An executable keeps more than it
             // needs until it says what it is.
             roots: reachable::Roots::EveryExport,
+            // Nothing named, so the import graph is all there is. Every caller
+            // that knows the tsconfig should say, and the ones that do not are
+            // no worse off than before this existed.
+            entry_files: &[],
         }
     }
 }
@@ -2902,7 +2939,7 @@ fn narrow_storage(program: &mut Program, analyses: &[flow::Analysis]) {
 #[must_use]
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let mut lowered = lower::lower(snapshot);
+    let mut lowered = lower::lower_with(snapshot, options.entry_files);
     settle(&mut lowered);
     let mut program = lowered.program;
 

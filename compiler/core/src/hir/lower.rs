@@ -2594,7 +2594,50 @@ fn probe_kind(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
     }
 }
 
-fn public_api(snapshot: &SemanticSnapshot, naming: &Naming, module: &ModuleScope) -> PublicSurface {
+/// Note a module whose exports the fallback rule passed over.
+///
+/// Only under the fallback, and only for a module that had something to lose.
+/// A library module excluded because a sibling imports it is the rule working,
+/// and the caller cannot tell that case from `fs`'s -- which is the whole
+/// difficulty, and why the backend reports a count and a few names rather than
+/// a verdict on each.
+///
+/// The importer is the first module found importing it. There may be several
+/// and the first is enough: the point is to name something concrete to look at,
+/// and a reader who has one edge of the cycle can find the rest.
+fn record_unpublished(
+    snapshot: &SemanticSnapshot,
+    module: &nts_semantic_schema::schema::ModuleRecord,
+    unpublished: &mut Vec<(String, String, usize)>,
+) {
+    if module.exports.is_empty() {
+        return;
+    }
+    let Some(source) = snapshot.sources.get(module.file.0 as usize) else {
+        return;
+    };
+    let importer = snapshot
+        .modules
+        .iter()
+        .find(|other| {
+            other.imports.iter().any(|target| {
+                snapshot
+                    .modules
+                    .get(target.0 as usize)
+                    .is_some_and(|reached| reached.file == module.file)
+            })
+        })
+        .and_then(|other| snapshot.sources.get(other.file.0 as usize))
+        .map_or_else(|| "another module".to_owned(), |at| at.uri.clone());
+    unpublished.push((source.uri.clone(), importer, module.exports.len()));
+}
+
+fn public_api(
+    snapshot: &SemanticSnapshot,
+    naming: &Naming,
+    module: &ModuleScope,
+    entry_files: &[String],
+) -> PublicSurface {
     let mut imported = vec![false; snapshot.modules.len()];
     for module in &snapshot.modules {
         for target in &module.imports {
@@ -2606,8 +2649,43 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming, module: &ModuleScope
     let mut api: Vec<(String, String)> = Vec::new();
     let mut namespaces: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut functions: Vec<String> = Vec::new();
+    let mut unpublished: Vec<(String, String, usize)> = Vec::new();
+    // Where the surface starts.
+    //
+    // A project that named its root files said which modules are the product,
+    // and nothing else has to be inferred. A project that named none -- every
+    // tsconfig that uses only `include` -- leaves the question open, and
+    // "nothing imports it" is the answer this has always given.
+    //
+    // **That answer is wrong whenever a module's own dependency imports it
+    // back**, and it is wrong in the loudest possible way: the module
+    // contributes no exports, and therefore no *declines* either, so its whole
+    // surface goes missing with nothing said about any of it. `fs` publishes
+    // none of its 303 exports because `fs/src/utf8-stream.ts` imports four
+    // functions from `fs/src/main.ts`. `util` publishes `width.ts`'s three --
+    // an orphan helper nothing in the module references -- because `width.ts`
+    // imports `main.ts` and so `main.ts` is "imported" and `width.ts` is not.
+    //
+    // There is no rule over the import graph that picks `main.ts` in both.
+    // "Not imported from outside my own cycle" answers `fs`, whose two modules
+    // are a genuine cycle, and leaves `util`, whose back edge is one-way. "An
+    // importer that is itself a root does not disqualify" answers `util` and
+    // makes every `posix.ts` an entry. The fact that `main.ts` is the module
+    // and `width.ts` is a helper is not in the type graph. It is in the
+    // tsconfig, which is why `entry` exists.
     for (entry, into) in snapshot.modules.iter().zip(&imported) {
-        if *into {
+        let is_entry = if entry_files.is_empty() {
+            !*into
+        } else {
+            snapshot
+                .sources
+                .get(entry.file.0 as usize)
+                .is_some_and(|source| entry_files.contains(&source.uri))
+        };
+        if !is_entry {
+            if entry_files.is_empty() && *into {
+                record_unpublished(snapshot, entry, &mut unpublished);
+            }
             continue;
         }
         for (published, symbol) in &entry.exports {
@@ -2695,14 +2773,18 @@ fn public_api(snapshot: &SemanticSnapshot, naming: &Naming, module: &ModuleScope
     namespaces.dedup();
     functions.sort_unstable();
     functions.dedup();
-    (api, namespaces, functions)
+    unpublished.sort_unstable();
+    unpublished.dedup();
+    (api, namespaces, functions, unpublished)
 }
 
-/// What the entry modules publish: plain names, and namespaces of names.
+/// What the entry modules publish: plain names, namespaces of names, and the
+/// modules whose exports were never considered at all.
 type PublicSurface = (
     Vec<(String, String)>,
     Vec<(String, Vec<(String, String)>)>,
     Vec<String>,
+    Vec<(String, String, usize)>,
 );
 
 /// Record what the entry modules publish, and keep a published global's name.
@@ -2716,8 +2798,10 @@ fn publish_surface(
     snapshot: &SemanticSnapshot,
     naming: &Naming,
     module: &ModuleScope,
+    entry: &[String],
 ) {
-    let (api, namespaces, functions) = public_api(snapshot, naming, module);
+    let (api, namespaces, functions, unpublished) =
+        public_api(snapshot, naming, module, entry);
     // Only the ones that are not functions: a name in `functions` is published
     // by calling something, and a global that happens to share it is a
     // different thing.
@@ -2750,10 +2834,22 @@ fn publish_surface(
     lowered.program.public_api = api;
     lowered.program.public_namespaces = namespaces;
     lowered.program.public_functions = functions;
+    lowered.program.unpublished_modules = unpublished;
 }
 
 #[must_use]
 pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
+    lower_with(snapshot, &[])
+}
+
+/// As [`lower`], told which source files the project named as its roots.
+///
+/// `entry` is `SourceFile::uri` values -- `nts-workspace:///src/main.ts` -- and
+/// an empty slice means the project named none, which is what every tsconfig
+/// using only `include` does. See [`public_api`] for what it decides and why
+/// there is no way to decide it without being told.
+#[must_use]
+pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
     let mut lowered = Lowered::default();
     // Closures first, because a module-scope `const f = () => ...` is typed by
     // the *closure* the arrow becomes rather than by its function type, and the
@@ -2897,7 +2993,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
     declare_unfilled_signatures(&hierarchy, &mut lowered.program);
     declare_interface_methods(&hierarchy, &mut lowered.program);
 
-    publish_surface(&mut lowered, snapshot, &shared.naming, &module);
+    publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
     canonicalize_objects(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every

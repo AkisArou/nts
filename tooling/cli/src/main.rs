@@ -1680,7 +1680,7 @@ fn named_entry() -> Vec<String> {
 /// thing on the C side, where the flag existed and was not known. A command
 /// whose output does not match what is built is worse than no command, because
 /// its answers are specific and wrong.
-fn emit_options(entry: &[String]) -> hir::Options<'_> {
+fn emit_options<'a>(entry: &'a [String], entry_files: &'a [String]) -> hir::Options<'a> {
     let standalone = std::env::args().any(|arg| arg == "--main") || !entry.is_empty();
     hir::Options {
         provider: if std::env::args().any(|arg| arg == "--rc") {
@@ -1693,6 +1693,12 @@ fn emit_options(entry: &[String]) -> hir::Options<'_> {
         } else {
             hir::reachable::Roots::EveryExport
         },
+        // Two different questions that both read as "where does it start".
+        // `roots` is what reachability keeps and is named in *functions*;
+        // this is which source files the project called its product, and it
+        // decides whose exports the addon publishes. A tsconfig with no
+        // `files` array gives an empty slice and the old inference stands.
+        entry_files,
         ..hir::Options::default()
     }
 }
@@ -1703,7 +1709,8 @@ fn emit_llvm(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = named_entry();
-    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry)) {
+    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry, &entry_files)) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
@@ -1745,7 +1752,8 @@ fn emit_jvm(tsconfig: &Utf8Path, out: Option<&Utf8Path>, text: bool) -> Result<(
     let snapshot = source.snapshot(tsconfig)?;
     report_snapshot_diagnostics(&snapshot)?;
     let entry = named_entry();
-    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry)) {
+    let entry_files = nts_frontend_ts::entry_uris(tsconfig, &snapshot);
+    let prepared = match hir::prepare_with(&snapshot, &emit_options(&entry, &entry_files)) {
         Ok(prepared) => prepared,
         Err(problems) => {
             for problem in &problems {
@@ -1825,6 +1833,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>) -> Result<()> {
         &hir::Options {
             provider,
             roots,
+            entry_files: &nts_frontend_ts::entry_uris(tsconfig, &snapshot),
             ..hir::Options::default()
         },
     ) {
