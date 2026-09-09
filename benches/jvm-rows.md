@@ -76,6 +76,7 @@ meets them. This is the map; the row table below it is the current state.
   - `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
   - The seven headers, read: six of them argue, and one row is genuinely missing a reference
   - The bar's second number, read at last: eight rows lose to node and six of them are the platform
+  - The partition, re-measured at a fresh pin: same eight rows, same six and two
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2932,8 +2933,8 @@ and the actionable half is one file.
 
 ### The bar's second number, read at last: eight rows lose to node and six of them are the platform
 
-**Stale numbers, and they are enough to settle the shape.** These come from the
-pinned worktree at `bf066859`, so `array-from` is still 2.12x here and its fix
+**Stale numbers, and they are enough to settle the shape** -- confirmed at a
+fresh pin two sections below. These come from the pinned worktree at `bf066859`, so `array-from` is still 2.12x here and its fix
 has since landed. A clean sitting is owed. But the partition does not depend on
 any single row being current, and it has never been done at all.
 
@@ -2978,6 +2979,50 @@ readings have been filed under one sentence and they are different claims.
 reference loses to node at 1.02, and we are at **0.17** -- six times faster than
 the reference and six times faster than node. A row is only a question when
 `jvm/node` is above one.
+
+### The partition, re-measured at a fresh pin: same eight rows, same six and two
+
+The section above was measured on a worktree **480 commits behind**, which is
+the exact failure `pin.sh` exists to prevent, and I said so at the time. Re-pinned
+to HEAD and re-swept under the gate lock:
+
+    row                jvm/node  Java/node  jvm/Java
+    array-from             2.02       2.13      0.95   platform
+    loop                   1.68       2.23      0.76   platform  *
+    objects                1.42       1.39      1.02   platform  *
+    bytes                  1.41       1.28      1.10   platform
+    map-and-set            1.26       1.56      0.81   platform  *
+    node-utf8              1.21       0.20      6.15   OURS
+    generic-classes        1.18       0.99      1.19   OURS
+    case-convert           1.10       1.14      0.96   platform
+
+    51 rows with a reference; 8 slower than node; 6 of those the
+    reference is slower too; 43 faster than node on both lanes.
+
+**Identical partition across two sittings 480 commits apart** -- same eight
+rows, same six and two. `array-from` is the row that moved most between them
+(jvm/node 4.28 to 2.02, because the cursor fix landed in between) and it stays a
+platform ceiling, because a hand-written Java `Array.from` is 2.13x of node
+either way.
+
+`*` marks the three measured while another session's compiler was running, and
+they are named rather than dropped: `loop`, `objects` and `map-and-set`. A busy
+machine inflates our column and the reference's together, so a *ratio* survives
+it better than an absolute -- but for `objects` at `Java/node` 1.39 the margin
+is not large, and it is the one of the eight whose classification a clean
+sitting could in principle move. It landed platform in both sittings, at 1.11
+and 1.39.
+
+**`array-from` at 0.95x is a third sitting on the cursor pass** -- 0.96x over
+thirteen runs, then 2.12x on the stale tree because that pin predated the fix,
+now 0.95x at HEAD. The stale reading is the useful one: it is what a pin 480
+commits old does to a row whose fix is 400 of them ago.
+
+Of the rows this session touched, `node-utf8` (6.54 to 6.15), `array-methods`
+(1.17 to 1.14) and `generic-classes` (1.13 to 1.18) all moved inside the band
+this file spent a night establishing is not a verdict, so **none of them moved**.
+`symbol-keyed-map` and `number-format-double` were both contaminated and are not
+quotable from this sitting at all.
 
 ## Open, and whose
 
