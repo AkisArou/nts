@@ -11839,6 +11839,80 @@ becomes true when it clears**, and that is answerable only where the other lane
 already shows the answer -- which is exactly what a module at 9 of 9 interpreted
 and 4 of 9 compiled provides.
 
+## The `join` landing, diffed across all 22 modules: one out, one in, same fifteen
+
+The compiler lane cleared `` `join` on a typed array `` and sampled two modules,
+both unchanged. Diffing the root lines of `last-mile.mjs --all` across the
+landing -- v10 `d537f7a7` against v11 `f5e561fa` -- says the sample generalises
+exactly:
+
+    434 root lines before        434 after
+
+    - runtime/node/internal/errors.ts:547  `join` on a typed array
+    + runtime/node/internal/errors.ts:563  `key` on a union, whose members lay their fields out differently
+
+**One construct out, one in, sixteen lines down the same function.** And the
+replacement inherited the *identical* reach set -- both are reached by the same
+fifteen modules: async_hooks, buffer, dgram, events, fs, http, net, os, process,
+readline, stream, string_decoder, timers, util, zlib.
+
+Nothing about this is visible in a count. Both numbers are 434, both reach
+counts are 15, and the only thing that changed is which line the chain stops at.
+
+## What each module gains: `prize.mjs`, and the exports worth the most
+
+`prize.mjs` runs node's own tests twice per module -- against the TypeScript on
+node, and against the compiled `.node`. A file that **passes interpreted and
+fails compiled** is one the implementation already gets right and the artifact
+cannot yet reach. That set is the prize, and the compiled failure names what is
+missing.
+
+| module | interp | compiled | to gain | most-named export |
+| --- | ---: | ---: | ---: | --- |
+| http | 405 | 0 | 405 | *(`undefined`, 405 — the parser answers nothing)* |
+| fs | 345 | 1 | 344 | `mkdirSync` (57), `writeFileSync` (33), `openSync` (31) |
+| stream | 250 | 2 | 248 | `Readable` (80) |
+| net | 148 | 0 | 148 | **`createServer` (96)** |
+| async_hooks | 116 | 0 | 116 | **`createHook` (65)** |
+| process | 88 | 0 | 88 | **`_fatalException` (73)** |
+| dgram | 77 | 0 | 77 | **`createSocket` (68)** |
+| zlib | 68 | 0 | 68 | `createGzip` (6) — spread thin |
+| timers | 56 | 1 | 55 | `setTimeout` (27) |
+| buffer | 55 | 0 | 55 | `from` (19), `alloc` (15) |
+| url | 50 | 0 | 50 | `pathToFileURL` (2) — spread thin |
+| diagnostics_channel | 33 | 0 | 33 | `tracingChannel` (15), `channel` (9) |
+| events | 32 | 0 | 32 | `EventEmitter` (22) |
+| readline | 26 | 0 | 26 | `createInterface` (9), `Interface` (8) |
+| util | 25 | 1 | 24 | `inspect` (3) — spread thin |
+| console | 19 | 0 | 19 | `Console` (10) |
+| assert | 12 | 0 | 12 | `apply` (2) — spread thin |
+| **path** | 21 | **11** | 10 | `format` (2), `matchesGlob` (1) |
+| querystring | 8 | 0 | 8 | `parse` (4) |
+| **os** | 9 | **4** | 5 | `constants` — all five |
+| string_decoder | 5 | 0 | 5 | `StringDecoder` (2) |
+| **punycode** | 3 | **3** | **0** | — |
+
+`punycode` at 0 to gain is the control: the instrument reads a finished module
+as finished.
+
+**Single exports worth the most test files**, which is a ranking nothing else
+here produces: `net.createServer` 96, `stream.Readable` 80,
+`process._fatalException` 73, `dgram.createSocket` 68, `async_hooks.createHook`
+65, `fs.mkdirSync` 57, `timers.setTimeout` 27, `events.EventEmitter` 22,
+`buffer.from` 19, `diagnostics_channel.tracingChannel` 15.
+
+**And the two ends of the profile are both worth knowing.** `os` needs one
+export for five files and would be the second whole module. `zlib`, `url`,
+`util` and `assert` have no dominant name at all -- their gains are spread over
+twenty-odd exports each, so no single fix moves them and they are late whatever
+happens.
+
+**A caveat this table needs.** "To gain" is what the compiled lane would gain
+*if the named export appeared and behaved*. It is an upper bound per file: a
+file can fail for the first missing name and then fail again on a second. The
+one place that is settled is `os`, where the interpreted lane passes all nine
+and the five compiled failures name a single export.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
