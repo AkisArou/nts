@@ -1,0 +1,16 @@
+export const cases = [
+  { call: "toFixedRounding", why: "toFixed rounding on the decimal string" },
+  { call: "toFixedExact", why: "toFixed of an exactly representable half" },
+  { call: "parseIntStops", why: "parseInt stopping at the first non-digit" },
+  { call: "parseIntRadix", why: "parseInt with a radix" },
+  { call: "parseFloatExponent", why: "parseFloat accepting an exponent" },
+  { call: "numberOfBlank", why: "Number of a whitespace-only string being zero" },
+  { call: "padStartTotal", why: "padStart padding to a total length" },
+  { call: "repeatZero", why: "repeat with a count of zero" },
+  { call: "splitEmpty", why: "split with an empty separator" },
+  { call: "splitLimit", why: "split with a limit" },
+  { call: "emptyNeedle", why: "indexOf and lastIndexOf of an empty string" },
+  { call: "sliceClamps", why: "slice clamping rather than throwing" },
+  { call: "charAtPastEnd", why: "charAt past the end" },
+  { call: "sharpS", why: "a character whose upper form is two characters" },
+];
