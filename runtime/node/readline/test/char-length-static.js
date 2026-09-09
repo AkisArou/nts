@@ -60,7 +60,9 @@ assert.strictEqual(
 );
 
 // A combining mark is one code unit on its own.
-assert.strictEqual(charLengthAt("́", 0), 1, "charLengthAt over a combining mark is not 1");
+// U+0301 as an escape, not a literal: a bare combining mark attaches itself to
+// the previous character in every diff and review tool that shows this file.
+assert.strictEqual(charLengthAt("\u0301", 0), 1, "charLengthAt over a combining mark is not 1");
 
 // Stepping backwards.
 assert.strictEqual(charLengthLeft("abc", 3), 1, "charLengthLeft from the end is not 1");
