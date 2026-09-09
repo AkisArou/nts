@@ -419,8 +419,10 @@ pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) ->
 /// field with the symbol's identity in its name. It verified, it ran, it agreed
 /// with node -- and it could not reach Android, which is the one thing this
 /// backend targets that the others do not. Found by dexing all sixty cases;
-/// **it is the only one of the sixty**, so `@` is the whole of the difference
-/// in practice and not merely the first of a family.
+/// **it is the only one of the sixty** -- which is a fact about the sixty and
+/// not about the rule. Asserting the rule instead (`dex_can_spell` over every
+/// mangled ASCII name) found twenty-two more the same minute, including the
+/// space in `class C { "a b": number }`.
 ///
 /// So the rule is the JVM's *and* DEX's, and the paragraph above is now the
 /// reason the two are different rather than the reason to prefer the looser
@@ -433,9 +435,16 @@ pub fn jvm_member_name(raw: &str) -> String {
             // name and reads badly in a stack trace, which is the one place a
             // generated name is shown to a person.
             //
-            // `@` is not a readability question. `d8` refuses it, so a name
-            // carrying one is a program that cannot be shipped to a phone.
-            '.' | ';' | '[' | '/' | '<' | '>' | '#' | '@' => '$',
+            // Everything else DEX forbids. Listing the six by hand was the
+            // bug: `@` was missing, and so were twenty-one others -- a space
+            // among them, which `class C { "a b": number }` produces from four
+            // lines of legal TypeScript. A predicate cannot be short by one.
+            //
+            // Non-ASCII is left alone deliberately. `SimpleName` admits large
+            // unicode ranges and a TypeScript identifier may legitimately use
+            // them, so mangling those would rename valid programs for a
+            // constraint that does not exist.
+            other if other.is_ascii() && !other.is_ascii_alphanumeric() && other != '_' => '$',
             other => other,
         })
         .collect()
@@ -475,6 +484,47 @@ mod jvm_tests {
     fn the_characters_the_format_forbids_are_the_only_ones_replaced() {
         // `@` was preserved here until `d8` refused a field carrying one.
         assert_eq!(jvm_member_name("resolve@win32"), "resolve$win32");
+    }
+
+    /// The ratchet the one-character fix is worth less than.
+    ///
+    /// `@` was found by dexing sixty programs, which is a test of the sixty
+    /// rather than of the rule. This asserts the rule: whatever ASCII a raw
+    /// name arrives carrying, what comes out can be spelled in a dex file. A
+    /// seventh forbidden character added to the mangler's `match` is then a
+    /// green test rather than a program that verifies and cannot ship.
+    #[test]
+    fn every_mangled_ascii_name_can_be_spelled_in_dex() {
+        for byte in 0x20..=0x7eu8 {
+            let ch = char::from(byte);
+            let raw = format!("a{ch}b");
+            let mangled = jvm_member_name(&raw);
+            assert!(
+                dex_can_spell(&mangled),
+                "`{raw}` mangles to `{mangled}`, which d8 refuses -- \
+                 add {ch:?} to jvm_member_name",
+            );
+        }
+        // The shapes this compiler actually emits, named rather than left to
+        // the sweep above to cover incidentally.
+        for raw in ["__@kCount@2", "Benchmark#benchmark", "module#init", "resolve@win32"] {
+            assert!(dex_can_spell(&jvm_member_name(raw)), "{raw}");
+        }
+    }
+
+    #[test]
+    fn dex_can_spell_is_about_the_mangling_and_not_a_dex_validator() {
+        // What it must reject: exactly what the mangler exists to remove.
+        assert!(!dex_can_spell("__@kCount@2"));
+        assert!(!dex_can_spell("a.b"));
+        assert!(!dex_can_spell(""));
+        // What it must not reject, because SimpleName admits it and a
+        // TypeScript identifier may legitimately be spelled this way.
+        assert!(dex_can_spell("\u{3b1}\u{3b2}"));
+        assert!(dex_can_spell("__$kCount$2"));
+        // `-` is in SimpleName, but it is not in this mangler's output set:
+        // the predicate is about what d8 accepts, not about what we emit.
+        assert!(dex_can_spell("a-b"));
         assert_eq!(jvm_member_name("module#init"), "module$init");
         assert_eq!(jvm_member_name("a/b.c;d[e"), "a$b$c$d$e");
     }

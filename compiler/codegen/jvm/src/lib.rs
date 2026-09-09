@@ -53,6 +53,7 @@ pub mod widen;
 
 use nts_core::hir::Program;
 use nts_diagnostics::Diagnostic;
+use rustc_hash::FxHashMap;
 use nts_jvm_emitter::class::access;
 use nts_jvm_emitter::code::Code;
 use nts_jvm_emitter::{Class, ClassBuilder, Kind, Pool, VType};
@@ -278,7 +279,40 @@ fn declare_fields(
     interface: bool,
     origin: &nts_semantic_schema::Origin,
 ) -> Result<(), Diagnostic> {
+    // Two properties that mangle to one field name.
+    //
+    // `jvm_member_name` maps everything DEX forbids to `$`, which is not
+    // injective: `class C { "a.b": number; "a$b": number }` declares two
+    // properties and produces two `public int a$b;` in one class file. The JVM
+    // refuses that at load -- `ClassFormatError: Duplicate field name` -- so
+    // the program is not miscompiled today so much as unloadable, and where
+    // the descriptors happen to differ it is worse, because then it loads and
+    // the two properties are told apart by their *types*, which is a rule
+    // nobody can hold in their head.
+    //
+    // Refused by name. The injective mangling that would accept it -- escape
+    // `$` as `$$`, forbidden characters as `$` plus a letter -- costs every
+    // generated name its readability (`module#init` becomes `module$hinit`,
+    // not `module$init`), and this shape has never occurred outside the test
+    // that found it. If a real program hits this, that is the fix, and it is a
+    // change to `symbols.rs` rather than to this refusal.
+    let mut spelled: FxHashMap<String, String> = FxHashMap::default();
     for field in hierarchy::declared(program, layout) {
+        if let Some(other) = spelled.insert(body::method_name(&field.name), field.name.clone()) {
+            return Err(Diagnostic::error(
+                "NTS4013",
+                format!(
+                    "`{}` declares both `{}` and `{}`, which are different properties and \
+                     become the same JVM field `{}` -- this backend will not emit a class \
+                     the JVM cannot load",
+                    layout.name,
+                    other,
+                    field.name,
+                    body::method_name(&field.name)
+                ),
+                origin.location,
+            ));
+        }
         if interface {
             // A JVM interface has no instance fields, so there is nowhere to
             // put this. Refused by name rather than dropped: an interface whose
