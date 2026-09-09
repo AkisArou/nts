@@ -24,9 +24,18 @@
 // Checked against node 24.20.0 directly, and against the addon, before writing
 // this: all three agree.
 //
-// There is no round-trip here because `setDefaultHighWaterMark` is not
-// published. When it is, this file should grow one -- a write observed by the
-// next read is a stronger statement than any number of correct defaults.
+// # The round-trip, added when the setter arrived
+//
+// This file shipped saying "there is no round-trip here because
+// `setDefaultHighWaterMark` is not published. When it is, this file should grow
+// one -- a write observed by the next read is a stronger statement than any
+// number of correct defaults." The setter publishes now, so it has one.
+//
+// Node's setter takes the mode: `setDefaultHighWaterMark(objectMode, value)`,
+// and leaves the other mode alone. That is the assertion worth making --
+// **a write to one mode must be visible to the next read of that mode and
+// invisible to the other**. A single shared slot passes every other line in
+// this file and fails that.
 "use strict";
 
 require("../common");
@@ -62,4 +71,35 @@ assert.strictEqual(
   stream.getDefaultHighWaterMark(undefined),
   byteMode,
   "an absent flag did not take the byte-stream branch",
+);
+
+// A write observed by the next read, per mode.
+assert.strictEqual(
+  typeof stream.setDefaultHighWaterMark,
+  "function",
+  "stream.setDefaultHighWaterMark is missing",
+);
+
+try {
+  stream.setDefaultHighWaterMark(false, 1024);
+  assert.strictEqual(
+    stream.getDefaultHighWaterMark(false),
+    1024,
+    "the byte-stream write was not observed by the next read",
+  );
+  // The other mode must not have moved. One shared slot fails here and passes
+  // everything above it.
+  assert.strictEqual(
+    stream.getDefaultHighWaterMark(true),
+    objectMode,
+    "writing the byte-stream default changed the object-mode default",
+  );
+} finally {
+  stream.setDefaultHighWaterMark(false, byteMode);
+}
+
+assert.strictEqual(
+  stream.getDefaultHighWaterMark(false),
+  byteMode,
+  "the byte-stream default was not restored",
 );
