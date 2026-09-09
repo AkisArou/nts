@@ -1,5 +1,27 @@
 // expect: an `in` naming `length` on an `object`
 //
+// 2026-09-10: this is what stops `Buffer.from`, and `Buffer.from` is the largest
+// single item on the compiled axis.
+//
+// `buffer/src/main.ts:189` is `hasArrayLikeShape`, one line -- `return "length"
+// in value` with `value: object` -- and `Buffer.from`'s whole dispatch for
+// array-likes goes through it. `:184` is the same form once more inside
+// `isTypedArrayView`.
+//
+// `string_decoder` is 0 of 5 compiled and 5 of 5 interpreted with **zero
+// `NTS1001` roots in its own source**: every one of its five declines is a
+// cascade ending at `Buffer.from` or `Buffer.alloc`, which is why four of its
+// five failures are the one sentence `StringDecoder is not a constructor`. It
+// clears outright on this. `querystring` and `os` are one further item each.
+// Thirteen of 22 modules carry functions cascading directly from those two
+// names, 101 of them, though reach is the weaker column and roots-of-their-own
+// is the one that answers the question.
+//
+// Not rewritable in the module source, and the reason is a rule rather than a
+// preference: `"length" in value` is ordinary TypeScript narrowing, and the
+// alternatives are casts to a shape with optional fields -- the unchecked
+// assertions this profile forbids.
+//
 // `"length" in value` where `value` is a bare `object`.
 //
 // # Why this one rather than a bigger row
