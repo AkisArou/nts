@@ -41,6 +41,24 @@ fi
 printf '  %-20s %-34s %s\n' module counted uncounted
 differing=0
 for module in $modules; do
+  # **The compiler is checked every iteration, not once at the start.**
+  #
+  # On 2026-09-09 this script reported thirteen modules as `did not build` with
+  # `0 module(s) differ` -- all thirteen false. The pinned binary was deleted
+  # mid-run by its own author tidying pins down to "current and previous", and
+  # `build.sh` re-invokes `$NTS_COMPILER` per module, so every module after the
+  # deletion failed for a reason with nothing to do with the module. A preflight
+  # would not have caught it: the compiler was there when the run began.
+  #
+  # `loads.sh`, an instrument built for something else, is what contradicted the
+  # table. Nothing in this script could.
+  if [ ! -x "$compiler" ]; then
+    printf '\n  INSTRUMENT FAILURE: the compiler vanished mid-run (%s)\n' "$compiler"
+    printf '  Rows above are real; every module from `%s` on was never attempted.\n' "$module"
+    printf '  A long run holds a live reference to its pin -- keep two pins *plus whatever is in flight*.\n'
+    exit 3
+  fi
+
   # Counted first, then uncounted, so the artifact left behind is the ordinary
   # one -- another lane reading `target/node` after this finds what it expects.
   counted=""
