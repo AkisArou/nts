@@ -11685,6 +11685,67 @@ passes on the first try, check that it can fail -- `--sabotage`,
 `--mutate-addon`, and for a boundary fixture, whether the program contains the
 global feature the defect keys on.
 
+## The compiled axis on v10: 23 passes across 7 modules, and `path` moved 3 to 11
+
+Node's own tests run against each built `.node`, on pin v10 (`d537f7a7`).
+
+| module | passed | failed | | module | passed | failed |
+| --- | ---: | ---: | --- | --- | ---: | ---: |
+| **path** | **11** | 10 | | assert | 0 | 12 |
+| **os** | 4 | 5 | | async_hooks | 0 | 116 |
+| **punycode** | **3** | **0** | | buffer | 0 | 55 |
+| stream | 2 | 248 | | console | 0 | 19 |
+| fs | 1 | 344 | | dgram | 0 | 77 |
+| timers | 1 | 55 | | diagnostics_channel | 0 | 33 |
+| util | 1 | 24 | | events | 0 | 32 |
+| | | | | http | 0 | 410 |
+| | | | | net | 0 | 148 |
+| | | | | process | 0 | 90 |
+| | | | | querystring | 0 | 8 |
+| | | | | readline | 0 | 26 |
+| | | | | string_decoder | 0 | 5 |
+| | | | | url | 0 | 50 |
+| | | | | zlib | 0 | 68 |
+
+**23 passed, 1,835 failed, 7 modules with at least one pass.** The axis was 15
+passes across the same 7 modules; **all eight of the gain is `path`**, and it is
+the `export * as posix` landing -- `path` publishes 15 names now, with `posix`
+and `win32` as namespace objects, against 12 before.
+
+**It is still 1 of 22 whole.** `punycode` is the only module that passes
+everything it is given.
+
+### Controlled, because a pass that cannot fail is not a pass
+
+Every number above is the plain run. Two controls per module, `--sabotage`
+(hand the test a blank module) and `--mutate-addon` (keep every exported name,
+destroy the behaviour behind it):
+
+| module | plain | `--mutate-addon` | `--sabotage` | behaviour-dependent |
+| --- | ---: | ---: | ---: | ---: |
+| `punycode` | 3 | **0** | **0** | **3 of 3** |
+| `path` | 11 | 3 | 0 | **8 of 11** |
+| `os` | 4 | 1 | 0 | **3 of 4** |
+
+`punycode` is the strongest row in the profile: every one of its three passes
+fails when the behaviour behind the names is destroyed, so none of them is
+passing on the shape of the export surface.
+
+`path` is 11 and **not** "nearly all of 21". Three of the eleven survive an
+addon whose behaviour is gone -- they check that a name exists and is callable,
+which is a real thing to check and is not evidence the implementation is right.
+The honest sentence is *8 behaviour-dependent passes of 21 files*, and it is the
+sentence to repeat when this number is quoted.
+
+`os` is 3 of 4 the same way. Its 5 failures are all downstream of `constants`
+being absent, which is behind `computed-member-write` -- so `os` cannot load
+whatever else clears, and its 4 passes are the files that never touch
+`constants`.
+
+Not controlled: `stream` (2), `fs` (1), `timers` (1), `util` (1). Four passes
+across four modules whose suites take long enough that the control was skipped
+for now; they are counted in the 23 and **not** claimed as behaviour-dependent.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
