@@ -11737,14 +11737,61 @@ which is a real thing to check and is not evidence the implementation is right.
 The honest sentence is *8 behaviour-dependent passes of 21 files*, and it is the
 sentence to repeat when this number is quoted.
 
-`os` is 3 of 4 the same way. Its 5 failures are all downstream of `constants`
-being absent, which is behind `computed-member-write` -- so `os` cannot load
-whatever else clears, and its 4 passes are the files that never touch
-`constants`.
+`os` is 3 of 4 the same way. Its 5 failures are downstream of `constants` being
+absent, which is behind `computed-member-write`.
+
+**Corrected, and by a load rather than by either of us recalling.** This
+paragraph first said `os` "cannot load at all until `computed-member-write`
+lands". That is false. `os.node` loads, publishes **17 of 23** names, and
+answers `arch()` with `x64` and `EOL` with `"\n"`; `constants` is absent and
+tolerated. The claim came from a comment in `computed-member-write` describing a
+failure that had since been fixed **in this lane's own file** --
+`os/shape.mjs:15` no longer dereferences `exports.constants` unguarded, and the
+note recording that it did was left standing. A stale note about one's own fix
+reads exactly like a current fact.
+
+So `computed-member-write` is not a hard gate on `os` loading. It is one of six
+missing names. That is a smaller claim than the one it replaces and it is the
+one that survives being run.
 
 Not controlled: `stream` (2), `fs` (1), `timers` (1), `util` (1). Four passes
 across four modules whose suites take long enough that the control was skipped
 for now; they are counted in the 23 and **not** claimed as behaviour-dependent.
+
+## Index-signature tables have to cross the boundary, in both directions
+
+Asked by the compiler lane before building the representation, because the
+answer decides its shape: does anything in the profile need a table to *cross*,
+or only to work inside the compiled program? Surveyed rather than recalled --
+every `[k: string]:` declaration in `runtime/node`, then which of them appear in
+an entry file's exported signature.
+
+**Seven declarations. Five cross, in three modules, and two of the five are
+inbound.**
+
+| where | direction | shape |
+| --- | --- | --- |
+| `os.networkInterfaces(): NetworkInterfaceMap` | out | `[name: string]: NetworkInterfaceInfo[] \| undefined` |
+| `os.constants: OsConstants` | out | an object with **four** `Record<string, number>` fields |
+| `querystring.parse(…): ParsedUrlQuery` | out | `[key: string]: string \| string[] \| undefined` |
+| `querystring.stringify(obj?: ParsedUrlQueryInput)` | **in** | `[key: string]: StringifiableValue` |
+| `util.parseArgs(config?: ParseArgsConfig)` | **in** | `options?: { [longOption: string]: ParseArgsOptionDescriptor }`, nested one level |
+
+Internal only, and satisfied by a representation that never leaves the program:
+`stream/src/utils.ts:75` (`StreamState`, a state bag whose index signature sits
+beside eight named optional fields), and `stream/src/iter/pull.ts:57` and `:62`.
+
+**So the representation alone does not publish `os.constants`.** That export is
+an object with four map fields and one number: it needs the object-return path
+*and* a map crossing, and its element type is `NetworkInterfaceInfo[] |
+undefined` in the other `os` case -- an array of objects, behind
+`array-of-object-literals-has-no-layout`. Two of the five are inbound, so a
+one-directional design covers three.
+
+The cheapest useful subset is `querystring.parse`: one outbound table of
+`string | string[] | undefined`, no nesting, no array-of-objects. `querystring`
+is 0 of 8 on the compiled axis and `parse` is the export its shape is built
+around.
 
 ## Conventions
 
