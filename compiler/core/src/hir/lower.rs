@@ -12858,6 +12858,38 @@ impl<'a> FuncBuilder<'a> {
         if self.is_the_object_type(ty) {
             return self.lower_in_over_every_class(id, rhs, &key);
         }
+        // A `Record<string, V>`, whose membership is a *runtime* question.
+        //
+        // Everything below asks which declared members a type has, and a table
+        // declares none -- so `declaring` came out empty and the whole
+        // expression folded to `false`. `"a" in o` answered no on a table that
+        // had just been given `a`, unconditionally: the emitted C was `v7 =
+        // false` with no use of the map after the `nts_map_set`. It did not
+        // lower to a lookup that missed; it did not lower to a lookup.
+        //
+        // The absent case agreed, which is why nothing caught it -- `false` is
+        // the right answer there. The Node lane's `agreement.mjs` found it with
+        // `Object.hasOwn`, `o["a"]` and `Object.keys` as controls, all of which
+        // were already right: the object was correct and only `in` was not.
+        //
+        // The key is erased on the way in for the reason every table key is:
+        // entries are erased values, and `nts_map_has` reads the tag.
+        if let Some(HirType::Managed(ManagedType::Table(_, _))) = self.represent(ty) {
+            let receiver = self.lower_expression(rhs)?;
+            let origin = self.origin(id);
+            let text = self.push(
+                OpKind::ConstString(key.clone()),
+                HirType::Managed(ManagedType::String),
+                origin.clone(),
+            );
+            let erased = self.push(OpKind::Erase { value: text }, HirType::Erased, origin.clone());
+            return Ok(self.runtime_call(
+                "nts_map_has",
+                vec![receiver, erased],
+                HirType::Bool,
+                origin,
+            ));
+        }
         let members = match &self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Union(members)) => members.clone(),
             Some(_) => vec![ty],
