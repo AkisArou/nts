@@ -26,6 +26,28 @@
 // type string ('y')`. The module is doing its job correctly on an input the
 // boundary invented.
 //
+// # It has a second face, and one fixture covers both
+//
+// A garbage value is one way this shows. The other is **a missing exception**:
+//
+//     getPriority(null)    ours returns, node throws ERR_INVALID_ARG_TYPE
+//     getPriority(false)   the same
+//
+// `os.getPriority(pid?: number)` takes its parameter optionally, so a `null`
+// argument whose conversion fails leaves the local unchecked, and whatever it
+// holds passes `validateInt32`. Nothing throws.
+//
+// That is how `test-os-process-priority.js` fails *now*. It used to fail on the
+// wording of a different error; the compiler lane fixed the wording, `os` stayed
+// at 5 passed and 4 failed, and the failure had moved. Traced through all twelve
+// of the inputs that test uses -- `null`, `true`, `false`, `'foo'`, `{}`, `[]`,
+// `/x/`, `NaN`, `Infinity`, `-Infinity`, `3.14`, `2**32` -- exactly those two
+// disagree.
+//
+// Worth the paragraph because the two faces look like different bugs: one
+// returns a number nobody supplied, the other returns successfully when it
+// should throw. They are the same unchecked conversion.
+//
 // # It is a `calls` fixture and could not be anything else
 //
 // The wrongness only appears when the **host** passes a value the parameter's
