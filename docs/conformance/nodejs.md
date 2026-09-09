@@ -15210,6 +15210,40 @@ a declared return type, a getter returning `undefined`, a generic rest
 forwarded to its callback -- are the form the remaining distance takes, and
 each is a compiler change rather than a wiring one.
 
+### The seven modules with nothing on the axis are not seven pieces of work
+
+Each traced to its head with `cascade-reach.mjs`, which ranks a primary refusal
+by the size of its transitive cone rather than by how often its message
+appears:
+
+    module                primaries   head                        cone
+    assert                    1,210   coerceToDOMString             39
+    console                   1,229   coerceToDOMString             39
+    dgram                     1,499   coerceToDOMString             39
+    events                    1,124   coerceToDOMString             39
+    url                         129   objectToBuffer                 9
+    string_decoder               59   objectToBuffer                11
+    diagnostics_channel          48   trackPromise                  11
+
+**Four of the seven are one dependency.** `assert`, `console`, `dgram` and
+`events` are each headed by `coerceToDOMString`, with `URLParser#parse` and an
+`EventTarget` handler behind it -- the URL and EventTarget implementations,
+which are web-platform, which this profile does not adopt. Their four-figure
+refusal counts are not four modules' worth of compiler work; they are the same
+wall counted four times.
+
+**Two more share a head with each other**, `objectToBuffer` in `buffer`, filed
+as `in-on-an-undeclared-object`. And `diagnostics_channel`, the nearest of all
+at 48 primaries, is headed by two roots that were **already filed**:
+`weak-collections-have-no-representation` and `weakref-property`. The second
+unblocks three named exports -- `subscribe`, `tracingChannel`, `unsubscribe` --
+in a module that publishes none.
+
+So the seven decompose into: one dependency this profile declines, one filed
+fixture covering two modules, and two filed fixtures covering the module
+closest to the axis. Nothing on that list is waiting on a reduction that has not
+been written.
+
 ### One instrument error, named
 
 The survey walked every directory under `runtime/node` with a `test/` folder,
