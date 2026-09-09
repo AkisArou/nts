@@ -12296,6 +12296,61 @@ plus this, and nothing else -- `cpus` needs `returns an object[]`,
 `networkInterfaces` needs `getCIDR`, and `getPriority`/`setPriority` both wait on
 `validateInt32` -> `ERR_OUT_OF_RANGE#constructor`.
 
+## Calling every published export with no arguments: 14 of 31 disagree with node
+
+A zero-argument call is the one invocation that is always well-formed to
+attempt, and it is where a wrapper's argument checks meet the module's own. Run
+against every published function in the artifacts that have one:
+
+| module | published functions | differ on `f()` |
+| --- | ---: | ---: |
+| `path` | 11 | **9** |
+| `punycode` | 4 | **4** |
+| `util` | 1 | **1** |
+| `os` | 15 | **0** |
+| `buffer`, `string_decoder` | 0 | 0 |
+
+**`os` at 0 of 15 is the control**, and it says what the other rows mean: its
+published functions take no required parameters, so no wrapper check fires and
+the module answers. This is about required parameters, not about wrappers.
+
+**Every difference is the same one: the wrapper's check pre-empts the module's
+validation, so node's error code is replaced.**
+
+    ours   path.dirname()        TypeError  code ERR_MISSING_ARGS      "the compiled function requires 1 argument"
+    node   path.dirname()        TypeError  code ERR_INVALID_ARG_TYPE  "The \"path\" argument must be of type string…"
+
+    ours   punycode.decode()     TypeError  code ERR_MISSING_ARGS
+    node   punycode.decode()     TypeError  code undefined             "Cannot read properties of undefined (reading 'length')"
+
+    ours   path.toNamespacedPath()   throws
+    node   path.toNamespacedPath()   returns undefined
+
+**This is not straightforwardly a defect and the fair reading matters.**
+`ERR_MISSING_ARGS` is a real node error code and a `TypeError` carrying it is
+more informative than what node's `punycode.decode()` does, which is to fall
+into a property read on `undefined`. Where node has no validation, ours is
+arguably better. Where node *does* validate -- which is every `path` function --
+ours replaces `ERR_INVALID_ARG_TYPE` with `ERR_MISSING_ARGS`, and node is the
+oracle.
+
+**It costs at least one test file.** `path/test/error-identity-static.js` asserts
+`thrown.code === "ERR_INVALID_ARG_TYPE"` for each function, and it is one of
+`path`'s nine remaining failures. It fails first on `resolve`, whose code is
+`undefined` because the rest gatherer raises a bare `Error` -- the same family
+with a different sub-case:
+
+    a rest parameter     bare `Error`, no code, "could not gather the rest arguments"
+    a missing argument   `TypeError`, code `ERR_MISSING_ARGS`
+    node                 the module's own coded error, whatever it is
+
+**And it qualifies "punycode is whole."** `punycode` is 3 of 3 on node's tests,
+all three behaviour-dependent, and 140,224 differential comparisons with zero
+divergences -- and all four of its published functions answer a zero-argument
+call differently from node. The differential's corpus always supplies an
+argument, and node's own tests never call these with none. **Whole means whole
+on every question anyone has asked**, and this is a question nobody had.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
