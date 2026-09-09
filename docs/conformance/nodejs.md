@@ -11561,6 +11561,105 @@ than one happening now: a module only fails to link once something calls it.
 
 
 
+
+## The counted lane got to 10 of 22 and stopped there
+
+2026-09-10. The counted lane against its uncounted control is the goal text's
+named missing deliverable, and the version standing in this ledger was measured
+on a compiler several fixes ago. **I could not re-derive it, and the reason is
+not a result about the lane.**
+
+Two attempts, both reported `killed` by the task runner rather than exiting:
+
+    all 22 modules in one invocation   -> killed after 5 rows, ~12 minutes
+    one invocation per module          -> killed after 2 rows
+
+Ruled out, each checked rather than assumed:
+
+- **not the disk.** `/tmp` at 20% of 16G both times, and no temp directories
+  left behind. The full-`/tmp` failure mode that once produced 29 fake fixture
+  failures is not this.
+- **not the outer timeout.** `timeout 3000` and `timeout 900` respectively,
+  neither expired, and an expiry would have exited 124 and continued the loop
+  rather than killing the task.
+- **not "long runs die here".** Four longer runs completed tonight on the same
+  box: the 22-module axis sweep, the full interpreted lane, the hollow
+  classification over 14 modules, and `fs` alone under three controls.
+- **not `cargo`.** The script does not reach it; it runs `build.sh` with
+  `NTS_CONFORMANCE_RC=1`.
+- **not the loop shape.** Decomposing to one invocation per module — the fix
+  this ledger already prescribes for a run that dies partway — made it die
+  *sooner*, at 2 rows instead of 5. I wrote that prescription and then applied
+  it at the wrong level.
+
+**What it does correlate with is the amount of work in one task**, and that
+took four attempts to see because I kept theorising about shape:
+
+    22 modules, one task                    killed after 5 rows
+    22 modules, one invocation each, 1 task killed after 2 rows
+    punycode alone                          completed
+    5 small modules, 54 test files          completed
+    6 medium modules, 318 test files        killed after the first
+
+Every module builds and runs **twice** here, counted and uncounted, so the
+second batch was roughly six times the work of the first. Short tasks finish and
+long ones are killed, somewhere between those two sizes.
+
+**The mechanism is still unknown and is written down as unknown.** An OOM kill
+would fit — heavy repeated `clang` builds, killed with no diagnostic — but
+`free` and `dmesg` are both unavailable in this environment, so that is a
+hypothesis and not a finding. A `killed` status from the task runner is real
+evidence in a way `ps` never was; it says something stopped the process rather
+than that the process failed, and it does not say what.
+
+**Four wrong explanations, and the fourth was mine too.** "Long runs die here",
+then "the loop is the problem", then "batches of five work", then "it is the
+amount of work in a task" — each contradicted by the next attempt. The last one
+died on the very next try: `events` **alone**, 52 test files, produced nothing,
+where a batch of five totalling **54** had completed twenty minutes earlier.
+
+What actually changed between those two is not in my process at all. MainClaude
+is compiling `Buffer.from`'s dispatch and the JVM session is live, so heavy
+`clang` work is contending for this box in a way it was not earlier in the
+evening. **That is a hypothesis with a mechanism and no measurement**, which is
+worth exactly as much as the previous four, and it is why the attempts stopped
+rather than continuing: further retries burn build capacity a peer is actively
+using, to re-derive a number that is already recorded as unmet.
+
+### The five rows it did produce
+
+They are worth keeping, because a partial answer to this question is still an
+answer about those modules:
+
+    assert        26  0 passed, 12 failed [1887 rc]    26  0 passed, 12 failed
+    async_hooks  155  2 passed, 115 failed [403 rc]   155  2 passed, 115 failed
+    buffer        98  2 passed, 54 failed [822 rc]     98  2 passed, 54 failed
+    console       39  0 passed, 19 failed [1998 rc]    39  0 passed, 19 failed
+    dgram        110  0 passed, 77 failed [2782 rc]   110  0 passed, 77 failed
+
+Five more came from a later batch that did survive:
+
+    punycode        3   3 passed, 0 failed  [  55 rc]     3   3 passed, 0 failed
+    string_decoder  6   0 passed, 5 failed  [ 824 rc]     6   0 passed, 5 failed
+    os             13   5 passed, 4 failed  [1021 rc]    13   5 passed, 4 failed
+    path           23  15 passed, 5 failed  [ 559 rc]    23  15 passed, 5 failed
+    querystring     9   1 passed, 7 failed  [ 889 rc]     9   1 passed, 7 failed
+
+**Ten of twenty-two modules, 0 differing**, over 9,240 reference-counting sites.
+Counted and uncounted agree everywhere the runs reached.
+
+`path` is the row that matters most tonight: **15 passed / 5 failed on the
+counted side, identical to the uncounted axis**, so both fixes made in that
+module today hold with reference counting enabled. That pairing is the thing
+this lane exists to establish, and it is established for the module I actually
+changed.
+
+The twelve not measured are `diagnostics_channel` (one row produced, then the
+task died), `events`, `fs`, `http`, `net`, `process`, `readline`, `stream`,
+`timers`, `url`, `util` and `zlib`. **The deliverable is not met.** Ten rows is
+not twenty-two, and this is recorded as unmet with the partial data rather than
+as met with an old number.
+
 ## Every compiled pass classified: 41 = 31 behaviour + 10 shape-only + 0 hollow
 
 2026-09-10, post-`code`-fix pin. **The classification reconciles exactly with
