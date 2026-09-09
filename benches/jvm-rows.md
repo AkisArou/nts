@@ -1762,6 +1762,47 @@ seven have neither an argument nor a reference. Deciding that is `benches/**`
 work and mine. Not done tonight; recorded so the next count starts from 60 and
 starts by reading seven headers.
 
+### Is the harness itself the band? No, and the 18% it was built around is narrower than it reads
+
+Ten rows sitting 1-5% above parity with no per-row cause is the signature of one
+systematic thing rather than ten separate ones, and the obvious candidate is the
+harness. So it was checked, because `benches/common` and `tooling/bench` are
+mine and nobody had.
+
+**There is a real asymmetry and it is documented in the tool that creates it.**
+`handwritten_java` puts the workload *inside* `Bench.Work.run()` -- `Ref` **is**
+the `Work` -- and says why:
+
+> The wrapper was not free. `awfy-sieve`'s reference measured 4.7us with the
+> workload inline in `run()` and **5.5us behind one extra static call** -- 18%.
+> An 18% tax on the *reference* lane makes this compiler look better, which is
+> the one direction a harness must never be wrong in.
+
+Our lane cannot have that. The generated driver is
+`Bench.measure(new Bench.Work() { run() { return Program.work(seed); } })`, and
+`work` then calls `work$whole` -- **two static frames where the reference has
+zero, by construction rather than by choice.** If one call is worth 18%, ten
+rows a few percent apart is exactly what two would look like.
+
+**Measured, one variable, on `in-narrowing`'s own reference body:**
+
+    A0   workload inline in run()      1292      what ref.java gets
+    A1   one static call behind it     1317      +1.9%
+    A2   two, which is our shape       1287      -0.4%
+
+Identical checksums throughout, and `A2` is the *fastest* of the three. **Call
+depth costs this row nothing**, so the harness is not taxing our lane and the
+band is not its doing.
+
+**And it bounds the 18%.** That number is real and it is about `awfy-sieve`
+specifically -- its own comment says AWFY's benchmarks "are already three deep
+before the harness adds a fourth", so what was measured is a depth *limit* being
+crossed, not a per-call cost. Reading it as general is what made this hypothesis
+look strong. It should not be quoted as one.
+
+So: our emission runs 1313 against this body's 1292, about 1.6%, and none of it
+is the harness. The gap is in the emitted code, where five leads are now dead.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
