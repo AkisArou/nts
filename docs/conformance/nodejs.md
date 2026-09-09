@@ -11269,6 +11269,68 @@ already filed:
   addon publishes nothing at all.
 
 
+
+## Ranking the 22 by roots in their own source
+
+2026-09-10. Pass counts say which modules are furthest along. They do not say
+which are closest to *clearing*, because a module with two passes and forty
+roots of its own is further from whole than one with no passes and none.
+
+The count that answers it is **`NTS1001` roots reported inside the module's own
+`src/`** — a root is a construct the compiler refuses outright, while a cascade
+(`NTS1003`) is only a consequence of one. A module with zero roots is blocked
+entirely on other people's work.
+
+| module | own roots | cascades | wrapper declines |
+| --- | ---: | ---: | ---: |
+| `punycode` | **0** | 0 | 0 |
+| `string_decoder` | **0** | 5 | 2 |
+| `os` | 1 | 1 | 2 |
+| `querystring` | 1 | 3 | 5 |
+| `path` | 4 | 9 | 7 |
+| `dgram` | 13 | 34 | 2 |
+| `diagnostics_channel` | 19 | 7 | 7 |
+| `async_hooks` | 20 | 5 | 13 |
+| `console` | 20 | 5 | 5 |
+| `timers` | 28 | 7 | 29 |
+| `events` | 30 | 19 | 16 |
+| `buffer` | 35 | 20 | 10 |
+| `process` | 38 | 32 | 5 |
+| `url` | 39 | 48 | 13 |
+| `net` | 45 | 63 | 13 |
+| `assert` | 49 | 5 | 24 |
+| `readline` | 71 | 6 | 14 |
+| `util` | 73 | 22 | 33 |
+| `zlib` | 97 | 9 | 66 |
+| `http` | 145 | 88 | 25 |
+| `fs` | 202 | 257 | 123 |
+| `stream` | 456 | 142 | 65 |
+
+**`punycode` is 0 / 0 / 0 and it is the one whole module.** That is the check on
+the instrument rather than a result from it: the only module that has cleared
+everything is the only one with nothing left, and nothing else in the table
+comes first by accident.
+
+Two things this ordering says that the pass counts do not:
+
+- **`string_decoder` sits second, on zero passes.** Every one of its five
+  declines is somebody else's, all of them `Buffer.from`/`Buffer.alloc`. By
+  passes it looks worse than `buffer` or `util`; by what stands between it and
+  whole it is second in the tree.
+- **`dgram` is the next tier at 13, ahead of `console` and `events` at 20 and
+  30**, which have comparable pass counts. Nothing in the pass column suggests
+  that order.
+
+`assert` is the clearest case of the opposite reading: 49 roots and 24 wrapper
+declines, and its entire published surface refuses with `is exported and is not
+a function this backend can name`. It is a small module by test count and a
+large one by work.
+
+> Provenance: counted from per-module build logs on a pin taken at 00:23.
+> `string_decoder`, `os` and `path` were re-derived on a 00:59 pin unchanged.
+> Roots are counted as reported, so a single construct refused at two call sites
+> counts twice — the column is an ordering, not an inventory.
+
 ## `Buffer.from` is the largest single item on the compiled axis
 
 2026-09-10. Found by taking `string_decoder` as the smallest remaining module
