@@ -15,6 +15,30 @@
 //
 // Filed late for the same reason as `missing-builtin`: it has been named in
 // analysis all session and never reduced, so it was not on the list that matters.
+
+// # What it is worth, traced 2026-09-09
+//
+// **It is one of the two roots under the largest concentration in the tree.**
+// `http/src/server.ts:252` is
+//
+//     this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
+//
+// storing the class itself as a default, and it is one of exactly two roots
+// inside `http`'s `Server` constructor -- the other being `options = {}` reached
+// through `super()` into `net`'s. `http.createServer` is **241 of http's 405
+// failing test files**.
+//
+// **And it gates every read of a static member.** A sweep of ten spread and
+// class-member questions found eight agreeing exactly -- a static *method*
+// called through the class, a private field, a getter, a setter, a rest
+// parameter, array spread, destructuring with a rest, destructuring a rename --
+// and `static readonly limit = 5` read as `WithStatic.limit` refuses with this
+// message. Reading a static field needs the class as a value; calling a static
+// method does not.
+//
+// 18 distinct sites across the `http`, `events` and `stream` builds alone,
+// naming `EventSource` 15 times, `Event` 12, `Readable` 6, `EventEmitter` 3.
+
 class RangeErrorLike extends Error {
   constructor(name: string) {
     super(name);
