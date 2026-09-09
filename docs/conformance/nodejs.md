@@ -14604,6 +14604,38 @@ subject entirely.
 Both numbers are real. The difference is which gate they describe, and only one
 of them is the gate that is live.
 
+## `string_decoder`, stated plainly on both lanes
+
+The goal names this module and asks for the number without rounding.
+
+**Interpreted: 5 of 5 applicable, 0 failed, 1 not applicable.**
+
+    pass  test-string-decoder-end.js
+    pass  test-string-decoder-fuzz.js
+    pass  local/core-static.js
+    pass  local/export-surface-static.js
+    pass  local/split-sequences-static.js
+    n/a   test-string-decoder.js   mixed language non-goal (§13) plus host-engine
+                                   stress; calls the exported class as a function
+
+`local/core-static.js` is held exactly as it was and passes. It is the file that
+asserts `lastChar` is a `Buffer` and compares it with `.equals`, alongside
+`lastNeed` and `lastTotal` -- 46 assertions, node's own bar, unmodified since
+`d59d0631`.
+
+**Compiled: 0.** The addon builds and loads and publishes no names.
+
+    no wrapper for StringDecoder: is a class whose constructor was not compiled
+    no wrapper for default: is exported and is not a function this backend can name
+
+Not "nearly": zero. The module has **no refusals of its own** -- every one of its
+59 roots is in something it imports -- and its chains now end at a single
+construct, `buffer/src/main.ts:196`, down from three this morning.
+
+So the two lanes say different things and both are true: the implementation is
+finished against node's suite, and the compiler cannot yet carry a class to the
+host. That is the order this ledger's opening describes as the intended one.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
