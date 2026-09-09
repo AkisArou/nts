@@ -128,6 +128,25 @@ function printedSkipReason(output) {
 const notApplicable = readList(join(ROOT, "runtime/node", moduleName, "not-applicable"));
 const moduleDir = join(ROOT, "runtime/node", moduleName);
 
+// A name that does not exist is an error, not an empty run.
+//
+// Without this, `--module notamodule` answered `0 file(s): 0 passed, 0 failed`
+// -- which reads as "nothing to do" rather than "you asked for something that
+// is not there". In a loop over module names a typo contributes a clean 0/0 and
+// the total looks the same as if it had been covered.
+//
+// The same shape as a nine-module floor printing "11 newly building", and as a
+// differential counting an absent export as agreement: an instrument answering
+// a question about something that is not there, in the vocabulary it uses for
+// success.
+if (!existsSync(moduleDir)) {
+  console.error(
+    `no module at runtime/node/${moduleName}. ` +
+      `An empty run would report 0 passed and 0 failed, which is not the same answer.`,
+  );
+  process.exit(2);
+}
+
 // A module's tests are `test-<module>.js` and `test-<module>-*.js`. Node also
 // files some under other names; those are found by hand and listed in the
 // module's `extra-tests` file when they exist.
