@@ -9419,6 +9419,48 @@ It honours both now, controlled after the change rather than declared. **A pin
 that is silently ignored is worse than no pin: it produces a control that looks
 run and is not**, and four copies of one measurement look like agreement.
 
+## The counted lane over every building module, with its control
+
+`tooling/conformance/counted-vs-uncounted.sh`, 2026-09-09:
+
+    identical counted and uncounted : 19
+    differing                       : 0
+    did not build either side       : 3   (fs, os, process)
+    retain/release sites, counted   : 17,652
+
+**Nineteen modules behave identically under reference counting**, with between
+26 and 1,784 retain/release sites each against a handful uncounted. The
+allocator sees no defect these tests can reach. Zero differing rows is the
+result; it is not a blank.
+
+The right-hand column is the whole point and `counted-lane.sh` does not produce
+it. Its "pass" means *the module built and its tests ran*, so its rows read
+`0 passed, 12 failed` — which looks like a defect in reference counting and is
+the export table's doing, identical on both sides. Four rows said exactly that
+earlier in the day and said nothing else.
+
+The comparison was controlled by inverting it: `punycode` flags and the run
+reports one differing; restored, none. A comparison never seen to fire is a
+claim about agreement rather than a measurement of it.
+
+### The summary line was mangled, and by me
+
+The run printed all twenty-two rows and then died on a syntax error in its own
+last `echo`. Nothing was wrong with the script: **it was edited while it was
+running.** Bash reads a script incrementally from a byte offset, so an insertion
+near the top shifts everything after it and the interpreter resumes mid-token.
+
+The edit was adding a comment recording that the comparison had been controlled
+— which makes it the second mistake in one sequence, the first being a commit
+whose message described a note the failed edit never wrote. A claim about a
+control that lives only in a commit message is one `git log` away from being
+lost.
+
+The data survived because every row is printed as it completes and only the
+trailing summary was in the shifted region. That is luck rather than design, and
+the totals above were recomputed from the rows rather than read off a line the
+script never got to print.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
