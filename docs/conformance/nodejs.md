@@ -11416,9 +11416,24 @@ not the entry-set effect that explains `path`'s two messages. Something about
 
 `this-in-a-static-method` claims the two in `net/src/main.ts` where a `static`
 method declares its receiver as a `this` parameter. The other 37 are not that.
-Ruled out: `this` in a default parameter value; `this` in an arrow-function
-class field; the same with a rest parameter and with a `#private` call; a getter
-reading `this.#size`. All four lower.
+**Seven shapes ruled out, each probed on v10 and each lowering cleanly:**
+
+| probe | drawn from |
+| --- | --- |
+| `this` in a default parameter value, own property | `buffer/src/main.ts:575` |
+| the same, reading an **inherited** property | `Buffer extends Uint8Array` |
+| `override toString(encoding?, start = 0, end = this.length)` -- line 575 verbatim | `buffer` |
+| `this` in an arrow-function class field | `console/src/main.ts:263` |
+| the same with a rest parameter and a `#private` call | `console:333` |
+| an arrow declared **inside a method body**, capturing `this` | `console/src/main.ts:417` |
+| a getter reading `this.#size` | `stream/src/duplex.ts` |
+
+Every one of those is copied from a site that reports the message, and every one
+lowers in isolation. Combined with the reported column landing on the `get` and
+`override` *declaration* lines rather than on any expression, the likeliest
+reading is that **the location is not the construct** -- and the second
+likeliest, after tonight, is that it keys on something program-wide that a
+reduction deletes.
 
 `stream/src/duplex.ts` supplies nine and every one is reported at a `get` line
 whose body reads `this._writableState`. Since a plain getter lowers, **the
