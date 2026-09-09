@@ -14917,6 +14917,49 @@ layer. **The rule that separates them is which question is being asked** -- "doe
 the addon compute it" wants the raw artifact, "does a test see it" wants the
 module.
 
+## Every value this profile publishes agrees with node
+
+`surface-diff.mjs` walks each module's **shaped** surface against node's, one
+level into plain-object tables, comparing values rather than names.
+
+    16 module(s) compared, 1 value differing, 402 absent
+
+The one:
+
+    zlib  constants.ZLIB_VERNUM: ours 4896, node 4897
+
+which is the linked library. Node bundles `1.3.2.1-motley-42c2f19` reporting
+`0x1321`; this profile links the system `1.3.0` reporting `0x1320`. Both numbers
+are right and they are about different libraries.
+
+**Nothing else disagrees.** Not one constant, not one table entry, not one
+scalar, across `os`, `fs`, `buffer`, `zlib`, `http`, `net`, `path`, `process`,
+`util`, `stream`, `timers`, `readline`, `querystring` and `async_hooks`.
+
+### The 402 absent are a different question and already counted
+
+A name node has and this profile does not publish is the publish gap --
+`prize.mjs` counts it per file, `hidden-exports.mjs` counts what is published
+and unreachable, and `blocking-files.mjs` says what refuses. This instrument
+deliberately reports absence as a number and nothing more.
+
+Separating the two is the point. **"What is missing" has been measured all day
+and is large; "what is wrong" had not been measured at all and is one, and that
+one is the host's zlib.**
+
+### Through the shim, and that is not a detail
+
+The same walk against the raw `.node` reports a second difference:
+`zlib.constants` carries a `codes` key there, because `constants.ts` exports
+both and the addon publishes the module. `shape.mjs` builds the public
+`constants` from an explicit list and puts `codes` beside it, which is node's
+shape and which `test-zlib-const.js` asserts by reading `zlib.codes.Z_OK`.
+
+Reading the artifact would have reported a defect the module does not have. It
+did, for about ten minutes, and this instrument reads the module for that
+reason. The rule: **"does the addon compute it" wants the raw `.node`; "does a
+test see node's value" wants the module.**
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
