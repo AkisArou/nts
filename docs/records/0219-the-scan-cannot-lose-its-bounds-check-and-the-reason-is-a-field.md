@@ -1,4 +1,4 @@
-# The scan cannot lose its bounds check, and the reason is a field
+# The scan keeps its bounds check, and the reason was not what I wrote first
 
 `benches/cases/json-parse` exists now, and it published with **our JVM backend
 2.8x ahead of our own C** on the same program. A gap that size between two of
@@ -59,9 +59,37 @@ emitted C still contains four `nts_str_char_code_at` and no `nts_unit`. Reverted
 
 So neither half of the obvious source-level fix works: hoisting the length gives
 the upper bound the analysis already had, and asserting the lower bound gives a
-fact the loop-carried value does not inherit. **This is a compiler gap and the
-TypeScript cannot route around it**, which is worth more than the diagnosis
-alone -- it says where the work has to happen.
+fact the loop-carried value does not inherit.
+
+## Corrected: the join is precise, and I filed a fixture saying it was not
+
+I reduced this to a minimal scanner and it looked conclusive. A clean position
+field emits `nts_unit`, the unchecked read; adding one method that stores
+`at - 1` turns it into `nts_str_char_code_at`, in a method that never calls it.
+I wrote it up as "one subtraction costs every reader its bounds check".
+
+**The analysis was right and the fixture was wrong.** An unguarded `at - 1` on a
+field that can be `0` really does produce `-1`, and the scan really would index
+it. The check was not a missed optimisation; it was the check doing its job.
+
+The half that settles it is the one I nearly did not run. Guard the subtraction
+--- `if (at > 0) this.at = at - 1;` --- and `nts_unit` comes back. So the
+whole-program join is not too coarse to see a guard, which is the opposite of
+what this record claimed two paragraphs ago.
+
+Both fixtures are kept, as guards on correct behaviour rather than as reports of
+a defect: `a-position-field-only-ever-increased` and
+`a-position-field-decreased-behind-a-guard`.
+
+**What is still open, stated narrowly.** `json/parse.ts` writes `this.at = at - 1`
+on a throw path where the position is at least one for reasons no explicit guard
+states. Whether that is provable is a real question and it is *not* the one this
+record answered. The two measured reverts above stand; the conclusion drawn from
+them does not.
+
+This is the fifth instrument in two records to look conclusive and be wrong, and
+the first where the correction came from running the control rather than from
+somebody else finding it.
 
 ## What that generalises to
 
