@@ -9313,6 +9313,38 @@ measured.
 what `cascade-reach.mjs` says about `createSocket`, and the export tables of all
 five.
 
+## The native half is complete, and it bought nothing on the axis
+
+**331 declared bindings, none without C**, as of 2026-09-09. `nm -D` on every
+artifact the floor builds finds no undefined `nts_` symbol at all, and
+`build-floor.sh`'s pinned set is empty — it held seventeen names that morning.
+
+    dgram    21 of 21     the directory held no .c at all
+    net      30 of 30     net.c was eleven lines holding two option defaults
+    fs       71 of 71     the entire async surface, plus the watchers
+    process   9 of 9      with assert's one
+    internal  4 of 4
+
+The last to go was `nts_async_context_get`, unwritable until the
+return-position escape landed: its prototype named a per-program struct no
+shared translation unit could spell. Thirteen modules carried it, each loading
+and waiting to abort on first call.
+
+**And the axis did not move.** Measured against the rebuilt artifacts:
+
+    punycode    3 files, 3 passed, 0 failed
+    path       22 files, 2 passed
+    every other building module   0 passed
+
+`dgram` is 0 of 110 with all 21 of its bindings defined — `createSocket is not
+a function`, because its own refusals stop the module. This is the sharpest
+version of *necessary and not sufficient* the axis has produced, and it is worth
+stating plainly rather than letting "native half complete" read as progress.
+
+What it did buy is permanent: thirteen modules no longer carry a latent
+abort-on-first-call, and no module's compiled artifact can now fail for want of
+a definition.
+
 ## The native half, and what finishing it did not buy
 
 Written 2026-09-09: `dgram` 21 of 21, `net` 30 of 30, `process` and `assert`
