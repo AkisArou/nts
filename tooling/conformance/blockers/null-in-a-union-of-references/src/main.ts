@@ -1,31 +1,49 @@
-// expect: NTS1001 `null` or `undefined` where what it stands in for is not a reference
+// expect: lowers
 //
-// A conditional yielding `Holder | null` refuses **in an object literal** and
-// lowers when it is bound to a `const` first. Same value, same type, same
-// property:
+// FIXED, kept as a guard, and fixed by something that was not aimed at it.
+//
+// A conditional yielding `Holder | null` refused **in an object literal** and
+// lowered when bound to a `const` first. Same value, same type, same property:
 //
 //     return { held: flag !== 0 ? new Holder(flag) : null };   // REFUSED
-//
 //     const held = flag !== 0 ? new Holder(flag) : null;
-//     return { held };                                          // lowers
+//     return { held };                                          // lowered
 //
-// **The control is the whole fixture.** `nullableBound` does the identical
-// conditional, produces the identical union, and stores it in the identical
-// property -- and lowers. So this is not "a nullable reference has no
-// representation", which is what the diagnostic sounds like and which would
-// point at the type. It is where the value is *formed*.
+// The cause was `contextual_type` having no arm for `PROPERTY_ASSIGNMENT`. An
+// object literal's property value never saw the *field's* declared type, so a
+// conditional's `Holder | null` had nothing to be represented *as* -- while the
+// bound form got its type from the `const`'s declaration, which
+// `contextual_type` did handle.
 //
-// I wrote `nullableField` intending it as a second control -- the plain
-// `held: <conditional>` form, expected to lower -- and it refuses too. That is
-// the useful half: the boundary is not "inline in a return" versus "bound", it
-// is "the conditional is the property's initialiser" versus "a name is".
+// So this fixture's own analysis was right and its diagnosis was one step
+// short: "it is where the value is formed" is true, and the reason a formed
+// value has no type is that nothing told it what the field wanted.
 //
-// **What it costs.** `os.userInfo`, at `main.ts:433`:
+// # What actually made it land
+//
+// A segfault in `os`. The same missing arm meant `signals: {}` -- a
+// `Record<string, number>` field of an object literal -- became an anonymous
+// object rather than a table, and `nts_map_set` on it killed node during
+// `require`. Fixing that fixed this, and neither was found by looking for the
+// other.
+//
+// It had been harmless for every object-typed field there has ever been: an
+// empty layout stored into a slot expecting a layout is the same pointer. A
+// table is the first field type where the two differ, and a nullable reference
+// was the first where the *absence* of a type mattered.
+//
+// # What it cost
+//
+// `os.userInfo`, at `main.ts:433`:
 //
 //     shell: hasShell !== 0 ? Buffer.from(shellBytes) : null,
 //
-// one of six exports `os` does not publish, and `os` is the module closest to
-// green -- 17 of node's 23 names, 4 of its 9 applicable test files passing.
+// which was `os`'s last own-source root.
+//
+// `nullableField` stays. It was written as a second control, expected to lower,
+// and refused -- which is what located the boundary at "the conditional is the
+// property's initialiser" rather than at "inline in a return". A control that
+// failed is why this fixture said anything useful at all.
 
 class Holder {
   readonly size: number;

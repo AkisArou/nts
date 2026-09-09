@@ -178,3 +178,60 @@ export function keysOfEmpty(n: number): number {
   const table: Record<string, number> = {};
   return Object.keys(table).length + n * 0;
 }
+
+// A TABLE THAT IS A FIELD OF AN OBJECT LITERAL, which is the shape every case
+// above is missing and the one that crashed node.
+//
+// `os.constants` is `{ UV_UDP_REUSEADDR: number; signals, errno, priority,
+// dlopen: Record<string, number> }`, each written `{}`. An object literal's
+// property value had no contextual type, so the inner `{}` fell back to *its
+// own* type -- an anonymous object with no members -- and became an
+// `NtsObj_Type9` stored into an `NtsMap *` field. `readConstants()` runs at
+// module init, so `nts_map_set` on one segfaulted node during `require`, with
+// nothing on stdout, and every `os` test failed as a crashed child.
+//
+// It was invisible while every such field was an object: an empty layout stored
+// into a slot expecting a layout is the same pointer. A table is the first
+// field type where the two differ.
+
+interface Holder {
+  count: number;
+  signals: Record<string, number>;
+}
+
+export function tableInsideAnObjectLiteral(n: number): number {
+  const holder: Holder = { count: n, signals: {} };
+  holder.signals["x"] = n;
+  return (holder.signals["x"] ?? -1) + holder.count;
+}
+
+export function tableFieldWithEntries(n: number): number {
+  const holder: Holder = { count: n, signals: { a: n, b: n + 1 } };
+  return (holder.signals["a"] ?? 0) + (holder.signals["b"] ?? 0);
+}
+
+// Through a function's return, which is `readConstants()`'s shape exactly.
+function makeHolder(n: number): Holder {
+  const holder: Holder = { count: n, signals: {} };
+  const table = holder.signals;
+  table["built"] = n;
+  return holder;
+}
+
+export function tableFieldThroughAReturn(n: number): number {
+  return makeHolder(n).signals["built"] ?? -1;
+}
+
+// Two table fields on one object, so a shared allocation would show up as one
+// answering for the other.
+interface Pair {
+  left: Record<string, number>;
+  right: Record<string, number>;
+}
+
+export function twoTableFields(n: number): number {
+  const pair: Pair = { left: {}, right: {} };
+  pair.left["k"] = n;
+  pair.right["k"] = n + 100;
+  return (pair.left["k"] ?? 0) * 1000 + (pair.right["k"] ?? 0);
+}

@@ -23436,6 +23436,30 @@ impl<'a> FuncBuilder<'a> {
     /// Only for the literals that have no type of their own. The checker types
     /// `null` as `null`, which is true and useless: what a backend needs is the
     /// reference type the absence is standing in for, and that is a property of
+    /// The declared type of the field an object literal's property fills.
+    ///
+    /// Split out of [`Self::contextual_type`] only for its length; the reason
+    /// is in the comment there.
+    fn declared_field_type(&self, parent: NodeId, depth: u32) -> Option<HirType> {
+                let name = self
+                    .children(parent)
+                    .first()
+                    .and_then(|at| self.literal_name(*at))?;
+                let owner = self.syntactic_parent(parent)?;
+                let outer = self
+                    .contextual_type(owner, depth + 1)
+                    .or_else(|| self.type_of(owner))?;
+                let HirType::Managed(ManagedType::Object(type_id)) = outer else {
+                    return None;
+                };
+                let record = self.snapshot.types.get(type_id.0 as usize)?;
+                let TypeKind::Object { properties } = &record.kind else {
+                    return None;
+                };
+                let declared = properties.iter().find(|property| property.name == name)?;
+                self.represent(declared.ty)
+    }
+
     /// the position rather than of the token.
     fn contextual_type(&self, id: NodeId, depth: u32) -> Option<HirType> {
         if depth > 8 {
@@ -23543,6 +23567,24 @@ impl<'a> FuncBuilder<'a> {
                 self.represent(parameter.ty)
             }
             // The receiver of `x.m()`, for the same reason.
+            // `{ signals: {} }` -- an object literal's property value, whose
+            // type is the *field's* and is written down nowhere else.
+            //
+            // Without this arm the inner literal fell back to its own type,
+            // which for `{}` is an anonymous object with no members. That was
+            // harmless while every such field was an object: an empty layout
+            // stored into a field expecting a layout is the same pointer. It
+            // stopped being harmless the moment a field could be a **table** --
+            // `os.constants` has four `Record<string, number>` fields, each
+            // written `{}`, and each became an `NtsObj_Type9` stored into an
+            // `NtsMap *` slot. `nts_map_set` on one segfaulted node during
+            // `require`, with nothing on stdout, for every `os` test at once.
+            //
+            // The layout is not consulted -- `contextual_type` takes `&self`
+            // and layouts are built as functions are lowered -- so the field's
+            // declared type comes from the schema, which is where it was
+            // written.
+            Some(syntax::PROPERTY_ASSIGNMENT) => self.declared_field_type(parent, depth),
             Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
                 if self.children(parent).first() != Some(&id) {
                     return None;
