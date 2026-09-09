@@ -22,7 +22,7 @@ not measured clean and should not be quoted.**
 
 | row | jvm/Java | note |
 | --- | --- | --- |
-| `node-utf8` | **6.58x** | blocked: 62% is `toInt32`; stable to 1%, see below |
+| `node-utf8` | **6.3-6.6x** | blocked: 62% is `toInt32`; 1% within a sitting, 4% between |
 | `symbol-keyed-map` | 2.92x *jit* | blocked: 52% is `toInt32` |
 | `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
 | `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
@@ -862,6 +862,39 @@ compiled code is at parity where it is hottest, and the two instruments that
 disagree are a stopwatch that has been consistent all evening and a counter that
 has not. Not a row to spend a third evening on without a better instrument.
 
+### A row can be stable to 1% within a sitting and move 4% between them
+
+`node-utf8` has now been measured four times over one evening:
+
+    6.69x   mine, flagged busy
+    6.60x   mine, five runs, spread 1.2%
+    6.43x   the published table, one clean sitting
+    6.32x   mine, five runs, spread 1.2%
+
+I read the first two disagreements as instrument problems and spent a
+compiler build on the third, comparing emissions at `bcad0d7d` and HEAD to see
+whether a landed fix explained it. **The emitted program has not changed at
+all**: 10 `toInt32`, 2 `charCodeAt`, 2053 instructions against 2052, across the
+whole evening.
+
+So four different numbers describe one unchanged program, and the two five-run
+sittings were each internally tight -- 1.2% -- while sitting four percent apart.
+Ours moved 48.68 to 47.64 us and the *reference* moved 7.43 to 7.53 in the same
+comparison, which is why the ratio moved more than either half.
+
+**Within-sitting tightness is not evidence of stability.** Five runs agreeing to
+1% establishes that the machine was consistent for those five minutes and says
+nothing about the next hour, and the noise rule already in this file -- two runs
+for a row between 0.95x and 1.05x -- is too weak in the wrong dimension. The
+band that matters is *between* sittings, and on a 6.3x row it is about 4%.
+
+**What that means for reading this file.** Any two numbers here taken hours
+apart differ by a few percent for reasons that have nothing to do with the
+compiler, so a row that "moved" by less than about 5% between sittings has not
+been shown to have moved at all. The deterministic checks -- coercion counts,
+instruction counts, `bytes/op`, call counts -- are the ones that carry across
+sittings, and every conclusion in this file that rests on one of those is worth
+more than one that rests on a ratio.
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
