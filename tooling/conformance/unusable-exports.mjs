@@ -26,13 +26,30 @@
 //
 // # What it decides
 //
-// A name is **unusable** when no argument shape succeeds *and* at least one
-// raised a **boundary** error -- the runtime saying it cannot represent the
-// value, in either direction.
+// A name is reported when **any** argument shape hits a **boundary** error --
+// the runtime saying it cannot represent the value, in either direction --
+// split by whether anything worked:
 //
-// The first version of this required *every* shape to be a boundary error, and
-// it missed `isUtf8`, which is the case it was written for. What `isUtf8`
-// actually does:
+//     UNUSABLE                        no shape succeeded
+//     UNREACHABLE FOR SOME ARGUMENTS  some did
+//
+// It took two wrong criteria to get here, in opposite directions.
+//
+// **Too strict.** The first version required *every* shape to be a boundary
+// error, and missed `isUtf8`, the case it was written for.
+//
+// **Too lenient.** The second required *no* shape to succeed, and reported
+// `util` clean while `util.types.isDate(new Date())` threw. `isDate("")`
+// returns `false` -- a success -- so the boundary failures behind it were never
+// counted, and the loop stopped at the first success anyway. A predicate that
+// answers for scalars and refuses references is the most common form of this
+// defect and both criteria walked straight past it.
+//
+// Hence "any shape", and hence the split: a function that works for scalars and
+// refuses references is a different finding from one that refuses everything,
+// and one label for both would be wrong about whichever it was not describing.
+//
+// What `isUtf8` actually does:
 //
 //     isUtf8(undefined) (""), (0), (true), (null)   The "input" argument must be
 //                                                   an instance of ArrayBuffer…
