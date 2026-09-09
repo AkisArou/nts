@@ -440,7 +440,6 @@ fn collect_interfaces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarch
             hierarchy.implements.insert(ty, faces);
         }
     }
-
 }
 
 /// Read every class declaration's name, base and own methods.
@@ -2488,8 +2487,7 @@ fn initializer_function(
     let children = probe.children(declaration);
     let name = children.first().copied();
     let initializer = children.iter().rev().find(|child| {
-        Some(**child) != name
-            && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
+        Some(**child) != name && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
     })?;
     // A call is not an alias for what it calls.
     //
@@ -2611,9 +2609,7 @@ fn module_namespace_of(
             // `path.win32.sep` is `"\\"` and `path.posix.sep` is `"/"`: the one
             // member where the two namespaces disagree in a way callers depend
             // on, and the reason this is worth carrying at all.
-            let declaring = symbol_record
-                .aliased
-                .unwrap_or(*symbol);
+            let declaring = symbol_record.aliased.unwrap_or(*symbol);
             if let Some(global) = scope
                 .variables
                 .get(&declaring.0)
@@ -2624,11 +2620,7 @@ fn module_namespace_of(
             continue;
         }
         let (declaration, name) = resolved.unwrap_or((declaration, member.name.clone()));
-        let emitted = naming
-            .qualified
-            .get(&declaration)
-            .cloned()
-            .unwrap_or(name);
+        let emitted = naming.qualified.get(&declaration).cloned().unwrap_or(name);
         properties.push((published.clone(), emitted));
     }
     (!properties.is_empty()).then_some(properties)
@@ -2653,8 +2645,7 @@ fn namespace_of(
     let children = probe.children(declaration);
     let name = children.first().copied();
     let literal = children.iter().rev().find(|child| {
-        Some(**child) != name
-            && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
+        Some(**child) != name && !syntax::is_type_node(probe.kind_of(**child).unwrap_or_default())
     })?;
     if probe.kind_of(*literal) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
         return None;
@@ -2823,7 +2814,10 @@ fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     let probe = FuncBuilder::new(snapshot);
     let carried = |member: TypeId| -> bool {
         matches!(
-            snapshot.types.get(member.0 as usize).map(|record| &record.kind),
+            snapshot
+                .types
+                .get(member.0 as usize)
+                .map(|record| &record.kind),
             Some(
                 TypeKind::Undefined
                     | TypeKind::Null
@@ -3341,6 +3335,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
 
     canonicalize_objects(&mut lowered.program);
+    prune_class_tests(&mut lowered.program);
     // The conservation law, enforced rather than merely measured: every
     // function the checker knows about is either lowered or refused, and never
     // neither. `super::unaccounted` explains why that is worth asking; this is
@@ -3467,6 +3462,49 @@ fn nominal_name(name: &str) -> bool {
         || super::builtin::is_constructor_name(name)
 }
 
+/// Every `InstanceOf` names classes this program has a layout for, and no
+/// `InstanceOf` names none.
+///
+/// The test is a descriptor comparison, so a class with no layout has no
+/// descriptor to compare against and contributes nothing but its name. Whole
+/// sets of them arrive that way: `"byteLength" in value` over an `object` asks
+/// which types declare the name, and `lib.d.ts` declares it on `ArrayBuffer`,
+/// on a `DataView` and on nine typed arrays -- object types in the snapshot,
+/// natively represented here, allocated by nothing and laid out as nothing.
+///
+/// **Here rather than in a backend, because the two backends disagreed about
+/// it and only one of them was visibly wrong.** The C emitter resolved each id
+/// to a layout and dropped the ones that had none, silently, so an `InstanceOf`
+/// naming four absent classes emitted `= false` and read as correct. The JVM
+/// emitter said `an instanceof against no class at all` and declined the
+/// function. Neither behaviour is the bug: the operation is, and it should not
+/// have been built. Dropping it in one pass over the finished program is the
+/// only place the question can be answered, because a layout is discovered by
+/// whichever function first needs it and the set is not complete until every
+/// function has been lowered.
+///
+/// The operand is left where it is. It is an already-computed value in the same
+/// block, and the ops that produced it keep whatever effects they had; only the
+/// test itself goes.
+fn prune_class_tests(program: &mut Program) {
+    let laid_out: std::collections::HashSet<TypeId> = program
+        .layouts
+        .iter()
+        .flat_map(|layout| layout.types.iter().copied())
+        .collect();
+    for func in &mut program.funcs {
+        for op in &mut func.values {
+            let OpKind::InstanceOf { classes, .. } = &mut op.kind else {
+                continue;
+            };
+            classes.retain(|class| laid_out.contains(class));
+            if classes.is_empty() {
+                op.kind = OpKind::ConstBool(false);
+            }
+        }
+    }
+}
+
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
@@ -3539,7 +3577,9 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
                 existing.name = layout.name;
             }
         } else {
-            program.layouts.push(unshared_layout_name(&program.layouts, layout));
+            program
+                .layouts
+                .push(unshared_layout_name(&program.layouts, layout));
         }
     }
 }
@@ -3908,10 +3948,13 @@ fn relate_closures_to_signatures(
     // caught as `DuplicateFunction` on the first run.
     let mut declared_for: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
 
-
     for (index, info) in closures.iter().enumerate() {
         let (class, method) = closure_names(index);
-        let Some(at) = program.layouts.iter().position(|layout| layout.name == class) else {
+        let Some(at) = program
+            .layouts
+            .iter()
+            .position(|layout| layout.name == class)
+        else {
             continue;
         };
         let Some(&ty) = snapshot.node_types.get(&info.node) else {
@@ -3990,7 +4033,10 @@ fn relate_closures_to_signatures(
         };
         let declared = format!("{}#call", program.layouts[signature].name);
         if declared_for.insert(signature)
-            && program.layouts[signature].methods.get(slot).is_none_or(Option::is_none)
+            && program.layouts[signature]
+                .methods
+                .get(slot)
+                .is_none_or(Option::is_none)
         {
             let mut shell = call.clone();
             shell.name.clone_from(&declared);
@@ -4349,7 +4395,6 @@ fn spell(kind: u16, fallback: &str) -> String {
         },
     )
 }
-
 
 /// Whether a type declares a property, and whether the answer is usable.
 enum Declares {
@@ -4772,8 +4817,8 @@ fn provided_representation(
     ) {
         return None;
     }
-        // declared its own `Promise` would be mis-read, and the principled
-        // version is `docs/any-unknown.md`'s profiles, which tie a trusted
+    // declared its own `Promise` would be mis-read, and the principled
+    // version is `docs/any-unknown.md`'s profiles, which tie a trusted
     // A `Date` carries nothing: the specification's "time value" is the whole
     // of its contents, so there are no arguments to read and no payload
     // representation to decide. First, because it is the only one of these
@@ -4825,9 +4870,9 @@ fn provided_representation(
         && let Some(class) = name.strip_suffix("Constructor")
         && let Some(index) = super::builtin::error_index(class)
     {
-        return Some(HirType::Managed(ManagedType::Object(super::constructor_token(
-            index,
-        ))));
+        return Some(HirType::Managed(ManagedType::Object(
+            super::constructor_token(index),
+        )));
     }
 
     // The payload comes from the checker's type arguments rather than from the
@@ -4983,9 +5028,7 @@ fn representation_of(
         // belongs to the closure's own class, which has this one as its base.
         // `Promise<T>`, recognized by name the way the rest of the provided
         // surface is. The same caveat applies as for `Math`: a program that
-        _ if let Some(provided) = provided_representation(snapshot, ty, path, subst) => {
-            provided
-        }
+        _ if let Some(provided) = provided_representation(snapshot, ty, path, subst) => provided,
         // A class that extends a typed array and adds no storage of its own
         // *is* that typed array. `Buffer extends Uint8Array` is the whole of
         // this in the node profile -- it declares methods and not one field, so
@@ -5159,7 +5202,6 @@ fn representation_of(
         // for why the first cannot be -- so both arrive structured and would
         // otherwise have no representation at all.
         TypeKind::Structured { flags } => {
-
             // TypeScript's `object`: not a primitive, and nothing further.
             //
             // An erased value, because that is what "some object, which one is
@@ -5927,7 +5969,6 @@ impl<'a> FuncBuilder<'a> {
             block.terminator = Some(terminator);
         }
     }
-
 
     /// The import a name came in through, when it came in through one.
     ///
@@ -7499,9 +7540,13 @@ impl<'a> FuncBuilder<'a> {
             return None;
         };
         let prefix = format!("__@{described}@");
-        let mut found = properties.iter().map(|property| &property.name).filter(|name| {
-            name.starts_with(&prefix) && name[prefix.len()..].bytes().all(|b| b.is_ascii_digit())
-        });
+        let mut found = properties
+            .iter()
+            .map(|property| &property.name)
+            .filter(|name| {
+                name.starts_with(&prefix)
+                    && name[prefix.len()..].bytes().all(|b| b.is_ascii_digit())
+            });
         let first = found.next()?.clone();
         found.next().is_none().then_some(first)
     }
@@ -7746,8 +7791,7 @@ impl<'a> FuncBuilder<'a> {
             // because *every* arm satisfies the target, so no path can arrive
             // with anything else. `descends_from` is asked of each arm rather
             // than of the union, because a union is not a class.
-            if let (HirType::Erased, HirType::Managed(ManagedType::Object(target))) =
-                (&have, want)
+            if let (HirType::Erased, HirType::Managed(ManagedType::Object(target))) = (&have, want)
                 && self.every_arm_descends_from(id, *target)
             {
                 let origin = self.origin(id);
@@ -8303,8 +8347,11 @@ impl<'a> FuncBuilder<'a> {
         let Some(returned) = self.snapshot.node_types.get(&id).copied() else {
             return Err(self.unsupported(id, "a generator whose type the checker did not give"));
         };
-        let Some(TypeKind::Function(signature)) =
-            self.snapshot.types.get(returned.0 as usize).map(|r| &r.kind)
+        let Some(TypeKind::Function(signature)) = self
+            .snapshot
+            .types
+            .get(returned.0 as usize)
+            .map(|r| &r.kind)
         else {
             return Err(self.unsupported(id, "a generator with no call signature"));
         };
@@ -8394,7 +8441,7 @@ impl<'a> FuncBuilder<'a> {
         self.in_closure = true;
         let mut params = vec![Param {
             name: "this".to_owned(),
-                shape: ParamShape::Ordinary,
+            shape: ParamShape::Ordinary,
             ty: receiver_ty,
             origin: origin.clone(),
             known: Facts::TOP,
@@ -8863,7 +8910,6 @@ impl<'a> FuncBuilder<'a> {
             .collect()
     }
 
-
     /// The arguments a call passes, with the defaults it leaves to the callee.
     ///
     /// JavaScript evaluates a default at the call, in the callee's scope, after
@@ -9225,10 +9271,7 @@ impl<'a> FuncBuilder<'a> {
     /// erasable, so the oracle refuses the program rather than disagreeing with
     /// it. The differential passes `--experimental-transform-types` for exactly
     /// this and for `enum`, the other non-erasable construct.
-    fn store_parameter_properties(
-        &mut self,
-        declared: &[(NodeId, u32)],
-    ) -> Result<(), Diagnostic> {
+    fn store_parameter_properties(&mut self, declared: &[(NodeId, u32)]) -> Result<(), Diagnostic> {
         for (child, index) in declared.iter().copied() {
             let name = self
                 .name_node(child)
@@ -9242,7 +9285,9 @@ impl<'a> FuncBuilder<'a> {
             let HirType::Managed(ManagedType::Object(owner)) =
                 self.values[receiver.0 as usize].ty.clone()
             else {
-                return Err(self.unsupported(child, "a parameter property on a receiver with no layout"));
+                return Err(
+                    self.unsupported(child, "a parameter property on a receiver with no layout")
+                );
             };
             let layout = self.layout_of(child, owner)?;
             let field = layout
@@ -11029,10 +11074,15 @@ impl<'a> FuncBuilder<'a> {
                 )
             )
         };
-        match self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
-            Some(TypeKind::Union(members)) => {
-                members.iter().all(|member| primitive(self.snapshot, *member))
-            }
+        match self
+            .snapshot
+            .types
+            .get(ty.0 as usize)
+            .map(|record| &record.kind)
+        {
+            Some(TypeKind::Union(members)) => members
+                .iter()
+                .all(|member| primitive(self.snapshot, *member)),
             _ => primitive(self.snapshot, ty),
         }
     }
@@ -11121,12 +11171,7 @@ impl<'a> FuncBuilder<'a> {
                         origin.clone(),
                     ),
                 };
-                return Ok(self.call_runtime(
-                    "nts_is_array",
-                    vec![erased],
-                    HirType::Bool,
-                    &origin,
-                ));
+                return Ok(self.call_runtime("nts_is_array", vec![erased], HirType::Bool, &origin));
             }
             // Everything else is not an Array, `Uint8Array` included -- which
             // the runtime test above now agrees with rather than contradicts.
@@ -11591,43 +11636,39 @@ impl<'a> FuncBuilder<'a> {
         origin: &Origin,
     ) -> ValueId {
         match walk {
-        // `done` says when to *stop*, so the loop runs while it is false.
-        Walk::Protocol { .. } | Walk::Generator { .. } => self.push(
-            OpKind::Unary {
-                op: UnOp::Not,
-                operand: at,
-            },
-            HirType::Bool,
-            origin.clone(),
-        ),
-        Walk::Counted(_) | Walk::Text => {
-            let length = self.push(
-                OpKind::Length(sequence),
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            self.push(
-                OpKind::Binary {
-                    op: BinOp::Lt,
-                    lhs: at,
-                    rhs: length,
+            // `done` says when to *stop*, so the loop runs while it is false.
+            Walk::Protocol { .. } | Walk::Generator { .. } => self.push(
+                OpKind::Unary {
+                    op: UnOp::Not,
+                    operand: at,
                 },
                 HirType::Bool,
                 origin.clone(),
-            )
-        }
-        Walk::Table { .. } | Walk::Entries { .. } => {
-            let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-            self.push(
-                OpKind::Binary {
-                    op: BinOp::Ge,
-                    lhs: at,
-                    rhs: zero,
-                },
-                HirType::Bool,
-                origin.clone(),
-            )
-        }
+            ),
+            Walk::Counted(_) | Walk::Text => {
+                let length = self.push(OpKind::Length(sequence), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Lt,
+                        lhs: at,
+                        rhs: length,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            }
+            Walk::Table { .. } | Walk::Entries { .. } => {
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Ge,
+                        lhs: at,
+                        rhs: zero,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            }
         }
     }
 
@@ -11648,9 +11689,12 @@ impl<'a> FuncBuilder<'a> {
         let index = self.synthetic_symbol();
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let start = match walk {
-            Walk::Table { .. } | Walk::Entries { .. } => {
-                self.call_runtime("nts_map_next", vec![sequence, zero], HirType::NUMBER, origin)
-            }
+            Walk::Table { .. } | Walk::Entries { .. } => self.call_runtime(
+                "nts_map_next",
+                vec![sequence, zero],
+                HirType::NUMBER,
+                origin,
+            ),
             _ => zero,
         };
         self.bindings.insert(index, start);
@@ -11768,7 +11812,11 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Function(signature) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
             return None;
         };
-        let declared = self.snapshot.signatures.get(signature.0 as usize)?.return_type;
+        let declared = self
+            .snapshot
+            .signatures
+            .get(signature.0 as usize)?
+            .return_type;
         let argument = *self
             .snapshot
             .type_arguments
@@ -11911,10 +11959,7 @@ impl<'a> FuncBuilder<'a> {
                     self.values[value.0 as usize].ty,
                     HirType::Managed(ManagedType::String)
                 ) {
-                    return Err(self.unsupported(
-                        id,
-                        "a `Symbol` description that is not a string",
-                    ));
+                    return Err(self.unsupported(id, "a `Symbol` description that is not a string"));
                 }
                 value
             }
@@ -12076,10 +12121,9 @@ impl<'a> FuncBuilder<'a> {
             // A view walks by count exactly as an array does -- `length` and
             // an index, which is what `Walk::Counted` is. The loop it emits
             // reads through `ArrayGet`, and that already takes both.
-            (
-                HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)),
-                None,
-            ) => Ok(Walk::Counted((**element).clone())),
+            (HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)), None) => {
+                Ok(Walk::Counted((**element).clone()))
+            }
             (HirType::Managed(ManagedType::String), None) => Ok(Walk::Text),
             // A `Set`'s elements are its keys, so iterating one, its `keys()`
             // and its `values()` are the same walk -- which is what JavaScript
@@ -12115,7 +12159,8 @@ impl<'a> FuncBuilder<'a> {
             // ids are their own part of the synthetic space, so nothing else
             // can be mistaken for one.
             (HirType::Managed(ManagedType::Object(ty)), None)
-                if ty.0 >= super::SYNTHETIC_GENERATOR_FRAMES && ty.0 < super::SYNTHETIC_CLOSURES =>
+                if ty.0 >= super::SYNTHETIC_GENERATOR_FRAMES
+                    && ty.0 < super::SYNTHETIC_CLOSURES =>
             {
                 self.generator_walk(sequence, value)
             }
@@ -12811,7 +12856,7 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
-    /// A property a **natively represented** type answers `in` for.
+    /// Which **natively represented** types answer `in` for a name.
     ///
     /// The boundary of the whole-program answer below, and the reason it is a
     /// list rather than a rule: `object` includes an array, a `Map`, a `Set`, a
@@ -12819,33 +12864,154 @@ impl<'a> FuncBuilder<'a> {
     /// -- so a set built from the layouts alone answers *false* for them, and
     /// for these names JavaScript answers true.
     ///
-    /// `"then" in promise` is the one that bites: four of the sites ask it, and
-    /// it is exactly how a program tests for a thenable.
+    /// This was a `bool` and a refusal for two months, which was the honest
+    /// answer while the set was all it knew. What changed is that none of these
+    /// needs a layout: each is one descriptor comparison the runtime already
+    /// performs for `instanceof`, and a function is its *tag*. So the names
+    /// below stopped being the boundary of the answer and became part of it --
+    /// 31 of the 50 refusals across `runtime/node`, of which 27 are `then`.
     ///
     /// Named individually, and conservatively. A name missing from this list is
-    /// a wrong answer; a name here that need not be costs one refusal.
-    fn a_native_type_declares(key: &str) -> bool {
-        matches!(
-            key,
-            // An array, a string and a typed array.
-            "length"
-                // A `Map` and a `Set`.
-                | "size"
-                // A `Promise`, and how every thenable test is written.
-                | "then"
-                | "catch"
-                | "finally"
-                // A typed array over a buffer.
-                | "buffer"
-                | "byteLength"
-                | "byteOffset"
-                // A function, which `typeof v === "function"` admits beside
-                // `object` at several of these sites.
-                | "name"
-                | "call"
-                | "apply"
-                | "bind"
-        )
+    /// a wrong answer -- the whole-program set answers `false` for a native and
+    /// nothing says so -- and a name here that need not be costs one comparison.
+    ///
+    /// **What is deliberately absent, and is a stated limit rather than an
+    /// oversight**: the names every object answers for through its prototype.
+    /// `"toString" in x`, `"constructor" in x` and `"hasOwnProperty" in x` are
+    /// `true` in JavaScript for every object including a plain class instance,
+    /// and this compiler folds each to `false`. Measured, not assumed --
+    /// `v2 = false` in the emitted C. Left as it is because a compiled program
+    /// has no prototype chain to consult and the corpus asks it **zero** times,
+    /// where an entry here would answer `true` unconditionally and be a wrong
+    /// answer at the one site that ever writes `"toString" in x` meaning it.
+    fn natives_declaring(key: &str) -> &'static [Native] {
+        match key {
+            // An array, a tuple, a typed array and a function. Not a `DataView`,
+            // which has `byteLength` and no `length`, and not a string -- a
+            // string is not `object` in TypeScript, so one cannot arrive here.
+            "length" => &[Native::Array, Native::TypedArray, Native::Function],
+            // A `Map` and a `Set`, which are one struct here and one descriptor,
+            // told apart by whether the entries hold values.
+            "size" => &[Native::Map, Native::Set],
+            // A `Promise`, and how every thenable test in the corpus is written.
+            "then" | "catch" | "finally" => &[Native::Promise],
+            // A typed array *and* a `DataView`: both sit on a buffer at an
+            // offset, and both answer for all three names.
+            "buffer" | "byteOffset" => &[Native::View],
+            // The one of the three an `ArrayBuffer` answers for too -- it is the
+            // block, so it has a length in bytes and no buffer under it.
+            "byteLength" => &[Native::View, Native::ArrayBuffer],
+            // A function, which `typeof v === "function"` admits beside
+            // `object` at several of these sites.
+            "name" | "call" | "apply" | "bind" => &[Native::Function],
+            _ => &[],
+        }
+    }
+
+    /// One natively represented test, as the runtime already spells it.
+    ///
+    /// Every one of these is a predicate `instanceof` emits, on the same erased
+    /// value and by the same descriptor comparison -- so this adds no runtime
+    /// surface, and the LLVM and JVM lanes already carry the signatures.
+    fn native_test(&mut self, native: Native, value: ValueId, origin: &Origin) -> ValueId {
+        let call = |lower: &mut Self, name: &str| {
+            lower.call_runtime(name, vec![value], HirType::Bool, origin)
+        };
+        match native {
+            Native::Array => call(self, "nts_is_array"),
+            Native::View => call(self, "nts_value_is_view"),
+            // A typed array is a view that is not a `DataView`. Two tests
+            // rather than nine `nts_is_view_kind` calls, and a subtraction
+            // rather than an enumeration: a tenth typed array would join this
+            // one for free and would have to be remembered in the other.
+            Native::TypedArray => {
+                let view = call(self, "nts_value_is_view");
+                let data_view = call(self, "nts_is_data_view");
+                let not = self.push(
+                    OpKind::Unary {
+                        op: UnOp::Not,
+                        operand: data_view,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                self.bool_join(view, not, false, origin)
+            }
+            Native::ArrayBuffer => call(self, "nts_is_buffer"),
+            Native::Map => call(self, "nts_is_map"),
+            Native::Set => call(self, "nts_is_set"),
+            Native::Promise => call(self, "nts_is_promise"),
+            // The tag, and no call at all: a closure's erased form carries
+            // `tags::FUNCTION`, which is what `typeof f === "function"` already
+            // compiles to two hundred lines above.
+            Native::Function => {
+                let unsigned = HirType::Int {
+                    bits: 32,
+                    signed: false,
+                };
+                let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+                let function = self.push(
+                    OpKind::ConstInt(i128::from(super::tags::FUNCTION)),
+                    unsigned,
+                    origin.clone(),
+                );
+                self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: tag,
+                        rhs: function,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                )
+            }
+        }
+    }
+
+    /// `first || second`, or `first && second`, over two booleans.
+    ///
+    /// A branch and **not** [`BinOp::BitOr`]. Every backend routes the bitwise
+    /// operators through `ToInt32` -- C casts both operands, the JVM narrows
+    /// them with `d2i` -- because the language only ever produces one on
+    /// numbers: TypeScript rejects `a | b` on two `boolean`s, so no program has
+    /// ever put a bool on either side of one. Making this the first place would
+    /// rest on three separate backends happening to do the right thing with an
+    /// operand shape none of them was written for, and would fail silently in
+    /// whichever one did not.
+    ///
+    /// Both operands are built before the branch rather than the second one
+    /// inside it, which gives up the short circuit and buys the thing that
+    /// matters here: every test this joins is `NTS_READS_ONLY`, allocates
+    /// nothing and cannot throw, so *where* it runs is not observable -- and a
+    /// value defined in the block that dominates both arms reaches them with no
+    /// block parameter to carry it.
+    fn bool_join(&mut self, first: ValueId, second: ValueId, or: bool, origin: &Origin) -> ValueId {
+        let taken = self.new_block();
+        let other = self.new_block();
+        let merge = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: first,
+            then_target: if or { taken } else { other },
+            then_args: Vec::new(),
+            else_target: if or { other } else { taken },
+            else_args: Vec::new(),
+        });
+        let answer = self.push_block_param(merge, HirType::Bool, origin.clone());
+        // The arm the first operand settles on its own: `true` for `||` and
+        // `false` for `&&`.
+        self.switch_to(taken);
+        let settled = self.push(OpKind::ConstBool(or), HirType::Bool, origin.clone());
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![settled],
+        });
+        self.switch_to(other);
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![second],
+        });
+        self.switch_to(merge);
+        answer
     }
 
     /// `"k" in value` where the value is `object` and nothing narrower.
@@ -12866,16 +13032,6 @@ impl<'a> FuncBuilder<'a> {
         rhs: NodeId,
         key: &str,
     ) -> Result<ValueId, Diagnostic> {
-        if Self::a_native_type_declares(key) {
-            return Err(self.unsupported(
-                rhs,
-                &format!(
-                    "an `in` naming `{key}` on an `object`, which a natively represented type \
-                     answers for -- an array, a `Map`, a `Promise` and a `Date` are all `object` \
-                     and none of them has a layout to find the name on"
-                ),
-            ));
-        }
         // Every object type the program has, not every *class*: an object
         // literal typed by an interface has a layout and no entry in the
         // hierarchy, and asking the hierarchy answered `false` for
@@ -12903,7 +13059,7 @@ impl<'a> FuncBuilder<'a> {
                     // true for a property that was never written and excluding
                     // it answers false for one that was.
                     //
-                    // 165 sites in `runtime/node`, and the type is named
+                    // 208 sites in `runtime/node`, and the type is named
                     // because that is what makes it actionable: the fix is at
                     // the declaration, and "some class" points at nothing.
                     let who = named(self.snapshot, class)
@@ -12922,21 +13078,41 @@ impl<'a> FuncBuilder<'a> {
         }
         declaring.sort_unstable_by_key(|ty| ty.0);
         declaring.dedup();
-
         let value = self.lower_expression(rhs)?;
         let origin = self.origin(id);
         let value = match self.values[value.0 as usize].ty {
             HirType::Erased => value,
             _ => self.push(OpKind::Erase { value }, HirType::Erased, origin.clone()),
         };
-        Ok(self.push(
-            OpKind::InstanceOf {
-                value,
-                classes: declaring,
-            },
-            HirType::Bool,
-            origin,
-        ))
+        // The classes first, and the natives folded onto it.
+        //
+        // A constant when no class declares the name, rather than an
+        // `InstanceOf` against an empty list. The C backend emits `= false` for
+        // one and the identity for `||` would have been correct there -- but an
+        // `InstanceOf` naming nothing is an operation that asks no question,
+        // and the JVM backend says so: `NTS4001 an instanceof against no class
+        // at all`, which declined fourteen functions of the fixture written for
+        // this change. The op was already reachable that way for any name the
+        // program does not declare; folding the natives onto it would have made
+        // it the *common* case, so what looked like an economy in one backend
+        // was a decline in another.
+        let mut answer = if declaring.is_empty() {
+            self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone())
+        } else {
+            self.push(
+                OpKind::InstanceOf {
+                    value,
+                    classes: declaring,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        };
+        for native in Self::natives_declaring(key) {
+            let test = self.native_test(*native, value, &origin);
+            answer = self.bool_join(test, answer, true, &origin);
+        }
+        Ok(answer)
     }
 
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
@@ -12985,7 +13161,11 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Managed(ManagedType::String),
                 origin.clone(),
             );
-            let erased = self.push(OpKind::Erase { value: text }, HirType::Erased, origin.clone());
+            let erased = self.push(
+                OpKind::Erase { value: text },
+                HirType::Erased,
+                origin.clone(),
+            );
             return Ok(self.runtime_call(
                 "nts_map_has",
                 vec![receiver, erased],
@@ -13118,7 +13298,6 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-
     /// `x instanceof C`.
     ///
     /// # The answer is a comparison, not a walk
@@ -13194,7 +13373,11 @@ impl<'a> FuncBuilder<'a> {
         {
             let origin = self.origin(id);
             let _ = self.lower_expression(lhs)?;
-            return Ok(Some(self.push(OpKind::ConstBool(false), HirType::Bool, origin)));
+            return Ok(Some(self.push(
+                OpKind::ConstBool(false),
+                HirType::Bool,
+                origin,
+            )));
         }
         let kind = super::builtin::typed_array_element(&name)
             .as_ref()
@@ -13240,7 +13423,12 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             ));
         }
-        Ok(Some(self.call_runtime(helper, args, HirType::Bool, &origin)))
+        Ok(Some(self.call_runtime(
+            helper,
+            args,
+            HirType::Bool,
+            &origin,
+        )))
     }
 
     fn lower_instanceof(
@@ -13380,10 +13568,7 @@ impl<'a> FuncBuilder<'a> {
             .iter()
             .enumerate()
             .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
-            .filter(|ty| {
-                self.name_of_type(*ty)
-                    .is_some_and(super::builtin::is_error)
-            })
+            .filter(|ty| self.name_of_type(*ty).is_some_and(super::builtin::is_error))
             .collect()
     }
 
@@ -13945,9 +14130,7 @@ impl<'a> FuncBuilder<'a> {
             // Only the first slot, and only while the *next* child is also a
             // modifier: a `readonly` in any other position is not one of these.
             if bit == 0
-                && slot.is_some_and(|first| {
-                    self.kind_of(first).is_some_and(syntax::is_modifier)
-                })
+                && slot.is_some_and(|first| self.kind_of(first).is_some_and(syntax::is_modifier))
             {
                 while children
                     .peek()
@@ -14309,9 +14492,8 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, "an assignment that reads through an accessor"));
             }
             Place::Element { array, index } => {
-                let HirType::Managed(
-                    ManagedType::Array(element) | ManagedType::View(element),
-                ) = self.values[array.0 as usize].ty.clone()
+                let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
+                    self.values[array.0 as usize].ty.clone()
                 else {
                     return Err(self.not_an_array(id));
                 };
@@ -15158,10 +15340,7 @@ impl<'a> FuncBuilder<'a> {
                 let what = self
                     .kind_of(id)
                     .and_then(nts_semantic_schema::syntax::name_of)
-                    .map_or_else(
-                        || "this statement".to_owned(),
-                        |name| format!("a `{name}`"),
-                    );
+                    .map_or_else(|| "this statement".to_owned(), |name| format!("a `{name}`"));
                 Err(self.unsupported(id, &what))
             }
         }
@@ -15565,9 +15744,7 @@ impl<'a> FuncBuilder<'a> {
         let computed = (self.kind_of(property) == Some(syntax::PROPERTY_ASSIGNMENT))
             .then(|| self.children(property))
             .filter(|children| children.len() == 2)
-            .filter(|children| {
-                self.kind_of(children[0]) == Some(syntax::COMPUTED_PROPERTY_NAME)
-            });
+            .filter(|children| self.kind_of(children[0]) == Some(syntax::COMPUTED_PROPERTY_NAME));
         if let Some(children) = computed {
             let Some(expression) = self.children(children[0]).first().copied() else {
                 return Err(self.unsupported(children[0], "a computed name with no expression"));
@@ -16135,11 +16312,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         let text = HirType::Managed(ManagedType::String);
-        let name = self.push(
-            OpKind::ConstString(class.to_owned()),
-            text,
-            origin.clone(),
-        );
+        let name = self.push(OpKind::ConstString(class.to_owned()), text, origin.clone());
         for (field, value) in [("message", message), ("name", name)] {
             let Some(at) = layout.index_of(field) else {
                 continue;
@@ -16182,7 +16355,9 @@ impl<'a> FuncBuilder<'a> {
         // a nominal relation checked at class load there, so `examples/
         // exceptions` emitted `nts/gen/TypeError` extending `Object` and would
         // not verify.
-        let base = (name != "Error").then(|| self.type_named("Error")).flatten();
+        let base = (name != "Error")
+            .then(|| self.type_named("Error"))
+            .flatten();
         let layout = Layout {
             types: vec![ty],
             name,
@@ -17175,8 +17350,7 @@ impl<'a> FuncBuilder<'a> {
         // assignable to 'Tagged'`. The fourth time that lane has been the only
         // instrument able to see a lie about a type, and the first where what
         // it saw was a memory-safety defect rather than a wrong answer.
-        let Some(HirType::Managed(ManagedType::Object(wanted))) =
-            self.contextual_type(id, 0)
+        let Some(HirType::Managed(ManagedType::Object(wanted))) = self.contextual_type(id, 0)
         else {
             return ty;
         };
@@ -17810,12 +17984,8 @@ impl<'a> FuncBuilder<'a> {
         // way every comparison with NaN is false, and the `RangeError` node
         // raises simply did not happen. The same helper decides the allocation
         // size, so the two cannot drift apart about what a length is.
-        let length_index = self.call_runtime(
-            "nts_to_index",
-            vec![length],
-            HirType::NUMBER,
-            &origin,
-        );
+        let length_index =
+            self.call_runtime("nts_to_index", vec![length], HirType::NUMBER, &origin);
         let max_index = self.call_runtime("nts_to_index", vec![max], HirType::NUMBER, &origin);
         let over = self.push(
             OpKind::Binary {
@@ -18059,8 +18229,11 @@ impl<'a> FuncBuilder<'a> {
             [] => None,
             [one] => Some(self.lower_expression(*one)?),
             _ => {
-                return Err(self.unsupported(id, "a `resolve` or `reject` with more than one \
-                                                 argument"));
+                return Err(self.unsupported(
+                    id,
+                    "a `resolve` or `reject` with more than one \
+                                                 argument",
+                ));
             }
         };
 
@@ -18080,10 +18253,7 @@ impl<'a> FuncBuilder<'a> {
             self.values[reason.0 as usize].ty,
             HirType::Managed(_) | HirType::Erased
         ) {
-            return Err(self.unsupported(
-                id,
-                "a `reject` with a reason that is not a reference",
-            ));
+            return Err(self.unsupported(id, "a `reject` with a reason that is not a reference"));
         }
         Ok(Some(self.runtime_call(
             "nts_promise_reject",
@@ -18296,9 +18466,7 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Managed(ManagedType::Array(_))
                 )
             {
-                return Err(
-                    self.unsupported(node, "a spread of something that is not an array")
-                );
+                return Err(self.unsupported(node, "a spread of something that is not an array"));
             }
             lowered.push((spread, value));
         }
@@ -18393,7 +18561,12 @@ impl<'a> FuncBuilder<'a> {
         };
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
-        Ok(self.runtime_call(helper, vec![source, zero, length], ty.clone(), origin.clone()))
+        Ok(self.runtime_call(
+            helper,
+            vec![source, zero, length],
+            ty.clone(),
+            origin.clone(),
+        ))
     }
 
     /// `s[i]` where `s` is a string, which is a one-unit string rather than an
@@ -18758,28 +18931,28 @@ impl<'a> FuncBuilder<'a> {
         member_name: &str,
         sequence: bool,
     ) -> Diagnostic {
-            // `buffer`, `byteLength` and `byteOffset` land here: a typed array
-            // is an array of a known width and not a view onto storage
-            // something else can also see, so it has a length and nothing else.
+        // `buffer`, `byteLength` and `byteOffset` land here: a typed array
+        // is an array of a known width and not a view onto storage
+        // something else can also see, so it has a length and nothing else.
         self.unsupported(
             id,
             &if sequence {
-                    format!("`{member_name}`, where an array has only `length`")
-                } else if self.values[value.0 as usize].ty == HirType::Erased {
-                    // A union of object types. Every member is a pointer, so
-                    // the value is representable -- what is missing is that a
-                    // field lives at a different offset in each member, so
-                    // reading one needs the layouts reconciled or the
-                    // discriminant tested first. Saying "a value with no
-                    // fields" of something that has several sets of them is
-                    // the wrong sentence entirely.
-                    format!(
-                        "`{member_name}` on a union, whose members lay their fields out \
+                format!("`{member_name}`, where an array has only `length`")
+            } else if self.values[value.0 as usize].ty == HirType::Erased {
+                // A union of object types. Every member is a pointer, so
+                // the value is representable -- what is missing is that a
+                // field lives at a different offset in each member, so
+                // reading one needs the layouts reconciled or the
+                // discriminant tested first. Saying "a value with no
+                // fields" of something that has several sets of them is
+                // the wrong sentence entirely.
+                format!(
+                    "`{member_name}` on a union, whose members lay their fields out \
                          differently"
-                    )
-                } else {
-                    format!("`{member_name}`, a property of a value with no fields")
-                },
+                )
+            } else {
+                format!("`{member_name}`, a property of a value with no fields")
+            },
         )
     }
 
@@ -18821,7 +18994,10 @@ impl<'a> FuncBuilder<'a> {
             return false;
         };
         matches!(
-            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            self.snapshot
+                .types
+                .get(ty.0 as usize)
+                .map(|record| &record.kind),
             Some(TypeKind::Array(_))
         )
     }
@@ -19689,9 +19865,7 @@ impl<'a> FuncBuilder<'a> {
             // An integer here would be `specialize`'s doing, and it has not run
             // yet; anything else is a type with no zero to name.
             _ => {
-                return Err(
-                    self.unsupported(declaration, "a declaration without an initializer")
-                );
+                return Err(self.unsupported(declaration, "a declaration without an initializer"));
             }
         };
         Ok(self.push(kind, ty, origin))
@@ -20107,7 +20281,11 @@ impl<'a> FuncBuilder<'a> {
         let carry_on = self.new_block();
         let two = self.push(OpKind::ConstFloat(2.0), HirType::NUMBER, origin.clone());
         let below = self.push(
-            OpKind::Binary { op: BinOp::Lt, lhs: radix, rhs: two },
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: radix,
+                rhs: two,
+            },
             HirType::Bool,
             origin.clone(),
         );
@@ -20121,10 +20299,13 @@ impl<'a> FuncBuilder<'a> {
         });
 
         self.switch_to(checking);
-        let thirty_six =
-            self.push(OpKind::ConstFloat(36.0), HirType::NUMBER, origin.clone());
+        let thirty_six = self.push(OpKind::ConstFloat(36.0), HirType::NUMBER, origin.clone());
         let above = self.push(
-            OpKind::Binary { op: BinOp::Gt, lhs: radix, rhs: thirty_six },
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: radix,
+                rhs: thirty_six,
+            },
             HirType::Bool,
             origin.clone(),
         );
@@ -20141,9 +20322,7 @@ impl<'a> FuncBuilder<'a> {
         // toString() radix must be between 2 and 36`.
         let text = HirType::Managed(ManagedType::String);
         let message = self.push(
-            OpKind::ConstString(
-                "toString() radix must be between 2 and 36".to_owned(),
-            ),
+            OpKind::ConstString("toString() radix must be between 2 and 36".to_owned()),
             text,
             origin.clone(),
         );
@@ -20374,7 +20553,10 @@ impl<'a> FuncBuilder<'a> {
             self.values[buffer.0 as usize].ty,
             HirType::Managed(ManagedType::Buffer)
         ) {
-            return Err(self.unsupported(id, "a `new DataView` over something other than an `ArrayBuffer`"));
+            return Err(self.unsupported(
+                id,
+                "a `new DataView` over something other than an `ArrayBuffer`",
+            ));
         }
         self.guard_view_attached(id, buffer)?;
         let origin = self.origin(id);
@@ -20438,10 +20620,7 @@ impl<'a> FuncBuilder<'a> {
             // left, which is why this is a call rather than a stored field.
             "byteLength" => ("nts_dataview_byte_length", HirType::NUMBER),
             "byteOffset" => ("nts_dataview_byte_offset", HirType::NUMBER),
-            "buffer" => (
-                "nts_dataview_buffer",
-                HirType::Managed(ManagedType::Buffer),
-            ),
+            "buffer" => ("nts_dataview_buffer", HirType::Managed(ManagedType::Buffer)),
             other => {
                 return Err(self.unsupported(
                     id,
@@ -20536,7 +20715,8 @@ impl<'a> FuncBuilder<'a> {
         let wide = width > 1.0;
 
         if ty == HirType::BigInt {
-            let little = self.endianness(id, arguments.get(if reading { 1 } else { 2 }), &origin)?;
+            let little =
+                self.endianness(id, arguments.get(if reading { 1 } else { 2 }), &origin)?;
             if reading {
                 return Ok(self.call_runtime(
                     &format!("nts_dataview_get_{helper}"),
@@ -20610,11 +20790,7 @@ impl<'a> FuncBuilder<'a> {
     /// numeric table's arity filling would supply -- so `join` is handled
     /// outside that table on all three receivers, and this is the one place
     /// that knows what the default is.
-    fn join_separator(
-        &mut self,
-        id: NodeId,
-        arguments: &[NodeId],
-    ) -> Result<ValueId, Diagnostic> {
+    fn join_separator(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
         if let Some(argument) = arguments.first() {
             return self.lower_expression(*argument);
         }
@@ -20728,8 +20904,12 @@ impl<'a> FuncBuilder<'a> {
             let from = me.view_number(id, arguments.first(), zero)?;
             let to = match arguments.get(1) {
                 Some(node) => {
-                    let length =
-                        me.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin);
+                    let length = me.call_runtime(
+                        "nts_view_length",
+                        vec![receiver],
+                        HirType::NUMBER,
+                        &origin,
+                    );
                     me.view_number(id, Some(node), length)?
                 }
                 None => {
@@ -20743,12 +20923,8 @@ impl<'a> FuncBuilder<'a> {
             // representation exists for.
             "subarray" => {
                 let (from, to) = endpoints(self)?;
-                let view = self.call_runtime(
-                    "nts_view_subarray",
-                    vec![receiver, from, to],
-                    ty,
-                    &origin,
-                );
+                let view =
+                    self.call_runtime("nts_view_subarray", vec![receiver, from, to], ty, &origin);
                 self.guard_allocated_view(id, view)?;
                 Ok(view)
             }
@@ -20776,10 +20952,8 @@ impl<'a> FuncBuilder<'a> {
             // statement.
             "fill" => {
                 let Some(node) = arguments.first() else {
-                    return Err(self.unsupported(
-                        id,
-                        "`fill` on a typed array with no value to fill it with",
-                    ));
+                    return Err(self
+                        .unsupported(id, "`fill` on a typed array with no value to fill it with"));
                 };
                 let value = self.lower_expression(*node)?;
                 let value = self.coerce(value, &HirType::NUMBER, id)?;
@@ -20841,27 +21015,24 @@ impl<'a> FuncBuilder<'a> {
             let Some(target_node) = arguments.first() else {
                 return Err(self.unsupported(id, "a `copyWithin` with no target"));
             };
-                let target = self.lower_expression(*target_node)?;
-                let target = self.coerce(target, &HirType::NUMBER, id)?;
-                let from = match arguments.get(1) {
-                    Some(node) => {
-                        let value = self.lower_expression(*node)?;
-                        self.coerce(value, &HirType::NUMBER, id)?
-                    }
-                    None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
-                };
-                let to = match arguments.get(2) {
-                    Some(node) => {
-                        let value = self.lower_expression(*node)?;
-                        self.coerce(value, &HirType::NUMBER, id)?
-                    }
-                    None => self.call_runtime(
-                        "nts_view_length",
-                        vec![receiver],
-                        HirType::NUMBER,
-                        &origin,
-                    ),
-                };
+            let target = self.lower_expression(*target_node)?;
+            let target = self.coerce(target, &HirType::NUMBER, id)?;
+            let from = match arguments.get(1) {
+                Some(node) => {
+                    let value = self.lower_expression(*node)?;
+                    self.coerce(value, &HirType::NUMBER, id)?
+                }
+                None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+            };
+            let to = match arguments.get(2) {
+                Some(node) => {
+                    let value = self.lower_expression(*node)?;
+                    self.coerce(value, &HirType::NUMBER, id)?
+                }
+                None => {
+                    self.call_runtime("nts_view_length", vec![receiver], HirType::NUMBER, &origin)
+                }
+            };
             return Ok(self.call_runtime(
                 "nts_view_copy_within",
                 vec![receiver, target, from, to],
@@ -20882,10 +21053,9 @@ impl<'a> FuncBuilder<'a> {
                     self.values[source.0 as usize].ty,
                     HirType::Managed(ManagedType::View(_))
                 ) {
-                    return Err(self.unsupported(
-                        id,
-                        "a `set` from something other than a typed array",
-                    ));
+                    return Err(
+                        self.unsupported(id, "a `set` from something other than a typed array")
+                    );
                 }
                 let offset = match arguments.get(1) {
                     Some(node) => {
@@ -21144,12 +21314,8 @@ impl<'a> FuncBuilder<'a> {
     /// A detached buffer, refused in the `DataView` constructor's own words.
     fn guard_view_attached(&mut self, id: NodeId, buffer: ValueId) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let detached = self.call_runtime(
-            "nts_buffer_detached",
-            vec![buffer],
-            HirType::Bool,
-            &origin,
-        );
+        let detached =
+            self.call_runtime("nts_buffer_detached", vec![buffer], HirType::Bool, &origin);
         self.refuse_when(
             id,
             detached,
@@ -21255,7 +21421,12 @@ impl<'a> FuncBuilder<'a> {
             HirType::Bool,
             origin.clone(),
         );
-        self.refuse_when(id, past, "RangeError", "Offset is outside the bounds of the DataView")
+        self.refuse_when(
+            id,
+            past,
+            "RangeError",
+            "Offset is outside the bounds of the DataView",
+        )
     }
 
     /// The allocation, which can fail for the same reason a buffer's can.
@@ -21285,12 +21456,8 @@ impl<'a> FuncBuilder<'a> {
         what: &str,
     ) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let detached = self.call_runtime(
-            "nts_buffer_detached",
-            vec![buffer],
-            HirType::Bool,
-            &origin,
-        );
+        let detached =
+            self.call_runtime("nts_buffer_detached", vec![buffer], HirType::Bool, &origin);
         let message =
             format!("Cannot perform ArrayBuffer.prototype.{what} on a detached ArrayBuffer");
         self.refuse_when(id, detached, "TypeError", &message)
@@ -21301,12 +21468,8 @@ impl<'a> FuncBuilder<'a> {
     /// support rather than a length it cannot reach.
     fn guard_resizable(&mut self, id: NodeId, buffer: ValueId) -> Result<(), Diagnostic> {
         let origin = self.origin(id);
-        let resizable = self.call_runtime(
-            "nts_buffer_resizable",
-            vec![buffer],
-            HirType::Bool,
-            &origin,
-        );
+        let resizable =
+            self.call_runtime("nts_buffer_resizable", vec![buffer], HirType::Bool, &origin);
         let fixed = self.push(
             OpKind::Unary {
                 op: UnOp::Not,
@@ -21391,12 +21554,9 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         match name.as_str() {
-            "getTime" | "valueOf" => Ok(self.call_runtime(
-                "nts_date_value",
-                vec![receiver],
-                HirType::NUMBER,
-                &origin,
-            )),
+            "getTime" | "valueOf" => {
+                Ok(self.call_runtime("nts_date_value", vec![receiver], HirType::NUMBER, &origin))
+            }
             // Refused, and the reason is the oracle rather than the calendar.
             // `new Date(NaN).toISOString()` **throws a RangeError** in node,
             // and this compiler has no throw to give from a runtime helper --
@@ -21416,17 +21576,15 @@ impl<'a> FuncBuilder<'a> {
                  instead is a divergence the differential cannot see",
             )),
             // Named individually so the message says which family it is in.
-            "getFullYear" | "getMonth" | "getDate" | "getHours" | "getMinutes"
-            | "getSeconds" | "getMilliseconds" | "getDay" | "getTimezoneOffset" => {
-                Err(self.unsupported(
-                    id,
-                    &format!(
-                        "`Date.{name}`, which reads a *local* calendar -- that needs a timezone \
+            "getFullYear" | "getMonth" | "getDate" | "getHours" | "getMinutes" | "getSeconds"
+            | "getMilliseconds" | "getDay" | "getTimezoneOffset" => Err(self.unsupported(
+                id,
+                &format!(
+                    "`Date.{name}`, which reads a *local* calendar -- that needs a timezone \
                          database this compiler does not carry, and would make one program \
                          answer differently on two machines"
-                    ),
-                ))
-            }
+                ),
+            )),
             _ => Err(self.unsupported(id, &format!("`Date.{name}`"))),
         }
     }
@@ -21861,11 +22019,7 @@ impl<'a> FuncBuilder<'a> {
     /// the specification's "decide from the text" is: `parseInt("0x1f")` is 31
     /// and `parseInt("0x1f", 10)` is 0. Passing ten as the default would answer
     /// the second for both.
-    fn lower_parse_int(
-        &mut self,
-        id: NodeId,
-        arguments: &[NodeId],
-    ) -> Result<ValueId, Diagnostic> {
+    fn lower_parse_int(&mut self, id: NodeId, arguments: &[NodeId]) -> Result<ValueId, Diagnostic> {
         let Some(text) = arguments.first() else {
             return Err(self.unsupported(id, "`parseInt` with no argument"));
         };
@@ -22377,9 +22531,7 @@ impl<'a> FuncBuilder<'a> {
 
         let (helper, arity, ty) = match name.as_str() {
             "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
-            "indexOf" if arguments.len() == 2 => {
-                ("nts_str_index_of_from", 2, HirType::NUMBER)
-            }
+            "indexOf" if arguments.len() == 2 => ("nts_str_index_of_from", 2, HirType::NUMBER),
             "indexOf" => ("nts_str_index_of", 1, HirType::NUMBER),
             "lastIndexOf" => ("nts_str_last_index_of", 1, HirType::NUMBER),
             "includes" => ("nts_str_includes", 1, HirType::Bool),
@@ -22632,8 +22784,7 @@ impl<'a> FuncBuilder<'a> {
             ));
         }
 
-        let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array)
-        else {
+        let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array) else {
             return Err(self.unsupported(member, "this array method"));
         };
 
@@ -23479,8 +23630,7 @@ impl<'a> FuncBuilder<'a> {
             // the one it returns for an array that never decides.
             Iteration::FindIndex => {
                 let symbol = self.synthetic_symbol();
-                let start =
-                    self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
+                let start = self.push(OpKind::ConstFloat(-1.0), HirType::NUMBER, origin.clone());
                 self.bindings.insert(symbol, start);
                 Some(symbol)
             }
@@ -23978,15 +24128,20 @@ impl<'a> FuncBuilder<'a> {
         // matches it -- from the symbol to its declarations, not the other way
         // -- because a `FUNCTION_DECLARATION` node does not carry the symbol;
         // its name child does, and the symbol is what holds the list.
-        let function = self.snapshot.symbols.iter().enumerate().find(|(_index, record)| {
-            record.flags.contains(SymbolFlags::FUNCTION)
-                && record.name == text
-                && record.declarations.iter().any(|declaration| {
-                    self.closures
-                        .iter()
-                        .any(|closure| closure.wraps && closure.node == *declaration)
-                })
-        });
+        let function = self
+            .snapshot
+            .symbols
+            .iter()
+            .enumerate()
+            .find(|(_index, record)| {
+                record.flags.contains(SymbolFlags::FUNCTION)
+                    && record.name == text
+                    && record.declarations.iter().any(|declaration| {
+                        self.closures
+                            .iter()
+                            .any(|closure| closure.wraps && closure.node == *declaration)
+                    })
+            });
         if let Some((index, _)) = function {
             return Ok(nts_semantic_schema::SymbolId(
                 u32::try_from(index).unwrap_or(u32::MAX),
@@ -24152,23 +24307,23 @@ impl<'a> FuncBuilder<'a> {
     /// Split out of [`Self::contextual_type`] only for its length; the reason
     /// is in the comment there.
     fn declared_field_type(&self, parent: NodeId, depth: u32) -> Option<HirType> {
-                let name = self
-                    .children(parent)
-                    .first()
-                    .and_then(|at| self.literal_name(*at))?;
-                let owner = self.syntactic_parent(parent)?;
-                let outer = self
-                    .contextual_type(owner, depth + 1)
-                    .or_else(|| self.type_of(owner))?;
-                let HirType::Managed(ManagedType::Object(type_id)) = outer else {
-                    return None;
-                };
-                let record = self.snapshot.types.get(type_id.0 as usize)?;
-                let TypeKind::Object { properties } = &record.kind else {
-                    return None;
-                };
-                let declared = properties.iter().find(|property| property.name == name)?;
-                self.represent(declared.ty)
+        let name = self
+            .children(parent)
+            .first()
+            .and_then(|at| self.literal_name(*at))?;
+        let owner = self.syntactic_parent(parent)?;
+        let outer = self
+            .contextual_type(owner, depth + 1)
+            .or_else(|| self.type_of(owner))?;
+        let HirType::Managed(ManagedType::Object(type_id)) = outer else {
+            return None;
+        };
+        let record = self.snapshot.types.get(type_id.0 as usize)?;
+        let TypeKind::Object { properties } = &record.kind else {
+            return None;
+        };
+        let declared = properties.iter().find(|property| property.name == name)?;
+        self.represent(declared.ty)
     }
 
     /// the position rather than of the token.
@@ -24983,7 +25138,6 @@ fn has_finally(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
     parts.len() >= 2 && kind_at(snapshot, parts[parts.len() - 1]) == Some(syntax::BLOCK)
 }
 
-
 /// The syntax kind of a node, or `None` for a list.
 fn kind_at(snapshot: &SemanticSnapshot, id: NodeId) -> Option<u16> {
     match snapshot.nodes.get(id.0 as usize)?.kind {
@@ -25389,6 +25543,30 @@ struct CaseChain<'a> {
 /// `Clone` and not `Copy`: `Member` carries a representation, which is a type
 /// and owns a `Box` for an array's element. Every branch is built where it is
 /// used and moved once, so nothing here wanted the copy.
+/// A natively represented thing an erased value can be, for the one question
+/// `in` asks of it: does something of this shape declare the name.
+///
+/// Each variant is a test the runtime already performs for `instanceof`, which
+/// is why the list is these eight and not a kind enum: a kind the compiler
+/// cannot name is a kind it cannot answer for, and a variant here that no
+/// `natives_declaring` entry mentions would be dead rather than conservative.
+#[derive(Clone, Copy)]
+enum Native {
+    /// An array or a tuple. One `nts_is_array`, which accepts both because the
+    /// language calls a tuple an Array.
+    Array,
+    /// A typed array or a `DataView`.
+    View,
+    /// A typed array and not a `DataView`, which is `View` minus one test.
+    TypedArray,
+    ArrayBuffer,
+    Map,
+    Set,
+    Promise,
+    /// Not a descriptor at all: a closure's erased form carries its own tag.
+    Function,
+}
+
 #[derive(Clone)]
 enum Branch {
     Expression(NodeId),

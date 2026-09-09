@@ -293,36 +293,88 @@ fn an_unknown_is_not_narrowed_to_the_empty_object_type() {
     }
 }
 
-/// A key a natively represented type answers for is refused, by name.
+/// A key a natively represented type answers for is **answered**, by that
+/// type's own test.
 ///
-/// `object` includes an array, a `Map`, a `Set`, a `Promise` and a `Date`, and
-/// none of them has a layout to find a name on — so a set built from the
+/// `object` includes an array, a `Map`, a `Set`, a `Promise` and a typed array,
+/// and none of them has a layout to find a name on — so a set built from the
 /// layouts answers `false` for them, and for their own property names
-/// JavaScript answers `true`.
+/// JavaScript answers `true`. This was a refusal by name for as long as that
+/// was all the lowering could say.
 ///
-/// `then` is the one that bites: four sites in `runtime/node` ask it, and it is
-/// how a program tests for a thenable. Without this the compiled program tells
-/// a `Promise` it is not one, and agrees with node on every case that does not
-/// happen to pass a promise.
+/// What closed it is that none of these needs a layout: each is one descriptor
+/// comparison the runtime already performs for `instanceof`. So the assertion
+/// is on the **set** of predicates each key reaches, not merely that it reaches
+/// one — a key wired to the wrong native compiles, runs, and answers `false`
+/// for the type it should have named, which is what the refusal was avoiding.
 #[test]
-fn a_key_a_native_type_answers_for_is_refused() {
-    let Some(lowered) = lowered("unsupported") else {
+fn a_key_a_native_type_answers_for_reaches_that_type_s_test() {
+    let Some(lowered) = lowered("in-on-an-object-a-native-answers-for") else {
         return;
     };
-    let said: Vec<&str> = lowered
-        .diagnostics
-        .iter()
-        .map(|d| d.message.as_str())
-        .filter(|message| message.contains("natively represented"))
-        .collect();
-    assert_eq!(
-        said.len(),
-        1,
-        "`\"then\" in value` names the boundary rather than answering: {:?}",
-        lowered
-            .diagnostics
+    for (name, wanted) in [
+        // A `Promise` and nothing else. 27 of the 50 sites in `runtime/node`.
+        ("thenable", &["nts_is_promise"][..]),
+        ("catchAndFinally", &["nts_is_promise"][..]),
+        // One struct here and one descriptor, told apart by whether the entries
+        // hold values — so both, and a `Set` answering as a `Map` would pass a
+        // test that only asked for one of them.
+        ("sized", &["nts_is_map", "nts_is_set"][..]),
+        // A typed array is a view that is not a `DataView`, which is why the
+        // second name is here: without it a `DataView` gains a `length`.
+        (
+            "lengthy",
+            &["nts_is_array", "nts_is_data_view", "nts_value_is_view"][..],
+        ),
+        ("overABuffer", &["nts_value_is_view"][..]),
+        // The one of the three an `ArrayBuffer` answers for too.
+        ("byteLength", &["nts_is_buffer", "nts_value_is_view"][..]),
+        // Deliberately empty: a function is its *tag*, and a call here would
+        // mean the lowering had gone looking for a descriptor a closure has
+        // no business carrying.
+        ("functionNames", &[][..]),
+        // The two controls, which must reach no native test at all — the class
+        // path is what they cover and this change must not have touched it.
+        ("declaredByAClass", &[][..]),
+        ("declaredByNothing", &[][..]),
+    ] {
+        let mut called: Vec<&str> = func(&lowered, name)
+            .values
             .iter()
-            .map(|d| d.message.as_str())
-            .collect::<Vec<_>>(),
-    );
+            .filter_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: hir::Callee::External(name),
+                    ..
+                } => Some(name.as_str()),
+                _ => None,
+            })
+            .filter(|name| name.starts_with("nts_is") || name.starts_with("nts_value_is"))
+            .collect();
+        called.sort_unstable();
+        called.dedup();
+        assert_eq!(called, wanted, "`{name}` reaches the wrong native tests");
+    }
+}
+
+/// The function arm is a tag test, and the object beside it is not.
+///
+/// Separate from the set above because "no `nts_is_*` call" is also what a key
+/// nothing answers for produces, and those two must not read alike: one has a
+/// `TagOf` and the other has none.
+#[test]
+fn a_function_is_answered_by_its_tag_and_a_class_is_not() {
+    let Some(lowered) = lowered("in-on-an-object-a-native-answers-for") else {
+        return;
+    };
+    let tags = |name: &str| {
+        func(&lowered, name)
+            .values
+            .iter()
+            .filter(|op| matches!(op.kind, OpKind::TagOf { .. }))
+            .count()
+    };
+    // `name`, `call` and `bind`, asked of a closure and of an object: six sites.
+    assert_eq!(tags("functionNames"), 6, "a function is its tag");
+    assert_eq!(tags("declaredByAClass"), 0, "a class is a descriptor");
+    assert_eq!(tags("declaredByNothing"), 0, "and a name nothing has is neither");
 }

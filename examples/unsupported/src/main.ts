@@ -238,20 +238,24 @@ function callsAnAmbientOverload(p: Platform, n: number): number {
 }
 void callsAnAmbientOverload;
 
-// `"then" in value` on an `object`, which a natively represented type answers
-// for.
+// `"k" in value` on an `object`, where `k` is optional somewhere in the program.
 //
-// `"k" in value` over an `object` is answered from the closed set of types
-// declaring `k` — but `object` includes an array, a `Map`, a `Set`, a `Promise`
-// and a `Date`, none of which has a layout to find a name on. So a set built
-// from the layouts answers *false* for them, and for their own property names
-// JavaScript answers true.
+// The whole-program answer is over every object type the program declares, so a
+// single optional declaration of the name makes the question unanswerable for
+// every site that asks it: the slot exists whether or not it was written, and
+// `{}` and `{ k: undefined }` disagree in JavaScript.
 //
-// `then` is the one that bites, and it is why the list is named rather than
-// derived: four sites in `runtime/node` ask it, and it is exactly how a program
-// tests for a thenable. A `Promise` reaching one of them would be told it is
-// not one.
-function isThenable(value: unknown): boolean {
-  return value !== null && typeof value === "object" && "then" in value;
+// Not the same case as the natively represented names, which
+// `examples/in-on-an-object-a-native-answers-for` now answers — those needed a
+// test the runtime already had, and this needs a fact the representation does
+// not carry. 165 sites in `runtime/node`, and the message names the declaring
+// type because that is what makes it actionable.
+interface MaybeCounted {
+  counted?: number;
 }
-void isThenable;
+void ((v: MaybeCounted): number => v.counted ?? 0);
+
+function hasBeenCounted(value: unknown): boolean {
+  return value !== null && typeof value === "object" && "counted" in value;
+}
+void hasBeenCounted;
