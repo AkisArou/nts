@@ -12536,7 +12536,16 @@ impl<'a> FuncBuilder<'a> {
         // which reports **one refusal per function** -- so it named `DataView`
         // until `DataView` landed and then named `WeakMap`, and nothing in the
         // output ever said how many remained.
-        if matches!(name.as_str(), "WeakMap" | "WeakSet")
+        //
+        // `WeakRef` is the same case and is named beside them rather than
+        // folded by a general rule. "Any unrepresentable type answers false"
+        // would be true today and is a much larger claim than the evidence --
+        // it would quietly fold a class this compiler has simply not learned
+        // yet, where a refusal is the honest answer. These three are named
+        // because each was checked: `new WeakMap()`, `new WeakSet()` and
+        // `new WeakRef()` all refuse as unrepresentable, and `util`'s
+        // `inspect.ts:870` asks `value instanceof WeakRef` of a real value.
+        if matches!(name.as_str(), "WeakMap" | "WeakSet" | "WeakRef")
             && self
                 .type_named(&name)
                 .and_then(|ty| self.represent(ty))

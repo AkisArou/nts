@@ -48,3 +48,17 @@ export function weakMapSubject(value: object): boolean {
 export function weakSetSubject(value: object): boolean {
   return value instanceof WeakSet;
 }
+
+// `WeakRef` is not a collection and is here anyway, because it is the same
+// case: unrepresentable, so uninhabited, so `false`. Raised by the JVM lane
+// after this fixture was written -- `util/src/inspect.ts:870` asks it of a real
+// value and `diagnostics_channel/src/main.ts:209` constructs one, so it is a
+// live site rather than a completeness exercise.
+//
+// Named in the lowering beside the two collections rather than folded by a
+// general rule. "Any unrepresentable type answers false" is true today and is a
+// much larger claim than the evidence: it would quietly fold a class this
+// compiler has simply not learned yet, where a refusal is the honest answer.
+export function weakRefSubject(value: object): boolean {
+  return value instanceof WeakRef;
+}
