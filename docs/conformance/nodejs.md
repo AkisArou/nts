@@ -13750,6 +13750,62 @@ if `unknown` and `object` ever disagree, the run prints INSTRUMENT FAILURE and
 exits. They are the same erased type with the same wrapper, so a disagreement
 means the probe is wrong -- which is exactly the state this file shipped in.
 
+## Driving the hollow count to zero cost two modules and gained one pass
+
+The five hollow passes, and what each turned out to be.
+
+**Two needed a control to see. Three did not.** `path`'s pair are only visible
+under `--empty-exports`. The other three compare two absences in the *ordinary*
+run -- no lane required, nobody had looked:
+
+    stream.Readable / require('_stream_readable')   both undefined
+    timers.promises / require('timers/promises')    both undefined, and
+                                                    deepStrictEqual({}, {}) holds
+    ReadableStream  / require('stream/web').…       both Node's own
+
+### `path`: replaced, and the axis went up
+
+`local/subpath-identity-static.js` keeps `require('path/posix') === path.posix`
+and puts in front of it what an absent module cannot satisfy -- the subpath must
+resolve to an object carrying a `join` that returns a string containing its
+arguments. It passes plain and **fails under all three controls**, so it is
+behaviour-dependent.
+
+    path   14 pass: 11 behaviour, 1 shape-only, 2 hollow
+      ->   13 pass: 12 behaviour, 1 shape-only, 0 hollow
+
+One fewer pass and one more thing demonstrated.
+
+### `stream` and `timers`: replaced with guards that fail
+
+There is no passing replacement to write. The aliases and the promises namespace
+do not exist, so a file that requires them to exist fails. Both were written
+anyway:
+
+    local/legacy-alias-identity-static.js   requires each alias to construct an
+                                            instance of its class
+    local/promises-identity-static.js       requires setTimeout, setImmediate and
+                                            setInterval to be functions, and one
+                                            of them to resolve
+
+Each fails today and passes the moment its subject appears. **A failing guard is
+a truer axis entry than a passing assertion between two absences**, and both
+modules now report zero compiled passes, which is what they have.
+
+`test-global-webstreams.js` gets no replacement at all. `shape.mjs:91` assigns
+the platform `node:stream/web`, and the globals it is compared against are those
+same objects, so nothing of ours is on either side of it until Web Streams are
+implemented here rather than bridged.
+
+### What moved
+
+    before   26 pass: 17 behaviour-dependent, 4 shape-only, 5 hollow, 7 modules
+    after    22 pass: 18 behaviour-dependent, 4 shape-only, 0 hollow, 5 modules
+
+Four fewer passes, one more behaviour-dependent, two modules off the axis. The
+pass count went down and the axis got stronger, which is the direction this
+ledger exists to be able to report.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
