@@ -114,18 +114,31 @@ if (defined.size === 0) {
   process.exit(2);
 }
 
+// **`internal` has no `tsconfig.json`, and it is where the whole gap lives.**
+// Filtering the module list on a tsconfig -- which every other instrument in
+// this directory does, correctly, because a directory without one is not a
+// compilation unit -- silently dropped it, and the first run of this file
+// reported the native half complete at 0 missing.
+//
+// A directory of TypeScript that declares bindings is in scope for *this*
+// question whether or not it is separately compilable. The filter is on being a
+// directory, and `internal` keeps its declarations beside its C rather than
+// under `src/`.
 const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const modules = argv.length > 0
   ? argv
-  : readdirSync(NODE_DIR)
-    .filter((m) => m !== "node_modules" && existsSync(join(NODE_DIR, m, "tsconfig.json")))
+  : readdirSync(NODE_DIR, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== "node_modules")
+    .map((e) => e.name)
     .sort();
 
 let declaredTotal = 0;
 let missingTotal = 0;
 const rows = [];
 for (const module of modules) {
-  const src = join(NODE_DIR, module, "src");
+  const src = existsSync(join(NODE_DIR, module, "src"))
+    ? join(NODE_DIR, module, "src")
+    : join(NODE_DIR, module);
   if (!existsSync(src)) continue;
   const declared = new Set();
   const walk = (dir) => {
