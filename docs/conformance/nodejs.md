@@ -15311,6 +15311,63 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### The largest thing in front of the axis emits no diagnostic at all
+
+Every census in this directory reads diagnostics. A refusal that emits none is
+invisible to all of them, and the largest single obstacle on the compiled axis
+is one:
+
+    export function schedule<A extends unknown[]>(...args: A): number {
+      return args.length;
+    }
+
+Not lowered. No NTS1001, no NTS1003, and `grep -c schedule program.c` is **0**.
+The only trace anywhere is the wrapper's `no wrapper for schedule: is exported
+and no function of that name was compiled` -- true, and silent about the cause.
+
+Four controls, and the second is the condition:
+
+    <A extends unknown[]>(...args: A): number { return args.length; }   silent
+    <A extends unknown[]>(...args: A): number { return 1; }             compiles
+    (...args: unknown[]): number { return args.length; }                declined, saying `takes unknown[]`
+    <T>(value: T): number { return 1; }                                 compiles
+
+**The rest parameter has to be read.** Declared and ignored the function
+compiles; `args.length` loses it. And the third row is what makes the silence a
+defect rather than a limitation: the same function without the generic is
+declined too, and *names* what it cannot carry.
+
+`timers` declares `setTimeout`, `setInterval` and `setImmediate` this way, and
+none of the three is compiled. Against the compiled addon, of 57 failing test
+files:
+
+    25  setTimeout is not a function
+    11  setImmediate is not a function
+     5  setInterval is not a function
+
+**41 of 57 behind one construct**, on a module already on the axis. The next
+largest concentration anywhere is `querystring.parse` behind
+`decodeURIComponent`, which is six.
+
+Filed as `a-generic-rest-that-is-used`, with an absence for an expectation --
+`lacks-c schedule` -- because there is no message to name. Its sibling
+`a-generic-rest-forwarded-to-its-callback` is the same construct with a callback
+attached and *does* produce a message, so whatever closes the construct closes
+both and only one will show up as closed.
+
+`refusal-census.mjs` counts the wrapper's declines by reason now, since that is
+the only place this class is visible. Across `timers` and `querystring` alone,
+35 declined exports, and the largest group is the silent one:
+
+     15  is exported and no function of that name was compiled
+      8  is exported and is not a function this backend can name
+      6  takes an object
+      4  is a namespace member that is neither a wrapped function nor a value
+
+Every other reason names what could not be carried. The largest states the
+effect and leaves the cause unsaid, which is why it went uncounted for as long
+as it did.
+
 ### The seven modules with nothing on the axis are not seven pieces of work
 
 Each traced to its head with `cascade-reach.mjs`, which ranks a primary refusal
