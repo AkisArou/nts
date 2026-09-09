@@ -14088,6 +14088,62 @@ It is not "24 of node's tests pass". It is 24 files that pass **and** fail
 against roughly 1,800 applicable upstream files. The interpreted lane is a
 different number and always has been.
 
+## My own test passed on the compiled lane because the defect stopped the harness
+
+`net/test/default-family-static.js` asserted node's documented default:
+
+    assert.strictEqual(net.getDefaultAutoSelectFamilyAttemptTimeout(), 250);
+
+It **passed on the compiled lane and failed on the interpreted one**, which was
+found only by running the new tests against both. The compiled lane was the one
+that was wrong.
+
+`third_party/node/test/common/index.js:182` runs on load, in node and here:
+
+    net.setDefaultAutoSelectFamilyAttemptTimeout(
+      platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10));
+
+So every file that requires `../common` -- including that one -- sees **2500**
+in node. Verified directly rather than read:
+
+    node -e 'require("../common"); require("net").getDefaultAutoSelectFamilyAttemptTimeout()'
+    2500
+
+The compiled addon publishes `getDefaultAutoSelectFamilyAttemptTimeout` and not
+its setter, so `common`'s call cannot land and the value stays unscaled at 250.
+**The assertion held because the missing setter stopped the harness doing what
+node does.** That is the fourth failure mode in the fixture rules -- a control
+that suppresses the thing it controls for -- arriving in a conformance test
+rather than a fixture.
+
+### Split rather than deleted
+
+`attempt-timeout-static.js` asserts the relation instead of the literal:
+`common` moved the value, so the scaled figure is strictly greater than the
+unscaled 250. `platformTimeout` scales again on slow builds, so 2500 is not
+stable across machines and the relation is.
+
+    default-family-static.js   interpreted pass   compiled pass    (three controls fail)
+    attempt-timeout-static.js  interpreted pass   compiled FAIL
+
+The second is an honest guard on the missing setter, and it passes the moment
+the setter publishes.
+
+### Both lanes, for every new test
+
+The eight local tests written today were run against the interpreted lane as
+well, which is what caught this:
+
+    async_hooks internal-context-stack   readline char-length
+    util types-subpath                   path subpath-identity
+    stream default-highwatermark         stream legacy-alias-identity
+    timers promises-identity             net attempt-timeout
+
+**All eight pass interpreted**, including the two written as deliberate
+compiled-lane failures -- the TypeScript has the stream aliases and the timers
+promises namespace, and only the addon does not. So the compiled-lane failures
+are about the addon and not about the assertions.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

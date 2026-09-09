@@ -32,7 +32,26 @@
 //
 //     getDefaultAutoSelectFamily()               true
 //     setDefaultAutoSelectFamily(false), get()   false
-//     getDefaultAutoSelectFamilyAttemptTimeout() 250
+//
+// The attempt timeout is **not** asserted here, and the reason is worth the
+// paragraph. This file first asserted it was 250, node's documented default. It
+// passed on the compiled lane and failed on the interpreted one, and the
+// compiled lane was the one that was wrong.
+//
+// `test/common/index.js:182` *sets* the default when it loads:
+//
+//     net.setDefaultAutoSelectFamilyAttemptTimeout(
+//       platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10));
+//
+// so every test requiring `../common` -- including this one -- sees 2500 in
+// node. The compiled addon does not publish
+// `setDefaultAutoSelectFamilyAttemptTimeout`, so `common` cannot scale it and
+// the value stays 250. **The assertion passed because the defect stopped the
+// harness doing what node does**, which is the fourth failure mode in the
+// fixture rules: a control that suppresses the thing it controls for.
+//
+// It lives in `attempt-timeout-static.js` now, where it fails on the compiled
+// lane until the setter is published.
 "use strict";
 
 require("../common");
@@ -61,9 +80,11 @@ const original = net.getDefaultAutoSelectFamily();
 assert.strictEqual(typeof original, "boolean", "the default is not a boolean");
 assert.strictEqual(original, true, "node's default for autoSelectFamily is true");
 
-const timeout = net.getDefaultAutoSelectFamilyAttemptTimeout();
-assert.strictEqual(typeof timeout, "number", "the attempt timeout is not a number");
-assert.strictEqual(timeout, 250, "node's default attempt timeout is 250");
+assert.strictEqual(
+  typeof net.getDefaultAutoSelectFamilyAttemptTimeout(),
+  "number",
+  "the attempt timeout is not a number",
+);
 
 // A write has to be visible to the next read. A stub that answers a constant
 // passes everything above and fails here.
