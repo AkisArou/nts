@@ -14960,6 +14960,53 @@ did, for about ten minutes, and this instrument reads the module for that
 reason. The rule: **"does the addon compute it" wants the raw `.node`; "does a
 test see node's value" wants the module.**
 
+## Error messages differenced: the declaration decides whose message you get
+
+Five error messages compared against node's, on the compiled addons:
+
+    getTimerDuration(-5)     same    The value of "delay" is out of range...
+    getTimerDuration("3")    same    The "delay" argument must be of type number...
+    getTimerDuration(NaN)    same    The value of "delay" is out of range...
+    SlowBuffer(-1)           same    The value of "size" is out of range...
+    SlowBuffer("4")          DIFFER  ours "expected a number argument"
+                                     node "The \"size\" argument must be of type
+                                           number. Received type string ('4')"
+
+One difference, and the rule behind it is exact:
+
+    getTimerDuration(msecs: unknown, name: string)   -> node's message
+    SlowBuffer(length: number)                       -> the wrapper's
+
+**A wrong-*type* argument is intercepted by the wrapper; a wrong-*value*
+argument reaches the module.** `-1` is a number, so it crosses and
+`allocUnsafeSlow`'s own validation answers -- with node's text. `"4"` is not,
+so the wrapper answers first, and `expected a number argument` appears once in
+the emitted `addon.c` and nowhere in `runtime/node`.
+
+`getTimerDuration` is declared `unknown` and every one of its cases reaches the
+module, which is why all three of its rows match.
+
+### The source is not at fault, and that was checked
+
+Node's `SlowBuffer` calls `validateNumber(size, 'size', 0, kMaxLength)`
+explicitly; ours does not, and delegates to `Buffer.allocUnsafeSlow`. That looked
+like a missing validation until it was measured: in node,
+`allocUnsafeSlow` produces **byte-identical errors to `SlowBuffer` for all five
+cases**, so node's explicit call is redundant with the one behind it and the
+omission is equivalent.
+
+### What it is evidence for
+
+`blockers/unknown-at-the-boundary` records the trade: a parameter declared
+`unknown` carries its tag across and lets the module's own validator run, and
+"23 exported functions in the profile validate a parameter at run time with a
+check their own declaration deletes."
+
+This is that, measured end to end on two live functions in two modules, with the
+message text as the witness. Every such function will report the wrapper's
+sentence instead of node's until either the declaration widens or the wrapper
+learns node's text -- and node's tests assert these strings.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
