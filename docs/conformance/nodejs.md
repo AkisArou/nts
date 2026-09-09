@@ -9702,6 +9702,36 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### `path`'s eighteen failures, and two of them are the wrapper's
+
+Reading the failures rather than the count:
+
+```
+8   dereference `path.win32`, which is undefined      export-namespace
+1   matchesGlob                                       glob-matcher's own six roots
+1   `path.posix.join` absent                          rest-parameter-at-the-wrapper
+1   basename throws ERR_MISSING_ARGS                  optional-parameter-at-the-wrapper
+```
+
+The `win32` eight are not a shape problem. The shim builds `posix` from the flat
+exports and points `posix.posix` at itself, which is node's own identity
+(`path.posix === path` is true on a posix host); what it cannot do is invent
+`win32`, whose functions the addon does not publish because the namespace export
+is declined. A shim that supplied them would be answering for the module.
+
+**Two of the four causes are wrapper properties rather than lowering ones**, and
+that is a different queue from the refusal chains. `basename` compiled, linked
+and published, and then rejects `basename(p)` -- the call node makes everywhere
+-- because `suffix?: string` crosses as required.
+
+**Scope, measured rather than assumed: one.** Across all twenty-two addons,
+exactly one published function has an optional parameter in its declaration, and
+it is `path.basename`. The gap is narrow today because so little is published;
+it widens with every function that starts crossing. (Counted by cross-referencing
+each addon's published function names against `export function NAME(` in that
+module's source, so a function published under an alias or declared as a const
+arrow would not be seen.)
+
 ### `os` did not move, and tracing why found the convergence
 
 `os` is unchanged at 6 declines. `getPriority` and `setPriority` cascade on
