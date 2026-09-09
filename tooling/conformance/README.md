@@ -50,7 +50,7 @@ is in the file's own header; the summary is here so you know what to reach for.
 | `interpreted-lane.sh` | does the implementation still pass everything it runs? |
 | `axis-controls.mjs` | is a compiled pass behaviour, shape-only, or hollow? |
 | `hidden-exports.mjs` | does the shim drop a name the addon publishes? |
-| `surface-diff.mjs` | is a published value node's value, or only its name? |
+| `surface-diff.mjs` | is a published value node's value, and does the function have node's arity? |
 | `unusable-exports.mjs` | can a published name be called with anything? |
 | `reference-boundary.sh` | which references cross the wrapper, in each direction? |
 | `blocking-files.mjs` | which files' refusals sit on the most modules' paths? |
