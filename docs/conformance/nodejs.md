@@ -13806,6 +13806,72 @@ Four fewer passes, one more behaviour-dependent, two modules off the axis. The
 pass count went down and the axis got stronger, which is the direction this
 ledger exists to be able to report.
 
+## Three modules were on the axis all along, behind a suite that could not reach them
+
+`net`, `stream` and `async_hooks` each recorded zero compiled passes. Each has
+working, published behaviour. Nothing was asking it anything.
+
+    net          getDefaultAutoSelectFamily / setDefaultAutoSelectFamily /
+                 getDefaultAutoSelectFamilyAttemptTimeout -- all three node's,
+                 and every upstream `test-net-*.js` needs a socket
+    stream       getDefaultHighWaterMark, answering 65536 / 16 / 65536 for
+                 false / true / undefined, exactly as node does
+    async_hooks  the async id stack: newAsyncId advances, a push makes an id
+                 current, a nested push nests, pops restore
+
+All three now have a `local/*-static.js` that passes and **fails all three
+controls**, so each is behaviour-dependent rather than shape.
+
+### Each test had to defeat a constant
+
+Reading one default is a shape question -- `--mutate-addon` keeps the names and
+destroys behaviour, and a stub answering a constant satisfies "returns a
+number". So each file asks for something a constant cannot do:
+
+    net          a write has to be visible to the next read
+    stream       two arguments have to give two different answers, and
+                 `undefined` has to take the byte-stream branch
+    async_hooks  a counter has to advance, and **two** pushes with an
+                 observation between them have to nest -- one push and one pop
+                 is satisfied by a single slot
+
+### `stream`'s shape was throwing the working function away
+
+The shim did `if (Stream === undefined) return {}`. The addon publishes
+`getDefaultHighWaterMark` and it answers correctly, and the shape discarded it
+because an unrelated export was missing -- so through the module the name was
+simply absent. Found by asking the raw `.node` with `process.dlopen` and getting
+a different answer than the module gave.
+
+`os/shape.mjs` records the same mistake from the other side: "a shape that
+throws on a missing export reports one fact about the addon and hides seven."
+This was the silent version.
+
+Surveyed the rest rather than assuming. **Six shims bail this way and it bites
+in one**: `process`, `events`, `console` and `querystring` publish nothing, so
+theirs discard nothing, and `timers` discards `decRefCount` and `TIMEOUT_MAX`,
+neither of which is node's.
+
+### And `--empty-exports` was not reaching the facade
+
+The `async_hooks` file uses `internal/async_hooks`, the facade `shape.mjs`
+builds because node's own `lib/` reaches those names. It passed under
+`--empty-exports`, so the hollow check flagged **my own test**.
+
+The cause was in the harness. `run-one.mjs` blanked what `shape()` was given and
+passed the *real* exports to `subpaths()`, `internals()` and `testBindings()`.
+A test reaching the facade therefore saw a fully working module while the public
+surface was empty. The control's claim is "a file that passes under this passes
+without the module having supplied the thing it names", and the facade is the
+module supplying it.
+
+All four now take the same blanked input.
+
+**The five hollow findings were re-checked against this rather than assumed**:
+`path`'s pair go through subpaths built from the shaped object, `stream`'s two
+are `undefined` on both sides either way, `timers` is `{}` on both sides, and
+webstreams is node's own on both sides. All five stand.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
