@@ -10023,6 +10023,47 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### 61 exports are declared, not published, and not declined by name
+
+`tooling/conformance/unaccounted-exports.sh` subtracts what a module publishes
+and what the wrapper declined *by name* from what its entry file declares. The
+remainder is surface nobody was told about:
+
+```
+fs    44 declared,  0 published,  0 declined  ->  44 unaccounted
+util  20 declared,  2 published,  1 declined  ->  17 unaccounted
+every other module                            ->   0
+```
+
+**Validated where the arithmetic is exact**: `punycode` 6-6-0, `os` 23-17-6,
+`querystring` 8-0-8, `diagnostics_channel` 7-0-7, `dgram` 2-0-2 all reach zero.
+A check that has never returned zero for a healthy module is not a check.
+
+`util` was invisible before this. It declines exactly one export by name,
+`getStringWidth`, publishes two, and declares twenty. The seventeen in between
+get nothing.
+
+**What the backend says, which is not nothing but is not about the exports
+either.** `fs` carries 41 `an object type with no layout`, eighteen of them for
+one type alone, plus 6 NTS2009 and 2 NTS2008. `util` carries 8. So the backend
+is loud and the wrapper is silent: `addon.c` was written, it contains zero
+`napi_set_named_property`, and no `no wrapper for X` line accompanies it. The
+wrapper stage ran and produced neither publications nor declines.
+
+**The first version of this check was wrong in the usual direction.** It counted
+every `export` in every file of a module -- including internal helpers shared
+between files -- and reported every module as having a gap: `fs` 232, `zlib`
+188, `util` 82. A module's public surface is its entry file, not its directory.
+That is the fourth population error in this document's own measurements tonight,
+after the typed-array count, the wrapper-decline double-count and the cone
+summation, and in every case the wrong number was the larger and more
+interesting one.
+
+Both limits under-report. Declared reads only `export function|class|const` from
+`src/main.ts`, so a surface arriving through `export *` is undercounted -- `fs`
+has eleven such lines, which makes 44 a floor -- and a name published under an
+alias counts as unaccounted.
+
 ### What each module is waiting on, all twenty-two on one compiler
 
 `decl` is wrapper declines, `own` is NTS1001 sites in the module's own `src/`.
