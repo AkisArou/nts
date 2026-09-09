@@ -17,7 +17,9 @@ The row table below is always current; the sections behind it are a history.
 
 ## Where the rows stand
 
-**Re-taken from the current tree on 2026-09-08, all 51 cases, nothing refused.**
+**Re-taken from the current tree on 2026-09-08, all 51 cases *that carry a
+`ref.java`*, nothing refused.** There are 60 cases; the nine `json-*` ones have
+no Java reference and so have never appeared here at all -- see below.
 The previous table was read from `~/.cache/nts-jvm-sweep`, which is pinned at
 `f071672b` from 08:41 and so predates this morning's `uirem` fix -- see the
 stale-worktree section below. `->` marks a row this lane has moved. A row marked
@@ -1594,6 +1596,38 @@ it is what an index-based `nts_map_next(map, from)` contract *is*, and
 
 So the classification stands, and now it stands on having read the code instead
 of on where the function happened to live. Filed with the lowering, unchanged.
+
+### There are 60 cases, not 51, and nine of them cannot be held to the bar
+
+Everything in this file, and the goal text it is written against, says "all 51
+cases carry a `ref.java`, so a node-only ratio is a choice". The first half is
+true and the sentence is not: **`benches/cases` holds 60 directories**, 51 with
+a `ref.java` and nine without.
+
+    json-build-append   json-build-join      json-parse
+    json-scan           json-serialize       json-stringify-doc
+    json-stringify-fused json-stringify-inline json-stringify-typed
+
+All nine are JSON, and they have no `ref.cpp` either -- only a `case.ts`. So
+they have no `jvm/Java` column, cannot be measured against the bar, and have
+been invisible in this table for as long as it has existed, because the table
+was built from the cases that produce a ratio.
+
+**They are not idle rows.** From the current sweep:
+
+    json-scan     2.65 us   against node's 1.79 us
+    json-parse   805.47 us  against node's 840.84 us
+
+`json-scan` loses to node by 1.48x on the only axis it has. The bar's second
+number -- decisively faster than node -- is measurable for these nine today and
+nobody has been reading it, because a row with a `--` in the column this file
+sorts by does not appear in it.
+
+**What this changes.** "Optimise every row where the JVM lane loses" has a
+larger denominator than any count in this file. Nine rows need a `ref.java`
+before they can be held to the first half of the bar at all, and that is
+`benches/**` work -- mine -- rather than anyone else's. Not written tonight;
+recorded so the next count starts from 60.
 
 ## Open, and whose
 
