@@ -26,16 +26,40 @@
 // concentration in any module on the axis -- larger than `querystring.parse`
 // behind `decodeURIComponent`, which is six.
 //
-// # Four controls, and the second is the condition
+// # The condition, widened after the first version got it too narrow
 //
-//     schedule<A extends unknown[]>(...args: A): number { return args.length; }   silent
-//     schedule<A extends unknown[]>(...args: A): number { return 1; }             compiles
-//     schedule(...args: unknown[]): number { return args.length; }                declined, with a reason
-//     schedule<T>(value: T): number { return 1; }                                 compiles
+// The first version of this fixture said the rest parameter has to be *read*.
+// That is one instance. Six forms, no rest parameter among the last four:
 //
-// **The rest parameter has to be read.** Declared and ignored, the function
-// compiles; `args.length` is enough to lose it. So it is not the generic, not
-// the rest parameter, and not the pair -- it is a use of one.
+//     f<A extends unknown[]>(...args: A): number { return args.length; }  silent
+//     f<A extends unknown[]>(...args: A): number { return 1; }            compiles
+//     f<T>(value: number): number                                         compiles
+//     f<T>(value: T): number                                              compiles
+//     f<T>(value: number): T | undefined                                  silent
+//     f<T extends number>(value: T): number                               silent
+//     f<T extends Base>(target: T): T                                     silent
+//
+// A type parameter declared and unused is fine. **Used as a parameter type
+// alone is fine.** Used in the *return type*, or carrying a *constraint*, and
+// the function vanishes.
+//
+// The non-generic control is what makes the silence a defect rather than a
+// limitation. `attach(target: Base): Base` is declined too and says
+// `takes an object, which crosses…` -- it names what it cannot carry. The
+// generic one names nothing.
+//
+// # It is under the largest concentrations in the tree
+//
+//     events/src/main.ts:747   function addListener<T extends EventEmitter>(target: T, …): T
+//                              66 lines, zero diagnostics, not lowered
+//       EventEmitter#addListener   calls addListener, refused above
+//       EventEmitter#on            calls addListener, refused above
+//       net Server#constructor     calls EventEmitter#on  (reached once the
+//                                  empty-literal question is settled either way)
+//       http Server#constructor    through super()
+//
+// `events` publishes nothing at all because of this, and `net` at 91 files and
+// `http` at 241 stand behind it at one remove.
 //
 // The third row is the contrast that makes the silence a defect rather than a
 // limitation. The same function without the generic is declined too, and says
