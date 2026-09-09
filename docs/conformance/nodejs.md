@@ -11612,6 +11612,64 @@ it happens to route through. Four of the five are filed; `` `this` outside a
 method `` is the one that resisted isolation six ways and is carried as a
 diagnosis.
 
+## A program-wide fact deciding a local outcome, three times in one night
+
+Three defects found in one evening share a shape worth naming, because the
+thing that hides all three is the same and it is *good fixture practice*.
+
+**1. The wrapper's dispatch table.** `ParsedPath` is five `string` fields, no
+methods, no base, and it was declined as `returns an object`. The wrapper's test
+for "this is a class and copying it loses behaviour" was
+`!layout.methods.is_empty()`, and `Layout::methods` holds one entry per dispatch
+slot **in the whole program**, with `None` where a layout does not implement
+that slot. `ParsedPath`'s was `[None, None, None, None, None, None]`. An object
+return was refused by dispatch existing *anywhere*. Reproduced from the other
+side here: a five-string record crosses in a slot-free program and does not
+cross beside a `Shape`/`Square` hierarchy that never touches the boundary.
+
+**2. `an `in` naming X on an `object`, which Y declares optionally.** 42 distinct
+sites -- stream 23, fs 6, net 3.
+
+    class Opts { port: number }   ...  "port" in given  -> lowers
+    class Opts { port?: number }  ...  "port" in given  -> REFUSED
+
+`Opts` is not taken, returned or mentioned by the refused function. One `?` on a
+declaration it never touches decides whether the `in` lowers. Filed as
+`in-on-an-object-with-an-optional-declarer`, with both classes in one program so
+the difference cannot be anything else.
+
+**3. A call of a function value in a program with no closures.** Not a defect --
+a stated limitation -- but the same shape, and it broke a control rather than a
+subject. `fn(x)` is refused when the program contains no closure anywhere, so
+the control in `call-and-apply-on-a-function-value` refused for a reason with
+nothing to do with `.call`, and the first draft read "all three refuse". The
+fixture now carries `makeAdder` as a **precondition, not a subject**.
+
+### Why good practice hides them
+
+A minimal reduction keeps the subject and deletes everything else. That is
+correct for a local defect and exactly wrong here: what was deleted *was* the
+precondition. Three consequences, each of which has now cost something:
+
+- **A fixture can stop reproducing by being improved.**
+  `object-return-carries-scalar-fields-only` had nine functions, six declines,
+  three controls and **no class anywhere**, so its program had zero dispatch
+  slots, every method table was genuinely empty, and it passed identically
+  before and after the defect existed. It could not fail. It now carries a
+  dispatched hierarchy nothing crosses, purely so the program is not slot-free.
+- **A control can be declined for its own reason** and read as agreement. Four
+  fixtures tonight needed a precondition restored for this: the two object
+  parameters, the TypedArray parameter, and the closure above.
+- **Two programs differing by one character in unrelated code** is the
+  reproduction. Neither program is smaller than the other, so "reduce until it
+  stops" terminates at the wrong place.
+
+**How to test for it:** when a reduction stops reproducing, put back the thing
+you deleted *last* before concluding the fixture is wrong. And when a fixture
+passes on the first try, check that it can fail -- `--sabotage`,
+`--mutate-addon`, and for a boundary fixture, whether the program contains the
+global feature the defect keys on.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
