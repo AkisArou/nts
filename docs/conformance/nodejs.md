@@ -15352,6 +15352,35 @@ A case that fails to compile is reported as "did not build" and counted apart
 from agreement, because those are opposite findings and this profile has
 confused them in both lanes.
 
+**Varying one thing at a time around that point gave six disagreements from six
+cases**, and widened the scope:
+
+    optionalNumberPresent      compiled -891087778116.3125          node 19
+    optionalNumberAbsent       compiled "not published"             node -2
+    optionalStringPresent      compiled CRASHED, signal SIGSEGV     node 3
+    twoOptionalPresent         compiled -2.2748072872723787e+265    node 7
+    mixedOptionalAndRequired   compiled -2.490026109152083e+86      node 11
+    mixedRequiredOnly          compiled 0                           node 7
+
+The last row is the widening one. `interface Mixed { a?: number; b: number }`,
+literal `{ b: 7 }`, reading the **required** `b`, answers 0. So it is not "an
+optional field reads wrong" -- a struct containing any optional field is laid
+out differently from the literal's struct, and every field read through an
+erased slot is wrong, required ones included. A string field segfaults, which is
+what a pointer-shaped field does when a tag is read as the pointer.
+
+**Two sweeps found nothing, and that is worth as much.** Ten number and string
+seams -- Grisu's shortest round-trip, int32 coercion, shift masking, unsigned
+shift, remainder sign, UTF-16 length, surrogate halves, NaN, negative zero --
+all agree. Seven layout seams -- a derived instance through its base, a field
+after an upcast, **two required fields through the same erased slot**, a
+narrowing outliving its branch, an array through a structural slot -- all agree.
+So the defect is not general to erasure and not general to layout.
+
+`agreement.mjs` calls one export per child, and earned it on its second use: the
+first run of that case exited on a signal and lost all six answers when five had
+something to say.
+
 ### In seven of the nine, the diagnostic describes something other than the cause
 
 Tracing all nine of the largest concentrations to a named construct produced one
