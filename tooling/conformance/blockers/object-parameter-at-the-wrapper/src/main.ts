@@ -18,6 +18,16 @@
 // which is five of the profile's eight `takes an object`. A timer list is an
 // object and every operation on it takes one.
 //
+// 2026-09-10, `path`: this is now the largest single thing between `path` and
+// whole. `format` declines on both namespaces -- `no wrapper for format@posix:
+// takes an object`, and the same for `@win32` -- and node's `path.format` takes
+// a `ParsedPath`, so there is no signature to rewrite into. It costs three of
+// the five test files `path` still fails: `test-path-parse-format.js` outright,
+// two of 183 cases in `local/edge-inputs-static.js`, and three of the six
+// findings in `local/export-surface-static.js`. The module is at 15 passed / 5
+// failed compiled and 20 / 0 interpreted, so `format` is not hiding behind
+// anything else in it.
+//
 // It also caught a control in a neighbouring fixture. `in-with-a-computed-key`
 // first took its `Row` as a parameter, and its control was declined for this
 // reason rather than for anything about `in`; it builds its own now.
