@@ -12649,6 +12649,44 @@ with **optional** fields -- which the `unknown` crossing does not supply:
 `format@posix` and `format@win32` still decline `takes an object` on the pin
 where `unknown` crosses both ways.
 
+## `path`'s namespaces are 11 of 17, and two of the six missing are a cycle
+
+`path.posix` and `path.win32` publish as objects with **11 members each**;
+node's have **17**. The six missing are the same in both:
+
+    format        a function -- takes an object inbound
+    matchesGlob   a function -- the RegExp chain
+    sep           a VALUE, and it differs by namespace: "/" against "\"
+    delimiter     a VALUE, ":" against ";"
+    posix         a REFERENCE to the other namespace object
+    win32         a REFERENCE to the other namespace object
+
+Top-level `path.sep` and `path.delimiter` do publish. It is only the namespace
+members that do not, so the gap is in how a namespace object is built rather
+than in value exports generally.
+
+**And the last two are not value members, they are a cycle with identity.**
+Node's own structure:
+
+    path.posix.posix === path.posix    true
+    path.posix.win32 === path.win32    true
+    path.win32.posix === path.posix    true
+
+So each namespace object contains a reference to itself and to the other, and
+`===` holds. Publishing `sep` and `delimiter` is a value member; publishing
+`posix` and `win32` is **two objects that reference each other, built before
+either is finished, with reference identity preserved**. Those are different
+problems and only the first is "value members in a namespace".
+
+`sep` is the member that matters most for behaviour: `"/"` against `"\"` is
+exactly what a caller reaching for `path.win32.sep` wants, and it is the one
+case where the two namespaces disagree in a way callers depend on.
+
+`local/export-surface-static.js` already asserts `typeof path[ns].sep ===
+"string"`, so this is a failing assertion that was written before the gap
+existed rather than a new finding -- the file currently fails earlier, on
+`path.format`, which is why the `sep` half had not surfaced.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
