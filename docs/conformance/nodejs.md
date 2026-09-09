@@ -13254,9 +13254,26 @@ So the full requirement is:
 4. `SIGUSR1` is read from the platform: 10 on Linux, 30 on macOS, which is why
    `readConstants` builds the table rather than transcribing it.
 
-Point 3 is the one a crossing will not give for free: a map arriving as a plain
-object is not frozen, and freezing all four would fail nothing today and diverge
-from node in three places that nothing currently asserts.
+**Point 3 is already done, and by this lane's own file.** `os/shape.mjs:39` is
+
+    if (constants !== undefined) Object.freeze(constants.signals);
+
+with the note at line 9 saying why: *"Node publishes null-prototype constant
+tables and freezes `signals`. Copying into that public shape leaves the
+statically assembled TypeScript records ordinary and keeps all metaobject work
+at this host boundary."*
+
+So the asymmetry is expressed in the right place and the boundary does not have
+to carry it. **This is the second time tonight a requirement handed to the
+compiler lane turned out to be satisfied by a file of mine whose note had not
+caught up** -- the first was claiming `os` could not load. Both times the survey
+read the requirement off node and off the tests without reading the shim that
+already met it.
+
+That is not an argument against surveying node. It is an argument for reading
+the shim in the same pass: the shim doing metaobject work deliberately is
+exactly the design that lets the crossing not have to, so a requirement derived
+from node alone will always overstate what the compiler owes.
 
 `core-static.js` also destructures `PRIORITY_BELOW_NORMAL` and `PRIORITY_LOW`
 from `constants.priority`, so the `priority` table has to carry its five names
