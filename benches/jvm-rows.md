@@ -49,7 +49,7 @@ not measured clean and should not be quoted.**
 | `generator` | **0.99x** | re-measured clean: not losing |
 | `symbol-keys` | **0.98x** | re-measured clean: not losing |
 | `arrays` | 1.03x | **not previously listed** |
-| `fib` | 1.03x | **not previously listed** |
+| `fib` | 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
 | `upcast` | 1.07x -> **0.99x** | re-measured clean; no `uirem` in its profile |
 | `checksum` | **1.00x** | parity |
 | `closure-merge` | **1.00x** | parity |
@@ -1334,6 +1334,66 @@ in-loop `ofObject` is a lookup key that does not escape, and C2 scalar-replaces
 it, exactly as it does the `at()` value on `array-methods`. **Two rows, two
 shapes of erased value, both eliminated.** That is the plan's headline question
 answered twice and it should stop being asked speculatively.
+
+### `fib`: the reference's `int` is justified by a claim about us that is false, and the rule would make the row worse
+
+`fib` is listed at 1.02x and its `ref.java` is `static int fib(int n)`, against a
+TypeScript `number`. The suite's rule -- **no field narrower than the f64 a
+TypeScript `number` is** -- forbids that, and the header argues an exemption:
+
+> Nobody writes `double fib(double n)`. It is also not a gift to this lane:
+> `fib(27)` stays far inside `int`, **this compiler's specialization proves the
+> same thing**, and both sides then measure what this case is for.
+
+**The bolded clause is false, and the emission says so.** Specialization narrows
+the *parameter* and not the *return*:
+
+    public static double fib$whole(int);
+      11: iload_0            <- int argument, int compare, int subtract
+      12: iconst_2
+      13: if_icmpge  21
+      28: invokestatic  fib$whole:(I)D     <- and a double back
+      45: dload  5
+      47: dload  8
+      49: dadd                             <- where the reference has iadd
+      54: dreturn
+
+`(I)D`, not `(I)I`. And it is *right* to be: `fib(n-1) + fib(n-2)` is a genuine
+f64 sum in JavaScript and narrowing it would change the answer above 2^31.
+`work$whole` on `array-methods` **does** return `I`, because that program ends in
+`| 0` and the middle end can prove it. `fib` has no such proof available. So the
+two sides are not measuring "call overhead and the branch"; one adds doubles and
+one adds ints.
+
+**Then the obvious correction was measured, and it went the other way.** Rule 3,
+one variable, `int` to `double` in the reference and nothing else:
+
+    run 1     RefI 483470     RefD 462251     RefD faster by 4.4%
+    run 2     RefI 466482     RefD 452537     RefD faster by 3.0%
+
+**The `double` reference is faster than the `int` one**, both times, minima
+compared across runs. Plausibly register pressure -- doubles live in XMM
+registers and leave the general-purpose ones to the recursion's frame work --
+but the mechanism is not measured and is not being claimed. What is measured is
+the direction.
+
+So the header's *conclusion* survives and its *reason* does not. `int` is not a
+gift to the reference; if anything it handicaps it, and obeying the rule here
+would move the row **against us**, from 1.02x to about 1.06x.
+
+**Which is why it should probably still be obeyed.** Applying "no field narrower
+than an f64" on `array-methods`, where it moved the row 1.67x to 1.18x in our
+favour, and declining it here because it moves the other way, is the exact bias
+the rule exists to remove. Not changed tonight, because changing a reference
+changes a published row and this was measured on a hand-rolled harness rather
+than `Bench.java` -- which is also why the 1.08x it reported for ours is not
+being used to restate the row. **Flagged as a decision with its measurement
+attached, not taken.**
+
+The instrument caveat, per rule 6: 20 calls a timing round on a ~500 us
+workload, best of seven, one JVM per arm. Good enough for a consistent 3-4%
+direction seen twice; not good enough to publish a ratio from, and one RefD
+round came back at 771197 against a 452537 minimum, so the spread is wide.
 
 ## Open, and whose
 
