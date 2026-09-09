@@ -37,7 +37,7 @@ not measured clean and should not be quoted.**
 | `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
 | `awfy-queens` | 1.25x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
-| `array-methods` | 1.14x | helpers beat the reference; the coercion is worth **8.9%**, measured |
+| `array-methods` | 1.14x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
 | `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8% |
@@ -1149,6 +1149,100 @@ from a share anyway.
 
 The row still has no in-lane residual -- the helpers win -- and it is still the
 best case for the fix, on a smaller and honest number.
+
+### `array-methods` read in the bytecode: three of my four claims about it were wrong
+
+I had characterised this row from profiles and a jar swap and never once read
+what the backend emits. Reading it refutes most of what I filed, including a
+hand-over I gave MainClaude.
+
+**1. The accumulator is already an `int`.** I wrote that this row carries "the
+identical shape" as `symbol-keyed-map` -- "an integer accumulator behind `| 0`
+living in a double slot" -- and handed it to `narrow.rs`. The emission says
+`istore_2` / `iload_2`:
+
+    194: iconst_0
+    195: istore_2          <- total, an int slot, for the whole loop
+    233: iload_2
+    234: iload  10
+    236: iadd              <- int addition
+    366: istore_2
+
+`specialize` already put it there. The one `i2d` per round is not the
+accumulator being a double, it is the *other operand*: `xs.at(-1)` yields an
+`f64` because the array's element type is `f64`. That is still upstream, but it
+is a different question from the one I asked, and `symbol-keyed-map` must now be
+re-read rather than assumed to share it.
+
+**2. The `NtsValue` from `at()` never reaches the heap.** The emission looked
+alarming -- an allocation per round, unwrapped on the next instruction:
+
+    314: invokestatic  NtsRuntime.arrayAtValue:([DD)Lnts/rt/NtsValue;
+    319: aload  26
+    321: getfield      NtsValue.num:D
+
+I was about to add an `arrayAtNumber([DD)D` and fuse the pair. **Measured
+first, and there is nothing there.** 256 rounds an op, so a surviving 32-byte
+object is ~8 KB/op:
+
+    empty         0 bytes/op     (the harness)
+    array only    0 bytes/op     (degenerate -- C2 removed the control too)
+    work        144 bytes/op
+
+144 is exactly `new double[16]`: 16 bytes of header and 128 of payload, the
+case's array literal, **which `ref.java` allocates identically**. Every one of
+the 256 `NtsValue`s is scalar-replaced. So the plan's headline question -- does
+C2 scalar-replace what this backend emits -- is answered **yes** on a real row,
+and the helper I was about to write would have bought zero bytes.
+
+The `array only` control is worth keeping as a warning rather than as evidence:
+it reported 0 because C2 eliminated *it*, so it establishes that a non-escaping
+array can vanish, not what an escaping one costs. The number that carried the
+argument was the 8 KB that did not appear.
+
+**3. The reference coerces too, so "the coercion the reference does not
+perform" is wrong.** It writes:
+
+    total = total + (int) xs[xs.length - 1];
+
+A `d2i`. Ours is a `toInt32` call. The gap is not a coercion against no
+coercion, it is **one instruction against a call with a guard** -- which is
+exactly the 8.9% the jar swap measured, and makes that number stop being a
+surprise. Worth noting the two are not the same function: the reference narrows
+the element *before* the addition and JavaScript narrows the sum *after*, so on
+data where the sum leaves int range they would disagree. They agree here.
+
+**4. `intcall` leaves an identity pair behind, and it is mine.** The pass holds
+the call result in an `int`, and the two `convert`s the HIR chain already had
+are then emitted against it:
+
+    218: invokestatic  NtsRuntime.arrayIndexOfI:([DD)I    <- already an int
+    223: iload  7
+    225: i2l
+    226: lstore 8
+    228: lload  8
+    230: l2i                                              <- identity, always
+    231: istore 10
+
+`i2l` sign-extends and `l2i` takes the low 32 bits back: for any `int` the pair
+is the identity, with no range precondition. Twice a round here. The pass's own
+rule -- a value is held as an `int` only if every use converts it to an integral
+type -- already has the machinery; it simply does not walk through the
+intermediate `convert : i64` to the `convert : i32` behind it.
+
+**Predicted worth on this row: about zero.** C2 has this exact identity on
+`ConvI2L`/`ConvL2I` and folds it, which is the same reason record 0004 found the
+store/load round trip free. It is worth doing for ART, which has no C2, and for
+the code size -- not for this table, and it is not being claimed for this table.
+Filed rather than built, and the control that would settle it is rule 3's: add
+a redundant `(long)` round trip to the reference's `indexOf` result and see
+whether the reference notices. That needs the lock.
+
+**What this row still is.** Helpers 18% faster than hand-written loops, a
+`toInt32` call where the reference has a `d2i` worth 8.9%, and a residual double
+round trip that is the array's element type and upstream. Nothing in it is
+in-lane any more, and three of the four things I thought were have now been
+measured away.
 
 ## Open, and whose
 
