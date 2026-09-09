@@ -13056,6 +13056,35 @@ Two confirmed divergent test files, one confirmed not, and five bindings with a
 settled answer each -- which is what the remaining eighteen candidates will be
 decided by, one lookup rather than one probe.
 
+### Applied by lookup: 20 test files the compiled binding cannot observe
+
+With one answer per binding, every pinned and local test file in the profile can
+be classified without probing each. Files whose mutation touches a binding the
+compiled artifact cannot see:
+
+| files | via | examples |
+| ---: | --- | --- |
+| 5 | `isTTY` | `color-options-static.js`, `test-console-tty-colors.js`, `test-repl-colors.js`, `test-util-styletext.js` |
+| 4 | `process.stderr.write` | `test-process-raw-debug.js`, `test-process-warning.js`, `test-global-console-exists.js` |
+| 3 | `process.stdout.write` | `count-static.js`, `test-console-count.js`, `test-internal-errors.js` |
+| 3 | both writes | `test-console.js`'s siblings -- `test-console-group.js`, `test-console-instance.js`, `test-common.js` |
+| 2 | `isTTY` + both writes | `test-console.js`, `test-console-diagnostics-channels.js` |
+| 2 | `process.cwd` | `test-path-resolve.js`, `test-util-inspect.js` |
+| 1 | `isTTY` + `process.stdout.write` | `test-console-clear.js` |
+
+**20 files.** The earlier scan said 21 candidates; that scan was case-insensitive
+and matched `hostProcess.platform ===` as an assignment, which is how `os` came
+to look like it had one. It does not.
+
+`isTTY` is the largest group and was not in the original list at all -- five
+files across `console`, `repl` and `util` set `process.stdout.isTTY` to choose a
+colour path. The compiled binding answers `isatty(1)`, which is **right about
+reality** and not what the test told it.
+
+Every one of these is a file that passes interpreted by construction. None is a
+defect in a module. They are the shape of the ceiling, and the ceiling is per
+module: `console` 12 of 19, `path` 20 of 21, `os` 9 of 9.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
