@@ -14843,6 +14843,20 @@ a timeout out of this harness knows which of the three numbers they are holding.
     node   name "RangeError"          code "ERR_OUT_OF_RANGE"   instanceof RangeError
     ours   name "ERR_OUT_OF_RANGE"    code undefined
 
+Sharper, measured on the 17:12 build: **each side has exactly one own key, and
+they are different keys with swapped contents.**
+
+    node   Object.keys(e)  ["code"]    code "ERR_OUT_OF_RANGE"   name "RangeError"
+    ours   Object.keys(e)  ["name"]    code undefined            name "ERR_OUT_OF_RANGE"
+
+    node   e instanceof RangeError  true
+    ours                            false
+
+So it is not that the code is missing and something else is fine. The one own
+property that crosses is the wrong one, carrying the right string under the
+wrong name, and the prototype identity that would make `instanceof` answer is
+gone with the accessor that produced it.
+
 `internal/errors.ts:405` is faithful to node:
 
     export class ERR_OUT_OF_RANGE extends NodeRangeError {
