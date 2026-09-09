@@ -47,7 +47,7 @@ const modules = argv.length > 0
     .filter((m) => m !== "node_modules" && existsSync(join(ADDON_DIR, m + ".node")))
     .sort();
 
-let totalDiffer = 0, totalMissing = 0, checked = 0;
+let totalDiffer = 0, totalMissing = 0, totalArity = 0, checked = 0;
 
 for (const module of modules) {
   const m = { exports: {} };
@@ -73,14 +73,26 @@ for (const module of modules) {
   try { theirs = require("node:" + module); } catch { continue; }
   checked += 1;
 
-  const differ = [], missing = [];
+  const differ = [], missing = [], arity = [];
   const walk = (ours, them, path, depth) => {
     for (const key of Object.keys(them)) {
       let a, b;
       try { a = ours?.[key]; } catch { continue; }
       try { b = them[key]; } catch { continue; }
       if (typeof b === "function") {
-        if (typeof a !== "function") missing.push(path + key + " (function)");
+        if (typeof a !== "function") { missing.push(path + key + " (function)"); continue; }
+        // Arity, which is the one thing about a function comparable without
+        // calling it -- and calling it here would arm timers and open handles.
+        //
+        // 53 of 56 published functions report `length` 0, because
+        // `napi_create_function` takes no arity and nothing defines the
+        // property afterwards. The three exceptions are JavaScript wrappers a
+        // `shape.mjs` builds. A function with the wrong `length` passes
+        // `loads.sh`, `unusable-exports.mjs` and the value comparison below, so
+        // it was invisible to everything here until this line.
+        if (a.length !== b.length) {
+          arity.push(path + key + ": length ours " + a.length + ", node " + b.length);
+        }
         continue;
       }
       if (b !== null && typeof b === "object") {
@@ -104,10 +116,12 @@ for (const module of modules) {
   };
   walk(shaped, theirs, "", 0);
 
-  if (differ.length === 0 && missing.length === 0) continue;
-  totalDiffer += differ.length; totalMissing += missing.length;
-  console.log("  " + module + ": " + differ.length + " differing, " + missing.length + " missing");
+  if (differ.length === 0 && missing.length === 0 && arity.length === 0) continue;
+  totalDiffer += differ.length; totalMissing += missing.length; totalArity += arity.length;
+  console.log("  " + module + ": " + differ.length + " differing, " + arity.length +
+    " wrong arity, " + missing.length + " missing");
   for (const d of differ.slice(0, 6)) console.log("      DIFFERS  " + d.slice(0, 92));
+  for (const d of arity.slice(0, 4)) console.log("      ARITY    " + d.slice(0, 92));
   if (missing.length > 0) console.log("      (" + missing.length + " absent, which is the publish gap and not this question)");
 }
 
@@ -117,7 +131,8 @@ if (checked === 0) {
   process.exit(2);
 }
 console.log("  " + checked + " module(s) compared, " + totalDiffer +
-  " value(s) differing, " + totalMissing + " absent");
+  " value(s) differing, " + totalArity + " function(s) with the wrong arity, " +
+  totalMissing + " absent");
 console.log("  A differing value is the finding: both sides have the name and");
 console.log("  disagree on what is behind it. Absence is the publish gap, which");
 console.log("  every other instrument here already counts.");
