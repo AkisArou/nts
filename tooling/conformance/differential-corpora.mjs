@@ -729,6 +729,201 @@ export const CORPORA = {
     ],
   },
 
+  dgram: {
+    // `createSocket`'s validation, which happens before any socket exists and
+    // is therefore comparable. A bad type, a bad options object, a missing
+    // type -- all answer synchronously with a code, and none of them binds
+    // anything.
+    //
+    // Every socket that *is* created here is closed immediately. A corpus that
+    // leaks handles keeps the process alive and the run never ends.
+    fixed: [
+      "udp4", "udp6", "UDP4", "udp", "", "tcp", "udp4 ", "0", "null",
+      "undefined", "{}", "o:udp4", "o:udp6", "o:bogus", "o:", "o:none",
+      "o:udp4+reuse", "o:udp4+ipv6only", "o:udp4+recvbuf", "o:udp4+badlookup",
+    ],
+    input: (rnd) => {
+      const T = ["udp4", "udp6", "UDP4", "udp", "", "tcp", "0", "o:udp4", "o:udp6", "o:bogus", "o:", "o:udp4+reuse", "o:udp4+badlookup", "o:none"];
+      return T[Math.floor(rnd() * T.length)];
+    },
+    calls: [
+      {
+        label: "createSocket",
+        call: (m, spec) => {
+          let arg;
+          if (spec.startsWith("o:")) {
+            const rest = spec.slice(2);
+            const [type, flag] = rest.split("+");
+            arg = {};
+            if (type !== "none") arg.type = type === "" ? "" : type;
+            if (flag === "reuse") arg.reuseAddr = true;
+            if (flag === "ipv6only") arg.ipv6Only = true;
+            if (flag === "recvbuf") arg.recvBufferSize = 1024;
+            if (flag === "badlookup") arg.lookup = 42;
+          } else if (spec === "null") {
+            arg = null;
+          } else if (spec === "undefined") {
+            arg = undefined;
+          } else if (spec === "{}") {
+            arg = {};
+          } else {
+            arg = spec;
+          }
+          let sock;
+          try {
+            sock = m.createSocket(arg);
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+          try {
+            // Never left open: an unclosed handle keeps the process alive and
+            // the sweep never finishes.
+            const type = sock.type;
+            sock.close();
+            return `ok:${type}`;
+          } catch (e) {
+            return `ok-then:${(e && e.code) || (e && e.name)}`;
+          }
+        },
+      },
+    ],
+  },
+  timers: {
+    // The synchronous surface of a timer: what `setTimeout` validates before
+    // scheduling, and what the handle it returns answers immediately.
+    // `hasRef()`, `ref()`/`unref()` returning the handle itself, and
+    // `refresh()` are all answerable without the timer ever firing.
+    //
+    // **The firing is not compared here.** Ordering between timers is
+    // `fuzz-timer-order.mjs`'s question and needs a clock, not a value compare.
+    // Every timer created is cleared in the same call.
+    //
+    // `Symbol.toPrimitive` was probed here and has been removed. It is a real
+    // difference -- node's `Timeout` carries it and answers the timer id, ours
+    // does not -- and it is **deliberately out of scope**: §13 lists
+    // `Symbol.toPrimitive` as an excluded runtime operation hook, and
+    // `test-timers-to-primitive.js` is marked not applicable for exactly that
+    // reason. Keeping the probe would report 8 divergences on every run for a
+    // decision already made, which trains a reader to ignore the number. The
+    // difference is recorded in `docs/conformance/nodejs.md` instead.
+    fixed: [
+      "fn|0", "fn|1", "fn|-1", "fn|N", "fn|I", "fn|2147483648", "fn|1.5",
+      "fn|", "fn|s", "no|0", "str|0", "obj|0", "num|0", "undef|0",
+      "fn|0|ref", "fn|0|unref", "fn|0|hasRef", "fn|0|refresh", "fn|1e21", "fn|0|hasRef",
+    ],
+    input: (rnd) => {
+      const CB = ["fn", "no", "str", "obj", "num", "undef"];
+      const D = ["0", "1", "-1", "N", "I", "1.5", "2147483648", "", "s", "1e21"];
+      const OP = ["", "|ref", "|unref", "|hasRef", "|refresh"];
+      return `${CB[Math.floor(rnd() * CB.length)]}|${D[Math.floor(rnd() * D.length)]}${OP[Math.floor(rnd() * OP.length)]}`;
+    },
+    calls: [
+      {
+        label: "setTimeout-surface",
+        call: (m, spec) => {
+          const [cbKind, delayText, op] = spec.split("|");
+          const cb =
+            cbKind === "fn" ? () => {}
+            : cbKind === "str" ? "notafunction"
+            : cbKind === "obj" ? {}
+            : cbKind === "num" ? 42
+            : cbKind === "undef" ? undefined
+            : null;
+          const delay =
+            delayText === "" ? undefined
+            : delayText === "N" ? NaN
+            : delayText === "I" ? Infinity
+            : delayText === "s" ? "later"
+            : Number(delayText);
+          let handle;
+          try {
+            handle = m.setTimeout(cb, delay);
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+          const out = ["scheduled"];
+          try {
+            if (op === "ref") out.push(`ref-self:${handle.ref() === handle}`);
+            else if (op === "unref") out.push(`unref-self:${handle.unref() === handle}`);
+            else if (op === "hasRef") out.push(`hasRef:${handle.hasRef()}`);
+            else if (op === "refresh") out.push(`refresh-self:${handle.refresh() === handle}`);
+          } catch (e) {
+            out.push(`op-threw:${(e && e.code) || (e && e.name)}`);
+          }
+          m.clearTimeout(handle);
+          return out;
+        },
+      },
+    ],
+  },
+  http: {
+    // The pure surface of `http`: two header validators and two tables. Header
+    // *validation* is a token grammar with no I/O -- RFC 7230 `token` for a
+    // name, and a value that may not carry a control character or a bare CR or
+    // LF -- and it is the part of `http` most likely to be almost right.
+    //
+    // These matter beyond conformance: `validateHeaderValue` is what stops
+    // response splitting, so a reimplementation that accepts a bare `\r\n`
+    // where node rejects it is a security difference and not a cosmetic one.
+    // Both the accept/reject decision and the error `code` are compared.
+    //
+    // Excluded: every part of `http` that speaks to a socket. This corpus is
+    // the part that does not, named as such rather than left implied.
+    fixed: [
+      "X-Test", "x-test", "", " ", "X Test", "X:Test", "X\tTest", "X\rTest",
+      "X\nTest", "X\r\nTest", "Content-Length", "content_length", "a".repeat(200),
+      "ünicode", "X-é", "\u0000", "X\u0000", "1", "-", "!#$%&'*+.^_`|~",
+      "(", ")", "<", ">", "@", ",", ";", "\\", '"', "/",
+      "[", "]", "?", "=", "{", "}", "X-Test ", " X-Test", "X-Té st",
+    ],
+    input: (rnd) => {
+      const CHARS = "abcXY-_.!#$%&'*+^`|~ \t\r\n:;,()<>@[]?={}\\\"/0\u0000\u00e9\u4e2d";
+      let out = "";
+      const k = Math.floor(rnd() * 12);
+      for (let i = 0; i < k; i++) out += CHARS[Math.floor(rnd() * CHARS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "validateHeaderName",
+        call: (m, s) => {
+          try {
+            m.validateHeaderName(s);
+            return "accepted";
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+        },
+      },
+      {
+        label: "validateHeaderValue",
+        call: (m, s) => {
+          try {
+            m.validateHeaderValue("X-Fixed", s);
+            return "accepted";
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+        },
+      },
+      {
+        // The two tables, compared whole once per input rather than per key.
+        // `STATUS_CODES` is 63 entries of prose and `METHODS` is an ordered
+        // list; a missing or misspelled entry in either is invisible to every
+        // pinned test that does not happen to use that code.
+        label: "tables",
+        call: (m) => [
+          Object.keys(m.STATUS_CODES).length,
+          m.STATUS_CODES[200],
+          m.STATUS_CODES[404],
+          m.STATUS_CODES[418],
+          m.STATUS_CODES[451],
+          Array.isArray(m.METHODS) ? m.METHODS.length : "not-array",
+          Array.isArray(m.METHODS) ? m.METHODS.join(",") : "",
+        ],
+      },
+    ],
+  },
   net: {
     // The pure surface of `net`, which I first dismissed as "sockets answer
     // over time" and then found is three address parsers and a value-shaped

@@ -11321,11 +11321,19 @@ run as a differential rather than as new hand-written assertions.
 | `process` | 4,015 | 4,015 | 0 |
 | `stream` | 4,030 | 4,030 | 0 |
 | `net` | 16,120 | 4,030 | 0 |
+| `http` | 12,117 | 4,039 | 0 |
+| `dgram` | 4,020 | 4,020 | 0 |
+| `timers` | 4,020 | 4,020 | 0 |
 
-**18 modules measured, 523,331 comparisons, 0 divergences** — `console`,
-`diagnostics_channel`, `readline`, `async_hooks`, `process`, `stream` and `net`
-were all added tonight and contribute 40,275 of them. `net` is the one that
-found a real defect; see the section above it.
+**21 modules measured, 543,488 comparisons, 0 divergences.** Ten corpora were
+added tonight — `console`, `diagnostics_channel`, `readline`, `async_hooks`,
+`process`, `stream`, `net`, `http`, `dgram` and `timers` — contributing 60,432
+of them, and `net` found a real defect (the section above).
+
+**This is every module the instrument can cover.** The one absence is `os`, and
+it is skipped with a reason rather than missing: its bindings stand in as node
+on this lane, so the comparison would be node against node. `differential-addon.mjs`
+is where that question belongs.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11428,18 +11436,40 @@ an output that is the right output *repeated* means state leaking between
 iterations. A real defect is usually a minority of inputs and a *different*
 answer, not the same answer twice.
 
-### What it could not run, which is half the tree
+### What it could not run, which is now one module
 
-That number means nothing without this beside it. **Eighteen of twenty-two
-modules were measured.** One more was skipped with a stated reason:
+That number means nothing without this beside it. **Twenty-one of twenty-two
+modules were measured**, up from eleven this morning. One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **three never appeared in the run at all** — `dgram`, `http` and `timers`.
-`net` was in that list until tonight on the reasoning that sockets answer over
-time, which was a generalisation from the module's name and cost a real defect
-its discovery; `dgram` and `http` have pure surfaces too and are next. These are the modules whose surfaces are sockets, streams and timers
+and **none is now absent without a reason.** `dgram`, `http`, `net` and
+`timers` were all written off earlier tonight as "sockets and timers answer over
+time to a peer, which a value-compare corpus has no way to hold" — a
+generalisation from the modules' *names* that cost `net`'s defect its discovery
+for several hours. Each has a pure surface:
+
+| module | what is comparable | what is excluded |
+| --- | --- | --- |
+| `net` | `isIP`/`isIPv4`/`isIPv6`, `BlockList` | `connect`, `createServer`, `Socket` |
+| `http` | `validateHeaderName`/`Value`, `STATUS_CODES`, `METHODS` | everything that speaks to a socket |
+| `dgram` | `createSocket`'s validation, before a socket exists | the socket itself |
+| `timers` | validation, `ref`/`unref`/`hasRef`/`refresh` | the firing, which needs a clock |
+
+`http`'s two validators are worth more than conformance: `validateHeaderValue`
+is what stops response splitting, so accepting a bare CRLF where node rejects it
+is a security difference. 31 of its 39 fixed inputs catch a sabotage that makes
+`validateHeaderName` accept everything.
+
+`timers` probed `Symbol.toPrimitive` and the probe was **removed rather than
+kept red**. Node's `Timeout` carries it and answers the timer id; ours does not.
+That is a real difference and it is **deliberately out of scope** — §13 lists
+`Symbol.toPrimitive` as an excluded runtime operation hook and
+`test-timers-to-primitive.js` is marked not applicable for exactly that reason.
+Implementing it would contradict a declared non-goal; leaving the probe in would
+report 8 divergences on every run for a decision already made, which teaches a
+reader to ignore the number. It is recorded here and dropped there. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven
