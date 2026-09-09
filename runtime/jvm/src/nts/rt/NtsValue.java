@@ -114,6 +114,26 @@ public final class NtsValue {
     }
 
     /**
+     * `instanceof DataView`, which needs no kind beside it.
+     *
+     * <p>`isViewKind` takes one because the twelve typed arrays are twelve
+     * classes under `NtsView` and the lowering has to say which. There is
+     * exactly one `DataView`, so the class *is* the answer -- and this is a
+     * plain `instanceof` rather than a switch for the same reason `isBuffer`
+     * is.
+     *
+     * <p>It cannot answer true for a typed array: `NtsDataView` is `final` and
+     * extends `NtsAnyView` directly, while every typed array extends
+     * `NtsView`, so the two are siblings rather than one being under the other.
+     * That is worth stating because `NtsAnyView` would have matched both and is
+     * the obvious thing to reach for.
+     */
+    public static boolean isDataView(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        return ref instanceof NtsDataView;
+    }
+
+    /**
      * `instanceof Promise`.
      *
      * <p>The C lane compares a descriptor pointer against `nts_desc_promise`
