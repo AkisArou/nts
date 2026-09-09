@@ -15544,6 +15544,21 @@ disagreeing, 28 refused, 0 that did not build:
     `in` on a record is always false            1 case
     integer-like keys are not promoted          1 case
 
+**How far each reaches in `runtime/node`, counted as an upper bound.** Each
+figure is every site of the *construct*, not every site that is wrong: most
+indexed writes are in bounds and correct, and many `in` sites are on a bare
+`object`, which refuses rather than answering wrongly. The bound is still the
+right ordering information, because a defect cannot reach further than its
+construct.
+
+    an indexed write `x[i] = `      302 sites across 21 modules
+    the `in` operator               260 sites across 13 modules
+    try / catch                     131 sites across 18 modules
+    Object.keys / Object.entries     33 sites across  9 modules
+
+The lone-surrogate defect has no construct to count -- it is reached by any
+string that holds one, and `string_decoder` exists to hold exactly those.
+
 **`in` on a `Record` is always false**, and it is the most confined defect
 measured:
 
