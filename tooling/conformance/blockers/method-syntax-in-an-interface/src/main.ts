@@ -26,13 +26,35 @@
 //
 // That matters for what a fix looks like. The message reads as a
 // representation gap for function types, and the first row says there is no
-// such gap: the representation exists and one spelling reaches it.
+// such gap for a *property*: one spelling already has a layout.
 //
 // It also matters for what a fix is *not*. Rewriting stream's interfaces from
 // `destroy?(reason: number): void` to
 // `destroy?: (reason: number) => void` would make 24 things compile and would
 // be rewriting correct source to route around a refusal. The declarations are
 // node's shape written the way node's own types write it. Hence a fixture.
+//
+// # The cause, and why the one-line version of it is wrong
+//
+// Found by the compiler lane and recorded here because it changes what this
+// fixture is asking for. `fields_of` has
+// `if !property.kind.is_stored() { continue; }`, and `MemberKind::Method` is
+// not stored -- **right for a class**, whose method lives in the dispatch
+// table, and **wrong for an interface** satisfied by
+// `{ read: (x) => x + 1 }`, where it is data. One line.
+//
+// They did not change it, and the reason is worth more than the fix would have
+// been. `class C implements I` gives `C` its own layout from `C`'s type. If `I`
+// gains a stored slot for a method member, `I`'s layout and `C`'s stop agreeing
+// about offsets, and a `C` passed where an `I` is expected reads the wrong ones
+// -- silently, which is the failure mode this compiler refuses everywhere else.
+// It is the same shape as `upcast-to-base` being free only because base fields
+// come first.
+//
+// **So this is not 24 things of layout work.** It is "what is an interface's
+// representation when both an object literal and a class instance can be one",
+// which is a design step and not a member-kind check. The count above is what
+// it is worth, not how long it takes.
 //
 // # A call cascades, so the refusal is on the declaration
 //
