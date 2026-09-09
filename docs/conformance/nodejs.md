@@ -15086,7 +15086,8 @@ otherwise.
 
 ## The interpreted lane, every module: 1,859 passing and nothing failing
 
-Node's own tests against the TypeScript running on node, all twenty-two modules:
+`tooling/conformance/interpreted-lane.sh`, all twenty-two modules -- node's own
+tests against the TypeScript running on node:
 
     22 modules, 2,323 files
     1,859 passed    0 failed    29 skipped    435 not applicable
