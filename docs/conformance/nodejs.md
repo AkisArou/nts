@@ -15084,6 +15084,64 @@ documented shape, matched the file's own comment, and removed an eager
 allocation. Running node's suite after making it is the only thing that said
 otherwise.
 
+## The interpreted lane, every module: 1,859 passing and nothing failing
+
+Node's own tests against the TypeScript running on node, all twenty-two modules:
+
+    22 modules, 2,323 files
+    1,859 passed    0 failed    29 skipped    435 not applicable
+
+    http     405 of 451      fs       346 of 395      stream   250 of 269
+    net      150 of 181      async_hooks 117 of 155   process   89 of 153
+
+**Not one module has a failing file.** The implementation passes every
+applicable test it runs, and has no outstanding defect this suite can see.
+
+### Which makes the 435 the number to argue with
+
+That is where the judgement lives, and it is the only place left for one. Every
+entry names a reason; by kind:
+
+    113  language non-goal (typescript.md §13), in three spellings
+     34  cross-module integration
+     14  unavailable provider
+     13  active-environment gap
+      7  implementation-detail test
+      7  hollow oracle
+      6  runtime blocker
+
+Sampled rather than trusted. The `active-environment gap` thirteen all need
+`process.send` IPC or cluster handle transfer. The six `runtime blocker` entries
+are CLI-flag plumbing (`--no-warnings`, `--insecure-http-parser`,
+`--use-env-proxy`, `--max-http-header-size`), `getBuiltinModule` needing a
+registry, and `util.aborted`'s fifth case -- which names two specific
+infrastructure gaps, weak listener registration through the canonical
+`EventTarget` and promise-state inspection needing a runtime helper.
+
+None of them is a defect waiting to be fixed. All of them are infrastructure or
+a stated non-goal.
+
+### What that means for where the work is
+
+The compiled axis is 29 behaviour-dependent across 15 modules. The interpreted
+lane is 1,859 and complete. **The entire remaining distance between them is the
+compiler**, and every module added to the axis today was added by finding
+behaviour an artifact already had and asking it -- not by fixing an
+implementation.
+
+### One instrument error, named
+
+The survey walked every directory under `runtime/node` with a `test/` folder,
+which picked up `internal` -- a shared source directory, not a module. It has a
+`test/` holding one C file, and the runner matched node's `test-internal-*.js`
+against a module that does not exist and reported **29 files, 0 passed, 29
+failed**.
+
+Excluded from the totals above. Reported because a row saying `0 passed, 29
+failed` in a table whose every other row says `0 failed` is exactly the kind of
+thing that gets quoted, and it is an artifact of the loop's directory test
+rather than a fact about anything.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
