@@ -6,12 +6,28 @@
 //     xs.push(2)                           answers 2, agreeing with node
 //     xs[1] = 5   inside the bounds        agrees
 //
-// **Corrected 2026-09-09.** This file first read `xs[1] = 2` as aborting too,
-// and said the ordinary append was broken. It was, on the pin measured at the
-// time, and it is not now -- one of that afternoon's compiler changes closed
-// it. The claim is left in this comment rather than deleted, because the file
-// was sent to the compiler lane with "the ordinary append aborts" as its
-// headline and that is no longer true.
+// **Corrected twice on 2026-09-09, and the second correction is the one to
+// read.** This file first said `xs[1] = 2` aborts. Then a later pin answered 2,
+// so it was rewritten to say the append had been fixed and only the sparse
+// write remained. **That was wrong: the append is not fixed on HEAD.**
+//
+// The pin was a copy of `target/release/nts`, which is built by whichever
+// session last ran a build **from its own working tree**. It contained the
+// compiler lane's in-progress array work, which they had not landed and which
+// their own memory floor was rejecting.
+//
+// Verified rather than taken: the same program answers `nts: refused: index 1
+// is outside [0, 1)` on a pin taken at 21:00 and `2` on one taken at 21:35, and
+// the only two commits in that window are `27ac7390` and `78d69869` -- one
+// about `super.fill` reaching the runtime, the other about a literal's
+// contextual member. Neither touches array growth. So the difference came from
+// something not in the history, which is the definition of a working tree.
+//
+// **A pin gives stability, not provenance.** Copying the binary stops it
+// changing under a measurement; it does not make the measurement about a
+// commit. To speak about HEAD, the binary has to be built from HEAD -- and this
+// lane may not run `cargo`, so the honest form is to say which pin a number
+// came from and when it was taken.
 //
 // # What is left is a documented representation limit, not a defect
 //
