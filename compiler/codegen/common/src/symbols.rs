@@ -289,6 +289,42 @@ fn collides_with_a_header(name: &str) -> bool {
     MATH.contains(&stem)
 }
 
+/// The first character of `name` that no C identifier may carry.
+///
+/// `c_identifier`'s first branch is injective and deliberately so: `#`, `.` and
+/// `@` each get their own spelling "so that two different qualified names cannot
+/// become one C name". But that branch only runs when the name contains one of
+/// the five *qualifiers*, and a TypeScript property name may legally carry any
+/// character at all:
+///
+/// ```text
+/// class Holder { "a b": number = 1 }
+/// ->  int32_t a b;
+/// program.c:8:14: error: expected ';' at end of declaration list
+/// ```
+///
+/// So the `else` returned it verbatim, and `_Static_assert(offsetof(NtsObj_Holder,
+/// a b) == 24u, ...)` came with it. Found by the JVM lane, who had the same
+/// defect in `jvm_member_name` and fixed it the same way after a hand-listed
+/// `match` of six characters turned out to be short by twenty-two.
+///
+/// Reported rather than escaped. The catch-all in that first branch maps every
+/// other character to `_`, which is **not** injective -- `a b` and `a+b` are one
+/// C name -- and an injective escape costs every generated name its readability
+/// for a construct no program in this tree writes. Naming the character says
+/// where the fix goes if one ever does.
+///
+/// Non-ASCII passes: `is_alphanumeric` is Unicode-aware, a TypeScript identifier
+/// may legitimately use it, and C11 admits it through universal character names.
+/// That is a decision rather than an oversight, and it is the one to revisit
+/// first if this ever reports something surprising.
+#[must_use]
+pub fn unspellable_in_c(name: &str) -> Option<char> {
+    name.chars().find(|c| {
+        !c.is_alphanumeric() && *c != '_' && !matches!(c, '#' | '.' | '<' | '>' | '@')
+    })
+}
+
 /// The C spelling of a function name.
 ///
 /// Appending an underscore is the whole rule: it is reversible by inspection,

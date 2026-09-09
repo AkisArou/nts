@@ -14,7 +14,7 @@
 //! to be visible.
 
 pub use nts_codegen_common::symbols::{c_global, c_identifier};
-use nts_codegen_common::symbols::c_member;
+use nts_codegen_common::symbols::{c_member, unspellable_in_c};
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
@@ -1826,6 +1826,39 @@ fn emit_object_types(
         ),
     );
     for layout in &program.layouts {
+        // A property name C cannot spell, which stops the *whole* struct.
+        //
+        //     class Holder { "a b": number = 1 }
+        //     ->  int32_t a b;
+        //     program.c:8:14: error: expected ';' at end of declaration list
+        //
+        // Skipping the field alone is not enough and was tried: the
+        // `_Static_assert(offsetof(...))` lines are emitted from `layout.fields`
+        // further down, so the struct came out missing two members with two
+        // asserts still naming them. That is the exact failure the comment
+        // fifty lines below this one is about -- "a struct missing a field the
+        // reference map still points at is not a smaller object, it is a wrong
+        // one" -- arriving through a different door.
+        //
+        // Found by the JVM lane, who had the identical defect in
+        // `jvm_member_name` and fixed it the same way after a hand-listed
+        // `match` of six characters turned out to be short by twenty-two.
+        if let Some(bad) = layout
+            .fields
+            .iter()
+            .find_map(|field| unspellable_in_c(&field.name).map(|c| (field.name.clone(), c)))
+        {
+            diagnostics.push(Diagnostic::error(
+                "NTS1001",
+                format!(
+                    "a property named `{}`, which contains `{}` and so has no C spelling, \
+                     is not supported by this lowering yet",
+                    bad.0, bad.1
+                ),
+                origin.location,
+            ));
+            continue;
+        }
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a

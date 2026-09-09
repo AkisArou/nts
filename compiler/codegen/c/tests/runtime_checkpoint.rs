@@ -102,6 +102,38 @@ fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
     );
 }
 
+/// An erased needle against an array of strings answers, rather than aborting.
+///
+/// `validateOneOf(value: unknown, name: string, oneOf: Choices)` is one of
+/// node's most-called validators, and the lowering chose the string-specialised
+/// helper from the array's element type alone -- handing `const NtsString *` an
+/// `NtsValue`. Four modules' `program.c` stopped compiling the hour that
+/// validator first became reachable.
+///
+/// The suite is here rather than in `examples/` because the shape cannot be
+/// written in a fixture: TypeScript will not typecheck `strings.includes(u)`
+/// without a cast, and `as string` unerases *before* the call, so the bug is out
+/// of reach. Only the generic instantiation node uses produces it, and a generic
+/// function is refused by this compiler in a standalone fixture.
+///
+/// What it checks is the repair that would have been wrong. Unerasing the needle
+/// aborts on a number; `SameValueZero` says a number is simply absent from an
+/// array of strings, and node answers `false`. A suite that only passed strings
+/// would agree with either repair, so most of these needles are not strings.
+#[test]
+fn an_erased_needle_answers_by_its_tag() {
+    let report = run_suite("needles", &[]);
+    assert!(
+        checks(&report) >= 11,
+        "expected at least 11 needle checks, saw {}:\n{report}",
+        checks(&report)
+    );
+    assert!(
+        report.contains("all needle checks passed"),
+        "the needle suite reported a failure:\n{report}"
+    );
+}
+
 #[test]
 fn an_element_is_read_by_kind_and_not_by_width() {
     // Reference counting, because two of the checks are about the read *owning*

@@ -1,7 +1,7 @@
-// expect: `toString` on a number is not supported by this lowering yet
+// expect: nothing refused
 //
-// The most leveraged small refusal found so far, and it is three calls away from
-// every module's front door.
+// FIXED, and kept as a guard. It was the most leveraged small refusal found,
+// three calls from every module's front door.
 //
 //   path.normalize(p)            runtime/node/path/src/posix.ts:80
 //     validateString(p, "path")  runtime/node/internal/validators.ts:19
@@ -19,6 +19,21 @@
 //
 // Radix is the whole of it -- argument-less `toString` on a number lowers, which
 // is why this fixture passes a literal 16 rather than nothing.
+//
+// What it bought, stated so the chain above is not read as cleared: `path`
+// publishes its fifteen names already, and this moved the `inspectValue` chain
+// exactly **one link**. `inspectString` compiles now; `inspectPropertyName`,
+// one line further down `internal/errors.ts`, is
+//
+//     /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
+//
+// and needs a regular expression engine. So `inspectValue` still does not
+// compile, and `ERR_OUT_OF_RANGE`, `ERR_INVALID_ARG_VALUE`,
+// `ERR_UNKNOWN_ENCODING` and `ERR_INVALID_ARG_VALUE_RANGE` are still behind it.
+// Across all 22 modules the published-name count went 86 -> 87.
+//
+// `examples/number-tostring-radix` is where the behaviour is checked; this
+// fixture only says the construct lowers.
 
 export function hex(code: number): string {
   return code.toString(16);

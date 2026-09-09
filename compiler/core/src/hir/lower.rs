@@ -19784,6 +19784,92 @@ impl<'a> FuncBuilder<'a> {
         ))
     }
 
+    /// `n.toString(radix)`, with node's domain check in front of it.
+    ///
+    /// Lifted out of [`Self::lower_method_call`] for length, and the split is
+    /// where it would be anyway: everything here is about the *argument* having
+    /// a domain, and nothing above it is.
+    fn lower_radix_to_string(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        radix: ValueId,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = origin.clone();
+        // `(5).toString(1)` is a `RangeError` in node and a string
+        // here, until this. The differential found it on the first run
+        // -- it feeds arbitrary numbers, and nine of its cases were a
+        // radix node refuses -- which is the whole argument for
+        // comparing against node rather than against an expectation:
+        // nothing in the source or the fixture says the argument has a
+        // domain, and node says so nine times.
+        //
+        // The bound belongs here rather than in the runtime because a
+        // provided `RangeError` is a *class*, and the runtime has no
+        // way to construct one. That asymmetry is what
+        // `throw_provided_error_text` exists for.
+        let throwing = self.new_block();
+        let carry_on = self.new_block();
+        let two = self.push(OpKind::ConstFloat(2.0), HirType::NUMBER, origin.clone());
+        let below = self.push(
+            OpKind::Binary { op: BinOp::Lt, lhs: radix, rhs: two },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let checking = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: below,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: checking,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(checking);
+        let thirty_six =
+            self.push(OpKind::ConstFloat(36.0), HirType::NUMBER, origin.clone());
+        let above = self.push(
+            OpKind::Binary { op: BinOp::Gt, lhs: radix, rhs: thirty_six },
+            HirType::Bool,
+            origin.clone(),
+        );
+        self.terminate(Terminator::Branch {
+            cond: above,
+            then_target: throwing,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+
+        self.switch_to(throwing);
+        // Node's exact sentence, and it names no value: `RangeError:
+        // toString() radix must be between 2 and 36`.
+        let text = HirType::Managed(ManagedType::String);
+        let message = self.push(
+            OpKind::ConstString(
+                "toString() radix must be between 2 and 36".to_owned(),
+            ),
+            text,
+            origin.clone(),
+        );
+        self.throw_provided_error_text(id, "RangeError", message)?;
+        if !self.is_terminated() {
+            self.terminate(Terminator::Jump {
+                target: carry_on,
+                args: Vec::new(),
+            });
+        }
+
+        self.switch_to(carry_on);
+        Ok(self.runtime_call(
+            "nts_number_to_string_radix",
+            vec![value, radix],
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     /// A call to a statically resolved target.
     ///
     /// Requires the frontend's call resolution: without it there is no way to
@@ -19834,6 +19920,23 @@ impl<'a> FuncBuilder<'a> {
             let name = self.node(*member).text.clone().unwrap_or_default();
             if name == "toString" && arguments.is_empty() {
                 return self.as_string(*receiver_node, receiver);
+            }
+            // `n.toString(radix)`, which is three calls from every module's
+            // front door: `ERR_INVALID_ARG_TYPE` renders the offending value
+            // into its message, rendering a control character means a hex
+            // escape, and `code.toString(16)` is that escape. A module cannot
+            // validate an argument without this, and validating arguments is
+            // what node's entry points do first.
+            //
+            // The receiver is widened to `f64` because the runtime takes one
+            // and an `i32` receiver is common -- `charCodeAt` gives one.
+            if name == "toString" && arguments.len() == 1 {
+                let radix = self.lower_expression(arguments[0])?;
+                let radix = self.coerce(radix, &HirType::NUMBER, arguments[0])?;
+                let value = self.coerce(receiver, &HirType::NUMBER, *receiver_node)?;
+                let origin = self.origin(id);
+
+                return self.lower_radix_to_string(id, value, radix, &origin);
             }
             return Err(self.unsupported(id, &format!("`{name}` on a number")));
         }
@@ -22226,12 +22329,41 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
+        // Lowered before the helper is chosen, because the choice now depends
+        // on the needle's type and not only on the array's.
+        let mut args = vec![receiver];
+        for argument in arguments {
+            args.push(self.lower_expression(*argument)?);
+        }
+        let needle_is_erased = args
+            .get(1)
+            .is_some_and(|value| self.values[value.0 as usize].ty == HirType::Erased);
+
         let (helper, arity, ty) = match name {
             "pop" => ("nts_array_pop_ref", 0, of_element),
             "shift" => ("nts_array_shift_ref", 0, of_element),
             "at" => ("nts_array_at_ref", 1, of_element),
+            // The needle's own type picks the variant, not only the array's.
+            //
+            // `validateOneOf(value: unknown, name: string, oneOf: string[])`
+            // calls `oneOf.includes(value)`, and choosing from the *array*
+            // alone handed `const NtsString *` an `NtsValue`. Four modules'
+            // `program.c` stopped compiling the hour that validator first
+            // became reachable, and the C compiler is what said so -- nothing
+            // in the lowering checks an extern's arguments against the
+            // signature table, because most of that table's entries are `None`.
+            //
+            // Not an unerase: an `unknown` that is not a string is not an error
+            // here. SameValueZero says it is simply absent from an array of
+            // strings, so the helper reads the tag and answers "not found".
+            "indexOf" if text && needle_is_erased => {
+                ("nts_array_index_of_str_value", 1, HirType::NUMBER)
+            }
             "indexOf" if text => ("nts_array_index_of_str", 1, HirType::NUMBER),
             "indexOf" => ("nts_array_index_of_ref", 1, HirType::NUMBER),
+            "includes" if text && needle_is_erased => {
+                ("nts_array_includes_str_value", 1, HirType::Bool)
+            }
             "includes" if text => ("nts_array_includes_str", 1, HirType::Bool),
             "includes" => ("nts_array_includes_ref", 1, HirType::Bool),
             "concat" => ("nts_array_concat_ref", 1, array.clone()),
@@ -22244,10 +22376,6 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
         };
-        let mut args = vec![receiver];
-        for argument in arguments {
-            args.push(self.lower_expression(*argument)?);
-        }
         let origin = self.origin(id);
         while args.len() < arity + 1 {
             let end = self.push(

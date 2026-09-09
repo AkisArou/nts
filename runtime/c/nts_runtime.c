@@ -1839,6 +1839,20 @@ bool nts_array_includes_str(const NtsArray *a, const NtsString *needle) {
   return nts_array_index_of_str(a, needle) >= 0.0;
 }
 
+bool nts_array_includes_str_value(const NtsArray *a, NtsValue needle) {
+  if (nts_value_tag(needle) != NTS_TAG_STRING)
+    return false;
+  return nts_array_includes_str(a,
+                                (const NtsString *)nts_value_reference(needle));
+}
+
+double nts_array_index_of_str_value(const NtsArray *a, NtsValue needle) {
+  if (nts_value_tag(needle) != NTS_TAG_STRING)
+    return -1.0;
+  return nts_array_index_of_str(a,
+                                (const NtsString *)nts_value_reference(needle));
+}
+
 /* `shift` and `unshift`, which are `pop` and `push` at the other end.
  *
  * The other end costs a `memmove`: an array's elements are contiguous and its
@@ -3437,6 +3451,121 @@ static int nts_u32toa(char *buf, uint32_t n) {
 
 NtsString *nts_number_to_string(double x) {
   return nts_number_to_string_into(NULL, x);
+}
+
+/* `n.toString(radix)`. V8's `DoubleToRadixCString`, which is the only
+ * implementation that agrees with node on the fraction.
+ *
+ * The buffer is 2200 bytes because that is what V8 uses and the bound is real
+ * rather than generous: the smallest denormal in radix 2 has about 1075
+ * fractional digits, and the largest double has about 1024 integer ones.
+ *
+ * `delta` is the termination argument. It starts at half the distance to the
+ * next representable double and is scaled by the radix alongside the fraction,
+ * so the loop stops as soon as the digits remaining could not change which
+ * double this is. Rounding up carries through the fraction and, if it runs off
+ * the front, into the integer part -- which is why the integer part is written
+ * after the fraction and not before. */
+NtsString *nts_number_to_string_radix(double x, double radix) {
+  if (radix == 10.0)
+    return nts_number_to_string(x);
+
+  int base = (int)radix;
+  if (x != x)
+    return nts_string_from_utf8("NaN", 3);
+  if (x == 0.0)
+    return nts_string_from_utf8("0", 1);
+  if (x > 1.7976931348623157e308)
+    return nts_string_from_utf8("Infinity", 8);
+  if (x < -1.7976931348623157e308)
+    return nts_string_from_utf8("-Infinity", 9);
+
+  static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  char buffer[2200];
+  const size_t kBufferSize = sizeof buffer;
+  size_t integer_cursor = kBufferSize / 2;
+  size_t fraction_cursor = integer_cursor;
+
+  bool negative = x < 0.0;
+  if (negative)
+    x = -x;
+
+  double integer = floor(x);
+  double fraction = x - integer;
+
+  /* Half the gap to the next double, and never zero: `nextafter` of zero is
+   * the smallest denormal, which is the floor a fraction can be compared to. */
+  double delta = 0.5 * (nextafter(x, 1.0 / 0.0) - x);
+  double smallest = nextafter(0.0, 1.0 / 0.0);
+  if (delta < smallest)
+    delta = smallest;
+
+  if (fraction >= delta) {
+    buffer[fraction_cursor++] = '.';
+    do {
+      fraction *= radix;
+      delta *= radix;
+      int digit = (int)fraction;
+      buffer[fraction_cursor++] = digits[digit];
+      fraction -= digit;
+      if (fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0)) {
+        if (fraction + delta > 1.0) {
+          /* Round up, carrying back through the digits already written. A
+           * carry off the front of the fraction lands on the integer part,
+           * which is why that is computed afterwards. */
+          for (;;) {
+            if (fraction_cursor == integer_cursor) {
+              integer += 1.0;
+              break;
+            }
+            char c = buffer[--fraction_cursor];
+            if (c == '.')
+              continue;
+            int at = c > '9' ? c - 'a' + 10 : c - '0';
+            if (at + 1 < base) {
+              buffer[fraction_cursor++] = digits[at + 1];
+              break;
+            }
+          }
+          break;
+        }
+      }
+    } while (fraction >= delta && fraction_cursor + 1 < kBufferSize);
+  }
+
+  /* The integer part, least significant digit first, written backwards from
+   * the middle of the buffer.
+   *
+   * `fmod` rather than a cast, because the value can exceed every integer type
+   * -- `1e300` in radix 2 is a thousand digits and no `uint64_t` holds it. */
+  /* A double whose ULP exceeds one cannot represent consecutive integers, so
+   * every digit below that point is a zero node writes and this must not
+   * invent. `fmod` on such a value returns a remainder built from bits the
+   * double does not have, and `1e21` in radix 3 came out
+   * `...2022201202222111` where node writes `...20222` and eleven zeros.
+   *
+   * `ilogb(v) > 52` is V8's `Double::Exponent() > 0`: the significand is 53
+   * bits, so an exponent above 52 puts the unit in the last place above one.
+   * Divide the exponent out first, writing the zeros it stands for. */
+  while (integer_cursor > 0 && integer > 0.0 && ilogb(integer / radix) > 52) {
+    integer /= radix;
+    buffer[--integer_cursor] = '0';
+  }
+  while (integer > 0.0 && integer_cursor > 0) {
+    double remainder = fmod(integer, radix);
+    integer = (integer - remainder) / radix;
+    buffer[--integer_cursor] = digits[(int)remainder];
+  }
+  /* Against the buffer's middle, not against `fraction_cursor`: the fraction
+   * has already moved that one past the '.', so the two are never equal when
+   * there is a fraction and `(0.5).toString(2)` came out `.1` for `0.1`. */
+  if (integer_cursor == kBufferSize / 2)
+    buffer[--integer_cursor] = '0';
+  if (negative)
+    buffer[--integer_cursor] = '-';
+
+  return nts_string_from_utf8(buffer + integer_cursor,
+                              fraction_cursor - integer_cursor);
 }
 
 /* Inlined, which is a quarter of `benches/cases/number-format`: 961ns to 729ns,

@@ -1654,6 +1654,30 @@ fn named_entry() -> Vec<String> {
     if named.is_empty() {
         vec![hir::lower::MODULE_INIT.to_owned()]
     } else {
+        // Module evaluation is a root in the same sense the named entry is:
+        // nothing *calls* it, and the program is wrong without it. The
+        // no-`--entry` arm above has always known that; the named arm dropped
+        // it, and `nts-bench` had to push it back at `main.rs:1799` with a
+        // comment saying why.
+        //
+        // It surfaces as a wrong **answer** rather than a link error, which is
+        // what makes it worth fixing rather than documenting. The JVM lane
+        // found `symbol-keyed-map --entry work` printing 32768 against node's
+        // 10240: five module-level `const` symbols stayed null, five distinct
+        // map keys collapsed into one, and every lookup hit it. 24 of the 60
+        // bench cases have a `module#init`.
+        //
+        // Worse, their sweep reported `agree` for two days -- `java` and
+        // `dalvikvm` were bit-identical on a program that was not the
+        // benchmark. Two runtimes agreeing is what a wrong program does too.
+        //
+        // The flag's own documentation recommends it for reproducing what a
+        // benchmark builds, which is exactly the use where a silently different
+        // answer costs the most.
+        let mut named = named;
+        if !named.iter().any(|name| name == hir::lower::MODULE_INIT) {
+            named.push(hir::lower::MODULE_INIT.to_owned());
+        }
         named
     }
 }

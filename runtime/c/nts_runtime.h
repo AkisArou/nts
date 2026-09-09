@@ -1463,6 +1463,25 @@ NTS_READS_ONLY bool nts_value_eq_boolean_fn(NtsValue value, bool boolean);
 uint32_t nts_to_uint32_fn(double x);
 
 NtsString *nts_number_to_string(double x);
+
+/* `n.toString(radix)`, for a radix of 2 through 36.
+ *
+ * Radix 10 is `nts_number_to_string`, which is faster and is what the fast path
+ * above is for; every other radix comes here.
+ *
+ * The fractional half is why this is not a digit loop. `(0.1).toString(3)` is
+ * an infinite expansion, and the question of where to stop is the whole of the
+ * algorithm: V8 stops when the remaining fraction is smaller than half the gap
+ * to the next representable double, so the digits written are exactly the ones
+ * that distinguish this double from its neighbours. A loop that stopped after
+ * twenty digits would print a number that reads back as a different one.
+ *
+ * The callers in this tree are all `code.toString(16)` on an integer character
+ * code, and none of them would notice. It is written for the general case
+ * anyway because the alternative is a silent wrong answer for a value nobody
+ * can see at compile time -- a refusal would have to happen at run time, and
+ * there is nowhere for it to go. */
+NtsString *nts_number_to_string_radix(double x, double radix);
 /* `String.fromCharCode` and `String.fromCodePoint`, which are two functions:
  * the first takes a UTF-16 code *unit* through `ToUint16` and always returns
  * one of them, the second takes a code *point* and returns a surrogate pair
@@ -1597,6 +1616,22 @@ NTS_READS_ONLY double nts_array_index_of_str(const NtsArray *a,
                                              const NtsString *needle);
 NTS_READS_ONLY bool nts_array_includes_str(const NtsArray *a,
                                            const NtsString *needle);
+/* `includes` and `indexOf` on an array of strings, with the needle *erased*.
+ *
+ * `validateOneOf(value: unknown, name: string, oneOf: string[])` is the shape,
+ * and it is one of node's most-called validators. The lowering picks the
+ * variant from the array's element type, so `oneOf.includes(value)` chose the
+ * string one and handed it an `NtsValue` -- which four modules' `program.c`
+ * refused to compile the hour `validateOneOf` first became reachable.
+ *
+ * Unerasing the needle would be the wrong repair: an `unknown` that is not a
+ * string is not an error here, it is a value SameValueZero says is absent from
+ * an array of strings. So the tag decides, and a non-string answers "not
+ * found" rather than aborting. */
+NTS_READS_ONLY bool nts_array_includes_str_value(const NtsArray *a,
+                                                 NtsValue needle);
+NTS_READS_ONLY double nts_array_index_of_str_value(const NtsArray *a,
+                                                   NtsValue needle);
 NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to);
 /* `join` on an array of strings. Only strings: every other element type needs a
  * conversion per element, which is a different question from this one. */
