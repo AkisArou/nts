@@ -1,6 +1,6 @@
 # `tooling/conformance`
 
-Sixty-two scripts, 129 fixtures and 23 agreement cases, and a new session needs about six of the
+Sixty-three scripts, 129 fixtures and 23 agreement cases, and a new session needs about six of the
 scripts. This says which six, and what the rest are for when you reach them.
 
 ## Two lanes, and they answer different questions
@@ -45,6 +45,7 @@ is in the file's own header; the summary is here so you know what to reach for.
 | `honours-addon-out.mjs` | which instruments measure the shared artifact directory by accident? |
 | `refusal-census.mjs` | which lowering roots are worth the most, counted by cause? |
 | `arity-agreement.mjs` | does a published function's `length` match the arity it demands? |
+| `native-half.mjs` | which declared bindings have no C anywhere? |
 | `next-pass.mjs` | what stands in front of the next compiled pass in each module? |
 | `agreement.mjs` | does a compiled program answer what node answers? |
 | `standin-blindspot.mjs` | which bindings can no lane disagree with node about? |
