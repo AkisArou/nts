@@ -15516,50 +15516,56 @@ more sweeps rather than more targeted probes.
 
 ### The suite as it stands
 
-Thirteen case files, **80 questions compared, 14 disagreeing, 16 refused, 0 that
-did not build**. The fourteen disagreements are **three defects**:
+Sixteen case files, **97 questions compared, 15 disagreeing, 22 refused, 0 that
+did not build**. The fifteen disagreements are **four defects**:
 
     exceptions do not cross a call frame        6 cases, two files
     a struct with an optional field, erased     6 cases, one a SIGSEGV
     an indexed write at or past the length      2 cases, both SIGABRT
+    integer-like keys are not promoted          1 case
 
-Eight files are clean, and they are the ones that took the longest to write:
+Ten files are clean, and they are what make the fifteen mean something:
 
-    number-and-string-seams        10   Grisu's shortest round-trip, int32 coercion,
-                                        shift masking, unsigned shift, remainder sign,
-                                        UTF-16 length, surrogate halves, NaN, -0
+    number-and-string-seams        10   Grisu, int32 coercion, shift masking,
+                                        unsigned shift, remainder sign, UTF-16
+                                        length, surrogate halves, NaN, -0
     coercion-and-object-seams       9   typeof null, object identity, template
-                                        stringification, a default parameter per call,
-                                        a destructuring default
+                                        stringification, a default parameter per
+                                        call, a destructuring default
+    spread-and-class-member-seams   8   a static method, a private field, a getter,
+                                        a setter, a rest parameter, array spread,
+                                        destructuring with a rest and a rename
     string-and-number-method-seams  8   padStart, repeat(0), split(""), indexOf(""),
                                         slice clamping, charAt past the end,
                                         Number("   "), "ß".toUpperCase()
     erasure-and-layout-seams        7   a derived instance through its base, a field
-                                        after an upcast, **two required fields through
-                                        the same erased slot**, a narrowing outliving
+                                        after an upcast, two required fields through
+                                        the same erased slot, a narrowing outliving
                                         its branch
     ordering-and-statement-seams    7   labelled break and continue, argument order,
                                         assignment order, do-while, for update
-    control-flow-and-method-seams   6   virtual dispatch, finally after a return,
-                                        a return inside finally, closure capture,
+    control-flow-and-method-seams   6   virtual dispatch, finally after a return, a
+                                        return inside finally, closure capture,
                                         short-circuiting, the nearest catch
     callback-seams                  6   a callback reading and writing the enclosing
                                         scope, called twice, its return used, two
                                         arguments, one calling another
+    collection-and-json-seams       6   for...of order, Array.isArray, Object.keys
+                                        insertion order, sort lexicographic and with
+                                        a comparator, replace, join, concat
     async-and-array-seams           4   await ordering, indexOf and NaN, negative
                                         slice, code-unit comparison
 
-**The clean files are what make the fourteen mean something.** Sixty-six of
-eighty questions answered exactly as node answers them. A profile where half of
-everything is wrong needs no instrument; one this exact has three specific
-things wrong with it, each reduced and each with a control that says what it is
-not.
+**Eighty-two of ninety-seven questions answered exactly as node answers them.**
+A profile where half of everything is wrong needs no instrument; one this exact
+has four specific things wrong with it, each reduced, each with a control that
+says what it is not.
 
-`callback-seams` matters most among the clean ones: calls work, closures work,
-return values come back. So the exception defect is the unwind path and not
-calls in general -- a smaller thing to fix and a worse thing to have, because
-every ordinary path was exercised by everything that passes and the error path
-by nothing.
+`callback-seams` and `spread-and-class-member-seams` matter most among the clean
+ones. Calls work, closures work, return values come back, static *methods*
+dispatch, private fields read, getters and setters run. So the exception defect
+is the unwind path and not calls, and `a class used as a value` is static
+*fields* and not class members generally.
 
 ### In seven of the nine, the diagnostic describes something other than the cause
 
