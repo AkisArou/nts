@@ -9643,6 +9643,52 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## `path` moved, and the widest remaining root is the one filed tonight
+
+The `instanceof` family completing let `validateString` compile. `path` went
+from 4 published exports to 10 -- `normalize`, `isAbsolute`, `relative`,
+`dirname`, `basename`, `extname` joined the four that were there, none bound to
+`undefined`. Wrapper declines 13 to 7, cone roots 28 to 27, compiled lane 2
+passed to 3.
+
+**The new pass is real.** `test-path-posix-relative-on-windows.js` fails under
+`--mutate-addon` and under `--empty-exports`; the two survivors are the presence
+checks that were already there. Behaviour-dependent passes across the profile go
+from six to seven. `path` is 3 of 21, so the axis is still 1 of 22.
+
+Where `path` stops now: a rest parameter on `resolve` and `join` (filed tonight
+as `rest-parameter-at-the-wrapper` -- it lowers and does not cross), an object
+parameter on `format`, an object return on `parse`, `matchesGlob` behind
+glob-matcher's own six roots, and the two namespaces.
+
+### `os` did not move, and tracing why found the convergence
+
+`os` is unchanged at 6 declines. `getPriority` and `setPriority` cascade on
+`validateInt32`, and `validateString` compiling did not bring its siblings:
+
+```
+validateInt32, validateInteger, validateNumberRange, validateUint32
+                                <- ERR_OUT_OF_RANGE#constructor
+validateArray                   <- ERR_INVALID_ARG_VALUE#constructor
+  -> validateStringArray, validateBooleanArray
+validatePort                    <- ERR_SOCKET_BAD_PORT#constructor
+```
+
+All three constructors call `inspectValue`, `inspectValue` calls
+`inspectValueWithin`, and `inspectValueWithin` is refused at `errors.ts:533` --
+**indexing an array of any**, which is `indexing-an-array-of-any`, filed
+tonight after `length-after-array-isarray` was fixed and revealed it two lines
+later.
+
+Within the `os` cone alone -- one module's cone, not the profile -- 16 distinct
+functions are one or two hops from `inspectValue`. It also holds
+`ERR_UNKNOWN_ENCODING#constructor`, which is what leaves `StringDecoder`
+without a constructor and `string_decoder` publishing nothing.
+
+So the widest remaining root and the one blocking the nearest module are the
+same expression, and the fixture for it was filed four hours after the fix that
+exposed it.
+
 ## The native half: 328 of 331, and which `nm` you ask decides the answer
 
 Re-derived tonight. 331 distinct `nts_*` bindings are declared across
