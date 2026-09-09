@@ -12523,6 +12523,60 @@ written: `win32.toNamespacedPath`'s transcribed
 under `path: string`, and it is what narrows `unknown` to `string` for the body
 below it. The dead guard was the precondition for its own resurrection.
 
+## The counted lane over all 22 modules, with its uncounted control: 0 differ
+
+The goal text asks for "the counted lane covering every building module with its
+uncounted control". Until tonight that was not satisfiable: seven modules built,
+so the set was a remembered list of seven. **22 build now, and the run has been
+made over all of them.**
+
+    22 module(s) measured, 0 reported `did not build`
+    29,394 retain/release sites across the profile
+    0 module(s) differ between the columns
+
+Heaviest: `process` 2,964 sites, `fs` 2,941, `dgram` 2,201, `net` 2,179,
+`readline` 2,164. Lightest that still runs: `punycode` 55, `timers` 321.
+
+Every row is identical counted and uncounted -- same file count, same passes,
+same failures, same skips. `NTS_CONFORMANCE_RC=1` selects reference counting on
+both halves and `-DNTS_POISON=1` rides along, so a freed or unwritten slot reads
+`a5d03c3c3c3c3c3c` rather than a zero indistinguishable from a legitimate one.
+
+**What an identical pair means, and what it does not.** It does not mean the
+allocator is correct. Most of these modules publish nothing, so most of these
+tests never reach compiled code at all: `zlib` runs 74 files with 2,159
+retain/release sites emitted and 0 published names, and its 68 failures are
+`zlib.createGzip is not a function` on both sides. An identical pair there is
+the allocator **seeing nothing these tests can reach**, which the script's own
+footer says and which is a result rather than a blank.
+
+The rows where it means something are the three that publish and pass:
+`punycode` 3 of 3 at 55 sites, `path` 12 of 22 at 435, `os` 4 of 13 at 512 --
+identical counted and uncounted, so nothing those tests exercise is freed early
+or twice.
+
+### And the run before this one was wrong in a way worth keeping
+
+The first attempt reported **thirteen modules as `did not build`** and
+`0 module(s) differ` -- and all thirteen were false. Mid-run, tidying pinned
+binaries down to "current and previous", I deleted the pin the run was using.
+`build.sh` re-invokes `$NTS_COMPILER` per module, so every module after `http`
+failed for a reason with nothing to do with the module.
+
+**`loads.sh` had said 22 of 22 build forty minutes earlier**, which is the only
+thing in the room that could contradict the table -- and it is an instrument
+built for something else entirely.
+
+Two rules out of it. A long run holds a live reference to its pin, so "keep two
+pins" has to mean two **plus whatever is in flight**; the tidy rule that cannot
+get this wrong is *delete only pins older than the one two runs back*. And an
+instrument reporting `did not build` cannot distinguish "this module does not
+compile" from "the compiler was not there" unless it is written to -- the same
+shape as `no addon built` reading as a module being far away when it is one
+function's body.
+
+The invalid table is kept as `cvu-INVALID-deleted-pin.txt` rather than deleted.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
