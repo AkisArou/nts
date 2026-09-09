@@ -55,6 +55,29 @@
 // it, because a fixture written to test object returns had no reason to declare
 // a class. Removing these three declarations puts the blind spot back.
 
+
+// # What it costs, measured
+//
+// A class instance is an object return too, and a class whose members are all
+// **methods** has no scalar field to carry -- so a function returning one is
+// declined outright rather than flattened.
+//
+//     async_hooks/src/main.ts:158   createHook(callbacks): AsyncHook
+//     no wrapper for createHook: returns an object
+//
+// `AsyncHook` holds one private field of an interface type and its surface is
+// `enable` and `disable`. Reduced both ways: a returned class with a private
+// field of an interface type, and one with a method and no fields at all, both
+// give `returns an object`. A returned class with a public scalar field
+// publishes, which is the rule above doing exactly what it says.
+//
+// Against the compiled `async_hooks` addon: 115 failing test files, **54 of
+// them stopping at `async_hooks.createHook is not a function`**.
+//
+// So the rule is not only about how much of an object crosses. For a factory of
+// a behavioural object it decides whether the function exists at all, and that
+// is a different-shaped cost from a field being dropped.
+
 interface Inner {
   a: number;
 }
