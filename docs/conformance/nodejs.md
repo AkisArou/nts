@@ -12201,6 +12201,58 @@ this one missing and the other fourteen present, which is the only reason it is
 here. A step that reports success without checking its own output is the same
 defect as a test that cannot fail, one level further out.
 
+## `os.node` segfaults during `require`: a `Record` field is never allocated
+
+The index-signature representation landed and `os` stopped loading. Before, on a
+pin built from the commit prior: loads, publishes 17 names, `arch()` answers
+`x64`, 4 of 9 applicable tests pass. After: **SIGSEGV during `require`**, exit
+139, nothing on stdout or stderr, **0 of 9**. `path` and `punycode`, rebuilt
+from the same pin, are unaffected -- neither has an index-signature type.
+
+    #0  nts_map_set ()
+    #1  module.init ()
+    #2  napi_register_module_v1 ()
+
+The crashing call is `program.c:14265`, inside `readConstants()`, which
+`module__init` runs to build `export const constants`:
+
+        v66 = v8->dlopen;
+        v63 = v66;
+        …
+        nts_map_set(v63, v76, v78);
+
+**`readConstants` contains zero `nts_map_new` calls.** The whole emitted program
+has exactly one, and it belongs to `objectUrlStore` in `buffer/src/blob.ts`. So
+the four `Record<string, number>` fields of `OsConstants` are never given a
+table, and the first write goes through whatever the struct held.
+
+The shape that escaped the compiler lane's `examples/string-keyed-table` is
+likely **a record that is a field of an object literal** rather than one bound
+to a name: a named table gets its `nts_map_new`, a field of a returned object
+literal does not.
+
+### What this cost me, which is the part worth keeping
+
+Two hours earlier this ledger recorded the same landing as "four own roots
+cleared, zero exports crossed" and treated it as the familiar disappointment
+where a real fix does not move the axis. **That was wrong in a way the entry
+could not see.** It did not publish nothing; it published a crash.
+
+The measurement was `emit-c` refusal counts and a grep for
+`napi_set_named_property` in the emitted wrapper. Both are static reads of text
+the compiler produced. Neither runs anything. `os` publishes 17 names by that
+measure on the pin where it segfaults on load.
+
+**And `os` is the one module where this ledger had already proved that loading
+is what matters.** The `computed-member-write` note claiming `os` "cannot load"
+was corrected earlier the same night, by the compiler lane, *by loading it* --
+and the correction is three sections above this one. Having been handed that
+lesson, the next measurement of the same module was still taken by counting.
+
+The build floor says "22 of 22 still build". Building is not loading, and
+nothing between the two was checking. A `require()` of every built addon costs
+under a second each and would have caught this the moment it landed.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
