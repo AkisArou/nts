@@ -11376,6 +11376,73 @@ Ruled out: that a pattern with no metacharacters could lower as a substring
 search. `/a/` is refused identically -- the decision is made on syntax, before
 anything reads the pattern.
 
+## Three refusal forms that resisted isolation, handed over as diagnoses
+
+Each of these is a large form in the profile that no minimal program reproduced.
+They are written here rather than filed because a fixture that does not
+reproduce is worse than none -- it goes green on a compiler that fixed nothing.
+What each one rules out is the useful part.
+
+### `a member of X, a class this compiler has no type for` -- 99 sites, the largest
+
+Named classes, by cone-summed occurrence rather than site: `PipeState`,
+`ByteTeeState`, `TeeState`, `ReadableStreamAsyncIterator`, `ByteTransferSource`,
+`AsyncLocalStorage`, `Immediate`, `CustomEvent`, `StorageContextEntry`. The
+live reproducer is `async_hooks/src/local-storage.ts`, where **every** member
+access on `AsyncLocalStorage` and `StorageContextEntry` reports it and no
+property refusal appears at all -- which is the surprise, because the class
+holds `#contexts = new WeakMap<AsyncContextFrame, StoredContext<T>>()` and a
+`WeakMap` field reports as a property everywhere else.
+
+**Ruled out, each probed on one pin and each lowering cleanly:**
+
+| probe | result |
+| --- | --- |
+| a generic class `Box<T>` with a member | lowers |
+| a generic class with a default, `Box<T = unknown>` | lowers |
+| instantiated at `unknown` | lowers |
+| two instantiations in one program | lowers |
+| a non-generic class with a `WeakMap` field | reports the **property**, not this |
+| a generic class whose field is `WeakMap<object, T>` | reports the property |
+| the same class `implements` an interface | reports the property |
+| the class in a transitively-reached file, entry elsewhere | reports the property |
+
+So it is not genericity, not defaults, not `unknown`, not multiple
+instantiations, not an unrepresentable member on its own, not `implements`, and
+not the entry-set effect that explains `path`'s two messages. Something about
+`local-storage.ts` that none of eight reductions carries is required.
+
+### `` `this` outside a method `` -- 39 sites, 2 filed
+
+`this-in-a-static-method` claims the two in `net/src/main.ts` where a `static`
+method declares its receiver as a `this` parameter. The other 37 are not that.
+Ruled out: `this` in a default parameter value; `this` in an arrow-function
+class field; the same with a rest parameter and with a `#private` call; a getter
+reading `this.#size`. All four lower.
+
+`stream/src/duplex.ts` supplies nine and every one is reported at a `get` line
+whose body reads `this._writableState`. Since a plain getter lowers, **the
+reported line is probably not the construct.** These diagnostics carry a
+location and no enclosing name, and `path` has already shown a reported position
+that does not describe what refused.
+
+### `a rest parameter that is not an array` -- 39 sites
+
+Second attempt, second failure to isolate. The live site is
+`internal/tick.ts:83`, `nextTick(() => { throw err })` -- a generic rest
+parameter `...args: A` where `A extends unknown[]` is instantiated at the empty
+tuple. Ruled out: a plain `...args: number[]`; a generic `...args: A` called
+with no arguments; the same called with one argument. All three lower, including
+the shape the site appears to be.
+
+**Standing note on all three.** The instrument that produced them -- counting
+distinct diagnostic texts over the profile -- has now been wrong in the same
+direction three times tonight: `a method X with no declaration in the hierarchy`
+(42 sites, at least three causes), `a module-scope variable of unrepresentable
+type` (18 sites, not about module scope), and `a member of X` (99 sites, and the
+`AsyncLocalStorage` case suggests it is downstream of something else). **A form
+count is a lower bound on causes and an upper bound on nothing.**
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
