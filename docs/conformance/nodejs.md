@@ -15255,6 +15255,55 @@ os.hostname` -- with the differences across two `dlopen` calls being what
 `dlopen` does rather than a defect, since node's `require` caches and
 `process.dlopen` deliberately does not.
 
+### The counted lane, every building module, with its uncounted control
+
+The goal's completion criteria name this and say `counted-lane.sh` does not
+produce it: a counted row means nothing without the uncounted one beside it,
+because a module reporting `0 passed, 12 failed` under reference counting looks
+like a reference-counting defect until the control shows the same figures.
+
+`counted-vs-uncounted.sh` builds each module twice and prints both. All 22:
+
+    22 module rows, **0 differing between the columns**
+    36,395 retain/release sites across the counted builds
+
+    assert       26  0 passed, 12 failed  [1887 rc]    26  0 passed, 12 failed
+    async_hooks 155  2 passed, 115 failed [403 rc]    155  2 passed, 115 failed
+    buffer       98  2 passed, 54 failed  [822 rc]     98  2 passed, 54 failed
+    zlib         74  1 passed, 67 failed  [2561 rc]    74  1 passed, 67 failed
+
+**An identical pair is a result, not a blank.** Thirty-six thousand retain and
+release sites are live in these builds and not one of them changes an answer
+node's tests can reach. That is what the pairing exists to say, and the counted
+column alone cannot say it.
+
+### os's priority test: the failure moved rather than closed
+
+The boundary-message fix (`fe58e916`) closed the wording, and `os` stayed at 5
+passed and 4 failed. **A refusal delta is not a measure of a fix**, so here is
+what replaced it: `test-os-process-priority.js` went from
+
+    Expected values to be strictly deep-equal   (the message)
+
+to
+
+    Missing expected exception
+
+Traced through every input the test uses -- `null`, `true`, `false`, `'foo'`,
+`{}`, `[]`, `/x/` for the type check and `NaN`, `Infinity`, `-Infinity`, `3.14`,
+`2**32` for the range -- exactly two disagree:
+
+    getPriority(null)    ours returns, node throws ERR_INVALID_ARG_TYPE
+    getPriority(false)   the same
+
+`getPriority(pid?: number)` takes its parameter optionally, and an optional
+parameter whose conversion fails is not checked -- the same defect as
+`an-optional-parameter-that-did-not-convert`, showing here as a **missing
+exception** rather than as a garbage value. One fixture covers both faces.
+
+So os is still four failures from whole and now three of the four are behind two
+filed roots, with the fourth behind that fixture.
+
 ### os is four failures from whole, and every one is behind something named
 
 The goal is counted in whole modules and `os` is nearest: **5 passed, 4 failed**
