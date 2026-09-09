@@ -13,6 +13,11 @@ if [ "${1:-}" = "--ts" ]; then
   exec node "$root/tooling/conformance/run.mjs" --module "$module" "$@"
 fi
 
+# `target/node` is shared with the other sessions in this tree. `NTS_ADDON_OUT`
+# is the variable `build.sh` already takes, so building and running here name
+# the same directory; the default is unchanged.
+addon_dir="${NTS_ADDON_OUT:-$root/target/node}"
+
 "$root/tooling/conformance/build.sh" "$module" >/dev/null
 exec node "$root/tooling/conformance/run.mjs" \
-  --module "$module" --addon "$root/target/node/$module.node" "$@"
+  --module "$module" --addon "$addon_dir/$module.node" "$@"

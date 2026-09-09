@@ -82,6 +82,17 @@ import { spawnSync } from "node:child_process";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it measures whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` already take; the default is
+// unchanged, so every existing caller behaves as before.
+//
+// Not hypothetical: this file reported ten functions whose `length` disagrees
+// with their own arity check, against artifacts of unknown vintage that another
+// lane had built. The finding may still be real -- but it was not a measurement
+// of anything this session built, and it read as one.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
+
 const UNSAFE = {
   net: "binds sockets",
   dgram: "opens a udp handle",
@@ -111,12 +122,15 @@ const modules = argv.length > 0
 
 let published = 0;
 let unusable = 0;
+let dishonestTotal = 0;
+const skipped = [];
 
 for (const module of modules) {
-  const addon = join(ROOT, "target/node", `${module}.node`);
+  const addon = join(ADDON_DIR, `${module}.node`);
   if (!existsSync(addon)) continue;
   if (Object.hasOwn(UNSAFE, module)) {
     console.log(`${module}: skipped -- ${UNSAFE[module]}`);
+    skipped.push(module);
     continue;
   }
 
@@ -145,6 +159,34 @@ for (const module of modules) {
         }
       }
     }
+    // A function that demands more arguments than its own length reports.
+    //
+    // Once the wrapper began setting Function.prototype.length from the
+    // signature, the property and the arity check stopped agreeing:
+    // readline.reverseString reports 1 -- node's number -- and throws
+    // "requires 3 arguments" when called with one. length counts up to the
+    // first optional parameter and the check counts every declared one.
+    //
+    // The one case where a caller doing exactly what the function says still
+    // fails, and it appeared as a consequence of a fix rather than as a
+    // regression: before it every length was 0 and nothing could disagree.
+    // (No backticks in this comment: it lives inside a template literal, and
+    // that has broken this directory three times today.)
+    const dishonest = [];
+    for (const [k, f] of targets) {
+      let demanded = null;
+      try { f(...new Array(f.length).fill(undefined)); }
+      catch (e) {
+        // Two backslashes: this lives in a template literal, and a single one
+        // collapses -- the regex reached the child as /requires (d+) argument/
+        // and matched nothing, so this check reported 0 disagreements against
+        // an addon a standalone probe had already found four in. The escape
+        // trap and the backtick trap are the same trap.
+        const found = /requires (\\d+) argument/.exec(String(e && e.message));
+        if (found !== null) demanded = Number(found[1]);
+      }
+      if (demanded !== null && demanded > f.length) dishonest.push([k, f.length, demanded]);
+    }
     const rows = []; let n = 0;
     for (const [k, f] of targets) {
       n++;
@@ -167,7 +209,7 @@ for (const module of modules) {
                     kind: ok === 0 ? "UNUSABLE" : "UNREACHABLE FOR SOME ARGUMENTS" });
       }
     }
-    console.log(JSON.stringify({ functions: n, rows }));
+    console.log(JSON.stringify({ functions: n, rows, dishonest }));
   `;
   const run = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", timeout: 60_000 });
   const line = `${run.stdout ?? ""}`.trim().split("\n").filter((l) => l.startsWith("{")).pop();
@@ -180,6 +222,10 @@ for (const module of modules) {
   unusable += result.rows.length;
   if (result.functions === 0) continue;
   console.log(`${module}: ${result.functions} published function(s), ${result.rows.length} unusable`);
+  for (const [name, length, demanded] of result.dishonest ?? []) {
+    console.log(`    ARITY DISAGREES  ${name}  length ${length}, demands ${demanded}`);
+    dishonestTotal += 1;
+  }
   for (const row of result.rows) {
     console.log(`    ${row.kind}  ${row.name}  --  ${row.why}`);
     console.log(`              ${row.boundary} shape(s) hit the boundary, ${row.validated} reached the module's own validation, ${row.ok} succeeded`);
@@ -187,4 +233,10 @@ for (const module of modules) {
 }
 
 console.log(`\n${unusable} of ${published} published function(s) refuse at least one argument shape at the boundary. UNUSABLE means none succeeded.`);
+console.log(`${dishonestTotal} of them demand more arguments than their own length reports -- the one` +
+  " case where a caller doing exactly what the function says still fails.");
+if (skipped.length > 0) {
+  console.log(`  Not asked: ${skipped.join(", ")}. Those are skipped whole, so the` +
+    " arity figure above is over the modules that were called, not over all of them.");
+}
 console.log("Silence is not a clearance: the shapes are generic, so this can find an unusable name and cannot certify a usable one.");

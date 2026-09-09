@@ -51,6 +51,16 @@ import process from "node:process";
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, "../..");
+
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it measures whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` already take; the default is
+// unchanged, so every existing caller behaves as before.
+//
+// Not hypothetical: `unusable-exports.mjs` reported ten arity findings against
+// artifacts another lane had built, and read as though it had measured this
+// session's.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
 const PROFILE = join(ROOT, "runtime/node");
 
 const argv = process.argv;
@@ -149,7 +159,7 @@ function shapeNamesMissingFrom(module, artifact) {
 }
 
 function addon(module) {
-  const artifact = join(ROOT, "target/node", `${module}.node`);
+  const artifact = join(ADDON_DIR, `${module}.node`);
   try {
     execFileSync(join(HERE, "build.sh"), [module], {
       encoding: "utf8",
@@ -365,7 +375,7 @@ function backendRefusals(module) {
   // including one known to have six.
   const run = spawnSync(
     compiler,
-    ["emit-c", join(PROFILE, module, "tsconfig.json"), "--out", join(ROOT, "target/node", `${module}.gap`), "--napi"],
+    ["emit-c", join(PROFILE, module, "tsconfig.json"), "--out", join(ADDON_DIR, `${module}.gap`), "--napi"],
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
@@ -953,7 +963,7 @@ if (!withCompiles && modules.length > 1) {
   // otherwise print the same line as a module that agrees about everything.
   const addonRuns = [];
   for (const module of modules) {
-    const addon = join(ROOT, "target/node", `${module}.node`);
+    const addon = join(ADDON_DIR, `${module}.node`);
     if (!existsSync(addon)) continue;
     const probe = spawnSync(
       process.execPath,

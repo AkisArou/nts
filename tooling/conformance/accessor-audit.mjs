@@ -40,14 +40,24 @@ import { fileURLToPath } from "node:url";
 // catch, in this file.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
+// `target/node` is shared with the other sessions in this tree, so a run that
+// names it measures whatever they last wrote. `NTS_ADDON_OUT` is the variable
+// `build.sh`, `loads.sh` and `axis-controls.mjs` already take; the default is
+// unchanged, so every existing caller behaves as before.
+//
+// Not hypothetical: `unusable-exports.mjs` reported ten arity findings against
+// artifacts another lane had built, and read as though it had measured this
+// session's.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
+
 const argv = process.argv.slice(2);
 const all = argv.includes("--all");
 const named = argv.filter((a) => !a.startsWith("--"));
 
 const files = all
-  ? readdirSync(join(ROOT, "target/node"), { withFileTypes: true })
+  ? readdirSync(ADDON_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory() && e.name.endsWith(".build"))
-      .map((e) => join(ROOT, "target/node", e.name, "program.c"))
+      .map((e) => join(ADDON_DIR, e.name, "program.c"))
       .filter(existsSync)
   : named;
 
