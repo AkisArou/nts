@@ -75,8 +75,44 @@ function invoke(target, spec, input) {
   }
 }
 
+/* Whether the compiled module publishes what a spec reaches for.
+ *
+ * `invoke` can only see absence for the `spec.name` form: it looks the function
+ * up and returns `{ missing }`. A `spec.call` form -- `(m, input) =>
+ * m.posix.normalize(input)` -- reaches through the module itself and *throws*,
+ * which arrives as a divergence.
+ *
+ * That is not a small difference in reporting. `path` publishes 4 of its 17
+ * exports, and the differential answered **400,840 comparisons, 400,840
+ * divergences**: every one of them `Cannot read properties of undefined`. A
+ * real wrong answer among them would have been invisible. `buffer` and `util`
+ * read the same way, for the same reason.
+ *
+ * The first segment of a label is the top-level export a spec needs --
+ * `posix.normalize` needs `posix`, `ucs2.decode` needs `ucs2` -- so this is a
+ * lookup rather than a guess about an error message. Matching on "Cannot read
+ * properties of undefined" would also have caught a module that genuinely
+ * returned undefined from a nested read, which is a defect and not an absence.
+ */
+function publishes(spec) {
+  const label = spec.label ?? spec.name ?? "";
+  // The leading identifier, not the segment before a dot. `posix.normalize`
+  // needs `posix` and `format(t)` needs `format` -- a label may spell its
+  // arguments, and splitting on "." alone let every flat call form through.
+  // `util` published two functions and its corpus exercises `format`, so it
+  // reported 45,216 comparisons and 45,216 divergences, all of them
+  // `m.format is not a function`.
+  const root = /^[A-Za-z_$][\w$]*/.exec(label)?.[0];
+  if (root === undefined) return true;
+  return compiled[root] !== undefined && compiled[root] !== null;
+}
+
 function compare(spec, input) {
   const label = spec.label ?? spec.name;
+  if (!publishes(spec)) {
+    absent.add(label);
+    return;
+  }
   const a = invoke(compiled, spec, input);
   const b = invoke(upstream, spec, input);
   // An addon that does not publish the function is named rather than counted
