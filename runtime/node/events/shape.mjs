@@ -6,6 +6,11 @@
 // implementation's.
 export function shape(exports) {
   const EventEmitter = exports.EventEmitter ?? exports.default;
+  // // A compiled module may publish none of this yet, and reaching through an
+  // absent export turns "one export is missing" into "the module did not load"
+  // -- one message for every test in the module, naming nothing. Every test
+  // still fails; they fail saying which export they wanted.
+  if (EventEmitter === undefined) return {};
   EventEmitter.EventEmitter = EventEmitter;
   EventEmitter.usingDomains = false;
   // `getEventListeners` and the module-level `listenerCount` are node's

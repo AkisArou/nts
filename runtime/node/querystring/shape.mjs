@@ -6,6 +6,11 @@
 // object and `parse` another.
 export function shape(exports) {
   const qs = exports.QueryString;
+  // // A compiled module may publish none of this yet, and reaching through an
+  // absent export turns "one export is missing" into "the module did not load"
+  // -- one message for every test in the module, naming nothing. Every test
+  // still fails; they fail saying which export they wanted.
+  if (qs === undefined) return {};
   const compiledParse = qs.parse;
 
   // NTS records have no prototype chain. N-API and the direct TypeScript

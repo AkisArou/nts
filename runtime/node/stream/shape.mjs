@@ -19,6 +19,10 @@ const callableConstructors = new Map();
  * while retaining `Derived.prototype`. No stream algorithm runs here.
  */
 function callableConstructor(Class, name) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing.
+  if (Class === undefined) return undefined;
   const existing = callableConstructors.get(Class);
   if (existing !== undefined) return existing;
 
@@ -48,6 +52,9 @@ export function shape(exports) {
   // host-facing object shape and deliberately stays out of typed algorithms.
   if (exports.iter?.Stream !== undefined) Object.freeze(exports.iter.Stream);
 
+  // A compiled module may not publish this yet -- see the note on
+  // callableConstructor above.
+  if (Stream === undefined) return {};
   Stream.Stream = Stream;
   // EventEmitter exposes these as the same function objects. The typed source
   // keeps ordinary statically declared methods; function-object aliasing is a

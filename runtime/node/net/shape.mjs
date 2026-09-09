@@ -10,6 +10,11 @@
  * `new.target` preserves normal subclass construction on the Node host.
  */
 function callableConstructor(Implementation, name) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing. Returning early lets
+  // each test fail saying which export it wanted.
+  if (Implementation === undefined) return undefined;
   const callable = function (...args) {
     if (new.target === undefined) return new Implementation(...args);
     return Reflect.construct(

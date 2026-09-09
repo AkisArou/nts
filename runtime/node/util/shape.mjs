@@ -38,11 +38,17 @@ export function shape(exports) {
 
   // These are Node's public properties on the `inspect` function. The values
   // remain the live typed tables used by `inspect`, `format`, and `styleText`.
+  // A compiled module may publish none of this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test, naming nothing. Guarded so each test fails saying
+  // which export it wanted.
+  if (util.inspect !== undefined) {
   util.inspect.defaultOptions = exports.inspectDefaultOptions;
   util.inspect.colors = exports.colors;
   util.inspect.styles = exports.styles;
   util.inspect.custom = Symbol.for("nodejs.util.inspect.custom");
-  installColorAliases(exports.colors);
+  }
+  if (exports.colors !== undefined) installColorAliases(exports.colors);
 
   delete util.inspectDefaultOptions;
   delete util.colors;

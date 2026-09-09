@@ -7,6 +7,11 @@
 export function shape(exports) {
   const underTest = exports.globalConsole ?? exports.default;
 
+  // A compiled module may publish none of this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test, naming nothing.
+  if (underTest === undefined) return {};
+
   // TypeScript fields are enumerable data properties. Node keeps these
   // Console implementation details off the enumerable module namespace.
   for (const name of [

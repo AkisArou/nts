@@ -50,6 +50,11 @@ export function installGlobals(underTest) {
  * shape without putting a property map in the compiled objects themselves.
  */
 function shapeWhatwgClasses(URL, URLSearchParams) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing. Returning early lets
+  // each test fail saying which export it wanted.
+  if (URL === undefined || URLSearchParams === undefined) return;
   makeEnumerableInOrder(URL.prototype, [
     "toString",
     "href",

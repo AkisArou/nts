@@ -282,6 +282,10 @@ const codeNames = [
 let instantiationWarningEmitted = false;
 
 function callableConstructor(Implementation, name) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing.
+  if (Implementation === undefined) return undefined;
   const callable = function (...args) {
     if (new.target === undefined) {
       // Node deduplicates deprecation warnings by code. DEP0184 belongs only
@@ -332,14 +336,16 @@ export function shape(exports) {
     });
   }
   const constants = Object.create(null);
-  for (const name of constantNames) {
+  // A compiled module may not publish `constants` yet -- see the note on
+  // callableConstructor above.
+  for (const name of exports.constants === undefined ? [] : constantNames) {
     Object.defineProperty(constants, name, {
       value: exports.constants[name],
       enumerable: true,
     });
   }
   const codeTable = {};
-  for (const name of codeNames) codeTable[name] = exports.codes[name];
+  for (const name of exports.codes === undefined ? [] : codeNames) codeTable[name] = exports.codes[name];
   const codes = Object.freeze(codeTable);
   delete implementations.default;
   delete implementations.iter;

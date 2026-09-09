@@ -9,6 +9,11 @@ export function shape(exports) {
   // are sorted. Node's CommonJS subpath installs the three operations first
   // and the scheduler object last; preserve both that observable order and
   // identity with the value exposed through `timers.promises`.
+  // A compiled module may publish none of this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test, naming nothing. Guarded so each test fails saying
+  // which export it wanted.
+  if (exports.promises === undefined) return {};
   const promises = {
     setTimeout: exports.promises.setTimeout,
     setImmediate: exports.promises.setImmediate,

@@ -1,6 +1,9 @@
 const kHighWaterMark = Symbol("kHighWaterMark");
 
 function callableConstructor(Class, name) {
+  // A compiled module may not publish this yet -- see the note on the first
+  // guard in this file.
+  if (Class === undefined) return undefined;
   const callable = function (...args) {
     if (new.target === undefined) return new Class(...args);
     return Reflect.construct(Class, args, new.target === callable ? Class : new.target);
@@ -17,6 +20,11 @@ function callableConstructor(Class, name) {
  * that host object-model detail belongs here rather than in runtime source.
  */
 function nullPrototypeProperty(Class, name, rawName) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing. Returning early lets
+  // each test fail saying which export it wanted.
+  if (Class === undefined) return;
   const descriptor = Object.getOwnPropertyDescriptor(Class.prototype, name);
   if (typeof descriptor?.get !== "function" || typeof descriptor.set !== "function") return;
   const read = descriptor.get;
@@ -43,6 +51,10 @@ function nullPrototypeProperty(Class, name, rawName) {
 }
 
 function nullPrototypeResult(Class, name) {
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test in the module, naming nothing.
+  if (Class === undefined) return;
   const original = Class.prototype[name];
   if (typeof original !== "function") return;
   Object.defineProperty(Class.prototype, name, {
@@ -117,6 +129,9 @@ function invokeRequest(request, options, optionsOrCallback, callback) {
 }
 
 function requestConstructor(Class) {
+  // A compiled module may not publish this yet -- see the note on
+  // callableConstructor above.
+  if (Class === undefined) return undefined;
   const shaped = function (options, callback) {
     const target = new.target === shaped ? Class : new.target;
     return Reflect.construct(Class, [requestOptions(options), callback], target);
