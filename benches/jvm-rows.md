@@ -75,6 +75,7 @@ meets them. This is the map; the row table below it is the current state.
   - `growth-grown` is at its floor, and the count proves it in one line
   - `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
   - The seven headers, read: six of them argue, and one row is genuinely missing a reference
+  - The bar's second number, read at last: eight rows lose to node and six of them are the platform
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2928,6 +2929,55 @@ naming rather than fixing twice.
 
 So the count is **eight of nine argued and one open**, not two and seven. Mine,
 and the actionable half is one file.
+
+### The bar's second number, read at last: eight rows lose to node and six of them are the platform
+
+**Stale numbers, and they are enough to settle the shape.** These come from the
+pinned worktree at `bf066859`, so `array-from` is still 2.12x here and its fix
+has since landed. A clean sitting is owed. But the partition does not depend on
+any single row being current, and it has never been done at all.
+
+The bar says "decisively faster than node". The table sorts by `jvm/Java`, so a
+row at parity with its hand-written reference while **both** lose to V8 reads as
+finished. The absolute `nts JVM`, `Java` and `node` columns are all in the
+table, so `Java/node` is a division and not an inference.
+
+**Eight of the forty-three rows with a reference lose to node.** Six of those
+eight, the hand-written Java loses too:
+
+    row                jvm/node   Java/node
+    array-from             4.28        2.02   platform
+    loop                   1.59        2.12   platform
+    bytes                  1.42        1.35   platform
+    map-and-set            1.27        1.62   platform
+    objects                1.11        1.11   platform
+    case-convert           1.01        1.15   platform
+
+    node-utf8              1.31        0.20   OURS
+    generic-classes        1.12        0.99   OURS
+
+**Thirty-three rows beat node on both lanes**, and several by an order of
+magnitude -- `instanceof` 0.05, `generator` 0.05, `elementwise` 0.06,
+`closure-merge` 0.10, `optional-chain` 0.10.
+
+So the second number is **two rows**, not twenty. That is the whole value of
+doing the division: `loop` at 1.59x of node has been readable as a defect since
+the column existed, and a person writing Java gets 2.12x -- worse than we do.
+Reporting those six as a queue would be reporting the JVM's distance from V8 as
+though it were our codegen's.
+
+**`node-utf8` is the sharpest row in the table and it is sharp in both
+directions.** Its reference is **five times faster than node** (0.20) while we
+are 1.31x slower -- a 6.5x gap against a hand-written Java codec that is itself
+crushing V8. This file already says the row "compares against a platform
+intrinsic and cannot reach the bar". Against *node* that is true. Against
+`ref.java` it is not, and the reference is the bar's first number. The two
+readings have been filed under one sentence and they are different claims.
+
+`bigint` is the case that shows why `Java/node` alone is not the test: its
+reference loses to node at 1.02, and we are at **0.17** -- six times faster than
+the reference and six times faster than node. A row is only a question when
+`jvm/node` is above one.
 
 ## Open, and whose
 
