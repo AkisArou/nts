@@ -1,4 +1,22 @@
 // Object and prototype semantics. Each answers a number.
+//
+// # Five of these are refused for one reason, and it has no reach
+//
+// `superReachesBase`, `instanceOfDerived` and `getterCalledEachRead` all
+// declare a class **inside a function body**, and that refuses with
+// `a \`class declaration\``. It is not `super`, not `instanceof` and not
+// getters: the same `super.shared()` at module scope compiles, and so does a
+// plain class declared in a function... no, it does not -- `class Local { v = 1 }`
+// inside a function refuses too, which is the whole of it.
+//
+// **Not filed, on purpose.** `grep` for a class declared inside a function body
+// across all of `runtime/node`: **0 sites, 0 modules**. Nothing this profile
+// compiles is written that way, so a fixture would guard a construct the corpus
+// does not contain, and the refusal is correct to have.
+//
+// Recorded here rather than in `blockers/` so that the next person to meet it in
+// a sweep can see it has been measured and set aside, instead of measuring it
+// again.
 
 class Base { shared(): number { return 1; } own = 10; }
 class Derived extends Base { override shared(): number { return 2; } }
