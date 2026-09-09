@@ -15432,6 +15432,22 @@ does not cover error paths, and until now nothing said so.
 
 Filed as `agreements/a-throw-across-a-call`.
 
+**Seven further questions scope it exactly.** Correct, all within one frame: the
+catch binds the thrown value, a rethrow from a catch reaches the outer catch, a
+thrown number arrives as a number, `finally` runs after a caught exception.
+Wrong, all crossing a call: `finally` running as an exception passes out of a
+frame, an exception through two frames, a catch in the caller of the throwing
+frame.
+
+So it is not `try`, not `catch`, not `finally`, not the catch binding, not the
+rethrow and not the thrown value's type. **Within one frame the machinery is
+complete and right; it does not cross a call.**
+
+One detail that may point at where: `finallyOnTheWayOut` escapes with an
+**empty message** where the other two carry theirs. The exception that gets out
+of a frame with a `finally` in it is not the one that went in, so something is
+constructed or reset on the unwind path rather than simply not caught.
+
 Found by a sweep of ten questions about statement forms -- labelled break,
 labelled continue, argument evaluation order, the left side of an assignment
 before the right, a do-while body running once, a for update after the body.
