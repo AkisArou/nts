@@ -366,8 +366,13 @@ for (const name of names) {
       try { process.dlopen(m, ${JSON.stringify(addon)}, flags.RTLD_NOW); }
       catch (e) { console.log(JSON.stringify({ stage: "did-not-load", message: String(e.message) })); process.exit(0); }
       const exports = m.exports;
+      // new Function, not eval: the expression is a fixture's own declared text
+      // and wants exactly one binding. run-one.mjs builds a test's CommonJS
+      // wrapper the same way and for the same reason.
+      // (No backticks in this comment: it lives inside a template literal, and
+      // one closed it the first time this was written.)
       const evaluate = (src) => {
-        try { return { ok: true, value: (0, eval)("(function(exports){ return (" + src + "); })")(exports) }; }
+        try { return { ok: true, value: new Function("exports", "return (" + src + ");")(exports) }; }
         catch (e) { return { ok: false, value: String(e && e.message) }; }
       };
       console.log(JSON.stringify({
