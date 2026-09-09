@@ -35,8 +35,28 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ADDON_DIR = process.env.NTS_ADDON_OUT ?? resolve(ROOT, "target/node");
 const require = createRequire(import.meta.url);
 const ABSENCE = /absent|not published|missing|does not publish/i;
+/**
+ * An absence in the **control lane** is not an absence in the build.
+ *
+ * `os/test-os-constants-signals.js` reads "an absent `constants` value throws
+ * the same TypeError that the test expects ... **so it passes empty-module
+ * sabotage**". The absence there is what `--sabotage` and `--empty-exports`
+ * create on purpose; it is true whatever the real build publishes, and the
+ * exclusion stays correct forever.
+ *
+ * This flagged it as stale the day `constants` published, and it was wrong:
+ * with the entry removed, the test still passes under `--sabotage`,
+ * `--empty-exports` and `--mutate-addon`. Measured before believing the flag,
+ * and the entry was put back.
+ *
+ * So an entry naming a control lane is about that lane and is skipped here. The
+ * cost is a false negative if a reason mentions sabotage *and* a real absence,
+ * which is why the skipped ones are counted and reported rather than dropped.
+ */
+const CONTROL_LANE = /sabotage|empty-module|empty exports|--mutate-addon|blanked/i;
 
 let conditional = 0;
+let controlLane = 0;
 let stale = 0;
 for (const entry of readdirSync(resolve(ROOT, "runtime/node"), { withFileTypes: true })) {
   if (!entry.isDirectory() || entry.name === "node_modules") continue;
@@ -55,6 +75,7 @@ for (const entry of readdirSync(resolve(ROOT, "runtime/node"), { withFileTypes: 
   for (const line of readFileSync(list, "utf8").split("\n")) {
     if (!line.trim() || line.startsWith("#")) continue;
     if (!ABSENCE.test(line)) continue;
+    if (CONTROL_LANE.test(line)) { controlLane++; continue; }
     conditional++;
     const named = [...line.matchAll(/`([A-Za-z_$][\w$]*)`/g)].map((m) => m[1]);
     const present = named.filter((n) => published.has(n));
@@ -67,5 +88,10 @@ for (const entry of readdirSync(resolve(ROOT, "runtime/node"), { withFileTypes: 
 
 console.log(
   `\n  ${conditional} exclusion(s) conditional on an absence, ${stale} whose named export is now published.`,
+);
+console.log(
+  `  ${controlLane} more name an absence the control lane creates on purpose, which is true` +
+  " whatever the build publishes; those are skipped rather than dropped, because a reason" +
+  "\n  mentioning sabotage *and* a real absence would hide behind the same words.",
 );
 process.exit(stale === 0 ? 0 : 1);
