@@ -2427,6 +2427,9 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
         HirType::Managed(
             ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_),
         ) => format!("{}->header.length", value_name(value)),
+        // An erased value the lowering proved is an array: the length is in
+        // the header every reference carries, reached through the tag.
+        HirType::Erased => format!("nts_value_reference({})->length", value_name(value)),
         _ => format!("{}->length", value_name(value)),
     }
 }

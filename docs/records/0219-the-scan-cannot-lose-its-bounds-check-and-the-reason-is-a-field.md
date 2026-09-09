@@ -38,6 +38,31 @@ The cause is the other half of the check. A bounds check asks
 whose range nothing bounds. The upper half was already provable and the lower
 half never was.
 
+## And the source of the widening, which no source change reaches
+
+`nts facts` settles it rather than leaving it inferred:
+
+    %15  f64  [-2147483648, +inf]      <- `at`, seeded from `this.at`
+    %17  i32  [0, 2147483646] whole    <- the length
+
+The upper half was always fine. The lower bound is `INT_MIN` because `Scanner.at`
+is **one field written from every method**, and the join takes the worst: line
+208 stores `at - 1`, and line 231 stores the return of `numberFailurePosition`,
+which takes `this.at` as an argument and so widens with it to a fixed point at
+`[-2147483648, +inf]`.
+
+**A second experiment ruled out the source side.** Adding `if (start < 0) throw`
+before the loop -- a statement rather than a ternary, because record 0217 says a
+refinement does not survive a phi -- is semantically a no-op, since a scanner
+position is never negative. It moved the row from 1.83 ms to 1.82 ms and the
+emitted C still contains four `nts_str_char_code_at` and no `nts_unit`. Reverted.
+
+So neither half of the obvious source-level fix works: hoisting the length gives
+the upper bound the analysis already had, and asserting the lower bound gives a
+fact the loop-carried value does not inherit. **This is a compiler gap and the
+TypeScript cannot route around it**, which is worth more than the diagnosis
+alone -- it says where the work has to happen.
+
 ## What that generalises to
 
 Every scanner in this tree has this shape: a position field, a local seeded from

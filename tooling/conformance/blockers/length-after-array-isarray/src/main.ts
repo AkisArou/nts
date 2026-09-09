@@ -1,4 +1,4 @@
-// expect: `length` of something without one
+// expect: nothing refused -- FIXED, kept as a guard
 //
 // `Array.isArray` narrows an `unknown` to `any[]`, and `any[]` has no layout,
 // so the `.length` that the narrowing was performed in order to reach is
@@ -42,3 +42,23 @@ export function subject(value: unknown): number {
   }
   return 0;
 }
+
+// **Fixed, and it cleared one root of string_decoder's 74 without greening the
+// module.** A length needs no element type: it is in the header every reference
+// carries, so reading it through the tag is sound for exactly the value
+// `Array.isArray` proved. `any` still has no representation and this does not
+// give it one -- what it gives a representation to is the *result of a runtime
+// array test*, which is a different claim and the honest one.
+//
+// **Elements stay refused, and two lines later that is what stops the chain.**
+// `internal/errors.ts:518` was the `.length` and `:520` indexes the same
+// narrowed value, so clearing the first revealed the second -- the Node lane's
+// "five cleared and five revealed" arriving immediately. An element read needs
+// the storage *width*, which the type does not say, and guessing it would be a
+// claim about memory rather than about type. That is the line `AnyView` draws
+// for views and it is drawn here for the same reason.
+//
+// Reading elements dynamically *is* possible -- an `NtsArray` carries its
+// descriptor and the descriptor knows the width -- and that is the array
+// analogue of `AnyView`, a feature rather than a fix. Named here so the next
+// reader meets it as the next step rather than as a surprise.

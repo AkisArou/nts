@@ -17613,6 +17613,87 @@ impl<'a> FuncBuilder<'a> {
     /// without lowering `a` twice: the optional form has to test the receiver
     /// *and* read through it, and once is the difference between `a?.b` and
     /// something that calls a getter on the way in and again on the way out.
+    /// Why a member other than `length` is not readable here, in the words that
+    /// send a reader to the right place.
+    ///
+    /// Three sentences and they are not interchangeable: an array has only a
+    /// length, a union lays its fields out differently in each member, and
+    /// anything else simply has none.
+    fn not_a_length(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+        sequence: bool,
+    ) -> Diagnostic {
+            // `buffer`, `byteLength` and `byteOffset` land here: a typed array
+            // is an array of a known width and not a view onto storage
+            // something else can also see, so it has a length and nothing else.
+        self.unsupported(
+            id,
+            &if sequence {
+                    format!("`{member_name}`, where an array has only `length`")
+                } else if self.values[value.0 as usize].ty == HirType::Erased {
+                    // A union of object types. Every member is a pointer, so
+                    // the value is representable -- what is missing is that a
+                    // field lives at a different offset in each member, so
+                    // reading one needs the layouts reconciled or the
+                    // discriminant tested first. Saying "a value with no
+                    // fields" of something that has several sets of them is
+                    // the wrong sentence entirely.
+                    format!(
+                        "`{member_name}` on a union, whose members lay their fields out \
+                         differently"
+                    )
+                } else {
+                    format!("`{member_name}`, a property of a value with no fields")
+                },
+        )
+    }
+
+    /// Whether this `.length` reads an erased value the checker has proved is
+    /// an array.
+    ///
+    /// `Array.isArray` narrows an `unknown` to `any[]`, and `any` deliberately
+    /// has no representation -- `docs/any-unknown.md` forbids one, because it is
+    /// the checker announcing it has stopped providing safety. So the narrowing
+    /// lowered and **the `.length` it was performed in order to reach did not**,
+    /// which is the wrong half to lose: the test is the thing that made the fact
+    /// true.
+    ///
+    /// A length needs no element type. It is in the header every reference
+    /// carries, so reading it through the tag is sound for exactly the value the
+    /// guard proved -- and this gives a representation to the *result of a
+    /// runtime array test*, not to `any`.
+    ///
+    /// Elements stay refused. Their **width** is unknown, so reading one would
+    /// be a guess about storage rather than about type -- the line `AnyView`
+    /// draws for views, drawn here for the same reason. `internal/errors.ts:520`
+    /// indexes the same narrowed value two lines after the `.length` this
+    /// clears, so the chain stops there rather than here.
+    fn proven_array_length(&self, id: NodeId, value: ValueId) -> bool {
+        self.values[value.0 as usize].ty == HirType::Erased && self.receiver_is_an_array(id)
+    }
+
+    /// Whether the receiver of this member access is an array by the checker's
+    /// reckoning, whatever its representation.
+    ///
+    /// The receiver rather than the access, for `reads_a_tuple`'s reason one
+    /// file over: the access's own type is what `noUncheckedIndexedAccess` and
+    /// narrowing leave behind, and the question here is what the value *is*.
+    fn receiver_is_an_array(&self, id: NodeId) -> bool {
+        let Some(receiver) = self.children(id).first().copied() else {
+            return false;
+        };
+        let Some(ty) = self.snapshot.node_types.get(&receiver) else {
+            return false;
+        };
+        matches!(
+            self.snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Array(_))
+        )
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
@@ -17721,29 +17802,11 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Array(_) | ManagedType::String)
         );
         if member_name != "length" {
-            // `buffer`, `byteLength` and `byteOffset` land here: a typed array
-            // is an array of a known width and not a view onto storage
-            // something else can also see, so it has a length and nothing else.
-            return Err(self.unsupported(
-                id,
-                &if sequence {
-                    format!("`{member_name}`, where an array has only `length`")
-                } else if self.values[value.0 as usize].ty == HirType::Erased {
-                    // A union of object types. Every member is a pointer, so
-                    // the value is representable -- what is missing is that a
-                    // field lives at a different offset in each member, so
-                    // reading one needs the layouts reconciled or the
-                    // discriminant tested first. Saying "a value with no
-                    // fields" of something that has several sets of them is
-                    // the wrong sentence entirely.
-                    format!(
-                        "`{member_name}` on a union, whose members lay their fields out \
-                         differently"
-                    )
-                } else {
-                    format!("`{member_name}`, a property of a value with no fields")
-                },
-            ));
+            return Err(self.not_a_length(id, value, member_name, sequence));
+        }
+        if !sequence && self.proven_array_length(id, value) {
+            let origin = self.origin(id);
+            return Ok(self.push(OpKind::Length(value), HirType::NUMBER, origin));
         }
         if !sequence {
             return Err(self.unsupported(id, "`length` of something without one"));
