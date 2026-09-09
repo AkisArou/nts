@@ -66,6 +66,16 @@ const verbose = argv.includes("--verbose");
  */
 const sabotage = argv.includes("--sabotage");
 /**
+ * Run the shim against an addon that published nothing, and let the shim run.
+ *
+ * `--sabotage` hands the test `{}` and skips the shim entirely. This hands the
+ * *shim* `{}` and keeps it, so every absent-export guard fires and every name
+ * they guard is `undefined`. A file that still passes is passing on two absent
+ * values agreeing, which is the one comparison neither sabotage nor
+ * `--mutate-addon` can express.
+ */
+const emptyExports = argv.includes("--empty-exports");
+/**
  * Keep the compiled addon's exported names and destroy their behaviour.
  *
  * `--sabotage` blanks the module, which asks whether the suite is connected to
@@ -313,6 +323,7 @@ for (const test of tests) {
         env: {
           ...process.env,
           NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
+          NTS_CONFORMANCE_EMPTY_EXPORTS: emptyExports ? "1" : "",
           NTS_CONFORMANCE_ADDON_MUTATE: mutateSilent ? "silent" : mutateAddon ? "1" : "",
         },
       },

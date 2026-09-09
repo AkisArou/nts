@@ -281,6 +281,27 @@ function dispatchEscapedException(error) {
  * state with. Whatever still passes was never measuring us.
  */
 const sabotaged = process.env["NTS_CONFORMANCE_SABOTAGE"] === "1";
+/**
+ * Hand the *shim* an empty exports object, and let it run.
+ *
+ * `--sabotage` replaces the shaped module with `{}`, so the shim never runs and
+ * the test sees nothing at all. This is the other question: what does a test see
+ * when the shim runs normally against an addon that published nothing? Every
+ * absent-export guard fires, every name it guards becomes `undefined`, and any
+ * assertion comparing two of them agrees.
+ *
+ * That is not hypothetical and `--sabotage` cannot see it. `timers` passes
+ * `test-timers-promises.js`, whose whole body is
+ * `deepStrictEqual(timerPromises, timer.promises)`; the addon publishes
+ * `decRefCount` and `TIMEOUT_MAX` and no `promises`, so the shim's guard returns
+ * `{}` and both sides are `undefined`. `vacuous-lane.mjs` misses it too, because
+ * that lane asks whether the *module* published nothing and `timers` published
+ * two things.
+ *
+ * A file that passes under this passes without the module having supplied the
+ * thing it names.
+ */
+const emptyExports = process.env["NTS_CONFORMANCE_EMPTY_EXPORTS"] === "1";
 /** Keep the addon's exported names and destroy their behaviour; see `poison`. */
 const mutatedAddon = process.env["NTS_CONFORMANCE_ADDON_MUTATE"] === "1";
 /**
@@ -495,7 +516,11 @@ try {
       compiledShapeGuard?.deregister();
     }
   }
-  underTest = shapeModule ? shapeModule.shape({ ...exports }) : { ...exports };
+  // `emptyExports` blanks what the shim is given, not what the test is given.
+  // The shim still runs, its guards still fire, and the test sees whatever a
+  // shim produces for a module that published nothing.
+  const shapeInput = emptyExports ? {} : { ...exports };
+  underTest = shapeModule ? shapeModule.shape(shapeInput) : shapeInput;
   // A subpath can be an exact member of the shaped public object. Passing that
   // object avoids rebuilding a second, merely equal value and losing identity
   // (`require('path/posix') === require('path').posix`). Existing shapers that
