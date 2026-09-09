@@ -9733,6 +9733,43 @@ The ranking that worked was following each blocked export to its own root, one
 cascade line at a time -- slower, one module at a time, and the only method that
 distinguished `errors.ts:533` from eleven roots with identical coverage.
 
+### A named "declaration outside every walk", handed over unreproduced
+
+`buffer` declines twelve exports. Two of them, `atob` and `btoa`, are refused
+with
+
+```
+main.ts:1877:32  NTS1001 `atob`, a declaration outside every walk
+main.ts:1923:53  NTS1001 `btoa`, a declaration outside every walk
+```
+
+and the same form at `os/src/main.ts:395` is what holds `userInfoString` and
+through it `os.userInfo`. So it costs three exports across two modules.
+
+**The reported location is not the declaration.** `main.ts:1877` is
+`code === 0x0d || code === 0x20;`, inside `isBase64Whitespace`; `atob` is
+declared at 1881. The diagnostic carries the right name and a span pointing
+into a different function, which is the second time tonight a location has been
+unreliable for this kind of message -- `EventEmitter#emit`'s root reported at a
+line holding a JSDoc comment.
+
+**Not filed, because it did not reproduce.** The obvious hypothesis was that the
+walk starts somewhere and never reaches a function nothing calls. A module with
+one unreferenced exported function, one helper, and one exported function that
+uses the helper lowers cleanly and publishes both -- no refusal of any kind. So
+"exported but unreferenced" is ruled out.
+
+What is left unexplored: both real sites call a refused constructor
+(`ERR_INVALID_ARG_TYPE`), so the form may be a *secondary* effect of a cascade
+rather than a cause -- the declaration losing its place once its body is
+refused. That would make it a diagnostic-quality problem rather than a blocker,
+and would explain why an isolated reproduction fails. `class-expression` covers
+the anonymous variant (`an anonymous declaration outside every walk`) and is a
+different thing: there the declaration genuinely has no name to place.
+
+Handed over as a diagnosis with what was ruled out, rather than as a fixture
+that reproduces something else.
+
 ### `querystring` is 0 of 8, and every one of its eight declines is filed
 
 ```
