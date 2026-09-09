@@ -15559,6 +15559,37 @@ construct.
 The lone-surrogate defect has no construct to count -- it is reached by any
 string that holds one, and `string_decoder` exists to hold exactly those.
 
+### The refusals the sweeps turned up, by reach
+
+Twenty-eight cases across the suite are refused rather than wrong. Counted the
+same way, in `runtime/node`:
+
+    parseInt                 14 sites,  6 modules
+    Array#fill                8 sites,  4 modules
+    JSON.parse                4 sites,  4 modules
+    JSON.stringify            3 sites,  3 modules
+    toFixed                   3 sites,  1 module
+    String#normalize          2 sites,  2 modules
+    parseFloat                1 site,   1 module
+    Object.assign             0 sites,  0 modules
+    a class declared inside a function   0 sites, 0 modules
+
+**The last two are worth as much as the first.** `Object.assign` and a nested
+class declaration are refused, and nothing this profile compiles is written
+either way -- so a fixture for them would guard a construct the corpus does not
+contain, and the refusals are correct to have. Recorded where the sweeps met
+them rather than filed, so the next person sees they have been measured and set
+aside instead of measuring them again.
+
+`parseInt` is the one to take: six modules is a wide enough spread to be in
+front of something in most of them, and it is closed by writing it. Filed as
+`the-number-parsing-builtins`.
+
+Two constructs the sweeps found **working** are worth naming beside these,
+because they are the ones a reader would assume are missing: `Array#splice` (15
+sites, 6 modules) and `Array#sort` with and without a comparator (2 sites) both
+agree with node exactly.
+
 **`in` on a `Record` is always false**, and it is the most confined defect
 measured:
 
