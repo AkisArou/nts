@@ -65,17 +65,21 @@ assert.deepStrictEqual(
 const extra = [...ours].filter((name) => !nodeKeys.includes(name)).sort();
 assert.deepStrictEqual(extra, [], `readline publishes name(s) node does not: ${extra.join(", ")}`);
 
+// Collected rather than asserted in the loop. Asserting here reported
+// `Interface` and stopped, which hid the `.name` sweep and the alias sweep
+// below -- and the alias sweep is, by its own comment, the check node's tests
+// have no reason to make. A file that reports its first finding and stops is a
+// file whose other findings do not exist until the first is repaired.
+const findings = [];
 for (const name of nodeKeys) {
   if (ABSENT.includes(name)) continue;
-  assert.strictEqual(
-    typeof mod[name],
-    nodeTypes[name],
-    `readline.${name} is ${typeof mod[name]}, node's is ${nodeTypes[name]}`,
-  );
-  if (nodeTypes[name] === "function") {
-    assert.strictEqual(
-      mod[name].name,
-      nodeNames[name],
+  const ours = typeof mod[name];
+  if (ours !== nodeTypes[name]) {
+    findings.push(`readline.${name} is ${ours}, node's is ${nodeTypes[name]}`);
+    continue;
+  }
+  if (nodeTypes[name] === "function" && mod[name].name !== nodeNames[name]) {
+    findings.push(
       `readline.${name}.name is ${JSON.stringify(mod[name].name)}, node's is ${JSON.stringify(nodeNames[name])}`,
     );
   }
@@ -90,9 +94,17 @@ const present = nodeKeys.filter((name) => !ABSENT.includes(name));
 for (const name of present) {
   const rep = nodeAliases[name];
   if (rep === name || ABSENT.includes(rep)) continue;
-  assert.strictEqual(
-    mod[name],
-    mod[rep],
-    `readline.${name} and readline.${rep} are the same object on node and are not here`,
-  );
+  // Both absent is not an alias finding -- it is the same absence twice, and
+  // reporting it here would say "the aliases are broken" about a module that
+  // has not published either half.
+  if (mod[name] === undefined && mod[rep] === undefined) continue;
+  if (mod[name] !== mod[rep]) {
+    findings.push(`readline.${name} and readline.${rep} are one object on node and are not here`);
+  }
 }
+
+assert.deepStrictEqual(
+  findings,
+  [],
+  `${findings.length} surface finding(s):\n  ${findings.join("\n  ")}`,
+);
