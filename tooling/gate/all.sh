@@ -637,6 +637,27 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
 # This runs `java`, so it needs a JDK where the other two need clang. A missing
 # one is not a passing step: it is reported and the step fails, for the reason
 # `codegen/llvm`'s signature test gives about clang.
+# Can `d8` spell what this backend emits?
+#
+# The ratchet `unverifiable class` is for the JVM, one platform along. Version
+# 52 and no `invokedynamic` are the *preconditions* for DEX and both were
+# asserted long before anything ran `d8`; `d8_accepts_the_runtime_jar` then ran
+# it, on hand-written Java, which can only fail if a person writes something
+# DEX forbids and no person had.
+#
+# What was never dexed was the compiler's own output. `symbol-keys` emitted a
+# field named `__@kCount@2` -- legal in a class file, refused by DEX -- and it
+# was green in every instrument this lane had: verified under `-Xverify:all`,
+# agreed with node, ran on ART. It could not reach the one platform this
+# backend exists for, and nothing said so for as long as it was true.
+#
+# Skips without an SDK, like `unverifiable class` reads zero without a JDK.
+# Needs no device: `d8` is a compiler, so whether it accepts a class file is a
+# question about the class file.
+dex() {
+  sh "$root/tooling/android/dexes.sh"
+}
+
 jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   if ! command -v java > /dev/null 2>&1 && [ ! -x "${JAVA_HOME-}/bin/java" ]; then
     echo "  no JDK on PATH or at JAVA_HOME -- this step cannot verify anything"
@@ -853,7 +874,7 @@ step "benches"  ./tooling/gate/benches.sh
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.
 jobs=$(( jobs > 4 ? 4 : jobs ))
-concurrently profile sweep llvm llvm-rc jvm bench-agree examples rc memory addons
+concurrently profile sweep llvm llvm-rc jvm dex bench-agree examples rc memory addons
 # Every node module built as an addon and *loaded*, under eager binding.
 #
 # The gap this fills was open for the whole of 2026-09-09 and had a crash in it.

@@ -36,7 +36,11 @@ tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
 [ -n "$tools" ] || { echo "SKIP: no build-tools" >&2; exit 0; }
 [ -x "$tools/d8" ] || { echo "SKIP: no d8 in $tools" >&2; exit 0; }
 
-nts=${NTS_BIN:-$root/target-jvm/release/nts}
+# `target/release` is what `tooling/gate/all.sh` builds and drives, so that is
+# the default here: a gate step dexing some other session's binary would report
+# a ratchet for code nobody is looking at. `NTS_BIN` overrides it, which is how
+# the JVM lane runs this against `target-jvm` by hand.
+nts=${NTS_BIN:-$root/target/release/nts}
 [ -x "$nts" ] || { echo "no nts at $nts -- set NTS_BIN" >&2; exit 1; }
 
 mkdir -p "$work"
