@@ -1226,7 +1226,18 @@ impl Emitter<'_> {
             let kind = self.kind_of(value)?;
             code.store(origin, kind, slot);
         } else {
-            let words = types::kind(ty).map_or(0, Kind::words);
+            // **`kind_of` here too, not the declared type.** A discard has to
+            // pop what is actually on the stack, and for a value this backend
+            // holds in another representation those differ: an `f64` held as an
+            // `int` is one word and `types::kind` says two. Nothing reached it
+            // until cursors, because `intcall`'s values are all used and only
+            // an unused one takes this branch -- so the declared type was right
+            // by accident for as long as the only narrowing was of results
+            // somebody wanted.
+            let words = self.kind_of(value).map_or_else(
+                |_| types::kind(ty).map_or(0, Kind::words),
+                Kind::words,
+            );
             if words > 0 {
                 code.pop(origin, words);
             }
@@ -4068,6 +4079,14 @@ impl Emitter<'_> {
                 // `Object[]` and the slot it is stored into is a `Foo[]`. The
                 // narrowing the middle end already proved has to be spelled for
                 // the verifier, which knows only what the descriptor said.
+                // **Not when the value is held as an `int`.** `narrow_result`
+                // reconciles the descriptor's return with the HIR type, and a
+                // cursor's HIR type is the `f64` `hir::runtime` declares -- so
+                // it would widen `nextI`'s answer straight back to a double and
+                // undo the representation this lane just chose. The same
+                // asymmetry `conversion` had: the mark has to be honoured on
+                // the way out as well as on the way in, or the emitter puts a
+                // double where its own accounting says an int.
                 self.narrow_result(code, pool, result, returns, origin)?;
                 return Ok(Placed::OnStack);
             }
