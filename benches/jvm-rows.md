@@ -1254,11 +1254,36 @@ floor exactly; `-Xverify:all` accepts it; and `work` answers identically across
 seeds -8..8, chosen because -1 is the no-match answer and the value a changed
 conversion would spell differently.
 
-**The timing is NOT measured** -- the gate lock was held for the whole window --
-and until it is, this row has not moved and is not claimed to have. The
-prediction on record is zero, and the control that settles it is rule 3's: give
-the reference a redundant `(long)` round trip on its `indexOf` result and see
-whether it notices.
+**Measured, and the prediction was right: zero.** Under the gate lock, one JVM
+per arm, interleaved so a drifting machine drifts through both, best-of-seven
+inside each run and identical checksums throughout:
+
+    round      before     after
+      1        1643.5    1605.3
+      2        1580.3    1628.1
+      3        1644.4    1672.3
+      4        1579.3    1644.8
+      5        1626.7    1578.7
+    minimum    1579.3    1578.7      -0.04%
+
+**0.04% on the minima, which is nothing.** C2 folds `ConvI2L`/`ConvL2I` itself,
+which is what was predicted in writing before the change was built, and this is
+the first prediction tonight that survived its measurement.
+
+What this run can and cannot say, because the spread inside each arm is about
+6%: it resolves "is this worth 3% or more" as **no**, and it cannot resolve 1%
+either way. That is enough for the decision it was taken for, and not enough to
+call the change a small win rather than no win.
+
+**So the row has not moved and is not recorded as moving.** The change stays --
+it is correct, it removes two instructions an operation from every emission
+using these helpers, and ART has no C2 to fold them -- but it is a code-quality
+change and this table is not where it should be argued for. Its value would show
+on a DEX lane, which does not exist yet to measure it on.
+
+Not tried, and the honest reason: giving the reference a redundant `(long)`
+round trip would have been the cheaper way to learn this, and it was already
+built by the time I thought of it.
 
 **What this row still is.** Helpers 18% faster than hand-written loops, a
 `toInt32` call where the reference has a `d2i` worth 8.9%, and a residual double
