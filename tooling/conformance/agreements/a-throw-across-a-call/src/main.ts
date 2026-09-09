@@ -26,8 +26,27 @@
 // of an assignment before the right, a do-while body running once, a for
 // update after the body. Nine of them agree exactly. The tenth was this.
 //
-// The `throwInPlace` control is the one that makes it precise: catching works,
-// and the call is what breaks it.
+// # The control does not show what I first said it showed
+//
+// I wrote that `throwInPlace` proves "catching works, and the call is what
+// breaks it". The compiler lane read the emitted C and it does not. **A
+// lexically enclosing throw is routed at compile time**, so
+// `try { throw } catch { return 5 }` compiles to `return 5.0` -- there is no
+// catching in it. And the emitted C for the across-a-call form is
+//
+//     double fromACall(double v0) { double v1; v1 = raiser(v0); return v1; }
+//
+// with no landing pad and no catch block. `grep -c landing` in the lowering is
+// **0**.
+//
+// So the split this file measures is not "catching works and calls break it".
+// It is that **two different things look like one feature**, one of them is
+// compile-time routing and complete, and the other does not exist. That is why
+// the split came out so clean, and it is a better description of what to build.
+//
+// Kept as the control anyway, because a case that agrees while its neighbours
+// do not is what made the shape visible -- and because if a real `try` is built
+// this row must keep agreeing.
 
 /** Node: 5. Agrees. */
 export function throwInPlace(): number {
