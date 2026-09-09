@@ -68,6 +68,8 @@ meets them. This is the map; the row table below it is the current state.
   - `symbol-keyed-map` on ART: 196,912 bytes/op to 304, and the box was the key rather than the answer
   - Substituting the call moved nothing, because the box has two halves
   - The sentence for the whole day, and it is the Node lane's
+  - The ART allocation axis, actually closed: seven parities to the byte, four wins, five ours
+  - `node-utf8` allocates 4.22x its reference on ART, and nothing on HotSpot says so
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2687,6 +2689,80 @@ and a join is where a distinction goes to die. **My version had the join in the
 artifact rather than in the probe**: `module#init` missing, five symbols null,
 five map keys collapsing into one, and `java` and `dalvikvm` agreeing to the bit
 for two days. Same failure, different half of the loop.
+
+### The ART allocation axis, actually closed: seven parities to the byte, four wins, five ours
+
+I wrote "the ART allocation axis, closed" earlier on eight cases and a broken
+instrument. Here it is on **58**, with both drivers calling module
+initialisation and both counters retried past the 32-bit wrap.
+
+The screen -- ours on ART against ours on HotSpot -- flags twenty rows. It is
+the wrong verdict and the right filter, for the reason recorded above: ART does
+no escape analysis on ordinary objects, so a program allocating a shape per
+iteration pays here whoever wrote it. The verdict is **ours on ART against
+`ref.java` on ART**, same runtime, same question.
+
+    row                     ours       ref     verdict
+
+    instanceof         2,133,336 2,133,336     parity, to the byte
+    optional-chain     1,600,000 1,600,000     parity, to the byte
+    in-narrowing          81,920    81,920     parity, to the byte
+    generator             80,000    80,000     parity, to the byte
+    growth-fixed          20,480    20,480     parity, to the byte
+    erasure-stored-typed  16,384    16,384     parity, to the byte
+    number-format          6,456     6,456     parity, to the byte
+    symbol-keys               24        24     parity
+
+    bigint                22,032    78,192     ours is 0.28x
+    array-mutations       21,600    36,600     ours is 0.59x
+    user-iterable             24        40     ours is 0.60x
+    case-convert          23,152    29,304     ours is 0.79x
+
+    node-utf8            285,376    67,632     ours is 4.22x
+    growth-grown          36,992    20,480     ours is 1.81x
+    number-format-double  12,464     6,952     ours is 1.79x
+    array-predicates      25,136    18,792     ours is 1.34x
+    map-and-set           74,144    68,016     ours is 1.09x
+
+**Seven rows agree with a hand-written reference to the byte.** `instanceof`
+allocating 2,133,336 on ART and *nothing at all* on HotSpot is C2 removing every
+allocation in the row; the reference gets the same treatment and loses it the
+same way. Two programs allocating the same objects for the same reason is not a
+number that can be arrived at by tuning.
+
+**And it corrects the earlier entry rather than extending it.** `instanceof` and
+`optional-chain` were not in the eight; they read `overflow`, which I recorded
+as an instrument limit and which was the strongest answer available -- the
+counter wrapping *is* "this allocates megabytes". `bigint` and `array-mutations`
+were not measured at all.
+
+### `node-utf8` allocates 4.22x its reference on ART, and nothing on HotSpot says so
+
+    node-utf8    HotSpot ours 98,472   ART ours 285,376   ART ref 67,632
+
+The row is already the table's worst at 6.53x jvm/Java, and this file says that
+is "a codec against an intrinsic" and cannot reach the bar. **The allocation is
+a different claim and it is not covered by that argument.** The reference is a
+hand-written Java codec doing the same work, on the same runtime, in a fifth of
+the garbage.
+
+It is the largest remaining ART number that is ours, and it is *invisible on
+HotSpot*: 98,472 against the reference's -- unmeasured there, but the ratio at
+1.45x screen level hides what the same comparison on ART shows at 4.22x. This is
+precisely the goal's premise. "C2 handles it, therefore it is free" does not
+transfer, and this row is where the difference is biggest.
+
+`growth-grown` at 1.81x is the second, and it is a sharper question than it
+looks: `growth-fixed` is parity **to the byte** against the same reference. The
+same program, the same reference, and the only difference is that one array
+grows. So this is not the `NtsArrayD` wrapper as such -- the fixed row proves
+the wrapper costs nothing here -- it is the growth strategy inside it, which is
+`runtime/jvm` and mine.
+
+`number-format-double` at 1.79x is the third. `number-format` beside it is
+parity to the byte, so it is the *double* formatter and not the integer one.
+`array-predicates` at 1.34x on ART matches its 1.33x on HotSpot, which is the
+growable-wrapper finding already recorded and already upstream.
 
 ## Open, and whose
 

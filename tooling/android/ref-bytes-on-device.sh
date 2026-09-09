@@ -97,8 +97,23 @@ for case in "$@"; do
   "$tools/d8" --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     > /dev/null 2>&1 || { printf "%-24s %14s\n" "$case" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/rb-$case.dex" > /dev/null 2>&1
-  got=$(adb shell "cd /data/local/tmp && dalvikvm -cp rb-$case.dex RefBytes $runs" 2>&1 \
-    | tr -d '\r' | tail -1)
+  # `getGlobalAllocSize` is 32-bit and wraps, and there is no HotSpot figure to
+  # size this run from the way `bytes-on-device.sh` does -- a reference has no
+  # second runtime here. So: halve and retry.
+  #
+  # Without it `instanceof` and `optional-chain` both printed `overflow`, which
+  # reads as "no answer" and is in fact the strongest possible one: the
+  # reference allocates so much that 2,000 rounds overflow a 32-bit counter.
+  attempt=$runs
+  got=""
+  while [ "$attempt" -ge 16 ]; do
+    got=$(adb shell "cd /data/local/tmp && dalvikvm -cp rb-$case.dex RefBytes $attempt" 2>&1 \
+      | tr -d '\r' | tail -1)
+    case "$got" in
+      overflow|-*) attempt=$((attempt / 8)) ;;
+      *) break ;;
+    esac
+  done
   adb shell "rm -f /data/local/tmp/rb-$case.dex" > /dev/null 2>&1 || true
   printf "%-24s %14s\n" "$case" "$got"
 done
