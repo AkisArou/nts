@@ -158,7 +158,46 @@ typedef struct NtsDescriptor {
    * one. */
   uint32_t erased;
   const uint32_t *erased_offsets;
+  /* What an array's elements *are*, which `size` and `references` between them
+   * cannot say.
+   *
+   * `size` is the width and `references` says whether the slots hold pointers,
+   * which is enough to find an element and not enough to read one: **eight
+   * bytes is a `double` or an `int64_t`**, and 64 bits is exactly what element
+   * narrowing picks for an array that leaves the `i32` range and stays inside
+   * the safe integers. Reading one as the other is a different number, not a
+   * rounding error -- and the ambiguous width is the *default* one, so the
+   * failure would first appear on an array past 2^31 and never on an example.
+   *
+   * `NTS_ARRAY_UNKNOWN` is zero and means **refuse**, never guess. A descriptor
+   * that has not been taught its element kind -- a hand-written one in
+   * `runtime/node`, built without `-Wextra`, whose literal simply ends early --
+   * must produce the honest refusal rather than a plausible value. Meaningful
+   * only where `kind` is `NTS_KIND_ARRAY`; every other descriptor says
+   * `NTS_ARRAY_UNKNOWN` because the question does not apply to it. */
+  uint32_t element;
 } NtsDescriptor;
+
+/* What an array's slots hold.
+ *
+ * The numeric kinds take their *width* from the descriptor's `size` rather than
+ * from the kind, so this list stays as short as the questions it answers: a
+ * kind says how to interpret the bits, `size` says how many. `NTS_ARRAY_FLOAT`
+ * is IEEE binary32 at four bytes and binary64 at eight; `NTS_ARRAY_INT` and
+ * `NTS_ARRAY_UINT` are two's complement at whatever width `size` gives.
+ *
+ * The list is deliberately complete over what `c_type` can spell for an
+ * element, including the spellings element narrowing does not currently choose.
+ * A kind that exists and is never emitted costs one line; a kind that is
+ * missing turns into `NTS_ARRAY_UNKNOWN` at the emitter and reads as "this
+ * runtime has not been taught", which is a different claim and a false one. */
+#define NTS_ARRAY_UNKNOWN 0u
+#define NTS_ARRAY_REFERENCE 1u
+#define NTS_ARRAY_VALUE 2u
+#define NTS_ARRAY_FLOAT 3u
+#define NTS_ARRAY_INT 4u
+#define NTS_ARRAY_UINT 5u
+#define NTS_ARRAY_BOOL 6u
 
 /* RFC 8.2. One header for every variable-length managed object: an array and a
  * string differ by descriptor, not by shape, so `length` is the same field at
@@ -2382,6 +2421,12 @@ NtsValue nts_promise_value(const NtsPromise *promise);
  * whether it is a string, and a promise raced into an erased `await` would
  * then answer `typeof` with "object" for a string. The header knows. */
 uint32_t nts_tag_of_reference(const NtsHeader *object);
+
+/* `xs[i]` where a guard proved `xs` is an array and said nothing about what it
+ * holds. Reads the slot through the descriptor's `element` kind and `size`,
+ * answers `undefined` out of range as JavaScript does, and refuses rather than
+ * guesses when the descriptor does not say. The result is owned. */
+NtsValue nts_array_element(NtsValue array, double index);
 
 /* Whether the resumed state machine has to propagate a rejection rather than
  * read a value. A rejected promise has no payload and both readers above

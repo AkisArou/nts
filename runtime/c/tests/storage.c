@@ -35,14 +35,14 @@ static void check(const char *what, bool ok) {
 /* The shape the emitter generates for `number[]`. */
 static const NtsDescriptor desc_num = {
     NTS_KIND_ARRAY, (uint32_t)sizeof(double), 0u, 0u, 0, 0, "number[]", 0u, 0,
-};
+    NTS_ARRAY_FLOAT};
 
 /* A reference array, whose elements are pointers the collector walks. Growing
  * one moves a block the tracer reads from, so this is the case where freeing
  * the wrong block would be visible as a crash rather than as a number. */
 static const NtsDescriptor desc_ref_grow = {
-    NTS_KIND_ARRAY, (uint32_t)sizeof(void *), 1u, 1u, 0, 0, "ref[]", 0u, 0,
-};
+    NTS_KIND_ARRAY,     (uint32_t)sizeof(void *), 1u, 1u, 0, 0, "ref[]", 0u, 0,
+    NTS_ARRAY_REFERENCE};
 
 int main(void) {
   size_t base = nts_live_bytes();

@@ -1,37 +1,53 @@
-// expect: indexing an array of any, which is not an array
+// expect: lowers
+//
+// FIXED, kept as a guard. An element of an array of `any` reads now.
+//
+// `lowers` rather than `nothing refused`, because that spelling also requires
+// the wrapper to carry it and `subject` takes and returns `unknown`, which is
+// declined at the boundary for `unknown-at-the-boundary` -- somebody else's
+// blocker, and no reason to keep this one red.
+//
+// # What it was
 //
 // The other half of `length-after-array-isarray`, and it arrived the moment
 // that one was fixed. `Array.isArray` narrows an `unknown` to `any[]`. Reading
-// `.length` off the result now lowers -- a length is in the header every
-// reference carries, so it needs no element type. Reading an *element* does
-// not, because an element has a width and `any` does not say what it is.
+// `.length` off the result lowers -- a length is in the header every reference
+// carries, so it needs no element type. Reading an *element* did not, because
+// an element has a width and `any` does not say what it is.
 //
-//     items[index]                        -> lowers, for `items: string[]`
-//     if (Array.isArray(v)) v.length      -> lowers, since f20ca2cd
-//     if (Array.isArray(v)) v[index]      -> REFUSED
+// # What changed
 //
-// Two controls, and the second is why this is a separate fixture rather than a
-// line in that one. `control` says indexing is not what is refused.
-// `lengthStillLowers` says the fix that landed is still landed: if it ever
-// regresses, this fixture reports it here rather than letting the two halves
-// blur into "arrays of any do not work".
+// The width was never the missing half on its own. `NtsDescriptor` carried
+// `size` and `references` already, which is enough to *find* an element and not
+// to read one: eight bytes is a `double` or an `int64_t`, and both are emitted
+// -- element narrowing picks a signed 64-bit width for an array that leaves the
+// `i32` range and stays inside the safe integers, so the two descriptors
+// differ in `name` and in nothing else a reader can switch on.
 //
-// This is the live blocker under `string_decoder`, which is the nearest module
-// to the compiled axis and owns no refusal of its own. `internal/errors.ts:518`
-// was the `.length`; `:520` indexes the same narrowed value two lines later:
+// So the descriptor gained an element *kind*, and `nts_array_element` reads the
+// slot through it. Zero means "this descriptor was written before the field
+// existed" and refuses, loudly, naming the array -- it never guesses, because a
+// guess at eight bytes returns 4.2439915819305446e-314 for 8589934592 and
+// `typeof` still says "number".
 //
-//     const items = new Array<string>(value.length);      // 518, now lowers
-//     for (let index = 0; index < value.length; index++) {
-//       items[index] = inspectValueWithin(value[index], ancestors);   // 520
+// # The three controls
 //
-// so the chain to `StringDecoder#constructor` is unchanged and the module still
-// publishes nothing. Measured after f20ca2cd: cone roots 74 -> 73, own-source
-// roots still 0, `no wrapper for StringDecoder: is a class whose constructor was
-// not compiled` still printed.
+// `control` says indexing is not what was refused. `lengthStillLowers` says the
+// fix that landed before this one is still landed. `subject` is the fix itself.
 //
-// "Five cleared and five revealed" was a `buffer` observation. It happened here
-// on the chain that had been named as the shortest, two lines from the fix,
-// which makes it a property of cones and not of that module.
+// Two more live elsewhere, because neither fits in a lowering fixture:
+// `runtime/c/tests/elements.c` checks the read against each element kind and
+// was controlled by making the runtime guess from width alone -- three checks
+// fail. `examples/dynamic-element` checks the whole path against node and was
+// controlled the same way -- `wide`, `widest` and `text` disagree.
+//
+// # What is still refused, deliberately
+//
+// Writing. `xs[i] = v` under the same guard names itself and stops: the value
+// being stored has a static type that need not be the slot's, and narrowing a
+// double into an `int64_t[]` is a conversion with no obvious place to be
+// decided. Reading through a descriptor and writing through one are not the
+// same feature.
 
 export function control(items: string[], index: number): string {
   return items[index] ?? "";

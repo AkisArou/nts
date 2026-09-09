@@ -24,7 +24,8 @@ typedef struct Cell {
 
 static const uint32_t cell_refs[] = {offsetof(Cell, link)};
 static const NtsDescriptor cell_desc = {
-    NTS_KIND_OBJECT, sizeof(Cell), 1u, 1u, cell_refs, 0, "Cell", 0u, 0};
+    NTS_KIND_OBJECT,  sizeof(Cell), 1u, 1u, cell_refs, 0, "Cell", 0u, 0,
+    NTS_ARRAY_UNKNOWN};
 
 static int failures;
 

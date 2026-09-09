@@ -103,6 +103,20 @@ fn the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does() {
 }
 
 #[test]
+fn an_element_is_read_by_kind_and_not_by_width() {
+    // Reference counting, because two of the checks are about the read *owning*
+    // what it hands back: under NoGC a missing retain is invisible, since
+    // nothing is ever reclaimed and the slot's string outlives everything by
+    // accident.
+    let report = run_suite("elements", &["-DNTS_PROVIDER_RC"]);
+    assert!(
+        checks(&report) >= 18,
+        "expected at least 18 element checks, saw {}:\n{report}",
+        checks(&report)
+    );
+}
+
+#[test]
 fn a_view_is_a_window_onto_a_buffer() {
     // Reference counting, because a view owns its buffer and half of what this
     // asks is whether the ownership is real -- under NoGC nothing is reclaimed

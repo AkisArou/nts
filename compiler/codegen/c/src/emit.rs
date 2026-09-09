@@ -2172,7 +2172,7 @@ fn emit_object_descriptors(
             format!(
                 "static const NtsDescriptor nts_desc_{name} = \
                  {{ {kind}, sizeof({name}), {}u, {cyclic}u, {offsets}, {methods}, \"{}\", \
-                 {}u, {erased_offsets} }};",
+                 {}u, {erased_offsets}, NTS_ARRAY_UNKNOWN }};",
                 references.len(),
                 layout.name,
                 erased.len()
@@ -2236,14 +2236,15 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
             origin,
             format!(
                 "static const NtsDescriptor {} = \
-                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0 }};",
+                 {{ NTS_KIND_ARRAY, sizeof({element}), 0, 0, 0, 0, \"{element}[]\", {}, 0, {} }};",
                 descriptor_name(element),
                 // For an array, `erased` is a fact about every element rather
                 // than a table of offsets -- exactly as `references` is. An
                 // array of erased values whose descriptor said `0` would never
                 // be walked, so a string held in one would be released while
                 // something still pointed at it.
-                u32::from(**element == *"NtsValue")
+                u32::from(**element == *"NtsValue"),
+                array_element_kind(element),
             ),
         );
     }
@@ -2482,6 +2483,31 @@ fn element_descriptor(array: &HirType, origin: &Origin) -> Result<String, Diagno
 /// The descriptor a given element type uses. One per element type, not per
 /// array: the descriptor is immutable and says nothing about a particular
 /// array's contents.
+/// What `nts_array_element` should read out of a slot of this C type.
+///
+/// The descriptor already carries `size` and `references`, which is enough to
+/// *find* an element and not to read one: eight bytes is a `double` or an
+/// `int64_t`, and eight bytes is what element narrowing picks for an array that
+/// leaves the `i32` range and stays inside the safe integers. So the ambiguity
+/// is on the default path rather than an exotic one.
+///
+/// Every spelling `c_type` can produce for a scalar element is answered here,
+/// including the ones narrowing does not currently choose. An unlisted spelling
+/// would fall to `NTS_ARRAY_UNKNOWN`, and unknown means the read refuses -- a
+/// correct outcome for a runtime that was never taught, and a wrong one for a
+/// type this backend can spell perfectly well. Failing to list one would look
+/// exactly like the honest case.
+fn array_element_kind(element: &str) -> &'static str {
+    match element {
+        "NtsValue" => "NTS_ARRAY_VALUE",
+        "bool" => "NTS_ARRAY_BOOL",
+        "float" | "double" => "NTS_ARRAY_FLOAT",
+        "int8_t" | "int16_t" | "int32_t" | "int64_t" => "NTS_ARRAY_INT",
+        "uint8_t" | "uint16_t" | "uint32_t" | "uint64_t" => "NTS_ARRAY_UINT",
+        _ => "NTS_ARRAY_UNKNOWN",
+    }
+}
+
 fn descriptor_name(element: &str) -> String {
     format!("nts_desc_{}", element.replace(' ', "_"))
 }
@@ -3923,6 +3949,73 @@ mod tests {
     }
 
     use super::*;
+
+    /// Every scalar an array can hold has a kind, so that "unknown" keeps
+    /// meaning "untaught runtime" and never "untaught emitter".
+    ///
+    /// `nts_array_element` reads a slot by consulting the descriptor, and it
+    /// refuses when the descriptor does not say what the slot holds. That
+    /// refusal is correct for a hand-written descriptor from before the field
+    /// existed -- `runtime/node` has three -- and it is wrong, and silent, for
+    /// an element type this backend can spell perfectly well and forgot to
+    /// list. The two look identical from the outside: an abort naming an array.
+    ///
+    /// So the emitter is not allowed to produce `NTS_ARRAY_UNKNOWN` at all.
+    /// Anything `c_type` can spell for a scalar has to have an answer here, and
+    /// adding a spelling without adding its kind fails this rather than
+    /// deferring to a run that may never happen.
+    #[test]
+    fn every_element_type_this_backend_can_spell_has_a_kind() {
+        let origin = Origin::source(nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span::new(0, 1),
+        });
+        let scalars = [
+            HirType::Bool,
+            HirType::Erased,
+            HirType::Float { bits: 32 },
+            HirType::Float { bits: 64 },
+            HirType::Int { bits: 8, signed: true },
+            HirType::Int { bits: 8, signed: false },
+            HirType::Int { bits: 16, signed: true },
+            HirType::Int { bits: 16, signed: false },
+            HirType::Int { bits: 32, signed: true },
+            HirType::Int { bits: 32, signed: false },
+            HirType::Int { bits: 64, signed: true },
+            HirType::Int { bits: 64, signed: false },
+        ];
+        for ty in scalars {
+            let Ok(spelling) = c_type(&ty, &origin) else {
+                panic!("`c_type` refused {ty:?}, which an array can hold");
+            };
+            assert_ne!(
+                array_element_kind(spelling),
+                "NTS_ARRAY_UNKNOWN",
+                "`array_element_kind` has no answer for `{spelling}` ({ty:?}), so an \
+                 array of it would emit a descriptor that says nothing and abort on \
+                 the first dynamic read -- indistinguishable from a runtime that \
+                 predates the field",
+            );
+        }
+    }
+
+    /// The width the ambiguity is actually at.
+    ///
+    /// `size` and `references` were what a reader had before this field, and
+    /// they do separate most element types. They do not separate these two, and
+    /// these two are not exotic: `double` is what every `number[]` starts as,
+    /// and `int64_t` is what element narrowing picks for one that leaves the
+    /// `i32` range and stays inside the safe integers.
+    #[test]
+    fn eight_bytes_is_two_element_types_and_they_differ_only_here() {
+        assert_eq!(array_element_kind("double"), "NTS_ARRAY_FLOAT");
+        assert_eq!(array_element_kind("int64_t"), "NTS_ARRAY_INT");
+        assert_eq!(
+            std::mem::size_of::<f64>(),
+            std::mem::size_of::<i64>(),
+            "if these ever differ, the field is answering a question nobody asks",
+        );
+    }
 
     #[test]
     fn a_c_keyword_is_not_a_usable_function_name() {

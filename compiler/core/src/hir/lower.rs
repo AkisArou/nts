@@ -13553,6 +13553,19 @@ impl<'a> FuncBuilder<'a> {
 
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
             let (array, index) = self.element_access_parts(target)?;
+            // `element_access_parts` now admits a receiver the checker proved
+            // is an array and the representation left erased, because a *read*
+            // of one can ask the descriptor what it holds. A write cannot: the
+            // value being stored has a static type that may not be the slot's,
+            // and narrowing a double into an `int32_t[]` is a conversion this
+            // has no place to decide. Refused by name rather than mis-stored.
+            if self.erased_but_proven_an_array(target, array) {
+                return Err(self.unsupported(
+                    target,
+                    "assigning to an element of an array whose element type is \
+                     only known at run time",
+                ));
+            }
             return Ok(Place::Element { array, index });
         }
 
@@ -17154,6 +17167,21 @@ impl<'a> FuncBuilder<'a> {
         // storage, which is what lets the bounds check, its elimination and the
         // verifier go on working unchanged. The backends decide the addressing
         // from the receiver's type.
+        // An array the checker proved and the representation did not. There is
+        // no element type to read a width from, so the width comes from the
+        // descriptor at run time and the answer is erased -- which is also the
+        // only type that can carry the `undefined` an out-of-range read gives,
+        // and the reason this form does not need the bounds trap the static one
+        // takes.
+        if self.erased_but_proven_an_array(id, array) {
+            let origin = self.origin(id);
+            return Ok(self.runtime_call(
+                "nts_array_element",
+                vec![array, index],
+                HirType::Erased,
+                origin,
+            ));
+        }
         let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
@@ -17421,11 +17449,31 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(
             self.values[array_value.0 as usize].ty,
             HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))
-        ) {
+        ) && !self.erased_but_proven_an_array(id, array_value)
+        {
             return Err(self.not_an_array(id));
         }
         let index_value = self.lower_expression(*index)?;
         Ok((array_value, index_value))
+    }
+
+    /// A receiver with no array *representation* that the checker nevertheless
+    /// says is an array.
+    ///
+    /// `Array.isArray(xs)` is what produces one. The guard narrows `xs` to
+    /// `any[]`, which is a fact about the value and not a representation for
+    /// it: the value is still the sixteen erased bytes it arrived as, so every
+    /// site that switches on a lowered type sees `Erased` and refuses. Thirty
+    /// of those refusals read `indexing an array of any, which is not an
+    /// array`, which is the two halves disagreeing in one sentence.
+    ///
+    /// Both halves are required, and the lowered half is the one that carries
+    /// the weight. The checker's answer alone would also be `true` for a
+    /// receiver that *does* have a representation, and this is a fallback for
+    /// the one that does not.
+    fn erased_but_proven_an_array(&self, id: NodeId, receiver: ValueId) -> bool {
+        matches!(self.values[receiver.0 as usize].ty, HirType::Erased)
+            && self.receiver_is_an_array(id)
     }
 
     /// `xs[i]` where `xs` is not an array, named by what it is.
