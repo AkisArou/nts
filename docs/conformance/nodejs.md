@@ -15232,6 +15232,20 @@ behaviour-dependent, 9 shape-only, 0 hollow, 15 modules -- **identical module by
 module**, not merely in total. `os` alone went from 17 published names to 21 and
 its five passes did not become six.
 
+**And measured a third time after four more compiler fixes** -- the empty object
+type, the wrapper's `length`, the getter walk, and the literal's contextual
+member. 22 built, 0 failed, **98 published names**. The axis: 38 pass, 29
+behaviour-dependent, 9 shape-only, 0 hollow, 15 modules. Identical again, module
+by module.
+
+Four fixes, one published name, and no test that did not pass before passes now.
+That is the fourth measurement of the same shape and it is not a criticism of
+the fixes -- two of them closed defects this profile's own suite had found, and
+one of those was a segfault. **It is a fact about what the axis measures.** A
+test passes when a module publishes what it asks for and answers correctly; the
+things fixed today were in front of *other* things, and the queue behind each is
+what the ledger's ordered list is for.
+
 Ten more published names and not one more test passing. That is the third time
 this lane has measured that shape, and it is the reason the axis and the name
 count are kept in separate columns: **a published name is a ceiling on what
