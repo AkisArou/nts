@@ -1596,6 +1596,12 @@ NtsArray *nts_array_slice_ref(const NtsArray *a, double from, double to);
 /* `join` on an array of strings. Only strings: every other element type needs a
  * conversion per element, which is a different question from this one. */
 NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep);
+/* `join` on an array of numbers, and on a typed array. Each element is
+ * formatted the way `String(x)` formats it, which is what
+ * `Array.prototype.join` says; the separator is the only thing that can make
+ * the result wide. */
+NtsString *nts_array_join_num(const NtsArray *a, const NtsString *sep);
+NtsString *nts_view_join(const NtsView *view, const NtsString *sep);
 NtsArray *nts_array_reverse_ref(NtsArray *a);
 NTS_READS_ONLY double nts_array_index_of(const NtsArray *a, double needle);
 NTS_READS_ONLY double nts_array_last_index_of(const NtsArray *a, double needle);

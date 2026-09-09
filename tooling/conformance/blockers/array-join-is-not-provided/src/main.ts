@@ -1,35 +1,45 @@
-// expect: `join` on a typed array, which this compiler does not provide yet
+// expect: lowers
 //
-// `join` is refused on both receivers, and with two different messages:
+// FIXED, kept as a guard. `join` is provided on all three receivers.
 //
-//     bytes.join(",")    Uint8Array  -> `join` on a typed array, which this
-//                                       compiler does not provide yet
-//     values.join(",")   number[]    -> this array method is not supported by
-//                                       this lowering yet
+// It was refused on two of them with two different messages: `join` on a typed
+// array named the receiver, and `join` on a `number[]` fell through to "this
+// array method is not supported". Only the string receiver worked, because only
+// a string element needs no conversion -- the refusal's stated reason was that
+// "every other element needs a conversion per element", which is true, and the
+// conversion is `String(x)`.
 //
-// `slice` is the control on both and lowers on both, so neither receiver is
-// refused as a whole.
+// `nts_array_join_num` and `nts_view_join` do it per element in the runtime.
+// Two passes, as the string form takes: the first formats to measure and the
+// second formats to write, because an element has no length until it is
+// formatted and storing the first pass's answers would cost an allocation per
+// element. A whole value in the `i32` range takes the integer path and
+// allocates nothing, which is every element of a typed array.
 //
-// **Separate from `typed-array-methods` for a reason that cost a wrong fixture
-// draft.** That one covers `at`, `includes` and `indexOf`, which lower on an
-// ordinary array and are refused only on a typed one -- a receiver gap. `join`
-// is refused on both, so it is a missing method, and listing it there would
-// have let a fix that taught only `join` turn the whole fixture green while
-// `at`, `includes` and `indexOf` stayed refused underneath a passing test.
+// `lowers` rather than `nothing refused`, because two of these four functions
+// take a `Uint8Array` and a view crosses outward only -- somebody else's
+// boundary blocker, and no reason to keep this one red.
 //
-// Two messages for one name is also why the expectation names the typed-array
-// spelling: that is the one on the live chain.
+// # What it unblocked, and what it did not
 //
-// Where it bites, and it is the head of the widest chain in the profile:
-// `internal/errors.ts:547` formats a `Uint8Array` for an error message,
+// `internal/errors.ts:547` formats a `Uint8Array` into an error message inside
+// `inspectValueWithin`, which is the head of the chain to
+// `ERR_UNKNOWN_ENCODING#constructor` and `StringDecoder#constructor`, with
+// sixteen validators in `os`'s cone behind the same `inspectValue`. Whether
+// that chain clears is a separate measurement; `0216` is the reason not to
+// predict it from a root count.
 //
-//     `Uint8Array(${value.length}) [ ${value.join(", ")} ]`
+// # The bug this found, which was not about `join`
 //
-// inside `inspectValueWithin` -> `inspectValue` ->
-// `ERR_UNKNOWN_ENCODING#constructor` -> `StringDecoder#constructor`. It took
-// that position when `indexing an array of any` was fixed: `string_decoder`'s
-// cone fell 70 to 65 and its class still has no constructor. Sixteen validators
-// in `os`'s cone sit behind the same `inspectValue`.
+// `examples/array-join` checksums the joined text and compares it against node,
+// and eight of fifteen cases disagreed -- **including the strings control**,
+// which this change does not touch. The checksum was miscompiled:
+// `(sum * 31 + code) % 1000000007` had its dividend truncated to `i32` before
+// the modulus, because `specialize::width_of` read an operation's width off its
+// own result and a remainder is bounded by its divisor however large the
+// dividend is. See `examples/wide-operand-narrow-result`.
+//
+// A control that disagrees is worth more than a subject that agrees.
 
 export function sliceOnTyped(bytes: Uint8Array): number {
   return bytes.slice(0, 1).length;

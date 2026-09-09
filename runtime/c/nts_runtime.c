@@ -2933,6 +2933,135 @@ static void nts_copy_units(NtsString *out, uint32_t offset,
  * node writes an empty string for a `null` or `undefined` element, which a
  * `string[]` cannot hold -- and the compiler calls this only where the element
  * type says as much, so there is no absence to spell here. */
+/* Defined with the number formatter further down, and used here: `join` is a
+ * string operation and belongs beside the other one, while the digit loop
+ * belongs beside `nts_number_to_string`. Moving either to satisfy C's ordering
+ * would put one of them in the wrong chapter. */
+static int nts_u32toa(char *buf, uint32_t n);
+
+/* One element of a numeric `join`, formatted into `out` and its length
+ * returned.
+ *
+ * `out` needs 32 bytes. The general path's widest answer is
+ * `-1.7976931348623157e+308` at 24 characters and the integer path's is eleven,
+ * so 32 is the bound with room rather than a guess -- and
+ * `nts_number_to_string` is asked for the general case, which cannot exceed
+ * what it produced.
+ *
+ * A whole value in the `i32` range takes the integer path and allocates
+ * nothing. That is every element of a `Uint8Array`, every index, and most of an
+ * ordinary `number[]`; the fraction allocates one string and frees it, which is
+ * the price of not duplicating Grisu's twenty lines of ECMAScript formatting
+ * rules here. `nts_number_to_string_into` is `always_inline` for a reason
+ * `benches/cases/number-format` measured, and splitting it to share a buffer
+ * would spend that to save an allocation on the rarer path. */
+static uint32_t nts_join_one(char *out, double x) {
+  const int32_t whole =
+      x >= -2147483648.0 && x <= 2147483647.0 ? (int32_t)x : 0;
+  if ((double)whole == x) {
+    const uint32_t magnitude =
+        whole < 0 ? (uint32_t)(-(int64_t)whole) : (uint32_t)whole;
+    const uint32_t sign = whole < 0 ? 1u : 0u;
+    if (sign != 0u) {
+      out[0] = '-';
+    }
+    return sign + (uint32_t)nts_u32toa(out + sign, magnitude);
+  }
+  NtsString *formatted = nts_number_to_string(x);
+  uint32_t length = formatted->length;
+  if (length > 31u) {
+    /* Unreachable for a `double`, and a silent overrun if it ever is not. */
+    fprintf(stderr, NTS_REFUSED "a number formatted to %u characters\n",
+            length);
+    abort();
+  }
+  memcpy(out, NTS_ELEMENTS(formatted, unsigned char), length);
+  nts_release(formatted);
+  return length;
+}
+
+/* Write `length` ASCII characters at `offset`, into either storage. */
+static void nts_join_put(NtsString *out, uint32_t offset, const char *from,
+                         uint32_t length, int wide) {
+  if (wide) {
+    uint16_t *into = NTS_ELEMENTS(out, uint16_t) + offset;
+    for (uint32_t at = 0; at < length; at++) {
+      into[at] = (uint16_t)(unsigned char)from[at];
+    }
+  } else {
+    memcpy(NTS_ELEMENTS(out, unsigned char) + offset, from, length);
+  }
+}
+
+/* `join`, on an array of numbers.
+ *
+ * The same two passes `nts_array_join_str` takes and one difference that
+ * decides the shape: an element has no length until it is formatted, so the
+ * first pass formats to measure and the second formats again to write. Storing
+ * the first pass's answers would be an allocation per element or a second
+ * buffer as large as the result, and formatting an integer twice is a digit
+ * loop twice.
+ *
+ * Narrow unless the *separator* is wide, because every character a number
+ * formats to is ASCII. */
+NtsString *nts_array_join_num(const NtsArray *a, const NtsString *sep) {
+  const double *items = NTS_ITEMS(a, const double);
+  uint32_t count = a->header.length;
+  char scratch[32];
+  uint32_t total = count > 1u ? sep->length * (count - 1u) : 0u;
+  for (uint32_t at = 0; at < count; at++) {
+    total += nts_join_one(scratch, items[at]);
+  }
+  int wide = count > 1u && (sep->flags & NTS_TWO_BYTE) != 0;
+  NtsString *out = nts_str_build(NULL, total, wide);
+  uint32_t written = 0;
+  for (uint32_t at = 0; at < count; at++) {
+    if (at != 0) {
+      nts_copy_units(out, written, sep, wide);
+      written += sep->length;
+    }
+    uint32_t length = nts_join_one(scratch, items[at]);
+    nts_join_put(out, written, scratch, length, wide);
+    written += length;
+  }
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[total] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[total] = 0;
+  }
+  return out;
+}
+
+/* The same over a view, which differs only in how an element is read: a view
+ * has an element width and an offset into a buffer, so `nts_view_get` is the
+ * one place that knows how to fetch one. */
+NtsString *nts_view_join(const NtsView *view, const NtsString *sep) {
+  uint32_t count = (uint32_t)nts_view_length(view);
+  char scratch[32];
+  uint32_t total = count > 1u ? sep->length * (count - 1u) : 0u;
+  for (uint32_t at = 0; at < count; at++) {
+    total += nts_join_one(scratch, nts_view_get(view, (double)at));
+  }
+  int wide = count > 1u && (sep->flags & NTS_TWO_BYTE) != 0;
+  NtsString *out = nts_str_build(NULL, total, wide);
+  uint32_t written = 0;
+  for (uint32_t at = 0; at < count; at++) {
+    if (at != 0) {
+      nts_copy_units(out, written, sep, wide);
+      written += sep->length;
+    }
+    uint32_t length = nts_join_one(scratch, nts_view_get(view, (double)at));
+    nts_join_put(out, written, scratch, length, wide);
+    written += length;
+  }
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[total] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[total] = 0;
+  }
+  return out;
+}
+
 NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
   const NtsString *const *items = NTS_ITEMS(a, const NtsString *);
   uint32_t count = a->header.length;

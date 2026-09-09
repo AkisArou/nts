@@ -19758,6 +19758,28 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The separator a `join` was given, or the comma it defaults to.
+    ///
+    /// `[1,2].join()` is `"1,2"` and not `"1Infinity2"`, which is what the
+    /// numeric table's arity filling would supply -- so `join` is handled
+    /// outside that table on all three receivers, and this is the one place
+    /// that knows what the default is.
+    fn join_separator(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        if let Some(argument) = arguments.first() {
+            return self.lower_expression(*argument);
+        }
+        let origin = self.origin(id);
+        Ok(self.push(
+            OpKind::ConstString(",".to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     /// A method call on a typed array.
     ///
     /// Two steps, the same two an array takes: the receiver's *declared* class
@@ -19840,6 +19862,24 @@ impl<'a> FuncBuilder<'a> {
                 Ok(view)
             }
             "copyWithin" | "set" => self.lower_view_move(id, receiver, &name, arguments),
+            // `join`, which is a *read* of every element rather than a window
+            // onto them -- so unlike `subarray` and `slice` it does not have to
+            // answer what the result shares with the receiver. The runtime
+            // reads elements through `nts_view_get`, which is the one place
+            // that knows a view's width and offset.
+            //
+            // This is `internal/errors.ts:547`, which formats a `Uint8Array`
+            // into an error message and stands at the head of the chain through
+            // `inspectValueWithin` to `StringDecoder#constructor`.
+            "join" => {
+                let separator = self.join_separator(id, arguments)?;
+                Ok(self.call_runtime(
+                    "nts_view_join",
+                    vec![receiver, separator],
+                    HirType::Managed(ManagedType::String),
+                    &origin,
+                ))
+            }
             other => Err(self.unsupported(
                 id,
                 &format!("`{other}` on a typed array, which this compiler does not provide yet"),
@@ -21595,6 +21635,25 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_pushes(id, "nts_array_unshift", receiver, arguments);
         }
 
+        // `join`, which is not in `numeric_array_method` because its one
+        // argument defaults to a comma rather than to the `Infinity` that
+        // table's arity filling supplies -- the same reason the reference path
+        // handles it separately.
+        //
+        // The runtime formats each element the way `String(x)` does, which is
+        // what `Array.prototype.join` says. That conversion is per element and
+        // has to be, and it is the whole of what used to make this refuse.
+        if name == "join" {
+            let separator = self.join_separator(id, arguments)?;
+            let origin = self.origin(id);
+            return Ok(self.call_runtime(
+                "nts_array_join_num",
+                vec![receiver, separator],
+                HirType::Managed(ManagedType::String),
+                &origin,
+            ));
+        }
+
         let Some((helper, arity, ty)) = numeric_array_method(&name, absent_result, &array)
         else {
             return Err(self.unsupported(member, "this array method"));
@@ -21700,19 +21759,14 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_pushes(id, "nts_array_unshift_ref", receiver, arguments);
         }
         // `join`, whose separator defaults to a comma rather than to the
-        // infinity the arity filling below supplies. Only on strings: every
-        // other element needs a conversion per element, which is the question
-        // `String()` on an erased value answers and not this one.
+        // infinity the arity filling below supplies. Only on strings here:
+        // this is the *reference* path, so the other elements are objects,
+        // and `String(o)` is "[object Object]" rather than a conversion the
+        // runtime can do from a pointer. Numbers are joined on the numeric
+        // path, which has a helper that formats them.
         if name == "join" && text {
+            let separator = self.join_separator(id, arguments)?;
             let origin = self.origin(id);
-            let separator = match arguments.first() {
-                Some(argument) => self.lower_expression(*argument)?,
-                None => self.push(
-                    OpKind::ConstString(",".to_owned()),
-                    HirType::Managed(ManagedType::String),
-                    origin.clone(),
-                ),
-            };
             return Ok(self.push(
                 OpKind::Call {
                     callee: Callee::External("nts_array_join_str".to_owned()),

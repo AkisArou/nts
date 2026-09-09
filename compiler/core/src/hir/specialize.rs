@@ -506,15 +506,81 @@ fn width_of(
         return None;
     }
 
-    if integral(id, I32_MIN, I32_MAX) {
-        Some(32)
-    } else if integral(id, facts::SAFE_MIN, facts::SAFE_MAX) {
-        // Past 2^53 an `f64` cannot tell adjacent integers apart, so there is
-        // nothing to prove and nothing to represent.
-        Some(64)
-    } else {
-        None
-    }
+    // The width a *result* takes, which is this pass's own decision and is
+    // signed.
+    //
+    // Deliberately not the unsigned question. `Math.abs(x)` over an `i32` has
+    // range `[0, 2^31]`, which fits `u32` -- and asking that here made the
+    // result 32 bits while the emitter spelled it `int32_t`, so
+    // `Math.abs(-2147483648)` negated in `int32_t` and became signed overflow.
+    // `examples/mathops` already carried a comment about that exact answer
+    // coming out negative once before, which is how the regression was
+    // recognised rather than debugged.
+    let width = |value: ValueId| -> Option<u8> {
+        if integral(value, I32_MIN, I32_MAX) {
+            Some(32)
+        } else if integral(value, facts::SAFE_MIN, facts::SAFE_MAX) {
+            // Past 2^53 an `f64` cannot tell adjacent integers apart, so there
+            // is nothing to prove and nothing to represent.
+            Some(64)
+        } else {
+            None
+        }
+    };
+
+    // The width an *operand* has to survive, which is a weaker question.
+    //
+    // An operand's representation was decided when it was produced; all this
+    // asks is whether the operation is wide enough to receive it without
+    // truncation. Thirty-two bits there is `int32_t` **or** `uint32_t`, and the
+    // difference is two billion: `absences` bounds its counter with
+    // `256 + (seed | 0)`, so `i` reaches 2^31 + 254 and its `i % 3` was
+    // correctly a `uint32_t` remainder long before this pass was touched.
+    // Asking the signed question about it widened 26 mentions of a 64-bit type
+    // to 86 and changed no answer.
+    let operand = |value: ValueId| -> Option<u8> {
+        if integral(value, I32_MIN, I32_MAX) || integral(value, 0.0, U32_MAX) {
+            Some(32)
+        } else if integral(value, facts::SAFE_MIN, facts::SAFE_MAX) {
+            Some(64)
+        } else {
+            None
+        }
+    };
+
+    // The result's width is not the operation's width.
+    //
+    // `(sum * 31 + code) % 1000000007` is the ordinary hash: the remainder is
+    // bounded by the divisor, so it fits `i32` however large the dividend is,
+    // and the dividend is `3.1e10`. Taking the width from the *result* made the
+    // `%` a 32-bit operation and inserted `(int32_t)` on the way in, so the sum
+    // was truncated before the modulus ever ran. The answer was not merely
+    // wrong, it was **negative**.
+    //
+    // `%` is the systematic case because its range does not depend on its left
+    // operand at all. `+`, `-` and `*` reach it by cancellation -- `a - b` where
+    // both are large and the difference is small -- and unary negation reaches
+    // it at exactly one value, `-(-2147483648)`. All of them are here because
+    // the rule is the same one: an operation is as wide as the widest value it
+    // touches, and the result is only one of those.
+    //
+    // Bitwise operations and the coercions are not in this list and must not be.
+    // Their result is `i32` by the language's definition rather than by
+    // inference, and their operands are coerced to `i32` on the way in -- which
+    // is a truncation the source asked for.
+    let widest = match &func.values[index].kind {
+        OpKind::Binary {
+            op: BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Rem,
+            lhs,
+            rhs,
+        } => width(id)?.max(operand(*lhs)?).max(operand(*rhs)?),
+        OpKind::Unary {
+            op: UnOp::Neg,
+            operand: value,
+        } => width(id)?.max(operand(*value)?),
+        _ => width(id)?,
+    };
+    Some(widest)
 }
 
 /// Add the conversions the new types require, and count them.
