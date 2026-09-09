@@ -238,5 +238,8 @@ console.log(`${dishonestTotal} of them demand more arguments than their own leng
 if (skipped.length > 0) {
   console.log(`  Not asked: ${skipped.join(", ")}. Those are skipped whole, so the` +
     " arity figure above is over the modules that were called, not over all of them.");
+  console.log("  `arity-agreement.mjs` reads both numbers out of the emitted C and covers");
+  console.log("  them all -- it reports 4 where this reports 2, and the difference is");
+  console.log("  `fs.Stats` and `readline.reverseString`, in modules this cannot call.");
 }
 console.log("Silence is not a clearance: the shapes are generic, so this can find an unusable name and cannot certify a usable one.");
