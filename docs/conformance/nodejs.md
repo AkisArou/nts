@@ -15535,8 +15535,8 @@ The last row is the one to note: the empty-literal refusal is gone **and** the
 value that comes back is right, so the literal change and the contextual-member
 change land together without the wrong answer that forced the first revert.
 
-**Five defects remain**, across 21 case files and 134 questions -- 12
-disagreeing, 27 refused, 0 that did not build:
+**Five defects remain**, across 22 case files and 144 questions -- 12
+disagreeing, 28 refused, 0 that did not build:
 
     exceptions do not cross a call frame        6 cases, two files
     a lone surrogate counts as three            3 cases
@@ -15555,6 +15555,17 @@ measured:
 
 The object is correct -- the key is stored, readable, found by `Object.hasOwn`
 and returned by `Object.keys`. Only the operator disagrees.
+
+**The mechanism, read from the emitted C:** it lowers to a literal constant.
+
+    v1 = nts_map_new(v0);
+    nts_map_set(v1, v4, v5);      <- the key goes in
+    v7 = false;                   <- and `in` answers this
+    if (v7) { goto b1; } else { goto b2; }
+
+`v7 = false` is unconditional, with no use of the map after the set. It does not
+lower to a lookup that misses; it does not lower to a lookup. Which is why the
+absent case agrees -- the same `false`, right by accident.
 
 **And the same operator refuses in a different type position.** `in` on a bare
 `object` gives `an in naming X on an object, which a natively represented type
