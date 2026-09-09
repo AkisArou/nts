@@ -14936,6 +14936,27 @@ are right and they are about different libraries.
 scalar, across `os`, `fs`, `buffer`, `zlib`, `http`, `net`, `path`, `process`,
 `util`, `stream`, `timers`, `readline`, `querystring` and `async_hooks`.
 
+### Two levels, because one was not enough to check what it claimed
+
+The first version walked one level, so a table inside a table was checked for
+**presence and never compared** -- and `os.constants` is four of them:
+
+    constants.signals    ours  33, node  33    0 differing
+    constants.errno      ours  79, node  79    0 differing
+    constants.priority   ours   6, node   6    0 differing
+    constants.dlopen     ours   5, node   5    0 differing
+
+    123 entries, 0 differing
+
+That is most of what `os` publishes, and at one level the instrument reported
+`os: 0 differing` without having looked at any of it. The answer did not change
+-- but "0 differing" and "0 differing, having compared 123 entries" are
+different claims and only the second was earned.
+
+Two is where it stops. `util.inspect.styles` is the deepest plain table in the
+surface, and a third level starts walking cyclic namespaces:
+`path.posix.win32.posix` closes in two hops.
+
 ### The 402 absent are a different question and already counted
 
 A name node has and this profile does not publish is the publish gap --
