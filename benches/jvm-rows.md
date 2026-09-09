@@ -42,7 +42,7 @@ not measured clean and should not be quoted.**
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
-| `module-closures` | 1.06x *busy* | the `(D)D` closure ABI is real and **priced at 0.1%** -- below. Never measured clean; needs a run, not a fix |
+| `module-closures` | **1.058x** | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
 | `awfy-sieve` | **1.03x or 1.27x** | two modes, and "two JIT shapes" was wrong -- below |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
 | `objects` | **0.99x** | re-measured clean: still a win, as it was |
@@ -1518,6 +1518,47 @@ evening, all "the bytecode carries obvious redundancy", all zero.**
 So the note was a true statement about the emission offered as an explanation of
 a ratio, and it is not one. `module-closures` is also flagged *busy* and has
 never been measured clean, so what the row needs is a clean run and not a fix.
+
+### `module-closures` is 1.058x for no reason I can find, and three mechanisms are dead
+
+Measured properly at last -- it had only ever carried a *busy* flag. Our
+emission against the reference, interleaved, one JVM per arm, **identical
+checksums (2.03397323776E13) between compiled TypeScript and hand-written
+Java**, which is worth as much as the timing:
+
+    minimum    ref 4216     ours 4461     1.058x
+
+So the 1.06x is real and not the contamination flag. Then three named
+mechanisms, each priced by rule 3 on the reference, one variable at a time:
+
+    the (D)D closure ABI's i2d/d2i        McI 4267  vs McD 4272     +0.1%
+    the non-final getstatic in the loop   McD 4209  vs McN 4213     +0.1%
+    the callee's size against MaxInline   ours 4447 vs +inl60 4458      0%
+
+**All three zero, and the transcriptions do not reproduce the gap at all** --
+every variant lands at 4210-4270 where ours is 4461. This is `awfy-queens`
+again: the residual survives every attempt to write it in Java.
+
+**And the inlining one is a misreading worth keeping.** `-XX:+PrintInlining`
+says, repeatedly:
+
+    nts.gen.Program::Closure0$call (54 bytes)   callee is too large
+
+against the reference's `McI::mix (13 bytes) inline`, which looked decisive --
+54 bytes is past `MaxInlineSize`'s 35, so the ABI conversions would be costing
+us the *inlining* rather than the cycles, which would have been a real exception
+to the four-for-four rule above. **The same log also says `inline (hot)` for the
+same method further down.** The "too large" lines are the site before it is hot;
+the steady state inlines. Raising the threshold to 60 confirms it and changes
+nothing.
+
+The case's header says the row's question is "whether the load is hoisted out of
+the loop and the call devirtualized". Both happen. The call is already
+`invokestatic`, the field load hoists, and the closure body inlines when hot.
+
+**So the row is 1.058x with no mechanism, and it goes in this section rather
+than into another evening.** What is excluded: the ABI, the global's mutability,
+the inline threshold, and any explanation a transcription can express.
 
 ## Open, and whose
 
