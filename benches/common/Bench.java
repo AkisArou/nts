@@ -50,8 +50,21 @@ public final class Bench {
         // returns often enough to be counted -- `awfy-mandelbrot` is 22ms of it
         // -- tiers up inside itself through on-stack replacement instead, which
         // is time rather than invocations.
-        long until = System.nanoTime() + 300_000_000L;
-        for (int i = 0; i < 20000 && System.nanoTime() < until; i++) {
+        // `NTS_BENCH_WARMUP_MS` raises the time bound, to price whether the
+        // bound is what makes six rows unquotable. The paragraph above says a
+        // count guarantees the compile was *requested*, not installed -- so a
+        // run that starts timing with C2's output still in flight measures C1,
+        // and five such runs of one binary disagree by exactly the 1.2x-1.9x
+        // those rows carry. Default unchanged, so this measures nothing until
+        // somebody asks it to.
+        long budget = 300_000_000L;
+        String raise = System.getenv("NTS_BENCH_WARMUP_MS");
+        if (raise != null) {
+            budget = Long.parseLong(raise) * 1_000_000L;
+        }
+        long until = System.nanoTime() + budget;
+        int cap = raise == null ? 20000 : Integer.MAX_VALUE;
+        for (int i = 0; i < cap && System.nanoTime() < until; i++) {
             work.run();
         }
 

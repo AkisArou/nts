@@ -129,7 +129,7 @@ different problem from the four rows losing by a lot.
 | `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
 | `awfy-sieve` | 1.07x *not clean* | two modes, and "two JIT shapes" was wrong -- below |
 | `bytes` | 1.05x | the `uirem` residual |
-| `objects` | 1.00x / 0.91x *not clean* | **bimodal on both lanes** -- ours varied 1.17x and the reference 1.22x across five runs of one binary. Neither reading is the row |
+| `objects` | **0.99x** | six runs at two warmup lengths, all 0.99x. The variance note is spread *within* a run; the minimum does not move. **Not losing** |
 | `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
 | `symbol-keys` | 1.04x | reads 1.04x twice against a 0.98x from another sitting -- and this row's own between-sitting movement is **0.07x**. Bytecode identical across the window; not a regression |
 | `arrays` | 1.03x / 1.02x | both runs above; small and real |
@@ -140,7 +140,7 @@ different problem from the four rows losing by a lot.
 | `growth-grown` | 1.01x | 1.01x twice |
 | `substrings` | **0.40x** | was 0.95x. **The largest real movement in the table** and unflagged |
 | `map-and-set` | **0.79x** | was 0.86x |
-| `dispatch` | **0.64x / 0.97x** *not clean* | varied 1.93x then 1.22x. **Not a number** -- see below |
+| `dispatch` | 0.67x-1.14x *not clean* | six runs land in two places. Neither P-core pinning nor 13x the warmup touches it. **Not a number** |
 | `case-convert` | 0.88x / 0.98x *not clean* | the two runs disagree by 11% |
 | `awfy-permute` | **0.72x** | |
 | `awfy-mandelbrot` | **0.84x** | |
@@ -1854,6 +1854,46 @@ last-level cache and turbo headroom" -- is about interference between sessions.
 Nobody was pinning at all here, and on a hybrid part that is a different and
 larger problem: not noise between neighbours but two arms measured on different
 hardware.
+
+### More warmup does not settle the flagged rows, and `objects` was never unsettled
+
+`Bench.java` warms for `20000` iterations **or** 300ms, whichever comes first,
+and its own comment names the gap: C2 "compiles at roughly five thousand
+invocations and does it on a background thread, so a count guarantees the
+*request* was made and not that the compiled code is installed". A run that
+begins timing with C1 still executing measures C1, and five launches of one
+binary would then disagree by whatever C1 costs -- which is the shape of the
+1.2x-1.9x those rows carry.
+
+Worth noting which bound actually binds: at about a microsecond an operation the
+**count** binds first, so a fast case gets 20,000 iterations and roughly **20ms**
+of warmup. A slow one hits the 300ms instead.
+
+Priced with the time bound raised to four seconds, three runs each:
+
+    objects     300ms   0.99x    0.99x FLAG   0.99x FLAG
+    objects    4000ms   0.99x FLAG   0.99x    0.99x
+    dispatch    300ms   1.02x FLAG   0.67x FLAG   1.08x FLAG
+    dispatch   4000ms   0.71x FLAG   1.14x FLAG   1.14x
+
+**The flags do not go away and the hypothesis is dead.** Eleventh tonight.
+
+**But `objects` is 0.99x six times out of six**, at two different warmup
+lengths, and that is the useful half. The flag is `nts-bench` reporting spread
+*within* a run; the minimum it reports is stable to the second decimal across
+six independent processes. This row has been carried as "1.00x / 0.91x *not
+clean*" on the strength of two readings, and 0.91x was an outlier. **It is
+0.99x and it is not a losing row.**
+
+`dispatch` is the opposite and the reason the two must not be treated alike:
+**0.67x, 0.71x, 1.02x, 1.08x, 1.14x, 1.14x**. Not a spread around a value, a
+row that lands in two different places. More warmup does not touch it, and
+neither did P-core pinning. It stays unquotable and the cause is unfound.
+
+**So a flag is not a verdict.** Six of these rows carry one and at least one of
+them has a perfectly stable answer underneath it. The others have to be checked
+one at a time rather than dismissed together, which is what carrying them as
+*not clean* had been doing.
 
 ## Open, and whose
 
