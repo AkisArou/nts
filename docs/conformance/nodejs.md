@@ -15202,11 +15202,23 @@ Controlled after the change, since the logic moved: a synthetic entry reading
 ### Where the change is committed
 
 In `fbcc60a8`, under the message "Eighty-three error classes each carried an own
-key node does not have", which is not about it. `git add <file>` followed by
-`git commit` without a pathspec, at the same moment another session committed
-into the shared index -- the failure this profile's own notes describe, made
-while the note was loaded. Recorded here because the commit message will not
-lead anyone to this reasoning.
+key node does not have", which is not about it. Recorded here because the commit
+message will not lead anyone to this reasoning.
+
+**And the cause was not what this section first said it was.** It read "at the
+same moment another session committed into the shared index", and that did not
+happen -- the commit is mine end to end, and the peer checked and said so.
+
+What happened: the Bash call that was to write a new message and commit was
+**refused by the safety classifier, so none of it ran, including the heredoc**.
+The retry passed the same path to `git commit -F`, and that path still held a
+message written seven hours earlier for `abc07d47`. A duplicate message, one
+commit late.
+
+**When a command is refused, every file it was going to write still holds
+whatever was there before**, and a retry that reads one of those paths is
+reading the past. Left as it is rather than rewritten: a duplicate message is
+cheaper than rewriting history three sessions have built on.
 
 ## Every function the addon publishes reports `length` 0
 
