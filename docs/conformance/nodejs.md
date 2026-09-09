@@ -14183,6 +14183,89 @@ A survey of what a guard currently costs is a measurement with a shelf life. The
 instrument is what makes it cheap to re-take, which is the argument for having
 written it rather than reading the six files once.
 
+## Two locks on one door: the inspect chain is clear
+
+`internal/errors.ts:505` was a regular expression literal, and the compiler lane
+named it as the only thing left in front of `inspectValue`:
+
+    function inspectPropertyName(name: string): string {
+      return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : inspectString(name);
+    }
+
+**It was also a conformance bug.** Node's is
+`lib/internal/util/inspect.js:249`, `/^[a-zA-Z_][a-zA-Z_0-9]*$/`, used at
+`:2336` for the same decision -- and it has no `$`:
+
+    node prints   { '$a': 1 }   { 'a$b': 1 }   { '$': 1 }     all quoted
+    ours would    { $a: 1 }     { a$b: 1 }
+
+Ours was the JavaScript identifier rule, which is a different rule. Nothing was
+testing it, and it was found by reading node's source before touching the file
+rather than after.
+
+That is why it was rewritten. This ledger's own opening says writing a module to
+fit today's compiler means writing something that is not node's algorithm; a
+corrected predicate spelled as the character test it already was is not that.
+The loop was checked against node's regex over **524 keys** -- every ASCII
+character in first, middle and last position, plus the empty string, `__proto__`
+and non-ASCII -- and differs on none.
+
+### Neither half would have done it alone
+
+With the radix work landed and `505` still a regex, the head moved exactly one
+link:
+
+    inspectPropertyName cannot be compiled because it calls inspectString
+
+and `inspectString`'s sole refusal was `errors.ts:476:23`, `code.toString(16)`.
+Two locks, one door, one key each. Measured on the compiler lane's current
+binary:
+
+    string_decoder NTS1001   64 -> 59
+    errors.ts roots          17 -> 14
+    chain heads               3 -> 1
+
+    inspectString  inspectPropertyName  inspectValueWithin  inspectValue
+    ERR_OUT_OF_RANGE  ERR_INVALID_ARG_VALUE  ERR_UNKNOWN_ENCODING
+    ERR_INVALID_ARG_VALUE_RANGE  ERR_SOCKET_BAD_PORT
+    validateInt32  validateInteger  validateNumberRange
+
+    zero mentions, all of them
+
+### What is left on `string_decoder` is the head I refused to claim
+
+    buffer/src/main.ts:196  an erased value where a concrete representation is wanted
+    UNRESOLVED Buffer.alloc (stopped at Uint8Array#fill)
+
+One head, and it is the one recorded earlier as not covered by
+`intersection-from-two-narrowings` -- that fixture narrows by a builtin and by a
+guard in **separate functions**, and `buffer` stacks them. The prediction written
+down then is now the only question left on this module.
+
+## A newer compiler published more and passed no more
+
+The same isolated three-control measurement, on a compiler an hour and a half
+newer:
+
+    13:42 pin   32 pass: 25 behaviour-dependent, 7 shape-only, 0 hollow, 11 modules
+    15:18 pin   32 pass: 25 behaviour-dependent, 7 shape-only, 0 hollow, 11 modules
+
+Identical, and the compiler did not stand still: `os` went from 17 published
+names to 19 with `constants` and `cpus` among them, `process` from 0 to 1,
+`util` and `buffer` and `zlib` and `async_hooks` each gained. **Not one of those
+names converted to a pass.**
+
+Worth stating plainly because the published-name count is the number that moves
+every day and reads like progress. It is a ceiling, not a score: a name has to
+be reachable through the shim, callable with the arguments node passes, and
+answering what node answers before any test changes its verdict.
+
+The one that did convert took work on this side too. `process` publishes `env`
+and `process/shape.mjs` returned `{}` because `default`/`process` was absent, so
+the environment was unreachable from every test -- the same correction `stream`
+needed. It is shape-only, and labelled so: `env` is a data table and survives
+`--mutate-addon`.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
