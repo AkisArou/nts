@@ -1,0 +1,3 @@
+# Each line is `file: reason`; mixed files name their independent coverage.
+test-path-posix-exists.js: hollow oracle; `require('path/posix') === require('path').posix` holds with both sides `undefined`, so the file passes empty-module sabotage; local/subpath-identity-static.js requires the subpath to resolve to an object with a working `join` before retaining the upstream identity assertion
+test-path-win32-exists.js: hollow oracle; the same assertion for `path/win32`, and the same absence satisfies it; covered by local/subpath-identity-static.js
