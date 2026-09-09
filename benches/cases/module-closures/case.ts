@@ -8,6 +8,27 @@
 // and whether the load is hoisted out of the loop and the call devirtualized is
 // the whole measurement.
 //
+// **Both happen, and the row loses anyway.** Measured on the JVM lane at
+// 1.058x with identical checksums against the hand-written Java, and then
+// three mechanisms priced one variable at a time and all three came back at
+// nothing:
+//
+//   the (D)D closure ABI's i2d/d2i per call         +0.1%
+//   the non-final getstatic inside the loop         +0.1%
+//   the callee's size against MaxInlineSize            0%
+//
+// The call is already `invokestatic`, the field load hoists, and
+// `-XX:+PrintInlining` says `inline (hot)` for the closure body -- after
+// saying `callee is too large` about the same method earlier in the same log,
+// which is worth knowing before reading that flag as a finding. So the
+// sentence above names the right question and the answer to it is *yes*, and
+// the gap is somewhere else. No transcription of the emitted shape into Java
+// reproduces it; every variant lands at 4210-4270ns where ours is 4461.
+//
+// `benches/jvm-rows.md` carries the numbers. Recorded here because this header
+// is where someone deciding what the row is for will look first, and it read
+// as though the question were still open.
+//
 // The mixing is `closures`'s, deliberately, so the two rows are comparable and
 // the difference between them is the binding rather than the arithmetic. A
 // linear accumulation has a closed form clang finds, which would measure the
