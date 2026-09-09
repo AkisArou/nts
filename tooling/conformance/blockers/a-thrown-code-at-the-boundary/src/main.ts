@@ -1,5 +1,37 @@
-// expect: emit-c --napi -> calls (() => { try { exports.alwaysThrows(); return "no throw"; } catch (e) { return e.code; } })() === undefined
+// expect: emit-c --napi -> calls (() => { try { exports.alwaysThrows(); return "no throw"; } catch (e) { return e.code; } })() === "ERR_FIXTURE"
 // control: typeof exports.alwaysThrows === "function"
+//
+// FIXED, and kept as a guard.
+//
+// This fixture's own class writes `code = "ERR_FIXTURE"` with **no modifiers**,
+// so it was only ever the boundary half -- which is worth saying, because the
+// thing it stands for in `runtime/node` had two halves and this one reproduces
+// exactly one of them. `internal/errors.ts` writes `override readonly code =
+// "ERR_..."` on ninety-four classes, and a property declaration with two or more
+// modifiers lost its initialiser outright: the modifiers occupy one slot and any
+// number of children, `child_slots` took one, every slot after them shifted, the
+// *name* came back as `readonly`, and the store was dropped in silence. There
+// the `code` was never set inside the compiled program at all.
+//
+// A fixture that reproduces one half of a defect is worth having and worth
+// labelling. This one would have gone green on the boundary fix alone while
+// every error in the tree still arrived without a code.
+//
+// The boundary half was that `nts_thrown_class` answers with the class's own
+// name -- `ERR_OUT_OF_RANGE`, not `RangeError` -- so the wrapper's two
+// comparisons missed, it built a generic error, and it set `name` to the class.
+// Node has `name` `"RangeError"` and `code` `"ERR_OUT_OF_RANGE"`; this had the
+// two swapped, with the right string under the wrong property and `instanceof
+// RangeError` false.
+//
+// `nts_napi_error_classes` is emitted per program from what each constructor's
+// allocation site actually assigns, not from the class name: six of those
+// ninety-four have a `code` that is not their name -- `AbortError` is
+// `ABORT_ERR` -- so the name would have been a wrong value for those six.
+//
+// Measured on `os.getPriority` against node over the twelve inputs
+// `test-os-process-priority.js` uses plus three more: 15 of 15 agree on `code`,
+// on `name`, and on `instanceof RangeError`. None did before.
 //
 // A thrown error's `code` does not cross the boundary.
 //

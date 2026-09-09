@@ -1224,14 +1224,39 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
      * node's own `test-punycode.js` asserts by regex on the string form, so it
      * passed against the flattened error. An oracle cannot test an invariant
      * that cannot fail in the implementation it was written against. */
+    /* The class's own name is `ERR_OUT_OF_RANGE`, not `RangeError`, so the two
+     * comparisons below miss for every one of node's error classes -- and the
+     * `else` then set `name` to the class, giving `name` the string node puts
+     * in `code` and leaving `instanceof RangeError` false.
+     *
+     * `nts_napi_error_classes` is emitted per program from what each
+     * constructor actually assigns, because six of `internal/errors.ts`'s
+     * ninety-four classes have a `code` that is not their name. */
+    const char *base = class_name;
+    napi_value code = NULL;
+    if (class_name != NULL) {
+        for (const NtsNapiErrorClass *entry = nts_napi_error_classes;
+             entry->name != NULL; entry++) {
+            if (strcmp(entry->name, class_name) != 0) continue;
+            base = entry->base;
+            if (napi_create_string_utf8(env, entry->code, NAPI_AUTO_LENGTH, &code) != napi_ok) {
+                code = NULL;
+            }
+            break;
+        }
+    }
+
     napi_status made = napi_generic_failure;
     napi_value error = NULL;
-    if (class_name != NULL && strcmp(class_name, "RangeError") == 0) {
+    if (base != NULL && strcmp(base, "RangeError") == 0) {
         made = napi_create_range_error(env, NULL, message, &error);
-    } else if (class_name != NULL && strcmp(class_name, "TypeError") == 0) {
+    } else if (base != NULL && strcmp(base, "TypeError") == 0) {
         made = napi_create_type_error(env, NULL, message, &error);
     } else {
         made = napi_create_error(env, NULL, message, &error);
+    }
+    if (made == napi_ok && code != NULL) {
+        napi_set_named_property(env, error, "code", code);
     }
     if (made != napi_ok) {
         napi_throw_error(env, NULL, "compiled code threw");
@@ -1241,9 +1266,9 @@ static void nts_napi_raise(napi_env env, const NtsLanding *landing) {
      * subclass -- which Node-API has no constructor for. `e.name` and
      * `String(e)` are then right and `instanceof` is not, and that is the
      * honest limit of what this boundary can express. */
-    if (class_name != NULL && made == napi_ok
-        && strcmp(class_name, "RangeError") != 0
-        && strcmp(class_name, "TypeError") != 0) {
+    if (base != NULL && made == napi_ok && base == class_name
+        && strcmp(base, "RangeError") != 0
+        && strcmp(base, "TypeError") != 0) {
         napi_value name = NULL;
         if (napi_create_string_utf8(env, class_name, NAPI_AUTO_LENGTH, &name) == napi_ok) {
             napi_set_named_property(env, error, "name", name);
@@ -1860,11 +1885,119 @@ fn class_definition(
 
 /// The addon's fixed head: the includes every wrapper needs, and the support
 /// helpers they call.
-fn preamble() -> String {
+/// Each thrown class, the error it descends from, and the `code` its
+/// constructor assigns.
+///
+/// `nts_thrown_class` answers with the *class's own* name, which for node's
+/// error classes is `ERR_OUT_OF_RANGE` rather than `RangeError` -- so the
+/// boundary's `strcmp` against the two Node-API constructors missed, it built a
+/// generic error, and it set `name` to the class. Node has `name` `"RangeError"`
+/// and `code` `"ERR_OUT_OF_RANGE"`; this had the two swapped, with the right
+/// string under the wrong property and `instanceof RangeError` false.
+///
+/// **The code is read from the constructor, not from the class name.** Six of
+/// `internal/errors.ts`'s ninety-four classes disagree with their own name --
+/// `AbortError` is `ABORT_ERR`, `ConnResetException` is `ECONNRESET`,
+/// `ERR_INVALID_ARG_VALUE_RANGE` is `ERR_INVALID_ARG_VALUE` -- so the name would
+/// have been a wrong value for those six, which is what this boundary refuses
+/// everywhere else.
+///
+/// A class whose constructor does not assign a constant `code` is left out and
+/// keeps the old behaviour: `name` set to the class, and no code. That is the
+/// honest answer for a class this cannot read one from.
+fn error_classes(program: &hir::Program) -> Vec<(String, String, String)> {
+    const ROOTS: [&str; 5] = ["Error", "TypeError", "RangeError", "URIError", "SyntaxError"];
+    let mut found = Vec::new();
+    for layout in &program.layouts {
+        if ROOTS.contains(&layout.name.as_str()) {
+            continue;
+        }
+        // The root of the chain, walked rather than named: a class two or three
+        // deep -- `ERR_OUT_OF_RANGE extends NodeRangeError extends RangeError`
+        // is the shape -- reaches it the same way as one directly above it.
+        let mut at = layout.base;
+        let mut root = None;
+        for _ in 0..16 {
+            let Some(ty) = at else { break };
+            let Some(above) = program.layout(ty) else { break };
+            if ROOTS.contains(&above.name.as_str()) {
+                root = Some(above.name.clone());
+                break;
+            }
+            at = above.base;
+        }
+        let Some(root) = root else { continue };
+        let Some(field) = layout.index_of("code") else {
+            continue;
+        };
+        // At the **`new`** site, not in the constructor. A class field
+        // initialiser is emitted by `initialize_fields` where the object is
+        // allocated -- which is where JavaScript runs it -- so
+        // `ERR_OUT_OF_RANGE#constructor` contains stores for `message` and
+        // `name` and none for `code`, and looking there found nothing.
+        //
+        // Every allocation of one class agrees about a constant initialiser, so
+        // the first is the answer and the scan stops at it.
+        let code = program.funcs.iter().find_map(|func| {
+            func.values.iter().find_map(|op| match &op.kind {
+                hir::OpKind::FieldSet {
+                    object,
+                    field: at,
+                    value,
+                } if *at == field
+                    && matches!(
+                        &func.values[object.0 as usize].ty,
+                        HirType::Managed(ManagedType::Object(ty)) if layout.types.contains(ty)
+                    ) =>
+                {
+                    match &func.values[value.0 as usize].kind {
+                        hir::OpKind::ConstString(text) => Some(text.clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+        });
+        if let Some(code) = code {
+            found.push((layout.name.clone(), root, code));
+        }
+    }
+    found.sort_unstable();
+    found.dedup();
+    found
+}
+
+/// That table, as C, ahead of the support code that reads it.
+fn error_class_table(program: &hir::Program) -> String {
+    let mut out = String::from(
+        "typedef struct { const char *name; const char *base; const char *code; } NtsNapiErrorClass;
+static const NtsNapiErrorClass nts_napi_error_classes[] = {
+",
+    );
+    for (name, base, code) in error_classes(program) {
+        let _ = writeln!(
+            out,
+            "    {{ {}, {}, {} }},",
+            c_string_literal(&name),
+            c_string_literal(&base),
+            c_string_literal(&code)
+        );
+    }
+    // A sentinel, because a zero-length array is not C and a program with no
+    // error classes at all is an ordinary program.
+    out.push_str("    { 0, 0, 0 }
+};
+
+");
+    out
+}
+
+fn preamble(program: &hir::Program) -> String {
     let mut out = String::from("/* Generated by nts. Do not edit. */\n");
     out.push_str(
         "#include <node_api.h>\n#include <string.h>\n#include <float.h>\n#include <math.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include \"nts_runtime.h\"\n",
     );
+    out.push_str(&error_class_table(program));
     out.push_str(SUPPORT);
     out.push('\n');
     out
@@ -3315,7 +3448,7 @@ fn emit_layouts(
 
 #[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
-    let mut out = preamble();
+    let mut out = preamble(program);
 
     let classes = class_names(program);
     let ownership = hir::own::summarize(program, &program.layouts);

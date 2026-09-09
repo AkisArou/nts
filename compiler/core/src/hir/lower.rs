@@ -13924,11 +13924,38 @@ impl<'a> FuncBuilder<'a> {
         let NodeData::Children { present, .. } = self.node(id).data else {
             return None;
         };
-        let mut children = self.children(id).into_iter();
+        let mut children = self.children(id).into_iter().peekable();
         let mut slots = [None; N];
         for (bit, slot) in slots.iter_mut().enumerate() {
-            if present & (1 << bit) != 0 {
-                *slot = children.next();
+            if present & (1 << bit) == 0 {
+                continue;
+            }
+            *slot = children.next();
+            // The modifiers are **one slot and any number of children**. Taking
+            // one shifted every slot after it, so `public readonly b = "22"`
+            // read `readonly` as the name, looked up a field of that name,
+            // found none, and dropped the initialiser in silence.
+            //
+            // One modifier worked and none worked, which is why nothing caught
+            // it: every fixture used at most one. `internal/errors.ts` writes
+            // `override readonly code = "ERR_..."` on ninety-four classes, and
+            // that is where the missing `code` on every compiled error came
+            // from -- 792 of node's tests assert one.
+            //
+            // Only the first slot, and only while the *next* child is also a
+            // modifier: a `readonly` in any other position is not one of these.
+            if bit == 0
+                && slot.is_some_and(|first| {
+                    self.kind_of(first).is_some_and(syntax::is_modifier)
+                })
+            {
+                while children
+                    .peek()
+                    .and_then(|next| self.kind_of(*next))
+                    .is_some_and(syntax::is_modifier)
+                {
+                    children.next();
+                }
             }
         }
         Some(slots)

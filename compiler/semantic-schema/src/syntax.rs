@@ -302,6 +302,34 @@ pub mod postfix_operator {
 /// call's child. `null`, `true` and `false` are *not* here, because in a type
 /// position they arrive wrapped in a `LiteralType` while as expressions they are
 /// bare.
+/// Whether a kind is a member modifier.
+///
+/// The modifiers of a declaration occupy **one slot** and any number of
+/// children, which is what `child_slots` reads them as -- so a member with two
+/// of them shifted every slot after it by one, and the *name* came back as
+/// `readonly`. `public readonly b = "22"` then looked up a field called
+/// `readonly`, found none, and dropped the initialiser in silence.
+///
+/// One modifier worked and none worked, which is why it survived: every fixture
+/// anyone had written used at most one. `internal/errors.ts` writes `override
+/// readonly code = "ERR_..."` on ninety-four classes, and that is where the
+/// missing `code` on every compiled error came from.
+#[must_use]
+pub fn is_modifier(kind: u16) -> bool {
+    matches!(
+        kind,
+        PRIVATE_KEYWORD
+            | PROTECTED_KEYWORD
+            | PUBLIC_KEYWORD
+            | STATIC_KEYWORD
+            | ABSTRACT_KEYWORD
+            | ASYNC_KEYWORD
+            | DECLARE_KEYWORD
+            | OVERRIDE_KEYWORD
+            | READONLY_KEYWORD
+    )
+}
+
 #[must_use]
 pub fn is_type_node(kind: u16) -> bool {
     /// `KindTypePredicate`, tsgo's `KindFirstTypeNode`.
