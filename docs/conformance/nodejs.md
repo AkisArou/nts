@@ -9661,6 +9661,26 @@ as `rest-parameter-at-the-wrapper` -- it lowers and does not cross), an object
 parameter on `format`, an object return on `parse`, `matchesGlob` behind
 glob-matcher's own six roots, and the two namespaces.
 
+### The counted lane on the two that changed
+
+The full twenty-two-row table above was derived against the previous compiler.
+Only `path` and `net` changed surface, so only those two were re-derived rather
+than spending an hour confirming twenty that did not move:
+
+```
+path  22  3 passed, 18 failed, 1 skipped  [434 rc]  identical
+net  179  0 passed, 148 failed, 7 skipped [2017 rc]  identical
+```
+
+`path`'s refcount traffic went from 70 to 434. That is the useful half: the pair
+being identical could mean the allocator saw nothing, and a sixfold rise says the
+eleven newly-compiled functions are running under counting rather than the row
+having gone quiet.
+
+`net` is 0 passed with one more export than before, which is the correct
+outcome. `setDefaultAutoSelectFamily` being published does not make a test pass,
+and a count that moved on it would have meant something was wrong.
+
 ### The whole surface, rebuilt on the same compiler
 
 All twenty-two addons rebuilt against the compiler carrying tonight's fixes, and
