@@ -200,7 +200,15 @@ export function relative(from: string, to: string): string {
 }
 
 /** Upstream `lib/path.js:1432`. A no-op on posix. */
-export function toNamespacedPath(path: string): string {
+/**
+ * Posix has no namespaced form, so this is identity — and identity is exactly
+ * why the parameter is `unknown`. Node returns whatever it was given;
+ * `@types/node` declares `(path: string): string`, and `test-path-makelong.js`
+ * asserts the looser contract on `null`, `100`, `false`, `true` and the module
+ * object. See `win32.ts` for why the widening is what makes its transcribed
+ * guard live.
+ */
+export function toNamespacedPath(path: unknown): unknown {
   return path;
 }
 

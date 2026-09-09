@@ -12485,6 +12485,44 @@ is worth recording that it happened *here*, in the section written to re-derive
 stale numbers, immediately after four instruments had been built specifically
 because static reads mislead. **The habit is not fixed by knowing about it.**
 
+## The widening: four divergences closed, and not one test file gained
+
+With the erased crossing landed, `toNamespacedPath` is declared
+`(path: unknown): unknown` in both namespaces, and `_makeLong` follows as its
+alias. Against `node:path`, on a `path.node` built here from the same pin:
+
+    toNamespacedPath(null)     same     null
+    toNamespacedPath(100)      same     100
+    _makeLong(false)           same     false
+    toNamespacedPath("/a/b")   same     "/a/b"
+    toNamespacedPath({})       DIFFER   ours TypeError, node returns the object
+
+**Four of six.** The object case raises `an argument of this type has no
+representation in the compiled runtime` rather than answering wrongly, which is
+the correct half of the trade and is still a divergence.
+
+**And the axis did not move.** `path` is 12 passed and 9 behaviour-dependent
+before and after, publishing 15 names either way. `test-path-makelong.js` still
+fails, because node's own file asserts
+
+    assert.strictEqual(path.toNamespacedPath(path), path);
+
+-- passing **the module object**. The two cases the widening cannot reach are in
+the same file as the four it fixed, so closing four bought nothing a test can
+see.
+
+That is the fourth time tonight a real improvement moved no number, and it is
+the cleanest instance: the change was correct, verified against node on five
+inputs, and its whole visible effect is that a file which failed on `null` now
+fails on `{}`. **"Four divergences closed" and "zero files gained" are both
+true, and only the second is what the axis counts.**
+
+The line that made the widening legal is the one that had been dead since it was
+written: `win32.toNamespacedPath`'s transcribed
+`if (typeof path !== "string" || path.length === 0) return path` could never run
+under `path: string`, and it is what narrows `unknown` to `string` for the body
+below it. The dead guard was the precondition for its own resurrection.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

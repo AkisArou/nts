@@ -673,7 +673,26 @@ export function relative(from: string, to: string): string {
  * @param {string} path
  * @returns {string}
  */
-export function toNamespacedPath(path: string): string {
+/**
+ * Node's runtime returns a non-string argument unchanged; `@types/node` declares
+ * `(path: string): string`. `test-path-makelong.js` asserts the looser contract
+ * nine times — `null`, `100`, `false`, `true` and the module object itself all
+ * come back as they went in — so the declaration is widened to match node rather
+ * than the types.
+ *
+ * The guard below was transcribed from node and, under `path: string`, could
+ * never run: `typeof path !== "string"` is statically false for a parameter the
+ * type says is a string, so it folded away and the boundary rejected non-strings
+ * before this body was reached. **That dead line is what makes the widened
+ * signature legal** — it narrows `unknown` to `string` for everything after it,
+ * which is what it was for in node.
+ *
+ * `{}` and `[]` still differ: the boundary raises a `TypeError` where node
+ * returns the object, because a value with no representation in the compiled
+ * runtime is refused loudly rather than answered wrongly. Four of six, not four
+ * of four.
+ */
+export function toNamespacedPath(path: unknown): unknown {
   // Note: this will *probably* throw somewhere.
   if (typeof path !== "string" || path.length === 0) return path;
 
