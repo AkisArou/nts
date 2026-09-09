@@ -1,23 +1,38 @@
-// An indexed write at or past an array's length aborts the process.
-//
-//     nts: refused: index 3 is outside [0, 1)
-//
-// In JavaScript `xs[xs.length] = v` **is** the append, and `xs[3] = v` on a
-// one-element array gives a length of 4. Here both call a bounds check that
-// aborts -- not a thrown error a program could catch, and not a compile-time
-// refusal a fixture in `blockers/` would see. The program compiles, runs, and
-// dies.
-//
-// Three controls:
+// A write **past** an array's length aborts the process. A write *at* the
+// length -- the ordinary append -- is correct.
 //
 //     xs[3] = 4   on a one-element array   aborts, node gives length 4
-//     xs[1] = 2   at exactly the length    aborts, node gives length 2
+//     xs[1] = 2   at exactly the length    answers 2, agreeing with node
 //     xs.push(2)                           answers 2, agreeing with node
+//     xs[1] = 5   inside the bounds        agrees
 //
-// The second row is the one that matters. Writing *at* the length is the
-// ordinary way to append in JavaScript and in much of node's own source, so
-// this is not an exotic input -- it is one of the two spellings of append, and
-// the other one works.
+// **Corrected 2026-09-09.** This file first read `xs[1] = 2` as aborting too,
+// and said the ordinary append was broken. It was, on the pin measured at the
+// time, and it is not now -- one of that afternoon's compiler changes closed
+// it. The claim is left in this comment rather than deleted, because the file
+// was sent to the compiler lane with "the ordinary append aborts" as its
+// headline and that is no longer true.
+//
+// # What is left is a documented representation limit, not a defect
+//
+// `nts_array_grow_slot` handles `index == length` by reserving and extending,
+// which is why the append works. Past that it calls `nts_bounds`, and its own
+// comment says why:
+//
+//     Out of range, or sparse, or not a whole number … the sparse case is
+//     refused here rather than [handled] because a dense array cannot hold a
+//     hole.
+//
+// So the refusal is deliberate and the reason is real. What is left to decide
+// is only **how** it refuses: `nts: refused: index 3 is outside [0, 1)` is an
+// abort, not a thrown error a program could catch and not a compile-time
+// refusal a `blockers/` fixture would see. The program compiles, runs, and
+// dies.
+//
+// Kept as a case because node grows the array and this does not, so the two
+// disagree whatever the reason -- and because a representation limit that
+// aborts at runtime is worth telling apart from one that refuses at compile
+// time.
 //
 // Found by a sweep of eight unrelated ordering and method questions, none of
 // which was about bounds. The case is kept here rather than in `blockers/`
