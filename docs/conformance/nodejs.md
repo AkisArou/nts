@@ -15210,6 +15210,51 @@ infrastructure gaps, weak listener registration through the canonical
 None of them is a defect waiting to be fixed. All of them are infrastructure or
 a stated non-goal.
 
+### A divergence measured and deliberately not asserted: export descriptors
+
+**Diagnosis, not a fixture.** Node's own tests never check the property
+descriptors on a module's exports, because on node they cannot fail: `os.EOL` is
+non-writable by construction and no regression test was ever needed for it. That
+makes it exactly the shape of "the assertion the oracle had no reason to write",
+and it was worth measuring.
+
+Read from the raw addon exports against node's own:
+
+    os.EOL                 ours wec   node -ec
+    os.devNull             ours wec   node -ec
+    os.constants           ours wec   node -e-
+    buffer.INSPECT_MAX_BYTES  ours wec   node -ec
+    buffer.constants       ours wec   node -e-
+    zlib.constants         ours wec   node -e-
+    zlib.codes             ours wec   node -e-
+
+The wrapper publishes with `napi_set_named_property`, which makes an ordinary
+writable, enumerable, configurable property. `os/shape.mjs` and `zlib/shape.mjs`
+restore node's shape with `Object.defineProperty`, so **through the shim os and
+zlib are 0 and buffer is 2**.
+
+**What it would cost to assert, and why it is not asserted.** The assertion
+fails in *both* lanes, because the interpreted lane runs the TypeScript directly
+and `export const EOL = …` is writable. Closing it there means
+`Object.defineProperty` in module source, and no module source uses it -- this
+profile's rules put "descriptor tricks" on the same list as `any` and
+`Reflect`, and TypeScript-on-node has to stay at 100%.
+
+So a test was written, run in both lanes, seen to fail in both, and **deleted**.
+The divergence is real and the means to close it are ones this profile has
+declined. It is recorded here instead.
+
+**What it would catch if it were asserted:** `buffer.INSPECT_MAX_BYTES = 0`
+succeeds here, does nothing on node in sloppy mode, and throws on node in strict
+mode. A test that reads the value cannot tell those apart.
+
+Two things it establishes in passing, both checked and both clean: every
+published function's `.name` equals the key it is published under, across seven
+modules; and export identity is stable within a handle -- `os.hostname ===
+os.hostname` -- with the differences across two `dlopen` calls being what
+`dlopen` does rather than a defect, since node's `require` caches and
+`process.dlopen` deliberately does not.
+
 ### os is four failures from whole, and every one is behind something named
 
 The goal is counted in whole modules and `os` is nearest: **5 passed, 4 failed**
