@@ -6086,12 +6086,90 @@ NtsMap *nts_map_copy(const NtsMap *map) {
  *
  * Each key is retained: the array owns what it holds, and the table it came
  * from is still holding its own count. */
+/* Whether a key is an *array index* in the specification's sense, which is what
+ * decides where it goes in `Object.keys`.
+ *
+ * `ToString(ToUint32(P)) === P` and `ToUint32(P) != 2^32 - 1`, spelled out: all
+ * digits, no leading zero unless the whole string is `"0"`, and below
+ * 4294967295. So `"0"` and `"101"` are indices; `"01"`, `"1.0"`, `"-1"` and
+ * `""` are ordinary string keys. */
+static bool nts_array_index_key(const NtsString *key, uint32_t *out) {
+  uint32_t units = key->length;
+  if (units == 0 || units > 10) {
+    return false;
+  }
+  if (units > 1 && nts_unit(key, 0) == (uint16_t)'0') {
+    return false;
+  }
+  uint64_t value = 0;
+  for (uint32_t at = 0; at < units; at++) {
+    uint16_t unit = nts_unit(key, at);
+    if (unit < (uint16_t)'0' || unit > (uint16_t)'9') {
+      return false;
+    }
+    value = value * 10u + (uint64_t)(unit - (uint16_t)'0');
+  }
+  if (value >= 4294967295u) {
+    return false;
+  }
+  *out = (uint32_t)value;
+  return true;
+}
+
 NtsArray *nts_map_keys_str(const NtsMap *map) {
   NtsArray *out = nts_array_new(&nts_desc_ref, (double)map->header.length);
   uint32_t written = 0;
+  /* Two passes, because JavaScript's own-property order is not insertion
+     order: every key that is an array index comes first, **ascending**, and the
+     rest follow in insertion order.
+
+     This walked once and wrote each key as it came, and its comment said
+     "`Object.keys(table)`, as the array of keys in insertion order" -- which
+     described the function accurately and left out that the language's order is
+     something else. `http`'s status table is `{ 100: "Continue", 101: ... }`,
+     every key an index, so any enumeration of it was wrong unless the insertion
+     happened to be ascending. */
+  uint32_t indices = 0;
   for (double at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
+    uint32_t slot = 0;
+    if (!nts_array_index_key((const NtsString *)key, &slot)) {
+      continue;
+    }
+    nts_retain(key);
+    NTS_ITEMS(out, NtsHeader *)[written] = key;
+    written++;
+    indices++;
+  }
+  /* Insertion sort over the index keys alone. They are few in every table this
+     compiles -- a status table is the large case at sixty -- and the value is
+     re-derived rather than carried, because parsing ten digits is cheaper than
+     an allocation to hold them. */
+  for (uint32_t i = 1; i < indices; i++) {
+    NtsHeader *held = NTS_ITEMS(out, NtsHeader *)[i];
+    uint32_t value = 0;
+    (void)nts_array_index_key((const NtsString *)held, &value);
+    uint32_t j = i;
+    while (j > 0) {
+      uint32_t before = 0;
+      (void)nts_array_index_key(
+          (const NtsString *)NTS_ITEMS(out, NtsHeader *)[j - 1], &before);
+      if (before <= value) {
+        break;
+      }
+      NTS_ITEMS(out, NtsHeader *)[j] = NTS_ITEMS(out, NtsHeader *)[j - 1];
+      j--;
+    }
+    NTS_ITEMS(out, NtsHeader *)[j] = held;
+  }
+  for (double at = nts_map_next(map, 0); at >= 0;
+       at = nts_map_next(map, at + 1)) {
+    NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
+    uint32_t slot = 0;
+    if (nts_array_index_key((const NtsString *)key, &slot)) {
+      continue;
+    }
     nts_retain(key);
     NTS_ITEMS(out, NtsHeader *)[written] = key;
     written++;
