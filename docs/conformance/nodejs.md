@@ -13009,9 +13009,30 @@ writing to descriptor 1, `buf` stays empty and every assertion fails.
 Two of the twenty-one candidates are now confirmed -- `test-path-resolve.js` by
 running it, and this class by probing the binding both ways.
 
-The rest of the list stays candidates. What changed is that the mechanism is no
-longer in question: a stand-in that forwards to a patchable property is observed
-by a test that patches it, and the C that replaces it is not.
+### And the next candidate probed the same way came out the other way
+
+`os/test/core-static.js` sets `process.env.TMPDIR` and asserts what
+`os.tmpdir()` answers -- the same shape: a test mutating node state and
+expecting our module to see it. Probed with
+`tooling/conformance/probes/env-capture.ts`:
+
+    process.env.NTS_PROBE_VALUE = "set-from-javascript";
+    compiled nts_process_env read "set-from-javascript"   -> OBSERVED
+
+**It is not a divergence.** Node's `process.env` setter calls `uv_os_setenv`,
+which updates the real environment, so the C's `getenv` sees it. The stdout case
+cannot work that way because a reassigned `process.stdout.write` changes a
+JavaScript property and nothing else.
+
+**So the shape of a case does not decide its answer**, and this is why the
+twenty-one are a list. Had they been treated as a population, `os` would have
+been written off as having an unwinnable test -- and `os` is the one module a
+single export makes whole. Its ceiling is **9 of 9**.
+
+Two confirmed divergent, one confirmed *not*, eighteen unprobed. What is settled
+is the mechanism: a stand-in forwarding to a patchable JavaScript property is
+observed where the C is not, **and only where the mutation does not reach the
+operating system**.
 
 ## Conventions
 
