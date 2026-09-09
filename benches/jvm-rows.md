@@ -967,6 +967,43 @@ like a reference artefact. The size of a gap is not evidence about its cause.
   so the next person to notice the default finds the measurement rather than
   repeating it.
 
+### Rule 4 applied to every losing row, which partitions the table
+
+Reading `ref.java`'s header on `node-utf8` cost that row its place at the top of
+another lane's queue and cost me an evening's premise. So I read all of them.
+**Two rows compare against something the platform implements and the rest do
+not**, and that distinction decides which rows the bar can even be asked of.
+
+**Cannot reach 1.00x, because the reference is not code a person wrote:**
+
+    node-utf8             6.33x   String.getBytes / new String(UTF_8) are
+                                  HotSpot intrinsics: hand-vectorized, ASCII
+                                  fast path, a machine word at a time. Our
+                                  176-line state machine against that has a
+                                  measured floor of 2.40x with every coercion
+                                  removed.
+    number-format-double  1.15x   `Double.toString` is `jdk.internal.math`'s
+                                  Schubfach. Ours calling *that* formatter is
+                                  still 5.8% slower than the reference, so the
+                                  formatter is only part of it -- but the digit
+                                  generation half is not winnable by codegen.
+
+**Ordinary hand-written Java, so the bar is a fair question:** `optional-chain`
+is a null check; `absences` three shapes of absence; `instanceof` is the same
+word in both languages; `module-closures` is `static` methods and a `static`
+field; `elementwise` is a `double[]` and two loops; `bytes` is `byte[]` with
+`& 0xff` per read; `in-narrowing` is one class per arm and `instanceof`;
+`array-methods` and `array-predicates` are loops written by hand because Java
+gives a `double[]` no such methods; `awfy-queens` is AWFY's own Java;
+`generic-classes` is an erased `Box<T>`; `symbol-keyed-map` is
+`IdentityHashMap`; `array-from` is `Arrays.copyOf` and `HashSet.toArray`.
+
+**Every one of those is a real target and two of them are not.** That is worth
+stating where the bar is stated, because "every losing row at or under 1.00x"
+is not a reachable goal for a row whose reference is vectorised assembly the JDK
+ships -- and treating it as one is how `toInt32` ended up at the top of a queue
+on the strength of a ratio that could not move.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
