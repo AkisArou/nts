@@ -16,6 +16,24 @@
 #
 # Measured 2026-09-08 across all twenty-two: **0 files still passing**, against
 # 1,832 that pass unblanked. The claim was true. It had just never been checked.
+
+# **Controlled on 2026-09-09** rather than trusted for answering zero. A test
+# asserting `1 + 1 === 2` -- nothing about the module -- was added to
+# `punycode/test` and this reported
+#
+#     HOLLOW  punycode  1 file(s) pass with the module blanked
+#     22 module(s) blanked; 1 file(s) still passing
+#
+# and reported none once it was removed. A `0 hollow` from a lane that has never
+# found one is a claim about the tests rather than a measurement of them.
+#
+# Two things that control cost, both worth avoiding rather than repeating:
+# adding the probe while `counted-vs-uncounted.sh` was running put a fourth file
+# in punycode's row of a measurement already in flight, and the skip-audit
+# control beside it *created* `runtime/node/punycode/not-applicable`, which had
+# never existed -- restoring "the previous contents" of a file that was not
+# there leaves an empty one. A probe is a change to the tree, and the tree is
+# shared with whatever is currently measuring it.
 set -u
 cd "$(dirname "$0")/../.."
 
