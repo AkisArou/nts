@@ -474,7 +474,21 @@ for (const name of names) {
   // behaviour, so "holds" means the fix is still in place and not-holding is a
   // regression. Deciding this from the form rather than from the prose means a
   // guard cannot be mislabelled by someone forgetting to write FIXED.
-  const isGuard = expectsClean || compiles || onceC !== null || lowersOnly ||
+  // A fixture that says so in its own header is a guard, whatever form its
+  // expectation takes.
+  //
+  // The forms cannot tell on their own: `emits-c`, `emits-addon` and `calls`
+  // are each used both ways -- to assert a defect while it stands, and to
+  // assert the fixed state afterwards -- and the file's comment already says
+  // that about the first two. So a converted fixture printed `reproduces` for
+  // a defect its own header calls FIXED, which is the reassuring word for the
+  // wrong outcome, the same way `FIXED` once printed for a regressed guard.
+  //
+  // `kept as a guard` rather than `FIXED` alone: 34 of the 56 fixtures
+  // mentioning the word use that phrase, and a fixture can mention a fix in
+  // prose without being one.
+  const declaresGuard = /kept as a guard/i.test(source);
+  const isGuard = declaresGuard || expectsClean || compiles || onceC !== null || lowersOnly ||
     lacksAddon !== null || addonCompiles ||
     /^\/\/\s+FIXED\b/m.test(source);
   // A `hir` expectation is a substring of the whole run, and a fixture's

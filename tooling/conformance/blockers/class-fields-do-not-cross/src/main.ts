@@ -1,11 +1,11 @@
-// expect: emit-c --napi -> calls new exports.Reading(1, 2).latitude === undefined
+// expect: emit-c --napi -> calls new exports.Reading(1, 2).latitude === 1 && Object.hasOwn(new exports.Reading(1, 2), "longitude")
 // control: typeof exports.Reading === "function" && new exports.Reading(1, 2).distance() === 3
 //
-// A class crosses to the host with its methods and without its fields.
+// **FIXED, kept as a guard.** A class crosses to the host with its fields.
 //
-// `napi_define_class` is emitted, the constructor allocates, the prototype
-// carries the methods, and they all work. The property descriptor list holds
-// only the methods:
+// Filed when it did not. `napi_define_class` was emitted, the constructor
+// allocated, the prototype carried the methods and they all worked, and the
+// property descriptor list held only the methods:
 //
 //     napi_property_descriptor members[] = {
 //         { "distance", NULL, nts_napi_Reading__distance, … },
