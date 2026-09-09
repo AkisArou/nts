@@ -14144,6 +14144,45 @@ compiled-lane failures -- the TypeScript has the stream aliases and the timers
 promises namespace, and only the addon does not. So the compiled-lane failures
 are about the addon and not about the assertions.
 
+## `hidden-exports` caught a second one, hours after it was written
+
+The instrument was built from `stream/shape.mjs` discarding a working
+`getDefaultHighWaterMark`. Pointed at a build made with a compiler four hours
+newer, it found the same shape in a different module:
+
+    process: 1 published; 1 node-own name(s) not on the module, 1 reaching no test
+        NOT PUBLIC  env: object
+
+`process/shape.mjs:18` is `if (instance === undefined) return {}`, where
+`instance` is `exports.default ?? exports.process`. The compiled `process`
+publishes **`env` and nothing else** -- the compiler lane landed it today, 105
+keys all matching node -- and neither `default` nor `process` is published, so
+the shape hands back `{}` and the environment is unreachable.
+
+That is the third instance of one mistake:
+
+    os/shape.mjs    the version that *throws* on a missing export, fixed with a
+                    note: "reports one fact about the addon and hides seven"
+    stream          `return {}`, discarding getDefaultHighWaterMark
+    process         `return {}`, discarding env
+
+**The guard is right and its scope is wrong.** Reaching through an absent export
+does turn one missing name into "the module did not load", and every one of
+these files says so. What none of them does is distinguish "cannot build the
+public object" from "cannot build any of it".
+
+### Six shims bail this way and now two of them bite
+
+The survey run this morning found `process`, `events`, `console`,
+`querystring` and `timers` bailing like `stream` did, and reported that four of
+them published nothing so their bail discarded nothing. **That was true this
+morning.** `process` publishes now, and the same line that was harmless became
+the thing standing between a working `env` and every test that reads one.
+
+A survey of what a guard currently costs is a measurement with a shelf life. The
+instrument is what makes it cheap to re-take, which is the argument for having
+written it rather than reading the six files once.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
