@@ -13624,6 +13624,67 @@ match makes a blocking file look *less* blocking, and nothing in the output says
 so. The tool prints its unparsed count on every run now, and says what a nonzero
 one means.
 
+## The compiled axis, isolated and controlled three ways
+
+Pin from 13:42, built into a private directory, every pass put through
+`--mutate-addon`, `--empty-exports` and `--sabotage`.
+
+    module      pass   behaviour   shape-only   hollow
+    path          14          11            1        2
+    os             4           3            1        0
+    punycode       3           3            0        0
+    stream         2           0            0        2
+    timers         1           0            0        1
+    fs             1           0            1        0
+    util           1           0            1        0
+
+    26 pass: 17 behaviour-dependent, 4 shape-only, 5 hollow, across 7 modules
+
+**Five of the twenty-six passes are hollow** -- they pass with no module at all:
+
+    path      test-path-posix-exists.js       test-path-win32-exists.js
+    stream    test-global-webstreams.js       test-stream-aliases-legacy.js
+    timers    test-timers-promises.js
+
+So `stream` and `timers` demonstrate nothing on this axis; their entire presence
+is hollow. Three modules show behaviour: `punycode` 3, `path` 11, `os` 3.
+
+### What found them, and why nothing had
+
+`--empty-exports`, and **no lane was asking it of the compiled axis**.
+`sweep.mjs` runs `--sabotage` against the interpreted lane and `--mutate-addon`
+against the addon, and neither catches these:
+
+    path under --sabotage        (nothing passes)
+    path under --empty-exports   test-path-posix-exists.js, test-path-win32-exists.js
+
+`sweep.mjs`'s own comment predicted this exactly -- those files assert
+`require('path/posix') === require('path').posix`, sabotage fails them "for the
+wrong reason, the subpath stopping resolving", and so it "reported a clean
+hollow count". The prediction was written down and the control was never run
+against the compiled lane. `axis-controls.mjs` runs all three.
+
+`vacuous-lane.mjs` does not cover them either: it states the arithmetic for a
+module publishing **zero** exports, and `path` publishes fifteen.
+
+### Against the previous number
+
+The last figure from this lane was "27 raw, 10 degenerate, 17
+behaviour-dependent". The 17 agrees. That is a coincidence and not a
+confirmation: the earlier run read a directory another session was rebuilding,
+its raw total was 27 against 26 here, and its 10 "degenerate" is 4 shape-only
+plus 5 hollow plus one pass that no longer exists. Two numbers agreeing at the
+bottom of different columns is worth less than either.
+
+### One pin behind
+
+`os` scores 4 here and scored 5 from the shared directory, and the extra was
+`local/constants-signals-static.js`. The compiler moved at 13:56, fourteen
+minutes after this pin was taken, and the shared directory had been rebuilt with
+it. So `os.constants` works in a compiler this measurement does not include --
+these numbers are one landing behind, in the conservative direction, and are
+labelled by their pin rather than adjusted.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
