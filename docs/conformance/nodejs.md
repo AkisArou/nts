@@ -15563,6 +15563,27 @@ under a measurement; it does not make the measurement about a commit. This lane
 may not run `cargo`, so the honest form is to name the pin and when it was
 taken.
 
+The compiler lane made the mirror of this mistake the same evening and caught it
+themselves, and it is recorded here with attribution because the rule is the
+useful part. `nts-bench` reported a case at 626 µs before a change and 265 µs
+after -- a 2.3x win from replacing one unsigned comparison with three double
+ones, which cannot produce one. Compiled with one driver and one set of flags,
+both `program.c` files:
+
+    before   302.50 us/op
+    after    286.35 us/op     same answer from both
+
+Five percent, not 230. Their rule: **when a measurement disagrees with the
+mechanism, check the measurement first** -- and the tell was visible before the
+driver was written.
+
+That is the same shape as this lane's `NODE_NO_WARNINGS` afternoon from the
+other direction. There, a result with no mechanism behind it was believed
+because it reproduced three times; here, a result with a mechanism that
+contradicted it was nearly sent. **Reproducibility is not a mechanism and a
+mechanism is not a measurement**, and a number needs both to be worth passing
+on.
+
 The sparse half remains what it was: `nts_array_grow_slot` refuses a hole
 deliberately, because a dense array cannot hold one, and what is open is only
 whether an abort is the right way to refuse.
