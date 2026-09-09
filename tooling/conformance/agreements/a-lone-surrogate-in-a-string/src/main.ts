@@ -24,6 +24,25 @@
 // It is also the quiet kind: `"a\uD800b".length` answering 5 does not throw,
 // and a test only fails if it compares a length or slices by index.
 //
+// # The mechanism, read from the emitted C
+//
+// The length is folded at compile time, and the fold is right for everything
+// that can be encoded:
+//
+//     "\u4e2d".length      v1 = 1.0    one code unit, three UTF-8 bytes
+//     "\u{1F600}".length   v1 = 2.0    two code units, four bytes
+//     "\uD800".length      v1 = 3.0    <-
+//
+// Through a `const s: string` binding rather than a literal it is **still
+// 3.0**, so this is not the constant folder disagreeing with the runtime -- the
+// string is *stored* three units long.
+//
+// A lone surrogate has no UTF-8 encoding. Whatever form it is kept in --
+// WTF-8's three bytes, or the replacement character's three bytes -- the length
+// is that form's byte count rather than one code unit. Every encodable string
+// gets a code-unit count, correctly; the unencodable one falls back to its
+// storage.
+//
 // # The controls are the point
 //
 // Four of the seven agree, and they are the ones that would fail if this were
