@@ -163,6 +163,27 @@ for (const module of modules) {
     if (c === undefined || c.verdict === "pass") continue;
     gain.push({ file, verdict: c.verdict, reason: c.reason });
   }
+  // The other direction, which had no name here and is the more interesting one.
+  //
+  // A file passing **compiled** and failing **interpreted** is not a compiled
+  // capability the TypeScript lacks -- the compiled lane is built from that same
+  // TypeScript. It is an assertion that holds for a reason other than the one it
+  // states, and the usual reason is that a missing export stopped the harness
+  // doing something node does.
+  //
+  // Measured: `net/test/default-family-static.js` asserted node's documented
+  // attempt timeout of 250 and passed compiled, failed interpreted.
+  // `test/common/index.js:182` scales that default by ten on load, so node
+  // answers 2500 to any file requiring `../common` -- and the compiled addon
+  // does not publish the setter, so the scaling could not land and the unscaled
+  // value survived. **The assertion held because of the defect.**
+  const inverted = [];
+  for (const [file, c] of compiled) {
+    if (c.verdict !== "pass") continue;
+    const i = interpreted.get(file);
+    if (i === undefined || i.verdict === "pass") continue;
+    inverted.push({ file, verdict: i.verdict, reason: i.reason });
+  }
   const ip = [...interpreted.values()].filter((v) => v.verdict === "pass").length;
   const cp = [...compiled.values()].filter((v) => v.verdict === "pass").length;
 
@@ -170,7 +191,7 @@ for (const module of modules) {
   for (const g of gain) {
     for (const n of namesIn(g.reason)) names.set(n, (names.get(n) ?? 0) + 1);
   }
-  rows.push({ module, ip, cp, gain: gain.length, names });
+  rows.push({ module, ip, cp, gain: gain.length, inverted: inverted.length, names });
 
   console.log(`\n${module}: ${ip} interpreted, ${cp} compiled, ${gain.length} to gain`);
   for (const g of gain.slice(0, 8)) {
@@ -178,6 +199,12 @@ for (const module of modules) {
     if (g.reason !== "") console.log(`         ${g.reason.slice(0, 96)}`);
   }
   if (gain.length > 8) console.log(`  … ${gain.length - 8} more`);
+  for (const v of inverted) {
+    console.log(`  INVERTED  ${v.file}`);
+    console.log(`            passes compiled, ${v.verdict} interpreted: ${v.reason.slice(0, 78)}`);
+    console.log("            Read it: the compiled lane is built from the same TypeScript, so this");
+    console.log("            is an assertion holding for a reason other than the one it states.");
+  }
   if (names.size > 0) {
     const optional = optionalParamExports(module);
     const ranked = [...names]
@@ -193,9 +220,17 @@ for (const module of modules) {
 }
 
 if (rows.length > 1) {
-  console.log(`\n${"module".padEnd(22)}${"interp".padStart(7)}${"compiled".padStart(9)}${"to gain".padStart(9)}   most-named`);
+  console.log(`\n${"module".padEnd(22)}${"interp".padStart(7)}${"compiled".padStart(9)}${"to gain".padStart(9)}${"inverted".padStart(9)}   most-named`);
   for (const r of rows.sort((a, b) => b.gain - a.gain)) {
     const top = [...r.names].sort((a, b) => b[1] - a[1])[0];
-    console.log(`${r.module.padEnd(22)}${String(r.ip).padStart(7)}${String(r.cp).padStart(9)}${String(r.gain).padStart(9)}   ${top ? `${top[0]} (${top[1]})` : ""}`);
+    console.log(`${r.module.padEnd(22)}${String(r.ip).padStart(7)}${String(r.cp).padStart(9)}` +
+      `${String(r.gain).padStart(9)}${String(r.inverted).padStart(9)}   ${top ? `${top[0]} (${top[1]})` : ""}`);
+  }
+  const totalInverted = rows.reduce((n, r) => n + r.inverted, 0);
+  if (totalInverted > 0) {
+    console.log(`\n  ${totalInverted} file(s) pass compiled and fail interpreted. Each is a finding:`);
+    console.log("  the compiled lane is built from the same TypeScript, so a pass there");
+    console.log("  that the TypeScript cannot reproduce is an assertion holding for the");
+    console.log("  wrong reason.");
   }
 }
