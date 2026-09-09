@@ -12873,6 +12873,55 @@ Interpreted stays green throughout -- `buffer` 55 of 55, `async_hooks` 116 of
 implementation works and fail only at the compiled boundary, which is what they
 are for.
 
+## "Published names" has been counting names node does not have
+
+Every published-name count in this document -- `async_hooks 13 -> 16`,
+`readline 7`, "thirteen of twenty-two publish something" -- was
+`Object.keys(addon).filter((k) => addon[k] !== undefined).length`. **That counts
+whatever the addon's export table contains, and the export table contains names
+node does not export.**
+
+Measured against `node:<module>`'s own key set:
+
+| module | raw published | names node also has |
+| --- | ---: | ---: |
+| `os` | 17 | **17** |
+| `path` | 15 | **15** |
+| `punycode` | 6 | **6** |
+| **`async_hooks`** | **16** | **3** |
+| **`readline`** | **7** | **0** |
+| `net` | 3 | 3 |
+| `buffer` | 3 | 3 |
+| `timers` | 3 | 1 |
+| `util` | 2 | 2 |
+| `http` | 2 | 1 |
+| `stream`, `fs` | 1 | 1 |
+| **`url`** | **1** | **0** |
+
+**53 of 77, and 11 modules rather than 13.** `readline` publishes seven names
+and **none of them is node's** -- `charLengthLeft`, `charLengthAt`,
+`reverseString`, and four `kClear*` symbols. `url`'s one is `isURL`, which node
+does not export either.
+
+So `async_hooks` is not "16 published"; it is **3 of node's 6**, plus thirteen
+internals. That is the same defect the ledger already records for `http` and
+`process`, and my own counts have been carrying it since the first table
+tonight.
+
+**Why no test caught it.** The `extra` sweep in each `export-surface-static.js`
+runs against the module `shape.mjs` returns, and `async_hooks`'s shim returns a
+literal with exactly node's seven keys. The shim is the production surface and
+it is right; the addon's export table is what is wrong, and **no test in this
+lane looks at the addon's export table directly.** The `extra` assertion is
+checking the shim's filtering, which cannot fail, rather than the thing it names.
+
+**These particular numbers are from a mixed set of artifacts** -- another
+session's gate rebuilt `buffer.node` one minute before the reading and the live
+compiler has moved twice since this lane's pin -- so they are provisional and
+the module list is what matters rather than the totals. The method correction is
+not provisional: **a published-name count has to be intersected with node's key
+set, or it counts internals as progress.**
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
