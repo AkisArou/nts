@@ -56,6 +56,10 @@ function unicodeWord(rnd, maxLength = 12) {
 //
 // Worth recording rather than leaving as an absence: the first version of that
 // corpus reported 1,839 divergences, and every one of them was the stub.
+// A per-invocation counter for `diagnostics_channel`, whose registry is keyed by
+// name process-wide. Deterministic: both lanes walk the same inputs in order.
+let dcInvocation = 0;
+
 export const CORPORA = {
   // `os` is almost entirely C bindings, and until now nothing compared any of
   // them to node. The interpreted lane cannot: its stand-ins call node's own
@@ -725,6 +729,89 @@ export const CORPORA = {
     ],
   },
 
+  diagnostics_channel: {
+    // A state-machine fuzz, third of its kind here after `events` and
+    // `console`, and for the same reason: nothing about a channel is a value
+    // in and a value out. What matters is *when* a subscriber sees a message
+    // and whether `hasSubscribers` agrees at that moment.
+    //
+    // The subtleties this reaches and a value fuzz cannot: publishing to a
+    // channel nobody holds a reference to, subscribing twice with the same
+    // function, unsubscribing during a publish that is walking the subscriber
+    // list, `hasSubscribers` in the middle of that walk, and whether
+    // `channel(name)` twice returns the same object.
+    //
+    // Channel names carry a per-invocation counter, not just the program text.
+    // Node keeps a **process-wide registry keyed by name**, so a name reused
+    // across iterations lets iteration N see iteration N-1's subscribers.
+    //
+    // Deriving the name from the program text alone was not enough and the
+    // first run said so: the same program appears twice -- `"sp"` is in
+    // `fixed` and the generator emits it too -- and the second occurrence
+    // inherited the first's subscriber, so one publish logged twice. Six
+    // divergences over 420 inputs, all of them this file. The counter is what
+    // makes each invocation its own channel, and it is deterministic because
+    // both sides walk the same inputs in the same order.
+    fixed: [
+      "sp", "ssp", "sup", "spu", "pp", "s", "p", "", "sppu", "ssuup",
+      "shp", "hsp", "sphp", "ssp", "supp", "sdp", "dsp", "spd", "ssppuu", "hh",
+    ],
+    input: (rnd) => {
+      const OPS = "spuhd";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 8);
+      for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "channel-program",
+        call: (m, program) => {
+          // The name has to be unique per program and identical on both sides,
+          // so it is derived from the program text and nothing else.
+          const name = `nts-diff-${program || "empty"}-${++dcInvocation}`;
+          const log = [];
+          const made = [];
+          let seq = 0;
+          const listener = (tag) => {
+            const fn = (msg) => log.push(`${tag}:${JSON.stringify(msg)}`);
+            made.push(fn);
+            return fn;
+          };
+          let ch;
+          try {
+            ch = m.channel(name);
+          } catch (e) {
+            return `CHANNEL-FAILED:${e && e.name}`;
+          }
+          for (const op of program) {
+            seq++;
+            try {
+              if (op === "s") m.subscribe(name, listener(`s${seq}`));
+              else if (op === "u") {
+                const fn = made.length > 0 ? made[made.length - 1] : () => {};
+                log.push(`u${seq}:${m.unsubscribe(name, fn)}`);
+              } else if (op === "p") {
+                log.push(`hs${seq}:${ch.hasSubscribers}`);
+                ch.publish({ n: seq });
+              } else if (op === "h") {
+                log.push(`h${seq}:${m.hasSubscribers(name)}`);
+              } else if (op === "d") {
+                // The same name twice must be the same object; node keys a
+                // process-wide registry by name and a reimplementation that
+                // builds a fresh channel each time passes every single-channel
+                // test and breaks every cross-module one.
+                log.push(`d${seq}:${m.channel(name) === ch}`);
+              }
+            } catch (e) {
+              log.push(`THREW${seq}:${e && e.name}`);
+            }
+          }
+          return log;
+        },
+      },
+    ],
+  },
   console: {
     // A state-machine fuzz like `events`, and for the same reason: `console`'s
     // behaviour is what it *writes*, and the parts worth comparing are stateful.
