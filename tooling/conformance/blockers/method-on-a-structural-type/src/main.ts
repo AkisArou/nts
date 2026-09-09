@@ -13,11 +13,24 @@
 // third fixture tonight to need this -- see `in-with-a-computed-key` and
 // `typed-array-methods`.
 //
-// 42 distinct sites in `runtime/node`, counted as sites rather than summed over
-// cones. The methods are varied -- `call` 7, `emit` 5, `removeListener` 3,
-// `on`, `once`, `open`, `exec` 2 each -- which is what says this is one blocker
-// and not several: they have nothing in common except how their receiver is
-// written. The live example is `stream/src/destroy.ts:375`,
+// 42 distinct sites in `runtime/node` print this message, counted as sites and
+// not summed over cones (the cone sum is 201, because every module imports
+// `internal/`). **They are not all this blocker.** An earlier draft of this
+// comment read the varied method names -- `call`, `emit`, `removeListener`,
+// `on`, `once`, `open` -- as evidence that the receiver's shape was the only
+// thing they had in common, and that was a count of one message text mistaken
+// for a count of one cause. What is established so far:
+//
+//   10  `.call` 8 and `.apply` 2, on a *function* value -- filed separately as
+//       `call-and-apply-on-a-function-value`, with its own control
+//    1  `path/src/glob-matcher.ts:41`, a `RegExp` receiver whose declaration
+//       the entry set never walks; the message describes a lookup that did not
+//       happen rather than anything about the receiver's shape
+//   31  not yet classified, and not claimed for this fixture until they are
+//
+// The subject below is still isolated and still reproduces -- `onAClass` is the
+// control and lowers. What is corrected is the *count*, not the defect.
+// The live example is `stream/src/destroy.ts:375`,
 //
 //     function emitCloseLegacy(stream: { emit(event: string, ...args: unknown[]): boolean })
 //

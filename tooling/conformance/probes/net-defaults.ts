@@ -1,12 +1,21 @@
-// The whole of `net`'s reachable native half, which is two bindings.
+// The two of `net`'s bindings that a probe can call without a socket.
 //
-// `net` declares 30 native bindings and **28 of them have no C at all** — the
-// socket and server half does not exist yet. These two are the exception: they
-// answer node's `getDefaultAutoSelectFamily` and
+// **Corrected.** This file used to say `net` declares 30 native bindings and
+// "28 of them have no C at all — the socket and server half does not exist
+// yet". That was derived from a regex and it is false. `nm --defined-only` over
+// a compiled `net/net.c` finds **all thirty** as global `T` symbols, and the
+// file is 909 lines of real libuv: `nts_net_write` builds a `uv_buf_t` and
+// retains the callback, `nts_net_listen` takes thirteen parameters and handles
+// the bind-then-listen path, `nts_net_connect` claims an entry and frees on
+// every error return. Nothing is stubbed.
+//
+// So the reason this probe covers two is not that the other 28 are missing. It
+// is that they need a live handle -- a bound socket, a connected peer, a
+// listening server -- and this harness calls a binding directly with no module
+// around it. These two answer node's `getDefaultAutoSelectFamily` and
 // `getDefaultAutoSelectFamilyAttemptTimeout`, which are plain settings rather
-// than handles. Probing them is worth doing precisely because it is *all* of
-// `net` that can currently be measured, and a row that says "2 of 30" is more
-// honest than `net` being absent from the table.
+// than handles, so they are the two that need no setup. **"2 of 30" is a
+// statement about this instrument, not about `net`'s native half.**
 //
 // `nts_checkpoint` rides along here rather than in its own file. It is
 // `runtime/c`'s, linked into every probe, and `timers` is the only module that

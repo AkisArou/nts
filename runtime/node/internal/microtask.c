@@ -23,20 +23,32 @@
  * discipline, a task run once gives its reference back by running, and anything
  * posted rather than re-armed wants `false`. A microtask runs once.
  *
- * THIS FILE DOES NOT COMPILE, AND THE SLOT IS THE SECOND PROBLEM. The compiler
- * emits the prototype for a `declare function` taking a callback as a
+ * THE PARAMETER TYPE WAS THE SECOND PROBLEM, AND IT IS FIXED. The compiler used
+ * to emit the prototype for a `declare function` taking a callback as a
  * *program-specific* closure struct:
  *
  *     program.c:1864  void nts_node_enqueue_microtask(NtsObj_Closure20 *);
  *     this file       void nts_node_enqueue_microtask(NtsHeader *callback)
  *     error: conflicting types for 'nts_node_enqueue_microtask'
  *
- * The number is per program -- `timers` gets 20, `diagnostics_channel` gets 18 --
- * so a `.c` compiled against every module cannot spell it, and no other spelling
- * is compatible. `blockers/callback-binding` has the reduction. It went unseen
- * because `timers` had not been built since the rename: the counted lane's
- * hardcoded list of seven modules did not include it, and running the lane over
- * all twenty-two is what surfaced it.
+ * The number was per program -- `timers` got 20, `diagnostics_channel` 18 -- so
+ * a `.c` compiled against every module could not spell it, and no other
+ * spelling was compatible. `blockers/callback-binding` has the reduction and is
+ * now a guard rather than a report. It went unseen because `timers` had not
+ * been built since the rename: the counted lane's hardcoded list of seven
+ * modules did not include it, and running the lane over all twenty-two is what
+ * surfaced it.
+ *
+ * What the emitter writes today, in `target/node/timers.build/program.c`:
+ *
+ *     1914  void nts_node_enqueue_microtask(NtsHeader *);
+ *     8493      nts_node_enqueue_microtask((NtsHeader *)v17);
+ *
+ * -- the signature below, with the cast at the call site. `timers.node` links
+ * it and `nm` finds `nts_node_enqueue_microtask` defined in the artifact. It is
+ * a local `t` symbol because the addon is built `-fvisibility=hidden`, so
+ * `nm -D` reports it absent; that is the same dynamic-table trap that once put
+ * the count of unimplemented bindings at 95 when it was 3.
  *
  * The slot below *was* the problem after that one, and is fixed. The middle
  * argument is a slot index into the callback descriptor's method table, and the
@@ -60,9 +72,10 @@
  * in nts_runtime.h and emitted unconditionally so a program with no closures
  * still links. The call below names the symbol.
  *
- * So of the three things wrong with this file, two are fixed: the binding
- * collision that started it, and the slot. What remains is the parameter type,
- * which is the one that stops it compiling. */
+ * So all three things wrong with this file are fixed: the binding collision
+ * that started it, the slot, and the parameter type. It compiles, links and
+ * loads. The comment stays because the three defects were each invisible to a
+ * different instrument, and the file is where that is written down. */
 void nts_node_enqueue_microtask(NtsHeader *callback) {
     nts_enqueue_microtask(nts_callback_task(callback, nts_closure_call_slot, false));
 }

@@ -11196,6 +11196,186 @@ short way they violate the proxy invariants for the non-configurable
 from probeable to "shape() calls into the module" -- a regression in the
 instrument that would have been read as a fact about the shim.
 
+## The same defect reports three different messages depending on the entry set
+
+`path`'s own-source roots went from six to four with no compiler landing and
+no source edit, and the four `a property `expression` of unrepresentable type
+(`RegExp`)` refusals in `src/glob-matcher.ts` were replaced by two messages
+that name neither `RegExp` nor a property:
+
+    glob-matcher.ts:28:22  a `new` with arguments and no constructor
+    glob-matcher.ts:41:11  a method `test` with no declaration in the hierarchy
+
+Read as a delta that is four cleared and two revealed, and the obvious reading
+-- that `RegExp` fields now lower -- is wrong. **Nothing was fixed, and no
+compiler moved.** The cause was `5e4af45d`, *this* session's commit naming the
+entry explicitly in all twenty-two module tsconfigs. Before it, `include:
+${configDir}/src/**/*` made every file in `src/` a root and
+`GlobSegmentMatcher`'s declaration was walked. After it, `files:
+["src/main.ts"]` reaches `glob-matcher.ts` only transitively and the class is
+never walked.
+
+**A harness change was read as compiler progress**, which is the same error as a
+stale baseline and was caught only because the two messages were too specific to
+be a coincidence. The control is below: the *same pin* reports six refusals
+under `include` and four under `files`.
+
+Held everything constant except the entry set -- one pin (v9, 09:11), all
+extending `runtime/node/tsconfig.module.json` with `rootDir` at the repo root,
+all compiling the identical 665-line `glob-matcher.ts`:
+
+| entry set | what it reports for the same class |
+| --- | --- |
+| `files: [glob-matcher.ts]` | 4x `a property `expression` of unrepresentable type (`RegExp`)` at 23, 34, 269, 587 |
+| `include: [path/src/**/*]` | the same four |
+| `files: [path/src/main.ts]` | `a `new` with arguments and no constructor` (28), `a method `test` with no declaration in the hierarchy` (41) |
+
+**The control that says the two runs are comparable** is the pair of refusals
+they agree on: `an array method with this many arguments` at 453:25 and
+`` `columns`, a name from an enclosing scope `` at 596:37, identical in both.
+Without that pair the difference could have been two different files, two
+different line numberings, or a failed compile.
+
+Reached transitively, `GlobSegmentMatcher`'s declaration is never walked. So
+`new RegExp(...)` finds no constructor to call and `expression.test(value)`
+finds no hierarchy to search -- both true statements about a walk that did not
+happen, and neither one a fact about `RegExp`.
+
+Hand-written probes confirm the direction. Every route to a `RegExp` that walks
+the declaration reports the property:
+
+| probe | message |
+| --- | --- |
+| field assigned from `new RegExp(pattern)` | a property of unrepresentable type (`RegExp`) |
+| field assigned from `/a/` | a property of unrepresentable type (`RegExp`) |
+| field assigned from a parameter | a property of unrepresentable type (`RegExp`) |
+| field from a parameter, then `.test()` in a method | the property, twice -- **not** `no declaration in the hierarchy` |
+| `new RegExp(pattern, nocase ? "i" : "")` in a constructor | the property -- **not** `with arguments and no constructor` |
+| local `const re = /a/; re.test(v)` | a regular expression literal, which needs a regular expression engine |
+| local `const re = new RegExp(p); re.test(v)` | a `new` of unrepresentable type (`RegExp`) |
+
+No hand-written program reproduces either of `path`'s two messages. That is
+what says they are not features in their own right.
+
+### What this costs a count
+
+`a method X with no declaration in the hierarchy` is the message
+`method-on-a-structural-type` was filed against, at 42 sites. Some unknown
+share of those 42 are receivers of an unrepresentable type reached without
+their declaration being walked, which is a different fix. **A count taken by
+grepping message text across the profile is a count of message texts, not of
+causes** -- and here one cause wears three.
+
+`regexp-as-a-property` still reproduces on the same pin, so it stays. It is the
+form that survives when the declaration is walked, which is the form a fix has
+to address.
+
+## The native half is 328 of 331, not 60% -- and the missing three are all in `internal/`
+
+The standing figure was "roughly 125 of 309 declared bindings have no C
+anywhere -- dgram 21 of 21, net 28 of 30, fs 60 of 133", and it named the
+native half as the tranche that needs no compiler. **Re-derived with `nm`
+against compiled objects, the gap is three.**
+
+| module | declared | with C | without |
+| --- | ---: | ---: | ---: |
+| fs | 155 | 155 | 0 |
+| process | 55 | 55 | 0 |
+| net | 30 | 30 | 0 |
+| **internal** | **22** | **19** | **3** |
+| dgram | 21 | 21 | 0 |
+| zlib | 20 | 20 | 0 |
+| os | 18 | 18 | 0 |
+| util | 10 | 10 | 0 |
+| timers | 8 | 8 | 0 |
+| buffer 3, path 2, stream 2, and one each in assert, async_hooks, console, events, readline, url | 12 | 12 | 0 |
+| **total** | **352** | **349** | **3** |
+
+352 counts a name once per module that declares it; 331 are distinct, 328 of
+those have C. The three are `nts_next_tick`, `nts_promise_hook_install` and
+`nts_promise_hook_uninstall`, declared in `internal/tick.ts` and
+`internal/async-hooks.ts`. `nts_next_tick` is declared generic
+(`<Args extends unknown[]>`), which no other binding is.
+
+**Method, because the method is the whole result.** Every `runtime/node/*/*.c`,
+`runtime/node/internal/*.c` and `runtime/c/*.c` compiled to an object with the
+flags `build.sh` uses, then `nm --defined-only` over all fifteen objects.
+Declared names came from `declare function` with `node_modules` excluded --
+without that exclusion `@types/node` contributes 674 more names and the count
+reads 1005.
+
+**Three controls, because the number that was wrong was wrong three ways.**
+
+1. *Symbol class.* `nm -D` reads the dynamic table, which an unlinked `.o` does
+   not have; it previously reported 95 missing. Splitting `T`/`W` from `t`/`w`
+   answers the question that actually matters -- a `static` implementation is
+   present in the source and still fails to link. 656 global, 458 local, and
+   **none of the three missing names is among the local ones**, so none is
+   hidden by `static`.
+2. *Absence in C at all.* Each of the three greps to zero hits across every
+   `.c` and `.h` under `runtime/`. They are declared in TypeScript and
+   implemented nowhere, rather than implemented somewhere this survey did not
+   compile.
+3. *`sed` on non-matching input.* The first extraction ran `sed s/.../.../`
+   over grep output; `sed` passes through what it does not match, so unmatched
+   lines were counted as names. That is the shape of the original error too:
+   a regex that answers even when it has not matched.
+
+What this changes: the native half is not a tranche of work. "Compiling is
+necessary and not sufficient, `dgram` would fail to link whatever the compiler
+does" is not supported by this measurement -- `dgram`'s twenty-one bindings all
+have global definitions in `dgram/dgram.c`.
+
+## Weak collections have no representation, and `internal/async-hooks.ts` is behind it
+
+`a module-scope variable of unrepresentable type` reports at 18 distinct sites
+and is not a fact about module scope. Four probes on one pin:
+
+| at module scope | result |
+| --- | --- |
+| `const base = 5` | lowers |
+| `new Map<string, number>()` | lowers |
+| `new Map<object, number>()` | lowers |
+| `new WeakMap<object, number>()` | **refused** |
+| `new WeakSet<object>()` | **refused** |
+
+`Map<object, number>` is the control that says the most: it holds the same keys
+and differs only in being strong. Filed as
+`weak-collections-have-no-representation`.
+
+**One gap, three messages, by position.** The same `WeakMap` reports
+differently depending on where it is written -- module scope gets `a
+module-scope variable of unrepresentable type`, a function body gets ``a `new`
+of unrepresentable type (`WeakMap` with no recorded arguments)``, and a class
+field gets ``a property `table` of unrepresentable type``. `RegExp` behaves the
+same way across five positions, which is why
+`regular-expression-literal` was filed separately from `regexp-as-a-property`
+rather than folded into it. **Counting sites by message text counts texts.**
+
+Eight weak-collection sites in `runtime/node`, six at module scope and two as
+class fields. The one that costs the most is `internal/async-hooks.ts:83`,
+`externalAsyncIdentities` -- ten functions in that file are NTS1003 behind it
+(`growExecutionStack`, `pushAsyncContext`, `popAsyncContext`,
+`executionAsyncResource`, `hasHooks` and the four `…HooksExist` predicates that
+call it), and every module imports `internal/`.
+
+**Ruled out**: that the weakness is what cannot be represented, for lack of a
+collector to observe it. Nothing in those eight sites tests collection -- all
+eight use it as a side table whose keys outlive the lookup, so a `WeakMap` that
+never dropped a key would satisfy every one of them. What the refusal costs is
+the table, not the weakness.
+
+## `a regular expression literal` is 21 sites and the honest one of five
+
+Filed as `regular-expression-literal`, with `value.indexOf("a")` as the control
+so the refusal cannot be read as "string methods do not lower". `http` 11,
+`web-platform` 4, `internal` 3, `util` 2, `readline` 1. `http`'s eleven are
+header and URL grammar written as patterns rather than scanners.
+
+Ruled out: that a pattern with no metacharacters could lower as a substring
+search. `/a/` is refused identically -- the decision is made on syntax, before
+anything reads the pattern.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
