@@ -2784,3 +2784,194 @@ void nts_fs_dir_close_async(double identifier, NtsHeader *callback) {
         free(dir);
     }
 }
+
+/* ------------------------------------------------------------------- rm
+ *
+ * `fs.rm` removes a path, optionally a whole tree, optionally tolerating a
+ * path that is not there, and retrying the failures that are usually somebody
+ * else still holding the file.
+ *
+ * **Done on the thread pool rather than as a chain of async calls.** A
+ * recursive removal is a walk whose shape depends on what it finds, and
+ * chaining `uv_fs_*` for it is a state machine with a stack -- one that has to
+ * be unwound correctly on the first error at any depth. `uv_queue_work` runs
+ * the same walk with the ordinary synchronous calls on a pool thread, which is
+ * where libuv would have put each of those requests anyway. The loop is not
+ * blocked, the callback still arrives on the loop thread, and there is one
+ * place where the recursion lives instead of one per state.
+ *
+ * The retry is not decoration. `EBUSY`, `ENOTEMPTY`, `EPERM` and `EMFILE` are
+ * the errors that mean "not right now" rather than "no": a virus scanner has
+ * the file open, or a directory gained an entry between the scan and the
+ * rmdir. Node retries exactly these, and a removal that failed on the first
+ * `EBUSY` would be flaky rather than wrong, which is worse to diagnose. */
+
+typedef struct {
+    uv_work_t work;
+    NtsHeader *callback;
+    char *path;
+    bool recursive;
+    bool force;
+    int max_retries;
+    int retry_delay;
+    int result;
+} RmWork;
+
+static bool rm_should_retry(int status) {
+    return status == UV_EBUSY || status == UV_ENOTEMPTY ||
+           status == UV_EPERM || status == UV_EMFILE || status == UV_ENFILE;
+}
+
+static int rm_one(const char *path, bool directory) {
+    uv_fs_t request;
+    int status = directory ? uv_fs_rmdir(NULL, &request, path, NULL)
+                           : uv_fs_unlink(NULL, &request, path, NULL);
+    uv_fs_req_cleanup(&request);
+    return status;
+}
+
+/* One path, with the retries. Split out because both the leaf and the
+ * directory case want it and neither wants to spell the loop again. */
+static int rm_with_retries(const char *path, bool directory, int max_retries,
+                           int retry_delay) {
+    int status = rm_one(path, directory);
+    for (int attempt = 0; attempt < max_retries && rm_should_retry(status);
+         attempt++) {
+        if (retry_delay > 0) uv_sleep((unsigned int)retry_delay);
+        status = rm_one(path, directory);
+    }
+    return status;
+}
+
+static int rm_tree(const char *path, bool force, int max_retries,
+                   int retry_delay) {
+    uv_fs_t request;
+    int status = uv_fs_lstat(NULL, &request, path, NULL);
+    bool directory =
+        status == 0 && (request.statbuf.st_mode & S_IFMT) == S_IFDIR;
+    uv_fs_req_cleanup(&request);
+
+    if (status == UV_ENOENT) {
+        /* `force` is the difference between "remove this" and "make sure this
+         * is gone". The second is satisfied already. */
+        return force ? 0 : UV_ENOENT;
+    }
+    if (status != 0) return status;
+
+    if (!directory) return rm_with_retries(path, false, max_retries, retry_delay);
+
+    /* A directory: empty it first. `uv_fs_scandir` is re-run after the children
+     * are gone rather than trusted once, because an entry added during the walk
+     * would otherwise be missed and the `rmdir` would fail with `ENOTEMPTY` --
+     * which the retry would then paper over without removing it. */
+    uv_fs_t scan;
+    int count = uv_fs_scandir(NULL, &scan, path, 0, NULL);
+    if (count < 0) {
+        uv_fs_req_cleanup(&scan);
+        return count;
+    }
+    int failure = 0;
+    uv_dirent_t entry;
+    while (uv_fs_scandir_next(&scan, &entry) == 0) {
+        size_t length = strlen(path) + 1 + strlen(entry.name) + 1;
+        char *child = malloc(length);
+        if (child == NULL) {
+            failure = UV_ENOMEM;
+            break;
+        }
+        snprintf(child, length, "%s/%s", path, entry.name);
+        int child_status = rm_tree(child, force, max_retries, retry_delay);
+        free(child);
+        /* The first failure is kept and the walk continues: removing as much as
+         * can be removed matches what node does, and stopping early would leave
+         * a half-emptied tree whose next attempt has more to do. */
+        if (child_status != 0 && failure == 0) failure = child_status;
+    }
+    uv_fs_req_cleanup(&scan);
+    if (failure != 0) return failure;
+    return rm_with_retries(path, true, max_retries, retry_delay);
+}
+
+static void rm_on_pool(uv_work_t *work) {
+    RmWork *job = (RmWork *)work;
+    if (job->recursive) {
+        job->result = rm_tree(job->path, job->force, job->max_retries,
+                              job->retry_delay);
+        return;
+    }
+    /* Not recursive: one path, and a directory is an error rather than a walk.
+     * Node reports `ERR_FS_EISDIR` for it, which the module builds from this
+     * errno. */
+    uv_fs_t request;
+    int status = uv_fs_lstat(NULL, &request, job->path, NULL);
+    bool directory =
+        status == 0 && (request.statbuf.st_mode & S_IFMT) == S_IFDIR;
+    uv_fs_req_cleanup(&request);
+    if (status == UV_ENOENT) {
+        job->result = job->force ? 0 : UV_ENOENT;
+        return;
+    }
+    if (status != 0) {
+        job->result = status;
+        return;
+    }
+    job->result = directory
+                      ? UV_EISDIR
+                      : rm_with_retries(job->path, false, job->max_retries,
+                                        job->retry_delay);
+}
+
+static void rm_on_loop(uv_work_t *work, int status) {
+    RmWork *job = (RmWork *)work;
+    /* A cancelled work item never ran, so its `result` means nothing and the
+     * cancellation is the answer. */
+    async_call_status(job->callback,
+                      status != 0 ? (double)status : (double)job->result);
+    if (job->callback != NULL) nts_release(job->callback);
+    free(job->path);
+    free(job);
+}
+
+static void rm_start(char *native, bool recursive, bool force,
+                     double max_retries, double retry_delay,
+                     NtsHeader *callback) {
+    if (native == NULL) {
+        async_call_status(callback, (double)UV_ENOMEM);
+        return;
+    }
+    RmWork *job = calloc(1, sizeof(RmWork));
+    if (job == NULL) {
+        free(native);
+        async_call_status(callback, (double)UV_ENOMEM);
+        return;
+    }
+    job->callback = callback;
+    job->path = native;
+    job->recursive = recursive;
+    job->force = force;
+    job->max_retries = max_retries > 0.0 ? (int)max_retries : 0;
+    job->retry_delay = retry_delay > 0.0 ? (int)retry_delay : 0;
+    if (callback != NULL) nts_retain(callback);
+
+    int status = uv_queue_work(fs_loop(), &job->work, rm_on_pool, rm_on_loop);
+    if (status != 0) {
+        if (callback != NULL) nts_release(callback);
+        free(job->path);
+        free(job);
+        async_call_status(callback, (double)status);
+    }
+}
+
+void nts_fs_rm_async(NtsString *path, bool recursive, bool force,
+                     double max_retries, double retry_delay,
+                     NtsHeader *callback) {
+    rm_start(native_path(path), recursive, force, max_retries, retry_delay,
+             callback);
+}
+
+void nts_fs_rm_async_bytes(NtsArray *path, bool recursive, bool force,
+                           double max_retries, double retry_delay,
+                           NtsHeader *callback) {
+    rm_start(native_byte_path(path), recursive, force, max_retries, retry_delay,
+             callback);
+}
