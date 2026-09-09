@@ -15,6 +15,11 @@
 # 5, and every failure count matched. Without the right-hand column those four
 # rows said `0 passed, 12 failed` and nothing else.
 #
+# The comparison itself was controlled by inverting it: with `!=` changed to
+# `=`, `punycode` flags and the run reports `1 module(s) differ`; restored, it
+# reports `0`. A comparison that has never been seen to fire is a claim about
+# agreement rather than a measurement of it.
+#
 # So this builds each module twice and prints both. A row differing between the
 # columns is the finding; a row identical on both is the allocator seeing
 # nothing these tests can reach.
