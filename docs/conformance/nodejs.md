@@ -15460,38 +15460,50 @@ more sweeps rather than more targeted probes.
 
 ### The suite as it stands
 
-Nine case files, **56 questions compared, 8 disagreeing, 13 refused, 0 that did
-not build**:
+Thirteen case files, **80 questions compared, 14 disagreeing, 16 refused, 0 that
+did not build**. The fourteen disagreements are **three defects**:
 
-    an-optional-field-across-an-erased-slot     1 of 3 disagree
-    optional-fields-through-erased-slots        5 of 5 disagree, one a SIGSEGV
-    an-indexed-write-at-or-past-the-length      2 of 4 disagree, both SIGABRT
-    number-and-string-seams                    10 agree
-    erasure-and-layout-seams                    7 agree
-    control-flow-and-method-seams               6 agree, 2 refused
-    coercion-and-object-seams                   9 agree, 1 refused
-    async-and-array-seams                       4 agree, 3 refused
-    string-and-number-method-seams              8 agree, 6 refused
+    exceptions do not cross a call frame        6 cases, two files
+    a struct with an optional field, erased     6 cases, one a SIGSEGV
+    an indexed write at or past the length      2 cases, both SIGABRT
 
-**The clean files are the ones that took the longest to write and are worth the
-most.** Grisu's shortest round-trip, int32 coercion, shift masking, unsigned
-shift, remainder sign, UTF-16 length, surrogate halves, NaN, negative zero, a
-derived instance through its base, a field after an upcast, two required fields
-through the same erased slot, a narrowing outliving its branch, virtual
-dispatch, `finally` after a return, a `return` inside `finally`, closure
-capture, short-circuiting, the nearest catch, `typeof null`, object identity,
-template stringification, a default parameter per call, a destructuring default.
-All correct.
+Eight files are clean, and they are the ones that took the longest to write:
 
-That list is what makes the eight disagreements mean something. A profile where
-half of everything is wrong needs no instrument to find a defect; one where
-forty of forty-eight questions are answered exactly as node answers them has
-eight specific things wrong with it, and they are named.
+    number-and-string-seams        10   Grisu's shortest round-trip, int32 coercion,
+                                        shift masking, unsigned shift, remainder sign,
+                                        UTF-16 length, surrogate halves, NaN, -0
+    coercion-and-object-seams       9   typeof null, object identity, template
+                                        stringification, a default parameter per call,
+                                        a destructuring default
+    string-and-number-method-seams  8   padStart, repeat(0), split(""), indexOf(""),
+                                        slice clamping, charAt past the end,
+                                        Number("   "), "ß".toUpperCase()
+    erasure-and-layout-seams        7   a derived instance through its base, a field
+                                        after an upcast, **two required fields through
+                                        the same erased slot**, a narrowing outliving
+                                        its branch
+    ordering-and-statement-seams    7   labelled break and continue, argument order,
+                                        assignment order, do-while, for update
+    control-flow-and-method-seams   6   virtual dispatch, finally after a return,
+                                        a return inside finally, closure capture,
+                                        short-circuiting, the nearest catch
+    callback-seams                  6   a callback reading and writing the enclosing
+                                        scope, called twice, its return used, two
+                                        arguments, one calling another
+    async-and-array-seams           4   await ordering, indexOf and NaN, negative
+                                        slice, code-unit comparison
 
-One case was **removed rather than reported**: it asked whether subtraction
-coerces a numeric string using `(s as unknown as number)`, and a double
-assertion is the unchecked assertion this profile forbids. The invalid C it
-produced is a fact about a construct nobody here may write.
+**The clean files are what make the fourteen mean something.** Sixty-six of
+eighty questions answered exactly as node answers them. A profile where half of
+everything is wrong needs no instrument; one this exact has three specific
+things wrong with it, each reduced and each with a control that says what it is
+not.
+
+`callback-seams` matters most among the clean ones: calls work, closures work,
+return values come back. So the exception defect is the unwind path and not
+calls in general -- a smaller thing to fix and a worse thing to have, because
+every ordinary path was exercised by everything that passes and the error path
+by nothing.
 
 ### In seven of the nine, the diagnostic describes something other than the cause
 
