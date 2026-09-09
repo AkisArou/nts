@@ -112,3 +112,42 @@ checked, so the count could not see the thing that moved.
 And a whole-file value map over a multi-function HIR dump, which reported "18 of
 23 coercions are on booleans". Value ids repeat per function. Rebuilt per
 function, the answer is block parameters, which is the finding.
+
+## Amended: the row this was argued from cannot reach the bar
+
+Two corrections from the JVM lane, both settled deterministically, and both
+against the argument this record opens with.
+
+**The retyping did not move `node-utf8`.** Compilers built either side of the
+change emit **10 `toInt32` both times** — 2060 instructions against 2052, with
+nine `dload` becoming `iload` and one fewer `dconst_0`. Real, visible, and eight
+bytecodes. So the 6.43x this row published sits between their 6.69x and a
+five-run median of ~6.58x, and none of that difference is the retyping. The
+candidate is retired; the code-unit change bought nothing on any row, which is
+what the `pays` heuristic said before it was overridden.
+
+**And `node-utf8` could not have been the argument even if it had moved.** Its
+reference is `String.getBytes(UTF_8)` and `new String(bytes, UTF_8)` — HotSpot
+intrinsics, hand-vectorised, ASCII fast path, a machine word at a time — against
+our compiled 176-line state machine walking one code point at a time and placing
+U+FFFD. The reference allocates a fresh array every round, which we do not, and
+still wins 6.3x. The arithmetic:
+
+    every toInt32 removed            18.10 us   2.40x
+    the decoder made entirely free    0.00 us   0.00x
+
+**Removing every coercion leaves the row at 2.40x.** No middle-end work reaches
+parity here; only calling the platform's codec would, and that is a
+`runtime/node` decision.
+
+So the refinement fix is still worth making and this record's diagnosis of *why*
+`&&` loses its facts is unchanged. What is withdrawn is the row: the case rests
+on `symbol-keyed-map` at 2.92x against `IdentityHashMap` and `array-methods` at
+1.14x against hand-written loops, which carry the same coercion at 52% and 25%
+and are ordinary code that can approach the bar.
+
+**Why it survived scrutiny for a day.** "Check the reference does the same work
+before calling a ratio a gap" was already a rule, applied to `array-predicates`,
+`generic-classes` and `number-format-double` — and not to the largest number in
+the table, because 6.3x was too big to look like it could be about the
+reference. The size of a gap is not evidence about its cause.
