@@ -14636,6 +14636,41 @@ So the two lanes say different things and both are true: the implementation is
 finished against node's suite, and the compiler cannot yet carry a class to the
 host. That is the order this ledger's opening describes as the intended one.
 
+## Three pins in one afternoon: roots barely moved, cascades fell a fifth
+
+Twenty-two modules built from scratch on each of three pinned compilers, all
+into private directories:
+
+    pin      NTS1001   NTS1003   published names
+    13:42     18,880     7,515              86
+    15:18     18,880     7,515              98
+    16:05     18,748     6,029              98
+
+**The middle pin changed no refusal at all.** Not one root, not one cascade --
+the two files are identical in both counts. What it did change is the published
+surface, in six modules, and that came from wrapper work rather than lowering.
+The axis moved by nothing across it.
+
+**The third pin cleared 132 roots and 1,486 cascades.** Roots fell by 0.7% and
+cascades by 20%, which is the shape to expect when the roots cleared are ones
+many functions stand behind: `internal/errors.ts` went from 17 distinct sites to
+14 and its line count across the 22 builds from 357 to 294, and everything that
+called into `inspectValue` came with it.
+
+### Which number to quote
+
+Not the published names. They went 86 to 98 across the afternoon and the axis
+went 25 behaviour-dependent to 25.
+
+Not `NTS1001` alone either. It moved 0.7% on the pin that cleared the
+`string_decoder` chain from three heads to one.
+
+The cascade count is the one that tracked the work, and it tracked it because
+the work was on roots with a lot behind them. That is not a general rule --
+a root nothing calls clears one cascade -- which is why the useful form is the
+pair, and why `last-mile.mjs` exists to say which roots have anything behind
+them at all.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
