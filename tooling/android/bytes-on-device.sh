@@ -69,7 +69,7 @@ cases=${*:-"array-methods symbol-keyed-map array-from arrays growth-fixed growth
   map-and-set array-predicates array-mutations pipeline substrings case-convert
   strings number-format in-narrowing closures closure-merge module-closures generator"}
 
-printf "%-24s %12s %12s\n" "case" "HotSpot" "ART"
+printf "%-24s %12s %12s %10s %6s\n" "case" "HotSpot" "ART" "objects" "avg"
 for case in $cases; do
   entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
     | head -1 | awk '{print $3}')
@@ -131,6 +131,7 @@ public final class Main {
     public static void main(String[] a) throws Exception {
         Class<?> dbg = Class.forName("android.os.Debug");
         Method start = dbg.getMethod("startAllocCounting");
+        Method tally = dbg.getMethod("getGlobalAllocCount");
         Method stop = dbg.getMethod("stopAllocCounting");
         Method size = dbg.getMethod("getGlobalAllocSize");
         double seed = nts.gen.Program.seed;
@@ -140,10 +141,17 @@ public final class Main {
         int n = Integer.parseInt(a[0]);
         start.invoke(null);
         long before = ((Number) size.invoke(null)).longValue();
+        long counted = ((Number) tally.invoke(null)).longValue();
         for (int i = 0; i < n; i++) { sink += nts.gen.Program.$entry(seed); }
         long after = ((Number) size.invoke(null)).longValue();
+        long objects = ((Number) tally.invoke(null)).longValue() - counted;
         stop.invoke(null);
-        System.out.println((after - before) / n);
+        // The count beside the bytes, because their quotient names the type.
+        // node-utf8 read 15,366 objects at 23 bytes -- a String and its
+        // backing array per character -- and that was the whole diagnosis.
+        // No backticks in here: the heredoc is unquoted so the driver can
+        // interpolate \$entry and \$init, and a backtick is a command.
+        System.out.println(((after - before) / n) + " " + (objects / n));
     }
 }
 JAVA
@@ -191,5 +199,8 @@ JAVA
     -*) art="overflow" ;;
   esac
   adb shell "rm -f /data/local/tmp/ab-$case.dex" > /dev/null 2>&1 || true
-  printf "%-24s %12s %12s\n" "$case" "$hotspot" "$art"
+  objects=$(printf "%s" "$art" | awk "{print \$2}")
+  art=$(printf "%s" "$art" | awk "{print \$1}")
+  avg=$(printf "%s %s" "$art" "$objects" | awk "{ if (\$2 > 0) print int(\$1 / \$2); else print \"--\" }")
+  printf "%-24s %12s %12s %10s %6s\n" "$case" "$hotspot" "${art:---}" "${objects:---}" "${avg:---}"
 done

@@ -71,6 +71,9 @@ meets them. This is the map; the row table below it is the current state.
   - The ART allocation axis, actually closed: seven parities to the byte, four wins, five ours
   - `node-utf8` allocates 4.22x its reference on ART, and nothing on HotSpot says so
   - `node-utf8`: the fusion built the string it was written to avoid, and C2 hid it
+  - The object count beside the byte count, and why it should have been there first
+  - `growth-grown` is at its floor, and the count proves it in one line
+  - `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -147,7 +150,7 @@ different problem from the four rows losing by a lot.
 | `awfy-queens` | 1.23x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.17x, **ART 6288 -> 144 B/op** | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
-| `number-format-double` | **1.15x** | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
+| `number-format-double` | **1.15x**, **ART 12,464 -> 6,624 B/op** (0.95x its reference) | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.05x / 1.02x | at its floor: both lanes vectorise |
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
@@ -2811,6 +2814,80 @@ site had been quietly breaking.
 
 Two of the four `stringFromCharCode` calls in `utf8Decode` fuse; the other two
 have real readers and stay.
+
+### The object count beside the byte count, and why it should have been there first
+
+`getGlobalAllocSize` answers *how much*. `getGlobalAllocCount` sits next to it in
+the same class and answers *how many*, and their quotient names the type:
+
+    node-utf8              bytes 354,496   objects 15,366   avg 23
+    growth-grown            bytes 36,992   objects     11   avg 3,362
+    growth-fixed            bytes 20,480   objects      1   avg 20,480
+    symbol-keyed-map           bytes 304   objects     11   avg 27
+    number-format-double    bytes 12,464   objects    384   avg 32
+
+Every one of those lines is a diagnosis. 23 bytes is an `NtsValue` or a small
+`String`; 20,480 with one object is the array itself; 3,362 average over eleven
+objects is a doubling ladder. The survey prints both now.
+
+**It should have been there from the first ART measurement.** Two objects per
+character told me `node-utf8`'s cause before I read any bytecode, and the
+bytecode then took one look to confirm. Bytes alone had been the instrument for
+three sittings and every diagnosis from them started with a guess.
+
+### `growth-grown` is at its floor, and the count proves it in one line
+
+Ours 36,992 on ART against the reference's 20,480 -- 1.81x, and `growth-fixed` is
+parity **to the byte** against the same reference. The reference is deliberately
+the same `double[n]` in both, and says so: a person with `n = 2048` in front of
+them writes `new double[n]` either way, the JDK has no growable primitive array,
+and an `ArrayList<Double>` would box.
+
+So the gap is growth against no growth. `growCapacity` doubles from a floor of
+four, so a push loop to 2048 allocates capacities 4, 8, ..., 2048 -- ten arrays,
+4,092 elements:
+
+    10 * 16 header  +  4,092 * 8  =  32,896
+
+which is **exactly** the measured HotSpot figure, and the ART count reads
+**eleven objects**: those ten and the `NtsArrayD`. Doubling is 2x the final size
+and no growth policy that does not know the final size beats that. There is
+nothing here to take.
+
+### `number-format-double`: the placement buffer was a `byte[]`, and ART decodes
+
+    number-format-double   ART 12,464 -> 6,624    reference 6,952
+    number-format-double   HotSpot 10,576 -> 10,576
+
+1.79x over its reference becomes **0.95x**, and HotSpot does not move at all.
+
+192 conversions an operation and 384 objects: two each, where ART stores a
+string's characters inline in the object and one is the floor. Measured on
+device rather than reasoned about, twenty thousand calls each:
+
+    new String(byte[], 0, 17, ISO_8859_1)    objects/call 2.0   bytes/call 88
+    new String(char[], 0, 17)                objects/call 1.0   bytes/call 40
+
+`ISO_8859_1` has to *decode*, and ART decodes through a fresh `char[]` before
+building the string. **`HotSpot` hides it in the opposite direction from
+usual**: compact strings make the ISO-8859-1 path its preferred one, which is
+why the buffer was a `byte[]` and why the HotSpot column is unchanged to the
+byte. A row where the right answer for one runtime is the wrong one for the
+other, rather than one runtime failing to remove what the other does.
+
+`SHORTEST_DIGITS` stays a `byte[]` -- it is Grisu's output buffer and its
+contract is with `NtsGrisu`. Only the placement buffer moved, and the five
+`System.arraycopy` calls became a `copyDigits` loop of at most seventeen.
+
+Checked against node with the same 98,910-value differential the radix work
+used: **0 differing**, and every ART bit pattern identical to the sweep before
+the change.
+
+**And I measured it twice, because the first reading said zero.** The jar is
+embedded in the compiler by `include_bytes!`, so regenerating
+`nts-runtime.jar` and re-running without rebuilding `nts-cli` measures the
+runtime you just replaced. `nts-bench does not follow the CLI` is the same
+sentence one level down.
 
 ## Open, and whose
 
