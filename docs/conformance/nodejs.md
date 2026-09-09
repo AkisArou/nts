@@ -11527,6 +11527,42 @@ an `in` on something that is not an object, an `in` naming `length` on an
 `object`, an erased value where a concrete representation is wanted, and `i`
 which `UnknownArrayLike` does not declare.
 
+
+### The three prerequisites `string_decoder` was said to need are all present
+
+The standing goal text says `string_decoder` "needs the export-class arm, three
+prototype accessors to cross, and `lastChar` to reach the host answering
+`.equals`". Probed individually on the 01:29 pin, because the module itself
+cannot ask any of these questions while `Buffer` blocks it:
+
+| prerequisite | measured |
+| --- | --- |
+| the export-class arm | **present** — a class with a constructor, a method and a getter crosses with no decline, and `addon.c` emits `napi_define_class` |
+| prototype accessors | **cross** — the getter lands in the accessor slot, not the method slot |
+| a typed array reaching the host | **crosses outward**, per the section above |
+
+The accessor is emitted as a real one rather than a method that happens to
+answer:
+
+    { "add",   NULL, nts_napi_Counter__add, NULL, NULL, NULL, napi_default, NULL },
+    { "value", NULL, NULL, nts_napi_Counter__get_value, NULL, NULL, napi_default, NULL },
+
+Third slot is the method, fourth is the getter. `add` fills the third and
+`value` fills the fourth.
+
+**So the remaining distance is one item, not four.** `StringDecoder` declines as
+`is a class whose constructor was not compiled`, and the constructor is not
+compiled because it calls `Buffer.alloc`. Everything the class would need on the
+far side of that already works.
+
+**What this does not license.** `local/core-static.js` wants `lastChar`,
+`lastNeed` and `lastTotal` as prototype accessors with `lastChar` a Buffer
+answering `.equals`. The *mechanisms* are all present, and that is not the same
+as the assertion passing — the outward typed-array path has never carried a
+Buffer subclass with `.equals` on it, because no module has got far enough to
+try. Whether the module comes to 4 of 5 or 5 of 5 is undetermined until `Buffer`
+lands, and it is written here as undetermined rather than as either number.
+
 ### Reach, and then what clears
 
 Thirteen of 22 modules carry functions cascading directly from
