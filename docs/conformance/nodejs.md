@@ -11754,9 +11754,35 @@ So `computed-member-write` is not a hard gate on `os` loading. It is one of six
 missing names. That is a smaller claim than the one it replaces and it is the
 one that survives being run.
 
-Not controlled: `stream` (2), `fs` (1), `timers` (1), `util` (1). Four passes
-across four modules whose suites take long enough that the control was skipped
-for now; they are counted in the 23 and **not** claimed as behaviour-dependent.
+Not controlled at the time: `stream` (2), `fs` (1), `timers` (1), `util` (1) --
+counted in the 23 and not claimed as behaviour-dependent.
+
+### Corrected: the four uncontrolled ones are all hollow, so the number is 14
+
+`sweep.mjs` computes this itself and names it. `degenerate` is the count of
+passes that survive `--mutate-addon`; `real` is `pass - degenerate`; and
+**`every-pass-hollow`** is the stage label for `real === 0`. Run on v11:
+
+    punycode   green                3 / 3
+    path       partial             11 / 21, 3 degenerate, absent: format, matchesGlob
+    os         partial              4 / 9,  1 degenerate, absent: constants, cpus, …
+    stream     every-pass-hollow    2 / 250, 2 degenerate
+    fs         every-pass-hollow    1 / 345, 1 degenerate
+    timers     every-pass-hollow    1 / 56,  1 degenerate
+    util       every-pass-hollow    1 / 25,  1 degenerate
+
+So the honest total is **14 behaviour-dependent passes across 3 modules**, not
+23 across 7. `stream`, `fs`, `timers` and `util` contribute **zero** -- every one
+of their four passes survives an addon whose behaviour has been destroyed.
+
+The hand-derived controls agree with the sweep exactly -- 3 degenerate for
+`path`, 1 for `os`, 0 for `punycode` -- which is worth something as independent
+arithmetic. What it does not excuse is the reason they were needed: **the
+instrument already had the answer and I built a second table without it.**
+`addon-table.sh` counted raw passes out of `run.mjs`, and a raw pass count is
+the one number this axis has been saying for months is not the measurement.
+Declining to claim the four uncontrolled modules was right; running the sweep's
+own summary first would have been better.
 
 ## Index-signature tables have to cross the boundary, in both directions
 
