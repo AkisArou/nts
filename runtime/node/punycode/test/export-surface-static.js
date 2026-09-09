@@ -32,13 +32,41 @@ assert.deepStrictEqual(
   ["decode", "encode", "toASCII", "toUnicode", "ucs2", "version"],
 );
 
+const findings = [];
 for (const name of ["decode", "encode", "toASCII", "toUnicode"]) {
-  assert.strictEqual(
-    typeof punycode[name],
-    "function",
-    `punycode.${name} should be a function`,
-  );
+  if (typeof punycode[name] !== "function") {
+    findings.push(`punycode.${name} is ${typeof punycode[name]}, node's is a function`);
+  }
 }
+
+// **And that each of the four can be called**, which `typeof` does not say.
+//
+// Node has no reason to assert this: there, a name of type `function` is always
+// callable. Here it is not -- `buffer.isUtf8` publishes with the right type and
+// throws for every argument node accepts, because its parameter has no inbound
+// representation. `ucs2.decode` and `ucs2.encode` below were already exercised
+// by a round trip; these four were asserted to be functions and never called.
+//
+// The values are node's, taken from `node:punycode` directly, and the pair
+// `mañana`/`maana-pta` is the RFC 3492 example so a wrong implementation cannot
+// agree by accident.
+for (const [label, got, want] of [
+  ["encode(\"mañana\")", typeof punycode.encode === "function" ? punycode.encode("mañana") : undefined, "maana-pta"],
+  ["encode(\"日本\")", typeof punycode.encode === "function" ? punycode.encode("日本") : undefined, "wgv71a"],
+  ["decode(\"maana-pta\")", typeof punycode.decode === "function" ? punycode.decode("maana-pta") : undefined, "mañana"],
+  ["toASCII(\"mañana.com\")", typeof punycode.toASCII === "function" ? punycode.toASCII("mañana.com") : undefined, "xn--maana-pta.com"],
+  ["toUnicode(\"xn--maana-pta.com\")", typeof punycode.toUnicode === "function" ? punycode.toUnicode("xn--maana-pta.com") : undefined, "mañana.com"],
+]) {
+  let answer;
+  try { answer = got; } catch (error) { findings.push(`${label} threw: ${error.message}`); continue; }
+  if (answer !== want) findings.push(`${label} is ${JSON.stringify(answer)}, node's is ${JSON.stringify(want)}`);
+}
+
+assert.deepStrictEqual(
+  findings,
+  [],
+  `${findings.length} surface finding(s):\n  ${findings.join("\n  ")}`,
+);
 
 // A string, and this exact string. Node vendors punycode.js 2.1.0 and reports
 // it here; a compiled artifact that published `undefined`, or an empty string,
