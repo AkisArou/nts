@@ -38,7 +38,7 @@
 // A module with no addon built is reported as such rather than as zero, because
 // zero and absent are different and only one of them is a result.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -85,6 +85,58 @@ function run(module, addon) {
   return files;
 }
 
+/**
+ * Exported functions in a module whose signature carries an optional or
+ * defaulted parameter.
+ *
+ * **The second gate this instrument cannot otherwise see.** "To gain" counts
+ * files that would pass if the named export *appeared*. An export that appears
+ * still publishes its optional parameters as required, so
+ * `dgram.createSocket("udp4")` throws `the compiled function requires 2
+ * arguments` -- and node's own dgram tests call it that way fourteen times, plus
+ * three with no arguments at all. `net.createServer` has both parameters
+ * optional and is the largest prize in the profile. Without this, the table
+ * ranks those two first and says nothing about the second thing they need.
+ *
+ * Found only because `path` began publishing and the compiled differential ran:
+ * `basename("/a/b.txt")` throws where node answers `"b"`. It is a syntactic
+ * property of the signature, so it can be read without waiting for a module to
+ * publish -- which is the point of reading it here.
+ */
+function optionalParamExports(module) {
+  const names = new Set();
+  const dir = join(ROOT, "runtime/node", module, "src");
+  if (!existsSync(dir)) return names;
+  const stack = [dir];
+  while (stack.length > 0) {
+    const at = stack.pop();
+    for (const entry of readdirSync(at, { withFileTypes: true })) {
+      const p = join(at, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") stack.push(p);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) continue;
+      const text = readFileSync(p, "utf8");
+      const lines = text.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const m = /^export (?:async )?function ([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\(/.exec(lines[i]);
+        if (m === null) continue;
+        let depth = 0;
+        let sig = "";
+        for (let j = i; j < Math.min(i + 12, lines.length); j++) {
+          sig += `${lines[j]} `;
+          depth += (lines[j].match(/\(/g) ?? []).length - (lines[j].match(/\)/g) ?? []).length;
+          if (depth <= 0 && sig.includes("(")) break;
+        }
+        const params = sig.slice(sig.indexOf("(") + 1, sig.lastIndexOf(")"));
+        if (/\w\?\s*:/.test(params) || /=\s*[^,)]+/.test(params)) names.add(m[1]);
+      }
+    }
+  }
+  return names;
+}
+
 /** The exported names a failure message mentions, if any. */
 function namesIn(reason) {
   const found = new Set();
@@ -127,8 +179,16 @@ for (const module of modules) {
   }
   if (gain.length > 8) console.log(`  … ${gain.length - 8} more`);
   if (names.size > 0) {
-    const ranked = [...names].sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} (${c})`);
+    const optional = optionalParamExports(module);
+    const ranked = [...names]
+      .sort((a, b) => b[1] - a[1])
+      .map(([n, c]) => `${n} (${c})${optional.has(n) ? " [optional-param]" : ""}`);
     console.log(`  names mentioned: ${ranked.join(", ")}`);
+    const gated = [...names.keys()].filter((n) => optional.has(n));
+    if (gated.length > 0) {
+      console.log(`  second gate: ${gated.join(", ")} take an optional parameter, which publishes as required`);
+      console.log(`               -- appearing is not enough; see optional-parameter-at-the-wrapper`);
+    }
   }
 }
 
