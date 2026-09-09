@@ -3109,7 +3109,16 @@ impl Emitter<'_> {
         } else {
             self.ty(operand).clone()
         };
-        self.convert(code, pool, &from, result, origin)?;
+        // And the same on the way out, for the same reason. An intermediate
+        // `i64` that `intcall` holds as an `int` is asked for as one here, or
+        // this emits the `i2l` that marking it exists to remove -- and then
+        // stores a long into a slot the frame says is an int.
+        let to = if self.narrowed.contains(&value) {
+            HirType::Int { bits: 32, signed: true }
+        } else {
+            result.clone()
+        };
+        self.convert(code, pool, &from, &to, origin)?;
         Ok(Placed::OnStack)
     }
 

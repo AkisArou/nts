@@ -94,6 +94,36 @@ pub(crate) fn narrowed(func: &Func) -> FxHashSet<ValueId> {
         return candidates;
     }
 
+    // A conversion *between* the call and the integer the caller wants belongs
+    // to the same value, and until this loop existed it did not get held the
+    // same way. `hir` widens the `f64` to an `i64` and then narrows that to an
+    // `i32`, so a result held as an `int` met its own two conversions as
+    // `i2l` immediately followed by `l2i` -- which is the identity for any
+    // `int`, with no range precondition, and which `array-methods` emitted
+    // twice a round for 256 rounds.
+    //
+    // Marking the intermediate makes both of them nothing: the first converts
+    // an `int` to an `int`, and so does the second. Nothing here decides that
+    // the narrowing is *safe* -- the use check below still has to agree, and a
+    // use wanting a real `i64` refuses the intermediate and leaves the `i2l`
+    // exactly where it was.
+    //
+    // A fixpoint rather than a single step because the chain's length is the
+    // middle end's business and not this pass's; two is what it emits today.
+    loop {
+        let mut added = false;
+        for (at, op) in func.values.iter().enumerate() {
+            let OpKind::Convert(source) = op.kind else { continue };
+            if !candidates.contains(&source) || !matches!(op.ty, HirType::Int { .. }) {
+                continue;
+            }
+            added |= candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)));
+        }
+        if !added {
+            break;
+        }
+    }
+
     // Any use that is not an integral conversion disqualifies the value: it
     // wants the double, and widening it back is the round trip this removes.
     let mut refused = FxHashSet::default();

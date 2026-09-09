@@ -1234,9 +1234,31 @@ intermediate `convert : i64` to the `convert : i32` behind it.
 `ConvI2L`/`ConvL2I` and folds it, which is the same reason record 0004 found the
 store/load round trip free. It is worth doing for ART, which has no C2, and for
 the code size -- not for this table, and it is not being claimed for this table.
-Filed rather than built, and the control that would settle it is rule 3's: add
-a redundant `(long)` round trip to the reference's `indexOf` result and see
-whether the reference notices. That needs the lock.
+
+**Built anyway, because it is four lines and the pass is mine.** `intcall` now
+walks through the intermediate `convert : i64` and holds it as an `int` too, and
+`conversion` honours the mark on the way out as well as on the way in -- without
+the second half it would emit the `i2l` the first half exists to remove and then
+store a long into a slot the frame calls an int. The emission goes
+
+    290: iload  16      before:  290: iload  16
+    292: istore 17               292: i2l
+    294: iload  17               293: lstore 17
+    296: istore 18               295: lload  17
+    298: iload  11               297: l2i
+    300: iload  18               298: istore 19
+    302: iadd                    ...
+
+Correctness: 133 of the examples agree through the JVM backend, which is the
+floor exactly; `-Xverify:all` accepts it; and `work` answers identically across
+seeds -8..8, chosen because -1 is the no-match answer and the value a changed
+conversion would spell differently.
+
+**The timing is NOT measured** -- the gate lock was held for the whole window --
+and until it is, this row has not moved and is not claimed to have. The
+prediction on record is zero, and the control that settles it is rule 3's: give
+the reference a redundant `(long)` round trip on its `indexOf` result and see
+whether it notices.
 
 **What this row still is.** Helpers 18% faster than hand-written loops, a
 `toInt32` call where the reference has a `d2i` worth 8.9%, and a residual double
