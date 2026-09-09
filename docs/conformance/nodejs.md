@@ -10072,6 +10072,35 @@ fixture: `an object type with no layout` (~50, filed as
 erased yet` (15, unfiled), and `closure class X reached code generation with no
 method to call` (13, unfiled).
 
+Both unfiled forms are handed over as diagnoses rather than fixtures, because
+neither reproduced.
+
+`NTS2008 a value of type Erased cannot be erased yet; a reference payload needs
+retain and release` sits at `internal/tick.ts:84` and `fs/src/async.ts:461`. The
+message names the missing piece itself -- an erased value holding a reference
+needs retain and release before it can be dropped -- which is a runtime
+ownership question rather than a shape this side can reduce.
+
+`NTS2006 closure class X reached code generation with no method to call` reaches
+four modules: `process`, `dgram`, `net`, `http`. Its site is
+`web-platform/src/json/text.ts:39`, a module-scope const initialised by a call:
+
+```ts
+const SHORT_ESCAPES: string[] = buildShortEscapes();
+```
+
+**Ruled out: that shape on its own.** A module-scope const initialised by a
+plain function call, with a loop in the callee, lowers and crosses cleanly. So
+whatever makes the compiler build a closure class here is not "a const
+initialised by a call".
+
+**Also checked, and it is not mine.** `text.ts` is the file this profile started
+importing tonight for `quoteJSONString`, so the obvious suspicion was that the
+import introduced these. It did not: the same four modules carried the same form
+in logs taken before the import. Counted rather than assumed, because a new
+dependency and a new diagnostic appearing in the same evening is exactly the
+coincidence that reads as cause.
+
 **And it does not overturn `asRequest`.** That one was called unreportable
 because `fs/src/request.ts` carries no NTS1001 or NTS1003 anywhere. Re-checked
 against every diagnostic code in the fresh log: still zero. The file has no
