@@ -9795,6 +9795,38 @@ That is the third instrument this evening that knew more than it said, after the
 lowering that names one refused class per function and the assertion loop that
 stops at the first mismatch.
 
+### The pass count did not move and the module did
+
+A rest parameter crosses now. `path` publishes 12:
+
+```
+resolve  normalize  isAbsolute  join  relative  _makeLong
+toNamespacedPath  dirname  basename  extname  delimiter  sep
+```
+
+`join` and `resolve` are the two a caller reaches for first. None of the twelve
+is bound to `undefined`.
+
+**The compiled lane reads 3 passed, 18 failed. It read 3 passed, 18 failed
+before.** Every test that exercises `join` or `resolve` also dereferences
+`path.win32`, which is still undefined, so not one file changed state.
+
+The edge table saw it:
+
+```
+before  66 of 183 diverge   basename 26, parse 26, join 11, format 2, resolve 1
+after   54 of 183 diverge   basename 26, parse 26, format 2
+```
+
+`join`'s eleven cases and `resolve`'s one are gone -- they cross *and* they
+compute node's answers. 129 of 183 match now, up from 117.
+
+That is the whole argument for the change made to this file a few hours
+earlier. Asserting inside the comparison loop gave one line; the pass count
+gives one bit; and both would have reported this fix as nothing happening. A
+module can improve by twelve behaviours while every count that is watched stays
+still.
+
 ### Nothing that crosses answers wrongly
 
 Swept every module that publishes anything, reading the *reason* each local test
