@@ -1537,6 +1537,18 @@ pub struct Program {
     /// to be re-derived: the backend cannot see a module that the surface walk
     /// skipped.
     pub unpublished_modules: Vec<(String, String, usize)>,
+    /// Exported functions with an erased slot that is not `unknown`.
+    ///
+    /// `HirType::Erased` is two things at a boundary. `unknown` means the caller
+    /// may pass anything and the body will decide; `Uint8Array | ArrayBuffer`
+    /// erases too and means two specific types the boundary cannot build. The
+    /// wrapper cannot tell them apart from the type alone, and the difference
+    /// decides whether a name should be published at all.
+    ///
+    /// Recorded here because [`lower::public_api`] is the only place holding
+    /// both the lowered representation and the checker's type for the same
+    /// slot.
+    pub opaque_signatures: Vec<String>,
     /// Exported names whose symbol declares a *function*, as opposed to a value.
     ///
     /// The backend cannot tell the two apart from `public_api` alone, and the

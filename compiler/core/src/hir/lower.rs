@@ -2574,6 +2574,7 @@ fn initializer_function(
 fn module_namespace_of(
     snapshot: &SemanticSnapshot,
     naming: &Naming,
+    scope: &ModuleScope,
     record: &SymbolRecord,
 ) -> Option<Vec<(String, String)>> {
     let module = snapshot
@@ -2582,13 +2583,13 @@ fn module_namespace_of(
         .find(|module| record.declarations.contains(&module.root))?;
     let mut properties = Vec::new();
     for (published, symbol) in &module.exports {
-        let Some(member) = snapshot.symbols.get(symbol.0 as usize) else {
+        let Some(symbol_record) = snapshot.symbols.get(symbol.0 as usize) else {
             continue;
         };
-        let member = member
+        let member = symbol_record
             .aliased
             .and_then(|to| snapshot.symbols.get(to.0 as usize))
-            .unwrap_or(member);
+            .unwrap_or(symbol_record);
         let Some(&declaration) = member.declarations.first() else {
             continue;
         };
@@ -2601,10 +2602,25 @@ fn module_namespace_of(
         let is_function = resolved.is_some()
             || probe_kind(snapshot, declaration) == Some(syntax::FUNCTION_DECLARATION);
         if !is_function {
-            // A value member -- `export const sep = "/"` -- is a global rather
-            // than a function, and the wrapper builds a namespace out of
-            // wrappers. Left out here rather than half-carried; the backend
-            // reports the member by name.
+            // A value member: `export const sep = "/"`. It is a *global*, not a
+            // function, and the name recorded is the global's -- which is not
+            // the property's whenever something else took the plain name first,
+            // the same reason `public_api` asks `ModuleScope::variables` rather
+            // than guessing.
+            //
+            // `path.win32.sep` is `"\\"` and `path.posix.sep` is `"/"`: the one
+            // member where the two namespaces disagree in a way callers depend
+            // on, and the reason this is worth carrying at all.
+            let declaring = symbol_record
+                .aliased
+                .unwrap_or(*symbol);
+            if let Some(global) = scope
+                .variables
+                .get(&declaring.0)
+                .and_then(|at| scope.globals.get(*at as usize))
+            {
+                properties.push((published.clone(), global.name.clone()));
+            }
             continue;
         }
         let (declaration, name) = resolved.unwrap_or((declaration, member.name.clone()));
@@ -2777,6 +2793,78 @@ fn record_unpublished(
     unpublished.push((source.uri.clone(), importer, module.exports.len()));
 }
 
+/// Whether a signature has an erased slot the boundary could never satisfy.
+///
+/// `HirType::Erased` is several things at a boundary and the wrapper cannot tell
+/// them apart from the type alone.
+///
+/// `unknown` means the caller may pass anything and the body will decide.
+/// Crossing one is what makes a module's own `validateString` live again, which
+/// is 23 exported functions in the node profile.
+///
+/// `boolean | undefined` -- every optional scalar parameter -- also erases, and
+/// **every member of it crosses**. `stream.getDefaultHighWaterMark(objectMode?:
+/// boolean)` is that shape and answers correctly for both.
+///
+/// `Uint8Array | ArrayBuffer` erases too and means something else entirely: two
+/// specific types, neither of which the boundary can build. A wrapper for one
+/// accepts every argument node offers and throws for all of them --
+/// `buffer.isUtf8` went from `typeof` being `"undefined"` to `"function"`, and
+/// only a *call* finds out. A presence check that used to fail now passes,
+/// which is the wrong-answer shape one level out from the one the erased
+/// crossing was careful about.
+///
+/// So the question is not "is it `unknown`" -- the first version asked that and
+/// declined `getDefaultHighWaterMark`, which works. It is **whether any member
+/// of the union is something the crossing cannot build**, and a union with no
+/// members at all is `unknown`, which is why that case answers `false` here
+/// rather than being special-cased.
+fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+    let probe = FuncBuilder::new(snapshot);
+    let carried = |member: TypeId| -> bool {
+        matches!(
+            snapshot.types.get(member.0 as usize).map(|record| &record.kind),
+            Some(
+                TypeKind::Undefined
+                    | TypeKind::Null
+                    | TypeKind::Boolean
+                    | TypeKind::Number
+                    | TypeKind::String
+                    | TypeKind::Literal(_)
+            )
+        )
+    };
+    let opaque_slot = |node: NodeId| -> bool {
+        let Some(ty) = snapshot.node_types.get(&node).copied() else {
+            return false;
+        };
+        if representation(snapshot, ty) != Some(HirType::Erased) {
+            return false;
+        }
+        match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::Union(members)) => !members.iter().copied().all(carried),
+            // `unknown` and `any` have no members and are the case the crossing
+            // exists for.
+            _ => false,
+        }
+    };
+    probe.children(declaration).into_iter().any(|child| {
+        match probe.kind_of(child) {
+            // A parameter's type is on its *name*, which is where `lower_param`
+            // reads it from.
+            Some(syntax::PARAMETER) => probe
+                .children(child)
+                .first()
+                .copied()
+                .is_some_and(&opaque_slot),
+            // The return annotation, which is the only type node a declaration
+            // has among its direct children.
+            Some(kind) if syntax::is_type_node(kind) => opaque_slot(child),
+            _ => false,
+        }
+    })
+}
+
 fn public_api(
     snapshot: &SemanticSnapshot,
     naming: &Naming,
@@ -2795,6 +2883,7 @@ fn public_api(
     let mut namespaces: Vec<(String, Vec<(String, String)>)> = Vec::new();
     let mut functions: Vec<String> = Vec::new();
     let mut unpublished: Vec<(String, String, usize)> = Vec::new();
+    let mut opaque: Vec<String> = Vec::new();
     // Where the surface starts.
     //
     // A project that named its root files said which modules are the product,
@@ -2882,7 +2971,7 @@ fn public_api(
             // object literal. Asked second because the literal form is decided
             // by the *declaration* and this one by the symbol's flags, and a
             // declaration that is a variable can never be a module.
-            if let Some(properties) = module_namespace_of(snapshot, naming, record) {
+            if let Some(properties) = module_namespace_of(snapshot, naming, module, record) {
                 namespaces.push((published.clone(), properties));
                 continue;
             }
@@ -2917,6 +3006,9 @@ fn public_api(
             let (declaration, name) =
                 resolved.unwrap_or_else(|| (declaration, record.name.clone()));
             let emitted = naming.qualified.get(&declaration).cloned().unwrap_or(name);
+            if opaque_signature(snapshot, declaration) {
+                opaque.push(emitted.clone());
+            }
             api.push((emitted, published.clone()));
         }
     }
@@ -2928,7 +3020,9 @@ fn public_api(
     functions.dedup();
     unpublished.sort_unstable();
     unpublished.dedup();
-    (api, namespaces, functions, unpublished)
+    opaque.sort_unstable();
+    opaque.dedup();
+    (api, namespaces, functions, unpublished, opaque)
 }
 
 /// What the entry modules publish: plain names, namespaces of names, and the
@@ -2938,6 +3032,7 @@ type PublicSurface = (
     Vec<(String, Vec<(String, String)>)>,
     Vec<String>,
     Vec<(String, String, usize)>,
+    Vec<String>,
 );
 
 /// Record what the entry modules publish, and keep a published global's name.
@@ -2953,7 +3048,7 @@ fn publish_surface(
     module: &ModuleScope,
     entry: &[String],
 ) {
-    let (api, namespaces, functions, unpublished) =
+    let (api, namespaces, functions, unpublished, opaque) =
         public_api(snapshot, naming, module, entry);
     // Only the ones that are not functions: a name in `functions` is published
     // by calling something, and a global that happens to share it is a
@@ -2966,15 +3061,24 @@ fn publish_surface(
     // `static` linkage, which is also what keeps `hir::globals` narrowing it --
     // the guard there is about a reader this compiler cannot see, and it has
     // still never met one.
+    // A namespace's value members are globals too, and they are not in `api` --
+    // `path.win32.sep` is published on the namespace object rather than on
+    // `exports`, so nothing above marks it. Without this it stays `static` and
+    // the addon, a different translation unit, cannot see it.
+    let members = namespaces
+        .iter()
+        .flat_map(|(_, properties)| properties.iter().map(|(_, emitted)| emitted.clone()));
     let settled: Vec<usize> = api
         .iter()
         .filter(|(_, published)| !functions.contains(published))
-        .filter_map(|(emitted, _)| {
+        .map(|(emitted, _)| emitted.clone())
+        .chain(members)
+        .filter_map(|emitted| {
             let at = lowered
                 .program
                 .globals
                 .iter()
-                .position(|global| global.name == *emitted)?;
+                .position(|global| global.name == emitted)?;
             lowered
                 .program
                 .global_is_settled(u32::try_from(at).unwrap_or(u32::MAX))
@@ -2988,6 +3092,7 @@ fn publish_surface(
     lowered.program.public_namespaces = namespaces;
     lowered.program.public_functions = functions;
     lowered.program.unpublished_modules = unpublished;
+    lowered.program.opaque_signatures = opaque;
 }
 
 #[must_use]

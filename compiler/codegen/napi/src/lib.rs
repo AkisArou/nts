@@ -1488,6 +1488,41 @@ fn preamble() -> String {
     out
 }
 
+/// Every layout that is a class, by name.
+///
+/// A name appearing before a `#` in some function is one: it has methods, and
+/// its behaviour is not carried by its fields.
+fn class_names(program: &hir::Program) -> FxHashSet<String> {
+    program
+        .funcs
+        .iter()
+        .filter_map(|f| f.name.split_once('#').map(|(owner, _)| owner.to_owned()))
+        .collect()
+}
+
+/// Why a function whose erased slot the boundary cannot satisfy gets no wrapper.
+///
+/// `Uint8Array | ArrayBuffer` erases, and no argument node can offer would
+/// build one -- so a wrapper for it accepts everything and throws for
+/// everything. `buffer.isUtf8` went from `typeof` being `"undefined"` to
+/// `"function"` with every call throwing, which is worse than absent: a
+/// presence check that used to fail now passes, and only a call finds out.
+///
+/// `hir::lower::opaque_signature` decides it, because the declaration is the
+/// only place that still knows which union erased.
+fn opaque_slot(program: &hir::Program, name: &str) -> Option<Skipped> {
+    program
+        .opaque_signatures
+        .iter()
+        .any(|at| at == name)
+        .then(|| Skipped {
+            function: name.to_owned(),
+            reason: "takes or returns a union that erases and whose members the boundary \
+                     cannot build, so no argument would satisfy it"
+                .to_owned(),
+        })
+}
+
 /// Why a function the C backend dropped gets no wrapper.
 ///
 /// A refused body leaves its `Func` in place, so every question the wrapper
@@ -2123,9 +2158,25 @@ fn emit_namespaces(
         let mut carried = 0usize;
         for (property, name_of) in properties {
             if !emitted.contains(&name_of.as_str()) {
+                // A member that is a *value* rather than a function.
+                // `export const sep = "/"` is a global, and a namespace built
+                // only out of wrappers had neither `sep` nor `delimiter` --
+                // which is the one place `posix` and `win32` differ in a way
+                // callers depend on, `"/"` against `"\\"`.
+                //
+                // Read after `module__init()`, for the reason the top-level
+                // value exports are: a deferred global holds its zero until
+                // module evaluation assigns it.
+                if let Some(text) = namespace_value(program, name_of, property) {
+                    out.push_str(&text.replace("__NTS_NS__", &object));
+                    carried += 1;
+                    continue;
+                }
                 skipped.push(Skipped {
                     function: format!("{name}.{property}"),
-                    reason: "is a namespace member whose function has no wrapper".to_owned(),
+                    reason: "is a namespace member that is neither a wrapped function nor a \
+                             value this backend can carry"
+                        .to_owned(),
                 });
                 continue;
             }
@@ -2149,6 +2200,85 @@ fn emit_namespaces(
             );
         }
     }
+}
+
+/// The `extern` declarations a namespace's value members need.
+///
+/// Skips anything `declare_value_exports` already wrote: `path.sep` and
+/// `path.posix.sep` are the same global under two names, and declaring it twice
+/// is a redefinition rather than a duplicate.
+fn declare_namespace_values(
+    program: &hir::Program,
+    values: &[(&hir::Global, &str, Cross)],
+    functions: &[String],
+) -> String {
+    let mut out = String::new();
+    let mut written: FxHashSet<&str> =
+        values.iter().map(|(global, _, _)| global.name.as_str()).collect();
+    for (_, properties) in &program.public_namespaces {
+        for (property, emitted) in properties {
+            if !written.insert(emitted.as_str())
+                || namespace_value(program, emitted, property).is_none()
+            {
+                continue;
+            }
+            let Some(global) = program.globals.iter().find(|g| g.name == *emitted) else {
+                continue;
+            };
+            let _ = writeln!(
+                out,
+                "extern {} {};",
+                c_type(&global.ty, &program.layouts),
+                c_global(&global.name, functions.iter().map(String::as_str))
+            );
+        }
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
+/// One namespace member that is a global rather than a function.
+///
+/// `__NTS_NS__` stands in for the namespace object, which the caller
+/// substitutes: the same text is written once per namespace and the object's
+/// C name is the only thing that differs.
+///
+/// `None` when the name is not an exported global this backend can carry, which
+/// is what makes the caller's decline honest rather than a guess.
+fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Option<String> {
+    let at = program
+        .globals
+        .iter()
+        .position(|global| global.name == *emitted && global.exported)?;
+    let global = &program.globals[at];
+    // The same rule the top-level value exports take: a global nothing writes
+    // has no value to publish, and publishing it binds the name to `undefined`.
+    if global.deferred && !program.global_is_initialized(u32::try_from(at).unwrap_or(u32::MAX)) {
+        return None;
+    }
+    let crossing = cross(&global.ty, &program.layouts, &FxHashSet::default())?;
+    if matches!(crossing, Cross::Object(_) | Cross::Void) {
+        return None;
+    }
+    let symbol = c_global(&global.name, std::iter::empty());
+    let key = c_string_literal(property);
+    let make = match crossing {
+        Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
+        Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
+        Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
+        Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
+        Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
+        Cross::Elements(inner) => format!(
+            "{}(env, {symbol}, &value)",
+            elements_helper(&inner, &program.layouts)
+        ),
+        Cross::Object(_) | Cross::Void => return None,
+    };
+    Some(format!(
+        "    {{\n        napi_value value;\n        if (!nts_napi_check(env, {make}, \"could not create a namespace value\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, __NTS_NS__, {key}, value), \"could not add a value to a namespace\")) return NULL;\n    }}\n"
+    ))
 }
 
 /// A value export: a module-scope binding published by its *value*.
@@ -2419,13 +2549,7 @@ pub fn emit(program: &hir::Program) -> Addon {
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let mut out = preamble();
 
-    // A layout whose name appears before a `#` in some function is a class:
-    // it has methods, and its behaviour is not carried by its fields.
-    let classes: FxHashSet<String> = program
-        .funcs
-        .iter()
-        .filter_map(|f| f.name.split_once('#').map(|(owner, _)| owner.to_owned()))
-        .collect();
+    let classes = class_names(program);
     let ownership = hir::own::summarize(program, &program.layouts);
     let release_managed = program.provider == hir::Provider::ReferenceCounting;
 
@@ -2491,6 +2615,10 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             skipped.push(missing);
             continue;
         }
+        if let Some(missing) = opaque_slot(program, &func.name) {
+            skipped.push(missing);
+            continue;
+        }
         match wrapper(
             func,
             &program.layouts,
@@ -2527,6 +2655,12 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let functions: Vec<String> =
         program.funcs.iter().map(|func| func.name.clone()).collect();
     out.push_str(&declare_value_exports(&values, &program.layouts, &functions));
+    // A namespace's value members are globals too, and they are not in
+    // `public_api` -- `path.win32.sep` is published on the namespace object
+    // rather than on `exports`. Without the extern the addon, a different
+    // translation unit from `program.c`, reports `use of undeclared identifier
+    // 'sep17'`.
+    out.push_str(&declare_namespace_values(program, &values, &functions));
 
     out.push_str("NAPI_MODULE_INIT() {\n");
     // Run the module's own top-level code before anything can call into it.
