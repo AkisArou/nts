@@ -105,6 +105,20 @@ for (const module of modules) {
     rows.push({ name, symbol, length: 0, demands: demanded.get(symbol) ?? null, isClass: true });
   }
 
+  // **Count what was not matched, because the class case was found by accident.**
+  // The function pattern requires a `nts_napi_set_length` call immediately after
+  // the `napi_create_function`. A function published without one would be
+  // skipped in silence and would be exactly the interesting case -- length 0
+  // against whatever it demands, which is how `fs.Stats` reads. So the two
+  // counts are compared and a shortfall is reported rather than absorbed.
+  const created = (source.match(/napi_create_function\(env, "/g) ?? []).length;
+  const paired = rows.filter((r) => r.isClass !== true).length;
+  if (created > paired) {
+    console.log(`  UNPAIRED        ${module}: ${created} function(s) created, ${paired} with a length this could read`);
+    console.log("                  The unread ones are skipped, and a function with no set_length is");
+    console.log("                  the shape most likely to disagree. This is a floor, not a clearance.");
+  }
+
   if (rows.length === 0) {
     // **A module publishing no functions is not a parse failure**, and calling
     // it one turned six honest rows into six alarms on the first run.
