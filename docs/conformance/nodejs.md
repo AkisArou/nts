@@ -10054,9 +10054,20 @@ produced it, and a stateful matcher is a traversal with a memory.
 
 **Zero declines means two opposite things, and the table would mislead without
 this line.** `punycode` has none because all six of its exports cross.
-`fs` has none because nothing gets far enough to be declined: 211 own roots,
-NTS2009 at the backend, and an addon publishing zero. A module with no
+`fs` has none because nothing gets far enough to be declined. A module with no
 complaints from the wrapper is either finished or has not arrived.
+
+**And `fs`'s zero is a reporting gap, not just a state.** It declares 291
+exported functions and 12 exported classes. Its emitted `addon.c` contains zero
+`napi_set_named_property` calls -- `punycode`'s contains six -- and the compiler
+prints **no decline naming any of the 303**. Six NTS2009 at the backend and 211
+own roots, and not one line that says why `readFileSync` is absent.
+
+Every other module accounts for its missing surface: `zlib` declines 53 exports
+by name, `stream` 28, `http` 25. `fs` declines none and publishes none. Someone
+asking "why is `fs.readFile` not there" gets no answer from the tool, which is
+the same shape as `asRequest` blocking 21 functions with nothing printed, at
+twelve times the scale.
 
 `string_decoder` is the other instructive row: 2 declines and **0 own roots**,
 which is the whole of its position. Nothing in the module is wrong. It is
