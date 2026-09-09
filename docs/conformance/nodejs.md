@@ -15185,6 +15185,20 @@ shape-only, **0 hollow**, 15 of 22 modules. That is the right answer for a
 rebuild with no compiler change in between, and it is now attributable to a tree
 this lane owns rather than to whatever the shared directory happened to hold.
 
+**Measured again after the compiler lane closed the erased-coalesce root**, on
+a pin taken after it, with all 22 modules rebuilt: 22 built, 22 loading, 0
+crashed, and **97 published names against 87 before**. The axis: 38 pass, 29
+behaviour-dependent, 9 shape-only, 0 hollow, 15 modules -- **identical module by
+module**, not merely in total. `os` alone went from 17 published names to 21 and
+its five passes did not become six.
+
+Ten more published names and not one more test passing. That is the third time
+this lane has measured that shape, and it is the reason the axis and the name
+count are kept in separate columns: **a published name is a ceiling on what
+could pass, not a count of what does.** The fix is real -- `parseFileMode`
+compiles and the `validators.ts` chain moved -- and the tests those names would
+satisfy sit behind the regular-expression engine.
+
 **And the lever that added seven of the last eight modules is empty.**
 `hidden-exports.mjs` against the same artifacts reports **0 node-own names
 published and not delivered** -- six names reach no test at all
