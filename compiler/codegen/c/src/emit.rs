@@ -3873,6 +3873,50 @@ fn emit_terminator(
 
 #[cfg(test)]
 mod tests {
+    /// `erasable` and `erased_tag` are one decision written twice, and they
+    /// have disagreed six times.
+    ///
+    /// Each time the same way: a `ManagedType` variant is added, taught to the
+    /// backend that has to spell it, and not to the predicate that decides
+    /// whether it may be boxed into an `unknown`. `Symbol` was the fourth,
+    /// `AnyView` the fifth, and `DataView` and `Date` together the sixth --
+    /// that one found by the JVM lane failing to exercise `instanceof DataView`
+    /// end to end, and by the C lane refusing the identical program, which is
+    /// what said the gap was upstream of either backend.
+    ///
+    /// The comments on both lists already say some version of "a test is worth
+    /// nothing if the value cannot get into the thing being tested". Writing it
+    /// a seventh time is not the fix. This is.
+    #[test]
+    fn the_two_erasure_lists_agree() {
+        use nts_semantic_schema::schema::TypeId;
+        let element = Box::new(HirType::Int { bits: 8, signed: false });
+        let managed = [
+            ManagedType::String,
+            ManagedType::Object(TypeId(1)),
+            ManagedType::Array(Box::new(HirType::NUMBER)),
+            ManagedType::View(element.clone()),
+            ManagedType::AnyView,
+            ManagedType::Buffer,
+            ManagedType::DataView,
+            ManagedType::Date,
+            ManagedType::Symbol,
+            ManagedType::Promise(Box::new(HirType::NUMBER)),
+            ManagedType::Map(Box::new(HirType::NUMBER), Box::new(HirType::NUMBER)),
+            ManagedType::Set(Box::new(HirType::NUMBER)),
+        ];
+        for kind in managed {
+            let ty = HirType::Managed(kind);
+            assert_eq!(
+                nts_core::hir::lower::erasable(&ty),
+                erased_tag(&ty).is_some(),
+                "`erasable` and `erased_tag` disagree about {ty:?}; one of the two \
+                 lists has learned a variant the other has not, which is how \
+                 `Symbol`, `AnyView`, `DataView` and `Date` were each missed",
+            );
+        }
+    }
+
     use super::*;
 
     #[test]

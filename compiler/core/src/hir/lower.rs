@@ -3736,7 +3736,16 @@ fn readable_back(ty: &HirType) -> bool {
 ///
 /// Stated once here so the two in this file cannot disagree again;
 /// `erasure_and_read_back_are_one_fact` is what holds them together.
-fn erasable(ty: &HirType) -> bool {
+/// Whether a value of this type may be boxed into an `unknown`.
+///
+/// **Public so that the C backend can hold it against `erased_tag`.** The two
+/// are one decision written twice -- this says a value may be asked about, that
+/// says which tag it carries -- and they have disagreed six times, always the
+/// same way: a variant taught to the backend that has to spell it and not to
+/// the predicate that decides whether it may be asked about. The seventh is a
+/// test rather than a comment.
+#[must_use]
+pub fn erasable(ty: &HirType) -> bool {
     matches!(
         ty,
         HirType::Float { .. }
@@ -3777,6 +3786,27 @@ fn erasable(ty: &HirType) -> bool {
                     // rejected. So a representation that cannot be boxed is a
                     // representation that cannot be reported on.
                     | ManagedType::AnyView
+                    // And a `DataView`, and a `Date`. The **sixth** time this
+                    // list has gone stale, and the first with two entries at
+                    // once -- both have been in the C backend's `erased_tag`
+                    // for longer than `AnyView` has, under the same
+                    // `NTS_TAG_OBJECT` as every other reference, so the boxing
+                    // was always emittable and only this list said no.
+                    //
+                    // Found by the JVM lane probing `instanceof DataView` end
+                    // to end: the predicate landed in both backends and a
+                    // *constructed* `DataView` still could not reach an
+                    // `unknown` to be asked about. Both lanes refused the same
+                    // program with the same message, which is what said the
+                    // gap was upstream of either.
+                    //
+                    // The pattern this list keeps repeating: a variant is added
+                    // to `ManagedType`, taught to the backend that has to spell
+                    // it, and not to the predicate that decides whether it may
+                    // be asked about. A test is worth nothing if the value
+                    // cannot get into the thing being tested.
+                    | ManagedType::DataView
+                    | ManagedType::Date
             )
     )
 }
@@ -12490,6 +12520,20 @@ impl<'a> FuncBuilder<'a> {
         let helper = match (name.as_str(), kind) {
             (_, Some(_)) => "nts_is_view_kind",
             ("ArrayBuffer", _) => "nts_is_buffer",
+            // One struct and one descriptor, so no per-class layout exists to
+            // find and the runtime answers it -- the same reason a typed array
+            // is not a class here, without the kind, because there is only one.
+            ("DataView", _) => "nts_is_data_view",
+            // A `Date` likewise: one struct and one descriptor, and its whole
+            // contents are the specification's time value.
+            //
+            // `Map` and `Set` are *not* here, and the reason is the JVM lane's:
+            // `newMap` and `newSet` both return a bare `NtsMap` and drop the
+            // kind they are handed, so `instanceof Set` would answer true for a
+            // `Map` -- a silent wrong answer rather than a refusal, which is
+            // the failure this compiler exists to avoid. They land when that
+            // class carries its kind.
+            ("Date", _) => "nts_is_date",
             ("Promise", _) => "nts_is_promise",
             _ => return Ok(None),
         };

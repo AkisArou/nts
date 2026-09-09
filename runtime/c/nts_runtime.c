@@ -4773,6 +4773,33 @@ bool nts_value_is_view(NtsValue value) {
          object->descriptor == &nts_desc_dataview;
 }
 
+/* `value instanceof DataView`.
+ *
+ * A `DataView` is not a class here for the reason a typed array is not: it has
+ * one struct and one descriptor, so there is no per-class layout for the class
+ * search to find, and the runtime answers it instead. Unlike a view it needs no
+ * kind beside the descriptor -- there is only one `DataView`. */
+/* `value instanceof Date`.
+ *
+ * The same descriptor comparison, and a `Date` is a class here no more than a
+ * `DataView` is: one struct, one descriptor, and its whole contents are the
+ * time value the specification names. */
+bool nts_is_date(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor == &nts_desc_date;
+}
+
+bool nts_is_data_view(NtsValue value) {
+  if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
+    return false;
+  }
+  const NtsHeader *object = nts_value_reference(value);
+  return object && object->descriptor == &nts_desc_dataview;
+}
+
 bool nts_is_view_kind(NtsValue value, double kind) {
   if (!NTS_TAG_IS_REFERENCE(nts_value_tag(value))) {
     return false;

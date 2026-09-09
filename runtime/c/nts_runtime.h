@@ -1695,6 +1695,8 @@ NTS_READS_ONLY bool nts_is_view_kind(NtsValue value, double kind);
  * both -- and unlike a typed array there is nothing below the kind to
  * distinguish, since `ArrayBuffer` is one class rather than nine. */
 NTS_READS_ONLY bool nts_is_buffer(NtsValue value);
+NTS_READS_ONLY bool nts_is_data_view(NtsValue value);
+NTS_READS_ONLY bool nts_is_date(NtsValue value);
 
 /* `value instanceof Promise`.
  *

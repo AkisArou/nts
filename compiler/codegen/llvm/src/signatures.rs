@@ -163,6 +163,8 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_is_array", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_buffer", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_class", returns: "zeroext i1", params: &["i32", "i64", "ptr"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_data_view", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
+    Signature { name: "nts_is_date", returns: "zeroext i1", params: &["i32", "i64"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_is_finite", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_integer", returns: "zeroext i1", params: &["double"], attributes: &[] },
     Signature { name: "nts_is_owner_thread", returns: "zeroext i1", params: &[], attributes: &[] },
