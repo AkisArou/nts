@@ -12982,8 +12982,36 @@ now:
   while the C writes to the descriptor. If those seven do diverge when `console`
   starts publishing, its ceiling is 12 of 19 rather than 19.
 
-The honest form of that last line today is *if*, and it stays *if* until
-`console` publishes something to measure.
+### Confirmed, without waiting for `console` to publish
+
+`binding-probe.sh` builds an addon around a module's C without compiling the
+module, so the mechanism can be measured directly.
+`tooling/conformance/probes/stdout-capture.ts` declares `nts_write_stdout` and
+calls it. Both directions:
+
+    compiled binding      wrote to the terminal; the reassigned write captured ""
+                          -> NOT OBSERVED
+    interpreted stand-in  the reassigned write captured "HELLO-FROM-THE-STANDIN\n"
+                          -> OBSERVED
+
+So the stand-in is observed and the compiled binding is not, for `stdout` and
+not only for `cwd`. And the seven files **assert on what they captured** --
+node's `test-console-count.js` is
+
+    process.stdout.write = (string) => buf = string;
+    …
+    assert.strictEqual(buf, 'default: 1\n');
+
+and this lane's `count-static.js` does the same. With the compiled binding
+writing to descriptor 1, `buf` stays empty and every assertion fails.
+
+**`console`'s ceiling is 12 of 19, and that is measured rather than predicted.**
+Two of the twenty-one candidates are now confirmed -- `test-path-resolve.js` by
+running it, and this class by probing the binding both ways.
+
+The rest of the list stays candidates. What changed is that the mechanism is no
+longer in question: a stand-in that forwards to a patchable property is observed
+by a test that patches it, and the C that replaces it is not.
 
 ## Conventions
 
