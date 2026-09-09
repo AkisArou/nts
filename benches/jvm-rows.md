@@ -1395,6 +1395,36 @@ workload, best of seven, one JVM per arm. Good enough for a consistent 3-4%
 direction seen twice; not good enough to publish a ratio from, and one RefD
 round came back at 771197 against a 452537 minimum, so the spread is wide.
 
+### Every reference checked for width at once, and 48 of 51 agree
+
+`fib`'s reference was narrower than the program it stands for, which raised the
+obvious question about the other fifty. `tooling/bench/ref-widths.sh` answers it
+mechanically rather than by eye, and the answer is short.
+
+The check is not "does the Java say `int`" -- `int` is usually right, for a loop
+counter or an index. It is **does the reference return a narrower type than the
+middle end could prove**. `specialize` gives the whole-number path a signature:
+`(I)I` means the program's result really is an int32 and a reference returning
+`int` computes the same thing; `(I)D` means it is not, and a reference returning
+`int` is a different program.
+
+    exceptions     ours=double  ref=int
+    fib            ours=double  ref=int
+    instanceof     ours=double  ref=int
+
+Three. **Forty-eight agree**, and that is the useful half: this axis is not a
+systematic problem with the suite and does not need doubting case by case again.
+
+Of the three, `exceptions` is at 0.01x and nothing about a reference's width
+will trouble it. `fib` is priced above and correcting it moves the row against
+us. **`instanceof` at 1.08x is the one that is both losing and unpriced**, and
+it should get the same one-variable treatment before anything else is said
+about it.
+
+The script reports and does not fail, deliberately: `fib` showed that a
+narrower reference can be *slower*, so a mismatch is a question with a
+measurement attached and not a defect to ratchet on.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
