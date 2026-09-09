@@ -1004,6 +1004,35 @@ is not a reachable goal for a row whose reference is vectorised assembly the JDK
 ships -- and treating it as one is how `toInt32` ended up at the top of a queue
 on the strength of a ratio that could not move.
 
+- **Dropping the integrality test from a subscript's bounds check.** `bytes` is
+  1.09x and `NtsRuntime.bounds` is **9.95%** of its profile, where the reference
+  -- a `byte[]` with `& 0xff` per read -- has no such frame at all. All four
+  sites take the *double* overload, which pays `(int) index` and then
+  `i == index`, converting back to compare, before two range checks. Seventeen
+  sites across the corpus take it and ten take the `int` one. **[-4.3%. The
+  guard pays for itself.]**
+
+  Priced by swapping the jar under the same emitted classes, with the check
+  removed -- unsound, since `i == index` is what makes `xs[1.5]` answer
+  undefined instead of element 1, but that is what makes it a *price* rather
+  than a candidate. Five interleaved rounds, identical checksums:
+
+      stock (with the test)      749,653 ns
+      without it                 781,617 ns    +4.3% SLOWER
+      ref                        659,671 ns
+
+  **Removing work made it slower**, and the reason is that the test is
+  load-bearing for the optimiser rather than for the program:
+  `i == index && i >= 0 && i < length` lets C2 prove the index is exactly that
+  `int` and in range, so it eliminates the *array's own* bounds check on the
+  access that follows. Without it C2 cannot relate the two and both survive.
+
+  So the 9.95% is not overhead to remove, and a `whole` fact from the middle end
+  would not buy it either -- the fact would let us *skip* the test, which is the
+  thing that measured worse. **This is the second guard tonight that looked like
+  dead work and was holding something up**, after `NtsArrayD.keepFirst`'s fill,
+  which turned out to be hole semantics rather than collector hygiene.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
