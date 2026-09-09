@@ -1668,7 +1668,13 @@ typedef enum {
     FS_STAT,
     FS_STAT_BIGINT,
     FS_STATFS,
-    FS_STATFS_BIGINT
+    FS_STATFS_BIGINT,
+    /* A path the call produced: `mkdtemp` invents one, `readlink` and
+     * `realpath` resolve one. Two spellings because a path is not always valid
+     * UTF-8 -- the byte form is the one that survives a name the filesystem
+     * accepted and the encoding cannot represent. */
+    FS_PATH_TEXT,
+    FS_PATH_BYTES
 } AsyncShape;
 
 typedef struct {
@@ -1678,6 +1684,9 @@ typedef struct {
     /* libuv keeps the pointer, not the bytes. Freed with the request. */
     char *first;
     char *second;
+    /* Bytes a write is sending. libuv does not copy them either, so they have
+     * to outlive the call exactly as the paths do. */
+    char *buffer;
 } AsyncRequest;
 
 static void async_call_status(NtsHeader *callback, double errno_value) {
@@ -1730,6 +1739,26 @@ static NtsArray *statfs_numbers_of(const void *ptr) {
     return values;
 }
 
+static void async_call_path(NtsHeader *callback, double errno_value,
+                            NtsString *path) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, NtsString *))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, errno_value, path);
+}
+
+/* A path as its bytes. The same reason `filename_bytes` above gives: the
+ * filesystem accepted these bytes and an encoding may not be able to name
+ * them, so the byte form is the one that cannot lose. */
+static NtsArray *path_bytes_of(const char *text) {
+    size_t length = text == NULL ? 0 : strlen(text);
+    NtsArray *out = nts_array_new(&nts_node_desc_double, (double)length);
+    for (size_t i = 0; i < length; i++) {
+        NTS_ITEMS(out, double)[i] = (double)(unsigned char)text[i];
+    }
+    return out;
+}
+
 static void on_async_done(uv_fs_t *request) {
     AsyncRequest *pending = (AsyncRequest *)request;
     ssize_t result = request->result;
@@ -1751,6 +1780,24 @@ static void on_async_done(uv_fs_t *request) {
         async_call_columns(pending->callback, failed,
                            result < 0 ? nts_array_new(&nts_desc_ref, 0)
                                       : statfs_bigint_of(request->ptr));
+    } else if (pending->shape == FS_PATH_TEXT) {
+        /* `mkdtemp` leaves the name in `path`; `readlink` and `realpath` leave
+         * it in `ptr`. Whichever is set is the answer, and on failure the empty
+         * string is -- the errno beside it is what the module reads. */
+        const char *produced = request->ptr != NULL ? (const char *)request->ptr
+                                                    : request->path;
+        async_call_path(pending->callback, failed,
+                        nts_string_from_utf8(
+                            result < 0 || produced == NULL ? "" : produced,
+                            result < 0 || produced == NULL ? 0
+                                                           : strlen(produced)));
+    } else if (pending->shape == FS_PATH_BYTES) {
+        const char *produced = request->ptr != NULL ? (const char *)request->ptr
+                                                    : request->path;
+        async_call_columns(pending->callback, failed,
+                           result < 0 || produced == NULL
+                               ? empty_doubles()
+                               : path_bytes_of(produced));
     } else if (pending->shape == FS_NUMBER) {
         async_call_number(pending->callback, failed,
                           result < 0 ? 0.0 : (double)result);
@@ -1762,6 +1809,7 @@ static void on_async_done(uv_fs_t *request) {
     uv_fs_req_cleanup(request);
     free(pending->first);
     free(pending->second);
+    free(pending->buffer);
     free(pending);
 }
 
@@ -1809,6 +1857,12 @@ static void async_fail(NtsHeader *callback, AsyncShape shape, double errno_value
     case FS_STAT_BIGINT:
     case FS_STATFS_BIGINT:
         async_call_columns(callback, errno_value, nts_array_new(&nts_desc_ref, 0));
+        break;
+    case FS_PATH_TEXT:
+        async_call_path(callback, errno_value, nts_string_from_utf8("", 0));
+        break;
+    case FS_PATH_BYTES:
+        async_call_columns(callback, errno_value, empty_doubles());
         break;
     default:
         async_call_status(callback, errno_value);
@@ -2141,4 +2195,105 @@ void nts_fs_statfs_bigint_bytes_async(NtsArray *path, NtsHeader *callback) {
     ASYNC_BEGIN(FS_STATFS_BIGINT, native_byte_path(path), NULL)
     ASYNC_END(FS_STATFS_BIGINT, uv_fs_statfs(fs_loop(), &pending->request,
                                              pending->first, on_async_done))
+}
+
+/* Paths a call produces, and the two writes. */
+
+void nts_fs_mkdtemp_async(NtsString *template_path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_TEXT, native_path(template_path), NULL)
+    ASYNC_END(FS_PATH_TEXT, uv_fs_mkdtemp(fs_loop(), &pending->request,
+                                          pending->first, on_async_done))
+}
+
+void nts_fs_mkdtemp_bytes_async(NtsArray *template_path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_BYTES, native_byte_path(template_path), NULL)
+    ASYNC_END(FS_PATH_BYTES, uv_fs_mkdtemp(fs_loop(), &pending->request,
+                                           pending->first, on_async_done))
+}
+
+void nts_fs_readlink_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_TEXT, native_path(path), NULL)
+    ASYNC_END(FS_PATH_TEXT, uv_fs_readlink(fs_loop(), &pending->request,
+                                           pending->first, on_async_done))
+}
+
+void nts_fs_readlink_async_bytes(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_BYTES, native_byte_path(path), NULL)
+    ASYNC_END(FS_PATH_BYTES, uv_fs_readlink(fs_loop(), &pending->request,
+                                            pending->first, on_async_done))
+}
+
+void nts_fs_realpath_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_TEXT, native_path(path), NULL)
+    ASYNC_END(FS_PATH_TEXT, uv_fs_realpath(fs_loop(), &pending->request,
+                                           pending->first, on_async_done))
+}
+
+void nts_fs_realpath_bytes_async(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_PATH_BYTES, native_byte_path(path), NULL)
+    ASYNC_END(FS_PATH_BYTES, uv_fs_realpath(fs_loop(), &pending->request,
+                                            pending->first, on_async_done))
+}
+
+/* The bytes of a `number[]`, copied because libuv keeps the pointer and the
+ * array belongs to the compiled program, which may collect or move it while
+ * the write is on the thread pool. */
+static char *bytes_of_array(const NtsArray *bytes, size_t *length_out) {
+    size_t length = bytes == NULL ? 0 : (size_t)bytes->header.length;
+    char *copy = malloc(length == 0 ? 1 : length);
+    if (copy == NULL) return NULL;
+    for (size_t i = 0; i < length; i++) {
+        copy[i] = (char)(unsigned char)NTS_ITEMS((NtsArray *)bytes, double)[i];
+    }
+    *length_out = length;
+    return copy;
+}
+
+void nts_fs_write_async(double fd, NtsArray *bytes, double position,
+                        NtsHeader *callback) {
+    ASYNC_BEGIN(FS_NUMBER, NULL, NULL)
+    size_t length = 0;
+    pending->buffer = bytes_of_array(bytes, &length);
+    if (pending->buffer == NULL) {
+        async_fail(callback, FS_NUMBER, (double)UV_ENOMEM, pending);
+        return;
+    }
+    uv_buf_t one = uv_buf_init(pending->buffer, (unsigned int)length);
+    ASYNC_END(FS_NUMBER,
+              uv_fs_write(fs_loop(), &pending->request, (uv_file)fd, &one, 1,
+                          (int64_t)position, on_async_done))
+}
+
+/* `writev` takes one flat byte array plus the length of each slice, because a
+ * `number[][]` has no representation that crosses. The slices are views into
+ * the one copy, so there is still exactly one allocation to outlive the call. */
+void nts_fs_writev_async(double fd, NtsArray *bytes, NtsArray *lengths,
+                         double position, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_NUMBER, NULL, NULL)
+    size_t total = 0;
+    pending->buffer = bytes_of_array(bytes, &total);
+    if (pending->buffer == NULL) {
+        async_fail(callback, FS_NUMBER, (double)UV_ENOMEM, pending);
+        return;
+    }
+    size_t count = lengths == NULL ? 0 : (size_t)lengths->header.length;
+    uv_buf_t *slices = count == 0 ? NULL : calloc(count, sizeof(uv_buf_t));
+    if (count != 0 && slices == NULL) {
+        async_fail(callback, FS_NUMBER, (double)UV_ENOMEM, pending);
+        return;
+    }
+    size_t offset = 0;
+    for (size_t i = 0; i < count; i++) {
+        size_t slice = (size_t)NTS_ITEMS(lengths, double)[i];
+        if (offset + slice > total) slice = total > offset ? total - offset : 0;
+        slices[i] = uv_buf_init(pending->buffer + offset, (unsigned int)slice);
+        offset += slice;
+    }
+    int status = uv_fs_write(fs_loop(), &pending->request, (uv_file)fd, slices,
+                             (unsigned int)count, (int64_t)position,
+                             on_async_done);
+    /* libuv copies the `uv_buf_t` array itself, unlike the bytes it points at,
+     * so the slice table is this function's to free either way. */
+    free(slices);
+    if (status != 0) async_fail(callback, FS_NUMBER, (double)status, pending);
 }
