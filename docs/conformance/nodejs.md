@@ -15516,53 +15516,44 @@ more sweeps rather than more targeted probes.
 
 ### The suite as it stands
 
-Sixteen case files, **97 questions compared, 15 disagreeing, 22 refused, 0 that
-did not build**. The fifteen disagreements are **four defects**:
+Seventeen case files. Against the compiler as of `78d69869`: **110 questions
+compared, 8 disagreeing, 21 refused, 0 that did not build.**
+
+**It has now confirmed a fix as well as found defects, which was the other half
+of the argument for building it.** Before `78d69869` the two optional-field
+files carried six disagreements including a SIGSEGV and a required field reading
+0. After it, both are clean:
+
+    optionalStringPresent    was CRASHED, signal SIGSEGV   now 3, node 3
+    mixedRequiredOnly        was 0                         now 7, node 7
+    twoOptionalPresent       was -2.27e+265                now agrees
+    mixedOptionalAndRequired was -2.49e+86                 now agrees
+    optionalNumberPresent    was -8.9e+11, unstable        now 19, node 19
+    optionalNumberAbsent     was "not published"           now -2, node -2
+
+The last row is the one to note: the empty-literal refusal is gone **and** the
+value that comes back is right, so the literal change and the contextual-member
+change land together without the wrong answer that forced the first revert.
+
+Three defects remain:
 
     exceptions do not cross a call frame        6 cases, two files
-    a struct with an optional field, erased     6 cases, one a SIGSEGV
     an indexed write at or past the length      2 cases, both SIGABRT
     integer-like keys are not promoted          1 case
 
-Ten files are clean, and they are what make the fifteen mean something:
+Eleven files are clean, one of them wholly -- twelve numeric formatting
+questions with no disagreement and no refusal: radix 16, radix 16 of a fraction,
+radix 2, radix 36, a negative in a radix conversion, an integer-valued double
+without a point, 1e20 in full, 1e21 crossing to exponent form, 1e-7 crossing the
+other way, Infinity, NaN, and negative zero without its sign.
 
-    number-and-string-seams        10   Grisu, int32 coercion, shift masking,
-                                        unsigned shift, remainder sign, UTF-16
-                                        length, surrogate halves, NaN, -0
-    coercion-and-object-seams       9   typeof null, object identity, template
-                                        stringification, a default parameter per
-                                        call, a destructuring default
-    spread-and-class-member-seams   8   a static method, a private field, a getter,
-                                        a setter, a rest parameter, array spread,
-                                        destructuring with a rest and a rename
-    string-and-number-method-seams  8   padStart, repeat(0), split(""), indexOf(""),
-                                        slice clamping, charAt past the end,
-                                        Number("   "), "ß".toUpperCase()
-    erasure-and-layout-seams        7   a derived instance through its base, a field
-                                        after an upcast, two required fields through
-                                        the same erased slot, a narrowing outliving
-                                        its branch
-    ordering-and-statement-seams    7   labelled break and continue, argument order,
-                                        assignment order, do-while, for update
-    control-flow-and-method-seams   6   virtual dispatch, finally after a return, a
-                                        return inside finally, closure capture,
-                                        short-circuiting, the nearest catch
-    callback-seams                  6   a callback reading and writing the enclosing
-                                        scope, called twice, its return used, two
-                                        arguments, one calling another
-    collection-and-json-seams       6   for...of order, Array.isArray, Object.keys
-                                        insertion order, sort lexicographic and with
-                                        a comparator, replace, join, concat
-    async-and-array-seams           4   await ordering, indexOf and NaN, negative
-                                        slice, code-unit comparison
+The rest: number and string seams 10, coercion and identity 9, spread and class
+members 8, string and number methods 8, erasure and layout 7, ordering and
+statements 7, control flow and dispatch 6, callbacks 6, collections and JSON 6,
+async and arrays 4.
 
-**Eighty-two of ninety-seven questions answered exactly as node answers them.**
-A profile where half of everything is wrong needs no instrument; one this exact
-has four specific things wrong with it, each reduced, each with a control that
-says what it is not.
-
-`callback-seams` and `spread-and-class-member-seams` matter most among the clean
-ones. Calls work, closures work, return values come back, static *methods*
+`callback-seams` and `spread-and-class-member-seams` still carry the most
+weight. Calls work, closures work, return values come back, static *methods*
 dispatch, private fields read, getters and setters run. So the exception defect
 is the unwind path and not calls, and `a class used as a value` is static
 *fields* and not class members generally.
