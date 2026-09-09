@@ -12577,6 +12577,47 @@ function's body.
 
 The invalid table is kept as `cvu-INVALID-deleted-pin.txt` rather than deleted.
 
+## The erased crossing published nine more names, in six modules, and moved no test
+
+`unknown` crosses in both directions now. Published names, before and after, on
+builds this lane made from each pin:
+
+| module | before | after |
+| --- | ---: | ---: |
+| `async_hooks` | 13 | **16** |
+| `buffer` | 3 | **5** |
+| `timers` | 2 | **3** |
+| `util` | 1 | **2** |
+| `stream` | 0 | **1** |
+| `url` | 0 | **1** |
+| `os`, `path`, `readline`, `punycode`, `net`, `http`, `fs` | unchanged | unchanged |
+
+**Nine names, six modules, and two of them off zero for the first time.**
+Thirteen of twenty-two now publish something, up from eleven.
+
+**The axis did not move.** `punycode` 3 real, `path` 9 real, `os` 3 real --
+**15 behaviour-dependent passes across 3 modules**, exactly as before, and still
+1 of 22 whole.
+
+That is the fifth time tonight, and by now the pattern is the finding rather
+than the disappointment:
+
+    join provided                       string_decoder 65 refusals -> 65, 0 published -> 0
+    errors.ts:547 cleared               reached by 15 modules, moved none
+    index-signature representation      4 own roots cleared, 0 exports crossed
+    toNamespacedPath widened            4 of 6 divergences closed, 0 files gained
+    erased crossing, both directions    +9 published names, 0 files gained
+
+Every one was correct work that made the compiler strictly better. **None of
+them moved the number the goal counts.** The reason is not that the work is
+small -- it is that a test file passes only when *every* name it touches is
+present and behaves, and these modules are far enough back that adding one name
+to `stream` leaves 248 files failing on the next one.
+
+`prize.mjs` is the instrument that says so in advance: `stream` has 248 to gain
+and its most-named absent export is `Readable` at 80 files. One name is not the
+unit; the unit is whatever a file needs, all of it.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
