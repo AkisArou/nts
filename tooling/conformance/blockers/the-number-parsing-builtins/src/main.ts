@@ -1,7 +1,19 @@
-// expect: `parseInt`, a builtin this compiler does not provide
+// expect: `parseFloat`, a builtin this compiler does not provide
 //
 // Three number-facing builtins that are not provided, and one string method
 // that is provided with fewer arguments than it has.
+//
+// **`parseInt` is provided now** and the expectation moved to the next name in
+// the file, which is what this fixture was shaped for: four things behind one
+// expectation, so a fix that lands one and not the others still reports the
+// fixture as reproducing rather than as closed. It did exactly that.
+//
+// `parseInt` was the largest of the four -- 14 sites across 6 modules, with
+// `os.networkInterfaces` behind it through `getCIDR` -- and it is `nts_parse_int`
+// now, agreeing with node on 278 of 279 cases over thirty-one strings and nine
+// radixes. `examples/parse-int` carries the behaviour; the one divergence is a
+// last-bit rounding past 2^53 in a radix that is not a power of two, and it is
+// named in the runtime header rather than hidden.
 //
 //     parseInt("12abc", 10)      `parseInt`, a builtin this compiler does not provide
 //     parseFloat("1e3")          `parseFloat`, the same

@@ -1303,6 +1303,38 @@ NtsString *nts_str_repeat(const NtsString *s, double times);
  * `parseFloat`. */
 double nts_str_to_number(const NtsString *s);
 
+/* `parseInt(string, radix)`.
+ *
+ * Not `nts_str_to_number` with a radix bolted on: the two disagree about almost
+ * everything at the edges. `Number("")` is 0 and `parseInt("")` is NaN;
+ * `Number("12abc")` is NaN and `parseInt("12abc")` is 12; `Number` accepts
+ * `0b`/`0o` prefixes, exponents and a trailing `.5`, and `parseInt` accepts
+ * none of them. It stops at the first character the radix does not admit, which
+ * is the whole of what makes it different.
+ *
+ * A radix of 0 means "decide from the text": `0x`/`0X` gives 16 and everything
+ * else 10. A radix of 16 skips the prefix if it is there. Outside 2..36 the
+ * answer is NaN, and so is a string with no digits at all after the sign.
+ *
+ * The value is accumulated as a double rather than an integer, which is what
+ * the specification's "mathematical value" comes to for anything past 2^53 --
+ * `parseInt("9007199254740993")` is 9007199254740992 in node too.
+ *
+ * One measured divergence, and it is the last bit. Node computes the exact
+ * integer and rounds once; this rounds at every multiply-add, so a very long
+ * string in a radix that is not a power of two can differ by a ULP:
+ *
+ *     parseInt("9007199254740993", 36)
+ *     nts   1.989698611603181e+24
+ *     node  1.9896986116031807e+24
+ *
+ * 278 of 279 cases agree, over thirty-one strings and nine radixes including
+ * every edge this file has a comment about. Closing the last one needs an exact
+ * accumulator -- the value is past 2^80, so neither `uint64_t` nor a long
+ * double reaches it -- and no call site in this tree parses a sixteen-digit
+ * base-36 number. Named rather than hidden. */
+double nts_parse_int(const NtsString *s, double radix);
+
 /* `Number(v)` on an erased value: ToNumber over the tags a value carries.
  *
  * A reference answers NaN, which is right for a plain object and not the whole

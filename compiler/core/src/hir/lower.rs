@@ -11073,6 +11073,22 @@ impl<'a> FuncBuilder<'a> {
         callee: NodeId,
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
+        // `Number.parseInt` before the intrinsic table, because that table's
+        // entries all take exactly one argument and this takes a radix.
+        //
+        // The same function object as the global in JavaScript, so it reaches
+        // the same helper rather than a second one -- and reaching a *different*
+        // one is how two spellings of an operation come to disagree, which this
+        // file has three comments about already.
+        if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            let parts = self.children(callee);
+            if let [object, member] = parts.as_slice()
+                && self.node(*object).text.as_deref() == Some("Number")
+                && self.node(*member).text.as_deref() == Some("parseInt")
+            {
+                return Some(self.lower_parse_int(id, arguments));
+            }
+        }
         if let Some(intrinsic) = self.intrinsic_of(callee) {
             return Some(self.lower_intrinsic(id, intrinsic, arguments));
         }
@@ -21696,6 +21712,9 @@ impl<'a> FuncBuilder<'a> {
             // and `isFinite`, because the whole difference the `Number.` forms
             // exist for is what they do to a value that is *not* a number,
             // and one cannot reach here.
+            // `Number.parseInt` and the global are the same function object in
+            // JavaScript, which is why this maps to the same helper rather than
+            // to a second one.
             "Number" => Some(match member {
                 "isNaN" => Intrinsic::NotANumber,
                 "isFinite" => Intrinsic::UnaryCall("nts_is_finite"),
@@ -21722,6 +21741,33 @@ impl<'a> FuncBuilder<'a> {
     /// from `Some(Err(..))`: the second is a builtin that is provided and was
     /// given something it cannot take, and it says so rather than falling
     /// through to "a builtin this compiler does not provide".
+    /// `parseInt(string, radix)`.
+    ///
+    /// The radix defaults to **zero** rather than to ten, because zero is what
+    /// the specification's "decide from the text" is: `parseInt("0x1f")` is 31
+    /// and `parseInt("0x1f", 10)` is 0. Passing ten as the default would answer
+    /// the second for both.
+    fn lower_parse_int(
+        &mut self,
+        id: NodeId,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let Some(text) = arguments.first() else {
+            return Err(self.unsupported(id, "`parseInt` with no argument"));
+        };
+        let value = self.lower_expression(*text)?;
+        let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
+        let origin = self.origin(id);
+        let radix = match arguments.get(1) {
+            Some(node) => {
+                let given = self.lower_expression(*node)?;
+                self.coerce(given, &HirType::NUMBER, *node)?
+            }
+            None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
+        };
+        Ok(self.runtime_call("nts_parse_int", vec![value, radix], HirType::NUMBER, origin))
+    }
+
     /// `setTimeout(fn, ms)` and `setInterval(fn, ms)`.
     ///
     /// A *capability* over the host's `post_delayed` rather than part of the
@@ -21817,6 +21863,20 @@ impl<'a> FuncBuilder<'a> {
         // they do to a value that is not a number, and one cannot reach here.
         if let Some(intrinsic) = global_predicate(name) {
             return Some(self.lower_intrinsic(id, intrinsic, arguments));
+        }
+        // `parseInt(string, radix)`, whose second argument is optional -- so it
+        // is read here rather than below, where every builtin takes exactly
+        // one.
+        //
+        // It is not `Number(s)` with a radix. `Number("")` is 0 and
+        // `parseInt("")` is NaN; `Number("12abc")` is NaN and `parseInt("12abc")`
+        // is 12. Stopping at the first character the radix does not admit is
+        // the whole of the difference, and `nts_parse_int` is where it lives.
+        //
+        // 14 sites across 6 modules, and `os.networkInterfaces` is behind one of
+        // them through `getCIDR`.
+        if name == "parseInt" {
+            return Some(self.lower_parse_int(id, arguments));
         }
         // The `timers` capability, which takes two arguments and so has to be
         // read before the single-argument builtins below.

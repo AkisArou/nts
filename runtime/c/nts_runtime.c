@@ -4000,6 +4000,68 @@ double nts_value_to_number(NtsValue value) {
   }
 }
 
+double nts_parse_int(const NtsString *s, double radix) {
+  if (!s) {
+    return (double)NAN;
+  }
+  uint32_t units = s->length;
+  uint32_t at = 0;
+  /* The specification's `StrWhiteSpaceChar`, which is what `trimStart` uses. */
+  while (at < units) {
+    uint16_t unit = nts_unit(s, at);
+    if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d &&
+        unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+      break;
+    }
+    at++;
+  }
+  bool negative = false;
+  if (at < units && (nts_unit(s, at) == '+' || nts_unit(s, at) == '-')) {
+    negative = nts_unit(s, at) == '-';
+    at++;
+  }
+  int32_t base = (int32_t)radix;
+  if (radix != radix || base == 0) {
+    base = 0;
+  }
+  if (base != 0 && (base < 2 || base > 36)) {
+    return (double)NAN;
+  }
+  if ((base == 0 || base == 16) && at + 1 < units && nts_unit(s, at) == '0' &&
+      (nts_unit(s, at + 1) == 'x' || nts_unit(s, at + 1) == 'X')) {
+    at += 2;
+    base = 16;
+  }
+  if (base == 0) {
+    base = 10;
+  }
+  double value = 0.0;
+  uint32_t digits = 0;
+  while (at < units) {
+    uint16_t unit = nts_unit(s, at);
+    int32_t digit;
+    if (unit >= '0' && unit <= '9') {
+      digit = (int32_t)(unit - '0');
+    } else if (unit >= 'a' && unit <= 'z') {
+      digit = (int32_t)(unit - 'a') + 10;
+    } else if (unit >= 'A' && unit <= 'Z') {
+      digit = (int32_t)(unit - 'A') + 10;
+    } else {
+      break;
+    }
+    if (digit >= base) {
+      break;
+    }
+    value = value * (double)base + (double)digit;
+    digits++;
+    at++;
+  }
+  if (digits == 0) {
+    return (double)NAN;
+  }
+  return negative ? -value : value;
+}
+
 double nts_str_to_number(const NtsString *s) {
   if (s == NULL) {
     return 0.0;
