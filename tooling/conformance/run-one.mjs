@@ -525,14 +525,27 @@ try {
   // object avoids rebuilding a second, merely equal value and losing identity
   // (`require('path/posix') === require('path').posix`). Existing shapers that
   // need only raw exports simply ignore the second argument.
-  const declaredSubpaths = shapeModule?.subpaths?.({ ...exports }, underTest) ?? null;
+  // `shapeInput`, not `{ ...exports }`, and the same below for internals and
+  // test bindings.
+  //
+  // `emptyExports` used to blank only what `shape()` was given. `subpaths()`,
+  // `internals()` and `testBindings()` each received the **real** exports, so a
+  // test reaching `internal/async_hooks` saw a fully working module while the
+  // public surface was empty -- and passed, and was counted hollow by
+  // `axis-controls.mjs` for it. Found by writing a file that exercises the
+  // async id stack and having the hollow check flag my own test.
+  //
+  // The claim this control makes is "a file that passes under this passes
+  // without the module having supplied the thing it names", and the facade is
+  // the module supplying it.
+  const declaredSubpaths = shapeModule?.subpaths?.(shapeInput, underTest) ?? null;
   if (declaredSubpaths !== null) {
     for (const [id, implementation] of Object.entries(declaredSubpaths)) {
       siblings.set(id, sabotaged ? {} : implementation);
     }
   }
-  const declaredInternals = shapeModule?.internals?.({ ...exports }) ?? null;
-  const declaredTestBindings = shapeModule?.testBindings?.({ ...exports }) ?? null;
+  const declaredInternals = shapeModule?.internals?.(shapeInput) ?? null;
+  const declaredTestBindings = shapeModule?.testBindings?.(shapeInput) ?? null;
   // A module that is also a global -- `console` -- has to be installed as one,
   // or a test comparing `require('console')` with `globalThis.console` sees
   // node's on one side and ours on the other. Declared per module rather than
