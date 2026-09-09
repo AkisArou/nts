@@ -121,7 +121,7 @@ different problem from the four rows losing by a lot.
 | `optional-chain` | 1.27x | the same `uirem` residual |
 | `awfy-queens` | 1.23x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
-| `array-methods` | 1.17x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
+| `array-methods` | 1.17x, **ART 6288 -> 144 B/op** | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
 | `number-format-double` | **1.15x** | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.05x / 1.02x | at its floor: both lanes vectorise |
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
@@ -2246,6 +2246,47 @@ for it buys 6,144 bytes an operation**, and the row is 43.7x on the axis that
 matters most on a phone.
 
 Stable across N=500, 2000 and 8000 -- 6288 every time.
+
+### `array-methods` on ART: 6288 bytes/op to 144, and the fix is free on HotSpot
+
+`fuse` is wired. A call to `nts_array_at_value` whose every use is an `Unerase`
+to a float now calls the scalar sibling, so the box is never built:
+
+    array-methods    before   HotSpot 144    ART 6288
+                     after    HotSpot 144    ART  144
+
+**Both runtimes now allocate exactly the case's `new double[16]` and nothing
+else.** The 6,144 bytes an operation -- 256 `NtsValue`s at 24 bytes, one a
+round -- are gone from ART, and HotSpot is unchanged because C2 was already
+removing them. A change worth nothing on one runtime and 43.7x on the other,
+which is the whole argument for having gone to ART.
+
+Nine cases still agree bit-for-bit between `java` and `dalvikvm`. Floor 137,
+46 tests, workspace clippy clean.
+
+**The substitution is a name.** `nts_array_at` already has table entries for the
+bare and the wrapped array, so rewriting the helper's name before the lookup
+picks the right overload for free. And it needs no precondition:
+`NtsRuntime.arrayAt` is `at < 0 ? NaN : a[at]` and `arrayAtValue(...).num` is
+the same expression with `ABSENT_NUMBER` being NaN.
+
+**What it cost was the fifth and sixth site that had to learn a value can be
+held differently from its declaration.** The verifier named both:
+
+    nth(D)D @9: checkcast
+    Type double_2nd is not assignable to 'java/lang/Object'
+
+`narrow_result` reconciles a descriptor's return with the HIR type, and a fused
+answer is declared `Erased` while being a `double` -- so it emitted a
+`checkcast NtsValue` against a double on the stack. The StackMapTable had the
+matching problem and called the slot a reference.
+
+**Both were found by reading the listing at the offset the verifier named**, one
+run each, against three wrong guesses on the cursor pass. The six sites are now
+asked in one place -- `held_differently` in `body.rs` -- because a value loaded
+as one representation and stored as another is not a wrong number, it is a frame
+the verifier rejects, and six passes answering that separately is how it took a
+night to learn once.
 
 ## Open, and whose
 
