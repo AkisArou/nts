@@ -171,8 +171,15 @@ export function shape(exports) {
   // Function properties are a Node compatibility shape. The ordinary
   // realpath functions walk components in TypeScript; only `.native` takes
   // libuv's direct resolver.
-  module.realpath.native = exports._realpathNative;
-  module.realpathSync.native = exports._realpathSyncNative;
+  // Same guard as the callable helpers: a compiled fs publishes neither of
+  // these yet, and `undefined.native = ...` reported a load failure for all 394
+  // of the module's files rather than naming the export.
+  if (module.realpath !== undefined) {
+    module.realpath.native = exports._realpathNative;
+  }
+  if (module.realpathSync !== undefined) {
+    module.realpathSync.native = exports._realpathSyncNative;
+  }
   delete module._realpathNative;
   delete module._realpathSyncNative;
   delete module._BigIntStats;
@@ -217,6 +224,8 @@ export function internals(exports) {
 
 /** Node's internal constructor takes fourteen bigint columns positionally. */
 function callableBigIntStats(Implementation) {
+  // Same guard as callableStats above.
+  if (Implementation === undefined) return undefined;
   function BigIntStats(
     dev,
     mode,
@@ -262,6 +271,13 @@ function callableBigIntStats(Implementation) {
  * a class; this wrapper supplies only the legacy CommonJS constructor shape.
  */
 function callableStats(Implementation) {
+  // Same guard as callableStats above.
+  if (Implementation === undefined) return undefined;
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test, naming nothing. See the same guard in buffer,
+  // console, events, http, net, querystring, stream, timers, url, util, zlib.
+  if (Implementation === undefined) return undefined;
   let warned = false;
   function Stats(...columns) {
     if (!warned) {
@@ -286,6 +302,8 @@ function callableStats(Implementation) {
  * static side of the `Readable`/`Writable` subclass.
  */
 function callableReadStream(Implementation) {
+  // Same guard as callableStats above.
+  if (Implementation === undefined) return undefined;
   function ReadStream(path, options) {
     return new Implementation(path, options);
   }
@@ -295,6 +313,8 @@ function callableReadStream(Implementation) {
 }
 
 function callableWriteStream(Implementation) {
+  // Same guard as callableStats above.
+  if (Implementation === undefined) return undefined;
   function WriteStream(path, options) {
     return new Implementation(path, options);
   }

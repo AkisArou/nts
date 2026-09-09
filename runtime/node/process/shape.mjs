@@ -11,8 +11,17 @@ export function shape(exports) {
   // These operations are implemented and typed in resources.ts. Only their
   // unusual CommonJS location -- a property of another function -- belongs in
   // this public-object shape layer.
-  instance.hrtime.bigint = exports._hrtimeBigInt;
-  instance.memoryUsage.rss = exports._memoryUsageRss;
+  // A compiled module may not publish this yet. Reaching through an absent
+  // export turns "one export is missing" into "the module did not load" -- one
+  // message for every test, naming nothing. See the same guard in buffer,
+  // console, events, http, net, querystring, stream, timers, url, util, zlib.
+  if (instance === undefined) return {};
+  if (instance.hrtime !== undefined) {
+    instance.hrtime.bigint = exports._hrtimeBigInt;
+  }
+  if (instance.memoryUsage !== undefined) {
+    instance.memoryUsage.rss = exports._memoryUsageRss;
+  }
 
   return instance;
 }
