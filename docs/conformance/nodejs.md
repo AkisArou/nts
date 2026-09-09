@@ -13456,6 +13456,70 @@ The third reduction added entry points and checked `program.c` for the method
 symbols -- `bodyRead` and `fromConst` present, `fromThis` absent -- which is the
 difference between a probe that passed and a probe that did not run.
 
+## `target/node` is shared, and every axis number today was read from it
+
+The rule for the compiler is written down and I follow it: copy
+`target/release/nts` to a scratch path, pass `NTS_BIN`, never measure the live
+binary. The artifact directory needed the same rule and did not have it.
+
+A 22-module axis run reported:
+
+    buffer     97 file(s): 0 passed, 55 failed, 1 skipped, 41 not applicable
+
+A re-run minutes later, same addon, `md5 c51f7e28d8fe4e320c3dc727badc73bd`, three
+times in a row:
+
+    buffer     97 file(s): 1 passed, 54 failed, 1 skipped, 41 not applicable
+
+Nothing of mine had rebuilt anything. What had:
+
+    14:02:01  target/node/fs.node
+    14:02:26  target/node/http.node
+    14:02:49  target/node/net.node
+    14:02:53  target/node/os.node
+    14:02:58  target/node/path.node
+
+Another session running its own rebuild sweep, alphabetically, through the
+directory my run was reading. `ps` showed `build.sh path` with no parent of
+mine. **Nothing in any of my scripts could have told me** -- the addon is a file
+at a fixed path, the run reads it, and a run that reads a different file than
+the one it thinks it is reading produces numbers with no defect and no fix.
+
+### The wrong explanation I had already started writing
+
+`run.mjs:317` sets a 60-second per-test timeout, and I had been running
+`blockers-check.mjs` -- 104 compiler invocations -- concurrently with the axis
+sweep. A test timing out under load and being counted as a failure explains the
+observation completely, it is a real hazard, and it is not what happened.
+
+I found it only because I checked `ps` for what else was running before
+re-running, and the thing that was running was somebody else's build. **A
+plausible mechanism that accounts for the evidence is not the mechanism.**
+
+### The fix, and what it does not cover
+
+`build.sh` takes `NTS_ADDON_OUT` and `axis-controls.mjs` reads the same
+variable, so a run builds into its own directory and measures what it built. The
+default is unchanged, so no other caller or lane moves.
+
+`loads.sh` still names `target/node` directly, and the first isolated run called
+it -- so that run's LOAD section is against the shared directory and is
+disregarded here. Fixing a callee while the run that calls it is in flight
+produces a measurement half from each version, which is the same class of defect
+as the one being fixed.
+
+### Which numbers this invalidates
+
+Every compiled-axis figure taken today after roughly 14:00 was read from the
+shared directory during another session's sweep. The **17 behaviour-dependent**
+figure and the per-module table behind it are withdrawn pending the isolated
+re-run, not because they are known wrong but because they are not known to be
+about any particular set of artifacts.
+
+The `os` breakdown is kept: 3 behaviour, 2 shape-only, 0 hollow, derived
+file-by-file and reproduced by hand against a stable addon before the sweep
+started.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
