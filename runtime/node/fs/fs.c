@@ -2425,3 +2425,241 @@ void nts_fs_mkdir_async_bytes(NtsArray *path, double mode, bool recursive,
                               NtsHeader *callback) {
     mkdir_start(native_byte_path(path), mode, recursive, callback);
 }
+
+/* ------------------------------------------------------ reads and entries
+ *
+ * Three more shapes. `FS_READ` reports what a read got and the bytes it got;
+ * `FS_ROWS` reports directory entries the same way the sync half does, through
+ * `dirent_rows`; `FS_DIR` registers an opened directory and reports its handle.
+ *
+ * All three reuse the sync half's helpers rather than growing a second copy:
+ * `dirent_rows` decides the row layout and `register_directory` owns the
+ * numbering, and both are things the module already agrees with. */
+
+typedef struct {
+    uv_fs_t request;
+    NtsHeader *callback;
+    char *path;      /* owned, for the opendir and scandir forms */
+    char *buffer;    /* owned, for the read forms */
+    size_t capacity;
+    bool rows;       /* scandir rather than opendir, on the same struct */
+} ExtraRequest;
+
+static void async_call_read(NtsHeader *callback, double errno_value,
+                            double count, NtsArray *bytes) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, double, NtsArray *))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, errno_value, count, bytes);
+}
+
+static NtsArray *bytes_as_numbers(const char *bytes, size_t length) {
+    NtsArray *out = nts_array_new(&nts_node_desc_double, (double)length);
+    for (size_t i = 0; i < length; i++) {
+        NTS_ITEMS(out, double)[i] = (double)(unsigned char)bytes[i];
+    }
+    return out;
+}
+
+static void extra_finish(ExtraRequest *extra) {
+    if (extra->callback != NULL) nts_release(extra->callback);
+    uv_fs_req_cleanup(&extra->request);
+    free(extra->path);
+    free(extra->buffer);
+    free(extra);
+}
+
+static void on_read_done(uv_fs_t *request) {
+    ExtraRequest *extra = (ExtraRequest *)request;
+    ssize_t result = request->result;
+    /* A short read is not an error and neither is end of file: libuv reports
+     * both as a count, and zero means the file had nothing more. The module
+     * decides what that means for the caller. */
+    async_call_read(extra->callback, result < 0 ? (double)result : 0.0,
+                    result < 0 ? 0.0 : (double)result,
+                    result < 0 ? nts_array_new(&nts_node_desc_double, 0)
+                               : bytes_as_numbers(extra->buffer,
+                                                  (size_t)result));
+    extra_finish(extra);
+}
+
+static void read_start(double fd, double length, double position,
+                       NtsHeader *callback) {
+    ExtraRequest *extra = calloc(1, sizeof(ExtraRequest));
+    if (extra == NULL) {
+        async_call_read(callback, (double)UV_ENOMEM, 0.0,
+                        nts_array_new(&nts_node_desc_double, 0));
+        return;
+    }
+    extra->capacity = length < 0.0 ? 0 : (size_t)length;
+    extra->buffer = malloc(extra->capacity == 0 ? 1 : extra->capacity);
+    extra->callback = callback;
+    if (extra->buffer == NULL) {
+        free(extra);
+        async_call_read(callback, (double)UV_ENOMEM, 0.0,
+                        nts_array_new(&nts_node_desc_double, 0));
+        return;
+    }
+    if (callback != NULL) nts_retain(callback);
+    uv_buf_t one = uv_buf_init(extra->buffer, (unsigned int)extra->capacity);
+    int status = uv_fs_read(fs_loop(), &extra->request, (uv_file)fd, &one, 1,
+                            (int64_t)position, on_read_done);
+    if (status != 0) {
+        async_call_read(callback, (double)status, 0.0,
+                        nts_array_new(&nts_node_desc_double, 0));
+        extra_finish(extra);
+    }
+}
+
+void nts_fs_read_async(double descriptor, double length, double position,
+                       NtsHeader *callback) {
+    read_start(descriptor, length, position, callback);
+}
+
+/* The bigint form differs only in how the caller spelled the offset. It has
+ * already become a double by the time it is here, so there is one
+ * implementation and not two -- and the note is worth leaving, because a
+ * reader looking for where the 64-bit path went should find this rather than
+ * conclude it was forgotten. */
+void nts_fs_read_bigint_async(double fd, double length, double position,
+                              NtsHeader *callback) {
+    read_start(fd, length, position, callback);
+}
+
+/* `readv` takes the slice lengths and answers one flat array, mirroring how
+ * `writev` takes one. Reading into separate buffers and concatenating would
+ * give the same bytes and one more copy. */
+void nts_fs_readv_async(double fd, NtsArray *lengths, double position,
+                        NtsHeader *callback) {
+    size_t total = 0;
+    size_t count = lengths == NULL ? 0 : (size_t)lengths->header.length;
+    for (size_t i = 0; i < count; i++) {
+        double each = NTS_ITEMS(lengths, double)[i];
+        if (each > 0.0) total += (size_t)each;
+    }
+    read_start(fd, (double)total, position, callback);
+}
+
+static void on_scandir_done(uv_fs_t *request) {
+    ExtraRequest *extra = (ExtraRequest *)request;
+    ssize_t count = request->result;
+    if (count < 0) {
+        async_call_columns(extra->callback, (double)count,
+                           nts_array_new(&nts_desc_ref, 0));
+        extra_finish(extra);
+        return;
+    }
+    uv_dirent_t *entries = calloc((size_t)count == 0 ? 1 : (size_t)count,
+                                  sizeof(*entries));
+    if (entries == NULL) {
+        async_call_columns(extra->callback, (double)UV_ENOMEM,
+                           nts_array_new(&nts_desc_ref, 0));
+        extra_finish(extra);
+        return;
+    }
+    for (ssize_t index = 0; index < count; index++) {
+        if (uv_fs_scandir_next(request, &entries[index]) < 0) {
+            /* Fewer entries than the count promised is a directory that
+             * changed underneath the walk. The sync half reports EIO for it and
+             * so does this: a partial list would look like a complete one. */
+            free(entries);
+            async_call_columns(extra->callback, (double)UV_EIO,
+                               nts_array_new(&nts_desc_ref, 0));
+            extra_finish(extra);
+            return;
+        }
+    }
+    async_call_columns(extra->callback, 0.0,
+                       dirent_rows(entries, (size_t)count));
+    free(entries);
+    extra_finish(extra);
+}
+
+static void scandir_start(char *native, NtsHeader *callback) {
+    if (native == NULL) {
+        async_call_columns(callback, (double)UV_ENOMEM,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+    ExtraRequest *extra = calloc(1, sizeof(ExtraRequest));
+    if (extra == NULL) {
+        free(native);
+        async_call_columns(callback, (double)UV_ENOMEM,
+                           nts_array_new(&nts_desc_ref, 0));
+        return;
+    }
+    extra->path = native;
+    extra->callback = callback;
+    if (callback != NULL) nts_retain(callback);
+    int status = uv_fs_scandir(fs_loop(), &extra->request, extra->path, 0,
+                               on_scandir_done);
+    if (status != 0) {
+        async_call_columns(callback, (double)status,
+                           nts_array_new(&nts_desc_ref, 0));
+        extra_finish(extra);
+    }
+}
+
+void nts_fs_scandir_async(NtsString *path, NtsHeader *callback) {
+    scandir_start(native_path(path), callback);
+}
+
+void nts_fs_scandir_bytes_async(NtsArray *path, NtsHeader *callback) {
+    scandir_start(native_byte_path(path), callback);
+}
+
+static void on_opendir_done(uv_fs_t *request) {
+    ExtraRequest *extra = (ExtraRequest *)request;
+    ssize_t result = request->result;
+    if (result < 0) {
+        async_call_number(extra->callback, (double)result, 0.0);
+        extra_finish(extra);
+        return;
+    }
+    NtsFsDirectory *entry = calloc(1, sizeof(NtsFsDirectory));
+    if (entry == NULL) {
+        uv_fs_t closing;
+        uv_fs_closedir(NULL, &closing, (uv_dir_t *)request->ptr, NULL);
+        uv_fs_req_cleanup(&closing);
+        async_call_number(extra->callback, (double)UV_ENOMEM, 0.0);
+        extra_finish(extra);
+        return;
+    }
+    entry->directory = (uv_dir_t *)request->ptr;
+    /* Registered through the sync half's own numbering, so a handle from an
+     * async open and one from a sync open cannot collide and either can be
+     * read or closed by either form. */
+    double handle = register_directory(entry);
+    async_call_number(extra->callback, 0.0, handle);
+    extra_finish(extra);
+}
+
+static void opendir_start(char *native, NtsHeader *callback) {
+    if (native == NULL) {
+        async_call_number(callback, (double)UV_ENOMEM, 0.0);
+        return;
+    }
+    ExtraRequest *extra = calloc(1, sizeof(ExtraRequest));
+    if (extra == NULL) {
+        free(native);
+        async_call_number(callback, (double)UV_ENOMEM, 0.0);
+        return;
+    }
+    extra->path = native;
+    extra->callback = callback;
+    if (callback != NULL) nts_retain(callback);
+    int status = uv_fs_opendir(fs_loop(), &extra->request, extra->path,
+                               on_opendir_done);
+    if (status != 0) {
+        async_call_number(callback, (double)status, 0.0);
+        extra_finish(extra);
+    }
+}
+
+void nts_fs_opendir_async(NtsString *path, NtsHeader *callback) {
+    opendir_start(native_path(path), callback);
+}
+
+void nts_fs_opendir_bytes_async(NtsArray *path, NtsHeader *callback) {
+    opendir_start(native_byte_path(path), callback);
+}
