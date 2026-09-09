@@ -405,6 +405,26 @@ pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) ->
 /// a diff. Applying C's rule here would rename functions for a constraint the
 /// JVM does not have, and the two artifacts would disagree about what a program
 /// exports.
+///
+/// # And there is a third constraint, which is the one that binds
+///
+/// **`d8` is stricter than the JVM.** DEX's `SimpleName` grammar does not admit
+/// `@`, and a class file the JVM loads without complaint is then refused:
+///
+/// ```text
+/// Field name '__@kCount@2' cannot be represented in dex format.
+/// ```
+///
+/// That is `benches/cases/symbol-keys`, whose symbol-keyed property becomes a
+/// field with the symbol's identity in its name. It verified, it ran, it agreed
+/// with node -- and it could not reach Android, which is the one thing this
+/// backend targets that the others do not. Found by dexing all sixty cases;
+/// **it is the only one of the sixty**, so `@` is the whole of the difference
+/// in practice and not merely the first of a family.
+///
+/// So the rule is the JVM's *and* DEX's, and the paragraph above is now the
+/// reason the two are different rather than the reason to prefer the looser
+/// one. Anything DEX forbids that this compiler can emit belongs here.
 #[must_use]
 pub fn jvm_member_name(raw: &str) -> String {
     raw.chars()
@@ -412,10 +432,29 @@ pub fn jvm_member_name(raw: &str) -> String {
             // `module#init` becomes `module$init`: `#` is legal in a member
             // name and reads badly in a stack trace, which is the one place a
             // generated name is shown to a person.
-            '.' | ';' | '[' | '/' | '<' | '>' | '#' => '$',
+            //
+            // `@` is not a readability question. `d8` refuses it, so a name
+            // carrying one is a program that cannot be shipped to a phone.
+            '.' | ';' | '[' | '/' | '<' | '>' | '#' | '@' => '$',
             other => other,
         })
         .collect()
+}
+
+/// Whether a member name survives `d8`, in the ASCII range this compiler emits.
+///
+/// Not a general DEX validator: `SimpleName` admits large unicode ranges and a
+/// TypeScript identifier may legitimately use them, so rejecting everything
+/// outside `[A-Za-z0-9$_-]` would rename valid programs for no reason. What
+/// this checks is that the *mangling* above leaves nothing behind that the
+/// format refuses, which is what the test asserts and what the sixty-case sweep
+/// found the one exception to.
+#[must_use]
+pub fn dex_can_spell(name: &str) -> bool {
+    !name.is_empty()
+        && !name.chars().any(|ch| {
+            ch.is_ascii() && !(ch.is_ascii_alphanumeric() || matches!(ch, '$' | '_' | '-'))
+        })
 }
 
 /// A class's binary name: the same rule, plus the package this backend owns.
@@ -434,7 +473,8 @@ mod jvm_tests {
 
     #[test]
     fn the_characters_the_format_forbids_are_the_only_ones_replaced() {
-        assert_eq!(jvm_member_name("resolve@win32"), "resolve@win32");
+        // `@` was preserved here until `d8` refused a field carrying one.
+        assert_eq!(jvm_member_name("resolve@win32"), "resolve$win32");
         assert_eq!(jvm_member_name("module#init"), "module$init");
         assert_eq!(jvm_member_name("a/b.c;d[e"), "a$b$c$d$e");
     }
