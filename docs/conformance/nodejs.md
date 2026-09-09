@@ -15612,9 +15612,26 @@ compiler said about itself.
 Each of the four largest concentrations traced to the constructor or the
 declaration that makes it, with the fixture that names it:
 
-    332 files   `options = {}` at net/src/main.ts:1778, plus `IncomingMessage`
-                used as a value at http/src/server.ts:252
-                an-empty-object-literal, and the second unfiled
+    332 files   **Closed 2026-09-09, and the queue behind it is measured.**
+                `options = {}` at net/src/main.ts:1778 no longer refuses: the
+                compiler lane gives a literal the contextual *member's* type when
+                the contextual type is a union, and that parameter is
+                `ServerOptions | ((socket) => void)`.
+
+                `net/src/main.ts:1778` now has 0 refusals, and
+                `Server#constructor` cascades off **1794** instead --
+                `EventEmitter#on`, which waits on
+                `function addListener<T extends EventEmitter>(target: T, …): T`,
+                the generic function that is not lowered and emits no
+                diagnostic. Filed as `a-generic-rest-that-is-used`.
+
+                That was predicted before the fix landed, by patching the literal
+                to a populated one as a measurement and reading what appeared:
+                0 diagnostics at 1794 before, `EventEmitter#on` after. The real
+                fix produced exactly the same wall.
+
+                `http.createServer` still needs `IncomingMessage` used as a
+                value at `server.ts:252` as well, filed as `class-as-value`.
                 -> http.createServer 241 of 405, net.createServer 91 of 148
 
      59 files   a computed member read whose key is held in a variable, where
