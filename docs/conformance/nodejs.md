@@ -12618,6 +12618,37 @@ to `stream` leaves 248 files failing on the next one.
 and its most-named absent export is `Readable` at 80 files. One name is not the
 unit; the unit is whatever a file needs, all of it.
 
+## `path` decomposed: four causes, and one test it can never pass
+
+`path` is 12 of 21 on the compiled axis and 21 of 21 interpreted. Every one of
+the nine it is missing, with what each waits on:
+
+| cause | files | which |
+| --- | ---: | --- |
+| **`format` absent** -- takes an object inbound, five *optional* string fields | **3** | `test-path-parse-format.js`, `local/edge-inputs-static.js` (2 of 183 cases, both `format`), `local/export-surface-static.js` |
+| **error identity** -- the wrapper's check replaces the module's coded error | **2** | `test-path.js` (expects `{code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError'}`, gets `{name: 'Error'}`), `local/error-identity-static.js` (`resolve: wrong code`) |
+| **object representation** -- `toNamespacedPath(obj) === obj` | **2** | `test-path-makelong.js`, `local/legacy-make-long.js` |
+| **`matchesGlob` absent** -- the `RegExp` chain in `glob-matcher.ts` | **1** | `test-path-glob.js` |
+| **the stand-in** -- `process.cwd = () => ''` | **1** | `test-path-resolve.js` |
+
+**So `path`'s ceiling is 20 of 21, not 21.** The last one is not a defect and
+cannot be fixed: node's test replaces `process.cwd`, our `resolve` calls the
+native `nts_process_cwd`, and the interpreted lane passes only because its
+stand-in is a JavaScript closure over the patchable property. No compiler change
+reaches it.
+
+That matters for the goal as written -- "every module that can pass node's own
+tests as a compiled addon does". **`path` cannot**, and the honest form of its
+row will always be *20 of 21, with the reason*, unless that file is reclassified
+by someone willing to own the reclassification.
+
+**Ranked by files, the work is:** `format` 3, error identity 2, object
+representation 2, `matchesGlob` 1. `format` is the largest single item on the
+near end of the profile, and it needs the inbound half of an object crossing
+with **optional** fields -- which the `unknown` crossing does not supply:
+`format@posix` and `format@win32` still decline `takes an object` on the pin
+where `unknown` crosses both ways.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
