@@ -15210,6 +15210,36 @@ infrastructure gaps, weak listener registration through the canonical
 None of them is a defect waiting to be fixed. All of them are infrastructure or
 a stated non-goal.
 
+### Two numbers that both describe the compiled axis, and what each counts
+
+**38 pass** is test *files* that pass, across 15 of 22 modules. It is what
+`axis-controls.mjs` reports and what this ledger has quoted all day, and it is
+the number that moves when one export starts working.
+
+**1 of 22 is whole** -- every applicable test in the module passing, nothing
+failing. Re-derived 2026-09-09 against the `addons-v26` build: **punycode**, 3
+files, 3 passed, 0 failed. Nothing else is close:
+
+    punycode         3 files    3 passed,   0 failed
+    os              13 files    5 passed,   4 failed
+    path            23 files   13 passed,   7 failed
+    querystring      9 files    1 passed,   7 failed
+    string_decoder   6 files    0 passed,   5 failed
+    assert          26 files    0 passed,  12 failed
+    http           451 files    1 passed, 405 failed
+
+The two are not in tension and neither is the headline on its own. A module
+reaching 38 from 37 has one more test answering; a module reaching whole has no
+test left that it cannot answer. **The goal is counted in whole modules**, and
+this ledger's 38 is the finer-grained view of the same lane.
+
+Worth stating because the coarse number is the one that has not moved. It read
+1 of 22 at the start of the day and it reads 1 of 22 now, while the fine number
+went from 26 to 38 and the published names from 87 to 98.
+
+*(Measured with a pin of `target/release/nts` taken at 21:35 -- see the note
+above on what a pin does and does not establish.)*
+
 ### What that means for where the work is
 
 The compiled axis is 29 behaviour-dependent across 15 modules. The interpreted
