@@ -12904,16 +12904,36 @@ and **none of them is node's** -- `charLengthLeft`, `charLengthAt`,
 does not export either.
 
 So `async_hooks` is not "16 published"; it is **3 of node's 6**, plus thirteen
-internals. That is the same defect the ledger already records for `http` and
-`process`, and my own counts have been carrying it since the first table
-tonight.
+internals.
 
-**Why no test caught it.** The `extra` sweep in each `export-surface-static.js`
-runs against the module `shape.mjs` returns, and `async_hooks`'s shim returns a
-literal with exactly node's seven keys. The shim is the production surface and
-it is right; the addon's export table is what is wrong, and **no test in this
-lane looks at the addon's export table directly.** The `extra` assertion is
-checking the shim's filtering, which cannot fail, rather than the thing it names.
+**Corrected, and the correction is the more useful half: the extra names are
+deliberate and the addon is not wrong.** `async_hooks/src/main.ts:38` re-exports
+all thirteen with a comment saying why --
+
+> Raw implementation exports for the conformance harness's node-internal facade.
+> `shape.mjs` deliberately omits them from the public module object. Keeping the
+> facade on this same export set prevents the compiled lane from importing
+> TypeScript helpers beside the addon it is meant to measure.
+
+-- and `readline/src/main.ts:49` says the same for its seven. So the addon
+publishes exactly what its entry exports, the shim narrows to node's surface,
+and both layers are doing what they were built to do. **This paragraph first
+said "the addon's export table is what is wrong". It is not.** The finding was a
+discrepancy between two numbers and the wrong side was named as the defect,
+before reading the comment that explains it -- which is the same failure as
+counting `nts_to_napi_view`'s definition as a capability.
+
+What survives is narrower and still worth having: **a raw published-name count
+includes the facade exports, so it is not a measure of public surface.** `os`
+17, `path` 15 and `punycode` 6 are entirely node's; `async_hooks` 16 is three of
+node's and thirteen of the harness's. Reported as one number they read the same.
+
+**Why no test distinguishes them.** The `extra` sweep in each
+`export-surface-static.js` runs against what `shape.mjs` returns, which is node's
+key set by construction, so it cannot see the facade names either way. That is
+correct for what the shim guarantees and it means **no test in this lane reads
+the addon's export table directly** -- which is fine while the extra names are
+deliberate, and would hide it if one day they were not.
 
 **These particular numbers are from a mixed set of artifacts** -- another
 session's gate rebuilt `buffer.node` one minute before the reading and the live
