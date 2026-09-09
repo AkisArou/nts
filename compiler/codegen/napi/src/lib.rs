@@ -946,6 +946,35 @@ static const char *nts_napi_type_name(napi_env env, napi_value value) {
  * not with a message about the gatherer's internals.
  *
  * Two of `path`'s nine remaining failures are this one line. */
+/* The same, for an ordinary parameter rather than a gathered one.
+ *
+ * `nts_napi_expect` threw `expected a number argument`, which carries the right
+ * code and the right error class and names neither the parameter nor what
+ * arrived. Node says
+ *
+ *     The "priority" argument must be of type number. Received type string
+ *
+ * and the module's own validator would have said exactly that -- except that the
+ * wrapper's conversion fails first, so `validateInt32`'s `typeof` check is never
+ * reached. The boundary is standing in for a guard the declaration deleted,
+ * which is `nts_napi_rest_type_error`'s argument one shape along, and a scalar
+ * parameter is much the commoner shape.
+ *
+ * Node appends the value -- `Received type string ('x')` -- and this does not,
+ * for the same reason the rest form does not: rendering an arbitrary value is
+ * `util.inspect`'s job, and a wrong rendering would be worse than an absent
+ * one. */
+static void nts_napi_argument_type_error(napi_env env, const char *what,
+                                         napi_value value, const char *expected) {
+    bool pending = false;
+    if (napi_is_exception_pending(env, &pending) == napi_ok && pending) return;
+    char message[192];
+    snprintf(message, sizeof message,
+             "The \"%s\" argument must be of type %s. Received type %s", what,
+             expected, nts_napi_type_name(env, value));
+    napi_throw_type_error(env, "ERR_INVALID_ARG_TYPE", message);
+}
+
 static void nts_napi_rest_type_error(napi_env env, const char *what, size_t at,
                                      napi_value value, const char *expected) {
     char message[192];
@@ -1492,7 +1521,7 @@ fn member_callback(
         .zip(args.iter().skip(1))
         .enumerate()
     {
-        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
+        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name));
     }
     out.push_str(
         "    NtsLanding nts_landing;\n    if (setjmp(nts_landing.frame) != 0) {\n        nts_napi_raise(env, &nts_landing);\n        out = NULL;\n        goto nts_napi_cleanup;\n    }\n    nts_landing_push(&nts_landing);\n",
@@ -1589,7 +1618,7 @@ fn constructor_callback(
         .zip(args.iter().skip(1))
         .enumerate()
     {
-        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
+        out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name));
     }
     let _ = write!(
         out,
@@ -1902,7 +1931,7 @@ fn wrapper(
             );
             continue;
         }
-        let read = unmarshal(crossing, &parameter.ty, layouts, name, index);
+        let read = unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name);
         if index < required {
             out.push_str(&read);
             continue;
@@ -2087,16 +2116,17 @@ fn unmarshal(
     layouts: &[hir::Layout],
     name: &str,
     index: usize,
+    declared: &str,
 ) -> String {
     match crossing {
         Cross::Erased => format!(
             "    if (!nts_napi_expect(env, nts_from_napi_value(env, argv[{index}], &{name}), \"could not read an argument of unknown type\")) goto nts_napi_cleanup;\n"
         ),
         Cross::Number if matches!(ty, HirType::Float { bits: 64 }) => format!(
-            "    if (!nts_napi_expect(env, napi_get_value_double(env, argv[{index}], &{name}), \"expected a number argument\")) goto nts_napi_cleanup;\n"
+            "    if (napi_get_value_double(env, argv[{index}], &{name}) != napi_ok) {{\n        nts_napi_argument_type_error(env, \"{declared}\", argv[{index}], \"number\");\n        goto nts_napi_cleanup;\n    }}\n"
         ),
         Cross::Number => format!(
-            "    if (!nts_napi_expect(env, napi_get_value_double(env, argv[{index}], &{name}_number), \"expected a number argument\")) goto nts_napi_cleanup;\n{}    {name} = ({}){name}_number;\n",
+            "    if (napi_get_value_double(env, argv[{index}], &{name}_number) != napi_ok) {{\n        nts_napi_argument_type_error(env, \"{declared}\", argv[{index}], \"number\");\n        goto nts_napi_cleanup;\n    }}\n{}    {name} = ({}){name}_number;\n",
             numeric_guard(ty, name),
             c_type(ty, layouts)
         ),
@@ -3397,7 +3427,7 @@ mod tests {
             declare_argument(&Cross::Number, &ty, &layouts, "a0"),
             "    double a0_number = 0;\n    int64_t a0 = 0;\n"
         );
-        let conversion = unmarshal(&Cross::Number, &ty, &layouts, "a0", 0);
+        let conversion = unmarshal(&Cross::Number, &ty, &layouts, "a0", 0, "value");
         assert!(conversion.contains("napi_get_value_double(env, argv[0], &a0_number)"));
         assert!(conversion.contains("a0 = (int64_t)a0_number"));
     }

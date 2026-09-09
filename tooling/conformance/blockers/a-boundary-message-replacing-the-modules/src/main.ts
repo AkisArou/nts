@@ -1,5 +1,23 @@
-// expect: emit-c --napi -> calls (() => { try { exports.takesANumber("x"); return "no throw"; } catch (e) { return e.message; } })() === "expected a number argument"
+// expect: emit-c --napi -> calls (() => { try { exports.takesANumber("x"); return "no throw"; } catch (e) { return e.message; } })() === "The \"value\" argument must be of type number. Received type string"
 // control: typeof exports.takesANumber === "function"
+//
+// FIXED, and kept as a guard. The boundary's argument check still rejects
+// before the module's validator runs -- it must, because `napi_get_value_double`
+// has nothing to hand the compiled function -- but it now says what node's
+// validator would have said instead of describing its own conversion.
+//
+//     was    expected a number argument
+//     now    The "value" argument must be of type number. Received type string
+//     node   The "value" argument must be of type number. Received type string ('x')
+//
+// The remaining difference is the value, and it is left out deliberately:
+// rendering an arbitrary JavaScript value is `util.inspect`'s job, and a wrong
+// rendering would be worse than an absent one. `nts_napi_rest_type_error` -- the
+// same repair for a gathered parameter, made earlier -- omits it for the same
+// reason, and the two now differ only in that one spells `name[0]`.
+//
+// The original text follows, because the reasoning that placed it is what made
+// the fix a two-line one.
 //
 // The boundary's argument check rejects before the module's validator runs, and
 // substitutes its own message.
