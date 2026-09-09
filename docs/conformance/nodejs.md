@@ -15753,9 +15753,22 @@ is not, and each with its mechanism read out of the source:
 
     exceptions do not cross a call frame        6 cases, two files
     a lone surrogate counts as three            3 cases
-    `in` on a record is always false            1 case
-    integer-like keys are not promoted          1 case
-    an indexed write at or past the length      1 case -- see below
+    an indexed write at or past the length      2 cases -- see below
+
+**Two closed on 2026-09-10 and verified here rather than taken.** `in` on a
+record lowers to `nts_map_has` (`eee7f428`) and integer-like keys are promoted
+(`f9daeab5`); both case files agree 5 of 5 and 3 of 3 against a pin taken after
+them. The suite went 12 disagreeing to 11.
+
+`lower_in` was built around the closed world -- a compiled program gains no
+classes, so which types can declare a key is answerable at compile time, which
+is why a class instance was always right. A `Record` declares no members, the
+set came out empty, and the fold turned the expression into a constant. The
+compiler lane's rule from it is worth keeping: **when a pass answers by
+enumerating a set, check the case where the set is legitimately empty** -- and
+the absent case agreeing is what let it live, because half the questions anyone
+would ask returned the right answer and the other half returned the same
+constant.
 
 **The array entry was corrected twice and the second correction is the one to
 read.** This section said the ordinary append `xs[xs.length] = v` had been
