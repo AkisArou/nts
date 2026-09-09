@@ -128,9 +128,33 @@ if [ "$after" -lt $((before - wanted)) ]; then
   echo "  before doing anything else. It has not been pushed." >&2
   exit 1
 fi
-if [ "$touched" -gt "$wanted" ]; then
-  echo "commit-mine: REFUSING -- $touched files changed, $wanted were named:" >&2
-  git diff --name-only HEAD^ HEAD | sed 's/^/    /' >&2
+# Every file the commit touched has to be one that was named, or under a
+# directory that was named.
+#
+# This counted instead, `touched -gt wanted`, and the count is not the
+# invariant: naming one directory of four fixtures is one path and four files,
+# so a correct commit reported "7 files changed, 5 were named" and the word
+# REFUSING -- *after* writing the commit, which the message did not say. A
+# safety check that cries wolf on a good commit gets read past, and the run it
+# is protecting against is the one where somebody reads past it.
+#
+# Containment is what was meant, and it says the same thing about the case this
+# was built for -- a file nobody named cannot be under a path somebody named.
+stray=""
+for changed in $(git diff --name-only HEAD^ HEAD); do
+  covered=""
+  for path in "$@"; do
+    case "$changed" in
+      "$path" | "${path%/}"/*) covered=yes; break ;;
+    esac
+  done
+  [ -n "$covered" ] || stray="$stray $changed"
+done
+if [ -n "$stray" ]; then
+  echo "commit-mine: REFUSING -- the commit is written and is HEAD, and it" >&2
+  echo "  touched files that no named path covers. Inspect it before doing" >&2
+  echo "  anything else; it has not been pushed. The strays:" >&2
+  for changed in $stray; do echo "    $changed" >&2; done
   exit 1
 fi
 
