@@ -15591,6 +15591,47 @@ construct.
 The lone-surrogate defect has no construct to count -- it is reached by any
 string that holds one, and `string_decoder` exists to hold exactly those.
 
+### Each remaining defect, with its mechanism read from the source
+
+None of the four is a behaviour report any more.
+
+**`in` on a record** lowers to a literal constant:
+
+    nts_map_set(v1, v4, v5);      <- the key goes in
+    v7 = false;                   <- and `in` answers this
+
+Unconditional, with no use of the map after the set. It does not lower to a
+lookup that misses; it does not lower to a lookup. And the same operator is
+**correct on a class instance**, so it is one path rather than the operator.
+
+**A lone surrogate** is a storage question, not a folding one:
+
+    "\u4e2d".length      v1 = 1.0    one code unit, three UTF-8 bytes
+    "\u{1F600}".length   v1 = 2.0    two code units, four bytes
+    "\uD800".length      v1 = 3.0    <-
+
+Folded at compile time and right for everything encodable, and **still 3.0**
+through a `const s: string` binding -- so the folder and the runtime agree and
+the string is stored three units long. A lone surrogate has no UTF-8 encoding;
+the length is its storage form's byte count.
+
+**Integer-like key order** is an omission, and its comment is the evidence.
+`nts_map_keys_str` walks with `nts_map_next` from 0 and writes each key as it
+comes, under a comment reading *"`Object.keys(table)`, as the array of keys in
+insertion order."* The comment describes the function accurately. What it does
+not say is that JavaScript's order is not insertion order. There is no note
+weighing the promotion and setting it aside, so the rule appears never to have
+been in view rather than considered and declined.
+
+**The function is correct against the description above it, and the description
+is the thing that is short.** That is a different failure from a wrong
+implementation, and it is worth naming because so much of this compiler is
+documented well enough that its premises can be checked -- which is how the
+exception decision was found to have outlived its own.
+
+**Exceptions** are read in the section above: the `try` is deleted, there is no
+landing pad, and the in-frame case is compile-time routing rather than catching.
+
 ### The refusals the sweeps turned up, by reach
 
 Twenty-eight cases across the suite are refused rather than wrong. Counted the
