@@ -11482,7 +11482,7 @@ rather than attributed by proximity:
 
 | chain | root | fixture |
 | --- | --- | --- |
-| `ERR_UNKNOWN_ENCODING#constructor` -> `inspectValue` -> `inspectValueWithin` | `internal/errors.ts:547`, `` `join` on a typed array `` | `array-join-is-not-provided` |
+| `ERR_UNKNOWN_ENCODING#constructor` -> `inspectValue` -> `inspectValueWithin` | `internal/errors.ts:563`, `` `key` on a union whose members lay their fields out differently `` (was `:547`, `join`, until it cleared) | `union-members-lay-fields-out-differently` |
 | `Buffer.from` -> `objectToBuffer` | `buffer/src/main.ts:196`, an erased value from two narrowings | `intersection-from-two-narrowings` |
 | `Buffer#toString` -> `decodeIn` | `buffer/src/encodings.ts:279`, `` `toString` on a number `` (a radix, `byte.toString(16)`) | `number-tostring-radix` |
 
@@ -11912,6 +11912,39 @@ happens.
 file can fail for the first missing name and then fail again on a second. The
 one place that is settled is `os`, where the interpreted lane passes all nine
 and the five compiled failures name a single export.
+
+## `punycode` is whole on 140,224 comparisons, not on three files
+
+`punycode` is the profile's one complete module on the compiled axis, and until
+now the evidence for that was three test files passing. Three files is a thin
+basis for a claim that carries the whole axis, so:
+
+    differential-addon.mjs punycode target/node/punycode.node --iterations 20000
+    140224 comparison(s) over 20000 random inputs and 32 fixed:
+      0 divergence(s), 0 property failure(s)
+
+Against **node's own `punycode`**, asking the compiled artifact and node the same
+questions. Together with the mutation control -- all three files fail under
+`--mutate-addon`, so none passes on the shape of the export surface -- that is
+the strongest module-level claim in the profile, and it is the bar the other
+twenty-one are measured against.
+
+**The gap this found in the instrument.** `sweep.mjs` runs a differential every
+time and prints eleven modules with zero divergences, which reads as the
+compiled lane being compared against node. It is not: the sweep calls
+`differential-ts.mjs`, the **TypeScript** lane. `differential-addon.mjs` exists
+and the sweep never invokes it, so **no compiled artifact in this profile had
+ever been differentially compared against node** until this run.
+
+That is the same failure the vacuous-lane work found one level up: a check that
+runs, reports zero, and is measuring the lane that cannot disagree. The
+interpreted lane's stand-ins call node's own implementation for the native half,
+so its differential agrees with node by construction wherever the C would be
+what differs -- which is exactly the half a compiled artifact replaces.
+
+`punycode` is a fair first target for it because it has no native half at all.
+The modules where this matters most are the ones with C behind them, and they
+are also the ones with no compiled exports to compare yet.
 
 ## Conventions
 

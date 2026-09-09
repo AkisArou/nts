@@ -795,8 +795,54 @@ if (!withCompiles && modules.length > 1) {
     .filter((line) => line.includes("comparison(s)") || line.includes("divergence"))
     .join("\n");
   if (diffText !== "") {
-    console.log(`\ndifferential against node:`);
+    console.log(`\ndifferential against node (TypeScript lane):`);
     console.log(differential.status === 0 ? summary : diffText);
   }
   if (differential.status !== 0) process.exitCode = 5;
+
+  // The same questions, asked of the compiled artifact.
+  //
+  // **This was missing and its absence read as coverage.** The block above
+  // prints eleven modules and zero divergences every sweep, which looks like
+  // the compiled lane being compared against node. It is not -- it is
+  // `differential-ts.mjs`, and the TypeScript lane's stand-ins call node's own
+  // implementation for the native half, so it agrees with node by construction
+  // wherever the C is what would differ. That is precisely the half a compiled
+  // artifact replaces. `differential-addon.mjs` existed and nothing invoked it,
+  // so no compiled artifact in this profile had ever been compared against node
+  // on an input outside the pinned corpus.
+  //
+  // Only modules with a built addon are asked, and a module whose addon
+  // publishes nothing is skipped with a reason rather than reported as zero
+  // divergences -- an empty artifact agrees with node about nothing and would
+  // otherwise print the same line as a module that agrees about everything.
+  const addonRuns = [];
+  for (const module of modules) {
+    const addon = join(ROOT, "target/node", `${module}.node`);
+    if (!existsSync(addon)) continue;
+    const probe = spawnSync(
+      process.execPath,
+      ["-e", `const m=require(${JSON.stringify(addon)});` +
+        `console.log(Object.keys(m).filter((k)=>m[k]!==undefined).length)`],
+      { encoding: "utf8" },
+    );
+    const published = Number.parseInt((probe.stdout ?? "0").trim(), 10);
+    if (!Number.isFinite(published) || published === 0) {
+      addonRuns.push(`  ${module}: addon publishes nothing -- not asked`);
+      continue;
+    }
+    const run = spawnSync(
+      process.execPath,
+      [join(HERE, "differential-addon.mjs"), module, addon, "--iterations", "200"],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const text = `${run.stdout ?? ""}${run.stderr ?? ""}`.trimEnd();
+    const line = text.split("\n").filter((l) => l.includes("comparison(s)") || l.includes("divergence")).join(" ");
+    addonRuns.push(`  ${module}: ${line === "" ? text.split("\n").pop() : line.trim()}`);
+    if (run.status !== 0) process.exitCode = 5;
+  }
+  if (addonRuns.length > 0) {
+    console.log(`\ndifferential against node (compiled addons):`);
+    for (const line of addonRuns) console.log(line);
+  }
 }
