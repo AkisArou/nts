@@ -122,12 +122,12 @@ different problem from the four rows losing by a lot.
 | `awfy-queens` | 1.23x | 20.6% is codegen and MINE -- ladder below |
 | `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
 | `array-methods` | 1.17x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
-| `number-format-double` | 1.11x *not clean* | the formatter is 54% of the profile and 1.7% of the gap |
+| `number-format-double` | **1.15x** | six runs inside 1.7% -- the *reference* was what varied. Worse than the 1.08x listed, and now the best-supported number here. The formatter is 54% of the profile and 1.7% of the gap |
 | `elementwise` | 1.05x / 1.02x | at its floor: both lanes vectorise |
 | `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
 | `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
-| `awfy-sieve` | 1.07x *not clean* | two modes, and "two JIT shapes" was wrong -- below |
+| `awfy-sieve` | **0.94x** | six runs, five of them under 1.00x. The bimodality section below predates this and its two modes did not appear |
 | `bytes` | 1.05x | the `uirem` residual |
 | `objects` | **0.99x** | six runs at two warmup lengths, all 0.99x. The variance note is spread *within* a run; the minimum does not move. **Not losing** |
 | `generator` | 1.01x | 1.01x twice against 0.99x from another sitting; this row moves 0.04x between them and the bytecode is identical |
@@ -141,12 +141,12 @@ different problem from the four rows losing by a lot.
 | `substrings` | **0.40x** | was 0.95x. **The largest real movement in the table** and unflagged |
 | `map-and-set` | **0.79x** | was 0.86x |
 | `dispatch` | 0.67x-1.14x *not clean* | six runs land in two places. Neither P-core pinning nor 13x the warmup touches it. **Not a number** |
-| `case-convert` | 0.88x / 0.98x *not clean* | the two runs disagree by 11% |
+| `case-convert` | **0.955x** | six runs, 0.92x-1.01x. **Not losing** |
 | `awfy-permute` | **0.72x** | |
 | `awfy-mandelbrot` | **0.84x** | |
 | `awfy-list` | **0.94x** | |
 | `awfy-towers` | **0.98x** | |
-| `awfy-bounce` | **0.99x** *not clean* | varied 1.13x |
+| `awfy-bounce` | **0.99x** | six runs, 0.97x-1.03x. Parity |
 | `awfy-nbody` | **1.00x** | and 7.69 ms against node's 78.25 |
 
 **Eight rows were losing and unlisted**, all between 1.01x and 1.07x, which is
@@ -1911,6 +1911,37 @@ neither did P-core pinning. It stays unquotable and the cause is unfound.
 them has a perfectly stable answer underneath it. The others have to be checked
 one at a time rather than dismissed together, which is what carrying them as
 *not clean* had been doing.
+
+### Six runs each of the flagged rows, and three of the four were never losing
+
+`objects` turned out to be 0.99x six times under a variance note, so the other
+four were asked the same way rather than dismissed together. Six `nts-bench`
+invocations each, default settings, each one already a best-of-five:
+
+    case-convert           0.98  1.01  0.95  0.96  0.92  0.95     median 0.955
+    awfy-bounce            1.03  0.99  0.97  0.99  1.00  0.97     median 0.99
+    awfy-sieve             0.96  1.02  0.95  0.93  0.92  0.93     median 0.94
+    number-format-double   1.16  1.17  1.15  1.15  1.15  1.17     median 1.155
+
+**Three of the four are at or under 1.00x and were being carried as
+unquotable.** `case-convert` is under on five of six, `awfy-bounce` on four of
+six and sits on parity, and `awfy-sieve` -- listed here as "1.03x or 1.27x", the
+row that got its own section about being bimodal -- is under on five of six with
+a median of 0.94x.
+
+**`number-format-double` is the opposite and the more useful correction.** It
+does not vary at all: six readings inside 1.15x-1.17x, a spread of 1.7%. Its
+flag was on the *Java* side -- the reference varied, not us -- and a note about
+the reference's instability was making our own stable number unquotable. It is
+**1.15x**, which is worse than the 1.08x it was listed at and is now the
+best-supported number in the table.
+
+**So the flag was answering a different question from the one the table asks.**
+`nts-bench` reports a minimum and flags on the spread around it; a minimum can
+be reproducible while the spread is wide, and for four of these five rows it
+was. `dispatch` is the one where it is not -- 0.67x to 1.14x across six --
+and record 0132 already established why: its modes are chosen per JVM and
+belong to the code this backend emits.
 
 ## Open, and whose
 
