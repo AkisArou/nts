@@ -8,6 +8,46 @@ updates this in the same commit.
 Two numbers per row: `jvm/Java` **at or under 1.00x** against the hand-written
 `ref.java`, and **decisively** faster than node. 0.9x node is not a win.
 
+## What is in here
+
+Thirty-odd sections and rising, because every one of them is a measurement
+that changed somebody's mind and the goal says to keep those where a reader
+meets them. This is the map; the row table below it is the current state.
+
+- Where the rows stand
+- bytes/op, re-taken from the current tree
+  - `arrays`: the only row where we allocate and the reference allocates nothing
+- Asked and answered -- do not spend a second evening on these
+  - The worktree these numbers were taken from was eight hours stale
+  - `absences` is the `uirem` residual, and it is 34%
+  - `in-narrowing`, characterised: everything matches except the slot traffic
+  - The `uirem` residual, measured on all four rows rather than inferred
+  - `generic-classes` has a cause at last, and our codegen is not it
+  - The noise band, measured -- and six rows that were not losing
+  - `awfy-sieve` is bimodal rather than noisy, and the reference is not
+  - `node-utf8` moved 6.69x to 6.43x between two sittings, and the fix landed in between did not do it
+  - Neither `counted.sh` nor a single bench sitting can resolve a 4% question here
+  - And the row itself is stable, which was worth checking rather than assuming
+  - `awfy-queens`: a cause filed as incidental -- WITHDRAWN two sections below, it is not most of the gap
+  - `awfy-queens`: six hypotheses dead, and the residual is not reproducible by transcription
+  - `awfy-queens` in the assembly: 37% more instructions and 6% more code, which do not reconcile
+  - A row can be stable to 1% within a sitting and move 4% between them
+  - `node-utf8` cannot reach the bar, and its own reference says why
+  - Rule 4 applied to every losing row, which partitions the table
+  - `array-from`'s bytes/op gap is a representation floor, and the arithmetic closes to three decimals
+  - `symbol-keyed-map`, re-profiled: the 52% is 50.5% and the mechanism is the accumulator
+  - `array-methods`: our helpers beat hand-written Java, and the coercion is worth 8.9% (I first said 24.8%)
+  - `array-methods` read in the bytecode: three of my four claims about it were wrong
+  - `symbol-keyed-map` reads the same way, so the hand-over was wrong on both rows
+  - `fib`: the reference's `int` is justified by a claim about us that is false, and the rule would make the row worse
+  - Every reference checked for width at once, and 48 of 51 agree
+  - `instanceof`, priced the same way: the width is invisible here, and the row is still `uirem`
+  - `module-closures`: the `(D)D` closure ABI is real in the bytecode and free at runtime
+  - `module-closures` is 1.058x for no reason I can find, and three mechanisms are dead
+  - `array-from`'s set walk, checked on the runtime side rather than inferred
+  - There are 60 cases, not 51, and nine of them cannot be held to the bar
+- Open, and whose
+
 **Read this file newest-claim-first within a row.** It is written by appending,
 so a row investigated three times has three sections and the *last* one is the
 one that stands -- twice tonight an earlier section's heading asserted something
