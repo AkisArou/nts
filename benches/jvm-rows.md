@@ -65,6 +65,9 @@ meets them. This is the map; the row table below it is the current state.
   - `symbol-keyed-map` answered 32768 on ART where node answers 10240, and my own script wrote the bug
   - 59 of 60 driven on ART, and the last one is not a driver problem
   - The eight rows printing 1.0, checked rather than assumed
+  - `symbol-keyed-map` on ART: 196,912 bytes/op to 304, and the box was the key rather than the answer
+  - Substituting the call moved nothing, because the box has two halves
+  - The sentence for the whole day, and it is the Node lane's
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -133,7 +136,7 @@ different problem from the four rows losing by a lot.
 | row | jvm/Java | note |
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
-| `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
+| `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator. **ART 196,912 -> 304 B/op**: the key box, below |
 | `array-from` | 2.12x -> **0.96x** | the cursor is held as an `int`. Thirteen runs across two sittings, 0.94x-0.97x. **Moved.** Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
@@ -2613,6 +2616,77 @@ like an hour earlier. All three were checked:
 because "these look degenerate" and "these are degenerate" were one keystroke
 apart, and the whole of the preceding section is about having taken agreement
 for evidence once already.
+
+### `symbol-keyed-map` on ART: 196,912 bytes/op to 304, and the box was the key rather than the answer
+
+`fuse` exists because a helper's erased *answer* is read as a scalar on the
+next instruction, so the box never needs to exist. This is the same sentence
+about an *argument*, and it is the larger of the two.
+
+    symbol-keyed-map    HotSpot 368    ART 196,912    before
+    symbol-keyed-map    HotSpot 368    ART     304    after
+
+`events.get(key)` lowers to `NtsValue.ofObject(symbol)` and then
+`NtsMap.get(map, NtsValue)`, and the first thing `get` does is compare through
+the box and discard it. The row looks a symbol up 8,192 times an operation, and
+`8192 * 24 = 196,608` is the whole of the difference to within the 304 that
+remains -- which is the four `set` calls' own boxes and the map. C2 inlines the
+helper and scalar-replaces the key; ART does not reach through the call
+boundary that inlining removes. The same mechanism as `array-methods`, one
+argument position over.
+
+**The equality is exact rather than close.** `ofObject` tags a non-null
+reference `OBJECT`; `hash` sends that tag to `hashObject`; `sameKey` reaches its
+default arm -- `a.ref == b.ref` -- only once `a.tag != b.tag` has ruled out
+every other tag. So `getObject` matches a stored key that is tagged `OBJECT` and
+holds the same reference, and nothing else moves. `hashObject` is *called* from
+`hash`'s default arm rather than transcribed beside it, because two hashes that
+must agree and do not would not throw -- the lookup would just stop finding
+things, which is the failure mode this file has already been caught by twice.
+
+**Strings are excluded, and that is precisely where the box earns its keep.**
+`Managed(String)` erases through `ofString` and tags `STRING`, and `sameKey`
+compares a `STRING` by `equals` where an `OBJECT` goes by reference. An unboxed
+lookup assuming `OBJECT` would silently stop finding string keys that are equal
+without being identical.
+
+### Substituting the call moved nothing, because the box has two halves
+
+The first version emitted `NtsMap.getObject` and measured **exactly what it
+measured before**. The `Erase` is a separate operation, and it went on emitting
+`ofObject` into a slot with no reader -- so the call took the reference and the
+box was built anyway.
+
+`fuse`'s other direction needs no equivalent, because there the call *is* the
+producer: not emitting the box and not emitting the call are the same act. That
+asymmetry is why I did not expect this one, and it is worth stating as a rule:
+**a fusion that removes a consumer has to remove the producer too, and only the
+answer-shaped fusions get that for free.**
+
+Found by reading the emission once the number failed to move. Reasoning about
+which pass owned the value is what produced the version that did not work.
+
+MainClaude hit the same shape within the hour, from the other side: refusing a
+field with no C spelling left the struct two members short with two
+`_Static_assert(offsetof(...))` lines still naming them, and `emit.rs` already
+carried a comment saying a struct missing a field the reference map points at is
+not a smaller object but a wrong one. Two artifacts, two halves, one fix
+reaching one half each time.
+
+### The sentence for the whole day, and it is the Node lane's
+
+They found a probe printing `e.code ?? e.name` over twelve cases with zero
+differences, on an artifact carrying no `code` at all: the `??` fell through to
+`name`, which happens to be the code string. Their words:
+
+> A fallback in a comparison is a place where two different things print the
+> same.
+
+`??`, `||`, a default parameter, a catch-all `_ =>` arm -- every one is a join,
+and a join is where a distinction goes to die. **My version had the join in the
+artifact rather than in the probe**: `module#init` missing, five symbols null,
+five map keys collapsing into one, and `java` and `dalvikvm` agreeing to the bit
+for two days. Same failure, different half of the loop.
 
 ## Open, and whose
 
