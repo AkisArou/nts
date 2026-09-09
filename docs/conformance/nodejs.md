@@ -9657,7 +9657,7 @@ emit logs, deduplicated because modules share cones:
 | `checkedOffset` | 28 | `boundsError` → `ERR_INVALID_ARG_TYPE` |
 | `validateString` | 22 | `ERR_INVALID_ARG_TYPE` |
 | `checkedIntegerWrite` | 21 | `ERR_INVALID_ARG_TYPE` |
-| `asRequest` | 21 | — |
+| `asRequest` | 21 | **never reported** — see below |
 | `Socket##healthCheck` | 16 | — |
 | `displayBytePath` | 15 | — |
 | `coerceToUSVString` | 14 | — |
@@ -9676,6 +9676,33 @@ its own root is a single expression — `JSON.stringify` in
 The second entry is already filed too: `uvException`'s root is the same
 undeclared-property form as the fixture that spells it `` `dest`, which
 `Carrier` does not declare ``.
+
+### `asRequest` blocks twenty-one functions and is never reported as refused
+
+`fs/src/request.ts` carries **zero diagnostics**. Not one NTS1001, not one
+NTS1003, in any of the twenty-two emit logs. And `asRequest` is named as the
+blocking callee 42 times across 21 distinct functions:
+
+```
+  lines saying `asRequest` was refused:        0
+  lines naming `asRequest` as the callee:     42
+  distinct functions blocked:                 21
+```
+
+This is `cascade-with-no-root`, which is already filed, at the largest scale
+measured. The cost is specific: someone working on `fs` -- the module with 214
+own roots and 2082 in its cone -- cannot reach this one from the output. Every
+other heavy blocker's file carries diagnostics to read (`dir.ts` 27,
+`async.ts` 282, `dgram/src/main.ts` 49, and `uvException` and `decodeIn` have
+findable NTS1001 roots at `uv.ts:102` and `encodings.ts:279`). This one has
+nothing to read at all.
+
+**866 of the 1,144 callees named in cascades have no NTS1003 line of their own,
+and that number is not the answer.** A function refused directly by NTS1001
+correctly has no NTS1003 -- its diagnostic is the NTS1001 in its body, which is
+findable. The 866 is an upper bound on the unreportable set, not a measurement
+of it. `asRequest` is the case where the distinction was checked and came out
+on the unreportable side.
 
 **What this table is not.** It counts immediate causes, so the transitive set is
 larger than any row. It does not predict pass counts: a function can have more
