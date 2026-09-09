@@ -1976,6 +1976,36 @@ core placement, and warmup twice.
 are not included above. That is the harness's row-name match rather than the
 rows, and it is worth fixing before this is repeated.
 
+### `closure-merge`'s 1.01x is not the closure ABI either, at a bimorphic site
+
+The most tractable row in the table: 1.01x, the same two decimals six times, on
+a case small enough to read whole. Our merge emits
+
+    140: invokevirtual  nts/gen/Fn3__3.call:(D)D
+
+against the reference's `invokeinterface IntFn.apply:(I)I` -- both bimorphic
+between two implementations, both allocating a capture per round.
+
+**The `(D)D` had been priced at 0.1% on `module-closures` and that did not
+settle it here.** There the call is `invokestatic`, which C2 inlines and folds
+the conversions through. Here it is a *guarded* bimorphic call, where the
+conversions sit either side of a type check and have no obvious reason to fold.
+Different enough to be worth its own measurement.
+
+One variable -- the reference's `IntFn` becomes `double apply(double)` with the
+widening and narrowing our emission does, arithmetic unchanged:
+
+    minimum   CmI 2124    CmD 2101    the double ABI is 1.1% FASTER
+
+**Twelfth zero.** And the second time the closure ABI has been priced and come
+back at nothing, in the two places its shape differs most.
+
+So `closure-merge` loses one percent, reproducibly, and the difference is not
+the dispatch, not the ABI, not the allocation shape and not anything else in the
+emission that anyone has named. It is the clearest statement of where this lane
+actually stands: **the codegen is not what is losing, and nobody can say what
+is.**
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
