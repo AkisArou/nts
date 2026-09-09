@@ -73,7 +73,14 @@ printf "%-24s %12s %12s\n" "case" "HotSpot" "ART"
 for case in $cases; do
   entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
     | head -1 | awk '{print $3}')
-  [ -n "$entry" ] || continue
+  # `elementwise` hands the same `double[]` to every call; both drivers below
+  # pass one `double`, so neither can call it. Reported rather than printed as
+  # a `javac` failure, which said the compiler was wrong.
+  if [ -f "$root/benches/cases/$case/driver.java" ]; then
+    printf "%-24s %12s %12s\n" "$case" "own-driver" "own-driver"
+    continue
+  fi
+  [ -n "$entry" ] || { printf "%-24s %12s %12s\n" "$case" "no-entry" "no-entry"; continue; }
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"
   cat > "$out/tsconfig.json" <<JSON
@@ -119,6 +126,7 @@ JAVA
   cat > "$out/Main.java" <<JAVA
 import java.lang.reflect.Method;
 public final class Main {
+    $init
     static double sink;
     public static void main(String[] a) throws Exception {
         Class<?> dbg = Class.forName("android.os.Debug");
@@ -160,10 +168,25 @@ JAVA
     "$out/classes/nts-runtime.jar" > /dev/null 2>&1 \
     || { printf "%-24s %12s %12s\n" "$case" "$hotspot" "d8"; continue; }
   adb push "$out/dex/classes.dex" "/data/local/tmp/ab-$case.dex" > /dev/null 2>&1
-  art=$(adb shell "cd /data/local/tmp && dalvikvm -cp ab-$case.dex Main $device_runs" 2>&1 \
-    | tr -d '\r' | tail -1)
-  # A negative answer is the counter having wrapped, not a program that freed
-  # memory. Say so rather than print it.
+  # A negative answer is the 32-bit counter having wrapped, not a program that
+  # freed memory. Halve and retry rather than report `overflow` and stop.
+  #
+  # The pre-scaling above sizes the device run from HotSpot's 64-bit answer,
+  # which is exactly wrong for the rows that matter most here: `instanceof` and
+  # `optional-chain` allocate **zero** on HotSpot because C2 scalar-replaces,
+  # and a great deal on ART because it does not. A bound taken from the number
+  # that is zero is no bound at all, and those two were the only two that
+  # printed `overflow`.
+  attempt=$device_runs
+  art=""
+  while [ "$attempt" -ge 16 ]; do
+    art=$(adb shell "cd /data/local/tmp && dalvikvm -cp ab-$case.dex Main $attempt" 2>&1 \
+      | tr -d '\r' | tail -1)
+    case "$art" in
+      -*) attempt=$((attempt / 8)) ;;
+      *) break ;;
+    esac
+  done
   case "$art" in
     -*) art="overflow" ;;
   esac
