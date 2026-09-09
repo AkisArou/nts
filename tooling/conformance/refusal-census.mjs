@@ -98,6 +98,8 @@ const modules = argv.length > 0
 const shape = (message) => message.replace(/`[^`]*`/g, "`X`");
 
 const causes = new Map();
+/** Wrapper declines by reason: the refusals that emit no diagnostic. */
+const declines = new Map();
 let scanned = 0;
 /** Lines carrying a diagnostic code that this could not read. Never silently. */
 let unparsed = 0;
@@ -122,6 +124,27 @@ for (const module of modules) {
   // The direction is what makes it worth the comment: a parse that drops what
   // it cannot match makes a file look *less* blocking, and nothing in the
   // output says so. Hence the unparsed count below, printed on every run.
+  // **The wrapper's declines, which carry no diagnostic and so appear in no
+  // count above.** A generic function whose rest parameter is *read* is simply
+  // not lowered -- `grep -c schedule program.c` is 0 -- and the only trace is
+  // `no wrapper for schedule: is exported and no function of that name was
+  // compiled`. `timers.setTimeout` is that case, and 25 of `timers`'s 57
+  // failing test files stop at `setTimeout is not a function`.
+  //
+  // A census that reads diagnostics cannot see a refusal that emits none, so
+  // these are counted separately and by reason. The reason is the useful axis:
+  // `takes unknown[]` names what could not be carried, while `no function of
+  // that name was compiled` describes the effect and leaves the cause unsaid --
+  // and it is the second kind that hides work.
+  for (const line of text.split("\n")) {
+    const decline = /no wrapper for ([A-Za-z0-9_.#]+): (.+)$/.exec(line);
+    if (decline === null) continue;
+    const reason = decline[2].trim();
+    if (!declines.has(reason)) declines.set(reason, { names: new Set(), modules: new Set() });
+    declines.get(reason).names.add(`${module}.${decline[1]}`);
+    declines.get(reason).modules.add(module);
+  }
+
   for (const raw of text.split("\n")) {
     const row = /^\s*([^\s]+\.ts):(\d+):(\d+): (NTS100[13]) (.+)$/.exec(raw);
     if (row === null) {
@@ -226,6 +249,19 @@ if (unparsed > 0) {
   console.log("  Every one of them is a root missing from the table above, and the table");
   console.log("  is therefore a floor. A parse that drops what it cannot match makes a");
   console.log("  file look less blocking than it is.");
+}
+if (declines.size > 0) {
+  const ranked = [...declines.entries()].sort((a, b) => b[1].names.size - a[1].names.size);
+  const total = ranked.reduce((n, [, v]) => n + v.names.size, 0);
+  console.log(`\n  ${total} export(s) the wrapper declined, by reason. These emit no`);
+  console.log("  diagnostic, so none of them is in the table above.\n");
+  console.log(`  ${"names".padStart(6)} ${"mods".padStart(5)}  reason`);
+  for (const [reason, v] of ranked.slice(0, 10)) {
+    console.log(`  ${String(v.names.size).padStart(6)} ${String(v.modules.size).padStart(5)}  ${reason.slice(0, 68)}`);
+  }
+  console.log("\n  \"no function of that name was compiled\" is the one to read twice: it");
+  console.log("  states the effect and leaves the cause unsaid, where every other reason");
+  console.log("  names what could not be carried.");
 }
 console.log("\n  Ranked by things, because fixing a property clears every use of it.");
 console.log("  A row is a place to start reducing, not a defect: the location names the");
