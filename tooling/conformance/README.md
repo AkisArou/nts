@@ -1,6 +1,6 @@
 # `tooling/conformance`
 
-Fifty-nine scripts and 121 fixtures, and a new session needs about six of the
+Fifty-nine scripts and 122 fixtures, and a new session needs about six of the
 scripts. This says which six, and what the rest are for when you reach them.
 
 ## Two lanes, and they answer different questions
