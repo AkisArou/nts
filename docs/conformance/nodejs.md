@@ -15311,6 +15311,62 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### What stands in front of the next pass, module by module
+
+`next-pass.mjs` runs node's suite against each compiled addon and groups the
+failing files by the reason they stop at. The largest group per module, ordered
+by it:
+
+    http     405 failing, 241 at `http.createServer is not a function`
+    net      148 failing,  91 at `net.createServer is not a function`
+    process   90 failing,  75 at `underTest._fatalException is not a function`
+    dgram     77 failing,  68 at `dgram.createSocket is not a function`
+    stream   249 failing,  59
+    async_hooks 115 failing, 54
+    fs       344 failing,  40
+    timers    57 failing,  25 at `setTimeout is not a function`
+    buffer    54 failing,  19
+    events    32 failing,  16
+    diagnostics_channel 33 failing, 15
+    url       50 failing,  14
+    console   19 failing,  10
+    readline  26 failing,   7
+    zlib      67 failing,   5
+    assert    12 failing,   4
+    querystring 7 failing,  3   (7 of 7 name `parse`)
+    util      23 failing,   3
+    string_decoder 5 failing, 2
+    os         4 failing,   1
+    path       7 failing,   1
+    punycode  no failing file
+
+A count here is what stands in front of those files, not what they would gain:
+a test failing at `createServer is not a function` fails there because that is
+the first question it asks, and clearing it reveals the second. It sizes a
+queue.
+
+**The top four look like one problem at the wrapper and are three.** All of
+`http.createServer`, `net.createServer` and `dgram.createSocket` produce `no
+wrapper for X: is exported and no function of that name was compiled`, and
+behind that identical sentence:
+
+    http    NTS1001 `createServer`, a declaration outside every walk
+    net     NTS1003 `createServer@main` cannot be compiled because it calls
+            `Server@main#constructor`, which was refused above
+    dgram   neither of those
+
+Reduced and filed as `a-factory-of-a-refused-class`: an exported function
+returning a class whose own body was refused is reported as *unwalked* rather
+than as cascaded. Two controls -- a factory of a class with a refused field is
+reported unwalked, a factory of a class that compiles compiles -- so it is the
+returned class and nothing about factories. The whole output for the reduction
+is the class's real refusal, the unwalked message, and the wrapper's decline;
+clearing the first clears all three.
+
+That message is counted as a **root** by `refusal-census.mjs` at 19 things
+across 16 modules, and is left that way. One reduction shows the path exists and
+does not show that all nineteen are it.
+
 ### The largest thing in front of the axis emits no diagnostic at all
 
 Every census in this directory reads diagnostics. A refusal that emits none is
