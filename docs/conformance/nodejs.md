@@ -15554,9 +15554,27 @@ disagreeing, 28 refused, 0 that did not build:
 
     exceptions do not cross a call frame        6 cases, two files
     a lone surrogate counts as three            3 cases
-    an indexed write at or past the length      2 cases, both SIGABRT
     `in` on a record is always false            1 case
     integer-like keys are not promoted          1 case
+    a write *past* an array's length aborts     1 case -- and see below
+
+**The fifth is not a defect and the entry is corrected.** This ledger said "an
+indexed write at or past the length aborts" and sent that to the compiler lane
+as "the ordinary append aborts". `xs[xs.length] = v` was aborting on the pin
+measured at the time and is not now; one of the afternoon's changes closed it,
+and it was found only by going to read the C in order to report a mechanism.
+
+What remains is `xs[3] = 4` on a one-element array, and
+`nts_array_grow_slot`'s own comment says why:
+
+> Out of range, or sparse, or not a whole number … the sparse case is refused
+> here rather than [handled] because a dense array cannot hold a hole.
+
+A deliberate limit with a real reason. What is left to decide is only **how** it
+refuses: `nts: refused: index 3 is outside [0, 1)` is an abort, not a thrown
+error a program could catch and not a compile-time refusal a `blockers/` fixture
+would see. Kept as a case because node grows the array and this does not, so the
+two disagree whatever the reason.
 
 **How far each reaches in `runtime/node`, counted as an upper bound.** Each
 figure is every site of the *construct*, not every site that is wrong: most
