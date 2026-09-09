@@ -3,6 +3,13 @@
 // `an-optional-field-across-an-erased-slot` is one point: an optional `number`
 // present in the literal, through a union parameter that erases. These vary one
 // thing at a time around it.
+//
+// **The wrong answer is not stable between runs.** `optionalNumberPresent` gave
+// `-891087778116.3125`, then `-3.399053609805979e+289`, then
+// `8.146787480684402e-247` for its neighbour, on the same binary and the same
+// source. That is what reading raw bits under address-space randomisation looks
+// like, and it is worth one line here because a reader comparing two runs of
+// this file will otherwise think something changed.
 
 type Fn = (n: number) => void;
 

@@ -80,6 +80,7 @@ const names = argv.length > 0
 let compared = 0;
 let disagreeing = 0;
 let unbuilt = 0;
+let refusedTotal = 0;
 
 for (const name of names) {
   const dir = join(DIR, name);
@@ -143,9 +144,22 @@ for (const name of names) {
     }
     return JSON.parse(line);
   };
-  const compiledSide = { loaded: true, answers: {} };
+  // **A refusal is not a disagreement, and counting them together defeats the
+  // point of the file.** This exists because a wrong answer is worse than a
+  // refusal; a run that reports "not published" as a disagreement has just
+  // equated them. `perIterationBinding` and `getterCalledEachRead` were refused
+  // outright on the first sweep and were reported alongside a segfault and a
+  // garbage double, which is three different severities in one column.
+  //
+  // A refused case belongs in `blockers/`, and is reported here as a refusal so
+  // it can be moved there rather than counted as evidence of anything.
+  const compiledSide = { loaded: true, answers: {}, refused: [] };
   for (const c of cases) {
     const answer = answerOf(c.call);
+    if (answer.ok !== true && answer.why === "not published") {
+      compiledSide.refused.push(c.call);
+      continue;
+    }
     compiledSide.answers[c.call] = answer.ok === true ? answer.value : answer.why;
   }
 
@@ -154,6 +168,7 @@ for (const name of names) {
 
   const rows = [];
   for (const c of cases) {
+    if (compiledSide.refused.includes(c.call)) continue;
     let theirs;
     try { theirs = typeof onNode[c.call] === "function" ? onNode[c.call]() : "(not exported)"; }
     catch (e) { theirs = `threw: ${String(e && e.message).slice(0, 60)}`; }
@@ -165,11 +180,16 @@ for (const name of names) {
     }
   }
 
+  refusedTotal += compiledSide.refused.length;
+  const asked = cases.length - compiledSide.refused.length;
+  const refusedNote = compiledSide.refused.length === 0
+    ? ""
+    : `, ${compiledSide.refused.length} refused (${compiledSide.refused.join(", ")})`;
   if (rows.length === 0) {
-    console.log(`  agrees          ${name}  (${cases.length} case(s))`);
+    console.log(`  agrees          ${name}  (${asked} case(s)${refusedNote})`);
     continue;
   }
-  console.log(`  DISAGREES       ${name}`);
+  console.log(`  DISAGREES       ${name}  (${asked} asked${refusedNote})`);
   for (const r of rows) {
     console.log(`      ${r.call}: compiled ${JSON.stringify(r.ours)}, node ${JSON.stringify(r.theirs)}`);
     console.log(`          ${r.why}`);
@@ -181,7 +201,10 @@ if (names.length === 0) {
   console.log("  An empty run is not a clean run.");
   process.exit(2);
 }
-console.log(`\n  ${compared} case(s) compared, ${disagreeing} disagreeing, ${unbuilt} case(s) that did not build.`);
+console.log(`\n  ${compared} case(s) compared, ${disagreeing} disagreeing, ${refusedTotal} refused, ` +
+  `${unbuilt} case(s) that did not build.`);
+console.log("  A refused case is a blocker and belongs in blockers/; it is counted apart");
+console.log("  because a wrong answer is worse than a refusal and this file exists to say so.");
 console.log("  A disagreement is a program that runs and is wrong, which is worse than a");
 console.log("  refusal and is what this profile trades refusals to avoid. A case that did");
 console.log("  not build is neither agreement nor disagreement and is counted apart.");
