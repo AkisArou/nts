@@ -14888,6 +14888,35 @@ same.** `e.code ?? e.name` is the same shape as `plain - degenerate` and as
 `reachable through any of four paths`: a reduction that loses the distinction it
 was built to find.
 
+## `zlib`'s tables differenced against node: one difference, and it is the library
+
+Every key of `constants` and `codes`, compared against node's:
+
+    codes        18 ours, 18 node    nothing missing, nothing extra, nothing differing
+    constants   171 ours, 170 node   nothing missing, one differing, one extra
+
+**`ZLIB_VERNUM`: ours 4896, node 4897.** `zlib/src/constants.ts:49` is
+`nts_zlib_vernum()` and `zlib/zlib.c:116` returns the linked library's
+`ZLIB_VERNUM`. Node bundles its own -- `process.versions.zlib` is
+`1.3.2.1-motley-42c2f19`, reporting `0x1321` -- and this profile links the
+system's `1.3.0`, reporting `0x1320`. The number is correct on both sides and
+about different libraries. **A test asserting a literal `ZLIB_VERNUM` would be
+asserting which zlib the host has.**
+
+The extra key was mine, not the module's: the differential read `constants` off
+the **raw addon**, where it carries `codes` because `constants.ts` exports both
+and the addon publishes the module. `shape.mjs` builds the public `constants`
+from an explicit name list that does not include `codes`, and defines `codes`
+beside it -- which is node's shape, and which `test-zlib-const.js` asserts by
+reading `zlib.codes.Z_OK` and passing.
+
+Third time today that reading the raw `.node` gave a different answer than the
+module: `stream`'s discarded `getDefaultHighWaterMark`, `os`'s unfrozen
+`signals`, and this. The first was a real defect and the other two were the
+layer. **The rule that separates them is which question is being asked** -- "does
+the addon compute it" wants the raw artifact, "does a test see it" wants the
+module.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
