@@ -63,6 +63,8 @@ meets them. This is the map; the row table below it is the current state.
   - A class file the JVM loads, `d8` refuses, and node disagrees with -- three rules, and the mangler knew one
   - And widening it found something already wrong, with no Android in it
   - `symbol-keyed-map` answered 32768 on ART where node answers 10240, and my own script wrote the bug
+  - 59 of 60 driven on ART, and the last one is not a driver problem
+  - The eight rows printing 1.0, checked rather than assumed
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2566,6 +2568,51 @@ first two are above: an A/B against a binary that predated the fixture, and a
 regression published from two runs in one sitting. A control that cannot fail
 independently of the thing it is controlling is not a control, and neither
 `agree` nor `0 refused` is evidence until something in the loop can say no.
+
+### 59 of 60 driven on ART, and the last one is not a driver problem
+
+`elementwise` spent two days as "javac failed" and then, briefly, as an honest
+skip. Both were wrong about what mattered, which is *which* case it is: it is
+the only one of the sixty where an array crosses the generated boundary. Bounds
+checks, a different collector and no C2 make that the shape ART is most likely
+to diverge on, so it was the single worst case to leave uncovered -- and it was
+uncovered because my driver could not write down a `number[]` argument.
+
+The case had already answered this. `driver.java` exists because `workload`
+cannot synthesise a call for it -- the same buffer goes to every call and is
+refilled in place, so there is state to reset rather than an expression to write
+-- and `driver.cpp` and `driver.mjs` are the same escape hatch on the other two
+lanes. What was missing was a `Bench` for it to run against.
+
+A one-shot `Bench`: `run()` once, print the bit pattern, no warmup. The same
+reasoning `ref-bytes-on-device.sh` already uses for its stub -- this asks what
+the program answers, and warmup would only make it answer more times. Any case
+shipping a `driver.java` is driven now, rather than this one being special.
+
+    elementwise    node 40000035b03f1bc9
+                   jvm  40000035b03f1bc9
+                   art  40000035b03f1bc9
+
+Checked against node rather than resting on the agreement, for the reason the
+section above exists.
+
+`json-serialize` is the remaining one and it is not a driver gap: `case.ts`
+exports nothing at all, and its workload comes from `provider`.
+
+### The eight rows printing 1.0, checked rather than assumed
+
+The re-swept table has eight `awfy-*` rows printing `3ff0000000000000` and two
+rows printing `0`, which is exactly what the degenerate-program signature looked
+like an hour earlier. All three were checked:
+
+    awfy-*             `return benchmark.innerBenchmarkLoop(n) ? 1 : 0`
+    generic-classes    node 0                 an xor total that cancels
+    symbol-keys        node 0                 confirmed against node
+
+1.0 is the verification passing, and the two zeros are the answer. Recorded
+because "these look degenerate" and "these are degenerate" were one keystroke
+apart, and the whole of the preceding section is about having taken agreement
+for evidence once already.
 
 ## Open, and whose
 
