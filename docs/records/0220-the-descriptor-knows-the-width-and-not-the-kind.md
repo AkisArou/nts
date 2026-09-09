@@ -40,11 +40,30 @@ The literal emits `nts_desc_int32_t`: **element size 4**. My switch handled 16
 (an `NtsValue`), 8 (a `double`), 1 (a `bool`) and references, and fell through
 to `undefined` for the commonest array in the corpus.
 
-Adding a `size == 4` arm does not fix it. **A four-byte slot is `i32` or `f32`
-and the descriptor records neither**, because `element_descriptor` names it from
-the C type -- `nts_desc_int32_t`, `nts_desc_float` -- and the descriptor keeps
-`size` and `references` and not the kind. Two element types, one width, no way
-to tell them apart at run time.
+Adding a `size == 4` arm does not fix it, and **my first reason for that was
+wrong**. I wrote that four bytes is `i32` or `f32`. It is not: `width_for`, the
+only thing that chooses an array's element storage, returns
+`HirType::Int { signed: true }` at **32 or 64 bits and nothing else**, and
+`Float32Array` is a `View` rather than an `Array`, so `Array(Float { bits: 32 })`
+is unreachable. Four bytes is unambiguously `i32`.
+
+**The ambiguity is real and it is at eight bytes.** `nts_desc_double` and
+`nts_desc_int64_t` are both `size == 8, references == 0`, and 64 bits is exactly
+what `width_for` picks for an array whose values leave the `i32` range and stay
+inside the safe integers. Reading an `int64_t` slot as a `double` is not a
+rounding error, it is a different number.
+
+So the conclusion stands and the width does not: the descriptor keeps `size` and
+`references` and not the kind, and **eight bytes is `f64` or `i64` with nothing
+at run time to tell them apart**. That the default storage is the ambiguous one
+makes it worse than the version I first described, not better.
+
+Found by the JVM lane asking a question rather than accepting the claim: on
+their lane a `number[]` is always a `double[]` -- there is no `NtsArrayI` -- so
+they asked whether the tag should be NUMBER regardless of the width this lane
+chose, and whether the field would therefore be recording a representation
+decision rather than a language fact. The tag *should* be NUMBER either way. The
+**value** cannot be read without knowing which.
 
 The `name` field holds `"int32_t[]"`, so the fact is *recorded* -- but reading
 it means a string comparison per element access, and a stringly-typed

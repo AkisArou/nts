@@ -607,6 +607,46 @@ static napi_status nts_to_napi_view(napi_env env, const NtsView *view,
                                   buffer, 0, out);
 }
 
+/* And inward: a JavaScript array of strings as a `string[]`.
+ *
+ * This was refused, and the reason given was wrong. "An array of references has
+ * to be allocated on this side, and allocation needs a descriptor `program.c`
+ * keeps" is true of an *object* array, whose layout is per program -- and false
+ * here. `nts_desc_ref` is declared `extern` in `nts_runtime.h` and
+ * `nts_array_new` takes it, so a reference array's descriptor comes from the
+ * runtime exactly as `number[]`'s does through `nts_array_of_numbers`.
+ *
+ * The wall an object parameter meets is a real wall. I put a `string[]` behind
+ * it by generalising from one case to a family, which is the same error as
+ * reading three colliding names as a libc collision because one of them was. */
+static napi_status nts_from_napi_strings(napi_env env, napi_value value,
+                                         NtsArray **out) {
+    bool is_array = false;
+    napi_status status = napi_is_array(env, value, &is_array);
+    if (status != napi_ok) return status;
+    if (!is_array) return napi_array_expected;
+
+    uint32_t length = 0;
+    status = napi_get_array_length(env, value, &length);
+    if (status != napi_ok) return status;
+
+    NtsArray *array = nts_array_new(&nts_desc_ref, (double)length);
+    if (array == NULL) return napi_generic_failure;
+
+    NtsString **slots = NTS_ITEMS(array, NtsString *);
+    for (uint32_t at = 0; at < length; at++) {
+        napi_value element = NULL;
+        status = napi_get_element(env, value, at, &element);
+        if (status != napi_ok) return status;
+        NtsString *text = NULL;
+        status = nts_from_napi_string(env, element, &text);
+        if (status != napi_ok) return status;
+        slots[at] = text;
+    }
+    *out = array;
+    return napi_ok;
+}
+
 /* A `string[]` as a JavaScript array of strings. The same copy the numbers
  * above are, one level in: the array is copied and so is each element, so
  * nothing on either side holds storage the other can free. */
@@ -809,8 +849,12 @@ fn crossings_of(
                 // keeps -- the same wall an object parameter meets. A
                 // `number[]` is the one that does not: `nts_from_napi_numbers`
                 // takes its descriptor from the runtime.
-                matches!(crossing, Cross::Elements(inner) if !matches!(**inner, Cross::Number))
-                    .then_some(parameter)
+                matches!(
+                    crossing,
+                    Cross::Elements(inner)
+                        if !matches!(**inner, Cross::Number | Cross::Str)
+                )
+                .then_some(parameter)
             })
         })
     {
@@ -1410,9 +1454,15 @@ fn unmarshal(
         // A `number[]` is copied element by element. The descriptor comes from
         // the runtime rather than from `program.c`, which keeps its own to
         // itself -- see `nts_array_of_numbers`.
-        Cross::Elements(_) => format!(
-            "    if (!nts_napi_expect(env, nts_from_napi_numbers(env, argv[{index}], &{name}), \"expected an array of numbers\")) goto nts_napi_cleanup;\n"
-        ),
+        Cross::Elements(inner) => {
+            let (helper, wanted) = match **inner {
+                Cross::Str => ("nts_from_napi_strings", "an array of strings"),
+                _ => ("nts_from_napi_numbers", "an array of numbers"),
+            };
+            format!(
+                "    if (!nts_napi_expect(env, {helper}(env, argv[{index}], &{name}), \"expected {wanted}\")) goto nts_napi_cleanup;\n"
+            )
+        }
         // An object argument would have to be *allocated*, and allocation needs
         // the layout's descriptor, which `program.c` keeps to itself. Reading a
         // returned object needs no descriptor, which is why one direction works
