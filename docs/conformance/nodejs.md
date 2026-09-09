@@ -9643,6 +9643,47 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## The counted lane over all twenty-two, with its uncounted control
+
+Re-derived against the compiler carrying tonight's four fixes, one module at a
+time. Left column is `NTS_CONFORMANCE_RC=1`, right is the same module built
+without it. The bracketed figure is refcount operations observed.
+
+| module | tests | counted | rc | uncounted |
+| --- | --- | --- | --- | --- |
+| `punycode` | 3 | 3 passed, 0 failed | 55 | identical |
+| `os` | 13 | 4 passed, 5 failed | 282 | identical |
+| `path` | 22 | 2 passed, 19 failed, 1 skipped | 70 | identical |
+| `stream` | 267 | 2 passed, 248 failed, 4 skipped | 1731 | identical |
+| `fs` | 394 | 1 passed, 344 failed, 7 skipped | 2214 | identical |
+| `timers` | 67 | 1 passed, 55 failed | 244 | identical |
+| `util` | 53 | 1 passed, 24 failed | 1530 | identical |
+| `assert` | 26 | 0 passed, 12 failed | 1508 | identical |
+| `async_hooks` | 154 | 0 passed, 116 failed | 186 | identical |
+| `buffer` | 97 | 0 passed, 56 failed | 196 | identical |
+| `console` | 39 | 0 passed, 19 failed | 1566 | identical |
+| `dgram` | 110 | 0 passed, 77 failed, 2 skipped | 1808 | identical |
+| `diagnostics_channel` | 60 | 0 passed, 33 failed | 185 | identical |
+| `events` | 52 | 0 passed, 32 failed | 1422 | identical |
+| `http` | 451 | 0 passed, 410 failed | 1265 | identical |
+| `net` | 179 | 0 passed, 148 failed, 7 skipped | 1786 | identical |
+| `process` | 152 | 0 passed, 90 failed | 2195 | identical |
+| `querystring` | 9 | 0 passed, 8 failed | 267 | identical |
+| `readline` | 28 | 0 passed, 26 failed | 1770 | identical |
+| `string_decoder` | 6 | 0 passed, 5 failed | 236 | identical |
+| `url` | 53 | 0 passed, 50 failed | 505 | identical |
+| `zlib` | 74 | 0 passed, 68 failed | 1768 | identical |
+
+**22 of 22 with an uncounted control, 0 differing.** Every row shows refcount
+traffic -- 55 at the low end, 2,214 at the high -- so no identical pair is the
+allocator having seen nothing. That is the distinction the lane was written for:
+an identical pair is a result, and only a blank one would not be.
+
+**Fourteen passes on the compiled axis, and three of them are not ours.** `fs` 1
+and `stream` 2 are the vacuous passes -- `undefined` compared with `undefined`
+on both sides -- leaving eleven real ones across `punycode` 3, `os` 4, `path` 2,
+`timers` 1 and `util` 1. Only `punycode` passes everything it is given.
+
 ## The interpreted lane after the `errors.ts` import: 22 of 22, 1,851 passing
 
 `internal/errors.ts` is imported by every module, so changing it is a change to
