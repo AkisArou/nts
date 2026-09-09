@@ -10023,6 +10023,55 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### What was filed, and what was declined
+
+Fifteen fixtures filed and four blockers declined, against a set that stood at
+59 when the evening began and reads 84 now, all as expected on the current pin.
+
+Filed, with the count that justified each -- distinct sites in `runtime/node`
+where the form is a lowering refusal, or occurrences where it is a wrapper
+decline:
+
+```
+iterable-and-buffer-union-properties  169   four types a class field cannot hold
+in-naming-an-optional-key              52
+method-on-a-structural-type            42
+union-members-lay-fields-out-diff      40
+optional-chained-method-call           38
+rest-parameter-of-unrepresentable-el    9   url's largest own form
+in-with-a-computed-key                  7
+constructor-overload-signatures         7   buffer's Buffer and Blob
+unknown-at-the-boundary                 5   async_hooks 4, buffer 2
+object-parameter-at-the-wrapper         5   timers
+typed-array-methods                     3   at, includes, indexOf
+array-join-is-not-provided              1   the head of the widest chain
+length-after-array-isarray              1   fixed the same night, now a guard
+optional-parameter-at-the-wrapper       1   path.basename
+assigning-to-array-length               1   url's URLSearchParams
+```
+
+Declined rather than filed, each with what was ruled out:
+
+- **buffer's bigint into `unknown`.** Four probes: a literal, a typed
+  parameter, a class method with buffer's own bounds, a narrowed value into a
+  constructor argument. All four lower. Deleted rather than kept as a near-miss.
+- **A named "declaration outside every walk"** -- `atob`, `btoa`,
+  `userInfoString`. An unreferenced exported function lowers, so "exported but
+  unreferenced" is ruled out. Its reported location is not the declaration.
+- **NTS2008 `a value of type Erased cannot be erased yet`.** The message names
+  its own missing piece; a runtime ownership question.
+- **NTS2006 `closure class reached code generation with no method to call`.** A
+  module-scope const initialised by a plain function call lowers cleanly, so
+  that shape is ruled out. Checked that it predates this profile's own
+  `quoteJSONString` import rather than assuming.
+
+**Three fixtures needed their control rebuilt** because the first control was
+declined for its own reason: an object parameter in `in-with-a-computed-key`, a
+`TypedArray` parameter in `typed-array-methods`, an object parameter again in
+`method-on-a-structural-type`. Each time the fix was to construct the value
+rather than accept it. The fourth failure mode in this document's own rules is
+not a rare case; it was the single most common mistake of the evening.
+
 ### Ranking refusal forms, and the denominator that ranked web-platform
 
 Choosing what to file next needs an ordering. The obvious one -- how often each
