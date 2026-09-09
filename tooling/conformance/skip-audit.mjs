@@ -18,6 +18,15 @@
 // that excludes nothing looks exactly like an entry that excludes something,
 // and the count of "not applicable" is quoted as though every line earned its
 // place.
+//
+// **Both checks were controlled on 2026-09-09** rather than trusted for
+// answering zero. An entry appended with no reason reported `1 without a
+// reason`; an entry whose reason named a file the suite does not have reported
+// `1 naming a file the suite does not have`. The tree was restored after each.
+//
+// A `0 without a reason` from a check that has never been seen to find one is a
+// claim about the skip lists rather than a measurement of them, and this file
+// exists precisely because a skip nobody justified is invisible.
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
