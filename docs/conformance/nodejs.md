@@ -15530,66 +15530,62 @@ more sweeps rather than more targeted probes.
 
 ### The suite as it stands
 
-Seventeen case files. Against the compiler as of `78d69869`: **110 questions
-compared, 8 disagreeing, 21 refused, 0 that did not build.**
+Twenty-three case files. Against the compiler as of `78d69869`: **155 questions
+compared, 12 disagreeing, 29 refused, 0 that did not build.** One hundred and
+forty-three of one hundred and fifty-five answered exactly as node answers them.
 
-**It has now confirmed a fix as well as found defects, which was the other half
-of the argument for building it.** Before `78d69869` the two optional-field
-files carried six disagreements including a SIGSEGV and a required field reading
-0. After it, both are clean:
-
-    optionalStringPresent    was CRASHED, signal SIGSEGV   now 3, node 3
-    mixedRequiredOnly        was 0                         now 7, node 7
-    twoOptionalPresent       was -2.27e+265                now agrees
-    mixedOptionalAndRequired was -2.49e+86                 now agrees
-    optionalNumberPresent    was -8.9e+11, unstable        now 19, node 19
-    optionalNumberAbsent     was "not published"           now -2, node -2
-
-The last row is the one to note: the empty-literal refusal is gone **and** the
-value that comes back is right, so the literal change and the contextual-member
-change land together without the wrong answer that forced the first revert.
-
-**Five defects remain**, across 22 case files and 144 questions -- 12
-disagreeing, 28 refused, 0 that did not build:
+The twelve are **four defects**, each reduced, each with controls saying what it
+is not, and each with its mechanism read out of the source:
 
     exceptions do not cross a call frame        6 cases, two files
     a lone surrogate counts as three            3 cases
     `in` on a record is always false            1 case
     integer-like keys are not promoted          1 case
-    a write *past* an array's length aborts     1 case -- and see below
+    a write past an array's length aborts       1 case -- a stated limit, see above
 
-**The fifth is not a defect and the entry is corrected.** This ledger said "an
-indexed write at or past the length aborts" and sent that to the compiler lane
-as "the ordinary append aborts". `xs[xs.length] = v` was aborting on the pin
-measured at the time and is not now; one of the afternoon's changes closed it,
-and it was found only by going to read the C in order to report a mechanism.
+**Seventeen files are clean**, and they are what make the twelve mean something:
 
-What remains is `xs[3] = 4` on a one-element array, and
-`nts_array_grow_slot`'s own comment says why:
+    numeric-formatting-seams       12   radix 16, 16 of a fraction, 2, 36, a
+                                        negative, an integer-valued double, 1e20,
+                                        1e21, 1e-7, Infinity, NaN, -0
+    math-and-arithmetic-seams      11   round(-0.5), trunc, floor/ceil of a
+                                        negative, sign(-0), min with NaN, abs of
+                                        the largest safe integer, 1/0, 0/0,
+                                        right-associative **, pow of a negative
+    number-and-string-seams        10   Grisu, int32 coercion, shift masking,
+                                        unsigned shift, remainder sign, UTF-16
+                                        length, surrogate halves
+    array-operation-seams          10   pop, shift, unshift, splice, slice as a
+                                        copy, reverse in place and returning the
+                                        receiver, indexOf, lastIndexOf, includes
+    coercion-and-object-seams       9   typeof null, object identity, template
+                                        stringification, a default parameter per
+                                        call, a destructuring default
+    spread-and-class-member-seams   8   a static method, a private field, a getter,
+                                        a setter, a rest parameter, array spread,
+                                        destructuring with a rest and a rename
+    string-and-number-method-seams  8   padStart, repeat(0), split(""), indexOf(""),
+                                        slice clamping, charAt past the end
+    text-and-byte-seams             8   codePointAt on a pair, fromCharCode, a null
+                                        character in a length, Uint8Array wrapping
+    erasure-and-layout-seams        7   a derived instance through its base, two
+                                        required fields through an erased slot
+    ordering-and-statement-seams    7   labelled break and continue, argument order,
+                                        assignment order, do-while, for update
+    control-flow-and-method-seams   6   virtual dispatch, finally after a return, a
+                                        return inside finally, closure capture
+    callback-seams                  6   a callback reading and writing the enclosing
+                                        scope, called twice, its return used
+    collection-and-json-seams       6   for...of order, Array.isArray, Object.keys
+                                        insertion order, sort, replace, join, concat
+    async-and-array-seams           4   await ordering, indexOf and NaN
+    object-and-prototype-seams      4   method shadowing, an inherited field
+    optional-fields-through-erased-slots  6   closed by the compiler lane
+    an-optional-field-across-an-erased-slot  3  the same
 
-> Out of range, or sparse, or not a whole number … the sparse case is refused
-> here rather than [handled] because a dense array cannot hold a hole.
-
-A deliberate limit with a real reason. What is left to decide is only **how** it
-refuses: `nts: refused: index 3 is outside [0, 1)` is an abort, not a thrown
-error a program could catch and not a compile-time refusal a `blockers/` fixture
-would see. Kept as a case because node grows the array and this does not, so the
-two disagree whatever the reason.
-
-**How far each reaches in `runtime/node`, counted as an upper bound.** Each
-figure is every site of the *construct*, not every site that is wrong: most
-indexed writes are in bounds and correct, and many `in` sites are on a bare
-`object`, which refuses rather than answering wrongly. The bound is still the
-right ordering information, because a defect cannot reach further than its
-construct.
-
-    an indexed write `x[i] = `      302 sites across 21 modules
-    the `in` operator               260 sites across 13 modules
-    try / catch                     131 sites across 18 modules
-    Object.keys / Object.entries     33 sites across  9 modules
-
-The lone-surrogate defect has no construct to count -- it is reached by any
-string that holds one, and `string_decoder` exists to hold exactly those.
+**The last four sweeps found one defect between them**, and the last three found
+none. That is the result rather than the absence of one: the seams this
+profile's own source runs on are covered and correct.
 
 ### Each remaining defect, with its mechanism read from the source
 
