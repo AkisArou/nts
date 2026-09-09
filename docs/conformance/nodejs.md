@@ -9702,6 +9702,36 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### "66 signatures in nine modules" cannot be re-derived, because it never said what it counted
+
+The typed-array gap is carried in this profile's standing description as "66
+signatures in nine modules". Attempting to re-derive it produces a different
+answer for every population you pick:
+
+| population | signatures | modules |
+| --- | --- | --- |
+| exported free functions naming a typed array | 54 | 7 |
+| the same, plus class and object methods | 116 | 12 |
+| the carried figure | 66 | 9 |
+| visible as `takes TypedArray` wrapper declines | 0 | 0 |
+
+66 sits between the two defensible counts and matches neither. Without the
+population it was taken over -- exported surface only? everything reachable at
+the boundary? methods included? -- it cannot be reproduced, and a number that
+cannot be reproduced cannot be watched for movement.
+
+The zero at the bottom is the masking already described: those functions do not
+reach the wrapper, so the one lane that would name them says nothing.
+
+**Both new counts needed a correction before they were even that good.** The
+first pass reported 53 free functions. It reused one global `RegExp` across
+every module without resetting `lastIndex`, so the scan for each module began
+wherever the previous module's had stopped and the first match in each file was
+skipped. 53 became 54 when the regex was reset per module. The rule this
+document already carries is to say which lane a number is from and what it
+counts; the other half is that a number is only as good as the traversal that
+produced it, and a stateful matcher is a traversal with a memory.
+
 ### Every wrapper decline in the profile, and 59% of them are not the wrapper's
 
 282 declines across the twenty-two modules, by reason:
