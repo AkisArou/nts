@@ -12064,6 +12064,52 @@ turned up because `path` began publishing, the compiled differential ran for the
 first time, and `basename("/a/b.txt")` threw where node returns `"b"`. A blocker
 with a fixture and no cost attached is easy to rank below its worth.
 
+## The index-signature representation landed: refusals fell, exports did not move
+
+Measured on v12 (`80f0d31c`, the commit after `55968463`), against v11:
+
+| module | own roots | published exports |
+| --- | --- | --- |
+| `os` | **3 -> 1** | 17 -> **17** |
+| `querystring` | **3 -> 1** | 0 -> **0** |
+| `path` | 4 -> 4 | 15 -> 15 |
+
+Both `table[name] = value` sites in `os` cleared, and both computed-member roots
+in `querystring`. `os`'s only remaining own root is `main.ts:433`,
+`null-in-a-union-of-references`; `querystring`'s is `main.ts:110`,
+`decodeURIComponent`.
+
+**Not one export crossed.** The axis is unchanged.
+
+**What did change is the shape of `os.constants`'s decline**, and it is the one
+piece of real progress the count cannot show:
+
+    v11   no wrapper for constants: is exported and no function of that name was compiled
+    v12   no wrapper for constants: is exported and is not a function this backend can name
+
+The first is a cascade -- `constants` did not compile. The second says it
+compiles and cannot *cross*. One of the three capabilities it needs is done, and
+the other two are the object-return path and a map crossing outward. The
+compiler lane said this in advance, which is why it is progress rather than a
+surprise.
+
+**This is the third time tonight the same shape has appeared**, and it is worth
+naming as a rule rather than a coincidence:
+
+- `join` cleared and `string_decoder` went 65 refusals to 65, 0 published to 0.
+- `errors.ts:547` was reached by fifteen modules; clearing it moved none.
+- The index-signature representation cleared four own roots across two modules
+  and published nothing.
+
+Each was real work that made the compiler strictly better. **None of them moved
+the axis, and in all three cases the refusal count moved.** The count is
+measuring the corpus, and the corpus is large enough that a genuine fix is
+invisible in it either way -- down four, unchanged, or down forty.
+
+`prize.mjs` is the instrument that would have predicted all three: `os` gains
+five files and only when `constants` *crosses*, `querystring` gains eight and
+only when `parse` does. Neither names a refusal count.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
