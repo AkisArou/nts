@@ -1608,10 +1608,29 @@ a `ref.java` and nine without.
     json-scan           json-serialize       json-stringify-doc
     json-stringify-fused json-stringify-inline json-stringify-typed
 
-All nine are JSON, and they have no `ref.cpp` either -- only a `case.ts`. So
-they have no `jvm/Java` column, cannot be measured against the bar, and have
-been invisible in this table for as long as it has existed, because the table
-was built from the cases that produce a ratio.
+All nine are JSON and have no `ref.cpp` either -- only a `case.ts` -- so none of
+them has a `jvm/Java` column and none can be measured against the bar's first
+number.
+
+**And for two of them that is a decision somebody made and wrote down, which I
+did not check before writing the paragraph this replaces.** `json-scan`'s header
+says it outright:
+
+> There is no `ref.cpp`. A C++ number scanner is a plausible reference in a way
+> the escaper was not -- the grammar is small and unambiguous -- but it would be
+> answering "how fast is a hand-written scanner" rather than "what does this
+> compiler do with the one we ship", and the `nts f64` column already answers
+> the question a reference would be for.
+
+That argument is about C++ and applies to Java unchanged, and `json-parse`
+carries it too. So those two are not oversights; they are cases that
+deliberately measure the compiler against itself, with `nts f64` as the control
+rather than a person. **The remaining seven say nothing either way**, which is
+the honest state: unexamined, not argued.
+
+Writing this up as nine invisible rows before reading their headers is the same
+mistake as the four profile shares -- a discrepancy assumed to be a defect
+because it looked like one.
 
 **They are not idle rows.** From the current sweep:
 
@@ -1623,11 +1642,13 @@ number -- decisively faster than node -- is measurable for these nine today and
 nobody has been reading it, because a row with a `--` in the column this file
 sorts by does not appear in it.
 
-**What this changes.** "Optimise every row where the JVM lane loses" has a
-larger denominator than any count in this file. Nine rows need a `ref.java`
-before they can be held to the first half of the bar at all, and that is
-`benches/**` work -- mine -- rather than anyone else's. Not written tonight;
-recorded so the next count starts from 60.
+**What this changes.** The denominator in "every row where the lane loses" is
+60 and not 51, and the second half of the bar -- decisively faster than node --
+already applies to all nine. What is *not* established is that any of them
+should have a `ref.java`: two have a written argument against it, and the other
+seven have neither an argument nor a reference. Deciding that is `benches/**`
+work and mine. Not done tonight; recorded so the next count starts from 60 and
+starts by reading seven headers.
 
 ## Open, and whose
 
