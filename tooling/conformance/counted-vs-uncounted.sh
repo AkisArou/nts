@@ -27,6 +27,11 @@ set -u
 cd "$(dirname "$0")/../.."
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 
+# `target/node` is shared with the other sessions in this tree. `NTS_ADDON_OUT`
+# is the variable `build.sh`, `loads.sh` and `axis-controls.mjs` take; the
+# default is unchanged, so every existing caller behaves as before.
+addon_dir="${NTS_ADDON_OUT:-$PWD/target/node}"
+
 if [ "$#" -gt 0 ]; then
   modules="$*"
 else
@@ -66,13 +71,13 @@ for module in $modules; do
       timeout 1800 bash tooling/conformance/build.sh "$module" 2>&1 |
       grep -q 'bytes$'; then
     sites=$(grep -cE 'nts_retain|nts_release' \
-      "target/node/$module.build/program.c" 2>/dev/null)
+      "$addon_dir/$module.build/program.c" 2>/dev/null)
     sites=${sites:-0}
     if [ "$sites" -eq 0 ]; then
       counted="NOT COUNTED (0 rc sites)"
     else
       counted=$(timeout 1800 node tooling/conformance/run.mjs \
-        --module "$module" --addon "$PWD/target/node/$module.node" 2>&1 |
+        --module "$module" --addon "$addon_dir/$module.node" 2>&1 |
         tail -1 | sed 's/ file(s)://; s/, 0 skipped//; s/, [0-9]* not applicable//')
       counted="$counted [$sites rc]"
     fi
@@ -84,7 +89,7 @@ for module in $modules; do
   if NTS_COMPILER="$compiler" timeout 1800 bash tooling/conformance/build.sh \
       "$module" 2>&1 | grep -q 'bytes$'; then
     uncounted=$(timeout 1800 node tooling/conformance/run.mjs \
-      --module "$module" --addon "$PWD/target/node/$module.node" 2>&1 |
+      --module "$module" --addon "$addon_dir/$module.node" 2>&1 |
       tail -1 | sed 's/ file(s)://; s/, 0 skipped//; s/, [0-9]* not applicable//')
   else
     uncounted="did not build"

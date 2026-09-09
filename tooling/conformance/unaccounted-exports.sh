@@ -39,7 +39,7 @@ for log in "$logs"/*.log; do
   declared=$(grep -hoE '^export (async )?(function|class|const) [A-Za-z_$][A-Za-z0-9_$]*' "$entry" |
     awk '{print $NF}' | sort -u | wc -l)
   reexports=$(grep -cE '^export (\*|\{)' "$entry")
-  published=$(node -e "try{console.log(Object.keys(require('$root/target/node/$module.node')).length)}catch(e){console.log(0)}" 2>/dev/null | tail -1)
+  published=$(node -e "try{console.log(Object.keys(require('${NTS_ADDON_OUT:-$root/target/node}/$module.node')).length)}catch(e){console.log(0)}" 2>/dev/null | tail -1)
   declined=$(grep -cE 'no wrapper' "$log")
   gap=$((declared - published - declined))
   [ "$gap" -lt 0 ] && gap=0

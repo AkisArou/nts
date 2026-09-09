@@ -26,6 +26,11 @@
 # Run it when the machine is quiet. It rebuilds each module from scratch, and
 # the compiled lane is a serialised resource shared with two other sessions.
 set -u
+
+# `target/node` is shared with the other sessions in this tree. `NTS_ADDON_OUT`
+# is the variable `build.sh`, `loads.sh` and `axis-controls.mjs` take; the
+# default is unchanged, so every existing caller behaves as before.
+addon_dir="${NTS_ADDON_OUT:-$PWD/target/node}"
 cd "$(dirname "$0")/../.."
 
 # Every module, not a remembered list of the seven that built once.
@@ -73,7 +78,7 @@ for module in $modules; do
   # and the build directory held *zero* retain/release sites -- a green row from
   # an uncounted build, which is precisely the false negative the lane exists to
   # prevent. `--rc` on punycode emits 55 sites, so 0 is never legitimate here.
-  program="$PWD/target/node/$module.build/program.c"
+  program="$addon_dir/$module.build/program.c"
   # `grep -c` prints `0` *and exits 1* when it matches nothing. Written
   # `$(grep -c ... || echo 0)` that appends a second zero, so `sites` became the
   # two-line string "0\n0", `[ "$sites" -eq 0 ]` failed with "integer expected",
@@ -97,7 +102,7 @@ for module in $modules; do
   fi
 
   result=$(timeout 1800 node tooling/conformance/run.mjs \
-    --module "$module" --addon "$PWD/target/node/$module.node" 2>&1 | tail -1)
+    --module "$module" --addon "$addon_dir/$module.node" 2>&1 | tail -1)
 
   # And again afterwards. Three sessions share this tree and `target/node` is
   # not owned by any of them, so another lane rebuilding the same module during
@@ -127,7 +132,7 @@ for module in $modules; do
   if grep -q "^  $module:" tooling/conformance/differential-corpora.mjs 2>/dev/null ||
      grep -q "\b$module:" tooling/conformance/differential-corpora.mjs 2>/dev/null; then
     diff_out=$(timeout 1800 node tooling/conformance/differential-addon.mjs \
-      "$module" "$PWD/target/node/$module.node" --iterations 20000 2>&1 | tail -1)
+      "$module" "$addon_dir/$module.node" --iterations 20000 2>&1 | tail -1)
     printf '  %-16s %s\n' "" "$diff_out"
     printf '%s' "$diff_out" | grep -q ' 0 divergence' || failures=$((failures + 1))
   fi
