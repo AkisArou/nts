@@ -9643,6 +9643,48 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## `http` gained two exports and neither of them is a value
+
+After tonight's rebuild the addon key counts moved in exactly one place:
+`http` from 2 to 4, gaining `METHODS` and `methods`. It reads as progress and is
+not:
+
+```
+getHTTPParserPoolLimit  function
+maxHeaderSize           number
+METHODS                 undefined   <--
+methods                 undefined   <--
+```
+
+`http` is unchanged at 0 passed, 410 failed. Node has 35 methods in `METHODS`,
+and `node.methods !== node.METHODS`; ours compare equal because both are
+`undefined`.
+
+The wrapper is not obviously at fault from the C. It emits the right thing:
+
+```c
+extern NtsArray * METHODS;
+nts_to_napi_strings(env, METHODS, &value);
+napi_set_named_property(env, exports, "METHODS", value);
+```
+
+The global behind it is never initialized -- `parser.ts:291` reports
+`invalidMethodOffset cannot be compiled because it reads methods, whose
+initializer was not compiled` -- so the name arrives bound to nothing. The
+wrapper declines a *function* it could not compile and says so; it publishes a
+*value* whose initializer was refused.
+
+**A name bound to `undefined` is worse than an absent one.** It satisfies "the
+module publishes something", it makes any export-surface check that asks only
+for presence agree, and it is exactly as incapable of being the subject of a
+passing test. Surveyed across all twenty-three built addons, this is the only
+occurrence: `http`, two names.
+
+`vacuous-lane.mjs` counted `Object.keys(m).length` and so read `http` as four
+exports. It now counts defined values and names the undefined ones separately,
+and exits non-zero on either. The hole was in the instrument whose whole premise
+is that `exports > 0` means the module has a subject.
+
 ## `JSON.stringify` is gone from `errors.ts`, and it did not free `validateString`
 
 `internal/errors.ts` had the only two `JSON.stringify` call sites that mattered,
