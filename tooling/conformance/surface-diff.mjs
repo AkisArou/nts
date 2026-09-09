@@ -22,7 +22,7 @@
 //
 // # What is compared, and what is not
 //
-// Scalars and one level of plain-object table. Functions are compared only by
+// Scalars and two levels of plain-object table. Functions are compared only by
 // their presence, because calling them is `unusable-exports.mjs`'s job and
 // calling them here would arm timers and open handles.
 //
@@ -85,7 +85,17 @@ for (const module of modules) {
       }
       if (b !== null && typeof b === "object") {
         if (a === null || typeof a !== "object") { missing.push(path + key + " (object)"); continue; }
-        if (depth < 1) walk(a, b, path + key + ".", depth + 1);
+        // Two levels, not one. `os.constants.signals` is a table inside a
+        // table -- 33 entries -- and at one level it was checked for presence
+        // and never compared. The same is true of `constants.errno`,
+        // `constants.priority` and `constants.dlopen`, which is most of what
+        // `os` publishes.
+        //
+        // Two is where it stops: node's `util.inspect.styles` is the deepest
+        // plain table in the surface, and going further starts walking
+        // prototypes and cyclic namespaces -- `path.posix.win32.posix` closes
+        // in two hops.
+        if (depth < 2) walk(a, b, path + key + ".", depth + 1);
         continue;
       }
       if (a === undefined && b !== undefined) { missing.push(path + key); continue; }

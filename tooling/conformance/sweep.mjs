@@ -644,6 +644,57 @@ if (!withCompiles && modules.length > 1) {
     if (loads.status !== 0) process.exitCode = 6;
   }
 
+  // Names the addon publishes that no shim hands to a test.
+  //
+  // This found three module-breaking defects on the day it was written, all in
+  // shims that were correct about one export and wrong about the rest:
+  // `stream` discarding `getDefaultHighWaterMark`, `process` discarding `env`,
+  // `querystring` discarding `escape`, and `http` throwing at definition time
+  // on `class X extends undefined` so every one of its tests failed with one
+  // message. It runs in seconds and it is the only check that asks the raw
+  // artifact and the module the same question.
+  {
+    const hidden = spawnSync(process.execPath, [join(HERE, "hidden-exports.mjs")], {
+      encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 600_000, env: process.env,
+    });
+    const text = `${hidden.stdout ?? ""}${hidden.stderr ?? ""}`;
+    // The finding lines only. The tool's closing paragraph explains what
+    // `NOT PUBLIC` means and contains the words, so the obvious filter prints
+    // the explanation as though it were a result.
+    for (const line of text.split("\n").filter((l) => /^ +(NOT PUBLIC|SHIM THROWS) /.test(l))) {
+      console.log(`  ${line.trim()}`);
+    }
+    // The final summary only. Every per-module line also contains "node-own
+    // name(s)", so the obvious filter joins fifteen rows into one and prints a
+    // paragraph where a sentence was wanted.
+    const summary = text.split("\n")
+      .filter((l) => /node-own name\(s\) published and not on the module/.test(l))
+      .join("").trim();
+    if (summary !== "") console.log(`hidden exports: ${summary}`);
+  }
+
+  // Every published value against node's, through the shim.
+  //
+  // The counterpart of the block above: that one asks whether a name reaches a
+  // test, this asks whether the value behind it is node's. A name can pass the
+  // first and fail this one, and only this one is a statement about what is
+  // *wrong* rather than what is missing.
+  {
+    const surface = spawnSync(process.execPath, [join(HERE, "surface-diff.mjs")], {
+      encoding: "utf8", maxBuffer: 16 * 1024 * 1024, timeout: 600_000, env: process.env,
+    });
+    const text = `${surface.stdout ?? ""}${surface.stderr ?? ""}`;
+    for (const line of text.split("\n").filter((l) => l.includes("DIFFERS"))) {
+      console.log(`  ${line.trim()}`);
+    }
+    const summary = text.split("\n").filter((l) => /value\(s\) differing/.test(l)).join("").trim();
+    if (summary !== "") console.log(`surface: ${summary}`);
+    if (surface.status === 2) {
+      console.log("surface: INSTRUMENT FAILURE -- nothing was comparable");
+      process.exitCode = 6;
+    }
+  }
+
   // Which references can cross the wrapper, in each direction.
   //
   // Not a per-module question, so it has no row above -- but it is the ceiling
