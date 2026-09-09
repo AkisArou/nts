@@ -11294,6 +11294,52 @@ already filed:
 
 
 
+
+## 483,056 comparisons against node on inputs no pinned test uses: 0 divergences
+
+2026-09-10, interpreted lane, `differential-ts.mjs --all`. This is the goal
+text's directive — node's pinned tests under-test whatever cannot fail on node —
+run as a differential rather than as new hand-written assertions.
+
+| module | comparisons | inputs | divergences |
+| --- | ---: | ---: | ---: |
+| `buffer` | 116,725 | 4,025 | 0 |
+| `path` | 84,882 | 4,042 | 0 |
+| `string_decoder` | 72,288 | 4,016 | 0 |
+| `zlib` | 40,130 | 4,013 | 0 |
+| `util` | 36,216 | 4,024 | 0 |
+| `url` | 32,192 | 4,024 | 0 |
+| `punycode` | 28,224 | 4,032 | 0 |
+| `fs` | 28,168 | 4,024 | 0 |
+| `assert` | 20,115 | 4,023 | 0 |
+| `querystring` | 16,076 | 4,019 | 0 |
+| `events` | 8,040 | 4,020 | 0 |
+
+**11 modules measured, 483,056 comparisons, 0 divergences.**
+
+### What it could not run, which is half the tree
+
+That number means nothing without this beside it. **Eleven of twenty-two
+modules were measured.** One more was skipped with a stated reason:
+
+    os: skipped on this lane -- its bindings stand in as node here;
+        run differential-addon.mjs against the built addon instead
+
+and **ten never appeared in the run at all** — `async_hooks`, `console`,
+`dgram`, `diagnostics_channel`, `http`, `net`, `process`, `readline`, `stream`,
+`timers`. These are the modules whose surfaces are sockets, streams and timers
+rather than values in and values out, so the generator has nothing to generate.
+
+So the claim this supports is narrow and worth stating exactly: **for the eleven
+value-shaped modules, the TypeScript answers what node answers on four thousand
+generated inputs each, well outside what the pinned tests reach.** It says
+nothing about the other eleven, and a reader who takes "0 divergences" as a
+property of the tree would be taking it from a 50% sample.
+
+The instrument earned that caution once already: it found the `querystring`
+`__proto__` ordering bug on its first serious run, 20 divergences over 4,000
+queries in a module whose pinned tests all passed.
+
 ## `hidden-exports.mjs`'s six findings are six non-defects, and here is why
 
 2026-09-10. Chased all six because the goal text points at this instrument —
