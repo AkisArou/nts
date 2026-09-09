@@ -962,6 +962,34 @@ public final class NtsRuntime {
     public static int arrayLastIndexOfI(double[] a, double value) {
         for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1;
     }
+    /**
+     * `join` over a bare `double[]`, the ungrowable spelling of a `number[]`.
+     *
+     * <p>The same method as {@link NtsArrayD#joinStr} over the wrapped one, and
+     * both are needed for the reason `arrays_can_grow` is whole-program: one
+     * `push` anywhere puts every array in a wrapper, and a program without one
+     * has `[D` here instead. `examples/array-join`'s `negativeZero` and
+     * `extremes` reach this spelling and the wrapper's method cannot serve them.
+     *
+     * <p>Formatting is {@link #appendNumber}, which is the Grisu port, because
+     * `Array.prototype.join` says `String(x)` per element -- so `-0` prints as
+     * `0` and `1e21` keeps JavaScript's spelling rather than Java's.
+     */
+    public static String arrayJoinNum(double[] a, String separator) {
+        int n = a.length;
+        if (n == 0) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(n, separator, 8));
+        for (int i = 0; i < n; i++) {
+            if (i != 0) {
+                out.append(separator);
+            }
+            appendNumber(out, a[i]);
+        }
+        return out.toString();
+    }
+
     public static double arrayIndexOf(double[] a, double value) { return arrayIndexOfI(a, value); }
     public static double arrayLastIndexOf(double[] a, double value) {
         return arrayLastIndexOfI(a, value);

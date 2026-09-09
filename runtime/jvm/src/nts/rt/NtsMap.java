@@ -77,6 +77,72 @@ public final class NtsMap {
     public static boolean builtAsMap(NtsMap map) { return map.map; }
     public static double size(NtsMap map) { return map.count; }
 
+    /**
+     * A copy in insertion order, keeping whether the source was a `Map` or a
+     * `Set`.
+     *
+     * <p>`{ ...table }` over a `Record<string, V>` is what reaches here, and
+     * insertion order is not an implementation detail: JavaScript specifies it
+     * for string keys, so a copy that rebuilt the table by hashing would print
+     * its keys in a different order than node and the differential would say
+     * so on the first spread.
+     *
+     * <p>Re-inserted through {@link #set} and {@link #add} rather than by
+     * copying the arrays, so the copy has whatever invariants those maintain
+     * -- the bucket index, the linear-scan threshold, the head and base -- and
+     * a future change to them does not have to remember this method exists.
+     * A source with deleted slots is compacted by the walk, which is correct
+     * and is why the count comes out right.
+     */
+    /**
+     * `Object.keys` of a string-keyed table, in insertion order.
+     *
+     * <p>Declared `Object[]` rather than `String[]` because that is what this
+     * runtime's reference-array signatures are: Java arrays are covariant, so
+     * the `String[]` the caller wants verifies on the way in, and the emitter
+     * spells the narrowing back on the way out.
+     *
+     * <p>Reads `key.ref` rather than going through `NtsValue`, which is exact
+     * here and only here: a *string-keyed* table's keys are STRING-tagged by
+     * construction, and this helper's name says so. It is not a general key
+     * reader and a numeric key would come back as whatever `ref` held.
+     */
+    public static Object[] keysStr(NtsMap map) {
+        // **`new String[]`, not `new Object[]`.** Declaring the return
+        // `Object[]` is right and allocating one is not: Java's array
+        // covariance lets a `String[]` be *passed* where an `Object[]` is
+        // wanted, and does not let an `Object[]` be *cast* to a `String[]` --
+        // the caller's slot is a `String[]` and the emitter spells that cast.
+        // The first version allocated `Object[]` and every case threw
+        // `ClassCastException` at run time rather than refusing, which is the
+        // one outcome this backend is supposed to make impossible.
+        String[] out = new String[(int) size(map)];
+        int at = 0;
+        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+            NtsValue key = map.keys[slot];
+            if (key != null) {
+                out[at++] = (String) key.ref;
+            }
+        }
+        return out;
+    }
+
+    public static NtsMap copy(NtsMap from) {
+        NtsMap out = new NtsMap(from.map);
+        for (int slot = from.head; slot < from.used; slot++) {
+            NtsValue key = from.keys[slot];
+            if (key == null) {
+                continue;
+            }
+            if (from.map) {
+                set(out, key, from.values[slot]);
+            } else {
+                add(out, key);
+            }
+        }
+        return out;
+    }
+
     public static NtsValue get(NtsMap map, NtsValue key) {
         int at = map.find(key);
         return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];

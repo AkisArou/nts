@@ -160,7 +160,13 @@ fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, S
         "extend" | "extend_ref" => ("extend", format!("(L{class};L{class};)L{class};")),
         "splice" | "splice_ref" => ("splice", format!("(L{class};DD)L{class};")),
         "keep_first" => ("keepFirst", format!("(L{class};D)V")),
-        "join_str" => ("joinStr", format!("(L{class};Ljava/lang/String;)Ljava/lang/String;")),
+        // `join_num` and `join_str` are one Java method. The C lane needs two
+        // entry points because the element width changes what it reads; here
+        // the receiver's class already carries that, so `NtsArrayD.joinStr` and
+        // `NtsArrayL.joinStr` are the two and the stem picks neither.
+        "join_str" | "join_num" => {
+            ("joinStr", format!("(L{class};Ljava/lang/String;)Ljava/lang/String;"))
+        }
         "new" | "new_uninitialized" => ("of", format!("(D)L{class};")),
         _ => return None,
     };
@@ -208,6 +214,9 @@ fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static s
             (RUNTIME, "arrayIncludes", format!("({array}{one})Z"))
         }
         "nts_array_includes_str" => (RUNTIME, "arrayIncludesStr", format!("({array}{one})Z")),
+        "nts_array_join_num" => {
+            (RUNTIME, "arrayJoinNum", format!("({array}Ljava/lang/String;)Ljava/lang/String;"))
+        }
         "nts_array_at" => (RUNTIME, "arrayAt", format!("({array}D)D")),
         "nts_array_at_value" => {
             (RUNTIME, "arrayAtValue", format!("({array}D)Lnts/rt/NtsValue;"))
@@ -279,6 +288,9 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         "nts_is_map" => (types::VALUE, "isMap", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_set" => (types::VALUE, "isSet", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_promise" => (types::VALUE, "isPromise", "(Lnts/rt/NtsValue;)Z"),
+        "nts_view_join" => {
+            (types::VIEW_BASE, "join", "(Lnts/rt/NtsView;Ljava/lang/String;)Ljava/lang/String;")
+        }
         "nts_is_view_kind" => (types::VALUE, "isViewKind", "(Lnts/rt/NtsValue;D)Z"),
         _ => return None,
     })
@@ -588,6 +600,10 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_map_delete" => (types::MAP, "delete", "(Lnts/rt/NtsMap;Lnts/rt/NtsValue;)Z"),
         "nts_map_clear" => (types::MAP, "clear", "(Lnts/rt/NtsMap;)V"),
         "nts_map_size" => (types::MAP, "size", "(Lnts/rt/NtsMap;)D"),
+        "nts_map_copy" => (types::MAP, "copy", "(Lnts/rt/NtsMap;)Lnts/rt/NtsMap;"),
+        "nts_map_keys_str" => {
+            (types::MAP, "keysStr", "(Lnts/rt/NtsMap;)[Ljava/lang/Object;")
+        }
         "nts_map_next" => (types::MAP, "next", "(Lnts/rt/NtsMap;D)D"),
         "nts_map_key_at" => (types::MAP, "keyAt", MAP_AT_TO_VALUE),
         "nts_map_value_at" => (types::MAP, "valueAt", MAP_AT_TO_VALUE),

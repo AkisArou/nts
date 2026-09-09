@@ -161,6 +161,33 @@ public abstract class NtsView extends NtsAnyView {
     }
 
     /** `indexOf`, and `-1` where there is none. Strict equality, so NaN is never found. */
+    /**
+     * `join` over a typed array, which is `Array.prototype.join`'s own text.
+     *
+     * <p>The parallel of {@link NtsArrayD#joinStr}, and deliberately written
+     * through {@link #readAt} rather than each subclass's own accessor:
+     * `NtsViewI64` and `NtsViewU64` **refuse** there, with *"a TypeError:
+     * cannot mix BigInt and other types"*, because a `double` cannot carry
+     * their top bits. That makes a bigint view a loud refusal here instead of a
+     * quiet wrong number, which is the property that matters -- node prints
+     * `1n` as `1` and would be right, and answering something else would not
+     * be caught by anything downstream.
+     */
+    public static String join(NtsView view, String separator) {
+        int n = elements(view);
+        if (n == 0) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(n, separator, 8));
+        for (int i = 0; i < n; i++) {
+            if (i != 0) {
+                out.append(separator);
+            }
+            NtsRuntime.appendNumber(out, view.readAt(i));
+        }
+        return out.toString();
+    }
+
     public static double indexOf(NtsView view, double value, double from) {
         NtsBuffer.alive(view.buffer);
         int n = count(view);
