@@ -14509,9 +14509,38 @@ in its gainable failures at all, so more than three quarters of the names
 standing between `fs` and its 344 files take an optional parameter. And `net`'s
 single `createServer` is named in 96 of its 149.
 
-That is `blockers/optional-parameter-at-the-wrapper`, already filed and not
-mine, and it is the largest quantified lever in the profile -- larger than the
-class surface, which is 19 for `Buffer.from` and 24 for the `Stats` fields.
+### Correction: it is a second gate, and it is live for one name
+
+The paragraph above originally called this "the largest quantified lever in the
+profile". **It is not, and the check that says so took two minutes.**
+
+`prize.mjs` marks the name and says so in its own output -- "appearing is not
+enough" -- and I read the marker as the blocker. Asking the build logs which of
+the 51 are declined for the *first* reason:
+
+    module      opt names   never compiled
+    fs                 29               29
+    zlib                9                9
+    util                6                6
+    os                  2                2
+    readline            2                2
+    stream              2                1
+    net                 1                1
+
+    50 of 51 are declined with `is exported and no function of that name was
+    compiled`. One is past that gate.
+
+`createServer`, `createHook` and `mkdirSync` -- three of the five biggest piles
+-- are all `no function of that name was compiled`, and `stream`'s `Readable` is
+`a class whose constructor was not compiled`. The wrapper never sees them.
+
+So the marker is a **prediction about the gate after the current one**, which is
+what its own output calls it. The largest lever in the profile is whatever is
+refusing those function bodies, and this table does not name it.
+
+What survives: when those bodies compile, 50 names arrive at a second gate that
+is already filed as `blockers/optional-parameter-at-the-wrapper`, and `fs` will
+meet it 29 times.
 
 ### Why this is a ceiling rather than a promise
 
