@@ -13029,10 +13029,32 @@ twenty-one are a list. Had they been treated as a population, `os` would have
 been written off as having an unwinnable test -- and `os` is the one module a
 single export makes whole. Its ceiling is **9 of 9**.
 
-Two confirmed divergent, one confirmed *not*, eighteen unprobed. What is settled
-is the mechanism: a stand-in forwarding to a patchable JavaScript property is
-observed where the C is not, **and only where the mutation does not reach the
-operating system**.
+### Answered per binding, which is smaller and more durable than per test
+
+One answer per binding covers every pinned test that reaches it. Measured with
+`probes/standin-observability.ts` and `probes/env-capture.ts`, each mutation
+applied the way node's own tests apply it:
+
+| binding | mutation | compiled binding |
+| --- | --- | --- |
+| `nts_process_env` | `process.env.X = "…"` | **OBSERVED** -- `uv_os_setenv` updates the real environment |
+| `nts_write_stdout` | `process.stdout.write = fn` | NOT OBSERVED -- writes descriptor 1 |
+| `nts_write_stderr` | `process.stderr.write = fn` | NOT OBSERVED -- writes descriptor 2 |
+| `nts_platform` | `process.platform = "win32"` | NOT OBSERVED -- read `"linux"` |
+| `nts_stdout_is_tty` | `process.stdout.isTTY = true` | NOT OBSERVED -- read `false`, which is what `isatty(1)` says |
+
+The last row is worth reading carefully: the binding is **right about reality**
+and merely does not see the lie. That is the correct behaviour for a compiled
+artifact and it still fails a test that told the lie and expects it back.
+
+So the rule is the one the `env` case forced: **a stand-in is observed where the
+C is not, and only where the mutation does not reach the operating system.**
+`process.env` reaches it; a reassigned property does not; `platform` and `isTTY`
+are read from the host at the point of call and cannot be reached at all.
+
+Two confirmed divergent test files, one confirmed not, and five bindings with a
+settled answer each -- which is what the remaining eighteen candidates will be
+decided by, one lookup rather than one probe.
 
 ## Conventions
 
