@@ -9643,6 +9643,43 @@ both tsconfigs extend the same base, so it is not a compiler-option difference.
 The fixture was deleted rather than kept as a near-miss. What is ruled out is
 recorded here; the cause is still unknown.
 
+## The native half: 328 of 331, and which `nm` you ask decides the answer
+
+Re-derived tonight. 331 distinct `nts_*` bindings are declared across
+`runtime/node`; 328 have C somewhere. Three do not:
+
+```
+nts_next_tick                internal/tick.ts
+nts_promise_hook_install     internal/async-hooks.ts
+nts_promise_hook_uninstall   internal/async-hooks.ts
+```
+
+No `.c` file under `runtime/node` mentions any of them. The microtask machinery
+they sit beside does exist -- `internal/microtask.c` implements
+`nts_node_enqueue_microtask` -- so these are a bounded gap and not a missing
+subsystem. `nextTick` is not a microtask: node runs its queue *before* promise
+microtasks, and that ordering is the whole content of the binding.
+
+**The instruction says derive it with `nm`, and the subtler trap is which `nm`.**
+The first attempt used `nm -D --defined-only`, which reads the *dynamic* symbol
+table, and reported **95** bindings with no C -- including every `nts_udp_*` in
+`dgram`, a file whose C was written this session. Plain `nm` finds
+`nts_udp_bind_sync` in `dgram.node`; `nm -D` does not, because the symbol is not
+exported from the shared object. Nothing was wrong with the reasoning and
+everything was wrong with the table:
+
+```
+nm -D --defined-only   95 declared bindings "with no C"    <- wrong table
+nm     (all symbols)    3 declared bindings with no C      <- the answer
+grep 'declare function' across all names   109              <- wrong population
+                                                              (host shims too)
+```
+
+Three numbers, one question, and only the third is an answer. The rule this
+document already carries -- *derive it with `nm`, never a regex* -- was written
+after two regexes disagreed. It needs the other half: `nm` against the right
+table, and the declared population narrowed to what the question is about.
+
 ## The counted lane over all twenty-two, with its uncounted control
 
 Re-derived against the compiler carrying tonight's four fixes, one module at a
