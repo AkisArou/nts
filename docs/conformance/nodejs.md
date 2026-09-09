@@ -9745,6 +9745,16 @@ are given -- 115 cases across `dirname`, `extname`, `isAbsolute`, `normalize`
 and `relative` -- which no lane could say while one early assertion was stopping
 the comparison.
 
+**Swept for a second instance and there is not one yet.** Nineteen local tests
+assert inside an indexed loop, which is the same shape. It costs signal only
+where the module's functions actually run, and today that is `path` and
+`punycode`, which passes everything it is given. The others fail before the
+loop: `async_hooks/test/providers-static.js` dies on
+`Object.keys(undefined)` for a missing export, not on a comparison. So the
+nineteen were left alone rather than rewritten -- the pattern will start costing
+signal as each module's exports arrive, and rewriting a test whose module
+publishes nothing is churn that cannot be checked.
+
 ### "66 signatures in nine modules" cannot be re-derived, because it never said what it counted
 
 The typed-array gap is carried in this profile's standing description as "66
