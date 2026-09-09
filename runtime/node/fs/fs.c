@@ -2297,3 +2297,131 @@ void nts_fs_writev_async(double fd, NtsArray *bytes, NtsArray *lengths,
     free(slices);
     if (status != 0) async_fail(callback, FS_NUMBER, (double)status, pending);
 }
+
+/* ---------------------------------------------------------------- mkdir
+ *
+ * libuv has no recursive `mkdir`, so recursion is a chain of them: one request
+ * per path component, left to right, treating `EEXIST` as "already there" and
+ * carrying on.
+ *
+ * The interesting part of the contract is not the recursion, it is what comes
+ * back. Node reports **the first directory it actually had to create**, so a
+ * caller can undo exactly what the call did and no more -- removing a tree that
+ * was already there would be destroying somebody else's directory. So `first`
+ * is set once, on the first component whose `mkdir` succeeds, and never
+ * updated.
+ *
+ * Non-recursive is the same machine with the walk skipped: one component, the
+ * whole path, and `first` unset because the caller already knows the name. */
+
+typedef struct {
+    uv_fs_t request;
+    NtsHeader *callback;
+    char *path;      /* owned; prefixes are terminated in place and restored */
+    size_t length;
+    size_t cursor;   /* how far along `path` the chain has got */
+    int mode;
+    bool recursive;
+    char *first;     /* owned; the first component this call created */
+    bool done;
+} MkdirChain;
+
+static void mkdir_finish(MkdirChain *chain, double errno_value) {
+    if (chain->callback != NULL) {
+        const char *first = chain->first == NULL ? "" : chain->first;
+        async_call_path(chain->callback, errno_value,
+                        nts_string_from_utf8(first, strlen(first)));
+        nts_release(chain->callback);
+    }
+    uv_fs_req_cleanup(&chain->request);
+    free(chain->path);
+    free(chain->first);
+    free(chain);
+}
+
+static void mkdir_step(MkdirChain *chain);
+
+static void on_mkdir_step(uv_fs_t *request) {
+    MkdirChain *chain = (MkdirChain *)request;
+    ssize_t result = request->result;
+    uv_fs_req_cleanup(request);
+
+    if (result == 0 && chain->first == NULL) {
+        /* The first one this call actually made. `request->path` is the prefix
+         * as it stood, which is why the terminator is restored *after* this. */
+        chain->first = strdup(chain->path);
+    }
+    /* Restore the separator the step replaced, so the next prefix is longer
+     * rather than a different string. */
+    if (chain->cursor < chain->length) chain->path[chain->cursor] = '/';
+
+    if (result != 0 && result != UV_EEXIST) {
+        mkdir_finish(chain, (double)result);
+        return;
+    }
+    if (chain->done) {
+        mkdir_finish(chain, 0.0);
+        return;
+    }
+    mkdir_step(chain);
+}
+
+static void mkdir_step(MkdirChain *chain) {
+    if (!chain->recursive) {
+        chain->done = true;
+        chain->cursor = chain->length;
+        int status = uv_fs_mkdir(fs_loop(), &chain->request, chain->path,
+                                 chain->mode, on_mkdir_step);
+        if (status != 0) mkdir_finish(chain, (double)status);
+        return;
+    }
+    /* The next separator after what has already been made. A leading slash is
+     * skipped rather than treated as an empty component, which would ask for
+     * `mkdir("")`. */
+    size_t at = chain->cursor;
+    while (at < chain->length && chain->path[at] == '/') at++;
+    while (at < chain->length && chain->path[at] != '/') at++;
+    chain->cursor = at;
+    chain->done = at >= chain->length;
+    if (at < chain->length) chain->path[at] = '\0';
+
+    int status = uv_fs_mkdir(fs_loop(), &chain->request, chain->path,
+                             chain->mode, on_mkdir_step);
+    if (status != 0) {
+        if (at < chain->length) chain->path[at] = '/';
+        mkdir_finish(chain, (double)status);
+    }
+}
+
+static void mkdir_start(char *native, double mode, bool recursive,
+                        NtsHeader *callback) {
+    if (native == NULL) {
+        async_call_path(callback, (double)UV_ENOMEM,
+                        nts_string_from_utf8("", 0));
+        return;
+    }
+    MkdirChain *chain = calloc(1, sizeof(MkdirChain));
+    if (chain == NULL) {
+        free(native);
+        async_call_path(callback, (double)UV_ENOMEM,
+                        nts_string_from_utf8("", 0));
+        return;
+    }
+    chain->callback = callback;
+    if (callback != NULL) nts_retain(callback);
+    chain->path = native;
+    chain->length = strlen(native);
+    chain->mode = (int)mode;
+    chain->recursive = recursive;
+    mkdir_step(chain);
+}
+
+void nts_fs_mkdir_async(NtsString *path, double mode, bool recursive,
+                        NtsHeader *callback) {
+    mkdir_start(native_path(path), mode, recursive, callback);
+}
+
+void nts_fs_mkdir_async_bytes(NtsArray *path, double mode, bool recursive,
+                              NtsHeader *callback) {
+    mkdir_start(native_byte_path(path), mode, recursive, callback);
+}
