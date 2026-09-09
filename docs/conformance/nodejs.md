@@ -13221,6 +13221,47 @@ The way to tell is the one both were found by: **run the guard against a binary
 that predates its own fix.** Reading it cannot distinguish the two cases; a
 count of 1 and 2 across the change does it immediately.
 
+## What `os.constants` has to be, beyond crossing
+
+`os` is five files behind one export and it is the only module in the profile a
+single export makes whole. Those five assert more than the value's presence, and
+the requirements are worth having before the crossing is built rather than after
+it lands and two of the five still fail.
+
+Measured against `node:os` directly:
+
+    os.constants          frozen: false
+      signals             frozen: TRUE     33 keys
+      errno               frozen: false    79 keys
+      priority            frozen: false     6 keys
+      dlopen              frozen: false     5 keys
+
+**Only `signals` is frozen.** That asymmetry is node's, not a transcription
+choice, and `constants-signals-static.js` asserts it directly:
+
+    assert.strictEqual(Object.isFrozen(constants.signals), true);
+    assert.throws(() => (constants.signals.FOOBAR = 1337), TypeError);
+
+The file is `"use strict"`, so the second line needs the assignment to *throw*
+rather than silently fail -- which follows from frozen, and would not follow
+from a plain object that merely refuses new keys.
+
+So the full requirement is:
+
+1. `constants` crosses as an object -- the object-return path.
+2. Its four table fields cross -- the map crossing outward.
+3. `signals` arrives **frozen**, and the other three do not.
+4. `SIGUSR1` is read from the platform: 10 on Linux, 30 on macOS, which is why
+   `readConstants` builds the table rather than transcribing it.
+
+Point 3 is the one a crossing will not give for free: a map arriving as a plain
+object is not frozen, and freezing all four would fail nothing today and diverge
+from node in three places that nothing currently asserts.
+
+`core-static.js` also destructures `PRIORITY_BELOW_NORMAL` and `PRIORITY_LOW`
+from `constants.priority`, so the `priority` table has to carry its five names
+and not only exist.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
