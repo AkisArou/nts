@@ -501,8 +501,41 @@ function escapeControlCharacter(code: number): string {
   }
 }
 
+/**
+ * Node's `keyStrRegExp`, spelled as the character test it is.
+ *
+ * `lib/internal/util/inspect.js:249` is `/^[a-zA-Z_][a-zA-Z_0-9]*$/`, and
+ * `:2336` uses it to decide whether a key prints bare or quoted.
+ *
+ * **This used to accept `$` and node does not.** The regex here read
+ * `/^[A-Za-z_$][A-Za-z0-9_$]*$/`, which is the JavaScript identifier rule and
+ * not node's rule for this decision -- node prints `{ '$a': 1 }`, `{ 'a$b': 1 }`
+ * and `{ '$': 1 }`, all quoted, and this would have printed the first two bare.
+ * Found by reading node's source while looking at something else; nothing was
+ * testing it.
+ *
+ * Written as a loop rather than a literal because the loop is what the two
+ * spellings have in common, and this one is checkable character by character
+ * against node's set. The regular expression engine is a separate question and
+ * this function is not the place to be waiting on it.
+ */
+function isBareKey(name: string): boolean {
+  if (name.length === 0) return false;
+  for (let i = 0; i < name.length; i++) {
+    const c = name.charCodeAt(i);
+    const letter = (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
+    const underscore = c === 0x5f;
+    if (letter || underscore) continue;
+    // Digits are allowed everywhere except first, which is the only way the
+    // two character classes in node's expression differ.
+    if (i > 0 && c >= 0x30 && c <= 0x39) continue;
+    return false;
+  }
+  return true;
+}
+
 function inspectPropertyName(name: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : inspectString(name);
+  return isBareKey(name) ? name : inspectString(name);
 }
 
 function isStringKeyedObject(value: unknown): value is Record<string, unknown> {
