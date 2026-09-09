@@ -46,6 +46,23 @@ meets them. This is the map; the row table below it is the current state.
   - `module-closures` is 1.058x for no reason I can find, and three mechanisms are dead
   - `array-from`'s set walk, checked on the runtime side rather than inferred
   - There are 60 cases, not 51, and nine of them cannot be held to the bar
+  - Is the harness itself the band? No, and the 18% it was built around is narrower than it reads
+  - The machine is hybrid, nothing pins, and an E-core run is 1.8x slower
+  - More warmup does not settle the flagged rows, and `objects` was never unsettled
+  - Six runs each of the flagged rows, and three of the four were never losing
+  - The band is real: three rows reproduce to two decimals across six runs
+  - `closure-merge`'s 1.01x is not the closure ABI either, at a bimorphic site
+  - `array-from`'s set walk priced at 6.5x, and it is the cursor being an `f64`
+  - `array-from` moved: 2.12x to 0.95x, and the cursor was the whole of it
+  - Re-measured after fourteen of the other lane's commits: nothing moved, and I nearly said two rows did
+  - A fixture added in the same commit as its fix cannot be run against an older binary
+  - ART, measured: seven of eight allocate the same, and the eighth is 43.7x
+  - `array-methods` on ART: 6288 bytes/op to 144, and the fix is free on HotSpot
+  - The ART allocation survey, twenty-four cases: three diverge and one instrument lied
+  - The ART allocation axis, closed: one was ours, two are parity, one we win
+  - A class file the JVM loads, `d8` refuses, and node disagrees with -- three rules, and the mangler knew one
+  - And widening it found something already wrong, with no Android in it
+  - `symbol-keyed-map` answered 32768 on ART where node answers 10240, and my own script wrote the bug
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -2421,6 +2438,135 @@ was the only one, and `fuse` closed it. Everything else is either parity, a win,
 or a gap that HotSpot has in the same proportion and that the existing bytes/op
 section already carries.
 
+### A class file the JVM loads, `d8` refuses, and node disagrees with -- three rules, and the mangler knew one
+
+`symbol-keys` was green in every instrument this lane has. It verified under
+`-Xverify:all`, it agreed with node, it ran on ART, and it could not reach
+Android:
+
+    Field name '__@kCount@2' cannot be represented in dex format.
+
+`jvm_member_name` mapped six characters and kept the rest, on an argument its
+own doc comment spelled out: the JVM's rule for a member name is much looser
+than C's rule for an identifier, so applying C's would rename functions for a
+constraint that does not exist. That argument is correct. **It is answering a
+question with two answers when there are three** -- and the third is the one
+that decides whether this backend is worth building, since Android is the
+platform the other two lanes cannot reach.
+
+I fixed the one character and wrote in the commit message that `@` was "the
+whole of the difference in practice, not merely the first of a family". The
+sixty-case sweep supported that: it was the only one of the sixty.
+
+**The ratchet written to hold the fix refuted it on its first run.**
+
+    `a b` mangles to `a b`, which d8 refuses -- add ' ' to jvm_member_name
+
+Twenty-two more, and the sweep could not have found them because no case
+contains one. Four lines of legal TypeScript does:
+
+    class Holder { "a b": number = 1 }   ->   public int a b;
+
+So the `match` is a predicate now. A list can be short by one; a predicate
+cannot. That is the whole lesson and it generalises past this file: **sixty
+programs is a fact about sixty programs.** Non-ASCII still passes through
+untouched, because `SimpleName` admits it and a TypeScript identifier may
+legitimately be spelled that way.
+
+### And widening it found something already wrong, with no Android in it
+
+    class C { "a.b": number = 1; "a$b": number = 2 }
+    -> public int a$b;   public int a$b;
+    -> ClassFormatError: Duplicate field name "a$b" with signature "I"
+
+The mapping is not injective and never was. Two distinct properties, one field,
+and a class file the JVM refuses at load -- this is the corpus's `unverifiable
+class` row, which is a hard zero, reached from six lines. Where the descriptors
+happen to differ it is worse: the class loads and the two properties are told
+apart by their *types*.
+
+`c_identifier` on the C lane names exactly this hazard and solves it, giving
+`#`, `.` and `@` each their own spelling "so that two different qualified names
+cannot become one C name". I did not have that and should have read it.
+
+Refused by name as NTS4013 rather than fixed by escaping. The injective
+mangling costs every generated name its readability -- `module$hinit` rather
+than `module$init` -- for a shape that has never occurred outside the test that
+found it, and the refusal says where the fix goes if a real program hits it.
+
+**And the same reading found it on the C lane, where it is not refused.**
+`c_identifier`'s injective branch only runs `if name.contains(['#','.','<','>','@'])`.
+A space is in none of those, so `"a b"` takes the `else` and is returned
+verbatim:
+
+    program.c:8:14: error: expected ';' at end of declaration list
+        8 |     int32_t a b;
+
+Uncompilable C, from the same four lines, plus a matching `offsetof` in a
+`_Static_assert`. Handed to MainClaude with the reproducer. LLVM is unaffected:
+fields are offsets there.
+
+`tooling/android/dexes.sh` is the ratchet, and it needs no device -- `d8` is a
+compiler, so whether it accepts a class file is a question about the class file.
+It covers the 137 examples, which nothing had ever dexed: the jar test only ever
+sees hand-written Java, and `agrees-on-device.sh` needs an emulator.
+
+    209 dexed, 0 refused, 1 declined by the backend
+
+Neither defect came from it. Both came from asking the rule.
+
+### `symbol-keyed-map` answered 32768 on ART where node answers 10240, and my own script wrote the bug
+
+Chasing why `elementwise` failed `javac` in the ART sweep -- a two-parameter
+entry my driver could not spell, which is all it was -- I read the driver
+`tooling/bench` generates and found a static block mine does not have:
+
+    static { nts.gen.Program.module$init(); }
+
+with a comment saying it was added because forty-nine cases did not need it and
+the fiftieth answered `4096 x 8` instead of `4096 x 2.5`. **That is the bit
+pattern my ART sweep had been printing for `symbol-keyed-map` for two days:**
+
+    ART sweep      40e0000000000000   32768   my driver
+    node           40c4000000000000   10240   the oracle
+
+Five module-level `const` symbols stayed null, five distinct map keys collapsed
+into one, and every lookup hit it. The sweep reported `agree`, and it was
+telling the truth: `java` and `dalvikvm` agree exactly, on a program that is not
+the benchmark.
+
+**The cause is not the driver, it is the flag.** `nts emit-jvm --entry work`
+does not emit `module#init` at all, so no driver could have called it.
+`tooling/bench` roots at `Entry(["work", "module#init"])`; the CLI's
+`named_entry()` roots at `Entry(["work"])`, and the CLI's own doc comment
+asserts these are the same thing. Two parsers sit twenty lines apart and
+disagree: `requested_entry()` splits `--entry a,b` on commas, `named_entry()`
+does not and instead collects repeated flags. So the fix is a repeated flag, not
+a comma:
+
+    --entry work --entry 'module#init'      ->   10240   matches node
+
+Both scripts now root that way and emit the static block when `javap` shows the
+method. `symbol-keyed-map` moved to `40c4000000000000`; `objects`, also on the
+init list, did not move, so its module state never reached its answer.
+
+**What this does and does not touch.** The allocation survey's conclusions
+stand: `in-narrowing`, `generator`, `case-convert`, `array-mutations`,
+`array-predicates` and `array-methods` have no module initialisation, so none of
+them was running the degenerate program. The agreement sweep's *claim* was
+always the narrow one -- `java` against `dalvikvm`, not against node -- and it
+held. What it lacked was any reason to believe the program under both was the
+right program, and "the bench cross-checks that emission against node" is now
+the reason, which requires my emission to be the bench's.
+
+**The instrument agreed with itself.** Two runtimes, one artefact, bit-identical
+-- and identical is what a wrong program is too. This is the third time on this
+lane that a comparison passed because both sides shared an assumption, and the
+first two are above: an A/B against a binary that predated the fixture, and a
+regression published from two runs in one sitting. A control that cannot fail
+independently of the thing it is controlling is not a control, and neither
+`agree` nor `0 refused` is evidence until something in the loop can say no.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
@@ -2621,3 +2767,28 @@ One incidental finding, not hot here but the same family as `narrow.rs`'s:
 `Queens.queenRows` is emitted `[D` with an `i2d` per store, where AWFY's Java
 uses `int[]`. An array's element type is `hir::elements`' decision, so it is
 theirs, and both native lanes carry it too.
+
+**Not mine, and reported: the CLI's `--entry` drops module evaluation.**
+`nts emit-{c,llvm,jvm} --entry work` roots at `Entry(["work"])` where
+`tooling/bench` roots at `Entry(["work", "module#init"])`, so the artefact has
+no `module#init` and no driver can call it. The CLI's own doc comment asserts
+the two are the same. It is a wrong *answer*, not a link error --
+`symbol-keyed-map` gave 32768 against node's 10240 -- and it reaches anyone who
+uses the flag to reproduce what a benchmark builds, which is exactly what the
+comment recommends it for. `--entry work --entry 'module#init'` is the
+workaround; `named_entry()` collects repeated flags and, unlike
+`requested_entry()` twenty lines above it, does not split on commas. Both my
+Android scripts do that now. MainClaude owns `tooling/cli`.
+
+**Mine, and open.** Two of sixty are not driven on ART: `elementwise` exports
+`scale(xs: number[], seed)` and ships its own `driver.java` for `tooling/bench`,
+and `json-serialize` exports nothing from `case.ts`. Both are now reported as
+skips rather than as failures, and counted apart from disagreements -- the
+summary line called them the same thing for two days.
+
+**Mine, and deliberately deferred.** NTS4013 refuses a layout whose properties
+mangle to one JVM field name. The fix that would accept it is an injective
+mangling -- `$` escaped as `$$`, forbidden characters as `$` plus a letter --
+and it costs every generated name its readability in a stack trace, which is the
+one place a person reads one. Worth doing the first time a real program is
+refused, and not before. `c_identifier` on the C lane is the design to copy.

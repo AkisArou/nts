@@ -80,13 +80,29 @@ for case in $cases; do
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benches/cases/$case"] }
 JSON
   NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
-    --out "$out/classes" --entry "$entry" > /dev/null 2>&1 \
+    --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1 \
     || { printf "%-24s %12s %12s\n" "$case" "declined" "declined"; continue; }
 
+  # Module evaluation is a root in the same sense the entry point is: nothing
+  # calls it, and the program is wrong without it. `--entry work` alone prunes
+  # it -- `named_entry()` does not add it the way `tooling/bench` does -- and it
+  # goes missing as a wrong *answer* rather than a link error, which is how this
+  # stood: `symbol-keyed-map` answered 32768 where node answers 10240, because
+  # five `const` symbols stayed null and five map keys collapsed into one.
+  #
+  # The flag is repeated rather than comma-joined: `named_entry()` collects
+  # every `--entry` occurrence and does not split on commas, unlike
+  # `requested_entry()` twenty lines above it, which does.
+  if javap -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+    init='static { nts.gen.Program.module$init(); }'
+  else
+    init=''
+  fi
   cat > "$out/H.java" <<JAVA
 import com.sun.management.ThreadMXBean;
 import java.lang.management.ManagementFactory;
 public final class H {
+    $init
     static double sink;
     public static void main(String[] a) {
         ThreadMXBean mx = (ThreadMXBean) ManagementFactory.getThreadMXBean();

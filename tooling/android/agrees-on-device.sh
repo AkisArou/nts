@@ -48,10 +48,25 @@ trap 'rm -rf "$work"' EXIT INT TERM
 
 cases=${*:-"fib checksum accumulate loop array-methods symbol-keyed-map objects erasure-typed erasure-unknown"}
 bad=0
+skipped=0
 for case in $cases; do
   entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
     | head -1 | awk '{print $3}')
-  [ -n "$entry" ] || { printf "%-22s no exported entry\n" "$case"; bad=$((bad + 1)); continue; }
+  # Two cases this driver cannot spell, and neither is the backend's fault --
+  # which is what "javac failed" and "no exported entry" implied for two days.
+  #
+  # `elementwise` exports `scale(xs: number[], seed: number)`. This driver
+  # passes one `double`; the array is why the case ships its own `driver.java`
+  # for `tooling/bench` to use. `json-serialize` exports nothing from `case.ts`
+  # at all -- its workload comes from `provider`.
+  #
+  # Counted apart from `bad`. A skip and a disagreement are different results
+  # and the summary line said one of them for both.
+  if [ -f "$root/benches/cases/$case/driver.java" ]; then
+    printf "%-22s has its own driver.java -- driven by tooling/bench, not here\n" "$case"
+    skipped=$((skipped + 1)); continue
+  fi
+  [ -n "$entry" ] || { printf "%-22s case.ts exports no function\n" "$case"; skipped=$((skipped + 1)); continue; }
 
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"
@@ -59,13 +74,29 @@ for case in $cases; do
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benches/cases/$case"] }
 JSON
   if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
-    --out "$out/classes" --entry "$entry" > /dev/null 2>&1; then
+    --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1; then
     printf "%-22s the backend declined it\n" "$case"
     bad=$((bad + 1))
     continue
   fi
+  # Module evaluation is a root in the same sense the entry point is: nothing
+  # calls it, and the program is wrong without it. `--entry work` alone prunes
+  # it -- `named_entry()` does not add it the way `tooling/bench` does -- and it
+  # goes missing as a wrong *answer* rather than a link error, which is how this
+  # stood: `symbol-keyed-map` answered 32768 where node answers 10240, because
+  # five `const` symbols stayed null and five map keys collapsed into one.
+  #
+  # The flag is repeated rather than comma-joined: `named_entry()` collects
+  # every `--entry` occurrence and does not split on commas, unlike
+  # `requested_entry()` twenty lines above it, which does.
+  if javap -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
+    init='static { nts.gen.Program.module$init(); }'
+  else
+    init=''
+  fi
   cat > "$out/Main.java" <<JAVA
 public final class Main {
+    $init
     public static void main(String[] a) {
         double got = nts.gen.Program.$entry(nts.gen.Program.seed);
         System.out.println(Long.toHexString(Double.doubleToRawLongBits(got)));
@@ -97,5 +128,7 @@ JAVA
 done
 
 echo
+[ "$skipped" = 0 ] && echo "every case was driven" \
+  || echo "$skipped case(s) this driver cannot spell -- see the comment above"
 [ "$bad" = 0 ] || { echo "$bad case(s) did not agree"; exit 1; }
 echo "every case agrees between java and dalvikvm"
