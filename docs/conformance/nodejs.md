@@ -9702,6 +9702,41 @@ across the whole profile rather than in `http` alone, because the defect was a
 value-export path publishing a global whose initializer had been excised, and
 nothing about that was specific to `http`.
 
+### Every wrapper decline in the profile, and 59% of them are not the wrapper's
+
+282 declines across the twenty-two modules, by reason:
+
+| reason | count | what it actually is |
+| --- | --- | --- |
+| `is exported and no function of that name was compiled` | 134 | lowering |
+| `is exported and is not a function this backend can name` | 95 | export form |
+| `is a class whose constructor was not compiled` | 32 | lowering |
+| `takes an object` | 8 | the wrapper |
+| `takes unknown` | 6 | the wrapper |
+| `takes a rest parameter` | 2 | the wrapper |
+| `returns an object` | 2 | the wrapper |
+| `takes an object[], which crosses outward only` | 1 | the wrapper |
+| `returns unknown` | 1 | the wrapper |
+| `returns an object[]` | 1 | the wrapper |
+
+**166 of 282 are lowering failures reported at the wrapper**, because a function
+that never compiled has nothing to wrap. Another 95 are the export-form family
+-- a class, a namespace, a value, a shorthand -- which is a naming question
+rather than a type-crossing one. The wrapper's own type boundary accounts for
+**21**.
+
+That decomposition is worth having before anyone reads "282 wrapper declines" as
+282 things wrong with the wrapper. It is 21 things wrong with the wrapper and
+166 things wrong upstream of it.
+
+**And it explains an absence.** This document has carried "66 signatures in nine
+modules sit behind the typed-array gap" for a while. There is not one
+`takes TypedArray` decline in the profile today. The gap is real -- no emitted
+wrapper builds a typed array, counted separately and still zero -- but those 66
+signatures are not reaching the wrapper to be declined. They are inside the 134
+whose functions never compiled. A blocker can be masked by a blocker in front of
+it, and the count that names it goes to zero without the blocker moving.
+
 ### `path`'s eighteen failures, and two of them are the wrapper's
 
 Reading the failures rather than the count:
