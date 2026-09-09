@@ -11972,6 +11972,53 @@ what differs -- which is exactly the half a compiled artifact replaces.
 The modules where this matters most are the ones with C behind them, and they
 are also the ones with no compiled exports to compare yet.
 
+## The first compiled differentials: `os` clean, `punycode` clean, `path` finds `basename`
+
+Run against the v11 addons, asking node's own module the same questions:
+
+| module | comparisons | inputs | divergences |
+| --- | ---: | ---: | ---: |
+| `punycode` | 140,224 | 20,032 | **0** |
+| `os` | 85,238 | 5,014 | **0** |
+| `path` | 105,882 | 5,042 | 20,168 |
+
+`os` publishing 17 names that agree with node across 85,238 comparisons is a
+stronger statement than its 4 passing test files, and it is the answer to
+"is the rest of `os` right, or merely untested" -- the five missing exports are
+missing, and the seventeen present are correct.
+
+**`path`'s 20,168 are two causes and neither is a wrong answer.** Classified by
+what the compiled side did:
+
+    m[ns].format is not a function                  -- the absent export, known
+    the compiled function requires 2 arguments      -- an arity divergence
+
+The second is the finding. `basename(path: string, suffix?: string)` publishes
+with its optional parameter **required**:
+
+    path.basename("/a/b.txt")           THREW: the compiled function requires 2 arguments
+    path.basename("/a/b.txt", ".txt")   "b"
+    posix.basename("/a/b.txt")          THREW
+    win32.basename("C:\a\b.txt")        THREW
+
+So the single-argument form -- which is how `basename` is almost always called --
+throws, and the two-argument form is correct. This is
+`optional-parameter-at-the-wrapper`, already filed and still reproducing, and
+what the differential adds is its cost: **it is not a corner, it is the common
+call of one of node's most-used path functions.**
+
+Probed across every published function in both modules, called with one
+argument: `path` 11 functions, **2** throwing the arity error (`basename`, and
+`relative`, which genuinely takes two and throws in node as well -- a false
+positive of the probe, not a divergence). `os` 15 functions, **0**.
+
+**Note what found it.** `path` is 11 of 21 on node's own tests and 8 of those
+are behaviour-dependent, and none of that says `basename("/a/b.txt")` throws.
+The pinned corpus calls it the way its author wrote the test; the differential
+calls it the way the corpus does not. Three real bugs came out of the
+TypeScript-lane differential for the same reason, and this is the first one from
+the compiled lane -- which had never been run.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
