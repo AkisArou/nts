@@ -14725,6 +14725,62 @@ somebody else's problem to clear first.
 in that near group. `string_decoder` at 0 and 59 is the clearest case of the
 pattern: nothing of its own left, and 59 things in front of it.
 
+## Where the compiled axis ended: 14 of 22 modules
+
+Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
+
+    module          pass   behaviour   shape-only   hollow
+    path              13          12            1        0
+    os                 5           3            2        0
+    punycode           3           3            0        0
+    async_hooks        2           1            1        0
+    fs                 2           1            1        0
+    util               2           2            0        0
+    net                1           1            0        0
+    querystring        1           1            0        0
+    readline           1           1            0        0
+    stream             1           1            0        0
+    buffer             1           0            1        0
+    http               1           0            1        0
+    process            1           0            1        0
+    zlib               1           0            1        0
+
+    35 pass: 26 behaviour-dependent, 9 shape-only, 0 hollow, 14 of 22 modules
+
+Where it started this morning, on the same instrument once it existed:
+
+    26 pass: 17 behaviour-dependent, 4 shape-only, 5 hollow, 7 modules
+
+### Seven of the eight new modules came from this side, not the compiler
+
+`net`, `stream`, `async_hooks`, `readline`, `fs`, `util` and `querystring` each
+had **zero** compiled passes and working published behaviour that nothing was
+asking about. Every upstream test for them needs a socket, a stream, a
+filesystem, an async context node creates, or a class that does not cross yet.
+
+`http` and `process` needed a shim fixed before anything could be asked at all.
+
+**Four shims discarded working exports.** `stream` threw away
+`getDefaultHighWaterMark`, `process` threw away `env`, `querystring` threw away
+`escape`, and `http` threw at definition time on `class X extends undefined` so
+every one of its tests failed with one message. All four are the same shape,
+which `os/shape.mjs` had already written down: the guard against reaching
+through an absent export is right, and its scope was wrong -- none of them
+distinguished "cannot build the public object" from "cannot build any of it".
+
+`hidden-exports.mjs` was written for the first of them and found the other three,
+one of them on a name that had landed an hour earlier.
+
+### And the compiler moved three times without moving this number
+
+    13:42 pin   25 behaviour-dependent, 11 modules   (with the tests of the time)
+    15:18 pin   25 behaviour-dependent, 11 modules
+    16:05 pin   25 behaviour-dependent, 13 modules
+
+Published names went 86 to 98 across those three, and `NTS1003` fell by a fifth
+on the last one. The behaviour count did not move. Every module added to the
+axis today was added by finding what an artifact already did and asking it.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
