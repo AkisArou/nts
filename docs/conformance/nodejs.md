@@ -9780,6 +9780,24 @@ exports. It now counts defined values and names the undefined ones separately,
 and exits non-zero on either. The hole was in the instrument whose whole premise
 is that `exports > 0` means the module has a subject.
 
+**Gated the same night, and verified here rather than taken.** A global whose
+initializer was excised kept its binding, zeroed, and the value-export path
+published it. It is now declined:
+
+```
+no wrapper for METHODS: is exported and is not a function this backend can name
+no wrapper for methods: ...
+```
+
+Rebuilt against the compiler that carries the gate -- not the addon already on
+disk, which was built before it -- the loaded module has two keys,
+`getHTTPParserPoolLimit` and `maxHeaderSize`, and none bound to `undefined`.
+`vacuous-lane` agrees: 2 exports, 0 undefined, 0 vacuous.
+
+`http` is still 0 passed, 410 failed, which is the correct outcome. The gate
+removed a misleading surface, not a missing capability, and a test count that
+moved on it would have meant something was wrong with the tests.
+
 ## `JSON.stringify` is gone from `errors.ts`, and it did not free `validateString`
 
 `internal/errors.ts` had the only two `JSON.stringify` call sites that mattered,
