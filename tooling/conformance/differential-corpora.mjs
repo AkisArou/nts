@@ -729,6 +729,89 @@ export const CORPORA = {
     ],
   },
 
+  async_hooks: {
+    // `AsyncLocalStorage` as a state machine: the input is a program of nested
+    // `run` calls, `enterWith`, `exit` and reads, and the result is the
+    // sequence of stores observed.
+    //
+    // Everything interesting here is nesting and restoration. A `run` inside a
+    // `run` must see the inner store and the outer one must come back
+    // afterwards; `exit` must make `getStore()` undefined for its callback and
+    // restore on the way out; `enterWith` must persist past the call it was
+    // made in, unlike `run`. None of that is reachable by calling anything
+    // once, which is why this is a program rather than a value.
+    //
+    // Synchronous only. The whole point of `AsyncLocalStorage` is propagation
+    // across an await, and comparing that means comparing *timing*, which this
+    // corpus is not built for -- it would need the callback-ordering harness
+    // rather than a value compare. The synchronous half is what is compared
+    // here, and the asynchronous half is uncompared and named as such.
+    fixed: [
+      "r", "rr", "rrr", "re", "er", "rer", "w", "wr", "rw", "g",
+      "rg", "rgr", "eg", "rEg", "rE", "wg", "wE", "rrE", "", "gg",
+      "rwg", "wrg", "rEr", "ErE", "rrgg", "wwg", "rgE", "grg", "Erw", "rwE",
+    ],
+    input: (rnd) => {
+      const OPS = "rewgE";
+      let out = "";
+      const k = 1 + Math.floor(rnd() * 8);
+      for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
+      return out;
+    },
+    calls: [
+      {
+        label: "als-program",
+        call: (m, program) => {
+          const als = new m.AsyncLocalStorage();
+          const log = [];
+          let depth = 0;
+          const read = (tag) => log.push(`${tag}:${JSON.stringify(als.getStore())}`);
+          // The program is executed as a fold rather than a loop, because `run`
+          // takes a callback and the remainder of the program has to run inside
+          // it for nesting to mean anything.
+          const step = (i) => {
+            if (i >= program.length) {
+              read("end");
+              return;
+            }
+            const op = program[i];
+            const n = i + 1;
+            try {
+              if (op === "r") {
+                depth++;
+                als.run({ d: depth }, () => {
+                  read(`in${n}`);
+                  step(i + 1);
+                });
+                read(`out${n}`);
+              } else if (op === "e") {
+                als.exit(() => {
+                  read(`ex${n}`);
+                  step(i + 1);
+                });
+                read(`unex${n}`);
+              } else if (op === "w") {
+                als.enterWith({ w: n });
+                read(`w${n}`);
+                step(i + 1);
+              } else if (op === "E") {
+                als.disable();
+                read(`dis${n}`);
+                step(i + 1);
+              } else {
+                read(`g${n}`);
+                step(i + 1);
+              }
+            } catch (err) {
+              log.push(`THREW${n}:${err && err.name}`);
+            }
+          };
+          step(0);
+          return log;
+        },
+      },
+    ],
+  },
   readline: {
     // The cursor functions, fuzzed over argument shapes the pinned tests do not
     // reach. `local/cursor-static.js` covers the documented calls and their

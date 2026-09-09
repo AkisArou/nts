@@ -11317,10 +11317,11 @@ run as a differential rather than as new hand-written assertions.
 | `console` | 4,030 | 4,030 | 0 |
 | `diagnostics_channel` | 4,020 | 4,020 | 0 |
 | `readline` | 4,030 | 4,030 | 0 |
+| `async_hooks` | 4,030 | 4,030 | 0 |
 
-**14 modules measured, 495,136 comparisons, 0 divergences** — `console`,
-`diagnostics_channel` and `readline` were all added tonight and contribute
-12,080 of them.
+**15 modules measured, 499,166 comparisons, 0 divergences** — `console`,
+`diagnostics_channel`, `readline` and `async_hooks` were all added tonight and
+contribute 16,110 of them.
 
 `console` is a state-machine fuzz like `events`, because its behaviour is what
 it *writes* and the parts worth comparing are stateful: `group` indentation
@@ -11365,6 +11366,22 @@ believed: **23 of its 30 fixed inputs write bytes, they produce 21 distinct
 results, and a sabotage that makes `clearLine` ignore its direction argument is
 caught by 5 of 30.** A corpus with no demonstrated failure is a claim.
 
+`async_hooks` runs `AsyncLocalStorage` as a program of nested `run` calls,
+`enterWith`, `exit`, `disable` and reads, executed as a fold rather than a loop
+so the remainder of the program runs *inside* each callback and nesting means
+something. It reaches what no single call can: an inner `run` seeing its own
+store with the outer one restored afterwards, `exit` making `getStore()`
+undefined for its callback and restoring on the way out, `enterWith` persisting
+past the call it was made in where `run` does not.
+
+**Synchronous only, and that is a real limit rather than an oversight.** The
+point of `AsyncLocalStorage` is propagation across an `await`, and comparing
+that means comparing timing, which a value-compare corpus cannot do. The
+asynchronous half is uncompared and is named as such in the corpus itself.
+
+Its controls: 30 distinct results over 30 fixed inputs across 135 log lines, and
+a sabotage where `exit` does not clear the store is caught.
+
 The tell in the other two was the **shape** of the divergence rather than the count:
 every input diverging with an empty oracle means the oracle is not wired up, and
 an output that is the right output *repeated* means state leaking between
@@ -11373,14 +11390,14 @@ answer, not the same answer twice.
 
 ### What it could not run, which is half the tree
 
-That number means nothing without this beside it. **Fourteen of twenty-two
+That number means nothing without this beside it. **Fifteen of twenty-two
 modules were measured.** One more was skipped with a stated reason:
 
     os: skipped on this lane -- its bindings stand in as node here;
         run differential-addon.mjs against the built addon instead
 
-and **seven never appeared in the run at all** — `async_hooks`, `dgram`,
-`http`, `net`, `process`, `stream`, `timers`. These are the modules whose surfaces are sockets, streams and timers
+and **six never appeared in the run at all** — `dgram`, `http`, `net`,
+`process`, `stream`, `timers`. These are the modules whose surfaces are sockets, streams and timers
 rather than values in and values out, so the generator has nothing to generate.
 
 So the claim this supports is narrow and worth stating exactly: **for the eleven
