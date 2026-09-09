@@ -11493,6 +11493,64 @@ A missing binding is a link failure waiting for the lowering to arrive rather
 than one happening now: a module only fails to link once something calls it.
 
 
+
+## What `fs` is actually waiting on: two items are 35% of it
+
+2026-09-10, post-`code`-fix pin. `fs` is **2 passed, 344 failed** of 395 files,
+unchanged by that fix, and it is the largest module in the tree.
+
+### The tests say "not a function", and mean "not compiled"
+
+Ranked by test files rather than by diagnostic text, the top failures are all
+absences:
+
+    40  Expected values to be strictly deep-equal:
+    36  mkdirSync is not a function
+    31  fs.writeFileSync is not a function
+    30  fn was called 0 times, expected 1
+    22  fs.openSync is not a function
+    21  fs.mkdirSync is not a function
+    12  fs.mkdtempSync is not a function
+    11  cpSync is not a function
+    10  fs.createWriteStream is not a function
+    10  fs.createReadStream is not a function
+
+**Not one of the top ten mentions an error, a code or a type.** Whatever the
+fourteen files predicted to move on the error-`code` fix were waiting for, this
+is what the module is waiting for.
+
+And the wrapper is not the wall either — **95 of its 123 wrapper declines are
+`is exported and no function of that name was compiled`**, which is a cascade,
+not a wrapper gap. Every one of the six named functions above declines for that
+reason. The 2,027 `NTS1001` are the module.
+
+### 202 own roots, 63 constructs, and two of them are a third of it
+
+| count | construct |
+| ---: | --- |
+| **43** | `#closeCapability` of unrepresentable type — `PromiseWithResolvers<void> \| undefined` |
+| **19** | `reject`, captured above its own declaration, where it has no value yet |
+| 12 | a rest parameter that is not an array |
+| 10 | `null`/`undefined` where what it stands in for is not representable |
+| **8** | `resolve`, same capture form as `reject` |
+| 8 | an optional-chained method call (`a?.b()`) |
+| 7 | an erased value where a concrete representation is wanted |
+| 7 | a method call on something without methods |
+
+`promises.ts:584` declares `#closeCapability: PromiseWithResolvers<void> |
+undefined`, and it accounts for **43 of 202 roots on its own**. The
+`resolve`/`reject` pair is one shape too — the `new Promise((resolve, reject) =>
+…)` executor, where both names are referenced from a closure written above their
+own binding, at 27 sites between them.
+
+**Two items, 70 of 202 roots, 35% of the module.** Nothing else in the table is
+above 12.
+
+> The 63-construct spread is why `fs` sits last but one in the roots table and
+> why it will not clear in one step. It is also why naming the top two matters:
+> a module with 63 distinct blockers gets read as "everything is broken" and
+> deprioritised, when a third of it is two shapes.
+
 ## The `code` on a thrown error had two halves, and I measured the wrong one
 
 ### Re-measured after the `code` fix: 40 to 41, and not where it was expected
