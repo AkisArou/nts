@@ -62,10 +62,20 @@ for case in $cases; do
   #
   # Counted apart from `bad`. A skip and a disagreement are different results
   # and the summary line said one of them for both.
-  if [ -f "$root/benches/cases/$case/driver.java" ]; then
-    printf "%-22s has its own driver.java -- driven by tooling/bench, not here\n" "$case"
-    skipped=$((skipped + 1)); continue
-  fi
+  # A case whose workload the generated driver cannot synthesise ships its own
+  # `driver.java`, and `elementwise` is the one that does: it hands the *same*
+  # `double[]` to every call and refills it in place, so there is no argument
+  # expression to write and no way to reset the state between runs.
+  #
+  # Driven here rather than skipped, because it is the only case with an array
+  # crossing the boundary -- which is exactly the shape ART is most likely to
+  # differ on, and so the worst one to leave uncovered. The case's own driver
+  # runs against a one-shot `Bench` below.
+  own=""
+  [ -f "$root/benches/cases/$case/driver.java" ] && own=$root/benches/cases/$case/driver.java
+  # `json-serialize` exports nothing from `case.ts` at all; its workload comes
+  # from `provider`. Counted apart from `bad`: a skip and a disagreement are
+  # different results and the summary line said one of them for both.
   [ -n "$entry" ] || { printf "%-22s case.ts exports no function\n" "$case"; skipped=$((skipped + 1)); continue; }
 
   out=$work/$case
@@ -94,7 +104,27 @@ JSON
   else
     init=''
   fi
-  cat > "$out/Main.java" <<JAVA
+  if [ -n "$own" ]; then
+    # A one-shot `Bench`: `run()` once, print the bit pattern. Deliberately not
+    # the timing harness -- this asks what the program answers, and warmup would
+    # only make it answer it more times.
+    main=Case
+    cp "$own" "$out/Case.java"
+    cat > "$out/Bench.java" <<'JAVA'
+public final class Bench {
+    private Bench() {}
+    public abstract static class Work {
+        public abstract double run();
+    }
+    public static void measure(Work work) {
+        System.out.println(Long.toHexString(Double.doubleToRawLongBits(work.run())));
+    }
+}
+JAVA
+    sources="$out/Bench.java $out/Case.java"
+  else
+    main=Main
+    cat > "$out/Main.java" <<JAVA
 public final class Main {
     $init
     public static void main(String[] a) {
@@ -103,10 +133,13 @@ public final class Main {
     }
 }
 JAVA
+    sources=$out/Main.java
+  fi
+  # shellcheck disable=SC2086
   javac -nowarn -cp "$out/classes:$out/classes/nts-runtime.jar" -d "$out/classes" \
-    "$out/Main.java" 2> /dev/null || { printf "%-22s javac failed\n" "$case"; bad=$((bad + 1)); continue; }
+    $sources 2> /dev/null || { printf "%-22s javac failed\n" "$case"; bad=$((bad + 1)); continue; }
 
-  jvm=$(java -cp "$out/classes:$out/classes/nts-runtime.jar" Main 2>&1 | tail -1)
+  jvm=$(java -cp "$out/classes:$out/classes/nts-runtime.jar" "$main" 2>&1 | tail -1)
   # The runtime jar goes to `d8` whole: it is the artefact the ratchets are
   # about, and dexing the classes without it would test the wrong thing.
   if ! "$tools/d8" --min-api 29 --output "$out/dex" \
@@ -116,7 +149,7 @@ JAVA
     continue
   fi
   adb push "$out/dex/classes.dex" "/data/local/tmp/nts-$case.dex" > /dev/null 2>&1
-  art=$(adb shell "cd /data/local/tmp && dalvikvm -cp nts-$case.dex Main" 2>&1 | tr -d '\r' | tail -1)
+  art=$(adb shell "cd /data/local/tmp && dalvikvm -cp nts-$case.dex $main" 2>&1 | tr -d '\r' | tail -1)
   adb shell "rm -f /data/local/tmp/nts-$case.dex" > /dev/null 2>&1 || true
 
   if [ "$jvm" = "$art" ]; then
