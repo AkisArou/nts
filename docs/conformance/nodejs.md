@@ -11495,6 +11495,42 @@ than one happening now: a module only fails to link once something calls it.
 
 ## The `code` on a thrown error had two halves, and I measured the wrong one
 
+### Re-measured after the `code` fix: 40 to 41, and not where it was expected
+
+The prediction was that the fourteen `fs` files where a missing error `code` was
+the only wall would move. **They did not.** Full axis on a post-fix pin, all 22
+modules, one per invocation:
+
+    before: 40 passed, 1,822 failed, 15 module(s) with a pass, 1 whole
+    after:  41 passed, 1,821 failed, 15 module(s) with a pass, 1 whole
+    built=no: 0 of 22
+
+The only module that moved is `timers`, +1 — and the hollow run had already read
+`timers` at 2 against the sweep's 1 before this fix landed, so even that one is
+probably not it.
+
+`fs` is unchanged at 2, and its refusal profile is **byte-identical** across the
+two pins:
+
+    NTS1001          2027  ->  2027
+    wrapper declines  123  ->   123
+
+That identity is expected rather than suspicious, and the reason is the shape of
+the defect: the two-modifier bug **emitted no diagnostic**. It dropped a store
+silently. So the fix changes what a compiled program *does* and not what it
+*refuses*, and a census of refusals cannot see it in either direction.
+
+**This is the refusal-delta rule reading the other way.** The usual failure is
+counting a drop in refusals as progress; here the count did not move at all and
+a real fix landed underneath it. Verified separately: `os.getPriority` on eight
+range inputs went from 0 of 8 agreeing on `code`, `name` and
+`instanceof RangeError` to 8 of 8.
+
+So the fix is real, it is worth having, and **it bought one test file or none**.
+Whatever those fourteen `fs` files were waiting on, the error `code` was not
+their only wall.
+
+
 2026-09-10. I reported that `ERR_OUT_OF_RANGE` arrives as a plain `Error` with
 the code moved into `name`, measured in `os` and `buffer` with `path`'s
 `ERR_INVALID_ARG_TYPE` as the control, and I could not reduce it — a fixture
