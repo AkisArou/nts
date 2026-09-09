@@ -29,6 +29,14 @@
 // version still reported `0 of them node own`. An instrument that cannot see
 // the bug it was built from is worth exactly its runtime.
 //
+// The second version was controlled the same way, and it does see it:
+//
+//     stream: 1 published; 1 node-own name(s) not on the module, 0 reaching no test
+//         NOT PUBLIC  getDefaultHighWaterMark: function  (reachable only through a facade)
+//
+// The parenthetical is the whole difference. The name was reachable -- through
+// `internals()` -- and that is exactly why the first rule could not see it.
+//
 // So two questions:
 //
 //     NOT PUBLIC   a name **node has on its public surface**, published by the
