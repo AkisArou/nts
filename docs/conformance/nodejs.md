@@ -10023,6 +10023,50 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### What each module is waiting on, all twenty-two on one compiler
+
+`decl` is wrapper declines, `own` is NTS1001 sites in the module's own `src/`.
+
+| module | decl | own | dominant decline |
+| --- | --- | --- | --- |
+| `punycode` | 0 | 0 | — everything crosses |
+| `fs` | 0 | 211 | — nothing reaches the wrapper |
+| `util` | 1 | 81 | function never compiled |
+| `dgram` | 2 | 13 | function never compiled |
+| `string_decoder` | 2 | 0 | not a function this backend can name |
+| `console` | 5 | 20 | not a function this backend can name |
+| `path` | 5 | 6 | not a function this backend can name |
+| `os` | 6 | 4 | function never compiled |
+| `process` | 6 | 45 | not a function this backend can name |
+| `diagnostics_channel` | 7 | 19 | function never compiled |
+| `querystring` | 8 | 3 | function never compiled |
+| `buffer` | 12 | 43 | function never compiled |
+| `net` | 13 | 45 | function never compiled |
+| `readline` | 14 | 71 | function never compiled |
+| `url` | 14 | 40 | function never compiled |
+| `async_hooks` | 15 | 20 | function never compiled |
+| `events` | 16 | 30 | function never compiled |
+| `assert` | 24 | 45 | not a function this backend can name |
+| `http` | 25 | 147 | function never compiled |
+| `timers` | 27 | 25 | function never compiled |
+| `stream` | 28 | 470 | function never compiled |
+| `zlib` | 53 | 98 | not a function this backend can name |
+
+**Zero declines means two opposite things, and the table would mislead without
+this line.** `punycode` has none because all six of its exports cross.
+`fs` has none because nothing gets far enough to be declined: 211 own roots,
+NTS2009 at the backend, and an addon publishing zero. A module with no
+complaints from the wrapper is either finished or has not arrived.
+
+`string_decoder` is the other instructive row: 2 declines and **0 own roots**,
+which is the whole of its position. Nothing in the module is wrong. It is
+waiting on `indexing an array of any` four cascades away, and on the
+export-class arm for `default`.
+
+`stream` at 470 own roots and `fs` at 211 are the two that are not close, and
+`http` at 147 is third. `path` at 6 own and 5 declines is the nearest thing to a
+module whose remaining work can be listed on one hand.
+
 ### The profile on one binary, and the 9.4x that summing cones costs
 
 All twenty-two modules emitted with one compiler, so the numbers are comparable
