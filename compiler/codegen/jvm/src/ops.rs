@@ -281,6 +281,11 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         }
         "nts_is_buffer" => (types::VALUE, "isBuffer", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_data_view" => (types::VALUE, "isDataView", "(Lnts/rt/NtsValue;)Z"),
+        // `ArrayBuffer.isView(x)`, which is a typed array *or* a `DataView`.
+        // Distinct from `nts_is_data_view` beside it, and it was missing here
+        // because nothing had asked: `instanceof` never needed it, and the
+        // callers are `ArrayBuffer.isView` and now `"buffer" in v`.
+        "nts_value_is_view" => (types::VALUE, "isView", "(Lnts/rt/NtsValue;)Z"),
         "nts_is_date" => (types::VALUE, "isDate", "(Lnts/rt/NtsValue;)Z"),
         // One class serves both, so these two read a bit rather than test a
         // type; see `NtsValue.isMap`. The C lane spells it the same way --

@@ -134,6 +134,26 @@ public final class NtsValue {
     }
 
     /**
+     * {@code ArrayBuffer.isView(x)} -- a typed array <em>or</em> a
+     * {@code DataView}, and not the buffer either of them is over.
+     *
+     * <p>{@link NtsAnyView} is what {@link #isDataView} above deliberately does
+     * <em>not</em> reach for, because there it would match both and the
+     * question is only one of them. Here matching both is the question:
+     * {@code NtsDataView} extends it directly and every typed array extends
+     * {@code NtsView}, which also extends it.
+     *
+     * <p>And it excludes an {@code ArrayBuffer} by construction rather than by
+     * a check -- {@code NtsBuffer} is a plain final class and extends nothing.
+     * Those two and no others extend {@code NtsAnyView}, which is the whole of
+     * why this one line is the definition.
+     */
+    public static boolean isView(NtsValue value) {
+        Object ref = value == null ? null : value.ref;
+        return ref instanceof NtsAnyView;
+    }
+
+    /**
      * `array[index]` where the array is erased and the element type is not
      * known until run time -- `nts_array_element`.
      *
