@@ -182,6 +182,15 @@ for (const module of modules) {
   // answers 2500 to any file requiring `../common` -- and the compiled addon
   // does not publish the setter, so the scaling could not land and the unscaled
   // value survived. **The assertion held because of the defect.**
+  //
+  // Controlled by putting that assertion back and running this over `net`:
+  //
+  //     INVERTED  local/default-family-static.js
+  //               passes compiled, FAIL interpreted: node's default attempt
+  //               timeout is 250
+  //
+  // and removed again after. A column that has never been seen with a row in it
+  // is a claim about a tree rather than a measurement of one.
   const inverted = [];
   for (const [file, c] of compiled) {
     if (c.verdict !== "pass") continue;
