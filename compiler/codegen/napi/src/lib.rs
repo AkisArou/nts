@@ -607,6 +607,65 @@ static napi_status nts_to_napi_view(napi_env env, const NtsView *view,
                                   buffer, 0, out);
 }
 
+/* The trailing arguments a rest parameter names, gathered into an array.
+ *
+ * A rest parameter is not handed an array -- JavaScript gives it the arguments
+ * one at a time -- so the wrapper reads however many arrived and builds the
+ * array the compiled body expects. The count is not known at emit time, hence
+ * the two-phase `napi_get_cb_info`: the first call asks only how many there
+ * are, the second reads them.
+ *
+ * Eight on the stack because `path.join(a, b)` is the shape callers write, and
+ * a heap buffer past that rather than a cap: silently dropping the ninth
+ * argument would be a wrong answer, and `join` is exactly the function someone
+ * calls with a spread. */
+static napi_status nts_napi_rest(napi_env env, napi_callback_info info,
+                                 size_t from, bool strings, NtsArray **out) {
+    size_t argc = 0;
+    napi_status status = napi_get_cb_info(env, info, &argc, NULL, NULL, NULL);
+    if (status != napi_ok) return status;
+
+    napi_value inline_argv[8];
+    napi_value *argv = inline_argv;
+    napi_value *heap = NULL;
+    if (argc > 8) {
+        heap = (napi_value *)calloc(argc, sizeof(napi_value));
+        if (heap == NULL) return napi_generic_failure;
+        argv = heap;
+    }
+    status = napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+    if (status != napi_ok) {
+        free(heap);
+        return status;
+    }
+
+    const size_t rest = argc > from ? argc - from : 0;
+    NtsArray *array = strings ? nts_array_new(&nts_desc_ref, (double)rest)
+                              : nts_array_of_numbers((double)rest);
+    if (array == NULL) {
+        free(heap);
+        return napi_generic_failure;
+    }
+
+    for (size_t at = 0; at < rest; at++) {
+        if (strings) {
+            NtsString *text = NULL;
+            status = nts_from_napi_string(env, argv[from + at], &text);
+            if (status != napi_ok) break;
+            NTS_ITEMS(array, NtsString *)[at] = text;
+        } else {
+            double number = 0;
+            status = napi_get_value_double(env, argv[from + at], &number);
+            if (status != napi_ok) break;
+            NTS_ITEMS(array, double)[at] = number;
+        }
+    }
+    free(heap);
+    if (status != napi_ok) return status;
+    *out = array;
+    return napi_ok;
+}
+
 /* And inward: a JavaScript array of strings as a `string[]`.
  *
  * This was refused, and the reason given was wrong. "An array of references has
@@ -823,15 +882,40 @@ fn crossings_of(
     // rest is what made an ordinary one swallow the remaining arguments. The
     // shape is on the parameter now, so the two are told apart rather than
     // refused together.
-    if let Some(parameter) = func
+    // A rest parameter is gathered rather than refused now: it is not handed a
+    // JavaScript array, it is handed the trailing arguments, and
+    // `nts_napi_rest` builds the array the body expects. What is still refused
+    // is a rest parameter this cannot *fill* -- an array of objects or views,
+    // for the reasons those elements are refused anywhere.
+    //
+    // `resolve` and `join` are how node spells `path`'s two most-reached
+    // functions and there is no fixed-arity spelling of either, so this is the
+    // difference between the module publishing them and not.
+    if let Some((at, parameter)) = func
         .params
         .iter()
-        .find(|parameter| parameter.shape == hir::ParamShape::Rest)
+        .enumerate()
+        .find(|(_, parameter)| parameter.shape == hir::ParamShape::Rest)
     {
-        return Err(Skipped {
-            function: func.name.clone(),
-            reason: format!("takes a rest parameter `{}`", parameter.name),
-        });
+        let fillable = matches!(
+            crossings.get(at),
+            Some(Cross::Elements(inner)) if matches!(**inner, Cross::Number | Cross::Str)
+        );
+        if !fillable {
+            return Err(Skipped {
+                function: func.name.clone(),
+                reason: format!(
+                    "takes a rest parameter `{}` this cannot gather",
+                    parameter.name
+                ),
+            });
+        }
+        if at + 1 != func.params.len() {
+            return Err(Skipped {
+                function: func.name.clone(),
+                reason: format!("takes a rest parameter `{}` that is not last", parameter.name),
+            });
+        }
     }
     if let Some(parameter) = func
         .params
@@ -1306,13 +1390,23 @@ fn wrapper(
         "{} {symbol}({signature});\nstatic napi_value nts_napi_{symbol}(napi_env env, napi_callback_info info) {{\n",
         c_type(&func.return_type, layouts)
     );
+    // A rest parameter is not one of the arguments a caller must supply, so it
+    // is out of the count and read separately. `join()` with nothing is legal.
+    let gathered = func
+        .params
+        .iter()
+        .position(|parameter| parameter.shape == hir::ParamShape::Rest);
+    let required = gathered.unwrap_or(func.params.len());
     if func.params.is_empty() {
         out.push_str("    (void)info;\n");
+    } else if required == 0 {
+        // Only a rest parameter: nothing to read positionally, and
+        // `nts_napi_rest` does its own `napi_get_cb_info`.
+        out.push_str("    (void)info;\n");
     } else {
-        let count = func.params.len();
         let _ = write!(
             out,
-            "    size_t argc = {count};\n    napi_value argv[{count}];\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, NULL, NULL), \"could not read callback arguments\")) return NULL;\n    if (argc < {count}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the compiled function requires {count} arguments\");\n        return NULL;\n    }}\n"
+            "    size_t argc = {required};\n    napi_value argv[{required}];\n    if (!nts_napi_check(env, napi_get_cb_info(env, info, &argc, argv, NULL, NULL), \"could not read callback arguments\")) return NULL;\n    if (argc < {required}) {{\n        napi_throw_type_error(env, \"ERR_MISSING_ARGS\", \"the compiled function requires {required} arguments\");\n        return NULL;\n    }}\n"
         );
     }
 
@@ -1329,6 +1423,17 @@ fn wrapper(
         .zip(&args)
         .enumerate()
     {
+        if gathered == Some(index) {
+            let strings = matches!(
+                crossing,
+                Cross::Elements(inner) if matches!(**inner, Cross::Str)
+            );
+            let _ = writeln!(
+                out,
+                "    if (!nts_napi_check(env, nts_napi_rest(env, info, {index}, {strings}, &{name}), \"could not gather the rest arguments\")) goto nts_napi_cleanup;"
+            );
+            continue;
+        }
         out.push_str(&unmarshal(crossing, &parameter.ty, layouts, name, index));
     }
 

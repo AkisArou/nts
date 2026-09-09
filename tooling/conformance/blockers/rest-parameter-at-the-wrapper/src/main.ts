@@ -1,32 +1,42 @@
-// expect: emit-c --napi -> no wrapper for subject: takes a rest parameter
+// expect: emit-c --napi -> emits-addon napi_set_named_property(env, exports, "subject"
 //
-// A rest parameter lowers and does not cross. `subject` compiles -- the body
-// below is emitted -- and the Node-API wrapper declines it, so the function
-// exists in the addon and is not published.
+// FIXED, kept as a guard. A rest parameter crosses now.
 //
-//     fixed(first, second)   -> crosses
-//     subject(...parts)      -> lowers, no wrapper
+// It was refused on the reading that "a wrapper handed one JavaScript array
+// would have to decide whether it is the array or the first of the gathered
+// arguments". That ambiguity was real when the shape was unknown, and
+// `Param::shape` carries `Rest` now -- **and a rest parameter is never handed
+// an array at all.** JavaScript gives it the trailing arguments one at a time,
+// so the wrapper reads however many arrived and builds the array the compiled
+// body expects.
 //
-// `fixed` is the control and must keep crossing, or the diagnostic reads as
-// "a string-taking function does not cross", which is false.
+// The count is not known at emit time, hence a two-phase `napi_get_cb_info`:
+// the first call asks how many there are, the second reads them. Eight on the
+// stack because `path.join(a, b)` is what callers write, and a heap buffer past
+// that rather than a cap -- silently dropping the ninth argument would be a
+// wrong answer, and `join` is exactly the function someone calls with a spread.
 //
-// It became the live blocker for `path` the moment the `instanceof` family
-// completed. `validateString` compiled, and with it eleven of path's functions,
-// taking the module from four published exports to ten -- `normalize`,
-// `isAbsolute`, `relative`, `dirname`, `basename`, `extname` joined
-// `_makeLong`, `toNamespacedPath`, `delimiter` and `sep`. What did not join
-// them, and why:
+// Verified by loading the addon and calling it, across the cases that differ:
 //
-//     resolve@posix   takes a rest parameter `args`     <- this
-//     join@posix      takes a rest parameter `args`     <- this
-//     format@posix    takes an object                   parameter-boundary-carries-four-types
-//     parse@posix     returns an object                 array-return-only-carries-numbers
-//     matchesGlob     no function of that name compiled glob-matcher's own six roots
-//     posix, win32    not a function this backend can name   export-namespace
+//     joinAll("a","b","c")        "abc"
+//     joinAll()                   ""            <- empty rest is legal
+//     after("x","y","z")          "x/y/z"       <- fixed parameters and a rest
+//     joinAll(...Array(12))       twelve        <- past the stack buffer
 //
-// `resolve` and `join` are the two functions a caller reaches for first, and a
-// rest parameter is how node spells both. There is no variant of `path.join`
-// that takes a fixed arity.
+// **`path` publishes `resolve` and `join` because of this**, going from 10
+// exports to 12 and from 7 wrapper declines to 5. There is no fixed-arity
+// spelling of either -- a rest parameter is how node declares both -- so this
+// was the difference between the module publishing the two functions a caller
+// reaches for first and not.
+//
+// What stays refused is a rest parameter this cannot *fill*: an array of
+// objects needs a layout and an array of views carries the ownership question,
+// which are the reasons those elements are refused anywhere. And a rest
+// parameter that is not last, which TypeScript forbids and which is checked
+// rather than assumed.
+//
+// `fixed` remains the control, or the diagnostic reads as "a string-taking
+// function does not cross", which is false.
 
 export function fixed(first: string, second: string): string {
   return first + second;
