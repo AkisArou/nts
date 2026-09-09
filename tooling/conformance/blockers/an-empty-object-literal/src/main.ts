@@ -39,6 +39,36 @@
 // no second message, because a local is not a module-scope variable.
 //
 // A guard on this should watch the first line and not the count.
+//
+// # What it is actually worth, which is not 13 things
+//
+// Traced after filing, and the answer is larger than the census row that
+// prompted it.
+//
+// `net/src/main.ts:1778` is `options = {};` -- reassigning a parameter to an
+// empty object in a `typeof options === "function"` branch -- and it is the
+// **only** root inside `net`'s `Server` constructor, which spans 1771 to 1797.
+// `http`'s `Server` constructor calls `super(...)` into it and adds exactly one
+// root of its own, `IncomingMessage` used as a value at `server.ts:252`.
+//
+// Against the compiled addons, grouping each module's failures by the reason
+// they stop at:
+//
+//     http.createServer    241 of http's 405 failing files
+//     net.createServer      91 of net's 148 failing files
+//
+// **332 test files behind two roots**, one of them this one. It is the largest
+// thing measured anywhere in this profile, and it is a two-character literal.
+//
+// The caveat that applies to every count here applies to this one: it is what
+// stands in front of those files, not what they would gain. `class Server` has
+// eleven distinct roots and only this chain is in the constructor -- `Date.now`
+// twice, a `for...of` over a `Set`, two methods with no declaration in the
+// hierarchy, a rest parameter and a regular expression literal are all still
+// there, outside it. `new Server()` needs the constructor; those tests will
+// need more than `new Server()`.
+//
+// The ordering is not in doubt even so. Nothing else measured is close.
 
 const moduleScopeMarker: object = {};
 
