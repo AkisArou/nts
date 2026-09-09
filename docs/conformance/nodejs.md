@@ -15535,13 +15535,34 @@ The last row is the one to note: the empty-literal refusal is gone **and** the
 value that comes back is right, so the literal change and the contextual-member
 change land together without the wrong answer that forced the first revert.
 
-**Four defects remain**, across 19 case files and 125 questions -- 11
-disagreeing, 22 refused, 0 that did not build:
+**Five defects remain**, across 21 case files and 134 questions -- 12
+disagreeing, 27 refused, 0 that did not build:
 
     exceptions do not cross a call frame        6 cases, two files
     a lone surrogate counts as three            3 cases
     an indexed write at or past the length      2 cases, both SIGABRT
+    `in` on a record is always false            1 case
     integer-like keys are not promoted          1 case
+
+**`in` on a `Record` is always false**, and it is the most confined defect
+measured:
+
+    "a" in o   with o = { a: 1 }    compiled 0   node 1   <-
+    "b" in o   with o = { a: 1 }    compiled 0   node 0
+    Object.hasOwn(o, "a")           compiled 1   node 1
+    o["a"]                          compiled 1   node 1
+    Object.keys(o).length           compiled 1   node 1
+
+The object is correct -- the key is stored, readable, found by `Object.hasOwn`
+and returned by `Object.keys`. Only the operator disagrees.
+
+**And the same operator refuses in a different type position.** `in` on a bare
+`object` gives `an in naming X on an object, which a natively represented type
+answers for`, filed as `in-on-an-undeclared-object` and the head of
+`Buffer.from`. So one operator refuses in one position and silently answers
+wrong in another, and **the wrong answer is the one that compiles**. It is the
+shape every feature test takes: `"code" in error`, `"then" in value`,
+`"length" in options`.
 
 **A lone surrogate is counted in its encoding's bytes, not in code units:**
 
