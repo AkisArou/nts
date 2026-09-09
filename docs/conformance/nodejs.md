@@ -12715,6 +12715,65 @@ attention beyond it.
 It also puts a number on the error-identity item: 40 of 440 comparisons here,
 and 2 of `path`'s 9 failing files.
 
+## The remaining standing numbers, re-derived
+
+Four claims in the session brief had not been checked tonight. Three hold, one
+was stale by one, and one only reproduces under a reading the sentence does not
+state.
+
+**`querystring` is 0 of 8, not 0 of 7.** Nine test files, 8 applicable, 0
+passing. The rest of that sentence holds exactly: `shape.mjs` line 8 is
+`const qs = exports.QueryString`, with a comment saying "It is `QueryString`
+itself, not a copy", so that one object is the whole module.
+
+**`string_decoder`'s bar is node's, and node's is what the brief says.**
+Measured on `node:string_decoder` directly:
+
+    lastChar    proto: accessor   value: Buffer(4)
+    lastNeed    proto: accessor   value: 0
+    lastTotal   proto: accessor   value: 0
+    prototype keys: constructor, write, end, text, lastChar, lastNeed, lastTotal
+
+All three are prototype accessors and `lastChar` is a `Buffer`.
+`test/core-static.js` is **unmodified** -- 45 assertions, including
+`assert(decoder.lastChar.equals(new Uint8Array([0xe1, 0, 0, 0])))`, which is the
+`.equals` the host has to answer.
+
+**"66 signatures in nine modules sit behind the typed-array gap" reproduces as
+64 in ten, and only under one reading.** Three readings of "signatures":
+
+| reading | count | modules |
+| --- | ---: | ---: |
+| exported functions mentioning a typed array anywhere | 51 | 9 |
+| **signatures whose _return_ mentions one** | **64** | **10** |
+| functions and exported-class methods, anywhere in the signature | 115 | 13 |
+
+The middle row is the one the sentence means -- "no emitted wrapper *builds* a
+typed array" is about returns, since building is what a return needs. It is 64
+and not 66, which is drift rather than disagreement.
+
+**And the declines do not mention typed arrays at all.** Collected across every
+module: **488** wrapper declines, of which
+
+    244  is exported and no function of that name was compiled
+     99  is exported and is not a function this backend can name
+     87  is a namespace member whose function has no wrapper
+     38  is a class whose constructor was not compiled
+     11  takes an object
+      9  the rest -- object/object[] inbound and outbound, `Promise<void>`,
+         `Map<string, string>`, `Map<f64, string[]>`
+
+**Zero name a typed array in the reason.** Nineteen lines match a typed-array
+word and every one of them matches on the *module or export name* -- `buffer`,
+`Buffer`, `SlowBuffer` -- not on why it was declined. That distinction was
+checked rather than assumed, because the first count of this was taken from a
+partially-written file and said 222 declines and zero matches; both numbers were
+wrong and only one of the conclusions was. Those 64 signatures are not declined *for* the
+typed array; they are behind lowering refusals that stop them long before the
+boundary is reached. So the typed-array gap is real and is not currently the
+thing costing those signatures -- which is the difference between a blocker and
+a blocker that is next.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
