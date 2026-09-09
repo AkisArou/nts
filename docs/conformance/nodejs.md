@@ -9646,7 +9646,8 @@ recorded here; the cause is still unknown.
 ## `path` moved, and the widest remaining root is the one filed tonight
 
 The `instanceof` family completing let `validateString` compile. `path` went
-from 4 published exports to 10 -- `normalize`, `isAbsolute`, `relative`,
+from 4 published exports to 10 -- later 12, once a rest parameter crossed --
+`normalize`, `isAbsolute`, `relative`,
 `dirname`, `basename`, `extname` joined the four that were there, none bound to
 `undefined`. Wrapper declines 13 to 7, cone roots 28 to 27, compiled lane 2
 passed to 3.
@@ -9967,7 +9968,13 @@ resolve          1      1
 ```
 
 **117 of 183 match, and every one of the 66 divergences is a filed wrapper
-blocker.** `parse` returns an object, `join` and `resolve` take rest parameters,
+blocker.** *Superseded later the same evening: once a rest parameter crossed,
+`join`'s eleven and `resolve`'s one went, leaving 54 divergences and 129
+matches. The table above is the earlier state and is kept because the reasoning
+about which controls the two `basename` matches provide is what identified the
+optional-parameter blocker.*
+
+`parse` returns an object, `join` and `resolve` take rest parameters,
 `format` takes an object, and `basename` diverges on exactly the 26 cases that
 call it with one argument -- the two that match are `basename("a/b.txt",
 ".txt")` and `basename("a/.txt", ".txt")`, the only two-argument calls in the
