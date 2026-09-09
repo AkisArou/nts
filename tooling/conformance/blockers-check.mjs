@@ -193,6 +193,20 @@ for (const name of names) {
   // A guard form that has never been seen to fail is worth as little as a
   // fixture that has never been seen to reproduce.
   const lacksAddon = /^lacks-addon\s+(.+)$/.exec(wanted);
+  // A **fifth** guard form, and the one the other four cannot reach: does the
+  // *wrapper* compile.
+  //
+  // `compiles` builds `program.c`. Every guard above it reads emitted text. So
+  // an addon that is well-formed text and uncompilable C had nothing here that
+  // could see it -- and that is not hypothetical: `process` exports a global
+  // whose C name is `env`, `NAPI_MODULE_INIT`'s parameter is also `env`, and the
+  // parameter shadowed the extern. The wrapper emitted
+  // `nts_to_napi_entries(env, env, &value)`, which is a `napi_env` where an
+  // `NtsMap *` belongs. `process` and `readline` both stopped building.
+  //
+  // The gate's `addons` step caught it, twenty minutes and twenty-two modules
+  // later. This is the same question asked of one file in two seconds.
+  const addonCompiles = /^addon-compiles$/.test(wanted);
   // Three guard forms, each the counterpart of a blocker form that had none.
   //
   // A fixed blocker with no way to state its fixed state either stays loud
@@ -265,9 +279,9 @@ for (const name of names) {
   // `--rc`: all five `fails-to-compile` fixtures went FIXED on 2026-09-08. That
   // is a good state for the compiler and an untested state for this check, and
   // the two are worth writing down separately.
-  const compileEmitted = (dir) => {
+  const compileEmitted = (dir, file = "program.c") => {
     const cc = spawnSync("clang", [
-      "-std=c11", "-c", join(dir, "program.c"), "-I", dir,
+      "-std=c11", "-c", join(dir, file), "-I", dir,
       "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
       "-include", join(ROOT, "runtime/node/internal/shared.h"),
       "-I", join(ROOT, "runtime/c"),
@@ -284,6 +298,14 @@ for (const name of names) {
     const plain = run(["emit-c", tsconfig, "--out", dir, "--napi"]);
     const emitted = /wrote .* to (\S+)/.exec(plain);
     controlErrors = emitted === null ? ["control build emitted nothing"] : compileEmitted(emitted[1]);
+  }
+
+  let addonErrors = null;
+  if (addonCompiles) {
+    const emitted = /wrote .* to (\S+)/.exec(output);
+    addonErrors = emitted === null
+      ? ["the compiler emitted nothing to compile"]
+      : compileEmitted(emitted[1], "addon.c");
   }
 
   let compileErrors = null;
@@ -306,7 +328,9 @@ for (const name of names) {
     }
   }
 
-  const holds = compiles
+  const holds = addonCompiles
+    ? addonErrors !== null && addonErrors.length === 0
+    : compiles
     ? compileErrors !== null && compileErrors.length === 0
     : onceC !== null
     ? occurrences(program, onceC[1]) === 1
@@ -347,7 +371,7 @@ for (const name of names) {
   // regression. Deciding this from the form rather than from the prose means a
   // guard cannot be mislabelled by someone forgetting to write FIXED.
   const isGuard = expectsClean || compiles || onceC !== null || lowersOnly ||
-    lacksAddon !== null ||
+    lacksAddon !== null || addonCompiles ||
     /^\/\/\s+FIXED\b/m.test(source);
   // A `hir` expectation is a substring of the whole run, and a fixture's
   // tsconfig can pull in more than its own `src`. If the only lines carrying the
@@ -413,6 +437,11 @@ for (const name of names) {
     console.log(`  ${verdict}  ${name}: the backend now emits it. Expected absence of:`);
   } else if (lacksAddon !== null) {
     console.log(`  ${verdict}  ${name}: the wrapper names it now. Expected absence of:`);
+  } else if (addonCompiles) {
+    console.log(`  ${verdict}  ${name}: the wrapper stopped compiling. Errors:`);
+    for (const line of (addonErrors ?? []).slice(0, 2)) {
+      console.log(`                ${line.trim()}`);
+    }
   } else if (compiles) {
     console.log(`  ${verdict}  ${name}: the emitted C stopped compiling. Errors:`);
     for (const line of (compileErrors ?? []).slice(0, 2)) {

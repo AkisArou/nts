@@ -248,7 +248,9 @@ fn c_type(ty: &HirType) -> &'static str {
         // generates calls from scalar signatures, so this is here to be right
         // rather than to be reached.
         HirType::Managed(
-            nts_core::hir::ManagedType::Map(_, _) | nts_core::hir::ManagedType::Set(_),
+            nts_core::hir::ManagedType::Map(_, _)
+            | nts_core::hir::ManagedType::Table(_, _)
+            | nts_core::hir::ManagedType::Set(_),
         ) => "NtsMap *",
         HirType::Bool => "bool",
         // The runtime's struct. The differential never drives one directly --

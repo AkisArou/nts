@@ -183,6 +183,32 @@ pub enum ManagedType {
     /// struct rather than a generated one, and giving it a layout would mean a
     /// shape with fields that nothing may read.
     Map(Box<HirType>, Box<HirType>),
+    /// A string-keyed table: `Record<string, V>`, `{ [k: string]: V }`, or a
+    /// named interface carrying only an index signature.
+    ///
+    /// **The storage is identical to [`ManagedType::Map`]'s.** It is the same
+    /// `NtsMap`, built with the same hash, read and written by the same
+    /// helpers, and every pass that cares only about representation should
+    /// spell its arm `Map(..) | Table(..)` -- that pairing is the *expected*
+    /// shape, not an oversight. Reading these as two runtime classes and
+    /// building a second one would be the opposite mistake and the more
+    /// expensive one.
+    ///
+    /// They are separate because they are different **types**, and the
+    /// difference is only observable at a boundary: `Object.prototype.toString`
+    /// says `[object Object]` for one and `[object Map]` for the other, only
+    /// one has `.get`, and `JSON.stringify` walks one and produces `{}` for the
+    /// other. A crossing that built a plain JavaScript object from a table
+    /// would silently do the same to a real `Map`.
+    ///
+    /// A variant rather than a flag on `Map`, argued by the JVM lane and taken:
+    /// every match on `ManagedType` in that backend is exhaustive, so a variant
+    /// is a *compile error* at each site where a boolean is ignorable -- and
+    /// ignoring it is silent. That lane had two wrong answers of exactly that
+    /// shape in one week: `newMap` and `newSet` both returning a bare `NtsMap`
+    /// and dropping the `kind` they were handed, and an `arrayElement` chain
+    /// missing its `long[]` arm.
+    Table(Box<HirType>, Box<HirType>),
     /// A `Set`: the same table, with no values stored at all.
     Set(Box<HirType>),
     /// A date: a millisecond offset from the epoch, and nothing else.

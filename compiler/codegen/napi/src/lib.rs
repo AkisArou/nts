@@ -74,6 +74,20 @@ enum Cross {
     /// would have to be allocated here -- the same asymmetry [`Cross::Object`]
     /// has, and refused in the same place with the same words.
     Bytes,
+    /// A string-keyed table, crossing outward as a plain JavaScript object.
+    ///
+    /// Carries nothing, and the absence is the point. `Elements` carries its
+    /// element crossing because an array's C representation differs per element
+    /// type and the wrapper has to spell one. A table's does not: entries are
+    /// erased values, so `nts_to_napi_entries` reads the tag at run time and
+    /// one conversion serves every value kind.
+    ///
+    /// The value's crossing still *decides* whether a table may cross at all --
+    /// `cross` computes it and refuses a table whose values cannot go -- but
+    /// that is an admission test, and a variant that stored its answer would be
+    /// claiming to carry data no wrapper ever reads. Clippy said so before a
+    /// person did.
+    Entries,
     /// A value whose type the declaration did not fix.
     ///
     /// `unknown` crossing in either direction, carrying its tag. Primitives
@@ -189,6 +203,30 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // Answering `None` leaves that decision where the erased one is, rather
         // than half-making it here.
         HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => None,
+        // A **table** is not a `Map`, and this is the whole reason the two are
+        // separate types. `Record<string, V>` is a plain JavaScript object on
+        // the other side, so it crosses outward as one: `napi_create_object`
+        // and a named property per entry, in insertion order.
+        //
+        // Outward only. Building one inward means allocating a table on this
+        // side and reading a JavaScript object's own enumerable keys, which is
+        // a different feature -- and the one place the profile needs a table to
+        // cross, `os.constants`, needs it going out.
+        //
+        // Only what the value's own crossing can carry, which is what makes an
+        // element of an unrepresentable type a refusal here rather than a
+        // property missing from the object at run time.
+        HirType::Managed(ManagedType::Table(key, value)) => {
+            if !matches!(**key, HirType::Managed(ManagedType::String)) {
+                return None;
+            }
+            let inner = cross(value, layouts, classes)?;
+            matches!(
+                inner,
+                Cross::Number | Cross::Bool | Cross::Str | Cross::Erased
+            )
+            .then_some(Cross::Entries)
+        }
         // A closure is represented by a synthetic object layout, but its
         // JavaScript value is a function. Copying captured fields into a plain
         // object would silently change its kind at the boundary.
@@ -227,7 +265,22 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
                         HirType::Bool
                             | HirType::Float { .. }
                             | HirType::Int { .. }
-                            | HirType::Managed(ManagedType::String)
+                            | HirType::Managed(
+                                ManagedType::String
+                            // A **table** field, which is a plain object on the
+                            // other side and so is no more nested than a string
+                            // is. `os.constants` is a number and four of them,
+                            // and it is the one export that would make `os` the
+                            // second whole module on the compiled axis.
+                            //
+                            // Still no nested *object*: that needs the layout's
+                            // descriptor recursively, which is the wall this
+                            // arm's comment above describes and which a table
+                            // does not meet -- its entries are erased values
+                            // and `nts_to_napi_entries` needs nothing but the
+                            // table.
+                                | ManagedType::Table(_, _)
+                            )
                     )
                 })
                 .then_some(Cross::Object(at))
@@ -269,6 +322,9 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Object(_)) => "an object".to_owned(),
         HirType::Managed(ManagedType::Promise(payload)) => {
             format!("Promise<{}>", spell(payload))
+        }
+        HirType::Managed(ManagedType::Table(key, value)) => {
+            format!("Record<{}, {}>", spell(key), spell(value))
         }
         HirType::Managed(ManagedType::Map(key, value)) => {
             format!("Map<{}, {}>", spell(key), spell(value))
@@ -316,7 +372,9 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         // One runtime struct for both, and whatever the key and value
         // represent as: the table stores `NtsValue`s, so nothing about the type
         // arguments reaches the C spelling.
-        HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => {
+        HirType::Managed(
+            ManagedType::Map(_, _) | ManagedType::Table(_, _) | ManagedType::Set(_),
+        ) => {
             "NtsMap *".to_owned()
         }
         HirType::Managed(ManagedType::Object(id)) => {
@@ -728,6 +786,47 @@ static napi_status nts_to_napi_view(napi_env env, const NtsView *view,
  * a heap buffer past that rather than a cap: silently dropping the ninth
  * argument would be a wrong answer, and `join` is exactly the function someone
  * calls with a spread. */
+/* A string-keyed table as a plain JavaScript object.
+ *
+ * This is what makes a `Record<string, V>` different from a `Map<string, V>` at
+ * the boundary, and the reason the two are separate types: node's
+ * `os.constants.signals` is an object with thirty-three named properties, not a
+ * `Map`, and a crossing that could not tell them apart would hand back the
+ * wrong kind of thing for one of them.
+ *
+ * Insertion order, because that is the order `Object.keys` is specified to give
+ * for string keys that are not array indices, and the order the table already
+ * holds.
+ *
+ * One conversion for every value kind, because a table stores its values
+ * *erased* -- `nts_map_set` takes `NtsValue`s -- so `nts_to_napi_value` is
+ * already the right switch and there is nothing per-type to emit. `cross`
+ * still asks what the value type is, because deciding whether a table may
+ * cross is a different question from converting one entry.
+ *
+ * The keys are strings by construction: `hir::lower` admits only a string index
+ * signature, and a numeric one is what an array is. */
+static napi_status nts_to_napi_entries(napi_env env, const NtsMap *table,
+                                       napi_value *out) {
+    if (table == NULL) return napi_get_undefined(env, out);
+    napi_status status = napi_create_object(env, out);
+    if (status != napi_ok) return status;
+    for (double at = nts_map_next(table, 0); at >= 0;
+         at = nts_map_next(table, at + 1)) {
+        napi_value name = NULL;
+        status = nts_to_napi_string(
+            env, (const NtsString *)nts_value_reference(nts_map_key_at(table, at)),
+            &name);
+        if (status != napi_ok) return status;
+        napi_value carried = NULL;
+        status = nts_to_napi_value(env, nts_map_value_at(table, at), &carried);
+        if (status != napi_ok) return status;
+        status = napi_set_property(env, *out, name, carried);
+        if (status != napi_ok) return status;
+    }
+    return napi_ok;
+}
+
 /* The type of a value, spelled the way node's `ERR_INVALID_ARG_TYPE` spells it.
  *
  * Node's message is `The "path" argument must be of type string. Received type
@@ -1088,7 +1187,10 @@ fn crossings_of(
         .find_map(|(parameter, crossing)| {
             matches!(
                 crossing,
-                Cross::Object(_) | Cross::Bytes | Cross::Void
+                // A table inward would mean allocating one on this side and
+                // reading a JavaScript object's own enumerable keys, which is a
+                // different feature from handing one over.
+                Cross::Object(_) | Cross::Bytes | Cross::Entries | Cross::Void
             )
             .then_some(parameter)
             .or_else(|| {
@@ -1779,9 +1881,11 @@ fn optional_argument(read: &str, absent: &str, index: usize) -> String {
 /// next crossing to be added is decided about instead of joining a list.
 fn absent_argument(crossing: &Cross, name: &str) -> String {
     match crossing {
-        Cross::Str | Cross::Bytes | Cross::Elements(_) | Cross::Object(_) => {
-            format!("{name} = NULL;")
-        }
+        Cross::Str
+        | Cross::Bytes
+        | Cross::Elements(_)
+        | Cross::Entries
+        | Cross::Object(_) => format!("{name} = NULL;"),
         Cross::Number => format!("{name} = 0.0;"),
         Cross::Bool => format!("{name} = false;"),
         // The one crossing that can *say* absent rather than stand in for it.
@@ -1832,6 +1936,9 @@ fn declare_argument(
         // Undefined until read, which is also what an omitted optional argument
         // leaves it as -- so the two paths need no separate initialisation.
         Cross::Erased => format!("    NtsValue {name} = nts_value_of_undefined();\n"),
+        // Outward only, so this is never read -- declared for the same reason
+        // every other crossing is, and never filled.
+        Cross::Entries => format!("    NtsMap *{name} = NULL;\n"),
         Cross::Number if matches!(ty, HirType::Float { bits: 64 }) => {
             format!("    double {name} = 0;\n")
         }
@@ -1890,7 +1997,12 @@ fn unmarshal(
         // returned object needs no descriptor, which is why one direction works
         // and the other is refused in `cross`. A view is the same story with
         // bytes in place of fields.
-        Cross::Object(_) | Cross::Bytes | Cross::Void => String::new(),
+        // Nothing to read. `crossings_of` refuses a table *parameter* before a
+        // wrapper is written, so `Entries` reaching here would be a bug in that
+        // guard rather than a shape to handle -- and the empty string it shares
+        // with the other three is the same emptiness for a different reason,
+        // which is why the comment is here and not in the arm's absence.
+        Cross::Object(_) | Cross::Bytes | Cross::Void | Cross::Entries => String::new(),
     }
 }
 
@@ -1957,6 +2069,21 @@ fn marshal(
         Cross::Void => format!(
             "    {call};\n{after_call}    if (!nts_napi_check(env, napi_get_undefined(env, &out), \"could not create undefined\")) goto nts_napi_cleanup;\n"
         ),
+        // A table hands back a plain object built from its entries. The table
+        // itself is released like any other reference result: what leaves is a
+        // copy the far side owns.
+        Cross::Entries => {
+            let mut text = format!(
+                "    NtsMap *result = {call};\n{after_call}    napi_status result_status = nts_to_napi_entries(env, result, &out);\n"
+            );
+            if release_result {
+                text.push_str("    if (result != NULL) nts_release((NtsHeader *)result);\n");
+            }
+            text.push_str(
+                "    if (!nts_napi_check(env, result_status, \"could not create an object from a table\")) goto nts_napi_cleanup;\n",
+            );
+            text
+        }
         Cross::Bool => format!(
             "    bool result = {call};\n{after_call}    if (!nts_napi_check(env, napi_get_boolean(env, result, &out), \"could not create a boolean\")) goto nts_napi_cleanup;\n"
         ),
@@ -2070,6 +2197,9 @@ fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::La
             HirType::Bool => format!("napi_get_boolean(env, result->{member}, &value)"),
             HirType::Float { .. } | HirType::Int { .. } => {
                 format!("napi_create_double(env, (double)result->{member}, &value)")
+            }
+            HirType::Managed(ManagedType::Table(_, _)) => {
+                format!("nts_to_napi_entries(env, result->{member}, &value)")
             }
             _ => unreachable!("nested object layouts are refused by cross"),
         };
@@ -2281,11 +2411,10 @@ fn declare_namespace_values(
             let Some(global) = program.globals.iter().find(|g| g.name == *emitted) else {
                 continue;
             };
-            let _ = writeln!(
-                out,
-                "extern {} {};",
-                c_type(&global.ty, &program.layouts),
-                c_global(&global.name, functions.iter().map(String::as_str))
+            declare_one_value(
+                &mut out,
+                &c_type(&global.ty, &program.layouts),
+                &c_global(&global.name, functions.iter().map(String::as_str)),
             );
         }
     }
@@ -2318,7 +2447,7 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
     if matches!(crossing, Cross::Object(_) | Cross::Void) {
         return None;
     }
-    let symbol = c_global(&global.name, std::iter::empty());
+    let symbol = format!("{}()", value_reader(&c_global(&global.name, std::iter::empty())));
     let key = c_string_literal(property);
     let make = match crossing {
         Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
@@ -2326,6 +2455,7 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
         Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
         Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
         Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
+        Cross::Entries => format!("nts_to_napi_entries(env, {symbol}, &value)"),
         Cross::Elements(inner) => format!(
             "{}(env, {symbol}, &value)",
             elements_helper(&inner, &program.layouts)
@@ -2395,7 +2525,10 @@ fn value_exports(program: &hir::Program) -> Vec<(&hir::Global, &str, Cross)> {
         let Some(crossing) = cross(&global.ty, &program.layouts, &FxHashSet::default()) else {
             continue;
         };
-        if matches!(crossing, Cross::Object(_) | Cross::Void) {
+        // An object *value* export publishes now: `os.constants` is a number
+        // and four tables, and it is the one export that would make `os` the
+        // second whole module. `Cross::Void` still cannot -- there is no value.
+        if matches!(crossing, Cross::Void) {
             continue;
         }
         published.push((global, name.as_str(), crossing));
@@ -2527,6 +2660,37 @@ fn report_unrepresentable_exports(
     }
 }
 
+/// The name of the file-scope reader for a value export.
+///
+/// A value export is read inside `NAPI_MODULE_INIT`, whose parameter is named
+/// `env` -- and `process.env` is a global whose C name is `env`. The extern at
+/// file scope was shadowed by the parameter, so the wrapper compiled
+/// `nts_to_napi_entries(env, env, &value)` and clang reported a `napi_env` where
+/// an `NtsMap *` belonged. `process` and `readline` stopped building the day
+/// object and table value exports started publishing.
+///
+/// Read through a function defined where the global is visible, and the
+/// shadowing cannot happen for `env` or for any other name the wrapper
+/// introduces -- `exports`, `out`, `value`, `status`, `argv`. Naming them all in
+/// a reserved list would be the same fix minus the guarantee, and it would go
+/// stale the next time a wrapper gains a local.
+///
+/// `nts_` is reserved to this backend, so a user global cannot collide with the
+/// reader itself; `a_name_this_backend_generates_is_also_reserved` is what keeps
+/// that true.
+fn value_reader(symbol: &str) -> String {
+    format!("nts_export_{symbol}")
+}
+
+/// The extern and its reader, which are always written together.
+fn declare_one_value(out: &mut String, spelling: &str, symbol: &str) {
+    let reader = value_reader(symbol);
+    let _ = writeln!(out, "extern {spelling} {symbol};");
+    let _ = writeln!(
+        out,
+        "static {spelling} {reader}(void) {{ return {symbol}; }}"
+    );
+}
 /// The `extern` declarations, at file scope, which is where one belongs.
 fn declare_value_exports(
     values: &[(&hir::Global, &str, Cross)],
@@ -2535,11 +2699,10 @@ fn declare_value_exports(
 ) -> String {
     let mut out = String::new();
     for (global, _, _) in values {
-        let _ = writeln!(
-            out,
-            "extern {} {};",
-            c_type(&global.ty, layouts),
-            c_global(&global.name, functions.iter().map(String::as_str))
+        declare_one_value(
+            &mut out,
+            &c_type(&global.ty, layouts),
+            &c_global(&global.name, functions.iter().map(String::as_str)),
         );
     }
     if !values.is_empty() {
@@ -2559,7 +2722,10 @@ fn publish_value_exports(
 ) -> String {
     let mut out = String::new();
     for (global, publish, crossing) in values {
-        let symbol = c_global(&global.name, functions.iter().map(String::as_str));
+        let symbol = format!(
+            "{}()",
+            value_reader(&c_global(&global.name, functions.iter().map(String::as_str)))
+        );
         let key = c_string_literal(publish);
         let make = match crossing {
             Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
@@ -2570,9 +2736,13 @@ fn publish_value_exports(
             }
             Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
             Cross::Erased => format!("nts_to_napi_value(env, {symbol}, &value)"),
-            // `value_exports` refuses these, so reaching one is a bug in it
+            Cross::Entries => format!("nts_to_napi_entries(env, {symbol}, &value)"),
+            Cross::Object(at) => {
+                format!("{}(env, {symbol}, &value)", object_helper(&layouts[*at]))
+            }
+            // `value_exports` refuses this, so reaching it is a bug in it
             // rather than a shape to handle here.
-            Cross::Object(_) | Cross::Void => continue,
+            Cross::Void => continue,
         };
         let _ = write!(
             out,
@@ -2602,6 +2772,28 @@ pub fn emit(program: &hir::Program) -> Addon {
 /// reported "no addon built" -- true, and reading as though the module were far
 /// away rather than one function short.
 #[must_use]
+/// The two halves of a value export, which are written far apart.
+///
+/// A value export needs an `extern` at file scope and a `napi_set_named_property`
+/// inside `NAPI_MODULE_INIT`, and the list of globals both halves walk has to be
+/// the same list. Computing it twice invited them to disagree, so it is computed
+/// once here and the caller places the two strings.
+///
+/// A namespace's value members are globals too, and they are not in `public_api`
+/// -- `path.win32.sep` is published on the namespace object rather than on
+/// `exports`. Without the extern the addon, a different translation unit from
+/// `program.c`, reports `use of undeclared identifier 'sep17'`.
+fn value_export_text(program: &hir::Program) -> (String, String) {
+    let values = value_exports(program);
+    let functions: Vec<String> =
+        program.funcs.iter().map(|func| func.name.clone()).collect();
+    let mut declarations = declare_value_exports(&values, &program.layouts, &functions);
+    declarations.push_str(&declare_namespace_values(program, &values, &functions));
+    let publishing = publish_value_exports(&values, &functions, &program.layouts);
+    (declarations, publishing)
+}
+
+#[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let mut out = preamble();
 
@@ -2619,6 +2811,11 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         .iter()
         .filter(|f| !published(program, f).is_empty())
         .flat_map(|f| std::iter::once(&f.return_type).chain(f.params.iter().map(|p| &p.ty)))
+        // And the types of the *value* exports, which name no function at all --
+        // `export const constants: OsConstants` is a global, and without this
+        // its helper was never emitted and the publication named a function
+        // nothing declared.
+        .chain(value_exports(program).into_iter().map(|(global, _, _)| &global.ty))
         .filter_map(|ty| match cross(ty, &program.layouts, &classes) {
             Some(Cross::Object(at)) => Some(at),
             // An `object[]` needs the struct *and* the helper the element loop
@@ -2707,16 +2904,8 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let (class_inits, published_classes) =
         emit_classes(program, &classes, &ownership, release_managed, &mut skipped, &mut out);
 
-    let values = value_exports(program);
-    let functions: Vec<String> =
-        program.funcs.iter().map(|func| func.name.clone()).collect();
-    out.push_str(&declare_value_exports(&values, &program.layouts, &functions));
-    // A namespace's value members are globals too, and they are not in
-    // `public_api` -- `path.win32.sep` is published on the namespace object
-    // rather than on `exports`. Without the extern the addon, a different
-    // translation unit from `program.c`, reports `use of undeclared identifier
-    // 'sep17'`.
-    out.push_str(&declare_namespace_values(program, &values, &functions));
+    let (value_declarations, value_publishing) = value_export_text(program);
+    out.push_str(&value_declarations);
 
     out.push_str("NAPI_MODULE_INIT() {\n");
     // Run the module's own top-level code before anything can call into it.
@@ -2758,7 +2947,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     out.push_str(&publish_functions(&wrapped));
     out.push_str(&class_inits);
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
-    out.push_str(&publish_value_exports(&values, &functions, &program.layouts));
+    out.push_str(&value_publishing);
     out.push_str("    return exports;\n}\n");
 
     report_missing(program, &wrapped, &published_classes, &mut skipped);

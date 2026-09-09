@@ -335,7 +335,9 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // which is why the payload types in `ManagedType::Map` are for the
         // compiler rather than the runtime, exactly as that type's own comment
         // says. This is not a monomorphization.
-        HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
+        HirType::Managed(
+            ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_),
+        ) => {
             MAP_DESCRIPTOR.to_owned()
         }
         // One runtime class whatever it settles with, which is what
@@ -444,6 +446,7 @@ pub fn kind(ty: &HirType) -> Option<Kind> {
             | ManagedType::DataView
             | ManagedType::Array(_)
             | ManagedType::Map(..)
+            | ManagedType::Table(..)
             | ManagedType::Set(_)
             | ManagedType::Promise(_),
         ) => Kind::Ref,
@@ -479,7 +482,9 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
         Kind::Ref => match ty {
             HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::BigInt => VType::Object(BIGINT.to_owned()),
-            HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_)) => {
+            HirType::Managed(
+                ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_),
+            ) => {
                 VType::Object(MAP.to_owned())
             }
             HirType::Managed(ManagedType::Promise(_)) => VType::Object(PROMISE.to_owned()),
@@ -578,6 +583,7 @@ pub fn describe(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Object(_)) => "an object".to_owned(),
         HirType::Managed(ManagedType::Promise(_)) => "a promise".to_owned(),
         HirType::Managed(ManagedType::Map(..)) => "a map".to_owned(),
+        HirType::Managed(ManagedType::Table(..)) => "a table".to_owned(),
         HirType::Managed(ManagedType::Set(_)) => "a set".to_owned(),
         HirType::Bool => "a boolean".to_owned(),
         HirType::Void => "nothing".to_owned(),

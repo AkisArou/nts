@@ -381,6 +381,12 @@ fn spell(ty: &super::HirType) -> String {
         HirType::Managed(ManagedType::Map(key, value)) => {
             format!("map{}_{}", spell(key), spell(value))
         }
+        // A distinct spelling, because this ends up in a C identifier and a
+        // `Map<string, V>` and a `Record<string, V>` are different types that
+        // must not share a specialization.
+        HirType::Managed(ManagedType::Table(key, value)) => {
+            format!("table{}_{}", spell(key), spell(value))
+        }
         HirType::Managed(ManagedType::Set(element)) => format!("set{}", spell(element)),
     }
 }

@@ -4126,6 +4126,35 @@ pub fn erasable(ty: &HirType) -> bool {
                     // a question the runtime can answer, and the value is
                     // sitting right there.
                     | ManagedType::Symbol
+                    // A table, which is the **seventh** time and the first that
+                    // was predicted in writing: the comment above says a variant
+                    // taught to the backend and not to this predicate is how
+                    // these drift, and `Table` leaving `Map` did exactly that
+                    // within a day of the comment being written.
+                    //
+                    // Found by `readline`, whose `internal/errors.ts` narrows an
+                    // `unknown` to a `Record<string, unknown>` -- and found by
+                    // the *gate* rather than by review, because `erased_tag`'s
+                    // match ends in `_ => None` and a new variant falls through
+                    // it silently. Every other match this change touched was
+                    // exhaustive and named itself; this family is the one that
+                    // cannot, which is why it now has the test the comment above
+                    // has been claiming for a day.
+                    | ManagedType::Table(_, _)
+                    // A table, which is the **seventh** time and the first that
+                    // was predicted in writing: the comment above says a variant
+                    // taught to the backend and not to this predicate is how
+                    // these drift, and `Table` leaving `Map` did exactly that
+                    // within a day of the comment being written.
+                    //
+                    // Found by `readline`, whose `internal/errors.ts` narrows an
+                    // `unknown` to a `Record<string, unknown>` -- and found by
+                    // the *gate* rather than by review, because `erased_tag`'s
+                    // match ends in `_ => None` and a new variant falls through
+                    // it silently. Every other match this change touched was
+                    // exhaustive and named itself; this family is the one that
+                    // cannot, which is why it now has the test the comment above
+                    // has been claiming for a day.
                     // And a view whose element type the declaration does not
                     // name, which is the *fifth* time this list has gone stale
                     // and the first where the omission was made the same hour
@@ -4803,7 +4832,7 @@ fn provided_representation(
             return None;
         }
         let value = representation_within(snapshot, signature.value, path, subst)?;
-        return Some(HirType::Managed(ManagedType::Map(
+        return Some(HirType::Managed(ManagedType::Table(
             Box::new(key),
             Box::new(value),
         )));
@@ -10735,7 +10764,7 @@ impl<'a> FuncBuilder<'a> {
         let table = self.lower_expression(argument)?;
         if matches!(
             self.values[table.0 as usize].ty,
-            HirType::Managed(ManagedType::Map(_, _))
+            HirType::Managed(ManagedType::Table(_, _))
         ) {
             // A table's keys are what is in it, so this is a walk rather than
             // the layout's field names. Insertion order, which is what
@@ -10808,7 +10837,7 @@ impl<'a> FuncBuilder<'a> {
         // refuse is ordinary here.
         if matches!(
             self.values[table.0 as usize].ty,
-            HirType::Managed(ManagedType::Map(_, _))
+            HirType::Managed(ManagedType::Table(_, _))
         ) {
             let origin = self.origin(id);
             let key = self.lower_expression(key)?;
@@ -14003,7 +14032,7 @@ impl<'a> FuncBuilder<'a> {
             // erased, as every other table operation's key does.
             if matches!(
                 self.values[array.0 as usize].ty,
-                HirType::Managed(ManagedType::Map(_, _))
+                HirType::Managed(ManagedType::Table(_, _))
             ) {
                 let origin = self.origin(target);
                 let key = self.erased_for_table(index, &origin);
@@ -15266,7 +15295,7 @@ impl<'a> FuncBuilder<'a> {
                 let source = self.lower_expression(source)?;
                 if !matches!(
                     self.values[source.0 as usize].ty,
-                    HirType::Managed(ManagedType::Map(_, _))
+                    HirType::Managed(ManagedType::Table(_, _))
                 ) {
                     // Spreading a *struct* into a table would have to know the
                     // layout's names, which is a different feature from copying
@@ -15385,7 +15414,7 @@ impl<'a> FuncBuilder<'a> {
             .filter(|ty| {
                 matches!(
                     ty,
-                    HirType::Managed(ManagedType::Object(_) | ManagedType::Map(_, _))
+                    HirType::Managed(ManagedType::Object(_) | ManagedType::Table(_, _))
                 )
             })
             .or_else(|| self.type_of(id))
@@ -15396,7 +15425,7 @@ impl<'a> FuncBuilder<'a> {
         // made `table["k"] = v` refuse as a property the type does not declare.
         //
         // The same reasoning as the comment above, one representation along.
-        if let HirType::Managed(ManagedType::Map(key, _)) = &ty {
+        if let HirType::Managed(ManagedType::Table(key, _)) = &ty {
             let key = (**key).clone();
             return self.lower_table_literal(id, ty.clone(), &key);
         }
@@ -17818,7 +17847,7 @@ impl<'a> FuncBuilder<'a> {
         // taken the `undefined` away.
         if matches!(
             self.values[array.0 as usize].ty,
-            HirType::Managed(ManagedType::Map(_, _))
+            HirType::Managed(ManagedType::Table(_, _))
         ) {
             let origin = self.origin(id);
             let key = self.erased_for_table(index, &origin);
@@ -18116,7 +18145,7 @@ impl<'a> FuncBuilder<'a> {
         if !matches!(
             self.values[array_value.0 as usize].ty,
             HirType::Managed(
-                ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Map(_, _)
+                ManagedType::Array(_) | ManagedType::View(_) | ManagedType::Table(_, _)
             )
         ) && !self.erased_but_proven_an_array(id, array_value)
         {

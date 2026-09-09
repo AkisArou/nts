@@ -2608,7 +2608,9 @@ impl Emitter<'_> {
             OpKind::Length(of)
                 if matches!(
                     self.ty(*of),
-                    HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
+                    HirType::Managed(
+                        ManagedType::Map(..) | ManagedType::Table(..) | ManagedType::Set(_),
+                    )
                 ) =>
             {
                 self.load(code, pool, *of)?;

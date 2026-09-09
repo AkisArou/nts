@@ -125,6 +125,9 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             | ManagedType::Array(_)
             | ManagedType::Promise(_)
             | ManagedType::Map(_, _)
+            // The same pointer to the same `NtsMap`. This is the arm the
+            // `Table` variant's documentation calls the expected shape.
+            | ManagedType::Table(_, _)
             | ManagedType::Set(_),
         ) => Shape {
             size: POINTER,

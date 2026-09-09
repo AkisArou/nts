@@ -1,4 +1,11 @@
-// expect: emit-c --napi -> emits-addon napi_create_double(env, (double)flag
+// expect: emit-c --napi -> emits-addon napi_create_double(env, (double)nts_export_flag()
+//
+// The expectation named `(double)flag` until the wrapper started reading value
+// exports through a file-scope function -- see
+// `value-export-named-like-a-wrapper-local` for why it has to. `flag` is still
+// published and still crosses; only its spelling at the read moved. That is a
+// CHANGED this fixture reported correctly and a person had to look at, which is
+// the outcome the three verdicts exist to produce.
 //
 // FIXED, kept as a guard. `export const x = f()` binds a value, not `f`.
 //

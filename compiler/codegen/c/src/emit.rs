@@ -2446,7 +2446,10 @@ fn length_expression(ty: &HirType, value: ValueId) -> String {
             format!("nts_view_length({})", value_name(value))
         }
         HirType::Managed(
-            ManagedType::Array(_) | ManagedType::Map(_, _) | ManagedType::Set(_),
+            ManagedType::Array(_)
+                | ManagedType::Map(_, _)
+                | ManagedType::Table(_, _)
+                | ManagedType::Set(_),
         ) => format!("{}->header.length", value_name(value)),
         // An erased value the lowering proved is an array: the length is in
         // the header every reference carries, reached through the tag.
@@ -2709,6 +2712,9 @@ fn erased_tag(ty: &HirType) -> Option<(&'static str, &'static str)> {
             // by a field rather than by a tag -- so from here they are the same
             // ordinary reference everything else in this arm is.
             | ManagedType::Map(_, _)
+            // A table is a map at run time -- one struct, one descriptor, told
+            // apart from a `Map` by the compiler and not by anything here.
+            | ManagedType::Table(_, _)
             | ManagedType::Set(_),
         ) => Some(("NTS_TAG_OBJECT", "reference")),
         _ => None,
@@ -2792,7 +2798,11 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         // a `Map<string, number>` and a `Map<Socket, Buffer>` are the same C
         // type -- what differs is the hash it was built with, which is an
         // argument to the constructor rather than part of the type.
-        HirType::Managed(ManagedType::Map(_, _) | ManagedType::Set(_)) => "NtsMap *",
+        // One C type for all three: the storage is the same `NtsMap` and a
+        // table differs from a map only at a boundary.
+        HirType::Managed(
+            ManagedType::Map(_, _) | ManagedType::Table(_, _) | ManagedType::Set(_),
+        ) => "NtsMap *",
         // An object type is named per program, so it has no `&'static str`
         // spelling. `c_type_of` answers for those; reaching here means a caller
         // asked the question that cannot be answered without the program.
@@ -3938,25 +3948,74 @@ mod tests {
     /// The comments on both lists already say some version of "a test is worth
     /// nothing if the value cannot get into the thing being tested". Writing it
     /// a seventh time is not the fix. This is.
-    #[test]
-    fn the_two_erasure_lists_agree() {
+    /// Every `ManagedType` variant, in a list that cannot go stale.
+    ///
+    /// The seventh drift was `Table`, and it is the one that says why the test
+    /// below was not enough on its own. The list of variants was written by
+    /// hand, so a variant nobody added was a variant nobody checked: the test
+    /// passed, green, for the single case it existed to catch. **An instrument
+    /// that enumerates its own inputs by hand can only fail for a variant it
+    /// already knows about, which is the one thing it never needs to.**
+    ///
+    /// Three edits are now required to add a `ManagedType`, and each fails
+    /// loudly until all three are done. `position` is exhaustive with no
+    /// catch-all, so a new variant does not compile. `COUNT` sits beside it, so
+    /// an arm added without bumping it fails here. And the samples must occupy
+    /// `0..COUNT` exactly, so a bumped count with no sample fails here too --
+    /// which matters because an arm that no sample reaches never runs, and a
+    /// match arm is not evidence that anything was tested.
+    fn every_managed_variant() -> Vec<ManagedType> {
         use nts_semantic_schema::schema::TypeId;
-        let element = Box::new(HirType::Int { bits: 8, signed: false });
-        let managed = [
+        const COUNT: usize = 13;
+        fn position(kind: &ManagedType) -> usize {
+            match kind {
+                ManagedType::String => 0,
+                ManagedType::Object(_) => 1,
+                ManagedType::Array(_) => 2,
+                ManagedType::Promise(_) => 3,
+                ManagedType::Map(_, _) => 4,
+                ManagedType::Table(_, _) => 5,
+                ManagedType::Set(_) => 6,
+                ManagedType::Date => 7,
+                ManagedType::Buffer => 8,
+                ManagedType::View(_) => 9,
+                ManagedType::AnyView => 10,
+                ManagedType::DataView => 11,
+                ManagedType::Symbol => 12,
+            }
+        }
+        let number = || Box::new(HirType::NUMBER);
+        let samples = vec![
             ManagedType::String,
             ManagedType::Object(TypeId(1)),
-            ManagedType::Array(Box::new(HirType::NUMBER)),
-            ManagedType::View(element.clone()),
-            ManagedType::AnyView,
-            ManagedType::Buffer,
-            ManagedType::DataView,
+            ManagedType::Array(number()),
+            ManagedType::Promise(number()),
+            ManagedType::Map(number(), number()),
+            ManagedType::Table(number(), number()),
+            ManagedType::Set(number()),
             ManagedType::Date,
+            ManagedType::Buffer,
+            ManagedType::View(Box::new(HirType::Int { bits: 8, signed: false })),
+            ManagedType::AnyView,
+            ManagedType::DataView,
             ManagedType::Symbol,
-            ManagedType::Promise(Box::new(HirType::NUMBER)),
-            ManagedType::Map(Box::new(HirType::NUMBER), Box::new(HirType::NUMBER)),
-            ManagedType::Set(Box::new(HirType::NUMBER)),
         ];
-        for kind in managed {
+        let mut covered: Vec<usize> = samples.iter().map(position).collect();
+        covered.sort_unstable();
+        covered.dedup();
+        assert_eq!(
+            covered,
+            (0..COUNT).collect::<Vec<_>>(),
+            "the samples do not cover every `ManagedType` variant exactly once; a \
+             variant with a `position` arm and no sample is a variant this file \
+             claims to check and does not",
+        );
+        samples
+    }
+
+    #[test]
+    fn the_two_erasure_lists_agree() {
+        for kind in every_managed_variant() {
             let ty = HirType::Managed(kind);
             assert_eq!(
                 nts_core::hir::lower::erasable(&ty),
