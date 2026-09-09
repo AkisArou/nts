@@ -9737,10 +9737,47 @@ traffic -- 55 at the low end, 2,214 at the high -- so no identical pair is the
 allocator having seen nothing. That is the distinction the lane was written for:
 an identical pair is a result, and only a blank one would not be.
 
-**Fourteen passes on the compiled axis, and three of them are not ours.** `fs` 1
-and `stream` 2 are the vacuous passes -- `undefined` compared with `undefined`
-on both sides -- leaving eleven real ones across `punycode` 3, `os` 4, `path` 2,
-`timers` 1 and `util` 1. Only `punycode` passes everything it is given.
+### Fourteen passes on the compiled axis, and only six depend on behaviour
+
+Run again with `--mutate-addon`, which keeps the addon's exported names and
+destroys their behaviour:
+
+| module | passes | survive mutation |
+| --- | --- | --- |
+| `punycode` | 3 | 0 |
+| `os` | 4 | 1 |
+| `path` | 2 | 2 |
+| `timers` | 1 | 1 |
+| `util` | 1 | 1 |
+
+**Surviving mutation is not the same as being fake, and the difference is in
+`poison` itself.** It replaces exported *functions* and passes data values
+through untouched, so a test that reads a constant cannot fail under it however
+wrong that constant is. Naming the five survivors is what separates them:
+
+```
+test-path-posix-exists.js    presence
+test-path-win32-exists.js    presence
+test-util-types-exists.js    presence
+test-os-eol.js               a constant, and that assigning to it throws
+test-timers-promises.js      deepStrictEqual(timers/promises, timers.promises)
+```
+
+Three assert that a name is there; mutation keeps names, so they survive. One
+asserts `os.EOL` and that `os.EOL = 123` throws -- both real properties of our
+module, neither of them behaviour, and neither expressible as a defect by a lane
+that only poisons functions. The last compares two of our own values to each
+other, so mutation transforms both sides identically and the equality holds.
+
+So the fourteen decompose as **three vacuous** (`fs` 1, `stream` 2 --
+`undefined` on both sides, not ours at all), **five that mutation cannot
+challenge** (presence, a constant, a self-comparison), and **six that depend on
+what the module does** -- `punycode` 3 and `os` 3.
+
+An earlier sentence here said "eleven real ones". That counted everything that
+was not vacuous, which is the wrong cut: it treats a lane's silence as evidence.
+Only `punycode` passes everything it is given, and only `punycode` has every one
+of its passes survive mutation.
 
 ## The interpreted lane after the `errors.ts` import: 22 of 22, 1,851 passing
 
