@@ -11443,6 +11443,67 @@ type` (18 sites, not about module scope), and `a member of X` (99 sites, and the
 `AsyncLocalStorage` case suggests it is downstream of something else). **A form
 count is a lower bound on causes and an upper bound on nothing.**
 
+## `string_decoder`'s last mile is four roots, three filed, and none of them is a wrapper
+
+The standing description is "zero own-source refusals, two wrapper declines
+left". The first half is true and the second half is downstream. On v10
+`string_decoder` publishes **0 of 1** -- `StringDecoder` is declined as `is a
+class whose constructor was not compiled`, and `default` as `is exported and is
+not a function this backend can name`. Both are consequences. Nothing about the
+wrapper is in the way.
+
+Every refusal in `string_decoder/src/main.ts` is NTS1003, and the ten of them
+name exactly five callees, three of which leave the module:
+
+    bytesOf                     <- Buffer.from
+    StringDecoder#write         <- bytesOf
+    StringDecoder#constructor   <- ERR_UNKNOWN_ENCODING#constructor
+    StringDecoder#text          <- Buffer#toString
+    #fillLast #flush #utf8Text #utf16Text #base64Text  <- Buffer#toString
+    StringDecoder#end           <- StringDecoder#flush
+
+Each of the three traces to exactly one root construct, read off the emitted log
+rather than attributed by proximity:
+
+| chain | root | fixture |
+| --- | --- | --- |
+| `ERR_UNKNOWN_ENCODING#constructor` -> `inspectValue` -> `inspectValueWithin` | `internal/errors.ts:547`, `` `join` on a typed array `` | `array-join-is-not-provided` |
+| `Buffer.from` -> `objectToBuffer` | `buffer/src/main.ts:196`, an erased value from two narrowings | `intersection-from-two-narrowings` |
+| `Buffer#toString` -> `decodeIn` | `buffer/src/encodings.ts:279`, `` `toString` on a number `` (a radix, `byte.toString(16)`) | `number-tostring-radix` |
+
+**Corrected by the instrument that replaced the hand trace.** The table above
+is three chains found by reading the log by hand. `last-mile.mjs`, which walks
+declaration *ranges* rather than following one cascade at a time, finds a
+fourth: `buffer/src/main.ts:575`, `` `this` outside a method ``, reported on
+`Buffer#toString`'s own declaration line --
+
+    override toString(encoding?: string, start = 0, end = this.length): string
+
+-- so that function carries a root of its own *and* the `decodeIn` chain behind
+it. Following the cascade alone missed it, which is why the tool records roots
+inside a range and keeps following.
+
+**So `string_decoder` is four roots, three of them filed.** The fourth is in the
+bucket that resists isolation: `` `this` outside a method `` has been probed six
+ways now -- a default parameter reading an own property, reading an *inherited*
+property, on an `override` method of a `Uint8Array` subclass with the same two
+defaults as line 575, an arrow-function class field, the same with a rest
+parameter, and a getter -- and every one lowers. See the diagnoses section.
+
+It is also four and not two, and not one. `intersection-from-two-narrowings`
+alone would publish nothing -- the constructor would still be refused, so the
+class still would not cross. A fixture landing is not a module landing, and the
+count of chains is the honest unit.
+
+**Method note.** The roots were found by taking each NTS1003's named callee,
+finding that function's line range in its own file, and reading which NTS1001
+falls inside it. `blockers.mjs` deliberately does not do this: it reports the
+cone's constructs with their files and lines and leaves attribution to a person,
+because "the diagnostic gives a location and not an enclosing name". Doing it by
+range rather than by nearest-line is what keeps that from being a guess -- and
+`decodeIn` is the case that would have defeated proximity, since it lives in
+`encodings.ts` while every NTS1003 naming it is in `main.ts`.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
