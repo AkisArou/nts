@@ -15410,7 +15410,7 @@ agreements and three refusals, and the two findings were things nobody asked.**
 
 ### The suite as it stands
 
-Six case files, **48 questions compared, 8 disagreeing, 7 refused, 0 that did
+Nine case files, **56 questions compared, 8 disagreeing, 13 refused, 0 that did
 not build**:
 
     an-optional-field-across-an-erased-slot     1 of 3 disagree
@@ -15421,6 +15421,7 @@ not build**:
     control-flow-and-method-seams               6 agree, 2 refused
     coercion-and-object-seams                   9 agree, 1 refused
     async-and-array-seams                       4 agree, 3 refused
+    string-and-number-method-seams              8 agree, 6 refused
 
 **The clean files are the ones that took the longest to write and are worth the
 most.** Grisu's shortest round-trip, int32 coercion, shift masking, unsigned
