@@ -15311,6 +15311,50 @@ things, the largest unfiled -- and the five reductions that missed it are
 written into the fixture that names its neighbour, so the next person does not
 repeat them.
 
+### 332 test files behind two roots, and one of them is `options = {}`
+
+The two largest concentrations in the tree are `http.createServer` at 241 of
+http's 405 failing files and `net.createServer` at 91 of net's 148. Traced to
+the constructors that make them:
+
+    http/src/server.ts   class Server spans 126-930 and carries eleven roots.
+                         Its constructor spans 179-274 and carries exactly one:
+                         252  `IncomingMessage`, a class used as a value
+                              this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
+
+                         Its super(...) goes to net's Server.
+
+    net/src/main.ts      class Server's constructor spans 1771-1797 and carries
+                         exactly one root:
+                         1778  an object literal that is not an object
+                               options = {};
+
+`net.createServer` is behind that empty literal and nothing else in its own
+constructor. `http.createServer` is behind the same literal through `super()`,
+plus `IncomingMessage` used as a value.
+
+**332 test files behind two roots, one of them a two-character literal** --
+`options = {}`, a parameter reassigned to an empty object in a
+`typeof options === "function"` branch. Filed as `an-empty-object-literal`,
+where the census row that prompted it said 13 things.
+
+The caveat holds and is worth restating because the number is large: **this is
+what stands in front of those files, not what they would gain.** Only the
+constructor chain is cleared by these two. `class Server` still carries
+`Date.now` twice, a `for...of` over a `Set`, two methods with no declaration in
+the hierarchy, a rest parameter and a regular expression literal, all outside
+the constructor. `new Server()` needs the constructor; the tests need more than
+`new Server()`.
+
+The ordering is not in doubt even so. The next largest thing measured is the
+generic rest parameter behind `timers.setTimeout` at 41 of 57, and after that
+`decodeURIComponent` behind `querystring.parse` at six.
+
+**And a census ranking by diagnostic breadth would have found none of this.**
+`an object literal that is not an object` is 13 things across 16 modules and
+sits eighteenth by that measure. Ranked by test files it is first. The two
+questions are different and the goal counts the second.
+
 ### What stands in front of the next pass, module by module
 
 `next-pass.mjs` runs node's suite against each compiled addon and groups the
