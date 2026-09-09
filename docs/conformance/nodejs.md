@@ -10120,13 +10120,33 @@ The set is the confirmation. Grepping every module for a back-import of
 17 with zero everywhere else. Two instruments built independently, the same two
 modules.
 
-**Neither is cheaply breakable from this side.** The four functions
-`utf8-stream` needs are *defined* in `main.ts` -- `fsyncSync` at 507, `openSync`
-at 933 -- not re-exported from a sibling, so there is nowhere else to import
-them from; breaking the cycle means moving definitions to suit an entry
-heuristic. And `width.ts` is unreferenced by anything in util, but it is a
-faithful port of node's width logic that `inspect.ts`'s table path will need,
-so deleting it would delete correct work waiting for its caller.
+**Neither is cheaply breakable from this side, and for the same reason in both
+modules.** The back-import in each case reaches a *definition* in `main.ts`, not
+a re-export:
+
+```
+fs    utf8-stream.ts needs openSync, writeSync, mkdirSync, fsyncSync
+      -- defined in main.ts at 933, 507 and beside them
+util  width.ts needs stripVTControlCharacters
+      -- defined in main.ts at 206
+```
+
+So there is nowhere else to point the import. Breaking either cycle means moving
+a function definition out of `main.ts` into a new file so that an entry
+heuristic lands on the right root, which is restructuring correct source to suit
+the compiler.
+
+`width.ts` additionally is unreferenced by anything in util -- none of
+`getStringWidth`, `isFullWidthCodePoint` or `isZeroWidthCodePoint` is named
+anywhere else in the module -- but it is a faithful port of node's width logic
+that `inspect.ts`'s table path will need, and `inspect.ts` already carries the
+comments for that path. Deleting it would delete correct work waiting for its
+caller.
+
+The symmetry is the useful part: two modules, two different import shapes -- a
+cycle and a one-way orphan -- and the same underlying fact, that a helper needs
+something the module's entry file defines. Any rule that fixes this by moving
+code is a rule about where definitions live, decided by an entry heuristic.
 
 **And `fs`'s zero is a reporting gap, not just a state.** It declares 291
 exported functions and 12 exported classes. Its emitted `addon.c` contains zero
