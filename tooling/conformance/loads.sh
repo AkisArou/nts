@@ -53,8 +53,26 @@ for module in "${modules[@]}"; do
     absent=$((absent + 1))
     continue
   fi
-  out="$("$node_bin" -e "const m=require('$addon');
-    const names=Object.keys(m).filter((k)=>m[k]!==undefined).length;
+  # `require` binds lazily, which is not the question.
+  #
+  # **A wrapper naming a symbol the C backend refused does not fail the link.**
+  # The addon loads, publishes the name, and dies on the *first call* with
+  # `symbol lookup error: … undefined symbol: describe` -- not a JavaScript
+  # exception, not catchable, at whatever later moment somebody calls it. Under
+  # `require` this check would have reported `loads, 2 name(s) published` about
+  # an addon with a landmine in it.
+  #
+  # `RTLD_NOW` resolves every symbol at load, so the landmine becomes a load
+  # failure naming the symbol. Controlled on a deliberately broken shared object
+  # with an `extern` never defined:
+  #
+  #     RTLD_LAZY: Module did not self-register        <- the defect is invisible
+  #     RTLD_NOW:  undefined symbol: refused_body      <- named
+  out="$("$node_bin" -e "
+    const flags = require('node:os').constants.dlopen;
+    const m = { exports: {} };
+    process.dlopen(m, '$addon', flags.RTLD_NOW);
+    const names = Object.keys(m.exports).filter((k) => m.exports[k] !== undefined).length;
     console.log('loads, ' + names + ' name(s) published')" 2>&1)"
   status=$?
   if [ $status -eq 0 ]; then
@@ -65,7 +83,13 @@ for module in "${modules[@]}"; do
     if [ $status -gt 128 ]; then
       reason="CRASHED on require, signal $((status - 128))"
     else
-      reason="failed to load (exit $status): $(printf '%s' "$out" | head -1 | cut -c1-70)"
+      # The useful line is the thrown message, not the first line of node's
+      # stack trace. `undefined symbol: X` is the whole finding for the class
+      # this check exists for, and `head -1` reported `[eval]:4` instead.
+      detail="$(printf '%s' "$out" | grep -oE 'undefined symbol: [A-Za-z_][A-Za-z0-9_]*' | head -1)"
+      [ -z "$detail" ] && detail="$(printf '%s' "$out" | grep -E '^[A-Za-z]*Error: ' | head -1)"
+      [ -z "$detail" ] && detail="$(printf '%s' "$out" | head -1)"
+      reason="failed to load (exit $status): $(printf '%s' "$detail" | cut -c1-72)"
     fi
     printf '  %-22s %s\n' "$module" "$reason"
     crashed=$((crashed + 1))
