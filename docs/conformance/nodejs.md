@@ -15269,6 +15269,30 @@ the moment they are read. Re-derived against a pin taken at 21:35 and the
     no wrapper builds a typed array     **two do** -- `buffer` and `querystring`,
       -- zero across 24 addons            outbound only; inbound is still zero,
                                           `napi_get_typedarray_info` appears nowhere
+    66 signatures behind that gap       **no decline names a typed array at all**
+
+**The typed-array gap is not visible as a decline any more.** Across 251 saved
+emit logs there are **18 distinct decline reasons** and not one names a view, a
+typed array, a `Uint8Array` or a byte:
+
+    2036  is exported and no function of that name was compiled
+     753  is exported and is not a function this backend can name
+     690  is a namespace member that is neither a wrapped function nor a value
+     315  is a class whose constructor was not compiled
+     118  takes an object
+      31  returns an object
+
+Said carefully, because it is a negative: **no export is declined for a typed
+array**, and two wrappers build one outbound. Whether signatures are still
+blocked by that boundary in some other form is not something this measurement
+can answer -- it can only say the reason has stopped being given.
+
+A first attempt counted declines whose *name* contained "Buffer" and found
+eight, none of which had a typed-array reason: `Buffer` itself declined as a
+value, four namespace members declined for being namespace members, and
+`fileURLToPathBuffer` declined as never compiled. **Matching the name of the
+thing rather than the reason for the decline is the same error as ranking a
+census by message**, one level down.
 
 **What has not moved is the coarse number.** 1 of 22 whole at the start of the
 day and 1 of 22 now.
