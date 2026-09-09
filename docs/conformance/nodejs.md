@@ -14725,7 +14725,7 @@ somebody else's problem to clear first.
 in that near group. `string_decoder` at 0 and 59 is the clearest case of the
 pattern: nothing of its own left, and 59 things in front of it.
 
-## Where the compiled axis ended: 27 behaviour-dependent across 14 of 22 modules
+## Where the compiled axis ended: 29 behaviour-dependent across 15 of 22 modules
 
 Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
 
@@ -14740,12 +14740,13 @@ Isolated build on the 16:05 pin, three controls on every pass, quiet machine:
     querystring        1           1            0        0
     readline           1           1            0        0
     stream             1           1            0        0
-    buffer             1           0            1        0
+    buffer             2           1            1        0
+    timers             1           1            0        0
     http               1           0            1        0
     process            1           0            1        0
     zlib               1           0            1        0
 
-    36 pass: 27 behaviour-dependent, 9 shape-only, 0 hollow, 14 of 22 modules
+    38 pass: 29 behaviour-dependent, 9 shape-only, 0 hollow, 15 of 22 modules
 
 Where it started this morning, on the same instrument once it existed:
 
@@ -14753,8 +14754,9 @@ Where it started this morning, on the same instrument once it existed:
 
 ### Seven of the eight new modules came from this side, not the compiler
 
-`net`, `stream`, `async_hooks`, `readline`, `fs`, `util` and `querystring` each
-had **zero** compiled passes and working published behaviour that nothing was
+`net`, `stream`, `async_hooks`, `readline`, `fs`, `util`, `querystring`,
+`timers` and `buffer` each had **zero** compiled passes, or none that
+demonstrated anything computed, and working published behaviour that nothing was
 asking about. Every upstream test for them needs a socket, a stream, a
 filesystem, an async context node creates, or a class that does not cross yet.
 
