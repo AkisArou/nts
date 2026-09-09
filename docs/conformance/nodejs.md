@@ -11540,6 +11540,28 @@ So `last-mile.mjs` output is *where each chain currently ends*. That is the
 right thing to read when choosing what to work on next, and it is not a count of
 remaining fixes. Its header now says so; the first version said the opposite.
 
+### Re-derived on v14: three heads, and the `errors.ts` chain is gone
+
+    buffer/src/main.ts:196       an erased value where a concrete representation is wanted
+    buffer/src/main.ts:575       `this` outside a method
+    buffer/src/encodings.ts:279  `toString` on a number
+    UNRESOLVED Buffer.alloc      (stopped at `Uint8Array#fill`)
+
+Four heads became three. `internal/errors.ts` is no longer among them -- the
+chain through `ERR_UNKNOWN_ENCODING#constructor` cleared -- and a new one
+appeared through `Buffer.alloc`, which `last-mile.mjs` cannot follow past
+`Uint8Array#fill` and says so rather than guessing.
+
+Still `0` own roots, still **2** wrapper declines, still **0** published:
+
+    no wrapper for StringDecoder: is a class whose constructor was not compiled
+    no wrapper for default: is exported and is not a function this backend can name
+
+Both are consequences. "Two wrapper declines left" is true and describes the
+symptom; the module is three lowering chains from publishing anything, and one
+of the three is the `` `this` outside a method`` form that eight reductions have
+failed to isolate.
+
 **Method note.** The roots were found by taking each NTS1003's named callee,
 finding that function's line range in its own file, and reading which NTS1001
 falls inside it. `blockers.mjs` deliberately does not do this: it reports the
