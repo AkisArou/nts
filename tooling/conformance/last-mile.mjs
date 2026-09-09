@@ -5,9 +5,25 @@
 //
 // `blockers.mjs` answers "what does this module's cone refuse", which is a
 // count over the cone. This answers a narrower question: **for each function
-// this module's own source cannot compile, which single construct is at the end
-// of the chain.** That is the unit of work -- three chains means three things
-// have to land, and a cone of sixty-five constructs can still be three chains.
+// this module's own source cannot compile, which single construct is currently
+// at the end of the chain.**
+//
+// **A chain count is a head, not a workload, and the first version of this
+// comment said otherwise.** It claimed "three chains means three things have to
+// land". That is false, and it was falsified the same day: the compiler lane
+// provided `join` on all three receivers, `errors.ts:547` cleared, and
+// `string_decoder` went from 65 refusals and 0 published to **65 and 0**. The
+// head of that chain moved sixteen lines down the same function, to
+// `errors.ts:563`, `key` on a union whose members lay their fields out
+// differently -- a dynamic property read across layouts, which is a harder
+// problem than the one it replaced.
+//
+// So read the output as *where each chain currently ends*, which is what tells
+// you what to work on next, and never as how many fixes remain. The emitter
+// reports one construct per function and stops, so removing one reveals the
+// next; `blockers.mjs` says the same thing about its own numbers. The only
+// instrument that distinguishes "cleared" from "replaced" is diffing the two
+// lists rather than their lengths -- lengths were identical here.
 //
 // The walk is: every NTS1003 in the module's own source names a callee; find
 // that callee's declaration and its line range in whatever file it lives in;
@@ -25,6 +41,18 @@
 //
 // A callee whose range cannot be found is printed as UNRESOLVED rather than
 // guessed at, because silence would read as "no blocker".
+//
+// To tell a cleared head from a replaced one, keep the root lines across a
+// change and diff those, never their counts:
+//
+//   node tooling/conformance/last-mile.mjs --all | grep '^     ' | sort > before
+//   # ... land the change, re-pin ...
+//   node tooling/conformance/last-mile.mjs --all | grep '^     ' | sort > after
+//   diff before after
+//
+// A `-` with no matching `+` in the same function is a chain that shortened. A
+// `-` and a `+` sixteen lines apart in one function is a head that moved, and
+// the module did not gain a single published export.
 
 import { readFileSync, existsSync, readdirSync, mkdtempSync } from "node:fs";
 import { dirname, join } from "node:path";

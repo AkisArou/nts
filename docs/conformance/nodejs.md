@@ -11443,7 +11443,7 @@ type` (18 sites, not about module scope), and `a member of X` (99 sites, and the
 `AsyncLocalStorage` case suggests it is downstream of something else). **A form
 count is a lower bound on causes and an upper bound on nothing.**
 
-## `string_decoder`'s last mile is four roots, three filed, and none of them is a wrapper
+## `string_decoder`'s last mile is four chain *heads*, and clearing one did not shorten it
 
 The standing description is "zero own-source refusals, two wrapper declines
 left". The first half is true and the second half is downstream. On v10
@@ -11492,8 +11492,38 @@ parameter, and a getter -- and every one lowers. See the diagnoses section.
 
 It is also four and not two, and not one. `intersection-from-two-narrowings`
 alone would publish nothing -- the constructor would still be refused, so the
-class still would not cross. A fixture landing is not a module landing, and the
-count of chains is the honest unit.
+class still would not cross. A fixture landing is not a module landing.
+
+### The count of chains is not the honest unit either, and one day proved it
+
+The sentence above originally ended "and the count of chains is the honest
+unit". **That was wrong within hours.** The compiler lane provided `join` on all
+three receivers, clearing `internal/errors.ts:547` -- the head of
+`string_decoder`'s constructor chain, and the root that
+`last-mile.mjs --all` had just ranked as blocking **eight of twenty-two
+modules**, the highest-value fix in the profile by that measure.
+
+`string_decoder` went from 65 refusals and 0 published to **65 and 0**. `os`
+went 71 and 17 to 71 and 17. Not one site moved.
+
+    - errors.ts:547:41  `join` on a typed array
+    + errors.ts:563:74  `key` on a union, whose members lay their fields out differently
+
+One out, one in, sixteen lines down the *same function*. The emitter reports one
+construct per function and stops, so a cleared head reveals the next -- and the
+replacement is harder than what it replaced: a dynamic property read across
+layouts is a representation question, not a missing method.
+
+**This is the stationary form of "a refusal delta is not a measure of a fix".**
+The familiar version is `buffer` going 79 to 79 with five cleared and five
+revealed. This one is worse to detect, because it is a single chain whose length
+and count are both unchanged. The only instrument that distinguished cleared
+from replaced was **diffing the two lists rather than their lengths**, which
+were identical.
+
+So `last-mile.mjs` output is *where each chain currently ends*. That is the
+right thing to read when choosing what to work on next, and it is not a count of
+remaining fixes. Its header now says so; the first version said the opposite.
 
 **Method note.** The roots were found by taking each NTS1003's named callee,
 finding that function's line range in its own file, and reading which NTS1001
@@ -11503,6 +11533,84 @@ because "the diagnostic gives a location and not an enclosing name". Doing it by
 range rather than by nearest-line is what keeps that from being a guess -- and
 `decodeIn` is the case that would have defeated proximity, since it lives in
 `encodings.ts` while every NTS1003 naming it is in `main.ts`.
+
+## The chokepoint is a function, not a construct: `inspectValueWithin` blocks 15 of 22
+
+`last-mile.mjs --all` on v10, ranking root constructs by **how many modules
+reach them** rather than by how many sites print a message:
+
+| modules | where | construct |
+| ---: | --- | --- |
+| **15** | `internal/errors.ts:547` | `` `join` on a typed array `` |
+| 8 | `buffer/src/main.ts:196` | an erased value where a concrete representation is wanted |
+| 6 | `events/src/main.ts:621` | `` `EventEmitter`, a class used as a value `` |
+| 4 | `internal/async-hooks.ts:451` | a method `init` with no declaration in the hierarchy |
+| 3 | `buffer/src/encodings.ts:279` | `` `toString` on a number `` |
+| 3 | `internal/errors.ts:653` | `` `map` on a typed array `` |
+| 3 | `internal/uv.ts:102` | `` `dest`, which `UVExceptionError` does not declare `` |
+| 3 | `internal/errors.ts:911` | an `Error` with options |
+| 3 | `url/src/url.ts:41` | a rest parameter whose element type has no representation |
+| 3 | `timers/src/timeout.ts:421` | a module-scope variable whose initializer was refused above |
+
+The fifteen for `errors.ts:547` are async_hooks, buffer, dgram, events, fs,
+http, net, os, process, readline, stream, string_decoder, timers, util and zlib
+-- every module that formats an error message, which is every module that has
+one.
+
+**And then it was cleared, and nothing moved.** The compiler lane provided
+`join` on all three receivers. `string_decoder` went 65 refusals and 0 published
+to 65 and 0; `os` went 71 and 17 to 71 and 17. The head advanced sixteen lines
+inside the same function, from `547` to `563`, `` `key` on a union whose members
+lay their fields out differently ``.
+
+**So the unit this table is really measuring is the function, not the line.**
+Fifteen of twenty-two modules are blocked by `internal/errors.ts`'s
+`inspectValueWithin`, which contains at least two independent constructs and
+will contain a third if that one clears. Ranking by construct made it look like
+one fix worth fifteen modules. Ranking by *function* says: this one function is
+worth fifteen modules and costs an unknown number of fixes, of which two are now
+known and the second is harder than the first.
+
+That is a better question to hand the compiler lane than a ranked list of lines,
+and it is the same correction in a different coat: a count sizes a corpus, not a
+feature.
+
+### Per-module shape
+
+    module                  own  chains        module                  own  chains
+    punycode                  0       0        process                  44       8
+    string_decoder            0       4        assert                   47       3
+    os                        3       1        net                      47      22
+    querystring               3       4        readline                 71       3
+    path                      4       4        util                     81      16
+    dgram                    13       9        zlib                     98       8
+    console                  19       0        http                    146      30
+    diagnostics_channel      19       3        fs                      196      76
+    async_hooks              20       5        stream                  467      61
+    timers                   25       4
+    events                   30      12
+    buffer                   37       4
+    url                      40      18
+
+`punycode` at 0 and 0 is the control that says the instrument reads a finished
+module correctly. `console` owns nineteen roots and reaches none -- all of its
+work is its own. `string_decoder` owns none and reaches four -- all of its work
+is someone else's. Those two are the extremes and they are both real.
+
+### Own roots by how many modules write them
+
+Not a site count -- a count of modules whose *own* source carries at least one:
+
+    10 modules  `null` or `undefined` where what it stands in for is not a reference
+     7 modules  a rest parameter whose element type has no representation
+     7 modules  an erased value where a concrete representation is wanted
+     7 modules  `this` outside a method
+     7 modules  an optional-chained method call (`a?.b()`)
+
+These are the constructs the profile writes everywhere, as opposed to the ones
+it happens to route through. Four of the five are filed; `` `this` outside a
+method `` is the one that resisted isolation six ways and is carried as a
+diagnosis.
 
 ## Conventions
 
