@@ -1,6 +1,6 @@
 # `tooling/conformance`
 
-Sixty-two scripts, 129 fixtures and 11 agreement cases, and a new session needs about six of the
+Sixty-two scripts, 129 fixtures and 12 agreement cases, and a new session needs about six of the
 scripts. This says which six, and what the rest are for when you reach them.
 
 ## Two lanes, and they answer different questions
