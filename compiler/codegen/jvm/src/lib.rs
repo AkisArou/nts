@@ -43,6 +43,7 @@
 pub mod closures;
 mod intcall;
 mod builder;
+mod fuse;
 pub mod body;
 pub mod hierarchy;
 pub mod ops;
