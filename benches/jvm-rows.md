@@ -2288,6 +2288,49 @@ as one representation and stored as another is not a wrong number, it is a frame
 the verifier rejects, and six passes answering that separately is how it took a
 night to learn once.
 
+### The ART allocation survey, twenty-four cases: three diverge and one instrument lied
+
+`tooling/android/bytes-on-device.sh` runs the same program under both counters.
+Twice for the rows that differ.
+
+    case                     HotSpot        ART
+    in-narrowing                   0      81920      <- HotSpot allocates nothing
+    generator                      0      80000      <- and neither should ART
+    case-convert               10232      23152      +126%
+    number-format               4608       6456      +40%
+    map-and-set                65952      74144      +12%
+    growth-fixed               16400      20480      +25%
+    growth-grown               32896      36992      +12%
+    array-from               8280864    8342832      agree, and see below
+    pipeline                  533520     533520      agree exactly
+    array-methods                144        144      agree, since `fuse`
+    arrays / objects / closures / strings / substrings / module-closures
+    erasure-typed / erasure-unknown          0 and 0 on both
+
+**`in-narrowing` and `generator` are the finding**: HotSpot allocates *nothing*
+per operation and ART allocates eighty kilobytes. That is the `array-methods`
+shape again -- C2 removing an allocation entirely, ART not -- and it is the
+shape `fuse` was built for, so there may be a second instance of the same fix.
+
+`in-narrowing` is the sharper of the two because `unbox.rs` exists **for that
+row**: its header records record 0108, "15.48us against hand-written Java's
+1.42us, and 212,944 bytes per operation against zero". The pass removed the box
+from the emission. Something is still allocating on ART and is not on HotSpot,
+so whatever it is, `unbox` is not covering it and C2 is.
+
+**And the instrument lied first, which is worth more than the survey.**
+`array-from` read **-247102 bytes/op**. `getGlobalAllocSize` answers an `int`,
+the case allocates 8.28MB an operation, and two thousand of those is 16.5GB --
+so the counter wrapped, to a plausible-looking negative rather than to anything
+that announces itself. The arithmetic checks out: 16.56e9 modulo 4.29e9 is about
+3.7e9, which as a signed int is about -0.6e9, over two thousand iterations.
+
+The tool now sizes the device run from the HotSpot figure -- measured first, on
+a 64-bit counter -- to keep the total under 1.5e9, and prints `overflow` rather
+than a number if one still comes back negative. With that, `array-from` is
+8,342,832 against 8,280,864: **they agree, and the 43.7x I would have reported
+was the counter.**
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that

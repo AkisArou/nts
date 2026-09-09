@@ -256,3 +256,83 @@ fn the_jar_names_no_method_android_spells_differently() {
         );
     }
 }
+
+/// `d8` accepts the jar, which is the thing the two ratchets above are
+/// preconditions for.
+///
+/// # Why a precondition is not the check
+///
+/// `nothing_in_the_runtime_needs_a_feature_android_lacks` asserts no
+/// `invokedynamic` and class file version 52, and
+/// `the_jar_names_no_method_android_spells_differently` asserts the names
+/// resolve. Both are true of a jar `d8` would still refuse -- they were chosen
+/// because they are the *known* ways to lose the Android path, and a rule
+/// chosen that way cannot cover the ones nobody thought of.
+///
+/// Until this test, nothing had ever run `d8`. The path was held open by two
+/// claims about the artefact and never by the tool that consumes it, and when
+/// it was finally tried by hand the whole runtime dexed to 134KB and nine cases
+/// ran bit-identically under `dalvikvm`. That is a good outcome and it was
+/// **unverified for as long as this backend has existed**.
+///
+/// # Why here and not in the gate
+///
+/// It costs a second, needs no device, and skips where `d8` is absent -- so it
+/// belongs beside the claims it checks rather than in a shared twenty-minute
+/// run. Running the *program* on a device is `tooling/android/agrees-on-device.sh`
+/// and stays a tool rather than a step: it needs an emulator, and a gate step
+/// that silently skips on every machine without one is a ratchet in name.
+#[test]
+fn d8_accepts_the_runtime_jar() {
+    let root = root();
+    let jar = root.join("runtime/jvm/nts-runtime.jar");
+    assert!(jar.exists(), "the jar this test is about is missing: {}", jar.display());
+
+    let Some(sdk) = std::env::var("ANDROID_HOME")
+        .or_else(|_| std::env::var("ANDROID_SDK_ROOT"))
+        .ok()
+    else {
+        eprintln!("SKIP d8_accepts_the_runtime_jar: no ANDROID_HOME");
+        return;
+    };
+    // The newest build-tools, because `d8` only gained `--min-api` behaviour
+    // worth relying on in recent ones and an old copy would answer about a
+    // tool nobody ships with.
+    let Some(d8) = std::fs::read_dir(PathBuf::from(&sdk).join("build-tools"))
+        .ok()
+        .map(|entries| {
+            let mut found: Vec<PathBuf> = entries
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .collect();
+            found.sort();
+            found
+        })
+        .and_then(|found| found.into_iter().rev().map(|dir| dir.join("d8")).find(|d8| d8.exists()))
+    else {
+        eprintln!("SKIP d8_accepts_the_runtime_jar: no build-tools with d8");
+        return;
+    };
+
+    // A named directory rather than a `tempfile` dependency: this crate's
+    // manifest says every addition is a maintenance obligation, and one test
+    // needing a scratch directory is not worth one.
+    let out = std::env::temp_dir().join(format!("nts-d8-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&out);
+    std::fs::create_dir_all(&out).expect("a directory to dex into");
+    let run = Command::new(&d8)
+        .arg("--min-api")
+        .arg("29")
+        .arg("--output")
+        .arg(&out)
+        .arg(&jar)
+        .output()
+        .expect("running d8");
+    let dexed = out.join("classes.dex").exists();
+    let _ = std::fs::remove_dir_all(&out);
+    assert!(
+        run.status.success(),
+        "d8 refused the runtime jar, so this backend's output cannot reach Android:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(dexed, "d8 reported success and produced no classes.dex");
+}
