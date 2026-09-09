@@ -48,6 +48,15 @@ import { spawnSync } from "node:child_process";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 
+// `target/node` is shared with the other sessions in this tree. Measuring it
+// means measuring whatever they last wrote: a 22-module run reported
+// `buffer 0 passed` while another session rebuilt the directory underneath it,
+// alphabetically, and a re-run minutes later on the same md5 said `1 passed`.
+//
+// `NTS_ADDON_OUT` is the same variable `build.sh` takes, so a run builds into
+// its own directory and reads back what it built.
+const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
+
 /** The set of test files that pass, under one control or none. */
 function passing(module, addon, flag) {
   const args = ["tooling/conformance/run.mjs", "--module", module, "--addon", addon];
@@ -68,14 +77,14 @@ const argv = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const modules = argv.length > 0
   ? argv
   : readdirSync(join(ROOT, "runtime/node"))
-    .filter((m) => m !== "node_modules" && existsSync(join(ROOT, "target/node", `${m}.node`)))
+    .filter((m) => m !== "node_modules" && existsSync(join(ADDON_DIR, `${m}.node`)))
     .sort();
 
 let tHollow = 0, tShape = 0, tBehaviour = 0;
 const withAny = [];
 
 for (const module of modules) {
-  const addon = join(ROOT, "target/node", `${module}.node`);
+  const addon = join(ADDON_DIR, `${module}.node`);
   const plain = passing(module, addon, null);
   if (plain.size === 0) continue;
 

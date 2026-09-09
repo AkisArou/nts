@@ -11,7 +11,20 @@ set -euo pipefail
 module="${1:?usage: build.sh <module>}"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 src="$root/runtime/node/$module"
-out="$root/target/node"
+# `target/node` is shared with the other sessions in this tree, and a
+# measurement that reads it is reading whatever they last wrote.
+#
+# On 2026-09-09 a 22-module axis run reported `buffer 0 passed` and a re-run
+# minutes later, same binary and same md5, reported `1 passed`. Another
+# session was part-way through its own rebuild sweep -- fs at 14:02:01, http
+# at 14:02:26, net at 14:02:49, path at 14:02:58, alphabetical, while my run
+# was reading the same directory. Nothing in my scripts could tell.
+#
+# `NTS_ADDON_OUT` gives a run its own directory, so the artifact measured is
+# the artifact built. The default is unchanged, so every existing caller and
+# every other lane behaves exactly as before -- this is the addon half of the
+# rule that already exists for the compiler: copy it and pass `NTS_BIN`.
+out="${NTS_ADDON_OUT:-$root/target/node}"
 work="$out/$module.build"
 
 [ -d "$src" ] || { echo "no such module: runtime/node/$module" >&2; exit 2; }
