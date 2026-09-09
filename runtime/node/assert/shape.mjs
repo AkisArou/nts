@@ -45,6 +45,10 @@ export function shape(exports) {
   // Custom inspection is a Symbol-dispatched Node object hook, deliberately a
   // section-13 non-goal for compiled TypeScript. Keep the whole hook at this
   // JavaScript boundary rather than leaving a symbol-shaped half in the class.
+  // Guarded for the reason buffer's is: a compiled `assert` may not publish
+  // `AssertionError`, and reaching through an absent export turns "one export
+  // is missing" into "the module did not load".
+  if (exports.AssertionError !== undefined)
   exports.AssertionError.prototype[inspect.custom] = function (_depth, context) {
     const actual = this.actual;
     const expected = this.expected;

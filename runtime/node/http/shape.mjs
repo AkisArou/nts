@@ -130,6 +130,9 @@ function requestConstructor(Class) {
 export function shape(exports) {
   // NTS represents this private slot as a fixed typed field. The symbol is
   // only Node's host-facing spelling, so the mapping remains in this facade.
+  // Guarded for the reason buffer's is: reaching through an absent export
+  // reports a load failure in place of the missing name.
+  if (exports.OutgoingMessage !== undefined)
   Object.defineProperty(exports.OutgoingMessage.prototype, kHighWaterMark, {
     configurable: true,
     get() {

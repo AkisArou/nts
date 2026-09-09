@@ -28,8 +28,22 @@ export function shape(exports) {
   // operations with ordinary assignments, so its static and prototype
   // operations are enumerable. Keep that host-object representation here;
   // the typed implementation does not depend on descriptors.
-  makePropertiesEnumerable(mod.Buffer, ["length", "name", "prototype"]);
-  makePropertiesEnumerable(mod.Buffer.prototype, ["constructor"]);
+  // Guarded, because this shaping runs against a *compiled* module too and a
+  // compiled `buffer` does not publish `Buffer` yet.
+  //
+  // Unguarded, `Object.getOwnPropertyNames(undefined)` threw and the whole
+  // module reported `loading the module: Cannot convert undefined or null to
+  // object` -- which says a load failed when what actually happened is that one
+  // export is missing. `build-floor.sh` meanwhile reported "builds and loads",
+  // because it requires the addon directly and never reaches this. The two
+  // disagreed and the shape was the one lying.
+  //
+  // This is not a weakened check. Every test still fails; they fail saying
+  // `buffer.Buffer is not a function`, which names the export.
+  if (mod.Buffer !== undefined) {
+    makePropertiesEnumerable(mod.Buffer, ["length", "name", "prototype"]);
+    makePropertiesEnumerable(mod.Buffer.prototype, ["constructor"]);
+  }
 
   return mod;
 }
