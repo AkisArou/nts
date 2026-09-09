@@ -10693,6 +10693,14 @@ util         25    zlib          68
 
 **1,851 passed, 0 failed, across all twenty-two.**
 
+**Re-measured at the end of the session, after everything else.** By then this
+profile had also gained `EventEmitter.usingDomains` as a class static with the
+shim line removed, three edited local tests, and `"files": ["src/main.ts"]` in
+all twenty-two tsconfigs. Each was checked when it landed; the point of running
+the twenty-two again is that four changes verified separately are not the same
+claim as four changes verified together. Same total, same distribution, still
+zero failures.
+
 **100% and 0 hollow are two measurements, and both were taken.** The counts
 above establish the first: no test that passed before the import fails after
 it. They say nothing about the second -- a file that passes with the module
