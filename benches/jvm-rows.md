@@ -2193,6 +2193,60 @@ declined to lower it on the grounds that a floor moved for another lane's
 in-flight change stops meaning anything -- which was the right call for the
 wrong reason, since there was no regression to accommodate.
 
+### ART, measured: seven of eight allocate the same, and the eighth is 43.7x
+
+Twelve optimisations were priced at zero here last night and **every one was
+refuted by C2**. ART has no C2 -- no sea-of-nodes JIT, weaker escape analysis,
+compilation ahead of time at install -- so the list was never a list of dead
+leads, it was a list of unmeasured ones. The device is an x86_64 emulator at API
+29, which is the wrong machine for *timings* and the right one for
+**allocation**, because allocation counts are deterministic.
+
+**The instrument first, because a counter that has counted nothing is worth
+nothing.** `android.os.Debug.startAllocCounting` with `getGlobalAllocSize`,
+against known allocations:
+
+    nothing            16 bytes
+    1x double[256]   2080          2064 + the 16 above
+    100x           206416          100 * 2064 + 16
+    1000x         2064016         1000 * 2064 + 16
+
+Exactly linear, exactly 2064 per array. `com.sun.management.ThreadMXBean` does
+not exist on Android, so the HotSpot instrument could not come along.
+
+**Same programs, same entries, same iteration count, only the runtime differs:**
+
+    case                     HotSpot      ART
+    array-methods                144     6288      43.7x
+    symbol-keyed-map             240      208
+    erasure-typed                  0        0
+    erasure-unknown                0        0
+    erasure-stored-typed       16016    16384
+    erasure-stored-unknown     16016    16384
+    objects                        0        0
+    arrays                       272      272
+
+**So the plan's headline question is answered, and the answer is not the one the
+worry was about.** "Does the erased representation need scalarising for ART" --
+no, in general. ART eliminates the non-escaping erasures exactly as C2 does, and
+`objects` is 0 on both, which is the A/B the plan wanted for the constructor
+question.
+
+**The one divergence is specific and it is the one I dismissed this morning.**
+`array-methods` allocates 6288 against 144, and the difference is
+`6144 = 256 * 24` -- one `NtsValue` per round, 24 bytes each, from
+`arrayAtValue` returning an erased value that `getfield num` unwraps on the very
+next instruction. HotSpot inlines that helper and scalar-replaces the result. ART
+does not: it is a call boundary, and that is exactly where the weaker analysis
+gives out.
+
+I wrote this morning that the fusion helper "would have bought zero bytes". That
+was true, and it was true of one runtime. **On the platform this backend exists
+for it buys 6,144 bytes an operation**, and the row is 43.7x on the axis that
+matters most on a phone.
+
+Stable across N=500, 2000 and 8000 -- 6288 every time.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
