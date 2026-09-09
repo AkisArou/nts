@@ -15448,6 +15448,62 @@ One detail that may point at where: `finallyOnTheWayOut` escapes with an
 of a frame with a `finally` in it is not the one that went in, so something is
 constructed or reset on the unwind path rather than simply not caught.
 
+### The mechanism, and a decision that documented its own premise
+
+The compiler lane read the emitted C. **The `try` is deleted:**
+
+    double fromACall(double v0) { double v1; v1 = raiser(v0); return v1; }
+
+No landing pad, no catch block. `grep -c landing` in the lowering is **0**, and
+0 in the C backend.
+
+**And the control above is not exception machinery either.** A lexically
+enclosing throw is routed at compile time, so `try { throw } catch { return 5 }`
+compiles to `return 5.0`. So the clean split this profile measured is not
+"catching works and the call breaks it" -- it is that **two different things
+look like one feature**, one of them compile-time routing and complete, the
+other absent. The empty message on the way out of a `finally` is the same fact:
+it leaves through `nts_uncaught` to the *boundary's* landing, a different frame
+from the one that should have caught it.
+
+`NtsLanding` already exists -- a stack with `previous`, `thrown` and `detail`,
+walked by `nts_uncaught`, which pops the innermost and `longjmp`s. A `try` needs
+`setjmp`, a push on entry, a jump to the catch on the non-zero return, and a pop
+on the way out.
+
+**The decision not to use it inside the lowering is written down in
+`nts_runtime.h`, with its premise**, and the premise is what makes this worth a
+section. It says a non-local jump does not run the releases reference counting
+inserted between the throw and the frame, that this is bounded by the throw
+being exceptional, and -- the clause that matters --
+
+> it is why this is at the boundary rather than inside the lowering: an ordinary
+> `try` never comes near it.
+
+The reasoning is sound and the last clause is false of this corpus.
+`internal/validators.ts` throws and every caller catches; a throw here is the
+**validation** path, not an exceptional one. Correct when written, documented
+with its own premise, and falsified by a measurement nobody could make until
+`agreement.mjs` existed.
+
+That is why the cost is not the plumbing, which is an afternoon. Under
+reference counting every throw through a frame leaks what that frame held, on
+ordinary input, and the gate's memory step would be right to fail it. The real
+work is an unwind that runs the releases, or an error-return discipline that
+never jumps -- a representation decision the size of the erased-slot one.
+
+### An instrument that agreed on every case it did not decline
+
+Before reading the C, the compiler lane wrote an example for this and their
+harness reported **"agreed on every case"** -- over 16 of 145 cases, with **17
+declined because the program aborted**. The declines were the finding.
+
+That is the shape this whole directory is built against, arriving in the one
+place it had not been looked for. `examples/` requires a case to agree with
+node, so it cannot express a case that does not; `agreement.mjs` counts a
+crash, a refusal and a wrong answer apart and prints all three. The argument for
+the suite stopped being an argument at that point.
+
 Found by a sweep of ten questions about statement forms -- labelled break,
 labelled continue, argument evaluation order, the left side of an assignment
 before the right, a do-while body running once, a for update after the body.
