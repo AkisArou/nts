@@ -15408,6 +15408,40 @@ Neither was on the list of things being looked for, which is the argument for
 sweeps over targeted probes: **the sweep's own eight questions gave six
 agreements and three refusals, and the two findings were things nobody asked.**
 
+### A try/catch does not catch what a function it calls throws
+
+    throw in the try's own body                caught, answers 5
+    throw from a called arrow                  escapes
+    throw from a called nested function        escapes
+    throw from a called top-level function     escapes
+
+Node answers 5 for all four. The compiled program answers 5 for the first and
+lets the other three out of the addon entirely. The first row is the control
+that makes it precise: **catching works, and the call is what breaks it.**
+
+This is not an exotic construct. `internal/validators.ts` throws and every
+caller catches; node's own tests are largely `assert.throws(() => …)`.
+
+**It also weakens what a compiled pass means, and that is worth stating rather
+than leaving implied.** The axis is counted in tests that pass, and a test
+passes if nothing threw across a call inside it. "38 pass, 29
+behaviour-dependent" is exactly what it says and is a narrower claim than it
+reads as: those 29 demonstrate behaviour that did not involve an exception
+crossing a call. The figure is not revised, because it is not wrong -- but it
+does not cover error paths, and until now nothing said so.
+
+Filed as `agreements/a-throw-across-a-call`.
+
+Found by a sweep of ten questions about statement forms -- labelled break,
+labelled continue, argument evaluation order, the left side of an assignment
+before the right, a do-while body running once, a for update after the body.
+Nine agree exactly.
+
+**That is four sweeps where the sweep's own questions came back clean and the
+finding was something nobody asked**: the array append aborting, the async arrow
+emitting invalid C, the optional-field struct, and this. It is the argument for
+more sweeps rather than more targeted probes.
+
 ### The suite as it stands
 
 Nine case files, **56 questions compared, 8 disagreeing, 13 refused, 0 that did
