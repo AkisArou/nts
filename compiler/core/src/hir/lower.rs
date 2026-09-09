@@ -2865,6 +2865,85 @@ fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
     })
 }
 
+/// Each parameter whose declared type is a scalar and `undefined`, with that
+/// scalar.
+///
+/// An optional parameter whose body observes the absence represents as `Erased`,
+/// so the wrapper reads it with `nts_from_napi_value` -- which accepts every
+/// JavaScript value. `os.getPriority(pid?: number)` therefore accepted `null`
+/// and `false` and returned instead of throwing, and `setPriority(1, "y")`
+/// handed the compiled function a string that `unerase` read as a double:
+/// `6.9231110677068e-310`, which is the pointer.
+///
+/// The type is the only thing missing at the boundary. `Param` carries `ty`,
+/// which is `Erased`, and `shape`, which says optional -- and neither says what
+/// the optional half *was*. A side table rather than a field on `Param`, for the
+/// reason `opaque_signatures` is one: no backend has to read it, and twenty
+/// construction sites do not have to learn a field they will not use.
+///
+/// Scalars only. A union of two scalars plus `undefined` is not one of these and
+/// is left alone, because the check has one type to name in its message and
+/// naming the wrong one is worse than the generic text this replaces.
+fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
+    let probe = FuncBuilder::new(snapshot);
+    let mut found = Vec::new();
+    let mut at = 0u32;
+    for child in probe.children(declaration) {
+        if probe.kind_of(child) != Some(syntax::PARAMETER) {
+            continue;
+        }
+        let index = at;
+        at += 1;
+        // The `?`. A parameter with a *default* is not one of these: the callee
+        // supplies the value, and the slot is the scalar rather than a union.
+        if !probe
+            .children(child)
+            .iter()
+            .any(|part| probe.kind_of(*part) == Some(syntax::QUESTION_TOKEN))
+        {
+            continue;
+        }
+        // A parameter's type is on its name, which is where `lower_param` reads
+        // it from.
+        let Some(name) = probe.children(child).first().copied() else {
+            continue;
+        };
+        let Some(ty) = snapshot.node_types.get(&name).copied() else {
+            continue;
+        };
+        if representation(snapshot, ty) != Some(HirType::Erased) {
+            continue;
+        }
+        let Some(TypeKind::Union(members)) = snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            continue;
+        };
+        let present: Vec<TypeId> = members
+            .iter()
+            .copied()
+            .filter(|member| {
+                !matches!(
+                    snapshot.types.get(member.0 as usize).map(|r| &r.kind),
+                    Some(TypeKind::Undefined | TypeKind::Void)
+                )
+            })
+            .collect();
+        let [only] = present.as_slice() else {
+            continue;
+        };
+        match representation(snapshot, *only) {
+            Some(scalar @ (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool)) => {
+                found.push((index, scalar));
+            }
+            Some(HirType::Managed(ManagedType::String)) => {
+                found.push((index, HirType::Managed(ManagedType::String)));
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 fn public_api(
     snapshot: &SemanticSnapshot,
     naming: &Naming,
@@ -2884,6 +2963,7 @@ fn public_api(
     let mut functions: Vec<String> = Vec::new();
     let mut unpublished: Vec<(String, String, usize)> = Vec::new();
     let mut opaque: Vec<String> = Vec::new();
+    let mut optional: Vec<(String, u32, HirType)> = Vec::new();
     // Where the surface starts.
     //
     // A project that named its root files said which modules are the product,
@@ -3009,6 +3089,9 @@ fn public_api(
             if opaque_signature(snapshot, declaration) {
                 opaque.push(emitted.clone());
             }
+            for (at, scalar) in optional_scalars(snapshot, declaration) {
+                optional.push((emitted.clone(), at, scalar));
+            }
             api.push((emitted, published.clone()));
         }
     }
@@ -3022,7 +3105,9 @@ fn public_api(
     unpublished.dedup();
     opaque.sort_unstable();
     opaque.dedup();
-    (api, namespaces, functions, unpublished, opaque)
+    optional.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    optional.dedup();
+    (api, namespaces, functions, unpublished, opaque, optional)
 }
 
 /// What the entry modules publish: plain names, namespaces of names, and the
@@ -3033,6 +3118,7 @@ type PublicSurface = (
     Vec<String>,
     Vec<(String, String, usize)>,
     Vec<String>,
+    Vec<(String, u32, HirType)>,
 );
 
 /// Record what the entry modules publish, and keep a published global's name.
@@ -3048,7 +3134,7 @@ fn publish_surface(
     module: &ModuleScope,
     entry: &[String],
 ) {
-    let (api, namespaces, functions, unpublished, opaque) =
+    let (api, namespaces, functions, unpublished, opaque, optional) =
         public_api(snapshot, naming, module, entry);
     // Only the ones that are not functions: a name in `functions` is published
     // by calling something, and a global that happens to share it is a
@@ -3093,6 +3179,7 @@ fn publish_surface(
     lowered.program.public_functions = functions;
     lowered.program.unpublished_modules = unpublished;
     lowered.program.opaque_signatures = opaque;
+    lowered.program.optional_scalars = optional;
 }
 
 #[must_use]

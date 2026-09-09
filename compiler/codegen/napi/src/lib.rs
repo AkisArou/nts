@@ -984,6 +984,57 @@ static void nts_napi_rest_type_error(napi_env env, const char *what, size_t at,
     napi_throw_type_error(env, "ERR_INVALID_ARG_TYPE", message);
 }
 
+/* Read an *optional* scalar argument, rejecting a value its type does not admit.
+ *
+ * An optional parameter whose body observes the absence crosses as an erased
+ * value, and `nts_from_napi_value` accepts every JavaScript value -- so
+ * `os.getPriority(pid?: number)` took `null` and `false` and returned where node
+ * throws, and `setPriority(1, "y")` handed the compiled function a string that
+ * `unerase` read as a double.
+ *
+ * `undefined` and `null` are both the absence: node's optional parameters treat
+ * an explicit `undefined` as omitted, and `null` fails the same `typeof` check
+ * that a string does -- except that a parameter typed `T | null` is a different
+ * declaration and does not reach here.
+ *
+ * The kind is passed rather than switched on a type name so the caller decides
+ * once, at emit time, from the declaration. */
+static bool nts_napi_optional_scalar(napi_env env, napi_value value, const char *what,
+                                     const char *expected, NtsValue *into) {
+    napi_valuetype kind = napi_undefined;
+    if (napi_typeof(env, value, &kind) != napi_ok) return false;
+    if (kind == napi_undefined) {
+        *into = nts_value_of_undefined();
+        return true;
+    }
+    if (expected[0] == 'n') { /* number */
+        double number = 0;
+        if (napi_get_value_double(env, value, &number) != napi_ok) {
+            nts_napi_argument_type_error(env, what, value, expected);
+            return false;
+        }
+        *into = nts_value_of_number(number);
+        return true;
+    }
+    if (expected[0] == 'b') { /* boolean */
+        bool flag = false;
+        if (napi_get_value_bool(env, value, &flag) != napi_ok) {
+            nts_napi_argument_type_error(env, what, value, expected);
+            return false;
+        }
+        *into = nts_value_of_boolean(flag);
+        return true;
+    }
+    /* string */
+    NtsString *text = NULL;
+    if (nts_from_napi_string(env, value, &text) != napi_ok) {
+        nts_napi_argument_type_error(env, what, value, expected);
+        return false;
+    }
+    *into = nts_value_of_reference((NtsHeader *)text, NTS_TAG_STRING);
+    return true;
+}
+
 static napi_status nts_napi_rest(napi_env env, napi_callback_info info,
                                  size_t from, bool strings, const char *what,
                                  NtsArray **out) {
@@ -1328,6 +1379,25 @@ fn crossings_of(
     Ok((ret, crossings))
 }
 
+
+/// The scalar an optional parameter admits, where the surface recorded one.
+///
+/// `number`, `boolean` or `string`, spelled as node spells it in
+/// `ERR_INVALID_ARG_TYPE`, because that string is both the check to emit and the
+/// word the message uses.
+fn optional_scalar(program: &hir::Program, func: &str, at: usize) -> Option<&'static str> {
+    let at = u32::try_from(at).ok()?;
+    program
+        .optional_scalars
+        .iter()
+        .find(|(name, index, _)| name == func && *index == at)
+        .and_then(|(_, _, ty)| match ty {
+            HirType::Float { .. } | HirType::Int { .. } => Some("number"),
+            HirType::Bool => Some("boolean"),
+            HirType::Managed(ManagedType::String) => Some("string"),
+            _ => None,
+        })
+}
 
 /// The `length` a published wrapper should report.
 ///
@@ -1852,6 +1922,7 @@ fn refused_body(refused: &[String], name: &str) -> Option<Skipped> {
 
 /// One function's wrapper. Every refusal is [`crossings_of`]'s.
 fn wrapper(
+    program: &hir::Program,
     func: &hir::Func,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
@@ -1931,7 +2002,17 @@ fn wrapper(
             );
             continue;
         }
-        let read = unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name);
+        // An optional parameter that is one scalar and `undefined`, whose
+        // admissible type only `program.optional_scalars` knows -- `parameter.ty`
+        // is `Erased` and `parameter.shape` says optional, and neither says what
+        // the optional half was.
+        let read = match optional_scalar(program, &func.name, index) {
+            Some(expected) if matches!(crossing, Cross::Erased) => format!(
+                "    if (!nts_napi_optional_scalar(env, argv[{index}], {}, \"{expected}\", &{name})) goto nts_napi_cleanup;\n",
+                c_string_literal(&parameter.name)
+            ),
+            _ => unmarshal(crossing, &parameter.ty, layouts, name, index, &parameter.name),
+        };
         if index < required {
             out.push_str(&read);
             continue;
@@ -3310,6 +3391,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             continue;
         }
         match wrapper(
+            program,
             func,
             &program.layouts,
             &classes,

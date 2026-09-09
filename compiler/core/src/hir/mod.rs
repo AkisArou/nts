@@ -1575,6 +1575,21 @@ pub struct Program {
     /// both the lowered representation and the checker's type for the same
     /// slot.
     pub opaque_signatures: Vec<String>,
+    /// Each published function's optional parameters that are one scalar and
+    /// `undefined`, with that scalar.
+    ///
+    /// An optional parameter whose body observes the absence represents as
+    /// `Erased`, so the boundary reads it with a conversion that accepts every
+    /// JavaScript value. `os.getPriority(pid?: number)` therefore accepted
+    /// `null` and returned where node throws, and `setPriority(1, "y")` handed
+    /// the compiled function a string that `unerase` read as a double.
+    ///
+    /// `Param` carries the type -- which is `Erased` -- and the shape -- which
+    /// says optional -- and neither says what the optional half *was*. A side
+    /// table rather than a field on `Param` for the reason `opaque_signatures`
+    /// is one: nothing but the wrapper reads it, and twenty construction sites
+    /// do not have to learn a field they will not use.
+    pub optional_scalars: Vec<(String, u32, HirType)>,
     /// Exported names whose symbol declares a *function*, as opposed to a value.
     ///
     /// The backend cannot tell the two apart from `public_api` alone, and the

@@ -1,5 +1,25 @@
-// expect: emit-c --napi -> calls (() => { const v = exports.optionalSecond(1, "y"); return typeof v === "number" && v !== 1 && v < 1e-300; })() === true
+// expect: emit-c --napi -> calls (() => { try { exports.optionalSecond(1, "y"); return "no throw"; } catch (e) { return e.message; } })() === "The \"second\" argument must be of type number. Received type string"
 // control: exports.optionalSecond(1, 3) === 3
+//
+// FIXED, and kept as a guard, with both faces of it in the header below.
+//
+// An optional parameter whose body observes the absence crosses as an **erased**
+// value, and `nts_from_napi_value` accepts every JavaScript value. So the
+// wrapper let a string through and `unerase` read its pointer as a double --
+// `6.9231110677068e-310` -- and `os.getPriority(null)` returned where node
+// throws. One defect, two faces: a value nobody supplied, and a missing
+// exception.
+//
+// The type was the only thing missing at the boundary. `Param` carries `ty`,
+// which is `Erased`, and `shape`, which says optional, and neither says what the
+// optional half *was*. `Program::optional_scalars` records it, the way
+// `opaque_signatures` records the other thing only the wrapper needs.
+//
+// Measured on `os.getPriority` against node over the twelve inputs
+// `test-os-process-priority.js` uses: `null`, `true`, `false`, `'foo'`, `{}`,
+// `[]` and `/x/` all agreed after this and none did before. The five range cases
+// -- NaN, the infinities, 3.14, 2**32 -- still differ, and for a different
+// reason: the module's validator runs and throws, and its `code` does not cross.
 //
 // An **optional** parameter whose conversion fails is left uninitialised, and
 // the uninitialised value reaches the module.
