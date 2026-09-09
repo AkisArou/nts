@@ -83,13 +83,14 @@ enum Cross {
 /// slots differ in *width* -- a `double` array and a reference array are not
 /// the same memory -- so a shared loop would need the width as data anyway and
 /// would read each slot through a cast the compiler could not check.
-fn elements_helper(inner: &Cross) -> &'static str {
+fn elements_helper(inner: &Cross, layouts: &[hir::Layout]) -> String {
     match inner {
-        Cross::Str => "nts_to_napi_strings",
-        Cross::Bool => "nts_to_napi_booleans",
+        Cross::Str => "nts_to_napi_strings".to_owned(),
+        Cross::Bool => "nts_to_napi_booleans".to_owned(),
+        Cross::Object(at) => format!("nts_to_napi_array_of_{}", c_identifier(&layouts[*at].name)),
         // Every other kind is refused in `cross`, so reaching one is a bug
         // there rather than a shape to handle here.
-        _ => "nts_to_napi_numbers",
+        _ => "nts_to_napi_numbers".to_owned(),
     }
 }
 
@@ -158,7 +159,7 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
             let inner = cross(element, layouts, classes)?;
             matches!(
                 inner,
-                Cross::Number | Cross::Bool | Cross::Str
+                Cross::Number | Cross::Bool | Cross::Str | Cross::Object(_)
             )
             .then(|| Cross::Elements(Box::new(inner)))
         }
@@ -1516,7 +1517,7 @@ fn marshal(
             text
         }
         Cross::Elements(inner) => {
-            let helper = elements_helper(inner);
+            let helper = elements_helper(inner, layouts);
             let mut text = format!(
                 "    NtsArray *result = {call};\n{after_call}    napi_status result_status = {helper}(env, result, &out);\n"
             );
@@ -1531,49 +1532,76 @@ fn marshal(
         Cross::Object(at) => {
             let layout = &layouts[*at];
             let struct_name = format!("NtsObj_{}", c_identifier(&layout.name));
+            let helper = object_helper(layout);
             let mut text = format!(
-                "    {struct_name} *result = {call};\n{after_call}    if (!nts_napi_check(env, napi_create_object(env, &out), \"could not create an object\")) {{\n"
+                "    {struct_name} *result = {call};\n{after_call}    napi_status result_status = {helper}(env, result, &out);\n"
             );
-            if release_result {
-                text.push_str("        nts_release((NtsHeader *)result);\n");
-            }
-            text.push_str("        goto nts_napi_cleanup;\n    }\n");
-            for field in &layout.fields {
-                let name = &field.name;
-                let member = c_identifier(name);
-                let set_property = set_property_call(name);
-                match field.ty {
-                    HirType::Managed(ManagedType::String) => {
-                        let _ = writeln!(
-                            text,
-                            "    {{ napi_value value; if (!nts_napi_check(env, nts_to_napi_string(env, result->{member}, &value), \"could not create an object string field\") || !nts_napi_check(env, {set_property}, \"could not set an object field\")) {{"
-                        );
-                    }
-                    HirType::Bool => {
-                        let _ = writeln!(
-                            text,
-                            "    {{ napi_value value; if (!nts_napi_check(env, napi_get_boolean(env, result->{member}, &value), \"could not create an object boolean field\") || !nts_napi_check(env, {set_property}, \"could not set an object field\")) {{"
-                        );
-                    }
-                    HirType::Float { .. } | HirType::Int { .. } => {
-                        let _ = writeln!(
-                            text,
-                            "    {{ napi_value value; if (!nts_napi_check(env, napi_create_double(env, (double)result->{member}, &value), \"could not create an object number field\") || !nts_napi_check(env, {set_property}, \"could not set an object field\")) {{"
-                        );
-                    }
-                    _ => unreachable!("nested object layouts are refused by cross"),
-                }
-                if release_result {
-                    text.push_str("        nts_release((NtsHeader *)result);\n");
-                }
-                text.push_str("        goto nts_napi_cleanup;\n    } }\n");
-            }
             if release_result {
                 text.push_str("    nts_release((NtsHeader *)result);\n");
             }
+            text.push_str(
+                "    if (!nts_napi_check(env, result_status, \"could not create an object\")) goto nts_napi_cleanup;\n",
+            );
             text
         }
     }
+}
+
+/// The name of the function that builds one of these as a JavaScript object.
+fn object_helper(layout: &hir::Layout) -> String {
+    format!("nts_to_napi_obj_{}", c_identifier(&layout.name))
+}
+
+/// That function.
+///
+/// The field loop used to be written **inline against `result`** in `marshal`,
+/// which is why an array of objects could not be built: there was nothing for a
+/// loop to call. Factored out, an object return and an object element are the
+/// same code, and the return arm becomes the same shape as every other one --
+/// call, status, check.
+///
+/// The locals keep the names the inline version used, `result` and `out`, so
+/// `set_property_call` and the `result->member` reads are unchanged; what
+/// changes is the failure path, which returns a status where the inline form
+/// jumped to the wrapper's cleanup label.
+fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::Layout]) {
+    let struct_name = format!("NtsObj_{}", c_identifier(&layout.name));
+    let name = object_helper(layout);
+    let _ = write!(
+        out,
+        "static napi_status {name}(napi_env env, const {struct_name} *result, napi_value *into) {{\n    napi_value out;\n    napi_status status = napi_create_object(env, &out);\n    if (status != napi_ok) return status;\n"
+    );
+    for field in &layout.fields {
+        let member = c_identifier(&field.name);
+        let set_property = set_property_call(&field.name);
+        let make = match field.ty {
+            HirType::Managed(ManagedType::String) => {
+                format!("nts_to_napi_string(env, result->{member}, &value)")
+            }
+            HirType::Bool => format!("napi_get_boolean(env, result->{member}, &value)"),
+            HirType::Float { .. } | HirType::Int { .. } => {
+                format!("napi_create_double(env, (double)result->{member}, &value)")
+            }
+            _ => unreachable!("nested object layouts are refused by cross"),
+        };
+        let _ = write!(
+            out,
+            "    {{\n        napi_value value;\n        status = {make};\n        if (status != napi_ok) return status;\n        status = {set_property};\n        if (status != napi_ok) return status;\n    }}\n"
+        );
+    }
+    let _ = write!(out, "    *into = out;\n    return napi_ok;\n}}\n\n");
+
+    // And the loop over an array of them, which is why the above is a function
+    // at all. Emitted beside it rather than on demand: an unused static is
+    // already what `nts_to_napi_view` and `nts_to_napi_numbers` are in most
+    // modules, and deciding per program which of the two are wanted is more
+    // machinery than the bytes it saves.
+    let array_name = format!("nts_to_napi_array_of_{}", c_identifier(&layout.name));
+    let _ = write!(
+        out,
+        "static napi_status {array_name}(napi_env env, const NtsArray *array, napi_value *out) {{\n    if (array == NULL) return napi_get_undefined(env, out);\n\n    uint32_t length = array->header.length;\n    napi_status status = napi_create_array_with_length(env, (size_t)length, out);\n    if (status != napi_ok) return status;\n\n    {struct_name} *const *slots = NTS_ITEMS(array, {struct_name} *);\n    for (uint32_t at = 0; at < length; at++) {{\n        napi_value element = NULL;\n        status = {name}(env, slots[at], &element);\n        if (status != napi_ok) return status;\n        status = napi_set_element(env, *out, at, element);\n        if (status != napi_ok) return status;\n    }}\n    return napi_ok;\n}}\n\n"
+    );
+    let _ = layouts;
 }
 
 fn should_release_result(release_managed: bool, return_is_borrowed: bool) -> bool {
@@ -1817,6 +1845,7 @@ fn declare_value_exports(
 fn publish_value_exports(
     values: &[(&hir::Global, &str, Cross)],
     functions: &[String],
+    layouts: &[hir::Layout],
 ) -> String {
     let mut out = String::new();
     for (global, publish, crossing) in values {
@@ -1827,7 +1856,7 @@ fn publish_value_exports(
             Cross::Number => format!("napi_create_double(env, (double){symbol}, &value)"),
             Cross::Str => format!("nts_to_napi_string(env, {symbol}, &value)"),
             Cross::Elements(inner) => {
-                format!("{}(env, {symbol}, &value)", elements_helper(inner))
+                format!("{}(env, {symbol}, &value)", elements_helper(inner, layouts))
             }
             Cross::Bytes => format!("nts_to_napi_view(env, {symbol}, &value)"),
             // `value_exports` refuses these, so reaching one is a bug in it
@@ -1873,6 +1902,12 @@ pub fn emit(program: &hir::Program) -> Addon {
         .flat_map(|f| std::iter::once(&f.return_type).chain(f.params.iter().map(|p| &p.ty)))
         .filter_map(|ty| match cross(ty, &program.layouts, &classes) {
             Some(Cross::Object(at)) => Some(at),
+            // An `object[]` needs the struct *and* the helper the element loop
+            // calls, and without this the array named a type nothing declared.
+            Some(Cross::Elements(inner)) => match *inner {
+                Cross::Object(at) => Some(at),
+                _ => None,
+            },
             _ => None,
         })
         .collect();
@@ -1892,6 +1927,7 @@ pub fn emit(program: &hir::Program) -> Addon {
             );
         }
         out.push_str("};\n\n");
+        emit_object_helper(&mut out, layout, &program.layouts);
     }
 
     let runs_module_init = emit_module_init_prototype(program, &mut out);
@@ -1989,7 +2025,7 @@ pub fn emit(program: &hir::Program) -> Addon {
     out.push_str(&publish_functions(&wrapped));
     out.push_str(&class_inits);
     emit_namespaces(program, &emitted, &mut skipped, &mut out);
-    out.push_str(&publish_value_exports(&values, &functions));
+    out.push_str(&publish_value_exports(&values, &functions, &program.layouts));
     out.push_str("    return exports;\n}\n");
 
     report_unrepresentable_exports(program, &wrapped, &published_classes, &mut skipped);
