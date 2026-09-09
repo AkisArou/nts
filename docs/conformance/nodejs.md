@@ -15208,6 +15208,45 @@ into the shared index -- the failure this profile's own notes describe, made
 while the note was loaded. Recorded here because the commit message will not
 lead anyone to this reasoning.
 
+## Every function the addon publishes reports `length` 0
+
+Arity compared against node's for every published name node also has:
+
+    56 compared, 53 of ours report `length` 0
+
+    26  ours 0 / node 0     agree, because node's is 0 too
+    22  ours 0 / node 1
+     4  ours 0 / node 2
+     1  ours 0 / node 14
+     3  a real length, and all three are shim-built
+
+The three with a real length are `assert.Assert`, `http.get` and `http.request`
+-- JavaScript wrappers a `shape.mjs` constructs. **Nothing the addon itself
+publishes has a length.**
+
+### The cause is one line, and it is not a bug in it
+
+    napi_create_function(env, "hostname", NAPI_AUTO_LENGTH, nts_napi_hostname, …)
+
+`NAPI_AUTO_LENGTH` there is the **name string's** length -- it tells N-API the
+name is NUL-terminated. `napi_create_function` takes no arity at all, and a
+function created through it has `length` 0 unless something defines the property
+afterwards. So this is not a wrong argument; it is a property nothing sets.
+
+### What it costs, stated as what is measured and what is not
+
+`fn.length` is observable and node's own suite reads it. **How many of its tests
+would be affected is not measured here** -- a grep for `.length` across
+`test/parallel` matches string and array lengths in the hundreds, and separating
+function arity from those needs more than a regular expression. The honest
+figure is the one above: 22 published functions report 0 where node reports 1,
+4 where node reports 2, and one where node reports 14.
+
+It is also the second thing today that is invisible to every name-counting
+instrument here. `loads.sh` counts the name, `unusable-exports.mjs` calls it,
+`surface-diff.mjs` compares its value -- and a function with the wrong `length`
+passes all three.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
