@@ -1,10 +1,15 @@
 // expect: emit-c --napi -> no wrapper for takesUnknown: takes unknown
 //
-// `unknown` does not cross in either direction. Both subjects lower -- their
-// bodies are emitted -- and the wrapper declines both:
+// `unknown` does not cross inward. The subject lowers -- its body is emitted --
+// and the wrapper declines it:
 //
 //     no wrapper for takesUnknown: takes unknown
-//     no wrapper for returnsUnknown: returns unknown
+//
+// The return direction is `unknown-return-at-the-boundary`. It was a second
+// subject here until an audit found that this fixture's *expectation* named
+// only the inward half, so a fix landing only inward would have turned it green
+// with the outward half still declined -- the exact failure this file's own
+// comment warned about.
 //
 // `takesNumber` and `returnsNumber` are the controls and must keep crossing.
 //
@@ -40,6 +45,3 @@ export function takesUnknown(value: unknown): number {
   return typeof value === "number" ? value : 0;
 }
 
-export function returnsUnknown(flag: boolean): unknown {
-  return flag ? 1 : "one";
-}
