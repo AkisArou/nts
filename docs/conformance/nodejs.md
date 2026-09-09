@@ -10036,7 +10036,8 @@ All twenty-two run against their own addon on the current pin, addons rebuilt
 after the entry change:
 
 ```
-punycode              3p    0f     <- the only module with no failures
+punycode              3p    0f     <- the only module with no failures, and
+                                      its surface is exactly node's
 os                    4p    5f
 path                  3p   18f
 stream                2p  248f
@@ -10048,6 +10049,20 @@ dgram 0p 77f    diagnostics_channel 0p 33f   events 0p 32f   http 0p 410f
 net 0p 148f     process 0p 90f   querystring 0p 8f   readline 0p 26f
 string_decoder 0p 5f   url 0p 50f   zlib 0p 68f
 ```
+
+**The one green module checks out at the surface too**, which is worth
+confirming rather than assuming since it is the whole of the axis. Against
+node's own `punycode`: the same six names, nothing missing, nothing extra,
+`ucs2` with the same two members, `version` identical at `"2.1.0"`. Its
+`export-surface-static.js` already asserts each of those and is written to fail
+when a name is *added*, not only when one is absent.
+
+That test pins the version as a literal rather than reading node's, and the
+choice is argued in the file: a compiled artifact publishing `undefined`, an
+empty string or a number would pass every other test in the module. Comparing
+against node would catch a different failure -- node revising its vendored
+copy -- at the cost of depending on a deprecated module continuing to exist.
+Left as it is, because the reasoning for the literal is stated and sound.
 
 **Fifteen passes across seven modules, and seven of the fifteen depend on
 behaviour.** The other eight are accounted for individually and none is a
