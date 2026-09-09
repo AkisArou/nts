@@ -11291,6 +11291,50 @@ already filed:
 
 
 
+
+## The native half is done: 349 of 352
+
+Re-derived 2026-09-10 with `nm --defined-only` against compiled objects, which
+is the only method this ledger accepts for it — two regexes once gave two
+different wrong answers.
+
+    352 declared binding(s), 3 with no C anywhere, across 18 module(s)
+
+The three are all in `internal`, and they are the same three recorded before:
+
+    nts_next_tick
+    nts_promise_hook_install
+    nts_promise_hook_uninstall
+
+**The standing goal text is stale here by a wide margin**, and says so of itself.
+It names "roughly 125 of 309 declared bindings have no C anywhere" with three
+worked examples. All three are now zero:
+
+| module | goal text (2026-09-09) | measured 2026-09-10 |
+| --- | --- | --- |
+| `dgram` | 21 of 21 missing | 21 declared, **0** missing |
+| `net` | 28 of 30 missing | 30 declared, **0** missing |
+| `fs` | 60 of 133 missing | 155 declared, **0** missing |
+
+So "compiling is necessary and not sufficient — `dgram` would fail to link
+whatever the compiler does" is **no longer true**. `dgram` has all 21 of its
+bindings, and nothing in the tree is gated on absent C except the three
+`internal` names above.
+
+The instrument reports what it could not run, which is the reason to trust the
+rest of it:
+
+    3 C file(s) did not compile and contributed no symbols:
+        runtime/node/fs/test/bytes.c
+        runtime/node/timers/test/host.c
+        runtime/node/zlib/test/bytes.c
+
+All three are test-support files, not bindings, and the count above is stated
+knowing their symbols read as missing.
+
+A missing binding is a link failure waiting for the lowering to arrive rather
+than one happening now: a module only fails to link once something calls it.
+
 ## Both lanes, 2026-09-10
 
 Re-derived end to end tonight, one module per invocation so a lost run costs one
