@@ -3733,6 +3733,9 @@ impl Emitter<'_> {
         if matches!(to, HirType::Bool) && !matches!(from, HirType::Bool) {
             return self.materialize_truth(code, pool, from, origin);
         }
+        if matches!(from, HirType::Managed(_)) && matches!(to, HirType::Managed(_)) {
+            return self.reinterpret_managed(code, pool, from, to, origin);
+        }
         // Widen to the computational kind first, then narrow to the declared
         // width. Doing it in one step would need a case per pair.
         let opcode = match (source, target) {
@@ -3783,6 +3786,52 @@ impl Emitter<'_> {
                 }
                 _ => {}
             }
+        }
+        Ok(())
+    }
+
+    /// Reinterpret one managed representation as another, which is a `checkcast`.
+    ///
+    /// **Two managed types are both `Kind::Ref`, so the table below answers
+    /// "same kind, no opcode" and emits nothing.** That is right when they
+    /// are the same representation and silently wrong when they are not: a
+    /// `Convert` is "reinterpret a value in a different representation, the
+    /// one operation whose whole content is its result type", and on the JVM
+    /// a reinterpretation between two reference types is a `checkcast`.
+    ///
+    /// Nothing produced one until now -- `Convert` reads as a numeric
+    /// operation and its arms are numeric -- so this was a hole rather than
+    /// a bug in anything that runs. It stops being a hole the moment an
+    /// all-reference tuple is laid out as an array: `pair[1]` declared
+    /// `managed<[string]>` arrives at the array's element type and is
+    /// converted back, which in C is a pointer cast costing nothing and here
+    /// must be checked. Emitting nothing would hand a `String[]` where a
+    /// `double[]` is declared and let the verifier reject the class -- or
+    /// not, which is worse.
+    ///
+    /// **The cast is emitted whenever the descriptors differ**, including
+    /// where the target is a supertype and it cannot fail. A redundant
+    /// `checkcast` is correct by construction and C2 removes one it can
+    /// prove; a missing one is a wrong answer. That asymmetry is the whole
+    /// argument for not consulting `assignable_types` here -- it answers
+    /// `Ok` by falling through for arrays, which is exactly the case that
+    /// needs the cast most.
+    fn reinterpret_managed(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        from: &HirType,
+        to: &HirType,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<(), Diagnostic> {
+        let have = types::descriptor(self.shape, from).ok_or_else(|| {
+            refuse(self.func, "a conversion from a managed type this backend cannot spell")
+        })?;
+        let want = types::descriptor(self.shape, to).ok_or_else(|| {
+            refuse(self.func, "a conversion to a managed type this backend cannot spell")
+        })?;
+        if have != want {
+            code.check_cast(origin, pool, &want);
         }
         Ok(())
     }
