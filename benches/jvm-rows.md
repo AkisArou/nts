@@ -42,7 +42,7 @@ not measured clean and should not be quoted.**
 | `elementwise` | 1.08x | at its floor: both lanes vectorise |
 | `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
 | `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
-| `module-closures` | 1.06x *busy* | closure ABI is `(D)D` where the reference's is `(I)I` |
+| `module-closures` | 1.06x *busy* | the `(D)D` closure ABI is real and **priced at 0.1%** -- below. Never measured clean; needs a run, not a fix |
 | `awfy-sieve` | **1.03x or 1.27x** | two modes, and "two JIT shapes" was wrong -- below |
 | `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
 | `objects` | **0.99x** | re-measured clean: still a win, as it was |
@@ -1456,6 +1456,45 @@ would still not move the row**, because the row is what it already said it was:
 the reference faster and our ratio worse -- by 3-4% on `fib` and by roughly
 nothing here. Obeying the rule is a fairness action, and this is the second time
 tonight that reading it as an optimisation was the mistake.
+
+### `module-closures`: the `(D)D` closure ABI is real in the bytecode and free at runtime
+
+The row's note said the cause was the closure ABI -- ours `(D)D` against the
+reference's `(I)I` -- and the emission backs the first half completely. Every
+call site widens an int in and narrows the result straight back out:
+
+    125: i2d
+    132: invokestatic  Closure0$call:(Lnts/gen/Closure0;D)D
+    139: d2i
+
+and the body's first instruction is `d2i`, its multiply is already an `imul`.
+So the arithmetic is int on both sides of the boundary and the widening exists
+only to cross it. `drive$Closure0` is `(Lnts/gen/Closure0;I)I` -- specialization
+narrowed the named function and not the closure stub, which is what made this
+look like an obvious four-instruction win.
+
+**Priced by rule 3, and it is worth 0.1%.** The reference given our ABI exactly
+-- `mix` and `twice` behind a static stub taking a closure reference and a
+`double`, callers widening and narrowing, arithmetic character-for-character
+unchanged -- against the reference as written, interleaved, identical checksums
+throughout:
+
+    round      McI      McD
+      1       4417     4273
+      2       4273     4367
+      3       4273     4272
+      4       4267     4315
+      5       4277     4529
+    minimum   4267     4272     +0.1%
+
+C2 inlines the stub and folds the `i2d`/`d2i` pair, which is the same thing it
+did to `intcall`'s `i2l`/`l2i` earlier tonight and the same thing record 0004
+found it doing to the store/load round trip. **Three separate leads this
+evening, all "the bytecode carries obvious redundancy", all zero.**
+
+So the note was a true statement about the emission offered as an explanation of
+a ratio, and it is not one. `module-closures` is also flagged *busy* and has
+never been measured clean, so what the row needs is a clean run and not a fix.
 
 ## Open, and whose
 
