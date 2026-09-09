@@ -12436,8 +12436,29 @@ what they read instead:
 | --- | --- |
 | "roughly 125 of 309 declared bindings have no C" | **3 of 331**; `dgram` 21/21, `net` 30/30, `fs` 155/155 |
 | "twenty of twenty-two build and load; `fs` and `process` do not" | **22 of 22** |
-| "no emitted wrapper builds a typed array at all -- zero across 24 addons" | `string_decoder`'s wrapper emits `napi_create_arraybuffer` and `napi_create_typedarray` |
+| "no emitted wrapper builds a typed array at all -- zero across 24 addons" | **still true** -- see the correction below |
 | "`os` is 17 of 23" | still 17 of 23 published; 4 of 9 applicable tests, 3 behaviour-dependent |
+
+### Correction: the typed-array claim is not stale, and I misread a helper as a call
+
+Grepping every emitted `addon.c` for `napi_create_typedarray` finds two calls in
+**all twenty-two**, which reads as every wrapper building one. It is not. Both
+calls are inside `nts_to_napi_view`, a `static napi_status` helper the emitter
+writes into every addon whether or not anything uses it.
+
+`nts_to_napi_view` occurs **22 times across 22 addons** -- once each, and that
+once is its definition. **Zero call sites.**
+
+So "no emitted wrapper builds a typed array at all" is still exactly true, and an
+earlier note here saying `bef165c7` had made it stale was wrong. The evidence for
+that note was a `grep -c` over emitted C, which counted a definition that is
+emitted unconditionally.
+
+This is the same error this ledger has spent the night documenting in other
+places -- a count over emitted text mistaken for a fact about behaviour -- and it
+is worth recording that it happened *here*, in the section written to re-derive
+stale numbers, immediately after four instruments had been built specifically
+because static reads mislead. **The habit is not fixed by knowing about it.**
 
 ## Conventions
 
