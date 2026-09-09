@@ -1,4 +1,13 @@
-// expect: an `in` naming `maybe`, which is optional
+// expect: an `in` naming `maybe`, which is optional -- its slot exists here
+//   whether or not it was written, and `{}` and `{ maybe: undefined }` disagree
+//   in JavaScript
+//
+// The expectation carries the whole message on purpose. Written as the prefix
+// `an `in` naming `maybe`, which is optional` it could not tell this message
+// from one that changed only its tail, so a fix that reworded the explanation
+// would leave this reading "reproduces" forever. The compiler lane found the
+// same shape in its own guard, where `requires 1 argument` matched
+// `requires 1 arguments` because the plural was unconditional.
 //
 // `"required" in row` lowers. `"maybe" in row` does not, when `maybe` is
 // declared optional: the slot exists in the layout whether or not it was ever
