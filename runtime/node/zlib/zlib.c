@@ -100,6 +100,7 @@ typedef struct NtsZlibBuffer {
 
 static const NtsDescriptor nts_zlib_desc_u8 = {
     NTS_KIND_ARRAY, sizeof(uint8_t), 0, 0, 0, 0, "u8[]", 0, 0,
+    NTS_ARRAY_UINT,
 };
 
 /* A loaded addon may be used by more than one Node worker. Handles and the
