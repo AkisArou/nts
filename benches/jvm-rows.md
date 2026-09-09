@@ -1033,6 +1033,32 @@ on the strength of a ratio that could not move.
   dead work and was holding something up**, after `NtsArrayD.keepFirst`'s fill,
   which turned out to be hole semantics rather than collector hygiene.
 
+### `array-from`'s bytes/op gap is a representation floor, and the arithmetic closes to three decimals
+
+The row loses **1.33x** on allocation and it is not waste. An allocation profile
+says ours is **99.69% `double[]`** where the reference is 66.78% `double[]` and
+**32.90% `Object[]`**, which is the whole story: `Array.from(set)` must produce
+a `number[]`, and a `number[]` is a `double[]`.
+
+    per round   ours  double[256] from slice   +  double[256] from the set walk
+                ref   double[256] from copyOf  +  Object[256] from toArray
+
+    ours  (256*8+16) + (256*8+16)  =  4128 bytes
+    ref   (256*8+16) + (256*4+16)  =  3104 bytes      ratio 1.330
+
+    measured bytes/op   8,280,864 against 6,232,944   ratio 1.329
+
+**A double is eight bytes and a compressed oop is four.** `toArray` copies 256
+pointers to `Double` objects that already exist; we materialise 256 doubles. The
+reference's answer is cheaper because it is a weaker answer -- an `Object[]`
+whose elements still have to be unboxed to be used, which is the same asymmetry
+the timing half of this row turns on.
+
+So this half of `array-from` is **at its floor and should not be chased**. The
+timing half is still open and still worth 5.9x, and it is the lowering's; the
+allocation half is closed by arithmetic that matches the measurement to three
+decimal places, which is a better kind of certainty than a ratio.
+
 ## Open, and whose
 
 **Blocked upstream, and it is TWO fixes rather than one** -- a distinction that
