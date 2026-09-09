@@ -15028,6 +15028,62 @@ message text as the witness. Every such function will report the wrapper's
 sentence instead of node's until either the declaration widens or the wrapper
 learns node's text -- and node's tests assert these strings.
 
+## A conformance fix that regressed three of node's tests
+
+Instance fields cross now, so `fs.Stats` hands its fourteen columns to the host
+as own enumerable properties. Asserting that turned up a divergence and then a
+worse one.
+
+The test first asserted the key list was **exactly** the fourteen. It passed
+compiled and failed interpreted -- `prize.mjs`'s `INVERTED` direction, right
+answer for the wrong reason:
+
+    node          14 own keys, growing as its Date getters are first read
+    interpreted   18, because `stats.ts` assigns the four Dates in the constructor
+    compiled      14, because a `Date` is a reference and cannot cross outward
+
+### The fix, and why it was wrong
+
+`stats.ts`'s own class comment says the Dates are "derived from the number
+rather than stored, which is what node does too", and the constructor stores
+them. Making them plain getters matches both the comment and node's key list
+before any read.
+
+**It broke three of node's tests.** `test-fs-stat-date.mjs` calls
+
+    function validateEnumerability(stats) {
+      const keys = Object.keys(stats);
+      assert.ok(keys.includes('atime'));
+      assert.ok(keys.includes('mtime'));
+    }
+
+*after* reading those dates, and node's getter is
+
+    get atime() { return setOwnProperty(this, 'atime', dateFromMs(this.atimeMs)); }
+
+which **materialises the own property on first read**. So node's key list starts
+at fourteen and grows, a getter that never materialises never gets there, and
+the eager assignment is the closer approximation of what node's suite observes.
+
+Reverted. `fs` interpreted went 346 to 343 and back to 346.
+
+### What decided it
+
+Counting what node's suite observes, before choosing:
+
+    3 files read `Object.keys` of a stat
+    7 files read a stat date's value
+    0 files compare stat dates by identity
+
+The identity difference is the one this profile cannot close without a
+descriptor write in runtime source, and it is the one nothing asserts. The key
+list is asserted, and the eager version satisfies it.
+
+**The change would have shipped as a conformance fix.** It matched node's
+documented shape, matched the file's own comment, and removed an eager
+allocation. Running node's suite after making it is the only thing that said
+otherwise.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
