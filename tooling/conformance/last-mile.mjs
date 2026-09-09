@@ -54,11 +54,29 @@
 // `-` and a `+` sixteen lines apart in one function is a head that moved, and
 // the module did not gain a single published export.
 
-import { readFileSync, existsSync, readdirSync, mkdtempSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+
+/* Emitted trees under one root, removed when the run ends.
+ *
+ * Temp directories created per module and never removed filled a 16G `/tmp`
+ * across a day of runs. The failure does not look like a disk error: `emit-c`
+ * has nowhere to write, every module reports a refusal it did not have, and a
+ * failed emit reads exactly like a real regression. `NTS_KEEP_TEMP=1` keeps the
+ * tree for anyone reducing a case by hand. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-lastmile-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -79,7 +97,7 @@ if (modules.length === 0) {
 
 /** Every NTS1001 root and NTS1003 cascade the module's cone reports. */
 function refusals(module) {
-  const out = mkdtempSync(join(tmpdir(), `nts-lastmile-${module}-`));
+  const out = workspace(`${module}-`);
   const run = spawnSync(
     compiler,
     ["emit-c", join(ROOT, "runtime/node", module, "tsconfig.json"), "--out", out, "--napi"],

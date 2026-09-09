@@ -21,11 +21,29 @@
 // which function contains a given NTS1001. Where the range is ambiguous this
 // prints the candidates rather than picking one.
 
-import { readFileSync, existsSync, mkdtempSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+
+/* Emitted trees under one root, removed when the run ends.
+ *
+ * Temp directories created per case and never removed filled a 16G `/tmp`
+ * across a day of runs. The failure does not look like a disk error: `emit-c`
+ * has nowhere to write, every case reports a refusal it did not have, and a
+ * failed emit reads exactly like a real regression. `NTS_KEEP_TEMP=1` keeps the
+ * tree for anyone reducing a case by hand. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-cascadereach-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -48,7 +66,7 @@ const run = spawnSync(compiler, [
   "emit-c",
   tsconfig,
   "--out",
-  mkdtempSync(join(tmpdir(), "nts-cascade-")),
+  workspace("nts-cascade-"),
   "--napi",
 ], {
   encoding: "utf8",

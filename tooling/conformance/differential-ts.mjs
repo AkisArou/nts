@@ -22,13 +22,31 @@
 // questions rather than two seeded sequences that are supposed to agree.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 
 import { CORPORA, makeRandom } from "./differential-corpora.mjs";
+
+/* Emitted trees under one root, removed when the run ends.
+ *
+ * Temp directories created per case and never removed filled a 16G `/tmp`
+ * across a day of runs. The failure does not look like a disk error: `emit-c`
+ * has nowhere to write, every case reports a refusal it did not have, and a
+ * failed emit reads exactly like a real regression. `NTS_KEEP_TEMP=1` keeps the
+ * tree for anyone reducing a case by hand. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-differentialts-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -73,7 +91,7 @@ for (const name of modules) {
   const inputs = [...corpus.fixed];
   for (let i = 0; i < ITERATIONS; i++) inputs.push(corpus.input(rnd));
 
-  const dir = mkdtempSync(join(tmpdir(), "nts-diff-"));
+  const dir = workspace("nts-diff-");
   const inputsPath = join(dir, "inputs.json");
   writeFileSync(inputsPath, JSON.stringify(inputs));
 

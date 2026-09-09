@@ -25,12 +25,30 @@
 // rather than attributed by proximity, which would be a guess wearing a
 // number.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
+
+/* Emitted trees under one root, removed when the run ends.
+ *
+ * Temp directories created per case and never removed filled a 16G `/tmp`
+ * across a day of runs. The failure does not look like a disk error: `emit-c`
+ * has nowhere to write, every case reports a refusal it did not have, and a
+ * failed emit reads exactly like a real regression. `NTS_KEEP_TEMP=1` keeps the
+ * tree for anyone reducing a case by hand. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-blockers-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -112,7 +130,7 @@ function nts(args) {
 
 const log = savedLog !== undefined
   ? readFileSync(savedLog, "utf8")
-  : nts(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blockers-")), "--napi"]);
+  : nts(["emit-c", tsconfig, "--out", workspace("nts-blockers-"), "--napi"]);
 
 /** `file:line:col: NTS1001 <what>` -- a construct this lowering cannot do. */
 const roots = [];

@@ -24,11 +24,35 @@
 // quickly: the annotated-const write was fixed twice today, the second time
 // because the first fix broke `instanceof`.
 
-import { readFileSync, readdirSync, existsSync, mkdtempSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+
+/* Every emitted tree under one root, removed when the run ends.
+ *
+ * This file made three or four temp directories per fixture and removed none,
+ * each holding a full C emission. Across 118 fixtures and a day of runs it
+ * filled a 16G `/tmp`, and what that looks like from inside is not a disk
+ * error: `echo` exits 1 because the harness cannot write its output file, and
+ * the same run reports **29 fixtures needing a person** because `emit-c` had
+ * nowhere to write. A failed emit and a real regression read identically.
+ * Twenty-eight of those twenty-nine were the disk, and the twenty-ninth was
+ * real -- which is the worst possible mixture, because the real one was
+ * invisible in the noise until the disk was cleared.
+ *
+ * `NTS_KEEP_TEMP=1` keeps the tree, which is what anyone reducing a fixture by
+ * hand will want. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-blockers-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -111,7 +135,7 @@ for (const name of names) {
     .split(/\s+/)
     .filter((f) => f.startsWith("--") && f !== "--napi");
   const output = viaEmit
-    ? run(["emit-c", tsconfig, "--out", mkdtempSync(join(tmpdir(), "nts-blk-")), "--napi", ...extraFlags])
+    ? run(["emit-c", tsconfig, "--out", workspace("fixture-"), "--napi", ...extraFlags])
     : run(["hir", tsconfig]);
 
   // Two ways for a fixture to say "this works now". `nothing refused` is the
@@ -341,7 +365,7 @@ for (const name of names) {
    * loudest of the three rather than the quietest.
    */
   const answersAgainstAddon = (dir, callExpr, controlExpr) => {
-    const work = mkdtempSync(join(tmpdir(), "nts-blk-run-"));
+    const work = workspace("run-");
     const addon = join(work, "fixture.node");
     const sources = readdirSync(dir).filter((f) => f.endsWith(".c")).map((f) => join(dir, f));
     if (sources.length === 0) return { stage: "emitted-nothing" };
@@ -387,7 +411,7 @@ for (const name of names) {
   };
   let controlErrors = null;
   if (failsToCompile !== null && extraFlags.length > 0) {
-    const dir = mkdtempSync(join(tmpdir(), "nts-blk-ctl-"));
+    const dir = workspace("ctl-");
     const plain = run(["emit-c", tsconfig, "--out", dir, "--napi"]);
     const emitted = /wrote .* to (\S+)/.exec(plain);
     controlErrors = emitted === null ? ["control build emitted nothing"] : compileEmitted(emitted[1]);

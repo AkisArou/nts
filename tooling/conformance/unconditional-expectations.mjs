@@ -51,11 +51,29 @@
 // fixture and this check flags it, which is the right trade: the flag costs a
 // reading, and the flaw it catches costs a fixture that can never fail.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
+
+/* Emitted trees under one root, removed when the run ends.
+ *
+ * Temp directories created per case and never removed filled a 16G `/tmp`
+ * across a day of runs. The failure does not look like a disk error: `emit-c`
+ * has nowhere to write, every case reports a refusal it did not have, and a
+ * failed emit reads exactly like a real regression. `NTS_KEEP_TEMP=1` keeps the
+ * tree for anyone reducing a case by hand. */
+const RUN_ROOT = mkdtempSync(join(tmpdir(), "nts-unconditionalexpectations-"));
+const workspace = (prefix) => mkdtempSync(join(RUN_ROOT, prefix));
+process.on("exit", () => {
+  if (process.env.NTS_KEEP_TEMP === undefined) {
+    try { rmSync(RUN_ROOT, { recursive: true, force: true }); } catch { /* going away anyway */ }
+  } else {
+    console.log(`  kept ${RUN_ROOT}`);
+  }
+});
+
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -68,7 +86,7 @@ if (!existsSync(compiler)) {
 
 // A program sharing nothing with any fixture: no class, no closure, no rest
 // parameter, no unrepresentable type, one scalar function.
-const work = mkdtempSync(join(tmpdir(), "nts-unconditional-"));
+const work = workspace("nts-unconditional-");
 mkdirSync(join(work, "src"), { recursive: true });
 writeFileSync(
   join(work, "tsconfig.json"),
