@@ -63,6 +63,19 @@
 // Recorded rather than smoothed over, because a fixture claiming to reduce a
 // site it does not is worse than one that guards a narrower thing honestly.
 //
+// # Its silent sibling
+//
+// `a-generic-rest-that-is-used` is the same construct with the callback taken
+// away, and it behaves differently in the way that matters most:
+//
+//     <A extends unknown[]>(cb: (...args: A) => void, ...args: A)  refuses, with a message
+//     <A extends unknown[]>(...args: A): number { args.length }    not compiled, silently
+//
+// One is a diagnostic that can be counted and ranked. The other appears in no
+// census, because a census reads diagnostics. They are worth reading together:
+// whatever is done about the generic rest parameter has to close both, and only
+// one of them will show up as having been closed.
+//
 // # The line the compiler names is not the line of the construct
 //
 // This cost a wrong reduction before it produced a right one. `fs/src/async.ts`
