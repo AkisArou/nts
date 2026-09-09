@@ -8,6 +8,13 @@ updates this in the same commit.
 Two numbers per row: `jvm/Java` **at or under 1.00x** against the hand-written
 `ref.java`, and **decisively** faster than node. 0.9x node is not a win.
 
+**Read this file newest-claim-first within a row.** It is written by appending,
+so a row investigated three times has three sections and the *last* one is the
+one that stands -- twice tonight an earlier section's heading asserted something
+its own body later withdrew, and a reader meeting the first would have taken a
+retracted number as current. Headings now say when they have been withdrawn.
+The row table below is always current; the sections behind it are a history.
+
 ## Where the rows stand
 
 **Re-taken from the current tree on 2026-09-08, all 51 cases, nothing refused.**
@@ -688,7 +695,7 @@ difference between them is not the retyping and not resolvable by anything here.
   1e-6, and this case's values reach neither. It measures the ceiling, and the
   ceiling is 1.7%.
 
-### `awfy-queens` has a cause for most of its gap, and it was filed as incidental
+### `awfy-queens`: a cause filed as incidental -- WITHDRAWN two sections below, it is not most of the gap
 
 This row was "no cause found" after the merge was built and refuted at 0.16%.
 The cause was already written down here as an aside -- *"`Queens.queenRows` is
@@ -1096,7 +1103,7 @@ the bar. Unlike `node-utf8` this row *can* reach the bar -- its reference is an
 ordinary `IdentityHashMap` -- so the coercion work has somewhere to go here that
 it does not have there.
 
-### `array-methods` is the row the coercion fix takes *under* the bar, and our helpers already beat hand-written Java
+### `array-methods`: our helpers beat hand-written Java, and the coercion is worth 8.9% (I first said 24.8%)
 
 Re-profiled on a current emission, because its 25% predated the stale-worktree
 correction. It holds at **24.82%**, and the rest of the profile says something
