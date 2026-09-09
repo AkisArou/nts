@@ -28,7 +28,17 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-work=${TMPDIR:-/tmp}/nts-dex.$$
+# Work on disk, and deliberately NOT through `TMPDIR`.
+#
+# `TMPDIR` is `/tmp` here and `/tmp` is a 16G tmpfs. The cleanup below is an
+# `EXIT INT TERM` trap, which SIGKILL does not fire, so a killed run leaves a
+# work directory holding classes and a copy of the runtime jar for every case
+# it reached. Three of those filled the tmpfs until the *shell* could not start.
+#
+# Honouring `TMPDIR` would have read as the fix and changed nothing, which is
+# the worse outcome. `NTS_ART_WORK` overrides; the default is a filesystem that
+# does not take the machine with it.
+work=${NTS_ART_WORK:-$HOME/.cache/nts-android}/nts-dex.$$
 sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 
 [ -n "$sdk" ] || { echo "SKIP: no ANDROID_HOME" >&2; exit 0; }
