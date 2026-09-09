@@ -10098,6 +10098,36 @@ this line.** `punycode` has none because all six of its exports cross.
 `fs` has none because nothing gets far enough to be declined. A module with no
 complaints from the wrapper is either finished or has not arrived.
 
+**The cause, found by the compiler side and verified here.** `public_api`
+considers only modules that nothing imports. A module that any other module
+imports contributes no exports *and no declines* -- which is why the silence is
+not an empty publication section but no publication section at all.
+
+`fs/src/utf8-stream.ts` imports `openSync`, `writeSync`, `mkdirSync` and
+`fsyncSync` from `./main.ts`, and `main.ts:158` re-exports `Utf8Stream` from
+`./utf8-stream.ts`. A two-module cycle, both value imports. `main.ts` is
+therefore "imported", skipped, and all 303 go with it.
+
+`util` is not a cycle. `util/src/width.ts` imports `stripVTControlCharacters`
+from `./main.ts` and `main.ts` never mentions `width`, so `main.ts` is imported
+and skipped and `width.ts` -- which nothing imports -- becomes the entry.
+`width.ts` exports exactly three: `getStringWidth`, `isFullWidthCodePoint`,
+`isZeroWidthCodePoint`. **That is util's published surface**: two published, one
+declined by name. The module's compiled surface is an orphan helper's.
+
+The set is the confirmation. Grepping every module for a back-import of
+`./main.ts` gives two hits, `fs` and `util`, and the unaccounted count is 44 and
+17 with zero everywhere else. Two instruments built independently, the same two
+modules.
+
+**Neither is cheaply breakable from this side.** The four functions
+`utf8-stream` needs are *defined* in `main.ts` -- `fsyncSync` at 507, `openSync`
+at 933 -- not re-exported from a sibling, so there is nowhere else to import
+them from; breaking the cycle means moving definitions to suit an entry
+heuristic. And `width.ts` is unreferenced by anything in util, but it is a
+faithful port of node's width logic that `inspect.ts`'s table path will need,
+so deleting it would delete correct work waiting for its caller.
+
 **And `fs`'s zero is a reporting gap, not just a state.** It declares 291
 exported functions and 12 exported classes. Its emitted `addon.c` contains zero
 `napi_set_named_property` calls -- `punycode`'s contains six -- and the compiler
