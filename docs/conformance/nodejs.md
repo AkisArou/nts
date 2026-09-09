@@ -10023,6 +10023,56 @@ document already carries is to say which lane a number is from and what it
 counts; the other half is that a number is only as good as the traversal that
 produced it, and a stateful matcher is a traversal with a memory.
 
+### Which modules are waiting on the wrapper, and which on the lowering
+
+Splitting each module's declines into the wrapper's own type boundary and
+everything else -- cascades from lowering, and export forms:
+
+```
+a wrapper type-boundary blocker (10)
+  assert       takes an object[], outward only
+  async_hooks  returns unknown; takes an object; takes unknown
+  buffer       takes unknown
+  events       takes an object
+  http         takes an object
+  os           returns an object[]
+  path         returns an object; takes an object
+  stream       takes unknown
+  timers       returns an object; takes an object; takes unknown
+  url          takes unknown
+
+only lowering or export form (11)
+  console  dgram  diagnostics_channel  fs  net  process
+  querystring  readline  string_decoder  util  zlib
+
+nothing at all (1)
+  punycode
+```
+
+**Six forms make up the whole of the wrapper's type boundary**, and after this
+evening every one is named by some fixture's *expectation*:
+
+| form | fixture |
+| --- | --- |
+| `takes an object` | `object-parameter-at-the-wrapper` |
+| `takes unknown` | `unknown-at-the-boundary` |
+| `returns unknown` | `unknown-return-at-the-boundary` |
+| `returns an object` | `object-return-at-the-wrapper` |
+| `returns an object[]` | `array-return-only-carries-numbers` |
+| `takes an object[]`, outward only | `parameter-boundary-carries-four-types` |
+
+**Two of those were found missing by auditing expectations rather than text.**
+A grep for `returns unknown` across fixture sources finds it -- in the *comment*
+of the fixture that asserts the inward half. Nothing asserted it. Same for
+`returns an object`, where the existing fixture asserts the positive case, that
+a scalar-field object return publishes, and nothing asserted that a nested one
+does not.
+
+That is the same mistake as the earlier survey that matched redacted diagnostic
+forms against literal fixture text: searching the wrong field of the right file.
+Twice, three hours apart, in opposite directions -- once finding nothing that
+existed, once finding everything that did not.
+
 ### What was filed, and what was declined
 
 Fifteen fixtures filed and four blockers declined, against a set that stood at
