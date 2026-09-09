@@ -8697,6 +8697,26 @@ Two things about the change worth keeping:
   absent and `U uv_cwd` still there; hoisting the probe above its first use was
   the whole fix.
 
+#### What the controls say about the two new passes
+
+Run after the fact, and the answer is not uniform across them:
+
+    path: 15 pass -- 13 behaviour, 2 shape-only, 0 hollow
+    os:    5 pass --  3 behaviour, 2 shape-only, 0 hollow
+
+**`test-path-resolve.js` is behaviour.** The cwd fix bought a pass that depends
+on the compiled code doing the work, and it fails under all three controls.
+
+**`local/legacy-make-long.js` is shape-only.** The `_makeLong` alias is a
+statement about which object a name points at, and a shim can satisfy it without
+the implementation answering anything. That is a real pass on a narrower claim
+than the axis is usually reported to make, and it is written here as shape-only
+rather than folded into "13 to 15" — one of the two gains is behaviour and the
+other is not.
+
+`0 hollow` holds in both modules: nothing passes under `--sabotage`,
+`--empty-exports` or `--mutate-addon`.
+
 #### Where `path` stands after both fixes: 15 passed, 5 failed
 
 Two changes landed in this module today, and the module went **13 passed / 7
