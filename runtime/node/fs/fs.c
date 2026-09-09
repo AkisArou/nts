@@ -1657,7 +1657,19 @@ void nts_fs_watchfile_unref(double handle) {
  * descriptor for `open`, the count for `write`, and zero for the rest. libuv
  * puts a negative errno in the same field, so the split is `result < 0`. */
 
-typedef enum { FS_STATUS, FS_NUMBER } AsyncShape;
+typedef enum {
+    FS_STATUS,
+    FS_NUMBER,
+    /* Column shapes. The four differ in where the numbers come from and how
+     * they are spelled, and every one of them answers an *empty* array on
+     * failure rather than a partial one -- which is what the sync half does and
+     * what the module reads as "there is nothing here", distinct from a row of
+     * zeros that would look like a real stat of an empty thing. */
+    FS_STAT,
+    FS_STAT_BIGINT,
+    FS_STATFS,
+    FS_STATFS_BIGINT
+} AsyncShape;
 
 typedef struct {
     uv_fs_t request;
@@ -1683,12 +1695,63 @@ static void async_call_number(NtsHeader *callback, double errno_value,
         callback, errno_value, value);
 }
 
+static void async_call_columns(NtsHeader *callback, double errno_value,
+                               NtsArray *columns) {
+    if (callback == NULL) return;
+    ((void (*)(NtsHeader *, double, NtsArray *))
+         callback->descriptor->methods[nts_closure_call_slot])(
+        callback, errno_value, columns);
+}
+
+/* The eight statfs numbers as decimal strings, the same spelling
+ * `statfs_bigint_native_path` uses. A `bigint` caller is asking for exactness
+ * past 2^53, so the number must not go through a double on the way out. */
+static NtsArray *statfs_bigint_of(const void *ptr) {
+    uint64_t columns[8];
+    statfs_columns(ptr, columns);
+    NtsArray *values = nts_array_new(&nts_desc_ref, 8);
+    for (size_t index = 0; index < 8; index++) {
+        char decimal[32];
+        int length =
+            snprintf(decimal, sizeof(decimal), "%" PRIu64, columns[index]);
+        NTS_ITEMS(values, void *)[index] =
+            nts_string_from_utf8(decimal, (size_t)length);
+    }
+    return values;
+}
+
+static NtsArray *statfs_numbers_of(const void *ptr) {
+    uint64_t columns[8];
+    statfs_columns(ptr, columns);
+    NtsArray *values = nts_array_new(&nts_node_desc_double, 8);
+    for (size_t index = 0; index < 8; index++) {
+        NTS_ITEMS(values, double)[index] = (double)columns[index];
+    }
+    return values;
+}
+
 static void on_async_done(uv_fs_t *request) {
     AsyncRequest *pending = (AsyncRequest *)request;
     ssize_t result = request->result;
     double failed = result < 0 ? (double)result : 0.0;
 
-    if (pending->shape == FS_NUMBER) {
+    if (pending->shape == FS_STAT) {
+        async_call_columns(pending->callback, failed,
+                           result < 0 ? empty_doubles()
+                                      : stat_columns(&request->statbuf));
+    } else if (pending->shape == FS_STAT_BIGINT) {
+        async_call_columns(pending->callback, failed,
+                           result < 0 ? nts_array_new(&nts_desc_ref, 0)
+                                      : stat_bigint_columns(&request->statbuf));
+    } else if (pending->shape == FS_STATFS) {
+        async_call_columns(pending->callback, failed,
+                           result < 0 ? empty_doubles()
+                                      : statfs_numbers_of(request->ptr));
+    } else if (pending->shape == FS_STATFS_BIGINT) {
+        async_call_columns(pending->callback, failed,
+                           result < 0 ? nts_array_new(&nts_desc_ref, 0)
+                                      : statfs_bigint_of(request->ptr));
+    } else if (pending->shape == FS_NUMBER) {
         async_call_number(pending->callback, failed,
                           result < 0 ? 0.0 : (double)result);
     } else {
@@ -1735,10 +1798,21 @@ static void async_fail(NtsHeader *callback, AsyncShape shape, double errno_value
         free(pending->second);
         free(pending);
     }
-    if (shape == FS_NUMBER) {
+    switch (shape) {
+    case FS_NUMBER:
         async_call_number(callback, errno_value, 0.0);
-    } else {
+        break;
+    case FS_STAT:
+    case FS_STATFS:
+        async_call_columns(callback, errno_value, empty_doubles());
+        break;
+    case FS_STAT_BIGINT:
+    case FS_STATFS_BIGINT:
+        async_call_columns(callback, errno_value, nts_array_new(&nts_desc_ref, 0));
+        break;
+    default:
         async_call_status(callback, errno_value);
+        break;
     }
 }
 
@@ -1989,4 +2063,82 @@ void nts_fs_open_bytes_async(NtsArray *path, double flags, double mode,
     ASYNC_END(FS_NUMBER,
               uv_fs_open(fs_loop(), &pending->request, pending->first,
                          (int)flags, (int)mode, on_async_done))
+}
+
+/* The stat family. Ten bindings, four shapes, one difference between them:
+ * whether the numbers come from `statbuf` or from the `statfs` block, and
+ * whether they are spelled as doubles or as decimal strings. */
+
+void nts_fs_stat_async(NtsString *path, bool follow, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT, native_path(path), NULL)
+    ASYNC_END(FS_STAT,
+              follow ? uv_fs_stat(fs_loop(), &pending->request, pending->first,
+                                  on_async_done)
+                     : uv_fs_lstat(fs_loop(), &pending->request, pending->first,
+                                   on_async_done))
+}
+
+void nts_fs_stat_bytes_async(NtsArray *path, bool follow, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT, native_byte_path(path), NULL)
+    ASYNC_END(FS_STAT,
+              follow ? uv_fs_stat(fs_loop(), &pending->request, pending->first,
+                                  on_async_done)
+                     : uv_fs_lstat(fs_loop(), &pending->request, pending->first,
+                                   on_async_done))
+}
+
+void nts_fs_stat_bigint_async(NtsString *path, bool follow,
+                              NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT_BIGINT, native_path(path), NULL)
+    ASYNC_END(FS_STAT_BIGINT,
+              follow ? uv_fs_stat(fs_loop(), &pending->request, pending->first,
+                                  on_async_done)
+                     : uv_fs_lstat(fs_loop(), &pending->request, pending->first,
+                                   on_async_done))
+}
+
+void nts_fs_stat_bigint_bytes_async(NtsArray *path, bool follow,
+                                    NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT_BIGINT, native_byte_path(path), NULL)
+    ASYNC_END(FS_STAT_BIGINT,
+              follow ? uv_fs_stat(fs_loop(), &pending->request, pending->first,
+                                  on_async_done)
+                     : uv_fs_lstat(fs_loop(), &pending->request, pending->first,
+                                   on_async_done))
+}
+
+void nts_fs_fstat_async(double fd, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT, NULL, NULL)
+    ASYNC_END(FS_STAT, uv_fs_fstat(fs_loop(), &pending->request, (uv_file)fd,
+                                   on_async_done))
+}
+
+void nts_fs_fstat_bigint_async(double fd, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STAT_BIGINT, NULL, NULL)
+    ASYNC_END(FS_STAT_BIGINT, uv_fs_fstat(fs_loop(), &pending->request,
+                                          (uv_file)fd, on_async_done))
+}
+
+void nts_fs_statfs_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATFS, native_path(path), NULL)
+    ASYNC_END(FS_STATFS, uv_fs_statfs(fs_loop(), &pending->request,
+                                      pending->first, on_async_done))
+}
+
+void nts_fs_statfs_bytes_async(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATFS, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATFS, uv_fs_statfs(fs_loop(), &pending->request,
+                                      pending->first, on_async_done))
+}
+
+void nts_fs_statfs_bigint_async(NtsString *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATFS_BIGINT, native_path(path), NULL)
+    ASYNC_END(FS_STATFS_BIGINT, uv_fs_statfs(fs_loop(), &pending->request,
+                                             pending->first, on_async_done))
+}
+
+void nts_fs_statfs_bigint_bytes_async(NtsArray *path, NtsHeader *callback) {
+    ASYNC_BEGIN(FS_STATFS_BIGINT, native_byte_path(path), NULL)
+    ASYNC_END(FS_STATFS_BIGINT, uv_fs_statfs(fs_loop(), &pending->request,
+                                             pending->first, on_async_done))
 }
