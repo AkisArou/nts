@@ -13185,6 +13185,42 @@ treat a surprising improvement as a provenance question first.
 On v18 -- rebuilt and read in the same minute -- `path` is 14 of 21 with the
 rename in place, so the rename costs nothing and buys `resolve`'s message.
 
+## An expectation that names something unconditional cannot fail
+
+`rest-element-error-replaces-the-modules-own` was filed with
+
+    expect: emit-c --napi -> emits-addon could not gather the rest arguments
+
+which is `nts_napi_check`'s **fallback message**, written into every emitted
+addon whether or not anything reaches it. Counted in the fixture's own addon
+across the fix that closed the defect:
+
+| text the expectation named | pre-fix binary | fixed binary |
+| --- | ---: | ---: |
+| `could not gather the rest arguments` (as filed) | 1 | **2** |
+| `nts_napi_rest(env, info, 0, true, "args"` (repaired) | **0** | 1 |
+
+The filed expectation is present **on both sides** -- it went up rather than
+away -- so the fixture would have reported `reproduces` after the defect was
+gone, forever. The repaired one names the gatherer's call site with the
+fixture's own parameter name, scores zero before and one after, and is what a
+guard has to be.
+
+**This is the second of its kind in two days and the pair is sharper than
+either.** The compiler lane's guard expected `the compiled function requires 1
+argument` while the old compiler emitted `requires 1 arguments` -- the plural was
+unconditional, so the expectation was a *substring* of the wrong output. Mine
+named a message that is written unconditionally. Both are the same shape:
+
+**The text a fixture names must be text that the fix changes.** Error strings
+are the most tempting thing to name and the worst candidate, because they are
+emitted once into every artifact and reached rarely -- so they are present when
+the defect is present, present when it is gone, and identical either way.
+
+The way to tell is the one both were found by: **run the guard against a binary
+that predates its own fix.** Reading it cannot distinguish the two cases; a
+count of 1 and 2 across the change does it immediately.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
