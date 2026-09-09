@@ -13386,6 +13386,76 @@ scalars and refuses references is a different finding from one that refuses
 everything, and calling both unusable would have been wrong in the other
 direction.
 
+## `string_decoder` has no refusals of its own
+
+The goal names `string_decoder/test/core-static.js` and says to hold it as it
+is. Worth saying where the module actually stands, because "0 published" reads
+like the module is far away and it is not:
+
+    string_decoder     64 NTS1001, 128 NTS1003, 0 names published
+    its own src/       **0 refusals**
+
+Every root is in something it imports:
+
+    runtime/node/buffer/src/main.ts       24
+    runtime/node/internal/errors.ts       17
+    runtime/node/buffer/src/blob.ts       14
+    runtime/node/internal/validators.ts    4
+    runtime/node/internal/uv.ts            4
+    runtime/node/buffer/src/encodings.ts   1
+
+`blob.ts`'s fourteen arrive because `buffer/src/main.ts:35` re-exports `Blob`,
+`File` and `resolveObjectURL`, so every module that imports `Buffer` compiles
+Blob as well. That is buffer's structure and not a defect; it is worth knowing
+when reading a root count, because fourteen of `string_decoder`'s sixty-four
+belong to a class it never mentions.
+
+### The three places its chains currently end
+
+`last-mile.mjs` walks each cascade to the root inside the declaration it names:
+
+    buffer/src/main.ts:575:54     `this` outside a method
+    buffer/src/main.ts:196:26     an erased value where a concrete representation is wanted
+    buffer/src/encodings.ts:279:10 `toString` on a number
+    UNRESOLVED Buffer.alloc (stopped at Uint8Array#fill)
+
+**Three chain heads is not three fixes.** That tool's own header records the
+falsification: `join` landed on all three receivers, `errors.ts:547` cleared,
+and `string_decoder` went from 65 refusals and 0 published to 65 and 0, with the
+head moved sixteen lines down the same function to a harder problem. Read this
+as where each chain ends today.
+
+All three now have a reproducing fixture, which took one new one and two
+checks that the message was the cause:
+
+    `this` outside a method     blockers/this-in-a-default-parameter   NEW
+    `toString` on a number      blockers/number-tostring-radix         `code.toString(16)`, the same construct
+    an erased value             blockers/intersection-from-two-narrowings
+
+The third is the one I would not claim. That fixture narrows by a builtin
+(`ArrayBuffer.isView`) in one function and by a user guard in another; buffer
+**stacks** them -- `ArrayBuffer.isView(value)`, then `hasArrayLikeShape(value)`,
+then the call. A probe of the stacked form refuses at the same message and the
+same column, but same message and same column is what I have twice today
+mistaken for same cause. **The prediction, so it can be checked rather than
+assumed: if clearing that fixture does not clear `buffer:196`, the stacked form
+is a separate construct and wants its own.**
+
+### Two guesses that were wrong before the fixture was right
+
+Filing `this-in-a-default-parameter` took three reductions.
+
+`this.length` in a default parameter on a **plain class** emitted no diagnostic,
+so I read it as lowering fine and looked elsewhere. Then `extends Uint8Array`
+emitted none either. Both were wrong for the same reason: with nothing exported
+that reaches the class the wrapper declines it, lowering never walks the method,
+and **the construct under test is never reached**. An absent diagnostic from a
+program that was never lowered looks exactly like a clean bill.
+
+The third reduction added entry points and checked `program.c` for the method
+symbols -- `bodyRead` and `fromConst` present, `fromThis` absent -- which is the
+difference between a probe that passed and a probe that did not run.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
