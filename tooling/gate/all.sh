@@ -157,6 +157,11 @@ concurrently() {
   cmd_profile="profile";           cmd_sweep="sweep"
   cmd_llvm="llvm";                 cmd_llvm_rc="llvm_rc"
   cmd_jvm="jvm";                   cmd_memory="./tooling/memory/run.sh"
+  # `dex` was added to the `concurrently` line below without a command here, and
+  # the group looks its members up by name -- so `eval "run=\$cmd_dex"` was an
+  # unbound variable under `set -u` and took the whole run down after every step
+  # before it had already passed. This table and that line have to agree.
+  cmd_dex="dex"
   cmd_examples="./tooling/gate/gate.sh"
   cmd_rc="./tooling/gate/rc.sh"
   cmd_bench_agree="./tooling/gate/bench-agree.sh"

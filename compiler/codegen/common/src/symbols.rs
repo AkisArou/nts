@@ -319,10 +319,22 @@ fn collides_with_a_header(name: &str) -> bool {
 /// That is a decision rather than an oversight, and it is the one to revisit
 /// first if this ever reports something surprising.
 #[must_use]
-pub fn unspellable_in_c(name: &str) -> Option<char> {
-    name.chars().find(|c| {
-        !c.is_alphanumeric() && *c != '_' && !matches!(c, '#' | '.' | '<' | '>' | '@')
-    })
+pub fn unspellable_in_c(name: &str) -> Option<String> {
+    // A leading digit, which is the half the first version missed. `100` is
+    // every-character-legal and is not an identifier, and `struct { NtsString *
+    // 100; }` is the same `expected member name` clang reports for `a b`.
+    //
+    // Found by `http`, whose status table is `{ 100: "Continue", 101: ... }` --
+    // and found only once an unrelated change let the code reaching that table
+    // compile. The predicate had been "wrong but unreachable" for as long as it
+    // had existed, which is the state a `_ => None` in the same family was in
+    // this morning.
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        return Some(format!("begins with `{}`", &name[..1]));
+    }
+    name.chars()
+        .find(|c| !c.is_alphanumeric() && *c != '_' && !matches!(c, '#' | '.' | '<' | '>' | '@'))
+        .map(|c| format!("contains `{c}`"))
 }
 
 /// The C spelling of a function name.

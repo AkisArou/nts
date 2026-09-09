@@ -4913,6 +4913,37 @@ fn representation_of(
         // refused. An array's items are inline and variable-length, so there is
         // nowhere to put one -- that is a real layout question and not this
         // one.
+        // An **anonymous empty object type**, which is `{}` and is not a struct.
+        //
+        // In TypeScript `{}` is every value except `null` and `undefined`, so a
+        // number is assignable to it. Representing it as an object layout made
+        // `const x: {} = n` fail with `a value of type Float { bits: 64 } where
+        // Managed(Object(TypeId(4))) is wanted` -- the checker was right and the
+        // representation disagreed with it.
+        //
+        // It is reached by inference far more often than by annotation.
+        // `value ?? byDefault` with `value: unknown` has type `{}` or a union
+        // containing it, and that one expression -- `internal/validators.ts`'s
+        // `parseFileMode` -- is a root the Node lane measured as blocking 21 of
+        // 22 modules. `fs.openSync` is behind it.
+        //
+        // **Anonymous only**, and the restriction is not fussiness. A declared
+        // empty type is the same TypeScript type and a different intent: `class
+        // Bare {}` is instantiated with `new`, asked about with `instanceof`,
+        // and given an identity by having an address. Erasing it would take all
+        // three. `interface Empty {}` is left with it rather than split from it,
+        // because nothing in this tree needs the distinction and guessing which
+        // side a declared empty type belongs on is how a representation change
+        // becomes a behaviour change.
+        //
+        // Inherited members are flattened into `properties` before this sees
+        // them -- checked, not assumed: `interface Derived extends Base {}`
+        // carries `Base`'s field here and so is not empty.
+        TypeKind::Object { properties }
+            if properties.is_empty() && named(snapshot, ty).is_none() =>
+        {
+            HirType::Erased
+        }
         TypeKind::Object { properties } => match inherited_typed_array(snapshot, ty) {
             Some(element) if !declares_storage(properties) => {
                 HirType::Managed(ManagedType::View(Box::new(element)))

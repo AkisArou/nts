@@ -1,6 +1,25 @@
-// expect: an erased value where a concrete representation is wanted
+// expect: nothing refused
 //
-// `??` with an erased left operand.
+// FIXED, and kept as a guard. `??` with an erased left operand.
+//
+// The cause was not `??` and not the erasure. `value ?? byDefault` with
+// `value: unknown` has the TypeScript type `{}`, or a union containing it --
+// and `{}` was being given an **object layout**. In TypeScript `{}` is every
+// value except `null` and `undefined`, so a number is assignable to it, and
+// `const x: {} = n` failed with `a value of type Float { bits: 64 } where
+// Managed(Object(TypeId(4))) is wanted`. The checker was right and the
+// representation disagreed with it.
+//
+// An anonymous empty object type erases now. **Anonymous only**: `class Bare {}`
+// is the same TypeScript type and a different intent -- instantiated with `new`,
+// asked about with `instanceof`, given an identity by having an address -- and
+// erasing it would take all three.
+//
+// The four controls in this file's original header are what made the fix
+// findable: each removed one element and still compiled, so `??`, the optional
+// parameter, `unknown` in a parameter position and binding an erased value were
+// each ruled out before anything was changed. The remaining element was the one
+// nobody had named, because it is not written anywhere in the source.
 //
 // This is the widest single root in the runtime tree.
 // `internal/validators.ts:243:16` is `const given = value ?? byDefault;` inside

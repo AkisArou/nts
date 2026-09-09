@@ -1846,12 +1846,12 @@ fn emit_object_types(
         if let Some(bad) = layout
             .fields
             .iter()
-            .find_map(|field| unspellable_in_c(&field.name).map(|c| (field.name.clone(), c)))
+            .find_map(|field| unspellable_in_c(&field.name).map(|why| (field.name.clone(), why)))
         {
             diagnostics.push(Diagnostic::error(
                 "NTS1001",
                 format!(
-                    "a property named `{}`, which contains `{}` and so has no C spelling, \
+                    "a property named `{}`, which {} and so has no C spelling, \
                      is not supported by this lowering yet",
                     bad.0, bad.1
                 ),
