@@ -99,6 +99,8 @@ const shape = (message) => message.replace(/`[^`]*`/g, "`X`");
 
 const causes = new Map();
 let scanned = 0;
+/** Lines carrying a diagnostic code that this could not read. Never silently. */
+let unparsed = 0;
 for (const module of modules) {
   const out = mkdtempSync(join(tmpdir(), "nts-census-"));
   const run = spawnSync(
@@ -110,16 +112,25 @@ for (const module of modules) {
   const text = `${run.stdout ?? ""}${run.stderr ?? ""}`;
   scanned++;
 
-  const rows = text.matchAll(
-    /([^\s]+\.ts):(\d+):(\d+): (NTS100[13]) (.+?) is not supported by this lowering yet|([^\s]+\.ts):(\d+):(\d+): (NTS1003) (.+)/g,
-  );
-  for (const row of rows) {
-    const file = row[1] ?? row[6];
-    const line = row[2] ?? row[7];
-    const column = row[3] ?? row[8];
-    const code = row[4] ?? row[9];
-    const message = (row[5] ?? row[10] ?? "").trim();
-    if (file === undefined || message === "") continue;
+  // **The suffix is optional, and matching it as though it were required drops
+  // a whole family in silence.** `NTS1001 \`atob\`, a declaration outside every
+  // walk` does not end "is not supported by this lowering yet" -- 35 of `fs`'s
+  // 2,037 lines do not. This file shipped with the required form, which is a
+  // trap recorded in this lane's own ledger against a different tool, walked
+  // into anyway.
+  //
+  // The direction is what makes it worth the comment: a parse that drops what
+  // it cannot match makes a file look *less* blocking, and nothing in the
+  // output says so. Hence the unparsed count below, printed on every run.
+  for (const raw of text.split("\n")) {
+    const row = /^\s*([^\s]+\.ts):(\d+):(\d+): (NTS100[13]) (.+)$/.exec(raw);
+    if (row === null) {
+      if (/NTS100[13]/.test(raw)) unparsed += 1;
+      continue;
+    }
+    const [, file, line, column, code, rest] = row;
+    const message = rest.replace(/ is not supported by this lowering yet\.?\s*$/, "").trim();
+    if (message === "") continue;
     // web-platform is not adopted, and it dominates every count: 6,695 of the
     // lines in one sweep against 1,981 sites in runtime/node. Left out rather
     // than left in and explained away.
@@ -192,6 +203,12 @@ for (const [key, v] of roots.slice(0, 25)) {
   console.log(`  ${String(v.things.size).padStart(6)} ${String(v.sites.size).padStart(6)} ` +
     `${String(v.modules.size).padStart(5)}  ${key.replace(/^NTS1001 /, "").slice(0, 62)}` +
     (filed === "" ? "" : `\n  ${" ".repeat(19)}filed as ${filed}`));
+}
+if (unparsed > 0) {
+  console.log(`\n  ${unparsed} line(s) carried a diagnostic code and could not be read.`);
+  console.log("  Every one of them is a root missing from the table above, and the table");
+  console.log("  is therefore a floor. A parse that drops what it cannot match makes a");
+  console.log("  file look less blocking than it is.");
 }
 console.log("\n  Ranked by things, because fixing a property clears every use of it.");
 console.log("  A row is a place to start reducing, not a defect: the location names the");
