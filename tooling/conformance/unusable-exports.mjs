@@ -111,21 +111,44 @@ for (const module of modules) {
     // Generic shapes: nothing, and one of each kind the boundary distinguishes.
     const shapes = [[], [undefined], [""], ["x"], [0], [1], [true], [[]], [{}],
                     [new Uint8Array([97])], [new ArrayBuffer(2)], [null], ["x", "y"]];
-    const rows = []; let n = 0;
+    // One level into published objects as well as the top level.
+    //
+    // util.types is a plain object of 31 predicates, and every one taking a
+    // reference throws at the boundary -- isDate(new Date()), isMap(new Map()),
+    // isPromise(...) -- while node answers true. A walk over the top level
+    // alone reported util clean, because types is an object and not a function.
+    // (No backticks in this comment: it lives inside a template literal.)
+    const targets = [];
     for (const k of Object.keys(m.exports)) {
-      const f = m.exports[k];
-      if (typeof f !== "function") continue;
+      const v = m.exports[k];
+      if (typeof v === "function") { targets.push([k, v]); continue; }
+      if (v !== null && typeof v === "object") {
+        for (const k2 of Object.keys(v)) {
+          if (typeof v[k2] === "function") targets.push([k + "." + k2, v[k2]]);
+        }
+      }
+    }
+    const rows = []; let n = 0;
+    for (const [k, f] of targets) {
       n++;
-      let anyOk = false; let boundary = 0; let validated = 0; let sample = "";
+      // Every shape is tried, not stopped at the first success.
+      //
+      // util.types.isDate returns false for a string and throws at the boundary
+      // for a Date -- the argument it exists to accept. Stopping at the first
+      // success reported it clean, because a scalar crosses and answers.
+      let ok = 0; let boundary = 0; let validated = 0; let sample = "";
       for (const args of shapes) {
-        try { f(...args); anyOk = true; break; }
+        try { f(...args); ok++; }
         catch (e) {
           const msg = String(e && e.message);
           if (BOUNDARY.some((b) => msg.includes(b))) { boundary++; if (!sample) sample = msg.slice(0, 62); }
           else validated++;
         }
       }
-      if (!anyOk && boundary > 0) rows.push({ name: k, why: sample, boundary, validated });
+      if (boundary > 0) {
+        rows.push({ name: k, why: sample, boundary, validated, ok,
+                    kind: ok === 0 ? "UNUSABLE" : "UNREACHABLE FOR SOME ARGUMENTS" });
+      }
     }
     console.log(JSON.stringify({ functions: n, rows }));
   `;
@@ -141,10 +164,10 @@ for (const module of modules) {
   if (result.functions === 0) continue;
   console.log(`${module}: ${result.functions} published function(s), ${result.rows.length} unusable`);
   for (const row of result.rows) {
-    console.log(`    UNUSABLE  ${row.name}  --  ${row.why}`);
-    console.log(`              ${row.boundary} shape(s) hit the boundary, ${row.validated} reached the module's own validation, 0 succeeded`);
+    console.log(`    ${row.kind}  ${row.name}  --  ${row.why}`);
+    console.log(`              ${row.boundary} shape(s) hit the boundary, ${row.validated} reached the module's own validation, ${row.ok} succeeded`);
   }
 }
 
-console.log(`\n${unusable} of ${published} published function(s) are unusable: no argument shape succeeded and at least one hit the boundary.`);
+console.log(`\n${unusable} of ${published} published function(s) refuse at least one argument shape at the boundary. UNUSABLE means none succeeded.`);
 console.log("Silence is not a clearance: the shapes are generic, so this can find an unusable name and cannot certify a usable one.");

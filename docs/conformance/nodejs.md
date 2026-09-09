@@ -13279,6 +13279,58 @@ from node alone will always overstate what the compiler owes.
 from `constants.priority`, so the `priority` table has to carry its five names
 and not only exist.
 
+## `util.types` publishes 31 predicates and none can be asked about a reference
+
+Comparing every published node-name against node found one divergence outside
+`path`:
+
+    util.types.isDate(new Date())     ours  TypeError: an argument of this type
+                                            has no representation in the compiled runtime
+                                      node  true
+
+It is not one predicate. `util.types` publishes **31 of node's 43**, and every
+one of them refuses a reference at the boundary while answering for scalars:
+
+    types.isDate  isMap  isSet  isWeakMap  isWeakSet  isPromise  isNativeError  …
+      4 shape(s) hit the boundary, 1 reached the module's own validation, 8 succeeded
+
+`isDate("")` returns `false` correctly. `isDate(new Date())` cannot be asked.
+**These are predicates whose entire purpose is to answer about references**, so
+publishing them and refusing the reference is the `buffer.isUtf8` shape at
+thirty-one times the scale -- and unlike `isUtf8` they are not fully unusable,
+which is why the first version of the instrument reported `util` clean.
+
+Across the profile, 39 of 103 published functions refuse at least one argument
+shape at the boundary:
+
+    util          31   every `types` predicate
+    path           6   `toNamespacedPath({})` and its aliases in both namespaces
+    async_hooks    1   `executionAsyncResource`, unusable -- outbound
+    url            1   unusable
+    os             0
+    punycode       0
+
+**The `path` six are deliberate.** An object with no representation raises a
+loud `TypeError` rather than answering wrongly, which is the trade the compiler
+lane chose and this ledger agreed with. The `util` thirty-one are not deliberate
+-- nothing chose to publish a predicate that cannot see its own subject.
+
+### Two instrument corrections this took
+
+`unusable-exports.mjs` reported `util` clean twice before this.
+
+**It walked only the top level.** `util.types` is a plain object, not a function,
+so 31 predicates were never called. It now walks one level into published
+objects.
+
+**And it stopped at the first success.** `isDate("")` succeeds, so `anyOk` was
+true and the boundary failures behind it were never counted. The criterion is
+now "any shape hits the boundary", split into `UNUSABLE` (none succeeded) and
+`UNREACHABLE FOR SOME ARGUMENTS` (some did) -- because a function that works for
+scalars and refuses references is a different finding from one that refuses
+everything, and calling both unusable would have been wrong in the other
+direction.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
