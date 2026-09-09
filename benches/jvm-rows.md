@@ -57,8 +57,13 @@ The row table below is always current; the sections behind it are a history.
 
 ## Where the rows stand
 
-**Re-taken from the current tree on 2026-09-08, all 51 cases *that carry a
-`ref.java`*, nothing refused.** There are 60 cases; the nine `json-*` ones have
+**Re-taken 2026-09-09 at `bf066859`, from a worktree pinned to that hash, all
+51 cases *that carry a `ref.java`*.** Rows in the 0.95x-1.05x band and rows the
+harness flagged were run **twice** and carry both readings; where the two
+disagree that is the finding, not an average. `*not clean*` is `nts-bench`'s own
+flag -- either the same binary varied by more than 10% across its five internal
+runs, or another session's compiler was running -- and those rows may not be
+quoted. There are 60 cases; the nine `json-*` ones have
 no Java reference and so have never appeared here at all -- see below.
 The previous table was read from `~/.cache/nts-jvm-sweep`, which is pinned at
 `f071672b` from 08:41 and so predates this morning's `uirem` fix -- see the
@@ -67,35 +72,63 @@ stale-worktree section below. `->` marks a row this lane has moved. A row marked
 or the same binary varied by more than 10% across five runs. **Those four are
 not measured clean and should not be quoted.**
 
-**25 rows above 1.00x, 26 at or under it.**
+**Two runs changed which rows are which, and one of them by 50%.** `dispatch`
+read **0.64x** and then **0.97x**; both runs carried the JIT-variance flag. A
+single sweep would have published a third of a row's ratio as a win. That is
+rule 4 -- distrust favourable numbers hardest -- earning its place on the
+largest apparent improvement in the table.
+
+**What moved, and it is the other lane's work rather than this one's:**
+
+    substrings    0.95x -> 0.40x    clean, both runs
+    map-and-set   0.86x -> 0.79x    clean
+    objects       0.99x -> bimodal  1.00x and 0.91x, both lanes varying
+
+**What moved against us, and reproduces:** `symbol-keys` 0.98x -> 1.04x twice,
+`upcast` 0.99x -> 1.03x/1.05x, `generator` 0.99x -> 1.01x twice. Small, real,
+and none of them has a cause yet.
+
+**Ten rows sit at 1.01x-1.05x on both runs.** That band is not noise around
+parity -- it reproduces. They are losing by a little, consistently, which is a
+different problem from the four rows losing by a lot.
 
 | row | jvm/Java | note |
 | --- | --- | --- |
-| `node-utf8` | **6.33x** | **a codec against an intrinsic**: floor is 2.40x, below |
-| `symbol-keyed-map` | 2.93x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
-| `array-from` | 2.09x | **priced: 5.9x on the set walk** -- the lowering's, below |
-| `array-predicates` | 1.70x | at its floor: every helper inlines; the wrapper is the row |
-| `absences` | 2.66x -> **1.29x** | blocked: **34%** is `uirem` over an `l2i` counter |
-| `optional-chain` | 3.00x -> **1.26x** *busy* | the same `uirem` residual |
-| `awfy-queens` | 1.25x | 20.6% is codegen and MINE -- ladder below |
-| `generic-classes` | 1.17x | **cause found**: monomorphisation, not codegen -- below |
-| `array-methods` | 1.14x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
-| `number-format-double` | **1.08x** | the formatter is 54% of the profile and 1.7% of the gap |
-| `elementwise` | 1.08x | at its floor: both lanes vectorise |
-| `instanceof` | 3.74x -> **1.08x** | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
-| `in-narrowing` | **1.01x** | re-measured; was listed at 1.07x from a contaminated run |
-| `module-closures` | **1.058x** | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
-| `awfy-sieve` | **1.03x or 1.27x** | two modes, and "two JIT shapes" was wrong -- below |
-| `bytes` | 1.19x -> **1.05x** | the `uirem` residual |
-| `objects` | **0.99x** | re-measured clean: still a win, as it was |
-| `generator` | **0.99x** | re-measured clean: not losing |
-| `symbol-keys` | **0.98x** | re-measured clean: not losing |
-| `arrays` | 1.03x | **not previously listed** |
-| `fib` | 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
-| `upcast` | 1.07x -> **0.99x** | re-measured clean; no `uirem` in its profile |
-| `checksum` | **1.00x** | parity |
-| `closure-merge` | **1.00x** | parity |
-| `growth-grown` | 1.01x | **not previously listed** |
+| `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
+| `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator |
+| `array-from` | 2.12x | **priced: 5.9x on the set walk** -- the lowering's, below |
+| `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
+| `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
+| `optional-chain` | 1.27x | the same `uirem` residual |
+| `awfy-queens` | 1.23x | 20.6% is codegen and MINE -- ladder below |
+| `generic-classes` | 1.13x | **cause found**: monomorphisation, not codegen -- below |
+| `array-methods` | 1.17x | helpers beat the reference by 18%; `toInt32` against the reference's `d2i` is **8.9%**, measured; the `NtsValue` from `at()` is scalar-replaced (144 B/op is the array literal, which the reference also pays) |
+| `number-format-double` | 1.11x *not clean* | the formatter is 54% of the profile and 1.7% of the gap |
+| `elementwise` | 1.05x / 1.02x | at its floor: both lanes vectorise |
+| `instanceof` | 1.09x | 60% of the profile is `uirem`; bounded at 8%. Reference is narrower than the program, priced at ~0 -- below |
+| `in-narrowing` | 1.01x / 1.02x | re-measured; was listed at 1.07x from a contaminated run |
+| `module-closures` | 1.10x | measured clean at last, identical checksums. Three mechanisms priced dead (ABI 0.1%, non-final global 0.1%, inline size 0%); **no cause found** -- below |
+| `awfy-sieve` | 1.07x *not clean* | two modes, and "two JIT shapes" was wrong -- below |
+| `bytes` | 1.05x | the `uirem` residual |
+| `objects` | 1.00x / 0.91x *not clean* | **bimodal on both lanes** -- ours varied 1.17x and the reference 1.22x across five runs of one binary. Neither reading is the row |
+| `generator` | 1.01x | 1.01x twice; the "not losing" this note used to claim was one run at 0.99x |
+| `symbol-keys` | 1.04x | 1.04x twice, up from 0.98x. **A real move against us**, not noise -- it reproduces |
+| `arrays` | 1.03x / 1.02x | both runs above; small and real |
+| `fib` | 1.04x / 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
+| `upcast` | 1.03x / 1.05x | up from 0.99x and it reproduces; no `uirem` in its profile, so the cause is unfound |
+| `checksum` | 1.00x | parity, twice |
+| `closure-merge` | 1.01x | 1.01x twice |
+| `growth-grown` | 1.01x | 1.01x twice |
+| `substrings` | **0.40x** | was 0.95x. **The largest real movement in the table** and unflagged |
+| `map-and-set` | **0.79x** | was 0.86x |
+| `dispatch` | **0.64x / 0.97x** *not clean* | varied 1.93x then 1.22x. **Not a number** -- see below |
+| `case-convert` | 0.88x / 0.98x *not clean* | the two runs disagree by 11% |
+| `awfy-permute` | **0.72x** | |
+| `awfy-mandelbrot` | **0.84x** | |
+| `awfy-list` | **0.94x** | |
+| `awfy-towers` | **0.98x** | |
+| `awfy-bounce` | **0.99x** *not clean* | varied 1.13x |
+| `awfy-nbody` | **1.00x** | and 7.69 ms against node's 78.25 |
 
 **Eight rows were losing and unlisted**, all between 1.01x and 1.07x, which is
 why they were invisible: a table written from the rows someone had already
