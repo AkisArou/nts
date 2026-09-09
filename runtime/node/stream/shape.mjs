@@ -52,9 +52,29 @@ export function shape(exports) {
   // host-facing object shape and deliberately stays out of typed algorithms.
   if (exports.iter?.Stream !== undefined) Object.freeze(exports.iter.Stream);
 
-  // A compiled module may not publish this yet -- see the note on
-  // callableConstructor above.
-  if (Stream === undefined) return {};
+  // A compiled module may not publish `Stream` yet, and when it does not, the
+  // rest of what it publishes is still real.
+  //
+  // This used to `return {}`. `os/shape.mjs` records the same mistake from the
+  // other side -- "a shape that throws on a missing export reports one fact
+  // about the addon and hides seven" -- and this was the silent version of it:
+  // the compiled `stream` publishes `getDefaultHighWaterMark`, it answers
+  // 65536 / 16 / 65536 for `false` / `true` / `undefined` exactly as node does,
+  // and **the shape threw it away** because `Stream` was missing. Measured
+  // against the raw `.node` with `process.dlopen`, which is how it was found;
+  // through the shim the name was simply not there.
+  //
+  // The wiring below genuinely needs `Stream` -- prototype aliasing, the
+  // `promisify.custom` links, `Duplex.fromWeb`. So the early exit stays, and
+  // hands back the names that do not depend on it instead of nothing.
+  if (Stream === undefined) {
+    const partial = {};
+    for (const [name, value] of Object.entries(exports)) {
+      if (name === "default" || name === "Stream") continue;
+      partial[name] = shapedConstructors[name] ?? value;
+    }
+    return partial;
+  }
   Stream.Stream = Stream;
   // EventEmitter exposes these as the same function objects. The typed source
   // keeps ordinary statically declared methods; function-object aliasing is a
