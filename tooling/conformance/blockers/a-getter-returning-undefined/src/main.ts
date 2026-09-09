@@ -1,6 +1,34 @@
-// expect: `null` or `undefined` where what it stands in for is not a reference
+// expect: nothing refused
 //
-// A getter whose declared return type is a union with `undefined`. All 59
+// FIXED, and kept as a guard. A getter whose declared return type is a union
+// with `undefined`.
+//
+// The cause was not a representation and the message points away from it.
+// `enclosing_callable` listed four node kinds -- function declaration, method,
+// arrow, constructor -- and not `GET_ACCESSOR`, so a `return` inside a getter
+// walked straight past it. `contextual_type` found no enclosing callable,
+// answered `None`, and `undefined` had **nothing to stand in for** rather than
+// something that is not a reference.
+//
+// Leaving those kinds out did not make the answer `None` everywhere either. A
+// getter nested inside a method would have taken the *method's* return type --
+// a wrong answer rather than a missing one, and the reason this was worth
+// fixing at the walk rather than at the refusal.
+//
+// `first_this`, forty lines further up the same file, already spelled the whole
+// set including accessors and function expressions. Two lists of one fact, and
+// this was the short one -- the same family as `erasable` and `erased_tag`
+// drifting apart earlier the same day.
+//
+// The controls in the original header are what made it findable: the same body
+// as a method compiles, a getter that never mentions `this` refuses too, and a
+// class refuses exactly as a number does. Together they say the condition the
+// message names is not the condition it has.
+//
+// `examples/getter-returning-undefined` checks the behaviour: seven exports,
+// every getter paired with a method of the same body, 203 cases agreeing with
+// node. A fixture with only the getters would pass on a compiler that got both
+// wrong the same way. All 59
 // occurrences of this message in `fs` carry the same two names -- `null` or
 // `undefined` -- and it is the sixth-largest lowering root by distinct things.
 //

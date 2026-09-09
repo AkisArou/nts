@@ -23907,6 +23907,33 @@ impl<'a> FuncBuilder<'a> {
                         | syntax::METHOD_DECLARATION
                         | syntax::ARROW_FUNCTION
                         | syntax::CONSTRUCTOR
+                        // An accessor and a function expression are callables
+                        // too, and leaving them out did not make this answer
+                        // `None` -- it made it answer for the *next* function
+                        // outwards.
+                        //
+                        // `get n(): number | undefined { return c ? this.n :
+                        // undefined; }` refused with "`null` or `undefined`
+                        // where what it stands in for is not a reference",
+                        // while the identical body written as a method
+                        // compiled. The Node lane counted 59 occurrences in
+                        // `fs` and reduced it to exactly that pair: same body,
+                        // same return type, same class, and a getter that never
+                        // mentions `this` refuses too.
+                        //
+                        // The message sends the reader to widen a
+                        // representation that was already wide enough. There
+                        // was no representation: `contextual_type` walked past
+                        // the getter, found no enclosing callable, and returned
+                        // `None` -- so `undefined` had nothing to stand in for
+                        // rather than the wrong thing.
+                        //
+                        // `first_this` forty lines up already spells the whole
+                        // set, accessors and function expressions included. Two
+                        // lists of one fact, and this was the short one.
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                        | syntax::FUNCTION_EXPRESSION
                 )
             ) {
                 return Some(here);
