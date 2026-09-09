@@ -12687,6 +12687,34 @@ case where the two namespaces disagree in a way callers depend on.
 existed rather than a new finding -- the file currently fails earlier, on
 `path.format`, which is why the `sep` half had not surfaced.
 
+## Both `path` namespaces against node, member by member: 0 value divergences
+
+Every published function in `path.posix` and `path.win32` against its
+`node:path` counterpart, over twenty inputs chosen for the shapes the two
+implementations disagree about -- drive letters, UNC shares, backslash runs,
+`\\?\` prefixes, trailing separators, empty and blank strings:
+
+    400 case(s) where both returned a value:   0 differ
+     40 case(s) differ only in which error was thrown
+
+**`win32` is a second implementation and it is right wherever it answers.** It
+is reached only through its own namespace, it has drive letters and UNC parsing
+that `posix` never executes, and across 400 answers it agrees with node exactly.
+
+**The entire divergence surface of `path`'s published members is error
+identity.** All forty are the same family already documented: the wrapper's
+argument check fires before the module's own validation, so `relative("/")` --
+one argument to a two-argument function -- raises `ERR_MISSING_ARGS` where node
+raises `ERR_INVALID_ARG_TYPE`.
+
+That is a useful shape to have measured rather than assumed. It says the
+remaining work on `path`'s *published* surface is one thing, not a list, and it
+says the second implementation nobody has been exercising does not need
+attention beyond it.
+
+It also puts a number on the error-identity item: 40 of 440 comparisons here,
+and 2 of `path`'s 9 failing files.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
