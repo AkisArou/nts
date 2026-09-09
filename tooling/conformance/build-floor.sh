@@ -32,7 +32,9 @@ cd "$(dirname "$0")/../.."
 # loads are 20 of 22 with and without it, which is what the refusal counts
 # predicted. A stale floor does not just miss a regression, it manufactures
 # progress, and the second failure is louder than the first.
-FLOOR="assert async_hooks buffer console dgram diagnostics_channel events http net os path punycode querystring readline stream string_decoder timers url util zlib"
+FLOOR="assert async_hooks buffer console dgram diagnostics_channel events fs http
+net os path process punycode querystring readline stream string_decoder timers url
+util zlib"
 
 # And the ones that do not, which is the half that rots.
 #
@@ -49,7 +51,23 @@ FLOOR="assert async_hooks buffer console dgram diagnostics_channel events http n
 # The two that do not build. Both are the largest modules in the profile and
 # both have the most declared-but-unimplemented bindings, so neither is one
 # compiler fix away.
-BLOCKED="fs process"
+BLOCKED=""
+
+# **Empty, and it held `fs` and `process` an hour ago.**
+#
+# All twenty-two modules build and load. What changed is compiler-side and was
+# reported as three separate fixes: a class reaching JavaScript, a `FieldGet`
+# that read an erased slot back as concrete, and the prototype pass no longer
+# discarding every prototype in a program when one binding could not be
+# declared. `os` came back the same way after regressing on the heterogeneous
+# tuple.
+#
+# Building is not passing, and the gap is wide: `fs` publishes **zero** exports
+# and answers 0 of 352 files, `process` zero and 0 of 90. `os` publishes 17 of
+# node's 23 and passes 4 of its 9 applicable files. Only `punycode` is green.
+#
+# An empty BLOCKED means a module that stops building is loud by default rather
+# than expected.
 
 # Bindings that are declared, reached, and have no C anywhere. Measured with
 # `nm -D` on the built artifacts 2026-09-09. Every one of these would abort the
