@@ -13315,6 +13315,61 @@ loud `TypeError` rather than answering wrongly, which is the trade the compiler
 lane chose and this ledger agreed with. The `util` thirty-one are not deliberate
 -- nothing chose to publish a predicate that cannot see its own subject.
 
+### Correction: the refusal is deliberate, and that is the stronger finding
+
+The section above called the `path` six deliberate and the `util` thirty-one
+not: "nothing chose to publish a predicate that cannot see its own subject."
+
+**Wrong, and wrong in the direction this ledger exists to catch.** Something did
+choose, and wrote it down. `blockers/unknown-at-the-boundary` is the fixture:
+
+> A string, number, boolean, `null` and `undefined` cross carrying their tag.
+> An object, array, function, symbol or bigint raises a `TypeError` naming the
+> limitation, **because answering `undefined` for a value the caller really
+> passed is the wrong-value failure this compiler refuses everywhere else.**
+
+One choice, made once, for a reason this ledger agrees with. It produces the
+`path` six and the `util` thirty-one alike. I asserted intent without reading
+the directory where intent is recorded -- the same error as claiming `os`
+could not load from a stale comment in my own fixture.
+
+### What survives the correction, and it is sharper
+
+The trade is: refuse loudly rather than answer wrongly. **It is priced on the
+value being read.** For `toNamespacedPath(v)`, which returns `v`, that price is
+real -- there is no answer without the value.
+
+`util.types` does not read the value. Measured across all 42 exported
+predicates:
+
+    value .   value [   value (      0 occurrences -- none dereferences it
+    instanceof / typeof                every one, and nothing else
+
+29 take `(value: unknown)` and classify it; 13 take `(_value: unknown)` and
+never read it at all, because cross-realm recognition "belongs to the engine
+metaobject model and is intentionally not approximated here".
+
+So the stated reason for the refusal does not reach these functions. Nothing
+here would answer `undefined` for a value the caller passed, because nothing
+here answers *from* the value -- it answers from its brand. `isDate` needs a
+type tag, not a materialised `Date`.
+
+Measured on the addon, `isDate` against node:
+
+    undefined null "" "x" 0 1 true      ours false     node false    7 agree
+    [] {} new Date() new Map() /a/
+    new Error() new Uint8Array () => {}  ours TypeError node false/true  8 differ
+    (no argument)                        ours arity     node false
+
+**The one node answers `true` for is the only argument the function exists to
+recognise.** Seven scalars agree, and they are the seven a `Date` predicate is
+never called with.
+
+That is the argument for an inbound brand check, and it is not "the boundary
+has a bug". It is that a representation-free classification is a *different*
+operation from carrying a value, the refusal was priced for the second, and 42
+functions in one module need only the first.
+
 ### Two instrument corrections this took
 
 `unusable-exports.mjs` reported `util` clean twice before this.
