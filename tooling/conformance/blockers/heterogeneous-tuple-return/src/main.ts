@@ -1,8 +1,12 @@
-// expect: emit-c --napi -> NTS2010 `nts_probe_heterogeneous` returns a tuple
-//          whose elements are not all one type
+// expect: emit-c --napi -> NTS2010 `heterogeneous` cannot be emitted because it
+//          calls `nts_probe_heterogeneous`
 //
-// Now a **named refusal** rather than a conflicting prototype, which is a
-// smaller claim than it looks and the honest one. The type was never the whole
+// Now a **named refusal that drops the calling body**, rather than a
+// conflicting prototype, which is a smaller claim than it looks and the honest
+// one. Refusing the prototype alone was not enough: the body still emitted an
+// assignment clang rejects, so `os` lost every export over `nts_os_cpus` alone.
+// Dropping the one function that reads it leaves the other twenty-two, and `os`
+// builds again. The type was never the whole
 // problem: the C side *builds* this value, and it builds a two-element
 // `NtsArray` of references where the compiler wants a struct with two fields.
 //

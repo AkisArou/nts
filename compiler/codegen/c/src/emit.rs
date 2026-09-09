@@ -416,30 +416,7 @@ pub fn emit(program: &Program) -> Emitted {
         }
     }
 
-    let mut bodies = Vec::new();
-    for func in &program.funcs {
-        // An `abstract` method is a signature and no body. It is in `funcs` so
-        // that a call through the slot can take its function-pointer type from
-        // it; nothing calls it and no vtable names it, because an abstract
-        // class is never instantiated. Emitting the stub gave clang an
-        // `unused function 'Shape__area'` under `-Werror`, which only the
-        // benchmark build turns on -- so `examples/abstract-methods` passed and
-        // `benches/cases/upcast` did not.
-        if func.abstract_declaration {
-            continue;
-        }
-        let mut body = CodeWriter::new();
-        let context = Context {
-            program,
-            literals: &literals,
-            read: values_read(func),
-        };
-        match emit_func(&mut body, func, &context) {
-            Ok(signature) => bodies.push((signature, body, func)),
-            Err(diagnostic) => diagnostics.push(diagnostic),
-        }
-    }
-
+    let mut bodies = emit_bodies(program, &literals, &mut diagnostics);
     drop_orphaned_bodies(&mut bodies, &mut diagnostics);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
@@ -594,19 +571,11 @@ fn external_prototypes(program: &Program) -> Prototypes {
             // "builds and loads" about all of them.
             let returns = match returned_shape(program, &op.ty) {
                 Returned::Header => "NtsHeader *".to_owned(),
-                Returned::Tuple => {
-                    refusals.push(Diagnostic::error(
-                        "NTS2010",
-                        format!(
-                            "`{name}` returns a tuple whose elements are not all one type, \
-                             and its layout is numbered per program -- so no C definition \
-                             can name the type this call expects, and one returning an \
-                             `NtsArray` would be read as a struct"
-                        ),
-                        op.origin.location,
-                    ));
-                    continue;
-                }
+                // Reported where the *caller* is dropped, not here. A
+                // prototype nothing calls is dead text; a body that calls it
+                // emits an assignment clang rejects, so the body is the thing
+                // that has to go and the diagnostic belongs beside it.
+                Returned::Tuple => continue,
                 Returned::Own => match c_type_of(program, &op.ty, &op.origin) {
                     Ok(named) => named,
                     Err(why) => {
@@ -756,6 +725,110 @@ fn literal_name(literals: &[String], text: &str) -> String {
 /// A string, an array, a map and a view are **not** here. Their C types are the
 /// runtime's own -- `NtsString *`, `NtsArray *` -- so a binding can name them,
 /// and `runtime/node`'s bindings do.
+/// Every function this translation unit will define, and the refusals that took
+/// the rest.
+///
+/// Split from [`emit`] for the length limit, and it is the natural seam: above
+/// it is what the file needs before any function can be written, below it is
+/// what the file does with the functions it got.
+fn emit_bodies<'a>(
+    program: &'a Program,
+    literals: &[String],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<(String, CodeWriter, &'a Func)> {
+    // The bindings whose return this backend cannot declare, and the bodies
+    // that call them. Computed before anything is emitted, because a body that
+    // calls one produces an assignment clang rejects -- `os` lost every export
+    // over `nts_os_cpus` alone, where dropping the one function that reads it
+    // leaves the other twenty-two.
+    let unspellable = unspellable_returns(program);
+    let mut bodies = Vec::new();
+    for func in &program.funcs {
+        if let Some((binding, origin)) = calls_unspellable(func, &unspellable) {
+            diagnostics.push(unspellable_refusal(&func.name, binding, origin));
+            continue;
+        }
+        // An `abstract` method is a signature and no body. It is in `funcs` so
+        // that a call through the slot can take its function-pointer type from
+        // it; nothing calls it and no vtable names it, because an abstract
+        // class is never instantiated. Emitting the stub gave clang an
+        // `unused function 'Shape__area'` under `-Werror`, which only the
+        // benchmark build turns on -- so `examples/abstract-methods` passed and
+        // `benches/cases/upcast` did not.
+        if func.abstract_declaration {
+            continue;
+        }
+        let mut body = CodeWriter::new();
+        let context = Context {
+            program,
+            literals,
+            read: values_read(func),
+        };
+        match emit_func(&mut body, func, &context) {
+            Ok(signature) => bodies.push((signature, body, func)),
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
+
+    bodies
+}
+
+/// Why a body that calls an unspellable binding is not emitted.
+fn unspellable_refusal(caller: &str, binding: &str, origin: &Origin) -> Diagnostic {
+    Diagnostic::error(
+        "NTS2010",
+        format!(
+            "`{caller}` cannot be emitted because it calls `{binding}`, which returns a \
+             tuple whose elements are not all one type -- its layout is numbered per \
+             program, so no C definition can name the type this call expects, and one \
+             returning an `NtsArray` would be read as a struct"
+        ),
+        origin.location,
+    )
+}
+
+/// The `declare function` names whose return no shared C definition can spell.
+fn unspellable_returns(program: &Program) -> rustc_hash::FxHashSet<String> {
+    let mut found = rustc_hash::FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            if let OpKind::Call { callee: Callee::External(name), .. } = &op.kind
+                && !runtime_declares(name)
+                && matches!(returned_shape(program, &op.ty), Returned::Tuple)
+            {
+                found.insert(name.clone());
+            }
+        }
+    }
+    found
+}
+
+/// The first such binding this body calls, if any.
+///
+/// Over the blocks rather than `func.values`, for `drop_callers_of_refused`'s
+/// reason one layer up: a value list keeps every op the lowering ever made,
+/// including ones a pass has taken out of the control flow, so a call that
+/// cannot run would drop a body that is fine.
+fn calls_unspellable<'a>(
+    func: &'a Func,
+    unspellable: &rustc_hash::FxHashSet<String>,
+) -> Option<(&'a str, &'a Origin)> {
+    func.blocks
+        .iter()
+        .flat_map(|block| block.ops.iter())
+        .find_map(|value| {
+            let op = &func.values[value.0 as usize];
+            match &op.kind {
+                OpKind::Call { callee: Callee::External(name), .. }
+                    if unspellable.contains(name) =>
+                {
+                    Some((name.as_str(), &op.origin))
+                }
+                _ => None,
+            }
+        })
+}
+
 /// What a binding's *return* type can be written as.
 ///
 /// The `NtsHeader *` escape that parameters take is right for a value the C
