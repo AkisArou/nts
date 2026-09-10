@@ -19421,6 +19421,37 @@ parameter it is used on. Three times in one sitting: `readFileSync(-0)` reading
 standard input, `setMaxListeners(1)` succeeding, `{ fd: undefined }` meaning
 absence. The table is split by that distinction now.
 
+## The stream instances' extra key is the object model, not a defect
+
+Fixing `EventEmitter`'s two extra own keys left `stream` still differing, and the
+obvious reading of that was wrong:
+
+    node fresh Readable   ["_events", "_readableState", "_maxListeners"]
+    ours fresh Readable   ["_events", "_eventsCount", "_maxListeners", "_readableState"]
+
+**Node has `_eventsCount`; it is inherited, not own.** On a fresh `Readable`,
+`"_eventsCount" in r` is `true` and `hasOwnProperty` is `false` -- it sits on the
+prototype at 0 and becomes an own property the first time a listener is added, at
+which point it appears at the *end* of the key order:
+
+    after r.on("data", …)   ["_events", "_readableState", "_maxListeners", "_eventsCount"]
+
+A bare `EventEmitter` has it own from construction, so the two differ from each
+other on node too.
+
+That is node creating an own property only when the value changes from its
+prototype default, against a typed class declaring its fields. It is the same
+difference `process/test/export-surface-static.js` already records for
+`noDeprecation` -- "node's `process` is a dynamic object where `noDeprecation`
+appears only once a flag sets it; ours is a typed class" -- and the same reason it
+is not something to delete at the host boundary.
+
+So the `EventEmitter` pair really were a defect, because node has neither key at
+all, and this one is not, because node has it and puts it somewhere else. Written
+down so the remaining difference does not read as unfinished work: the earlier
+note that "node's stream instances carry no `_eventsCount`" was mine and was
+wrong.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
