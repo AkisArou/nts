@@ -326,6 +326,15 @@ export class OutgoingMessage<
   #socket: SocketType | null = null;
   #lenientHeaderValues = false;
   /** Fixed typed representation of node's private `kHighWaterMark` slot. */
+  // **Not private, and the instance-shape sweep was wrong about it.** That sweep
+  // reported `_highWaterMark` as a key node does not have, because a *fresh*
+  // `new OutgoingMessage()` on node does not set one. Node's own
+  // `test-http-client-highwatermark.js` and
+  // `test-http-server-options-highwatermark.js` read it off a real request and a
+  // real response, and both failed the moment this became `#`.
+  //
+  // Exactly the limitation that sweep's header states: an ours-only key on a
+  // fresh instance is a question, and the answer here is that node has it.
   readonly _highWaterMark: number;
   #needDrain = false;
   #corked = 0;
@@ -561,7 +570,11 @@ export class OutgoingMessage<
   strictContentLength = false;
 
   /** Lowercased name to `[originalName, value]`. */
-  protected headersMap = new Map<string, [string, OutgoingHeaderValue]>();
+  // `#`, not `protected`: a TypeScript modifier is compile-time only, so this was
+  // an own enumerable key on every `ServerResponse` and `ClientRequest`, and node's
+  // `OutgoingMessage` keeps its headers under `[kOutHeaders]`. Nineteen uses, all
+  // `this.` inside this class, and no other file reads it.
+  #headersMap = new Map<string, [string, OutgoingHeaderValue]>();
   #rawHeaderPairs: ReadonlyArray<readonly [string, OutgoingHeaderValue]> | null = null;
   #trailer = "";
   #uniqueHeaders: ReadonlySet<string> | null = null;
@@ -638,7 +651,7 @@ export class OutgoingMessage<
     if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("set");
     validateHeaderName(name);
     validateHeaderValue(name, value, this.#lenientHeaderValues);
-    this.headersMap.set(name.toLowerCase(), [name, value]);
+    this.#headersMap.set(name.toLowerCase(), [name, value]);
     return this;
   }
 
@@ -672,9 +685,9 @@ export class OutgoingMessage<
     validateHeaderValue(name, value, this.#lenientHeaderValues);
 
     const key = name.toLowerCase();
-    const current = this.headersMap.get(key);
+    const current = this.#headersMap.get(key);
     if (current === undefined) {
-      this.headersMap.set(key, [name, value]);
+      this.#headersMap.set(key, [name, value]);
       return this;
     }
 
@@ -685,7 +698,7 @@ export class OutgoingMessage<
     } else {
       next.push(String(value));
     }
-    this.headersMap.set(key, [current[0], next]);
+    this.#headersMap.set(key, [current[0], next]);
     return this;
   }
 
@@ -693,7 +706,7 @@ export class OutgoingMessage<
     if (typeof name !== "string") {
       throw new ERR_INVALID_ARG_TYPE("name", "string", name);
     }
-    return this.headersMap.get(name.toLowerCase())?.[1];
+    return this.#headersMap.get(name.toLowerCase())?.[1];
   }
 
   /** Every header, keyed by lowercased name. A copy: mutating it does nothing. */
@@ -701,24 +714,24 @@ export class OutgoingMessage<
     // NTS records have no prototype, so `{}` has Node's intended dictionary
     // semantics once compiled.
     const out: OutgoingHeaders = {};
-    for (const [key, entry] of this.headersMap) out[key] = entry[1];
+    for (const [key, entry] of this.#headersMap) out[key] = entry[1];
     return out;
   }
 
   getHeaderNames(): string[] {
-    return [...this.headersMap.keys()];
+    return [...this.#headersMap.keys()];
   }
 
   /** The names as they were given, which is what goes on the wire. */
   getRawHeaderNames(): string[] {
-    return [...this.headersMap.values()].map((entry) => entry[0]);
+    return [...this.#headersMap.values()].map((entry) => entry[0]);
   }
 
   hasHeader(name: string): boolean {
     if (typeof name !== "string") {
       throw new ERR_INVALID_ARG_TYPE("name", "string", name);
     }
-    return this.headersMap.has(name.toLowerCase());
+    return this.#headersMap.has(name.toLowerCase());
   }
 
   removeHeader(name: string): void {
@@ -727,7 +740,7 @@ export class OutgoingMessage<
     }
     if (this.headersSent) throw new ERR_HTTP_HEADERS_SENT("remove");
     const lowerName = name.toLowerCase();
-    this.headersMap.delete(lowerName);
+    this.#headersMap.delete(lowerName);
     // `Date` is synthesized only when the head is built, so deleting its
     // current map entry is not enough to honor an explicit removal.
     if (lowerName === "date") this.sendDate = false;
@@ -786,10 +799,10 @@ export class OutgoingMessage<
     if (!this.statusLine) this._implicitHeader();
     if (!this.statusLine) return;
 
-    const declared = this.headersMap.get("content-length");
-    const encoding = this.headersMap.get("transfer-encoding");
-    const connection = this.headersMap.get("connection");
-    const trailerHeader = this.headersMap.get("trailer");
+    const declared = this.#headersMap.get("content-length");
+    const encoding = this.#headersMap.get("transfer-encoding");
+    const connection = this.#headersMap.get("connection");
+    const trailerHeader = this.#headersMap.get("trailer");
     let addChunkedHeader = false;
     let automaticHeaders = "";
 
@@ -828,11 +841,11 @@ export class OutgoingMessage<
       throw new ERR_HTTP_TRAILER_INVALID();
     }
 
-    if (this.sendDate && !this.headersMap.has("date")) {
+    if (this.sendDate && !this.#headersMap.has("date")) {
       automaticHeaders += `Date: ${new Date().toUTCString()}\r\n`;
     }
 
-    if (!this._removedConnection && !this.headersMap.has("connection")) {
+    if (!this._removedConnection && !this.#headersMap.has("connection")) {
       const connection =
         this.shouldKeepAlive && !this.maxRequestsOnConnectionReached ? "keep-alive" : "close";
       automaticHeaders += `Connection: ${connection}\r\n`;
@@ -843,7 +856,7 @@ export class OutgoingMessage<
       !this.maxRequestsOnConnectionReached &&
       this._defaultKeepAlive &&
       this._keepAliveTimeout > 0 &&
-      !this.headersMap.has("keep-alive")
+      !this.#headersMap.has("keep-alive")
     ) {
       const maximum = this._maxRequestsPerSocket;
       const max = typeof maximum === "number" && (maximum | 0) > 0 ? `, max=${maximum}` : "";
@@ -859,7 +872,7 @@ export class OutgoingMessage<
     let head = `${this.statusLine}\r\n`;
     const rawHeaderPairs = this.#rawHeaderPairs;
     if (rawHeaderPairs === null) {
-      for (const entry of this.headersMap.values()) {
+      for (const entry of this.#headersMap.values()) {
         head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
       }
     } else {
@@ -868,7 +881,7 @@ export class OutgoingMessage<
         rawNames.add(entry[0].toLowerCase());
         head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
       }
-      for (const [name, entry] of this.headersMap) {
+      for (const [name, entry] of this.#headersMap) {
         if (!rawNames.has(name)) {
           head += serializeHeader(entry[0], entry[1], this.#uniqueHeaders);
         }
