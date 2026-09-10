@@ -72,10 +72,31 @@
 // Skipping `!own && name.starts_with('#')` therefore skips neither, and the
 // rename fires twice.
 //
-// So the fix needs the **declaring class per property**, which the snapshot does
-// not carry. That is a schema question before it is a lowering one, and it is
-// where the next attempt should start rather than at a different separator or a
-// different rename direction. Reverted; the refusal above is what stands.
+// The order is recoverable without a schema change: the flattened list is
+// **most-derived first**, which is `getPropertiesOfType`'s order, so the first
+// `#count` is this class's and the rest are its ancestors'. Printed:
+//
+//     own = [("#count", Set), ("#count", Float)]
+//
+// on `class Base { #count = 0 }` / `class Derived extends Base
+// { #count = new Set<number>() }`.
+//
+// **A second attempt used that and got two fields with the right types and the
+// wrong order.** Keeping only the first `#count` in `fields_of` and renaming the
+// inherited copy in the base-first construction produced
+//
+//     Derived   #count : Managed(Set(Float))
+//               #count@Base : Int
+//
+// — the derived's at slot **0**. Base-first layout requires the inherited one
+// there, because a method of the base operates on a `Base *` and reads slot 0;
+// with the derived's field sitting in it, `bumpBase` and `bumpDerived` shared a
+// counter again and the same 28 of 28 cases disagreed, with the same numbers.
+//
+// So both fields can be built and the remaining work is entirely about **where**
+// they land. That is `after_the_base`'s construction, not the member list, and
+// it is where a third attempt should start. Reverted; the refusal above is what
+// stands.
 //
 // # The control
 //
