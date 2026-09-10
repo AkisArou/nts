@@ -19091,6 +19091,46 @@ been seen to fire is a claim about agreement, not a measurement of it, so the
     inverted   1 module(s) differ between the columns
     restored   0 module(s) differ between the columns
 
+## The native half is three symbols, and one of them is under eleven modules
+
+The goal names this as the first tranche needing no compiler: "roughly 125 of 309
+declared bindings have no C anywhere -- dgram 21 of 21, net 28 of 30, fs 60 of
+133". Re-derived with `nm` against the objects from a 09:28 pin, as that
+instruction requires:
+
+    352 declared binding(s), 3 with no C anywhere, across 18 module(s)
+
+dgram, net and fs are all **zero**. The whole tranche is three symbols, all in
+`internal`:
+
+    nts_next_tick                internal/tick.ts:21, called at :56
+    nts_promise_hook_install     internal/async-hooks.ts:42, called at :635
+    nts_promise_hook_uninstall   internal/async-hooks.ts:50, called at :646
+
+**`nts_next_tick` is under eleven of the twenty-two modules.** `dgram`,
+`diagnostics_channel`, `events`, `fs`, `http`, `net`, `process`, `readline`,
+`stream`, `util` and `zlib` all import `nextTick`.
+
+They build today, which is the trap this instrument's header describes: a missing
+binding is "a link failure waiting for the lowering to arrive, not one happening
+now -- a module only fails to link once something calls it". Every one of those
+eleven currently has the calling function refused for some other reason, so the
+symbol is never emitted and the link never asks for it. Each refusal cleared
+brings one of them closer to a link error that no diagnostic in this directory
+predicts.
+
+`runtime/c` is MainClaude's, so the three functions are theirs to write. What is
+recorded here is that the tranche is bounded, that it is three rather than 125,
+and which modules it stands under.
+
+**A trap re-entered while checking it.** The instrument reports 3 C files that did
+not compile in its run and says plainly that this is "a fact about this run, not
+about the bindings". Checking them with a bare `clang -I runtime/c/include` gave
+three `fatal error: 'fs.h' file not found`-style failures -- which is this tree's
+own recorded mistake, that node modules build through `build.sh` and bare clang on
+their sources counts errors nobody builds. Those three are test C files and are
+not the finding; the three symbols above are.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
