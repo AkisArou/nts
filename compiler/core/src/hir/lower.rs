@@ -18073,7 +18073,29 @@ impl<'a> FuncBuilder<'a> {
                 else {
                     continue;
                 };
-                let value = self.lower_expression(initializer)?;
+                // **`this` is the object being constructed.**
+                //
+                // A field initializer is lowered here, at the allocation site,
+                // rather than in a constructor -- so `self.this` holds whatever
+                // receiver the *enclosing* function had, which for `new
+                // Readable()` written in a free function is nothing at all. An
+                // initializer that captures `this` was therefore refused with
+                // "`this` outside a method", a sentence about the source that is
+                // false: the initializer is inside a class body and its `this`
+                // is the instance, which is `object`, which is in hand.
+                //
+                // Saved and restored rather than set, because a `new` can be
+                // written inside a method and the receiver has to come back.
+                //
+                // This is what stood behind the per-instance method idiom --
+                // `this._read = options.read`, the extension mechanism of all
+                // four stream classes -- because the field that idiom needs
+                // holds an arrow, and an arrow in a class body captures `this`
+                // almost always.
+                let outer = self.this.replace(object);
+                let value = self.lower_expression(initializer);
+                self.this = outer;
+                let value = value?;
                 let want = layout.fields[field as usize].ty.clone();
                 let value = self.coerce(value, &want, initializer)?;
                 let origin = self.origin(initializer);

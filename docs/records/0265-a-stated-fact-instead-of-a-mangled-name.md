@@ -73,6 +73,27 @@ and `same_slot` and `base_first_positions` both go through it.
 Consulting more facts looked like more precision and was a wrong answer. The
 narrower rule is the true one.
 
+## The fact is per type and the slot is per layout
+
+The JVM lane took its half the same day, and found the corollary from the other
+direction: `declared_by` names a **type**, and a `Layout` is a merge of
+structurally identical types, so the type it names is often not the class that
+lane emits. Comparing ids would have produced the same `BrokenBase` from the
+opposite side. It resolves through `program.layout` instead, which gives the
+class actually emitted -- the name a `Fieldref` needs.
+
+So both halves of this record are one rule seen twice: the fact is per type, the
+slot is per layout, and every consumer has to decide which of the two its own
+question is about. C asks about the slot, the JVM asks about the class, and
+`same_slot` asks about the member.
+
+That lane also measured field hiding on the JVM *before* asking for a
+representation change here rather than after, and checked the phantom slot by
+reading class files rather than by running programs -- including `PublicDerived`,
+which declares nothing. That is the better control: an extra slot appearing shows
+the outcome, but a public redeclaration *not* splitting shows the rule is
+declaration and not name shape.
+
 ## What it cost and what it did not
 
 Fourteen construction sites took the new field mechanically, seven more in test

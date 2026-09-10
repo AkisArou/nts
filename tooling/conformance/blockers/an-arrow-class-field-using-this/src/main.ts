@@ -1,8 +1,23 @@
-// expect: NTS1001 `this` outside a method
+// expect: lowers
+//
+// **Kept as a guard. Fixed 2026-09-10.**
 //
 // A class **field** holding an arrow function that reads `this`. Not a method,
-// so `this` is refused; not a plain field, so the refusal takes the whole class
+// so `this` was refused; not a plain field, so the refusal took the whole class
 // with it.
+//
+// # The message was about the source and was false
+//
+// A field initializer is inside a class body and its `this` is the instance.
+// What made the compiler say otherwise is that **an initializer is lowered at
+// the allocation site**, not in a constructor -- so `initialize_fields` runs
+// inside whatever function wrote `new F()`, and for a free function that is a
+// builder with no receiver at all. The capture asked `self.this` and got
+// nothing.
+//
+// The receiver it wanted is the object being allocated, which that function
+// already holds as a value. `initialize_fields` sets `self.this` to it and
+// restores the outer one after, because a `new` can be written inside a method.
 //
 // # The controls place it as the pair, not either half
 //
@@ -16,12 +31,13 @@
 // `a declaration outside every walk`, which says nothing about which construct
 // was at fault. A control sharing a class with the reduction is not a control.
 //
-// # The message is one and the causes are three
+// # The message was one and the causes are three
 //
 // `blockers/this-in-a-default-parameter` and `blockers/this-in-a-static-method`
-// both expect this exact text for different constructs. Three shapes, one
-// diagnostic -- so a census that groups by message text reports one item here
-// and there are three.
+// both expected this exact text for different constructs. Three shapes, one
+// diagnostic -- so a census that groups by message text reported one item here
+// and there were three, and fixing this one leaves the other two saying the same
+// words. That is why the count of the text did not fall to zero.
 //
 // # Where it bites, and why the module cannot route around it
 //
@@ -41,6 +57,24 @@
 // off the instance where node's own tests can see it, and `const { log } =
 // console` would lose its receiver. The arrow field is the faithful shape, so
 // this is a refusal to carry rather than a construct to avoid.
+//
+// # What it turned out to be standing in front of
+//
+// The same slot -- a field of function type, holding a closure, replaceable
+// after construction -- is node's per-instance override idiom:
+//
+//     if (typeof options.read === "function") this._read = options.read;
+//
+// the extension mechanism of `Readable`, `Writable`, `Duplex` and `Transform`,
+// and **129 failing test files**. `blockers/a-method-assigned-per-instance` is
+// the remaining half of that: giving a member written in *method syntax* such a
+// slot. This was the half underneath, and it was invisible from there, because
+// the refusal that idiom reports is about a function type having no
+// representation as a field -- and a field of function type works perfectly.
+// The reported cause was not the cause.
+//
+// `examples/this-in-a-field-initializer` is what asks node: 145 cases, agreeing,
+// including a subclass whose own initializer replaces the base's slot.
 
 class FieldArrowUsesThis {
   private total = 7;
