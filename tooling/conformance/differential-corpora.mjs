@@ -81,7 +81,10 @@ export const REJECTED = [null, undefined, 1, true, {}, [], 1.5, -0];
 export const rejected = (s) => REJECTED[String(s).length % REJECTED.length];
 
 /**
- * The same, for an argument that may be a **file descriptor**.
+ * The same, restricted to values that are not numbers.
+ *
+ * For an argument that may be a **file descriptor**, and for anything else where
+ * a number is a legitimate value rather than a rejected one.
  *
  * `fs.readFileSync` takes a path *or* an fd, so the numbers in `REJECTED` are not
  * rejected there at all -- they are descriptors. `readFileSync(1)` answers
@@ -114,7 +117,7 @@ export const REJECTED_NON_NUMERIC = [null, undefined, true, {}, []];
 // next unknown one. Removing it to make a number green would be the other
 // mistake; the difference is in the ledger and can be argued with there.
 
-export const rejectedPath = (s) =>
+export const rejectedNonNumeric = (s) =>
   REJECTED_NON_NUMERIC[String(s).length % REJECTED_NON_NUMERIC.length];
 
 export const CORPORA = {
@@ -476,8 +479,8 @@ export const CORPORA = {
       };
       return [
         // Error paths. See `REJECTED` above.
-        { label: "readFileSync!", throws: true, call: (m, s) => m.readFileSync(rejectedPath(s)) },
-        { label: "openSync!", throws: true, call: (m, s) => m.openSync(rejectedPath(s)) },
+        { label: "readFileSync!", throws: true, call: (m, s) => m.readFileSync(rejectedNonNumeric(s)) },
+        { label: "openSync!", throws: true, call: (m, s) => m.openSync(rejectedNonNumeric(s)) },
         { label: "existsSync", call: (m, s) => attempt(() => m.existsSync(BASE + s)) },
         {
           label: "statSync kind",
@@ -647,6 +650,13 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      // Error paths. See `REJECTED` above.
+      { label: "setMaxListeners!", throws: true, call: (m, s) => m.setMaxListeners(-(String(s).length + 1)) },
+      // `rejectedNonNumeric`: `setMaxListeners(1)` is a perfectly good call, so the
+      // general table made this succeed and the harness compared the two returned
+      // emitters instead -- 1,547 divergences that were nothing to do with errors.
+      // They were a real finding, but not this spec's.
+      { label: "ee.setMaxListeners!", throws: true, call: (m, s) => new m.EventEmitter().setMaxListeners(rejectedNonNumeric(s)) },
       {
         label: "emitter-program",
         call: (m, program) => {
@@ -835,6 +845,16 @@ export const CORPORA = {
           for (let i = 0; i < bytes.length; i++) out += d.write(bytes.subarray(i, i + 1));
           return out + d.end();
         },
+      },
+    ]).concat([
+      // Error path. An unknown encoding is the one thing
+      // `StringDecoder`'s constructor rejects, and `throws: true` holds this
+      // spec to the mirror of the harness's typo guard: node must throw a
+      // *coded* error, which an undefined-property typo does not.
+      {
+        label: "StringDecoder!",
+        throws: true,
+        call: (m, s) => new m.StringDecoder(`no-such-encoding-${String(s).length}`),
       },
     ]),
   },
@@ -1208,6 +1228,8 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      // Error paths. See `REJECTED` above.
+      { label: "validateHeaderName!", throws: true, call: (m, s) => m.validateHeaderName(`bad header ${String(s).length}`) },
       {
         label: "validateHeaderName",
         call: (m, s) => {
@@ -1283,6 +1305,16 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      // Error paths. See `REJECTED` above.
+      // A string `fd`, which node rejects by type. Not `rejectedNonNumeric`: that
+      // table holds `undefined`, and `{ fd: undefined }` means *no* fd, so the
+      // constructor succeeds and the harness compares two sockets instead. A
+      // value that is invalid for this parameter is not the same as one that is
+      // invalid generally -- the third time that distinction has cost a spec.
+      //
+      // This spec found that ours did not validate the descriptor at all and
+      // answered `EPERM` from the adopt call.
+      { label: "Socket!", throws: true, call: (m, s) => new m.Socket({ fd: `x${String(s).length}` }) },
       { name: "isIP", args: (s) => [s] },
       { name: "isIPv4", args: (s) => [s] },
       { name: "isIPv6", args: (s) => [s] },
@@ -1349,6 +1381,8 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      // Error paths. See `REJECTED` above.
+      { label: "pipeline!", throws: true, call: (m, s) => m.pipeline(rejected(s)) },
       {
         // The five pure predicates, which were uncompared -- the corpus reached
         // 2 of `stream`'s 22 functions. Each takes a value and answers a

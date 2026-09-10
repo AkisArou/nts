@@ -656,8 +656,19 @@ export class Socket extends Duplex {
       // has a handle, and so does everything below.
       let handle = options.handle;
       if (handle === undefined) {
+        // Node validates the descriptor before it reaches a syscall, and the
+        // difference was visible: `new Socket({ fd: "x" })` answered
+        // `ERR_INVALID_ARG_TYPE` there and `Error: EPERM` here, because the value
+        // went straight to `nts_net_adopt_fd` and failed as a permissions error
+        // on whatever it coerced to. An invalid argument reported as a system
+        // error is the wrong kind of failure, and it names the wrong cause.
+        //
+        // `validateInteger` with node's own bounds gives node's three messages:
+        // "must be of type number" for a non-number, "must be an integer" for
+        // 1.5, and ">= 0 && <= 2147483647" for -1.
+        validateInteger(options.fd, "fd", 0, 2147483647);
         const adopted = nts_net_adopt_fd(
-          options.fd ?? -1,
+          options.fd,
           options.readable ?? true,
           options.writable ?? true,
         );
