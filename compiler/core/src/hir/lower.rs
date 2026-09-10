@@ -8136,6 +8136,50 @@ impl<'a> FuncBuilder<'a> {
     /// literal in brackets, and it means something else entirely -- so this
     /// asks the checker what the receiver is rather than what the brackets
     /// contain.
+    /// The member an index names, when its *type* is a single literal.
+    ///
+    /// `None` unless this access is an element access and the index's type is a
+    /// string or numeric literal -- everything else keeps `literal_name`'s
+    /// answer, which is the node's text and is right for every position where
+    /// the source writes the name.
+    fn indexed_member_name(&self, id: NodeId, index: NodeId) -> Option<String> {
+        if self.kind_of(id) != Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let ty = self.snapshot.node_types.get(&index)?;
+        let record = self.snapshot.types.get(ty.0 as usize)?;
+        match &record.kind {
+            TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+            TypeKind::Literal(LiteralValue::Number(value)) => Some(format!("{value}")),
+            _ => None,
+        }
+    }
+
+    /// Whether an index expression denotes exactly one member name.
+    ///
+    /// A literal does -- the checker types `"a"` as `Literal(String("a"))` and
+    /// `0` as `Literal(Number(0))`, one value each. A `unique symbol` does, and
+    /// that is what it is *for*: `TypeFlagsUniqueESSymbol` is the checker saying
+    /// this is one name distinguishable from every other.
+    ///
+    /// An ordinary `number` or `string` does not. It is a computed index, and
+    /// the fact that its *spelling* could be read as a name is a coincidence of
+    /// how identifiers are stored rather than anything about the program.
+    fn names_one_member(&self, index: NodeId) -> bool {
+        const UNIQUE_SYMBOL: u32 = 1 << 14;
+        let Some(ty) = self.snapshot.node_types.get(&index) else {
+            return false;
+        };
+        let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
+            return false;
+        };
+        match &record.kind {
+            TypeKind::Literal(_) => true,
+            TypeKind::Structured { flags } => flags & UNIQUE_SYMBOL != 0,
+            _ => false,
+        }
+    }
+
     fn names_a_property(&self, id: NodeId) -> bool {
         match self.kind_of(id) {
             // A module's member is not one: there is no receiver, so a call
@@ -8146,12 +8190,32 @@ impl<'a> FuncBuilder<'a> {
                 [object, _] => !self.denotes_a_module(*object),
                 _ => true,
             },
+            // **The index's *type*, not its text.**
+            //
+            // `literal_name` answers for any node carrying text, and an
+            // identifier carries its own spelling -- so `source[i]` with an
+            // ordinary `let i` was read as `source.i` and refused with
+            // "`i`, which `UnknownArrayLike` does not declare". A sentence about
+            // a variable, said of a type, at a computed index.
+            //
+            // What actually names a property is an index the checker has given
+            // a *single* value: a string or numeric literal, or a
+            // `unique symbol`, whose whole purpose is to be one member name.
+            // `[kRefed]` is the shape `examples/symbol-keys` is built on and it
+            // has to keep resolving at compile time; `buf[i]` must not.
+            //
+            // What it cost: `fromArrayLike`'s loop is `source[i]`, so
+            // `Buffer.from` refused, and under it `Buffer.alloc`, `Buffer#fill`,
+            // `indexOf`, `lastIndexOf`, `includes`, `transcode`, and
+            // `StringDecoder`'s constructor -- the whole of `string_decoder`,
+            // which has no own-source refusal of its own.
             Some(syntax::ELEMENT_ACCESS_EXPRESSION) => match self.children(id).as_slice() {
                 [object, index] => {
                     matches!(
                         self.type_of(*object),
                         Some(HirType::Managed(ManagedType::Object(_)))
-                    ) && self.literal_name(*index).is_some()
+                    ) && self.names_one_member(*index)
+                        && self.literal_name(*index).is_some()
                 }
                 _ => false,
             },
@@ -18644,7 +18708,20 @@ impl<'a> FuncBuilder<'a> {
                 // missing stores. Escaping the name -- which is right, and
                 // which `http`'s `{ 100: "Continue" }` needs -- removed the
                 // mask and the defect underneath was two `continue`s.
-                let Some(text) = self.literal_name(name) else {
+                // **The third spelling of one member name.** A quoted name and
+                // a numeric one carry no `text` and are resolved by
+                // `literal_name`; a *computed* one -- `[kTag] = 7` -- is not a
+                // literal at all, and the layout holds it under the generated
+                // `__@kTag@2` that `symbol_member_name` produces.
+                //
+                // Each of the three was skipped here by a `continue`, and each
+                // skip is a field that keeps its zero while every read of it
+                // answers. `class Keyed { [kTag] = 7 }` answered **0** where
+                // node answers 7, with nothing refused and nothing emitted --
+                // found by an example written for something else entirely.
+                let Some(text) = self.literal_name(name).or_else(|| {
+                    self.symbol_member_name(declaration, member, Some(class))
+                }) else {
                     continue;
                 };
                 // **By declaring class, not by name.** A field initializer runs
@@ -20258,8 +20335,34 @@ impl<'a> FuncBuilder<'a> {
         if self.denotes_a_module(*object) {
             return self.lower_identifier(*member);
         }
+        // **In an index position, the name is the type's value, not the node's
+        // text.**
+        //
+        //     const key: "highWaterMark" = "highWaterMark";
+        //     options[key]
+        //
+        // `literal_name` answers for any node carrying text, and an identifier
+        // carries its own -- so this looked for a member called `key` and said
+        // "`key`, which `Options` does not declare", of a type that declares
+        // nothing of the sort. The checker has already given `key` the type
+        // `Literal(String("highWaterMark"))`, which is one name and the right
+        // one.
+        //
+        // Only in an index position. A *shorthand* property `{ a }` is an
+        // identifier whose text **is** the name while its type is whatever `a`
+        // holds -- `const a: "x" = "x"; ({ a })` is a property called `a`, not
+        // one called `x` -- so consulting the type there would be the same
+        // mistake pointing the other way.
+        //
+        // `blockers/a-key-held-in-a-variable` is the fixture, and its second
+        // control is this: a *single* literal type held in a variable, which
+        // refused where the literal written in source compiled. Under it sit
+        // `getHighWaterMark`, `ReadableState`, `Readable` and `Writable` -- 249
+        // failing test files in `stream`, 59 of them stopping at
+        // `Readable is not a constructor`.
         let member_name = self
-            .literal_name(*member)
+            .indexed_member_name(id, *member)
+            .or_else(|| self.literal_name(*member))
             .ok_or_else(|| self.unsupported(id, "a computed property name"))?;
 
         // The constants `Math` and `Number` hold, taken before the object is
