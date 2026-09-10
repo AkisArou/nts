@@ -78,6 +78,7 @@ meets them. This is the map; the row table below it is the current state.
   - WITHDRAWN: `json-serialize` should not have a `ref.java` either, and its own header said so
   - The bar's second number, read at last: eight rows lose to node and six of them are the platform
   - The partition, re-measured at a fresh pin: same eight rows, same six and two
+  - The published table against a fresh sweep: one of fifty-one rows is stale, and it is `array-from`
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3072,6 +3073,39 @@ problem for a reference.
 So the count is **nine of nine argued and none open**, not eight and one. The
 useful part of the exercise was the pricing: the measurement that would have
 justified writing the file is the one that says not to.
+
+### The published table against a fresh sweep: one of fifty-one rows is stale, and it is `array-from`
+
+`README.md`'s table is what anyone outside these two files reads, and nothing
+checks it against the tree. MainClaude found `awfy-towers (rc)` recorded at
+**7.82x** C++ and measured it at **1.58x** -- a 5x error that had been sitting
+in the published file for weeks because nobody re-ran the table after whatever
+moved it.
+
+So I diffed my own 51 rows the same way, against the pinned-at-HEAD sweep:
+
+    row                README      fresh   jvm drift
+    array-from          2.09x      0.95x       0.50x   STALE
+    objects             1.00x      1.02x       1.39x   contaminated, not stale
+    the other 49                               ~1.05x
+
+**One row is stale and it is `array-from`** -- 2.09x against 0.95x, because the
+cursor pass landed after the table was written. The other 49 sit inside 5%,
+which is the run-to-run band this file has now measured twice.
+
+`objects` is the trap in the list rather than a finding. Its jvm *time* drifts
+1.39x, and it was measured while another session's compiler was running; this
+file already records it as bimodal across sittings at 1.11x and 1.39x. A row
+that varies should say so rather than be re-stamped from whichever sitting is
+newest -- correcting it from a contaminated run would be the same error as
+leaving `array-from` at 2.09x, in the other direction.
+
+**The check is a diff and it had never been run.** Two files assert numbers
+about this lane -- this one and the table -- and only one of them is maintained
+by anyone reading it. `array-from` is the third time that row has taught the
+same lesson today: 0.96x over thirteen runs, 2.12x from a pin 480 commits old,
+2.09x in the published table. The number was right and three different
+artefacts disagreed about it.
 
 ## Open, and whose
 
