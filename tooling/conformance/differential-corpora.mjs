@@ -1462,6 +1462,55 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **`URLSearchParams.delete` and `has` with a second argument**, which
+        // node added and which has one case nothing here covered: an explicit
+        // `undefined` is treated as *no value given*, so `delete(name, undefined)`
+        // behaves as the one-argument form and removes every entry for the name.
+        // A reimplementation that coerces the second argument to the string
+        // `"undefined"` removes nothing, and every other row in this corpus keeps
+        // agreeing.
+        //
+        // It came out of a compiler-lane refusal: an explicit `undefined` in a
+        // `string` position has no representation, and `delete(name, undefined)`
+        // is the call that would hit it. No `runtime/node` caller passes it -- the
+        // callers that would are JavaScript, arriving through the napi wrapper --
+        // so the behaviour was never going to be exercised from inside this
+        // profile, and a differential is the only thing that would notice it
+        // changing.
+        label: "searchparams-two-arg",
+        call: (m, s) => {
+          const show = (f) => {
+            try {
+              return String(f());
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const build = () => new m.URLSearchParams(`a=1&a=${s}&b=${s}&a=undefined`);
+          return [
+            show(() => { const p = build(); p.delete("a"); return p.toString(); }),
+            show(() => { const p = build(); p.delete("a", undefined); return p.toString(); }),
+            show(() => { const p = build(); p.delete("a", s); return p.toString(); }),
+            show(() => { const p = build(); p.delete("a", "undefined"); return p.toString(); }),
+            show(() => { const p = build(); p.delete(s, s); return p.toString(); }),
+            show(() => build().has("a")),
+            show(() => build().has("a", undefined)),
+            show(() => build().has("a", s)),
+            show(() => build().has("a", "undefined")),
+            // A value that is definitely not present, because the rows above are
+            // weak on this argument: for most inputs `has("a", s)` and `has("a")`
+            // agree, and a control that made `has` ignore its second argument was
+            // noticed on **1 of 24** inputs. This one separates them on every
+            // input, which is what the row was for.
+            show(() => build().has("a", "\u0000absent")),
+            show(() => build().has("b", "\u0000absent")),
+            show(() => build().getAll("a").join(",")),
+            show(() => { const p = build(); p.set("a", s); return p.toString(); }),
+            show(() => { const p = build(); p.append("a", s); return p.toString(); }),
+          ].join("|");
+        },
+      },
+      {
         // **`URL`'s own methods and the newer statics**, which the corpus never
         // reached: `toString`, `toJSON`, `URL.parse`, `URL.canParse`,
         // `resolveObject`, and `URLSearchParams`' `forEach` and `values`.
