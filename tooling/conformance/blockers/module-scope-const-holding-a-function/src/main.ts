@@ -31,15 +31,34 @@
 // function object a test sees — `assert.deepEqual === assert.strict.deepEqual`
 // is false in node and true if both forward to one declaration.
 //
-// The probe that found it also widens the refusal beyond a property read:
+// **Correction, same night, an hour after the paragraph above was written.**
+// It first said "any `export const` holding a function fails to publish", and
+// that is false. `punycode` publishes **six `export const` and zero
+// `export function`** and is the one whole module on the compiled axis — the
+// strongest possible counterexample, and it was two lines away in the same
+// survey that produced the claim.
 //
-//     export const twice = bag.twice;              REFUSED
-//     export const twiceLiteral = (n) => n * 2;    REFUSED
-//     export function twiceDirect(n) { … }         crosses
+//     punycode   import * as codec from "./codec.ts"
+//                export const decode = codec.decode        publishes
+//     assert     const looseAssertions = new Assert(…)
+//                export const fail = looseAssertions.fail   REFUSED
 //
-// **Any `export const` holding a function fails to publish**, whether it is
-// bound to a property read or to an arrow literal. Only a function declaration
-// crosses.
+// The two are the same syntax. What differs is what the function is read *off*:
+//
+//     export const viaNamespace = helper.twice;   // module namespace  publishes
+//     export const viaInstance  = inst.thrice;    // class instance    REFUSED
+//     export const viaLiteral   = bag.quad;       // object literal    REFUSED
+//
+// A namespace member resolves to the function itself. A property read of a
+// *value* yields a method or closure carrying a receiver, and that is what has
+// no name the backend can give it. So the refusal is about the **source of the
+// binding**, not the `const`, and `assert`'s eighteen are all the instance
+// form because `looseAssertions` is `new Assert({ strict: false })`.
+//
+// The wrong claim was committed before `punycode` was checked. The survey that
+// would have refuted it — `export const` counts per module — was run *after*,
+// which is the wrong order and is the whole lesson: a rule about a construct
+// should be tested against the module that most obviously uses it and works.
 //
 // `declared` is the control: the same body, the same call, a function
 // *declaration* instead of a value bound to a name.
