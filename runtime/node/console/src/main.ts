@@ -104,10 +104,13 @@ export class Console {
 
   constructor(options: ConsoleConstructorOptions);
   constructor(stdout: WritableLike, stderr?: WritableLike, ignoreErrors?: boolean);
+  // A rest tuple rather than two optional parameters, so that `Console.length`
+  // is node's 1 and not 3. Node declares `function Console(options)` and reads
+  // the older three-argument form out of `arguments`, which is a non-goal here;
+  // a rest parameter reports the same arity without one.
   constructor(
     options: ConsoleConstructorOptions | WritableLike | null | undefined,
-    maybeStderr?: WritableLike,
-    maybeIgnoreErrors?: boolean,
+    ...legacy: [stderr?: WritableLike, ignoreErrors?: boolean]
   ) {
     // `new Console(out, err)` predates the options object and is still the
     // spelling most code uses. A stream is told apart from an options bag by
@@ -116,8 +119,8 @@ export class Console {
     if (isWritableLike(options)) {
       opts = {
         stdout: options,
-        stderr: maybeStderr,
-        ignoreErrors: maybeIgnoreErrors,
+        stderr: legacy[0],
+        ignoreErrors: legacy[1],
       };
     } else {
       if (options === null || options === undefined) {
