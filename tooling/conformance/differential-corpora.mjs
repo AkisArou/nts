@@ -60,6 +60,26 @@ function unicodeWord(rnd, maxLength = 12) {
 // name process-wide. Deterministic: both lanes walk the same inputs in order.
 let dcInvocation = 0;
 
+/**
+ * Values a validating function rejects, for the error-path calls below.
+ *
+ * The corpora generate inputs a function **accepts**, which is what they were
+ * for -- and it left the error paths entirely uncompared. Over 400 generated
+ * inputs plus the fixed ones, nineteen of twenty-one corpora threw **zero**
+ * times; `buffer`'s 811 throws were all `atob`, and `punycode`'s 424 carried no
+ * `code` at all. `assert.throws(fn, { code })` is how node's own suite states
+ * nearly every error expectation, so the shape node's tests lean on hardest was
+ * the shape these harnesses never saw.
+ *
+ * Indexed by something derived from the input rather than fixed, so a module's
+ * error calls are a spread of rejected values and not one case repeated four
+ * thousand times.
+ */
+export const REJECTED = [null, undefined, 1, true, {}, [], 1.5, -0];
+
+/** A rejected value that varies with `s`, deterministically. */
+export const rejected = (s) => REJECTED[String(s).length % REJECTED.length];
+
 export const CORPORA = {
   // `os` is almost entirely C bindings, and until now nothing compared any of
   // them to node. The interpreted lane cannot: its stand-ins call node's own
@@ -304,6 +324,15 @@ export const CORPORA = {
     // the default namespace left half of `node:path` uncompared -- on the host
     // this runs on, the default *is* posix.
     calls: [
+      // Error paths: the same functions handed a value they must reject. Both
+      // sides have to throw, and to throw the *same* error with the same
+      // `code` -- which is the half `name: message` alone could not check.
+      ...["posix", "win32"].flatMap((ns) => [
+        { label: `${ns}.normalize!`, throws: true, call: (m, s) => m[ns].normalize(rejected(s)) },
+        { label: `${ns}.basename!`, throws: true, call: (m, s) => m[ns].basename(rejected(s)) },
+        { label: `${ns}.resolve!`, throws: true, call: (m, s) => m[ns].resolve(rejected(s)) },
+        { label: `${ns}.join!`, throws: true, call: (m, s) => m[ns].join(s, rejected(s)) },
+      ]),
       ...["posix", "win32"].flatMap((ns) => [
         { label: `${ns}.normalize`, call: (m, s) => m[ns].normalize(s) },
         { label: `${ns}.dirname`, call: (m, s) => m[ns].dirname(s) },
@@ -650,6 +679,13 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      // Error paths. See `REJECTED` above: the generated inputs are ones these
+      // functions accept, so nothing here reached a validation branch until
+      // these were added, and the `code` node's own suite asserts on was never
+      // compared. `throws: true` tells the harness node is expected to reject,
+      // and it holds those specs to the mirror of its typo guard -- node must
+      // throw a *coded* error, which an undefined-property typo does not.
+      { label: "promisify!", throws: true, call: (m, s) => m.promisify(rejected(s)) },
       { label: "format(t)", call: (m, t) => m.format(t) },
       { label: "format(t,'x')", call: (m, t) => m.format(t, "x") },
       { label: "format(t,42)", call: (m, t) => m.format(t, 42) },
@@ -681,6 +717,15 @@ export const CORPORA = {
     ],
     input: (rnd) => unicodeWord(rnd, 40),
     calls: [
+      // Error paths. See `REJECTED` above: the generated inputs are ones these
+      // functions accept, so nothing here reached a validation branch until
+      // these were added, and the `code` node's own suite asserts on was never
+      // compared. `throws: true` tells the harness node is expected to reject,
+      // and it holds those specs to the mirror of its typo guard -- node must
+      // throw a *coded* error, which an undefined-property typo does not.
+      { label: "gzipSync!", throws: true, call: (m, s) => m.gzipSync(rejected(s)) },
+      { label: "deflateSync!", throws: true, call: (m, s) => m.deflateSync(rejected(s)) },
+      { label: "brotliCompressSync!", throws: true, call: (m, s) => m.brotliCompressSync(rejected(s)) },
       ...["gzip", "deflate", "deflateRaw", "brotliCompress"].map((kind) => ({
         label: `${kind}Sync`,
         call: (m, s) => m[`${kind}Sync`](Buffer.from(s, "utf8")).toString("base64"),
@@ -772,6 +817,14 @@ export const CORPORA = {
         choose(rnd, PATH) + choose(rnd, TAIL);
     },
     calls: [
+      // Error paths. See `REJECTED` above: the generated inputs are ones these
+      // functions accept, so nothing here reached a validation branch until
+      // these were added, and the `code` node's own suite asserts on was never
+      // compared. `throws: true` tells the harness node is expected to reject,
+      // and it holds those specs to the mirror of its typo guard -- node must
+      // throw a *coded* error, which an undefined-property typo does not.
+      { label: "fileURLToPath!", throws: true, call: (m, s) => m.fileURLToPath(rejected(s)) },
+      { label: "pathToFileURL!", throws: true, call: (m, s) => m.pathToFileURL(rejected(s)) },
       {
         // `URLSearchParams` as a state machine, which is what it is: the same
         // key appended twice must keep both and in order, `set` must collapse
@@ -995,6 +1048,14 @@ export const CORPORA = {
       return `${CB[Math.floor(rnd() * CB.length)]}|${D[Math.floor(rnd() * D.length)]}${OP[Math.floor(rnd() * OP.length)]}`;
     },
     calls: [
+      // Error paths. See `REJECTED` above: the generated inputs are ones these
+      // functions accept, so nothing here reached a validation branch until
+      // these were added, and the `code` node's own suite asserts on was never
+      // compared. `throws: true` tells the harness node is expected to reject,
+      // and it holds those specs to the mirror of its typo guard -- node must
+      // throw a *coded* error, which an undefined-property typo does not.
+      { label: "setTimeout!", throws: true, call: (m, s) => m.setTimeout(rejected(s)) },
+      { label: "setInterval!", throws: true, call: (m, s) => m.setInterval(rejected(s)) },
       {
         // `setInterval` and `setImmediate` have the same synchronous surface as
         // `setTimeout` and were not being compared at all -- the corpus reached

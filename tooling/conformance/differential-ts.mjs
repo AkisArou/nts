@@ -155,24 +155,40 @@ for (const name of modules) {
   // Node is the oracle, so the question is put to node: if it cannot answer a
   // spec for any fixed input, the spec is wrong rather than the implementation.
   {
+    // A spec may declare `throws: true`: node is *expected* to reject its input,
+    // and the comparison is of the error rather than of an answer. Those specs
+    // exist because the corpora generate inputs a function accepts, so nineteen
+    // of twenty-one never reached a validation branch at all.
+    //
+    // **They are held to the mirror of this rule, not exempted from it.** The
+    // guard above catches a typo because a spec naming nothing real throws; an
+    // error-path spec throws too, so "it threw" cannot separate them. What does:
+    // a typo throws `TypeError: Cannot read properties of undefined`, with **no
+    // `code`**, and a module's own validation throws one with a code. So an
+    // error-path spec must make node throw *a coded error* for at least one
+    // fixed input, and a spec that answers, or throws something uncoded, is
+    // broken in exactly the way the original guard was written to find.
     const broken = [];
+    const attempt = (spec, input) => {
+      try {
+        if (typeof spec.call === "function") return { value: spec.call(upstream, input) };
+        const fn = upstream[spec.name];
+        if (typeof fn !== "function") return { missing: true };
+        return { value: fn(...spec.args(input)) };
+      } catch (error) {
+        return { threw: true, code: error?.code };
+      }
+    };
     for (const spec of corpus.calls) {
       const label = spec.label ?? spec.name;
-      const answered = corpus.fixed.some((input) => {
-        try {
-          if (typeof spec.call === "function") {
-            spec.call(upstream, input);
-            return true;
-          }
-          const fn = upstream[spec.name];
-          if (typeof fn !== "function") return false;
-          fn(...spec.args(input));
-          return true;
-        } catch {
-          return false;
-        }
-      });
-      if (!answered) broken.push(label);
+      const ok = spec.throws === true
+        ? corpus.fixed.some((input) => {
+          const r = attempt(spec, input);
+          return r.threw === true && r.code !== undefined;
+        })
+        : corpus.fixed.some((input) => attempt(spec, input).value !== undefined ||
+          (!attempt(spec, input).threw && !attempt(spec, input).missing));
+      if (!ok) broken.push(spec.throws === true ? `${label} (declared throws:true)` : label);
     }
     if (broken.length > 0) {
       console.error(`${name}: node itself never answers ${broken.join(", ")};`);

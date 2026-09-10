@@ -19267,6 +19267,36 @@ function in one module. The corpora were written to generate *inputs a function
 accepts*, and an error path needs an input it rejects. That is a corpus gap rather
 than a harness gap, and it is the honest size of what "0 divergences" covers.
 
+### Closed for six modules
+
+A shared `REJECTED` table, and error-path specs in `path`, `zlib`, `url`,
+`timers` and `util` alongside `buffer`'s existing one. The rejected value varies
+with the input, so a module's error calls are a spread rather than one case
+repeated four thousand times.
+
+    coded throws   811  ->  7,698
+    modules        1    ->  6
+    comparisons    596k ->  660,342, still 0 divergence(s)
+
+`punycode` throws 424 times and carries no `code` on any of them, which is node's
+shape and not ours to change.
+
+**The harness's typo guard had to be extended rather than bypassed, and the
+distinction is the interesting part.** That guard rejects a spec node never
+answers, because `m.ucs3.decode(s)` -- a typo -- throws on both sides and reports
+agreement while testing nothing. An error-path spec also throws on both sides, so
+"it threw" cannot separate them. What can: **a typo throws `TypeError: Cannot read
+properties of undefined`, with no `code`; a module's own validation throws one with
+a code.** So `throws: true` specs are held to the mirror of the rule -- node must
+throw a *coded* error for at least one fixed input -- rather than exempted from it.
+
+Controlled twice. `atob`'s `InvalidCharacterError.code` 5 to 6, and
+`ERR_INVALID_ARG_TYPE`'s code at both of its sites: identical name, identical
+message, and the divergence reported. The second attempt at that control patched
+one site of two and silently changed nothing, which is why it is worth saying that
+a control that does not fire is either a working implementation or a control that
+did not run.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
