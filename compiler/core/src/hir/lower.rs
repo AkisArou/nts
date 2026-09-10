@@ -12908,6 +12908,88 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// `"k" in v` where the representation already says what `v` is.
+    ///
+    /// `"length" in xs` with `xs` a `number[]` was refused as **"an `in` on
+    /// something that is not an object"** -- a sentence about an array, which is
+    /// an object in every sense the language has. The union path asks which of a
+    /// type's *declared members* have the name; an array declares none, and
+    /// `TypeKind::Array` is not `TypeKind::Object`, so it fell through to the arm
+    /// written for primitives and borrowed their message. A refusal that told the
+    /// reader their program was wrong.
+    ///
+    /// The answer is a constant and [`Self::natives_declaring`] already holds it:
+    /// an array has a `length`, a `Map` has a `size`, a `Promise` has a `then`.
+    ///
+    /// **Only the `true` direction.** A name the table does not list is not
+    /// therefore absent -- `push`, `slice` and `forEach` are all `true` in
+    /// JavaScript and live on a prototype a compiled program does not have -- so
+    /// the other direction stays a refusal, and now says which of the two it is.
+    ///
+    /// `Ok(None)` where the representation says nothing, which is every ordinary
+    /// object and every union: the whole-program path answers those.
+    fn in_on_a_native(
+        &mut self,
+        id: NodeId,
+        rhs: NodeId,
+        key: &str,
+        ty: TypeId,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(native) = self.native_receiver(ty) else {
+            return Ok(None);
+        };
+        let origin = self.origin(id);
+        if Self::natives_declaring(key)
+            .iter()
+            .any(|listed| std::mem::discriminant(listed) == std::mem::discriminant(&native))
+        {
+            // The operand is still evaluated: `in` has no short circuit, and the
+            // left side of the `&&` chains these sit in has an effect often
+            // enough to matter.
+            self.lower_expression(rhs)?;
+            return Ok(Some(self.push(
+                OpKind::ConstBool(true),
+                HirType::Bool,
+                origin,
+            )));
+        }
+        Err(self.unsupported(
+            rhs,
+            &format!(
+                "an `in` naming `{key}` on a value this compiler represents natively, which \
+                 answers for its own methods through a prototype a compiled program does not have"
+            ),
+        ))
+    }
+
+    /// What a receiver **is**, where its representation says so outright.
+    ///
+    /// The mirror of [`Self::natives_declaring`]: that one asks which natively
+    /// represented things answer for a name, and this asks which one the value
+    /// in front of us already is. Where the two meet, `in` is a constant — an
+    /// array has a `length` and nothing has to be tested to find out.
+    ///
+    /// `String` is deliberately absent. `"length" in "abc"` **throws** in
+    /// JavaScript, because `in` requires an object and a string primitive is
+    /// not one, so the answer here is a refusal rather than `true`.
+    ///
+    /// `Date` is absent because nothing it answers for is in the table: every
+    /// `Date` member is on a prototype this compiler does not have.
+    fn native_receiver(&self, ty: TypeId) -> Option<Native> {
+        Some(match self.represent(ty)? {
+            HirType::Managed(ManagedType::Array(_)) => Native::Array,
+            HirType::Managed(ManagedType::View(_)) => Native::TypedArray,
+            // Either of the two, so only the names both answer for are
+            // constant -- which is exactly what `View` means in the table.
+            HirType::Managed(ManagedType::AnyView | ManagedType::DataView) => Native::View,
+            HirType::Managed(ManagedType::Map(_, _)) => Native::Map,
+            HirType::Managed(ManagedType::Set(_)) => Native::Set,
+            HirType::Managed(ManagedType::Promise(_)) => Native::Promise,
+            HirType::Managed(ManagedType::Buffer) => Native::ArrayBuffer,
+            _ => return None,
+        })
+    }
+
     /// One natively represented test, as the runtime already spells it.
     ///
     /// Every one of these is a predicate `instanceof` emits, on the same erased
@@ -13186,6 +13268,9 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Bool,
                 origin,
             ));
+        }
+        if let Some(answer) = self.in_on_a_native(id, rhs, &key, ty)? {
+            return Ok(answer);
         }
         let members = match &self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Union(members)) => members.clone(),
@@ -16046,6 +16131,23 @@ impl<'a> FuncBuilder<'a> {
         // where the author wrote them. The *field index* is what puts them in
         // layout order.
         for property in self.children(id) {
+            // `{ ...base, k: v }`. A field-by-field copy, emitted where the
+            // spread is written so that a property after it overwrites and a
+            // property before it is overwritten -- which is the whole of what
+            // the spelling means, and it falls out of source order rather than
+            // needing a rule.
+            //
+            // 25 sites in `runtime/node` and `runtime/web-platform`, 158
+            // functions across the module builds: `util/inspect.ts`,
+            // `stream/from.ts`, `util/format.ts`, `fs/src/options.ts`.
+            //
+            // Only from something with a layout. A spread of an erased value or
+            // of a table has no field list to walk, and guessing one would be a
+            // struct built from nothing.
+            if self.kind_of(property) == Some(syntax::SPREAD_ASSIGNMENT) {
+                self.spread_into(property, object, &layout, &origin)?;
+                continue;
+            }
             let (name, value) = self.property_parts(property)?;
             let Some(field) = layout.index_of(&name) else {
                 return Err(self.unsupported(property, "a property the type does not declare"));
@@ -16069,6 +16171,64 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::Erase { value: object }, HirType::Erased, origin));
         }
         Ok(object)
+    }
+
+    /// `...base` inside an object literal, as one store per field.
+    ///
+    /// The source's layout is what says which fields there are, and a field the
+    /// *target* does not declare is skipped rather than refused: the result's
+    /// type is what the checker gave the literal, so a field outside it cannot
+    /// be read back and copying it would need a slot that does not exist.
+    ///
+    /// Each field goes through `coerce`, like every other value meeting a slot,
+    /// because the two layouts may disagree about representation -- an optional
+    /// field is erased on one side and may be concrete on the other.
+    fn spread_into(
+        &mut self,
+        property: NodeId,
+        object: ValueId,
+        into: &Layout,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let [source] = self.children(property).as_slice().try_into().map_err(|_| {
+            self.unsupported(property, "a spread of unexpected shape in an object literal")
+        })?;
+        let value = self.lower_expression(source)?;
+        let HirType::Managed(ManagedType::Object(from)) = self.values[value.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(
+                source,
+                "a spread of a value with no fields to copy -- an object literal spread is a \
+                 field-by-field copy, and only a value with a layout has fields to walk",
+            ));
+        };
+        let from = self.layout_of(source, from)?;
+        for (at, field) in from.fields.iter().enumerate() {
+            let Some(target) = into.index_of(&field.name) else {
+                continue;
+            };
+            let Ok(at) = u32::try_from(at) else { continue };
+            let read = self.push(
+                OpKind::FieldGet {
+                    object: value,
+                    field: at,
+                },
+                field.ty.clone(),
+                origin.clone(),
+            );
+            let want = into.fields[target as usize].ty.clone();
+            let read = self.coerce(read, &want, property)?;
+            self.push(
+                OpKind::FieldSet {
+                    object,
+                    field: target,
+                    value: read,
+                },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(())
     }
 
     /// The name and value of one property in an object literal.

@@ -536,6 +536,72 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 # produces. Three sessions share this checkout and not all of them build into
 # `target/`: a hard-coded path means a step can measure a *different* session's
 # binary and report a floor for code that is not the code in front of you.
+# Every example that refuses something says so in `tooling/gate/example-refusals`.
+#
+# **`nts check` exits 0 when an exported function refuses.** It compiles what it
+# can, runs that, compares it with node, and reports agreement over the functions
+# that survived -- so `backend_examples` below counts such an example as `ok` and
+# the floor reads the same either way.
+#
+# That is not hypothetical. While `examples/in-on-a-native-receiver` was being
+# written, disabling the change under test refused seven of its nine functions
+# and `nts check` answered "checked 58 cases across 2 function(s), agreed on every
+# case", exit 0. The fixture could not fail at the thing it was written for, and
+# the floor could not see it. Three other instruments went the same way the same
+# night, each found by forcing the answer rather than by reading the fixture.
+#
+# `nts hir` rather than `nts check`: a refusal is a property of the lowering, and
+# this way the step needs no clang and no node and runs in the time the other
+# steps take to start.
+#
+# A count that has gone *down* prints a note and passes -- that is somebody's
+# progress and the file should be edited to match. A count that has gone up, or a
+# name absent from the file, fails: it is a fixture measuring less than it says.
+example_refusals() {
+  table="$root/tooling/gate/example-refusals"
+  results=$(mktemp)
+  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 sh -c '
+    d=$1
+    n=$(basename "$(dirname "$d")")
+    case "$n" in invalid|unsupported) exit 0 ;; esac
+    count=$(NTS_TSGO="${NTS_TSGO:-$PWD/target/tsgo}" "${NTS_BIN:-./target/release/nts}" hir "$d" 2>&1               | grep -c "NTS100[0-9]")
+    [ "$count" -gt 0 ] && printf "%s %s
+" "$n" "$count"
+    exit 0
+  ' _ > "$results"
+  bad=""
+  note=""
+  while read -r name count; do
+    [ -z "$name" ] && continue
+    want=$(awk -v n="$name" '$1 == n { print $2 }' "$table")
+    if [ -z "$want" ]; then
+      bad="$bad
+    $name refuses $count and is not in tooling/gate/example-refusals"
+    elif [ "$count" -gt "$want" ]; then
+      bad="$bad
+    $name refuses $count, up from $want"
+    elif [ "$count" -lt "$want" ]; then
+      note="$note
+    $name refuses $count, down from $want -- edit the table"
+    fi
+  done < "$results"
+  # And the other direction: a name in the table that refuses nothing any more.
+  while read -r name want _rest; do
+    case "$name" in ""|"#"*) continue ;; esac
+    grep -q "^$name " "$results" || note="$note
+    $name refuses nothing now, was $want -- remove it from the table"
+  done < "$table"
+  listed=$(grep -c . "$results")
+  rm -f "$results"
+  printf '  %s example(s) carry a refusal, all accounted for\n' "$listed"
+  [ -n "$note" ] && printf '  progress, and the table is stale:%s\n' "$note"
+  if [ -n "$bad" ]; then
+    printf '  a fixture is measuring less than it says:%s\n' "$bad"
+    return 1
+  fi
+  return 0
+}
+
 backend_examples() {
   floor=$1
   said=$2
@@ -619,7 +685,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 147 "through the LLVM backend, counting" ); }
+  backend_examples 149 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -630,7 +696,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 147 "through the LLVM backend" ); }
+  backend_examples 149 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -733,7 +799,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # backend has no name for it: `runtime/jvm` carries `isDataView` and
   # `isViewKind` and not the pair together, so it is a method and a row in
   # `external`, both in the JVM lane's files. Asked for; not written here.
-  backend_examples 146 "through the JVM backend" ); }
+  backend_examples 148 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
@@ -883,6 +949,7 @@ step "corpus"  corpus
 # there arrived through a twenty-five minute benchmark run instead of here. One
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
+step "example-refusals" example_refusals
 
 # Everything left, at once. `benches` is above because `bench-agree` runs the
 # cases it compiles; nothing else here depends on anything else here.

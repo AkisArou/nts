@@ -1,0 +1,44 @@
+# Examples that carry a refusal, and how many.
+#
+# `nts check` **exits 0 when an exported function refuses.** It compiles what it
+# can, runs that, compares it with node and reports agreement over the functions
+# that survived. So an example can lose most of its cases to a refusal and still
+# be counted by `backend_examples` as agreeing -- which is what happened while
+# `examples/in-on-a-native-receiver` was being written: with the change under
+# test disabled, seven of its nine functions refused, `nts check` said "checked
+# 58 cases across 2 function(s), agreed on every case", and exited 0.
+#
+# A fixture that cannot fail is worth nothing, and the floor above it says 147
+# either way. This file is what makes the difference visible: every example that
+# refuses anything is listed with its count and the reason, and the step fails on
+# an example that is not here or that refuses more than it says.
+#
+# A count that has gone *down* is progress and prints a note rather than failing;
+# edit the number when that happens. A count that has gone up, or a name that is
+# not here, is a fixture quietly measuring less than it says it does.
+#
+# Format: name<space>count<space>why. Blank lines and `#` are ignored.
+#
+# The count is `nts hir`'s, which is **not** `nts check`'s: `check` prints the
+# cascades below a refusal as well, so it says three for `calls` where the
+# lowering refuses one thing and two functions fall over behind it. Counting the
+# root is what makes the number stable when a cascade lengthens.
+
+# Deliberate: these exist to hold constructs that refuse, and the count is the
+# point rather than a debt.
+generic-classes-unsupported 8 the constructs the name promises
+generator-unsupported 4 the constructs the name promises
+dates-unsupported 6 the constructs the name promises
+async-unsupported 5 the constructs the name promises
+array-from-unsupported 2 the constructs the name promises
+mathops-unsupported 1 the constructs the name promises
+
+# Incidental: an example written for something else that happens to contain a
+# construct the compiler refuses. Each is a real gap and each is somebody's next
+# item; the number is what stops a second one arriving unnoticed.
+library 1 a parameter of intersection type
+module-evaluation 1 a regular expression literal
+calls 1 an erased value where a concrete representation is wanted
+jsx 2 a jsx self closing element
+object-literal-through-a-union 1 a void expression
+accessors 1 an assignment that reads through an accessor
