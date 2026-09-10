@@ -18729,19 +18729,50 @@ primitive conversion has nowhere to put either.
 disagree on two of three fields -- console non-writable and configurable, process
 writable and non-configurable -- so neither was inferred from the other.
 
+### `duplex instanceof Writable`, which was false here and is true on node
+
+The largest thing the symbol seam found. Node's `Duplex extends Readable`, not
+`Writable`, so an ordinary prototype walk says no, and node adds a
+`Symbol.hasInstance` to `Writable`:
+
+    if (FunctionPrototypeSymbolHasInstance(this, instance)) return true;
+    if (this !== Writable) return false;
+    return instance && instance._writableState instanceof WritableState;
+
+Behavioural, not cosmetic: any code asking whether a stream is writable before
+writing to it got the wrong answer for every `Duplex` and every `Transform`.
+
+**The obvious reading of that hook is wrong and it was measured before it was
+copied.** It looks like duck-typing and is not -- a plain object carrying
+`_writableState: {}` is not an instance on node, and neither is one with `write`,
+`end` and `on`. The state has to be a real `WritableState`. Copying only the first
+half would have made the case pass while turning `instanceof` into a shape test,
+so the test asserts all nine outcomes:
+
+    real Writable=true  Duplex=true  Transform=true  Readable=false
+    _writableState:{}=false  write/end/on duck=false  {}=false  null=false  42=false
+
+The predicate needs the class, which surfaced a second gap: node publishes
+`Writable.WritableState` and `Readable.ReadableState` as statics --
+`Object.keys(stream.Writable)` is `["WritableState", "fromWeb", "toWeb"]` -- and
+ours had neither. They are kept off the module object, where node does not have
+them either.
+
+The surface instruments did not report that absence and were right not to: they
+compare only paths present on both sides, because absence is `surface-diff.mjs`'s
+column. It arrived through the symbol seam instead, by way of a hook that needed
+the class.
+
 ### Left, with reasons
 
 `Buffer[Symbol.species]` is an accessor returning node's internal `FastBuffer`
 subclass, which is not a thing to reproduce. `Symbol.hasInstance` on
-`stream.Writable`, `console.Console` and `diagnostics_channel.Channel` is a
-duck-typing check whose semantics have not been measured; a duck with `write`,
-`on` and `end` is **not** an instance of node's `Writable`, so whatever it tests
-is narrower than shape.
+`console.Console` and `diagnostics_channel.Channel` is still unmeasured.
 
 ### The lane
 
-**1,869 passed, 0 failed across 22 modules**, from 1,859. The ten added are tests
-for defects these seams found, each controlled against the code it replaced.
+**1,870 passed, 0 failed across 22 modules**, from 1,859. The eleven added are
+tests for defects these seams found, each controlled against the code it replaced.
 
 One caveat that applies to every lane number in this tree, including this one:
 `test-util-inspect-long-running.js` fails about one run in seven, and it passed on
