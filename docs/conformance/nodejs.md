@@ -19274,9 +19274,14 @@ A shared `REJECTED` table, and error-path specs in `path`, `zlib`, `url`,
 with the input, so a module's error calls are a spread rather than one case
 repeated four thousand times.
 
-    coded throws   811  ->  7,698
-    modules        1    ->  6
-    comparisons    596k ->  660,342, still 0 divergence(s)
+    coded throws   811  ->  9,392
+    modules        1    ->  9
+    comparisons    596k ->  676,436, still 0 divergence(s)
+
+`assert`, `fs`, `console`, `dgram` and `diagnostics_channel` joined `path`, `zlib`,
+`url`, `timers` and `util`. Two of those needed a different insertion point --
+`fs` and `assert` build their `calls` in an IIFE rather than an array literal --
+which is worth knowing before editing this file with a pattern.
 
 `punycode` throws 424 times and carries no `code` on any of them, which is node's
 shape and not ours to change.
@@ -19339,6 +19344,36 @@ Node's suite asserts on messages as well as codes, so this is not cosmetic. It i
 also invisible to every count in this ledger that stops at "publishes" or "passes",
 and it was invisible to this harness until the corpora reached an error path at
 all.
+
+## Two hazards in a shared table of "rejected" values
+
+Both found by using one, and both are the same shape: **a value is invalid only
+with respect to a particular parameter**, so a shared table is a claim about every
+parameter it is used on.
+
+**`fs.readFileSync(-0)` reads standard input.** `readFileSync` takes a path *or* a
+file descriptor, so the numbers in the table are not rejected there at all --
+`readFileSync(1)` answers `EBADF` because stdout is not readable, and
+`readFileSync(-0)` reads descriptor 0 and **blocks**. The `fs` run did not fail;
+it hung, and a corpus that hangs the harness is worse than one that is narrow.
+Arguments that can be a descriptor get a non-numeric set now.
+
+**`fs.readFileSync(Symbol())` is a real divergence**, found the same way:
+
+    ours  TypeError: The "path" argument must be of type string or an instance
+          of Buffer or URL. Received type symbol      [ERR_INVALID_ARG_TYPE]
+    node  TypeError: Cannot convert a Symbol value to a number   [no code]
+
+Node, having decided the value is not a path, treats it as a descriptor and
+coerces it -- and the engine throws before node's own validation runs. Ours
+validates the path type first and produces the better message, which is not
+node's.
+
+It is out of the rotation and in this ledger instead, because it produced 590
+identical rows in every `fs` run and a harness whose output is 590 copies of a
+known difference buries the next unknown one. Removing it to make a number green
+would be the other mistake, which is why it is written down here where it can be
+argued with.
 
 ## Conventions
 

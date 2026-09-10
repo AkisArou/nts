@@ -80,6 +80,43 @@ export const REJECTED = [null, undefined, 1, true, {}, [], 1.5, -0];
 /** A rejected value that varies with `s`, deterministically. */
 export const rejected = (s) => REJECTED[String(s).length % REJECTED.length];
 
+/**
+ * The same, for an argument that may be a **file descriptor**.
+ *
+ * `fs.readFileSync` takes a path *or* an fd, so the numbers in `REJECTED` are not
+ * rejected there at all -- they are descriptors. `readFileSync(1)` answers
+ * `EBADF` because stdout is not readable, and `readFileSync(-0)` **reads
+ * descriptor 0** and blocks on stdin. That is not a slow corpus, it is a corpus
+ * that hangs the harness, and it did.
+ *
+ * So an argument that can be an fd gets the non-numeric values only. Recorded
+ * rather than quietly fixed because the shape recurs: a value is "invalid" only
+ * with respect to a particular parameter, and a shared table of rejected values
+ * is a claim about every parameter it is used on.
+ */
+export const REJECTED_NON_NUMERIC = [null, undefined, true, {}, []];
+
+// `Symbol("not a path")` was in that list and found a **real divergence**, which
+// is recorded rather than kept in the rotation:
+//
+//     fs.readFileSync(Symbol())
+//       ours  TypeError: The "path" argument must be of type string or an
+//             instance of Buffer or URL ...        [ERR_INVALID_ARG_TYPE]
+//       node  TypeError: Cannot convert a Symbol value to a number   [no code]
+//
+// `readFileSync` takes a path *or* a descriptor, so node, having decided the
+// value is not a path, treats it as a descriptor and coerces it -- and the engine
+// throws before node's own validation runs. Ours validates the path type first
+// and produces the better message, which is not node's.
+//
+// It is out of the rotation because it produced 590 identical rows in every `fs`
+// run, and a harness whose output is 590 copies of a known difference buries the
+// next unknown one. Removing it to make a number green would be the other
+// mistake; the difference is in the ledger and can be argued with there.
+
+export const rejectedPath = (s) =>
+  REJECTED_NON_NUMERIC[String(s).length % REJECTED_NON_NUMERIC.length];
+
 export const CORPORA = {
   // `os` is almost entirely C bindings, and until now nothing compared any of
   // them to node. The interpreted lane cannot: its stand-ins call node's own
@@ -438,6 +475,9 @@ export const CORPORA = {
         }
       };
       return [
+        // Error paths. See `REJECTED` above.
+        { label: "readFileSync!", throws: true, call: (m, s) => m.readFileSync(rejectedPath(s)) },
+        { label: "openSync!", throws: true, call: (m, s) => m.openSync(rejectedPath(s)) },
         { label: "existsSync", call: (m, s) => attempt(() => m.existsSync(BASE + s)) },
         {
           label: "statSync kind",
@@ -526,6 +566,9 @@ export const CORPORA = {
         }
       };
       return [
+        // Error paths. See `REJECTED` above.
+        { label: "strictEqual!", throws: true, call: (m, s) => m.strictEqual(s, rejected(s)) },
+        { label: "deepStrictEqual!", throws: true, call: (m, s) => m.deepStrictEqual({ a: s }, { a: rejected(s) }) },
         {
           label: "deepStrictEqual(a,b)",
           call: (m, p) => attempt(() => m.deepStrictEqual(build(p, false), build(p, true))),
