@@ -20582,6 +20582,7 @@ Three specs, on the gaps that are pure functions rather than I/O.
     util.types    0 of 42 predicates -> 35 compared, 8 excluded by name
     buffer        4 of 18 -> 16 of 18   (SlowBuffer and resolveObjectURL remain)
     events        3 of 17 ->  9 of 17   (the rest are `once`/`on`, asynchronous)
+    assert        4 of 19 -> 15 of 19   (the rest are the fuzzer's, or async)
 
 `buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
 `isEncoding`, `compare`, `concat`, `copyBytesFrom`, and the free `isUtf8`,
@@ -20590,6 +20591,21 @@ contents are whatever the allocator last left there, so comparing them would
 diverge on every input and say nothing. `concat` is given a `totalLength` that is
 wrong in both directions and absent, because truncating and zero-padding are the
 two behaviours a reimplementation gets backwards.
+
+`assert` went 4 of 19 to 15 of 19 with the assertions that are **not** deep
+comparisons: `ok`, `fail`, `equal`, `notEqual`, `match`, `doesNotMatch`,
+`ifError`, `partialDeepStrictEqual`, `throws` and `doesNotThrow`. The deep three
+are `fuzz-deep-equal.mjs`'s subject and are deliberately not repeated -- that file
+builds structures a string corpus cannot, and duplicating it would add comparisons
+without adding coverage. What remains unreached is that fuzzer's, asynchronous
+(`rejects`), or a namespace rather than a function (`strict`).
+
+Each is compared by **what it throws**, because a passing assertion returns
+`undefined` and says nothing: the error's `code` and the `operator` in it are the
+observable part, and the operator is what tells `equal` from `strictEqual` in a
+failure a program prints. The loose pair is given `"1"` against `1` and `""`
+against `0`, which is where `==` and `===` part company -- an implementation
+routing both through one comparison stops being distinguishable anywhere else.
 
 `events`' were `listenerCount`, `getEventListeners` and `getMaxListeners`, which
 answer *about* an emitter rather than driving one -- so the program specs never

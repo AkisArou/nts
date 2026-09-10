@@ -622,6 +622,63 @@ export const CORPORA = {
           label: "strictEqual(a,b)",
           call: (m, p) => attempt(() => m.strictEqual(build(p, false), build(p, true))),
         },
+        {
+          // **The assertions that are not deep comparisons.** `deepEqual`,
+          // `deepStrictEqual` and `isDeepStrictEqual` are `fuzz-deep-equal.mjs`'s
+          // subject and are deliberately not repeated here -- that file builds
+          // structures a string corpus cannot, and duplicating it would add
+          // comparisons without adding coverage.
+          //
+          // What nothing owned: `ok`, `fail`, `equal`, `notEqual`, `match`,
+          // `doesNotMatch`, `ifError` and `partialDeepStrictEqual`. Each is
+          // compared by **what it throws**, since a passing assertion returns
+          // `undefined` and says nothing -- the error's `code` and the operator in
+          // its message are the observable part, and the operator is what tells
+          // `equal` from `strictEqual` in a failure a program prints.
+          //
+          // The loose pair is given `"1"` against `1` and `""` against `0`, which
+          // is where `==` and `===` part company and where a reimplementation that
+          // routes both through one comparison stops being distinguishable.
+          label: "assertions",
+          call: (m, s) => {
+            const show = (f) => {
+              try {
+                f();
+                return "ok";
+              } catch (error) {
+                const code = (error && error.code) || (error && error.name) || "?";
+                const op = error && error.operator !== undefined ? String(error.operator) : "-";
+                return `${code}/${op}`;
+              }
+            };
+            const re = new RegExp(s.length % 2 === 0 ? "^a" : "^b");
+            return [
+              show(() => m.ok(s.length)),
+              show(() => m.ok(s.length === 0 ? 0 : 1)),
+              show(() => m.ok("")),
+              show(() => m.fail(s)),
+              show(() => m.equal("1", 1)),
+              show(() => m.equal("", 0)),
+              show(() => m.equal(s, s)),
+              show(() => m.notEqual("1", 1)),
+              show(() => m.notEqual(s, `${s}x`)),
+              show(() => m.strictEqual("1", 1)),
+              show(() => m.strictEqual(s, s)),
+              show(() => m.notStrictEqual("1", 1)),
+              show(() => m.match(s, re)),
+              show(() => m.doesNotMatch(s, re)),
+              show(() => m.ifError(null)),
+              show(() => m.ifError(undefined)),
+              show(() => m.ifError(s.length === 0 ? null : new Error(s))),
+              show(() => m.partialDeepStrictEqual({ a: 1, b: s }, { a: 1 })),
+              show(() => m.partialDeepStrictEqual({ a: 1 }, { a: 1, b: s })),
+              show(() => m.throws(() => { throw new TypeError(s); }, TypeError)),
+              show(() => m.throws(() => s, TypeError)),
+              show(() => m.doesNotThrow(() => s)),
+              show(() => m.doesNotThrow(() => { throw new TypeError(s); })),
+            ].join("|");
+          },
+        },
       ];
     })(),
   },
