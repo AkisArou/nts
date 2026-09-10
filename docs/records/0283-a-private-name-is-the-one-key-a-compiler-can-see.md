@@ -157,6 +157,45 @@ of them because `next()` got *further*, to `{ value: undefined, done: true }` at
 line 660. Six sites, one idiom, two spellings, and only the spelling decided
 whether it lowered.
 
+## The ladder, and five rungs of it measured wrong before being measured right
+
+"**And nothing newly compiles**" above was true when written and is false now.
+After the `this`-type resolution, `entries`, `keys`, `values`, `sort` and
+`toString` are lowered and exported — the first functions in this chain to
+actually clear.
+
+    refusals cleared                6
+    roots cleared                   4   (14 -> 10 -> 7)
+    functions not refused           5   (I said 7; `delete` and `set` are
+                                         refused at roots inside their bodies
+                                         and no refusal *names* them)
+    functions a backend receives    8   (I said 0)
+    functions the module publishes  0
+
+**Each rung is a true statement and none implies the one below it.** I mistook
+one for the next at every step, in both directions: reported six refusals as six
+functions, four functions as four compiling ones, and then eight lowered
+functions as none.
+
+The last was a grep artifact and the plainest of the lot. I counted definitions
+with `^func URLSearchParams#…` and the prefix in this output is **`export
+func`**, so the anchor matched nothing and I read nothing as zero. The Node lane
+found it by counting the same definitions and got there through three wrong
+readings of one file — the class name matched refusal lines and call sites as
+well as definitions, then `func URLSearchParams#get` matched `get size` on a
+word boundary, then an anchored `^\s*func` found nothing for the same reason
+mine did.
+
+**Zero from a pattern that matched nothing looks exactly like zero from a fact.**
+Nothing in `grep -c` distinguishes them, and the fix is to print one matching
+line before trusting a count of them.
+
+The conclusion is unchanged and the gate is still `URLSearchParams#constructor`
+at `searchparams.ts:161`. It just does not gate what I said it gated: it gates
+*publication*, not lowering. `no wrapper for URLSearchParams` is what it says,
+and five methods reach a backend behind it while nothing can construct the class
+to reach them through.
+
 ## The sabotage, which landed on the other guard this time
 
 Removing the resolution and rebuilding:
