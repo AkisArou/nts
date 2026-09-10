@@ -1461,6 +1461,67 @@ export const CORPORA = {
         choose(rnd, PATH) + choose(rnd, TAIL);
     },
     calls: [
+      {
+        // **`URL`'s own methods and the newer statics**, which the corpus never
+        // reached: `toString`, `toJSON`, `URL.parse`, `URL.canParse`,
+        // `resolveObject`, and `URLSearchParams`' `forEach` and `values`.
+        //
+        // `URL.parse` and `URL.canParse` answer the same question by different
+        // routes, one returning `null` and the other `false`. **Defining
+        // `canParse` as a try/catch around the constructor is indistinguishable
+        // here** -- a control that did exactly that was noticed on 0 of 24
+        // inputs, so it is a legitimate implementation rather than a shortcut
+        // this spec can catch. That is worth stating: the row is not weak
+        // coverage, it is a distinction that does not exist. `parse` returning
+        // `undefined` instead of `null` is caught on 24 of 24, which is the
+        // distinction that does.
+        //
+        // `toJSON` and `toString` are compared against `href` as well as each
+        // other, because node specifies all three to be the same string and a
+        // reimplementation that builds one of them separately drifts only on the
+        // inputs where serialisation is not the identity.
+        label: "url-methods",
+        call: (m, s) => {
+          const show = (f) => {
+            try {
+              const v = f();
+              return v === null ? "null" : v === undefined ? "undefined" : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const base = "http://base.example/dir/page";
+          return [
+            show(() => new m.URL(s, base).toString()),
+            show(() => new m.URL(s, base).toJSON()),
+            show(() => new m.URL(s, base).href),
+            show(() => m.URL.canParse(s)),
+            show(() => m.URL.canParse(s, base)),
+            show(() => {
+              const u = m.URL.parse(s);
+              return u === null ? "null" : u.href;
+            }),
+            show(() => {
+              const u = m.URL.parse(s, base);
+              return u === null ? "null" : u.href;
+            }),
+            show(() => {
+              const p = new m.URLSearchParams(s);
+              const seen = [];
+              p.forEach(function (value, key, parent) {
+                seen.push(`${key}=${value}:${parent === p}`);
+              });
+              return seen.join(",");
+            }),
+            show(() => [...new m.URLSearchParams(s).values()].join(",")),
+            show(() => [...new m.URLSearchParams(s).keys()].join(",")),
+            show(() => {
+              const r = m.resolveObject(base, s);
+              return r === null || typeof r !== "object" ? String(r) : String(r.href);
+            }),
+          ].join("|");
+        },
+      },
       // Error paths. See `REJECTED` above: the generated inputs are ones these
       // functions accept, so nothing here reached a validation branch until
       // these were added, and the `code` node's own suite asserts on was never

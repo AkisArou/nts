@@ -20612,6 +20612,9 @@ Three specs, on the gaps that are pure functions rather than I/O.
     events        3 of 17 ->  9 of 17   (the rest are `once`/`on`, asynchronous)
     assert        4 of 19 -> 15 of 19   (the rest are the fuzzer's, or async)
     zlib          8 of 45 -> 12 of 45   (the rest are streams and callbacks)
+    buffer       18 of 117 -> 94 of 117  (instance methods, once they were visible)
+    url          23 of 35  -> 30 of 35   (URLPattern is absent here)
+    console      10 of 43  -> 13 of 43   (the rest are its own exclusions)
     util          6 of 72 -> 48 of 72   (types included; 8 absent names excluded)
 
 `buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
