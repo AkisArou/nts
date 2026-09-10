@@ -20,6 +20,7 @@
 
 import { Buffer } from "../../buffer/src/main.ts";
 import { captureRejectionSymbol, EventEmitter } from "../../events/src/main.ts";
+import { Stream } from "../../stream/src/legacy.ts";
 import { Socket } from "../../net/src/main.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
 import { nextTick } from "../../internal/tick.ts";
@@ -36,6 +37,7 @@ import {
   ERR_INVALID_ARG_VALUE,
   ERR_INVALID_HTTP_TOKEN,
   ERR_METHOD_NOT_IMPLEMENTED,
+  ERR_STREAM_CANNOT_PIPE,
   ERR_STREAM_ALREADY_FINISHED,
   ERR_STREAM_DESTROYED,
   ERR_STREAM_NULL_VALUES,
@@ -286,9 +288,41 @@ function destroyOnRejection(this: OutgoingMessage, error: unknown): void {
   this.destroy(error);
 }
 
+// `Stream`, not `EventEmitter`: node's `OutgoingMessage` extends the legacy
+// `Stream`, so `res instanceof Stream` is true there and `res.pipe` exists.
+// Ours extended `EventEmitter` directly, which left `pipe` undefined on every
+// `ServerResponse` and `ClientRequest`.
+//
+// No test caught it. `http` runs 405 of node's files with nothing failing, and
+// none of them pipes a response -- on node it cannot be missing, so there is
+// nothing for node's suite to check. Found by differencing the prototype chain:
+//
+//     node  OutgoingMessage -> Stream -> EventEmitter
+//     ours  OutgoingMessage -> EventEmitter
 export class OutgoingMessage<
   SocketType extends OutgoingSocket = OutgoingSocket,
-> extends EventEmitter {
+> extends Stream {
+  /**
+   * Write-only: piping *from* a response or request is disabled.
+   *
+   * `OutgoingMessage` extends `Stream` for `instanceof` and for the rest of the
+   * legacy surface, and `Stream.pipe` would happily start forwarding `data`
+   * events off a thing that never emits them. Node overrides it to say so, and
+   * **emits** rather than throws:
+   *
+   *     OutgoingMessage.prototype.pipe = function pipe() {
+   *       this.emit('error', new ERR_STREAM_CANNOT_PIPE());
+   *     };
+   *
+   * Adding the base without this override was measured and was a wrong answer:
+   * ours inherited a working `pipe` and quietly forwarded nothing, where node
+   * emits `ERR_STREAM_CANNOT_PIPE`.
+   */
+  override pipe(): undefined {
+    this.emit("error", new ERR_STREAM_CANNOT_PIPE());
+    return undefined;
+  }
+
   #socket: SocketType | null = null;
   #lenientHeaderValues = false;
   /** Fixed typed representation of node's private `kHighWaterMark` slot. */
