@@ -50,13 +50,42 @@ export function shape(exports) {
   }
   if (exports.colors !== undefined) installColorAliases(exports.colors);
 
+  // `main.ts` reaches the predicates with `import * as types`, so `exports.types`
+  // is an **ESM module namespace object** and node's is an ordinary object. Four
+  // things are observable about the difference, and all four were ours:
+  //
+  //                        node        here, before
+  //     Symbol.toStringTag undefined   "Module"
+  //     isExtensible       true        false
+  //     prototype          Object.p    null
+  //     types.isDate       configurable true   configurable false
+  //
+  // A namespace object is frozen and null-prototyped by specification, so no
+  // amount of care on the TypeScript side changes it -- the shape is where it has
+  // to be undone. Spread copies own *enumerable* keys, and `Symbol.toStringTag`
+  // on a namespace is not enumerable, so it does not come across.
+  //
+  // Representation shaping only, in the sense this file uses everywhere else: the
+  // predicates are the same function objects and nothing here can add an
+  // operation to the compiled module.
+  if (exports.types !== undefined) {
+    util.types = { ...exports.types };
+  }
+
   delete util.inspectDefaultOptions;
   delete util.colors;
   delete util.styles;
   return util;
 }
 
-/** Node exposes the same fixed `types` object at `node:util/types`. */
-export function subpaths(exports) {
-  return { "util/types": exports.types };
+/**
+ * Node exposes the same fixed `types` object at `node:util/types`.
+ *
+ * `shaped.types` rather than `exports.types`: the shape rebuilds it as a plain
+ * object, and `require('util/types') === require('util').types` has to keep
+ * holding. Returning the raw namespace here would hand the subpath a different
+ * object from the one the module publishes.
+ */
+export function subpaths(exports, shaped) {
+  return { "util/types": shaped?.types ?? exports.types };
 }
