@@ -7827,6 +7827,48 @@ impl<'a> FuncBuilder<'a> {
                     &format!("a value of type {have:?} where {want:?} is wanted"),
                 ));
             }
+            // **And base-first layout is a fact about a base, not about every
+            // pair of object types.** The sentence above was true of the case it
+            // was written for -- a subclass reaching a base-typed slot -- and the
+            // emitter writes `(NtsObj_Base *)derived` on the strength of it. A
+            // *structural* target is the same operation with no such guarantee:
+            //
+            //     interface Named { name: string }
+            //     class Thing { id: number; name: string }
+            //     readName(new Thing(5))
+            //
+            // `Thing.name` is at offset 32 and `Named.name` at 24, so
+            // `readName` reads `id` -- a `double` -- as an `NtsString *` and
+            // dereferences it. **Measured: the addon exits on SIGSEGV where node
+            // answers 6.** Writing the same class as `{ name; id }` puts the two
+            // at the same offset and the program is correct, so *declaration
+            // order* decided whether it crashed and nothing said so.
+            //
+            // Refused rather than converted, because a conversion would be a
+            // copy and a copy is not the same object: `readName` writing through
+            // its parameter has to be visible to the caller, which is what a
+            // reference means. The prefix case is the one that is genuinely a
+            // no-op and it is the one this admits.
+            if let (
+                HirType::Managed(ManagedType::Object(from)),
+                HirType::Managed(ManagedType::Object(to)),
+            ) = (&have, want)
+                && !self.laid_out_as_a_prefix(id, *from, *to)
+            {
+                let (from, to) = (
+                    self.name_of_type(*from).unwrap_or("an anonymous type").to_owned(),
+                    self.name_of_type(*to).unwrap_or("an anonymous type").to_owned(),
+                );
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "a `{from}` where a `{to}` is wanted, which is a pointer cast between \
+                         two structs that do not agree about where their shared fields are -- \
+                         a base's fields keep their offsets in a subclass and a structural \
+                         type's do not"
+                    ),
+                ));
+            }
             return Ok(value);
         }
         if !erasable(&have) {
@@ -7845,6 +7887,72 @@ impl<'a> FuncBuilder<'a> {
     /// than from the callee's lowered `Func`, because the callee may not be
     /// lowered yet: `lower` walks declarations in index order and a call can
     /// precede its target.
+    /// Whether a value of one layout can be *read* as another by pointer cast.
+    ///
+    /// True when the target's fields are the source's first fields, in order,
+    /// with the same names and the same representations -- which is exactly what
+    /// makes `(NtsObj_Base *)derived` a no-op, and exactly what a subclass gets
+    /// from base-first layout.
+    ///
+    /// Names **and** types, because either alone lets a wrong one through: two
+    /// fields called `size` holding a `double` and an `NtsString *` are the same
+    /// name and different loads, and two fields at the same offset with
+    /// different names are the same load and a different program.
+    ///
+    /// A target with no fields is trivially a prefix, which is right: nothing
+    /// can be read through it.
+    fn laid_out_as_a_prefix(&mut self, id: NodeId, from: TypeId, to: TypeId) -> bool {
+        // **A closure or a signature is not a field-layout question, and asking
+        // is not free.** `apply(double, n)` passes a function value to a
+        // signature-typed parameter: two object types, no fields on either, and
+        // nothing to read at any offset.
+        //
+        // Answered before `layout_of` is called rather than after, because
+        // `layout_of` is not a query -- it **creates** a layout for a type that
+        // has none and pushes it into the function's list. For a signature that
+        // is a fieldless `Fn__174`, and materialising one changed the emitted
+        // program: assignments that had been writing a closure into a slot of
+        // its own type started writing it into a distinct struct, and clang
+        // said `incompatible pointer types assigning to 'NtsObj_Fn__174 *' from
+        // 'NtsObj_Closure356 *'` in six modules. The gate's `addons` step caught
+        // it; nothing earlier did, because every example and every test still
+        // passed.
+        //
+        // A checking predicate with a side effect on the program it is checking
+        // is the kind of thing that is obvious once it has cost twenty minutes.
+        if super::is_closure_type(from)
+            || super::is_closure_type(to)
+            || self.is_a_signature(from)
+            || self.is_a_signature(to)
+        {
+            return true;
+        }
+        // The **target** first, and its failure is an allow rather than an
+        // error: nothing can be read through a type with no layout, so there is
+        // nothing to be at the wrong offset.
+        let Ok(to) = self.layout_of(id, to) else {
+            return true;
+        };
+        // And a target with no fields, for the same reason stated the other way.
+        if to.fields.is_empty() {
+            return true;
+        }
+        // Only now is the source's layout needed, and here a failure is a
+        // refusal: the target has fields, so something will be read, and a
+        // source whose shape cannot be established cannot be shown to hold them
+        // where the target expects.
+        let Ok(from) = self.layout_of(id, from) else {
+            return false;
+        };
+        if to.fields.len() > from.fields.len() {
+            return false;
+        }
+        to.fields
+            .iter()
+            .zip(from.fields.iter())
+            .all(|(want, have)| want.name == have.name && want.ty == have.ty)
+    }
+
     fn coerce_to_parameter(
         &mut self,
         call: NodeId,

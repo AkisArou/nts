@@ -1,4 +1,23 @@
-// expect: NTS1001 `dest`, which `Carrier` does not declare
+// expect: which is a pointer cast between two structs that do not agree
+//         about where their shared fields are
+//
+// **The diagnosis moved to the assignment on 2026-09-10, and this is the same
+// defect named at its cause.** It used to refuse at the *write*, saying `dest`
+// is not on `Carrier`. What is actually wrong is one line earlier: `Shaped` is a
+// three-field struct and `Carrier implements Shaped` is a two-field one, so
+// `const shaped: Shaped = new Carrier(code)` is a pointer cast that widens the
+// object, and writing `shaped.dest` writes past the end of what was allocated.
+//
+// The old message was true and described the symptom. The new one is checked
+// rather than assumed: `coerce` emitted a raw pointer cast for every pair of
+// object types on the strength of a comment saying base-first layout makes it
+// free, which is a fact about a *base* and not about a structural target. The
+// unchecked version segfaults where node answers -- measured, on
+// `class Thing { id; name }` reaching `interface Named { name }`.
+//
+// So this fixture reproduces at a different line and for a better stated reason,
+// and the observation below -- that the class omits the field on purpose and the
+// purpose is observable -- is exactly why the two layouts cannot be one.
 //
 // An optional property declared on an *interface*, assigned through a reference
 // of that interface's type, where the implementing class deliberately does not

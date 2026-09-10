@@ -792,13 +792,27 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # typed array, and on a lane with no descriptors is a different mechanism --
   # no longer shows in the count.
   #
-  # **The two lanes are one apart again**, and the gap is named rather than
-  # absorbed: `examples/in-on-an-object-a-native-answers-for` asks `"buffer" in
-  # value` and `"length" in value` over an `object`, which reach
-  # `nts_value_is_view` -- the "typed array or `DataView`" predicate. This
-  # backend has no name for it: `runtime/jvm` carries `isDataView` and
-  # `isViewKind` and not the pair together, so it is a method and a row in
-  # `external`, both in the JVM lane's files. Asked for; not written here.
+  # **The two lanes are one apart, and the gap is named rather than absorbed.**
+  # `examples/a-structural-cast-that-is-a-prefix` passes a class where a
+  # structural type is wanted, which on C and LLVM is a free pointer cast
+  # whenever the target's fields are the source's first fields -- and is not
+  # expressible here at all.
+  #
+  # The JVM relates classes by **name**. Coinciding offsets buy nothing when
+  # `getfield Named.name` needs the object to *be* a `Named` in the class
+  # hierarchy, so that lane refuses the prefix case and the non-prefix case
+  # alike: `storing a X where a Y is declared, and the first does not extend the
+  # second here`. The only answer it has is a conversion, which is a copy, which
+  # is not the same object -- the trade refused on the C side for the same
+  # reason.
+  #
+  # So this is one example short rather than one backend behind, and the two
+  # cannot be brought level without deciding what an interface's representation
+  # is when both an object literal and a class instance can be one. That is the
+  # design step `blockers/method-syntax-in-an-interface` names.
+  #
+  # Measured by the JVM lane, not assumed here: `implements Named, Counted` was
+  # tried on that example to make it expressible and made it worse.
   backend_examples 149 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
