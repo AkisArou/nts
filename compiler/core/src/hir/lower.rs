@@ -117,10 +117,21 @@ struct Hierarchy {
     /// on an interface is a method every implementer must be reachable through,
     /// which is exactly what a slot is.
     ///
-    /// An interface has no fields here, so an upcast to one stays the no-op
-    /// pointer cast base-first layout already makes it: there is no prefix to
-    /// disagree about, only a table index that has to mean the same thing in
-    /// every implementer.
+    /// What it contributes is a *dispatch root*. It does **not** follow that an
+    /// interface has no fields, and this comment said it did.
+    ///
+    /// `interface Named { name: string }` is laid out with a `name` field like
+    /// anything else, and `class Thing { id: number; name: string }` puts its
+    /// `name` at a different offset. So an upcast to an interface is a pointer
+    /// cast with a prefix to disagree about, and it disagreed: the compiled
+    /// addon read a `double` as an `NtsString *` and exited on SIGSEGV where
+    /// node answered 6. Record 0257.
+    ///
+    /// Base-first layout is what makes an upcast free, and it is a fact about a
+    /// **base** -- `Layout.base`, one edge, contributing storage. This is the
+    /// other edge, as many as you like, contributing none, and the sentence that
+    /// used to be here borrowed the first one's guarantee for the second.
+    /// `coerce` checks the prefix now instead of assuming it.
     implements: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
     /// The methods a class declares itself, as opposed to inherits.
     declares: rustc_hash::FxHashMap<TypeId, Vec<String>>,
@@ -1281,6 +1292,36 @@ struct Naming {
     qualified: rustc_hash::FxHashMap<NodeId, String>,
     /// Declarations that cannot be told apart by anything this compiler has.
     ambiguous: rustc_hash::FxHashSet<NodeId>,
+    /// The order a program *writes* an object type's fields, where every
+    /// literal of that type agrees.
+    ///
+    /// A compiled object has no insertion order — `Object.keys` walks the
+    /// layout's field order — and JavaScript orders own string keys by
+    /// insertion. One layout is one order, so the two can only agree when the
+    /// layout **is** the order the program writes.
+    ///
+    /// It is not information that has to be recovered: the field sets at an
+    /// allocation site are already emitted in source order, which the JVM lane
+    /// found by reading its own bytecode. This is the same fact, taken before
+    /// lowering so the layout can be built from it.
+    ///
+    /// Only where every literal agrees. A program that writes one type two ways
+    /// — `{ a, b, c }` here and `{ c, a, b }` there — has no ordering answer,
+    /// and those types are absent rather than guessed at; the layout then keeps
+    /// the checker's order, which is what it always had.
+    ///
+    /// Here rather than computed as the lowering goes, for the reason
+    /// [`Self::generators`] gives: a builder is made fresh per function and one
+    /// cannot see another's.
+    ///
+    /// **Keyed by the field-name set, not by the type id.** An object literal
+    /// gets a type of its own — `{ a: n, b: 1, c: 2 }` written as an `Extended`
+    /// is not `Extended`'s id — and the two are merged into one layout later,
+    /// structurally, by the same rule this key uses. Keying by the literal's id
+    /// finds nothing when the layout is built for the declared type, which is
+    /// what happened first: the collector was right and the lookup missed.
+    written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
+
     /// Which generator each `function*` is, in source order.
     ///
     /// Here rather than counted as the lowering goes, because a builder is made
@@ -1370,6 +1411,62 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             generators.insert(NodeId(u32::try_from(index).unwrap_or(u32::MAX)), next);
         }
     }
+    // Every object literal, by the type the checker gave it, with its property
+    // names in source order. A type written two different ways is dropped: a
+    // conflict has no answer and a guess would be a wrong one.
+    let mut written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>> =
+        rustc_hash::FxHashMap::default();
+    let mut conflicting: rustc_hash::FxHashSet<Vec<String>> = rustc_hash::FxHashSet::default();
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::OBJECT_LITERAL_EXPRESSION) {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let mut names = Vec::new();
+        for property in probe.children(id) {
+            // A spread contributes its source's fields and there is no name to
+            // record, so a literal containing one says nothing about order and
+            // is skipped rather than recorded short.
+            let name = match probe.kind_of(property) {
+                Some(syntax::PROPERTY_ASSIGNMENT) => probe
+                    .children(property)
+                    .first()
+                    .and_then(|name| probe.literal_name(*name)),
+                Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => probe
+                    .children(property)
+                    .first()
+                    .and_then(|name| probe.node(*name).text.clone()),
+                _ => None,
+            };
+            let Some(name) = name else {
+                names.clear();
+                break;
+            };
+            names.push(name);
+        }
+        if names.is_empty() {
+            continue;
+        }
+        let mut signature = names.clone();
+        signature.sort();
+        // A literal that names one field twice is not a shape, and the second
+        // write wins in JavaScript. Nothing here can order it, so it is dropped.
+        let repeated = signature.windows(2).any(|pair| pair[0] == pair[1]);
+        if repeated || conflicting.contains(&signature) {
+            continue;
+        }
+        match written_order.get(&signature) {
+            Some(already) if *already != names => {
+                written_order.remove(&signature);
+                conflicting.insert(signature);
+            }
+            Some(_) => {}
+            None => {
+                written_order.insert(signature, names);
+            }
+        }
+    }
+
     for (index, node) in snapshot.nodes.iter().enumerate() {
         // Classes as well as functions. A method is spelled `Class#method`, so
         // it cannot collide with a plain function -- but it collides happily
@@ -1423,6 +1520,7 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         }
     }
     naming.generators = generators;
+    naming.written_order = written_order;
     naming
 }
 
@@ -1955,6 +2053,7 @@ impl Shared {
         builder.generic_calls.clone_from(&self.generics.at_call);
         builder.qualified.clone_from(&self.naming.qualified);
         builder.generators.clone_from(&self.naming.generators);
+        builder.written_order.clone_from(&self.naming.written_order);
         builder
     }
 }
@@ -5747,6 +5846,9 @@ struct FuncBuilder<'a> {
     generator: Option<super::GeneratorFrame>,
     /// Which generator each `function*` is, decided once by [`naming`].
     generators: rustc_hash::FxHashMap<NodeId, usize>,
+    /// The order the program writes each field-name set; see
+    /// [`Naming::written_order`], which computes it once for the whole program.
+    written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -5792,6 +5894,7 @@ impl<'a> FuncBuilder<'a> {
             async_result: None,
             generator: None,
             generators: rustc_hash::FxHashMap::default(),
+            written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
         }
@@ -17299,6 +17402,46 @@ impl<'a> FuncBuilder<'a> {
         Ok(layout)
     }
 
+    /// The fields in the order the program's literals write them, where they
+    /// agree, and unchanged where they do not.
+    ///
+    /// **No base, so nothing constrains the order but the program, and the
+    /// program has an opinion.** `Object.keys` walks the layout's field list,
+    /// because a compiled object has no insertion order, and JavaScript orders
+    /// own string keys by insertion. One layout is one order, so the two agree
+    /// only when the layout *is* the order the literals are written in. The
+    /// checker's order is not that: for `interface E extends B { c }` it puts
+    /// `c` first, so `{ a, b, c }` answered `c, a, b`.
+    ///
+    /// It also makes the interface-extension case a genuine prefix of its base
+    /// for free — which a rule that laid inherited fields first bought at the
+    /// cost of exactly this key order, measured and reverted in record 0258.
+    /// Both questions want the same order, and neither wants the declaration's.
+    ///
+    /// Looked up by the **field-name set** rather than by the type id, because
+    /// an object literal has a type of its own and is merged into the declared
+    /// type's layout later, structurally, by the same rule this key uses.
+    /// Keying by the literal's id found nothing at all: the collector was right
+    /// and the lookup missed.
+    ///
+    /// A field the order does not mention keeps the position it had — a literal
+    /// that omits an optional field says nothing about where that field goes.
+    fn as_the_program_writes_them(&self, mut fields: Vec<Field>) -> Vec<Field> {
+        let mut signature: Vec<String> = fields.iter().map(|field| field.name.clone()).collect();
+        signature.sort();
+        let Some(written) = self.written_order.get(&signature) else {
+            return fields;
+        };
+        let mut ordered: Vec<Field> = Vec::with_capacity(fields.len());
+        for name in written {
+            if let Some(at) = fields.iter().position(|field| field.name == *name) {
+                ordered.push(fields.remove(at));
+            }
+        }
+        ordered.append(&mut fields);
+        ordered
+    }
+
     /// Whether a type is a call signature rather than something with fields.
     fn is_a_signature(&self, ty: TypeId) -> bool {
         self.snapshot
@@ -17414,6 +17557,8 @@ impl<'a> FuncBuilder<'a> {
                 }
             }
             fields = ordered;
+        } else {
+            fields = self.as_the_program_writes_them(fields);
         }
 
         // The declared name where there is one. An anonymous object type —
