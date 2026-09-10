@@ -1388,6 +1388,18 @@ NtsString *nts_value_to_string(NtsValue value) {
     nts_retain((NtsHeader *)text);
     return text;
   }
+  /* `SymbolDescriptiveString` -- `"Symbol("`, the description, `")"`. The one
+   * conversion the language allows *only* through `String`: `sym + ""` throws
+   * a TypeError by 13.15.3, so no implicit coercion reaches here and this arm
+   * is reached solely by a `String()` the source wrote.
+   *
+   * Its typed sibling has existed for a while; what was missing was this one,
+   * for a symbol arriving in an erased slot. `String(type)` where
+   * `type: string | symbol` is node's `events`, and it is under
+   * `MaxListenersExceededWarning`, `warnMaxListenersExceeded`, `addListener`
+   * and therefore `EventEmitter#on`. */
+  case NTS_TAG_SYMBOL:
+    return nts_symbol_to_string((const NtsSymbol *)nts_value_reference(value));
   default:
     fprintf(stderr,
             NTS_REFUSED "String() of tag %u, which the lowering should have "
@@ -5731,12 +5743,33 @@ NtsString *nts_symbol_description(const NtsSymbol *symbol) {
 }
 
 NtsString *nts_symbol_to_string(const NtsSymbol *symbol) {
+  /* Four allocations and one survivor. `nts_string_from_utf8` and `nts_concat`
+   * are both `NTS_ALLOCATES` and both *borrow* their arguments, so every
+   * intermediate here is owned by this function and has to be given back --
+   * and none of them was. Under the bump allocator that is invisible; under
+   * reference counting it is **three objects per call**, which is what
+   * `examples/string-of-a-symbol-in-an-erased-slot` measured as 84 held over 29
+   * cases.
+   *
+   * Nothing had run it: the rc lane runs every example, and until that example
+   * existed no example called `String()` on a symbol at all. A leak in a helper
+   * no counted program reaches is a leak nobody can see.
+   *
+   * `head` is `open` itself when the symbol has no description -- `Symbol()`
+   * prints as `Symbol()` -- so the release below is guarded on their being
+   * different objects rather than written twice. */
   NtsString *open = nts_string_from_utf8("Symbol(", 7);
   NtsString *close = nts_string_from_utf8(")", 1);
   const NtsString *inside =
       symbol && symbol->description ? symbol->description : 0;
   NtsString *head = inside ? nts_concat(open, inside) : open;
-  return nts_concat(head, close);
+  NtsString *whole = nts_concat(head, close);
+  if (head != open) {
+    nts_release((NtsHeader *)head);
+  }
+  nts_release((NtsHeader *)open);
+  nts_release((NtsHeader *)close);
+  return whole;
 }
 
 NtsMap *nts_map_new(double kind) { return nts_map_alloc((uint32_t)kind, true); }

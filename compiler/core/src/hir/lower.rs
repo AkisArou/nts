@@ -15442,6 +15442,22 @@ impl<'a> FuncBuilder<'a> {
                             | TypeKind::Null
                             | TypeKind::Undefined
                             | TypeKind::Void
+                            // `String(sym)` is `SymbolDescriptiveString`, and
+                            // `nts_value_to_string` spells it from the tag like
+                            // every other member here. Added when
+                            // `String(type)` on a `string | symbol` turned out
+                            // to be under `EventEmitter#on`.
+                            //
+                            // **`BigInt` above is in this list and unreachable
+                            // through it**: putting one in an erased slot is
+                            // refused earlier, as "a value of type BigInt where
+                            // `unknown` is expected", so no bigint tag ever
+                            // reaches the helper. Teaching the helper a case it
+                            // cannot receive is a probe below its first use, so
+                            // it is deliberately not there -- and this comment
+                            // is the record of that being checked rather than
+                            // assumed.
+                            | TypeKind::Symbol
                             | TypeKind::Literal(_)
                     )
                 })
