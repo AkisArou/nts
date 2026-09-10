@@ -11794,6 +11794,35 @@ hours earlier — a check that exercises nothing announces itself as a pass, whi
 is what everybody wants to see — and it is the reason the sabotage count, not
 the divergence count, is the number to read on any new comparison.
 
+
+### The compiled differential cannot advance the axis, only describe it
+
+Sweeping `differential-addon.mjs` wider was the obvious next lever and it does
+not exist. Three more modules, 1,500 iterations each:
+
+    string_decoder   0 comparison(s)   [BLANK]
+    events           0 comparison(s)   [BLANK]
+    assert           0 comparison(s)   [BLANK]
+
+**All three addons publish nothing at all** — zero names, so there is nothing
+the corpus can call and nothing to compare.
+
+The instrument's reach is therefore **downstream of the axis**: it can ask
+questions only of modules that already publish, which are exactly the modules
+that are not blocked. A blocked module offers it no surface, so no amount of
+sweeping turns one into a passing one. It describes the axis; it cannot move it.
+
+That is worth stating plainly because the opposite is intuitive — a differential
+found `net.BlockList`'s wrong error code in the interpreted lane, so reaching
+for it again on the compiled side looks like the same move. It is not: the
+interpreted lane runs the TypeScript directly and every export is present, while
+the compiled lane can only see what the wrapper published.
+
+**The guard added earlier tonight paid for itself immediately.** Three blanks in
+one sweep, each of which would have printed `0 comparison(s) ... 0
+divergence(s)` and exited 0 an hour ago — three rows that would have read as
+three clean modules.
+
 ## The counted lane: 22 of 22, 0 differing
 
 2026-09-10, on a pin taken after `a80dcb8a`. **This is the standing goal's named
