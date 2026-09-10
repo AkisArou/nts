@@ -212,6 +212,10 @@ function eventListenerAt(
   return listener;
 }
 
+/** Node keeps its capture flag under a symbol; these are the same idea. */
+const kCapture: unique symbol = Symbol("kCapture");
+const kPreserveEventShape: unique symbol = Symbol("kPreserveEventShape");
+
 export class EventEmitter {
   /**
    * Statically named optional rejection hook. A computed symbol known at
@@ -224,8 +228,31 @@ export class EventEmitter {
   _events: EventStore | undefined = undefined;
   _eventsCount = 0;
   _maxListeners: number | undefined = undefined;
-  _captureRejections = false;
-  private _preserveEventShape = false;
+  // Symbol-keyed, as node's are, and for the reason node's are: a string-keyed
+  // field is an own **enumerable** property, so both of these appeared in
+  // `Object.keys` on every EventEmitter instance and node's has neither.
+  //
+  //     node  ["_events", "_eventsCount", "_maxListeners"]
+  //     ours  [... , "_captureRejections", "_preserveEventShape"]
+  //
+  // Visible through `Object.keys`, spread, `JSON.stringify` and
+  // `assert.deepStrictEqual` on any emitter -- and `EventEmitter` is the base of
+  // `net.Server`, `net.Socket`, `http.Server`, every stream, `process`,
+  // `readline` and `dgram`, so it was every one of those objects.
+  //
+  // `process/test/export-surface-static.js` pinned them as a known difference and
+  // argued that *deleting* them at the host boundary is not the fix, because a
+  // host-side `delete` cannot remove a struct field in the compiled
+  // representation and the two lanes would disagree about the same object. That
+  // argument is right and does not reach this: the field still exists in both
+  // lanes, it simply is not string-keyed, so neither lane enumerates it.
+  //
+  // A `#` field would hide it too and cannot be used: `addCatch` and
+  // `emitUnhandledRejectionOrErr` are module-level and read it off an instance,
+  // which `#` forbids. Node keeps its own under `Symbol(kCapture)` for what looks
+  // like the same reason.
+  [kCapture] = false;
+  [kPreserveEventShape] = false;
 
   constructor(options?: { captureRejections?: boolean }) {
     this._events = emptyStore();
@@ -236,9 +263,9 @@ export class EventEmitter {
   protected _configureCaptureRejections(capture: boolean | undefined): void {
     if (capture !== undefined) {
       validateBoolean(capture, "options.captureRejections");
-      this._captureRejections = capture;
+      this[kCapture] = capture;
     } else {
-      this._captureRejections = captureRejectionsDefault;
+      this[kCapture] = captureRejectionsDefault;
     }
   }
 
@@ -255,7 +282,7 @@ export class EventEmitter {
     for (const name of names) events.set(name, undefined);
     this._events = events;
     this._eventsCount = 0;
-    this._preserveEventShape = true;
+    this[kPreserveEventShape] = true;
   }
 
   /**
@@ -434,7 +461,7 @@ export class EventEmitter {
         return this;
       }
       this._eventsCount -= 1;
-      if (this._preserveEventShape) {
+      if (this[kPreserveEventShape]) {
         events.set(type, undefined);
       } else if (this._eventsCount === 0) {
         this._events = emptyStore();
@@ -503,11 +530,11 @@ export class EventEmitter {
       if (type === undefined) {
         this._events = emptyStore();
         this._eventsCount = 0;
-        this._preserveEventShape = false;
+        this[kPreserveEventShape] = false;
       } else if (events.get(type) !== undefined) {
-        if (this._preserveEventShape) events.set(type, undefined);
+        if (this[kPreserveEventShape]) events.set(type, undefined);
         else events.delete(type);
-        if (--this._eventsCount === 0 && !this._preserveEventShape) {
+        if (--this._eventsCount === 0 && !this[kPreserveEventShape]) {
           this._events = emptyStore();
         }
       }
@@ -530,7 +557,7 @@ export class EventEmitter {
       this.removeAllListeners("removeListener");
       this._events = emptyStore();
       this._eventsCount = 0;
-      this._preserveEventShape = false;
+      this[kPreserveEventShape] = false;
       return this;
     }
 
@@ -894,7 +921,7 @@ function isThenableLike(value: unknown): value is ThenableLike {
  * already is.
  */
 function addCatch(that: EventEmitter, promise: unknown, type: string | symbol, args: unknown[]): void {
-  if (!that._captureRejections) {
+  if (!that[kCapture]) {
     return;
   }
   try {
@@ -922,12 +949,12 @@ function emitUnhandledRejectionOrErr(
   }
   // Capture is turned off around the emit: an `error` handler that itself
   // returns a rejected promise would otherwise loop.
-  const prev = ee._captureRejections;
+  const prev = ee[kCapture];
   try {
-    ee._captureRejections = false;
+    ee[kCapture] = false;
     ee.emit("error", err);
   } finally {
-    ee._captureRejections = prev;
+    ee[kCapture] = prev;
   }
 }
 

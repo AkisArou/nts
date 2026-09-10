@@ -135,16 +135,25 @@ assert.deepStrictEqual(
 // **These are not a leak and deleting them is not the fix.** Node's `process`
 // is a dynamic object where `noDeprecation` appears only once a flag sets it.
 // Ours is a typed class: `noDeprecation = false` is a declared field, read at
-// four sites in `warning.ts`, and `_captureRejections` and `_preserveEventShape`
-// at seven each. In the compiled representation they are struct fields, which a
-// host-side `delete` cannot remove at all -- so a shape that deleted them would
-// make the interpreted and compiled lanes disagree about the same object.
+// four sites in `warning.ts`. In the compiled representation these are struct
+// fields, which a host-side `delete` cannot remove at all -- so a shape that
+// deleted them would make the interpreted and compiled lanes disagree about the
+// same object.
 //
 // The difference is the object model, not an oversight, and it is pinned here
 // so it stays that and does not become a place to put things.
+//
+// **`_captureRejections` and `_preserveEventShape` were on this list and are
+// not any more, and the argument above is why the fix took the form it did.**
+// They are `EventEmitter`'s, so they were on every emitter in the profile --
+// `net.Server`, `net.Socket`, `http.Server`, every stream, `process`, `readline`,
+// `dgram` -- and node has neither. Deleting them at the host was ruled out here
+// for a good reason, and it does not reach the fix that was made: they are
+// **symbol-keyed** now, as node keeps its own `Symbol(kCapture)`, so the field
+// still exists in both lanes and neither lane enumerates it. A `#` field would
+// also have hidden them and could not be used, because two module-level
+// functions read the flag off an instance.
 const EXTRA = [
-  "_captureRejections",
-  "_preserveEventShape",
   "noDeprecation",
   "throwDeprecation",
   "traceDeprecation",
