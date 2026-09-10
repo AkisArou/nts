@@ -3228,8 +3228,71 @@ fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
 /// Scalars only. A union of two scalars plus `undefined` is not one of these and
 /// is left alone, because the check has one type to name in its message and
 /// naming the wrong one is worse than the generic text this replaces.
+/// The declaration that carries the body, where a symbol has several.
+///
+/// An overload signature has no body; the implementation does. Asking for the
+/// body rather than for "the last declaration" is what makes this right for a
+/// symbol declared once -- there is no body-less sibling to pass over, and the
+/// answer is the argument unchanged.
+fn implementation_of(
+    snapshot: &SemanticSnapshot,
+    probe: &FuncBuilder,
+    declaration: NodeId,
+) -> NodeId {
+    let has_a_body = |node: NodeId| {
+        probe
+            .children(node)
+            .into_iter()
+            .any(|child| probe.kind_of(child) == Some(syntax::BLOCK))
+    };
+    if has_a_body(declaration) {
+        return declaration;
+    }
+    probe
+        .children(declaration)
+        .into_iter()
+        .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+        .and_then(|name| probe.node(name).symbol)
+        .and_then(|symbol| snapshot.symbols.get(symbol.0 as usize))
+        .and_then(|record| {
+            record
+                .declarations
+                .iter()
+                .copied()
+                .find(|other| has_a_body(*other))
+        })
+        .unwrap_or(declaration)
+}
+
 fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
     let probe = FuncBuilder::new(snapshot);
+    // **The declaration with a body, which for an overloaded function is not
+    // the first one.**
+    //
+    // A symbol's declarations list the overload *signatures* ahead of the
+    // implementation, and `public_api` hands over the first. For
+    //
+    //     export function overloaded(a: number): string;
+    //     export function overloaded(a: number, b: number): string;
+    //     export function overloaded(a: number, b?: number): string { ... }
+    //
+    // that is the one-parameter signature, which has no `b` and therefore no
+    // optional scalar at index 1 -- so the wrapper read that argument with
+    // `nts_from_napi_value`, which accepts every JavaScript value, and
+    // `overloaded(1, "s")` handed a string to a parameter declared `number`.
+    //
+    // `secondOptional(a: number, b?: number)` is second and optional and not
+    // overloaded, and it rejects: the Node lane ruled out "second" and
+    // "optional" by measuring both before reporting it, which is what left the
+    // overloads as the only thing varying.
+    //
+    // 52 exported functions in `runtime/node` carry overload declarations --
+    // fs 32, os 5, timers 4, stream 3 -- and each of their later parameters was
+    // unchecked. `os.setPriority(0, "x")` answered `ERR_OUT_OF_RANGE` where
+    // node answers `ERR_INVALID_ARG_TYPE`, because the module's own
+    // `typeof value !== "number"` is folded away inside a compiled program and
+    // the boundary is what has to stand in for it.
+    let declaration = implementation_of(snapshot, &probe, declaration);
     let mut found = Vec::new();
     let mut at = 0u32;
     for child in probe.children(declaration) {
