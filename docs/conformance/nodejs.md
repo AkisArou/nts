@@ -20088,6 +20088,12 @@ Every one of the 22 modules built twice -- once with `NTS_CONFORMANCE_RC=1` and
     39,531 retain/release sites across the counted builds
     45 test file(s) passing on the compiled lane
 
+**Re-derived independently on the post-overload-fix compiler**, every addon
+rebuilt: **45 across 22 modules again**, module for module -- `fs` 4, `http` 3,
+`path` 15, `os` 5, `punycode` 3. Two full builds on two compilers agreeing to the
+file is what makes "the fix did not move the axis" a measurement rather than an
+absence of news.
+
 The largest counted builds are `process` at 3,971 sites, `http` at 3,639, `net` at
 2,928, `zlib` at 2,683 and `stream` at 2,622; `punycode` is the smallest at 55.
 Every pair matched: `http` 3 passed and 406 failed on both sides, `path` 15 and 5
@@ -20326,6 +20332,39 @@ which instrument was wrong before the answer turned out to be that the subject
 changes. The instrument now says so in its header, and chasing a
 `process.stdin.*` name is chasing the terminal the run happened to have -- but
 following one of them is what found everything above.
+
+## Four deprecation flags this profile has and node does not, and why they stay
+
+`surface-absence.mjs` reports `process` with three `EXTRA` rows -- and measuring
+them turned up a fourth of the same kind:
+
+    noDeprecation          node: no own property, reads undefined | ours: own, false
+    throwDeprecation       same                                   | ours: own, false
+    traceDeprecation       same                                   | ours: own, false
+    traceProcessWarnings   same                                   | ours: own, false
+
+Node creates these only when the matching CLI flag is passed. Every program that
+tests one gets the same answer either way -- `false` and `undefined` are both
+falsy -- but `Object.keys(process)` differs by four, and
+`assert.strictEqual(process.noDeprecation, undefined)` would fail here.
+
+**Not fixed, deliberately.** `warning.ts` reads all four and types them `boolean`,
+so they are fields. Dropping the initialisers gets the *value* to `undefined` and
+not the ownership: a declared class field is still an own property. Making them
+genuinely absent is possible in the interpreted lane and not in the compiled one,
+where a field is a struct slot -- the same argument `process/test/`
+`export-surface-static.js` already records against deleting such a field at the
+host boundary, that the two lanes would then disagree about the same object.
+
+So the choice is between a difference from node that both lanes share, and a
+difference between the lanes. This profile takes the first, and it is written down
+here rather than left for someone to rediscover as a surface row.
+
+**A measurement that misled on the way, worth one line.** The first reading of
+these was taken under `node --no-deprecation`, where node's `noDeprecation` is
+`true` -- and it is `true` because the flag set it, not because node has a
+default. I read a divergence off it before noticing the flag was mine. Node's
+defaults have to be measured in a process with no flags on it.
 
 ## Conventions
 
