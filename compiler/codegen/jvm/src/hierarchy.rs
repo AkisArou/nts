@@ -161,5 +161,30 @@ pub fn implemented(program: &Program, layout: &Layout) -> Vec<String> {
 /// because the JVM resolves a superclass's interfaces too.
 #[must_use]
 pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
+    // The edge, **and** that the target is emitted as an interface. `implemented`
+    // below already filters by `is_interface` and its comment says the two
+    // halves have to agree -- there are three, and this was the one that did
+    // not ask.
+    //
+    // `interface Named { name: string }` is the case. It declares a property,
+    // so `is_interface` refuses it and it is emitted as a *class*; `implemented`
+    // then leaves it out of `Thing`'s `interfaces[]`, so the class file relates
+    // them not at all. This function said the edge existed, the assignability
+    // check believed it, and the store was emitted:
+    //
+    // ```text
+    // nts/gen/Program.subject(D)D @14: invokestatic
+    //   Type 'nts/gen/Thing' is not assignable to 'nts/gen/Named'
+    // ```
+    //
+    // A `VerifyError` is the one outcome this backend is supposed to make
+    // impossible, and it is the corpus's `unverifiable class` row. Refusing by
+    // name is correct here: an interface carrying state is not expressible as a
+    // JVM interface, and the program relates the two in a way this lane cannot
+    // spell.
+    //
+    // The edge test is first because it is a `contains` and `is_interface`
+    // scans every layout.
     ancestry(program, layout).iter().any(|at| at.interfaces.contains(&id))
+        && program.layout(id).is_some_and(|target| is_interface(program, target))
 }
