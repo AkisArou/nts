@@ -69,8 +69,13 @@ export function shape(exports) {
     }
     return new exports.Assert(options);
   };
-  const assert = function assert(...args) {
-    return exports.ok.apply(undefined, args);
+  // Named `ok`, not `assert`: node's callable reports `name` `"ok"`, because on
+  // node the callable *is* `ok`. `assert.name` is `"ok"` there and was `"assert"`
+  // here. The binding stays `assert`; only the function's name changes.
+  //
+  // Spread rather than `.apply`, which is a form this profile does not use.
+  const assert = function ok(...args) {
+    return exports.ok(...args);
   };
   // `lib/assert.js` installs these three before the assertion family. Keep
   // that order: CommonJS namespace enumeration is observable at this host
@@ -94,8 +99,10 @@ export function shape(exports) {
     assert[name] = exports[name];
   }
 
+  // `name` is already node's `"strict"` here. Spread rather than `.apply`, for
+  // the same reason as the callable above.
   const strict = function strict(...args) {
-    return exports.ok.apply(undefined, args);
+    return exports.ok(...args);
   };
   strict.AssertionError = exports.AssertionError;
   strict.CallTracker = exports.CallTracker;
