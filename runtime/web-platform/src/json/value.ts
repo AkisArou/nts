@@ -338,6 +338,27 @@ export class JsonValue {
       }
     }
 
+    // **No array-index key, which is almost every object.** Then the string
+    // arrays already hold the members in insertion order, which is what the
+    // ordering below is for -- so they *are* the answer and copying them into a
+    // second pair is the whole of the work skipped.
+    //
+    // Measured on `benches/cases/json-parse`, whose corpus is the serializer's
+    // own document: `nts_array_grow` and `nts_array_new` were 12.3% of the row
+    // and `JsonValue.objectValue` another 7.5%. An object cost nine arrays --
+    // three `index*` that stay empty, `order` that stays empty, the two string
+    // arrays, the final pair, and the empty items list -- of which two carry
+    // data.
+    //
+    // Safe to hand over rather than copy: both are local to this function,
+    // nothing else holds them, and a `JsonValue` does not mutate what it is
+    // given. `ascendingByIndex` on an empty array answers an empty array, so
+    // the general path below is what this is skipping and not something it
+    // changes.
+    if (indexKeys.length === 0) {
+      return new JsonValue("object", start, end, false, 0, "", [], stringKeys, stringValues);
+    }
+
     // Ascending numeric order, not lexicographic: "10" follows "9".
     const order = ascendingByIndex(indexOrder);
 

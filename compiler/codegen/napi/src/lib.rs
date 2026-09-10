@@ -2894,11 +2894,40 @@ fn emit_namespaces(
                     carried += 1;
                     continue;
                 }
+                // **The reason is already known; this used to re-derive a
+                // worse one.**
+                //
+                // A member with no wrapper has no wrapper for a *reason*, and
+                // `crossings_of` computed it when it declined to make one --
+                // `takes an object`, `returns Map<f64, string[]>`, `a class
+                // member`. Answering "is neither a wrapped function nor a
+                // value this backend can carry" instead throws that away and
+                // tells the reader only that the pass looked and did not find
+                // one, which they could see from the absence.
+                //
+                // Fifteen of the forty-eight declines across six modules said
+                // it, against seven that named a type -- so the generic form
+                // was the *commonest* thing the surface report said, and it is
+                // the one sentence in it carrying no information.
+                //
+                // Searched by the underlying function's name rather than the
+                // member path, because that is the key `crossings_of` records
+                // under: `path.posix.format` is the member and `format@posix`
+                // is the function that declined.
+                let known = skipped
+                    .iter()
+                    .find(|earlier| earlier.function == *name_of)
+                    .map(|earlier| earlier.reason.clone());
                 skipped.push(Skipped {
                     function: format!("{name}.{property}"),
-                    reason: "is a namespace member that is neither a wrapped function nor a \
-                             value this backend can carry"
-                        .to_owned(),
+                    reason: known.unwrap_or_else(|| {
+                        // No entry means no wrapper was ever attempted -- the
+                        // lowering refused the function, and the refusal that
+                        // says why is upstream with a source line on it. Naming
+                        // that is the honest fallback rather than describing
+                        // this pass's own search.
+                        "is a namespace member whose function was not compiled".to_owned()
+                    }),
                 });
                 continue;
             }
