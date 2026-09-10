@@ -19162,6 +19162,48 @@ One connection worth naming: `querystring.unescapeBuffer` is the first typed-arr
 return to cross, and it is also the one that **aborts** on `"%0日"`. The first
 export through a new boundary is the one exercising code no test had reached.
 
+## The three modules the goal names, re-derived on a 09:28 pin
+
+The goal's numbers are dated 2026-09-09 and it says so: every one is historical the
+moment it is read. All three still describe the right modules; two of the counts
+have moved.
+
+**`string_decoder` -- unchanged, and the goal's description is exact.**
+
+    own-source NTS1001 roots  0
+    wrapper declines          2
+        StringDecoder: is a class whose constructor was not compiled
+        default: is exported and is not a function this backend can name
+    published by the addon    0 names
+
+Still the nearest module by refusal count and still publishing nothing. Its cone
+is `buffer`'s, through `Buffer.from` and `Buffer.alloc`.
+
+**`os` -- "17 of 23" is now 21 published, with 2 declines.**
+
+    hostname type release version machine arch platform homedir tmpdir
+    endianness uptime totalmem freemem availableParallelism loadavg cpus
+    getPriority setPriority EOL constants devNull
+
+    no wrapper for networkInterfaces: returns Record<string, unknown[]>
+    no wrapper for userInfo: is exported and no function of that name was compiled
+
+Zero own-source refusals. `userInfo` is the `Buffer.from` cone again;
+`networkInterfaces` is the record-of-arrays boundary and is one signature.
+
+**`querystring` -- "0 of 7" is now 2 published**, `escape` and `unescapeBuffer`,
+against 5 declines and 1 own-source root:
+
+    stringify: takes an object
+    QueryString: is exported and is not a function this backend can name
+    decode, parse, unescape: no function of that name was compiled
+
+The goal notes that its `shape.mjs` returns `QueryString` itself, "so that one
+object is the whole module". That is still true of the intent and no longer of the
+consequence: the shim has a fallback that publishes the remaining names when
+`QueryString` is absent, which is why `escape` reaches a test at all. Without it
+this module would read 0 and the two working exports would be invisible.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
