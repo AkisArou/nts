@@ -621,6 +621,7 @@ fn frame_fields(
             signed: true,
         },
         readonly: false,
+        declared_by: None,
     };
     let mut fields = match mode {
         Mode::Async => vec![
@@ -629,6 +630,7 @@ fn frame_fields(
                 name: "result".to_owned(),
                 ty: func.return_type.clone(),
                 readonly: false,
+                declared_by: None,
             },
             Field {
                 name: "awaited".to_owned(),
@@ -637,6 +639,7 @@ fn frame_fields(
                 // resume block was generated beside the `await` that set it.
                 ty: HirType::Managed(ManagedType::Promise(Box::new(HirType::Void))),
                 readonly: false,
+                declared_by: None,
             },
         ],
         // Two, and the second is the element. There is no `done` field: the
@@ -648,6 +651,7 @@ fn frame_fields(
                 name: "yielded".to_owned(),
                 ty: yields.cloned().unwrap_or(HirType::Void),
                 readonly: false,
+                declared_by: None,
             },
         ],
     };
@@ -656,6 +660,7 @@ fn frame_fields(
             name: param.name.clone(),
             ty: param.ty.clone(),
             readonly: false,
+            declared_by: None,
         });
     }
     for (at, value) in spilled.iter().enumerate() {
@@ -665,6 +670,7 @@ fn frame_fields(
             name: format!("held{at}"),
             ty: func.values[value.0 as usize].ty.clone(),
             readonly: false,
+            declared_by: None,
         });
     }
     fields
