@@ -16413,12 +16413,83 @@ asserts `lastChar` is a `Buffer` and compares it with `.equals`, alongside
     no wrapper for default: is exported and is not a function this backend can name
 
 Not "nearly": zero. The module has **no refusals of its own** -- every one of its
-59 roots is in something it imports -- and its chains now end at a single
-construct, `buffer/src/main.ts:196`, down from three this morning.
+59 roots is in something it imports -- and its chains end in `buffer`.
+
+"a single construct, `buffer/src/main.ts:196`, down from three this morning" stood
+here until 2026-09-10 and was wrong in both halves. It is two constructs, and the
+three it was counting down from included one that was never on the path. The
+re-derivation is the next section.
 
 So the two lanes say different things and both are true: the implementation is
 finished against node's suite, and the compiler cannot yet carry a class to the
 host. That is the order this ledger's opening describes as the intended one.
+
+## Every refusal in `string_decoder` and `buffer` converges on one function
+
+Re-derived 2026-09-10 05:19 on a pin taken at 05:18 from `target/release/nts`,
+whose provenance is a peer's working tree rather than a commit. `NTS_ADDON_OUT`
+private, `NTS_BIN` the pin. Counts are that build's, for those two modules.
+
+`string_decoder`'s build reports **58 NTS1001 roots and 27 NTS1003 cascades**, and
+not one root is in `runtime/node/string_decoder`:
+
+    20  buffer/src/main.ts
+    14  internal/errors.ts
+    14  buffer/src/blob.ts
+     6  internal/uv.ts
+     4  internal/validators.ts
+
+The cascade is a single tree with one function at its root:
+
+    objectToBuffer
+      +- Buffer.from -+- Buffer.of
+                      +- Buffer#fill - Buffer.alloc - StringDecoder#constructor
+                      +- search - Buffer#indexOf / #lastIndexOf / #includes
+                      +- transcode
+                      +- bytesOf - StringDecoder#write - StringDecoder#end
+                                 \- StringDecoder#text
+
+Every one of the module's five compiled failures, and eight of `buffer`'s exports,
+sit behind it. The two wrapper declines are downstream of the same tree: the class
+is declined because `StringDecoder#constructor` calls `Buffer.alloc`.
+
+**Two roots, not one, and not the three previously recorded.**
+
+    buffer/src/main.ts:196:26  objectToBuffer  an erased value where a concrete
+                                               representation is wanted
+    buffer/src/main.ts:218:30  fromArrayLike   `i`, which `UnknownArrayLike`
+                                               does not declare
+
+Neither appears as the subject of an NTS1003 line, so both are roots. Both must
+clear: `objectToBuffer` refuses on its own account at 196 *and* calls
+`fromArrayLike`, which refuses at 218.
+
+**The third was never on the path.** `buffer/src/main.ts:184`, an `in` naming
+`length` on a natively represented value, is in `isTypedArrayView`. That name
+occurs twice in the file -- its definition at 180 and one call at 484, inside
+`Buffer.copyBytesFrom`. `objectToBuffer` calls `ArrayBuffer.isView`,
+`hasArrayLikeShape` and `fromArrayLike`; `hasArrayLikeShape` is not refused at
+all. So 184 costs `copyBytesFrom` and nothing here.
+
+It had been read off line proximity in one region of the file rather than off the
+call graph -- the same failure as ranking causes by grepping their messages. The
+artifact being read was not the structure being reasoned about. `blockers/a-refused-branch-blocks-every-caller`
+carried the same error in its prose and is corrected.
+
+**What is behind the two, per MainClaude, who owns the compiler and has probed
+218.** `UnknownArrayLike` is `{ readonly length: unknown; readonly [index: number]:
+unknown }` -- a named member *and* a numeric index signature.
+`representation_within` refuses that pair, the type falls through to an ordinary
+one-field object layout, and `source[i]` then looks for a field called `i`. The
+message names the member; the cause is the representation. On that reading 196 and
+218 are one item: an erased value cannot become an `UnknownArrayLike` struct, and
+the struct is the wrong shape for what it is. Recorded as their diagnosis, not as
+a verified claim of mine.
+
+**What this does not say.** Whether clearing both is *sufficient* for `Buffer.from`
+is unknown -- only necessary. A cleared root can reveal another, and `buffer` has
+gone 79 to 79 with five cleared and five revealed. The cone above is what is
+visible behind those two on this pin, not a promise about what publishes.
 
 ## Three pins in one afternoon: roots barely moved, cascades fell a fifth
 

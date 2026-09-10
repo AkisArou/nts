@@ -25,12 +25,24 @@
 // # Where it bites: this is why `string_decoder` is blocked
 //
 // `Buffer.from` is polymorphic over a string, an ArrayBuffer, a typed array and
-// a generic array-like object. Three refusals remain in it and **all three are
-// in the array-like branch**:
+// a generic array-like object. **Two** refusals remain on the path into it, both
+// in the array-like branch:
 //
-//     buffer/src/main.ts:184  isTypedArrayView   an `in` on something not an object
-//     buffer/src/main.ts:196  objectToBuffer     an erased value where a concrete one is wanted
-//     buffer/src/main.ts:218  fromArrayLike      `i`, which `UnknownArrayLike` does not declare
+//     buffer/src/main.ts:196  objectToBuffer   an erased value where a concrete one is wanted
+//     buffer/src/main.ts:218  fromArrayLike    `i`, which `UnknownArrayLike` does not declare
+//
+// Neither is the subject of an NTS1003 line, so both are roots rather than
+// cascades, and both must clear before the branch compiles.
+//
+// This read *three* until 2026-09-10 and named a third at `main.ts:184`, in
+// `isTypedArrayView`. That refusal is real and is not on this path.
+// `isTypedArrayView` occurs twice in the file -- its definition at 180 and one
+// call at 484, inside `Buffer.copyBytesFrom`. `objectToBuffer` calls
+// `ArrayBuffer.isView`, `hasArrayLikeShape` and `fromArrayLike`, and
+// `hasArrayLikeShape` is not refused at all. The three had been read off their
+// proximity in one region of the file rather than off the call graph, which is
+// the same mistake as ranking a blocker by reach: the question is what calls it,
+// and adjacency does not answer that.
 //
 // `string_decoder` never takes that branch. `string_decoder/src/main.ts:32` and
 // `:34` are
