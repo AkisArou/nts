@@ -11675,6 +11675,63 @@ shared by every module in the tree.
 
 
 
+
+## All 22 measured on the post-refusal pin: 564 refusals, 0 passes lost
+
+2026-09-10, 04:26 pin. The field-order refusal converts a raw pointer cast
+between structurally-incompatible types into a decline, so it could only move
+the axis down. Every module was rebuilt and rerun, `built=` verified on each.
+
+    process 62   http 60   net 51   dgram 51   zlib 50   stream 50
+    readline 30  console 26  assert 25  util 23  events 17  url 11
+    string_decoder 6  querystring 6  os 6  buffer 6  fs 82  timers 2
+    punycode 0   path 0   diagnostics_channel 0   async_hooks 0
+
+**Not one module's pass count changed.** `punycode`, `path`,
+`diagnostics_channel` and `async_hooks` carry zero sites and are the control:
+had any moved, the survey would have been wrong rather than the refusal free.
+
+`readline` at 30 with no sites of its own is the clearest illustration of cone
+multiplication — `internal/stdio.ts`'s `StandardStream -> WritableLike` reaches
+it twice, and every cone that passes through a shared internal counts it again.
+
+### The 49 sites are three kinds, and only one is mine
+
+MainClaude measured the field disagreements behind them: **746 by name, 54 by
+type, 0 by the `Object(id1)`/`Object(id2)` artifact** they had flagged as a
+possible over-count. That caveat is withdrawn and the count stands.
+
+| kind | example | who fixes it |
+| --- | --- | --- |
+| interface extends interface | `FileOptions -> BlobOptions`, 8 sites | **layout ordering** — inherited fields first, no source change |
+| class to unrelated interface | the `stream` family, most of the 75 | **neither** — needs a representation decision |
+| API-inherent two shapes | `Stats`/`BigIntStats`, `StatFs<number>`/`StatFs<bigint>` | **nobody** — the two shapes are node's contract |
+
+The middle row is the one that changed tonight's picture. The 746 name
+disagreements are `_events`, `_eventsCount`, `_maxListeners` against
+`_readableState`, `destroyed`, `_writev` — **`EventEmitter`'s fields sitting at
+the front of `Readable` and `Writable` because those classes extend it,
+correctly, base-first.** So `ErrorOrDestroyStream { destroyed, … }` can never be
+a prefix of `Readable`: `destroyed` is index 0 in the interface and index N in
+the class, and no ordering rule fixes that without deciding which order wins.
+
+Confirmed here rather than taken, and the diagnostic now says it itself:
+
+    a pointer cast between two structs that do not agree about where their
+    shared fields are -- a base's fields keep their offsets in a subclass and
+    a structural type's do not
+
+So this was described all evening as one layout problem and it is two, and only
+the smaller one has a cheap answer. The larger one is the design step
+`blockers/method-syntax-in-an-interface` names — what an interface's
+representation should be when both an object literal and a class instance can be
+one — and the stream family stays refused until it is decided.
+
+> The limit on "0 passes lost" is the more useful half: none of these refusals
+> sits in a cone a **currently-passing** test reaches, and 15 of 22 modules pass
+> fewer than three files each. Re-measure after `Buffer.from` and the
+> object-parameter wrapper clear, when those cones open.
+
 ## The field-order refusal cost the axis nothing
 
 2026-09-10, 04:00 pin against the 03:44 one. MainClaude's refusal turns a raw
