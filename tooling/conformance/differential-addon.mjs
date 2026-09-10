@@ -167,14 +167,26 @@ function compare(spec, input) {
 // across the fixed inputs. Node is the oracle; if the oracle cannot answer a
 // question, the question is wrong rather than the implementation.
 {
+  // A spec may declare `throws: true`: node is expected to reject its input, and
+  // the comparison is of the error rather than of an answer. Those specs exist
+  // because the corpora generate inputs a function accepts, so the error paths --
+  // where `code` lives, and `code` is what node's suite asserts on -- were never
+  // reached at all.
+  //
+  // Held to the mirror of the rule above rather than exempted from it. That rule
+  // catches a typo because a spec naming nothing real throws; an error-path spec
+  // throws too, so "it threw" cannot separate them. What does: a typo throws
+  // `TypeError: Cannot read properties of undefined`, with **no `code`**, and a
+  // module's own validation throws one with a code.
   const broken = [];
   for (const spec of corpus.calls) {
     const label = spec.label ?? spec.name;
-    const answered = corpus.fixed.some((input) => {
+    const ok = corpus.fixed.some((input) => {
       const r = invoke(upstream, spec, input);
+      if (spec.throws === true) return "threw" in r && r.code !== undefined && r.code !== null;
       return !("threw" in r) && r.missing !== true;
     });
-    if (!answered) broken.push(label);
+    if (!ok) broken.push(spec.throws === true ? `${label} (declared throws:true)` : label);
   }
   if (broken.length > 0) {
     console.error(

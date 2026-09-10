@@ -19297,6 +19297,49 @@ one site of two and silently changed nothing, which is why it is worth saying th
 a control that does not fire is either a working implementation or a control that
 did not run.
 
+## The compiled lane's errors carry node's code and not node's message
+
+The error paths added to the corpora reach the compiled lane too, once the addon
+harness's typo guard learned about `throws: true`. `path`, against its 09:28 addon:
+
+    541,134 comparison(s), 160,336 divergence(s)
+
+All of them error shape, and **none of them the `code`** -- which is the first
+thing worth saying, because "every compiled error reaches the host with no `code`"
+was the standing description and these all carry `ERR_INVALID_ARG_TYPE` on both
+sides.
+
+What differs is the message, in two distinct ways. The three-way comparison places
+the fault exactly:
+
+                  posix.join(null)                          posix.normalize(null)
+    node          The "path" argument must be of type       same
+                  string. Received null
+    interpreted   identical to node                         identical to node
+    compiled      The "paths[0]" argument ... Received      expected a string argument
+                  *type* null
+
+**The TypeScript is right.** Our interpreted lane produces node's message
+character for character, which is why the interpreted differential reports 0
+divergences over 660,342 comparisons. The compiled artifact, from the same source,
+produces two different wrong ones:
+
+  - `normalize` gets `expected a string argument` -- a generic message from the
+    boundary, replacing the module's validation rather than running it. The same
+    shape as the coercion finding recorded earlier, where the wrapper converts
+    before `validateInt32`'s `typeof` check can run and makes that branch dead;
+  - `join` gets the module's own message with two differences: `"paths[0]"` where
+    node says `"path"`, and `Received type null` where node says `Received null`.
+
+The second is the more interesting of the two, because the same source produces
+node's wording interpreted and different wording compiled -- so it is a rendering
+difference in the compiled path rather than a wrong string in `internal/errors.ts`.
+
+Node's suite asserts on messages as well as codes, so this is not cosmetic. It is
+also invisible to every count in this ledger that stops at "publishes" or "passes",
+and it was invisible to this harness until the corpora reached an error path at
+all.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
