@@ -18817,6 +18817,19 @@ there, `duplex instanceof Writable` really was false.
 **1,871 passed, 0 failed across 22 modules**, from 1,859. The twelve added are
 tests for defects these seams found, each controlled against the code it replaced.
 
+**596,000 comparisons, 0 divergences.** Twelve tests say the twelve fixes are
+right; they do not say the fixes broke nothing else, and nine modules' shapes
+changed. `differential-ts.mjs --all` asks the other question on inputs no pinned
+test uses:
+
+    21 modules, ~4,000 generated inputs each, 0 divergence(s) everywhere
+
+`os` is the twenty-second and is skipped on this lane by its own corpus, which
+says why: its bindings stand in as node's here, so a run would compare node
+against node and report zero for ever -- a green number that cannot fail. Its
+fourteen `Symbol.toPrimitive` functions were checked directly against node
+instead, which is the stronger check for that particular contract.
+
 **0 hollow.** The goal asks for 100% *with* zero hollow, and twelve new tests are
 twelve new chances to have written one that passes against nothing. Re-run with
 `--sabotage` across all nine modules changed tonight:
