@@ -19534,6 +19534,35 @@ visible was the two totals agreeing at 43 while eleven rows claimed to differ. A
 missing value does not leave a hole in a positional join, it moves everything
 after it -- so the re-run joins on the module name instead.
 
+## Does HEAD compile, or only the working tree?
+
+All three sessions build the tree and none of us builds the *commit*, so a commit
+made with a hand-written path list can leave HEAD broken and nothing notices.
+MainClaude lost an hour to exactly that today: `commit-mine.sh` did what it
+promises and their path list omitted two files.
+
+    git worktree add --detach <path> HEAD     0.11s
+
+Run against this lane's ~40 commits from one evening: **22 of 22 modules build
+from HEAD, 0 fail.** Nothing was left behind.
+
+Confirmed a second way, which is cheaper and answers the same question: a
+file-list comparison of `runtime/node` and `tooling/conformance` between HEAD and
+the working tree is **identical** but for one uncommitted fixture in
+`blockers/`, which is another session's.
+
+**The interpreted lane cannot be checked this way, and the reason is worth
+recording.** A fresh worktree lacks `third_party/node`, `node_modules` and
+`target/tsgo`, all git-ignored, and symlinking them back changes how the harness
+resolves paths: node's `common` reports `Unexpected global(s) found:
+nts_write_stdout, …` and `fs` reads 101 failed where the same content in the main
+tree reads 0. That is the environment, not the commit -- the file lists are
+identical -- but it means the worktree check answers "does it build" and not
+"does it pass".
+
+Which is the question worth asking of it. A missing file stops a build; the lane
+is what the main tree already runs after every edit.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
