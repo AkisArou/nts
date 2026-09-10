@@ -11676,6 +11676,51 @@ shared by every module in the tree.
 
 
 
+
+## The layout fix landed and cleared exactly what it said; my count did not mean what I read it as
+
+2026-09-10, 04:47 pin. MainClaude's base-fields-first ordering for interface
+extension landed:
+
+    04:26   struct NtsObj_Extended { header; c; a; b; }
+    04:47   struct NtsObj_Extended { header; a; b; c; }
+
+**It cleared `FileOptions -> BlobOptions` exactly as described**, with no source
+change and nothing flattened — which is why holding through two rounds of
+contradictory advice was the right call.
+
+    string_decoder  fo 6 -> 5   passes 0 -> 0
+    os              fo 6 -> 5   passes 5 -> 5
+
+    before   1 DNSExceptionError->UVError  1 FileOptions->BlobOptions  2 UVExceptionError->UVError
+    after    1 DNSExceptionError->UVError                             2 UVExceptionError->UVError
+
+### I predicted four would clear, and one did
+
+The prediction came from my own site survey printing `string_decoder 4 site(s)`.
+That number counted **refusal lines mentioning the module**, not four
+`FileOptions` sites. There was only ever one. Three ways of counting the same
+build disagree:
+
+    lines matching "is wanted"   6    <- what `fo=` reports
+    pair instances               4
+    distinct pairs               3
+
+A diagnostic wraps across lines, so a line count over-reports; a pair count
+collapses repeats; only the distinct-pair count answers "how many kinds". **All
+three are in this ledger under the same word "sites" at different points**, and
+the 564 total is a line count.
+
+This is the `built=` column again in a different place: a number that means
+something other than what it is read as, in an instrument I wrote. The `built=`
+case made "did not compile" and "tests failed" the same row; this one makes
+"one diagnostic" and "several sites" the same number.
+
+**The totals stand as line counts and should be read as such.** They are still
+comparable across pins, which is what they were used for — every before/after in
+this ledger counted the same way on both sides. What they are not is a count of
+distinct casts, and I used them as one when predicting.
+
 ## All 22 measured on the post-refusal pin: 564 refusals, 0 passes lost
 
 2026-09-10, 04:26 pin. The field-order refusal converts a raw pointer cast
