@@ -78,6 +78,40 @@ is a real economy and is not the problem; sharing the identity is. Both backends
 compare descriptors, so it is one decision for both and belongs with the Node
 and JVM lanes rather than in a unilateral commit.
 
+**Which pairs collapse, after getting the table wrong once.**
+
+    no base, identical fields                COLLAPSES
+    same user base, identical extra field    COLLAPSES
+    two field-less siblings of one parent    COLLAPSES
+    identical fields, base `TypeError`       COLLAPSES
+    ancestor vs descendant                   distinct
+    same field name, different type          distinct
+    different field name, same type          distinct
+
+The fourth row read `distinct` for an hour. I ran the probe, read `tail -5`,
+saw one function's disagreements in those five lines and concluded the error
+pair agreed. Counted per function it was `12 qIsNotP` and **`8 twoIsNotOne`** —
+disagreeing the whole time, three lines above where I stopped reading. **A tail
+is not a summary**, and the emitted C had said so without arithmetic:
+`static void ERR_TWO__constructor(NtsObj_ERR_ONE * v0)`.
+
+I told the Node lane the `ERR_*` family was safe *because* of the base, and had
+to retract it. Their weaker original claim — latent because nothing asks — was
+the true one, and I had talked them out of it. The other six rows were then
+re-counted rather than defended; only that one was wrong.
+
+**What is actually merged**, from `tooling/conformance/merged-layouts.mjs`,
+which reads the layout out of `nts hir`'s own printing (`this: managed<obj#1>`):
+five groups, twelve classes — `ErrnoException`/`UVAddressError`, the
+`Primitive`/`Batch` source pairs, `BroadcastConsumer`/its iterator, and
+`ERR_SERVER_NOT_RUNNING`/`SocketPeerEndedError`. **No `instanceof` in
+`runtime/` names any of them**, confirmed independently by the Node lane. Latent
+everywhere, and each one a wrong answer waiting for the first `instanceof`.
+
+`SocketPeerEndedError` merging with `ERR_SERVER_NOT_RUNNING` is a cross-family
+pair neither lane would have predicted by inspection, which is the argument
+against reasoning about this defect from names.
+
 **How far it reaches, because the first guess was that it reaches a published
 surface.** The Node lane raised `util/src/types.ts`, whose sixteen typed-array
 predicates are each `value instanceof Uint8Array`, and typed arrays are the

@@ -77,10 +77,24 @@
 //     no base, identical fields                COLLAPSES
 //     same *user* base, identical extra field  COLLAPSES
 //     two field-less siblings of one parent    COLLAPSES
+//     identical fields, base `TypeError`       COLLAPSES
 //     ancestor vs descendant                   distinct
 //     same field name, different type          distinct
 //     different field name, same type          distinct
-//     identical fields, base `TypeError`       distinct
+//
+// **The base does not separate anything**, and an earlier version of this table
+// said it did. That row read `identical fields, base TypeError -- distinct`, on
+// a probe whose output I read with `tail -5`: two of the three functions fit in
+// those five lines and the error pair was disagreeing three lines above where I
+// stopped. Counting per function says `twoIsNotOne` was wrong on eight cases the
+// whole time. **A tail is not a summary.**
+//
+// The emitted C says it without arithmetic, which is where the typed-array
+// question got answered correctly and where this one should have been:
+//
+//     static void ERR_TWO__constructor(NtsObj_ERR_ONE * v0);
+//
+// One descriptor, and `ERR_TWO` *is* `ERR_ONE`.
 //
 // **Inheritance depth is safe; siblings are not.** A subclass adding no fields
 // keeps its parent's field list exactly, which looks like the worst case and is
@@ -96,24 +110,47 @@
 // three are fine, and node's tests telling them apart with `instanceof Duplex`
 // and `instanceof Transform` would keep working.
 //
-// The last row is the one that matters for this profile. The Node lane surveyed
-// the shaped surface and found **89 of 93 `ERR_*` classes in one shape group,
-// 87 sharing exactly `[code: string]`**, and read that as eighty-seven classes
-// resolving to one layout -- which would be this defect at its maximum
-// anywhere in the tree.
+// The Node lane surveyed the shaped surface and found **89 of 93 `ERR_*`
+// classes in one shape group, 87 sharing exactly `[code: string]`** -- this
+// defect at its maximum anywhere in the tree. That group is real and the base
+// does not save it.
 //
-// They do not collapse. Every `ERR_*` extends `TypeError`, `RangeError` or
-// `Error`, and a provided base gives distinct identity: `emit-c` on `os` emits
-// **62 distinct `ERR_` descriptors**, one per class --
-// `nts_desc_NtsObj_ERR_BUFFER_OUT_OF_BOUNDS` and so on -- not one shared. Two
-// classes extending `TypeError` with the same `code: string` field answer
-// `instanceof` correctly.
+// `emit-c` on `os` does emit 62 distinct `ERR_` descriptors, and that is a fact
+// about *those* classes rather than about the base: several `ERR_*` take extra
+// arguments and carry extra fields, so their layouts differ on the fields. I
+// counted descriptors and inferred a mechanism that was not there.
 //
-// So the identical *own-property shape* a JavaScript survey sees is not the key
-// a layout is merged on, and the two questions have different answers. The
-// conclusion the Node lane drew -- that the `ERR_` family is unexposed -- holds,
-// and for a stronger reason than the one they gave: not "latent because nothing
-// asks", but "not collapsed at all".
+// What keeps the family unexposed is the Node lane's two latency arguments,
+// both checked: there is **no `instanceof ERR_` anywhere in `runtime/node`**,
+// and an error crossing the napi boundary arrives as a host `TypeError` with
+// `code` set -- a string *value*, and a value survives a collapse that an
+// identity would not. So: latent, not absent. That is the weaker claim, it
+// needs re-checking whenever someone writes an `instanceof` near an error, and
+// it is the true one.
+//
+// # What is actually merged in `runtime/node`
+//
+// `tooling/conformance/merged-layouts.mjs` reads the layout out of `nts hir`'s
+// own printing -- `func A#constructor(this: managed<obj#1>)` -- so two class
+// names against one `obj#N` is a merged layout stated by the compiler rather
+// than inferred. Across all 22 modules it finds five groups:
+//
+//     ErrnoException / UVAddressError                 console, fs, readline, util
+//     PrimitiveAsyncSource / PrimitiveSyncSource      7 modules
+//     BatchAsyncSource / BatchSyncSource              7 modules
+//     BroadcastConsumer / BroadcastConsumerIterator   fs, http, process, stream, zlib
+//     ERR_SERVER_NOT_RUNNING / SocketPeerEndedError   dgram, http, net, process
+//         (+ HTTPRequestTimeoutError in http, + WriteNoProgressError in process)
+//
+// **All twelve classes are latent: no `instanceof` in `runtime/` names any of
+// them.** So there is no wrong answer being produced today, and every one is a
+// wrong answer waiting for the first `instanceof` someone writes.
+//
+// The sweep **under-reports** and only under-reports. Its signal is the `this`
+// parameter of a lowered method, so a class with no constructor and no methods
+// emits no line and is invisible -- and two field-less siblings are exactly
+// that shape. An empty result is not "no pairs". It does not over-report: every
+// group it names, a differential probe confirms.
 //
 // # What decides the fix
 //
@@ -258,9 +295,9 @@ class ERR_TWO extends TypeError {
 }
 
 /**
- * Control, and the load-bearing one: the `ERR_*` shape. Same field, same
- * provided base, and **distinct** -- which is why 87 same-shaped error classes
- * are not eighty-seven collapsed ones. Answers `false`.
+ * The `ERR_*` shape: same field, same provided base. **Collapses** -- answers
+ * `true` where node answers `false`, which is what makes the 87-class group a
+ * real candidate rather than one the base rules out.
  */
 export function errTwoIsNotErrOne(n: number): boolean {
   return ((new ERR_TWO() as unknown) instanceof ERR_ONE) || n < 0;
