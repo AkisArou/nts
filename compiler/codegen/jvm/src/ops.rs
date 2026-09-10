@@ -286,6 +286,9 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
         // because nothing had asked: `instanceof` never needed it, and the
         // callers are `ArrayBuffer.isView` and now `"buffer" in v`.
         "nts_value_is_view" => (types::VALUE, "isView", "(Lnts/rt/NtsValue;)Z"),
+        // Not `ToNumber`: absent takes the fallback, a boolean is 0 or 1, and
+        // everything else is `NaN` rather than converted. See the method.
+        "nts_value_number_or" => (types::VALUE, "numberOr", "(Lnts/rt/NtsValue;D)D"),
         "nts_is_date" => (types::VALUE, "isDate", "(Lnts/rt/NtsValue;)Z"),
         // One class serves both, so these two read a bit rather than test a
         // type; see `NtsValue.isMap`. The C lane spells it the same way --
@@ -947,6 +950,12 @@ fn view_external(name: &str, class: &str) -> Option<(&'static str, &'static str,
         }
         "nts_view_put" => {
             (types::VIEW_BASE, "putElement", format!("(L{};DD)V", types::VIEW_BASE))
+        }
+        // A loop over the per-element write, so each store keeps its own
+        // coercion -- a byte fill would answer 44 for a `Uint8ClampedArray`
+        // where the language says 255.
+        "nts_view_fill" => {
+            (types::VIEW_BASE, "fill", format!("(L{};DDD)V", types::VIEW_BASE))
         }
         _ => return None,
     })

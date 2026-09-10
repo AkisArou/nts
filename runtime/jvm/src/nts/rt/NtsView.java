@@ -156,6 +156,35 @@ public abstract class NtsView extends NtsAnyView {
         return view.readAt((int) index);
     }
 
+    /**
+     * {@code fill(value, from, to)} over any typed array.
+     *
+     * <p>**A loop over {@link #writeAt}, not a byte fill**, and the difference
+     * is two wrong answers rather than one missing. Every store takes the same
+     * conversion an indexed write does, so {@code new Uint8ClampedArray(4)
+     * .fill(300)} is 255 while {@code new Uint8Array(4).fill(300)} is 44 -- a
+     * {@code memset} answers 44 for both. {@code Float32Array.fill(0.1)} is the
+     * other tell: it reads back {@code 0.10000000149011612}.
+     *
+     * <p>{@code from} and {@code to} are relative indices and not offsets:
+     * negative counts from the end, {@code NaN} is 0, past the end saturates.
+     * {@code fill(0, -2)} fills the last two.
+     *
+     * <p>A detached buffer returns without writing rather than throwing, which
+     * is the C's {@code !nts_view_bytes(view)} guard. Detachment is `null`
+     * bytes here rather than a flag, so the guard is the same shape.
+     */
+    public static void fill(NtsView view, double value, double from, double to) {
+        if (view.buffer.bytes == null) {
+            return;
+        }
+        int length = count(view);
+        int end = relative(to, length);
+        for (int at = relative(from, length); at < end; at++) {
+            view.writeAt(at, value);
+        }
+    }
+
     public static void putElement(NtsView view, double index, double value) {
         view.writeAt((int) index, value);
     }

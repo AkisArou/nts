@@ -148,6 +148,33 @@ public final class NtsValue {
      * Those two and no others extend {@code NtsAnyView}, which is the whole of
      * why this one line is the definition.
      */
+    /**
+     * An erased optional endpoint as a number, or the fallback when it is absent.
+     *
+     * <p>**Not {@code ToNumber}.** A string gives {@code NaN} rather than being
+     * parsed, and nothing reaches {@code valueOf}. That is deliberate: this
+     * exists for an optional argument that is a number or is missing, and a
+     * string arriving here is a program the compiler should have refused rather
+     * than one this should coerce.
+     *
+     * <p>{@code undefined} and {@code null} both take the fallback -- absent is
+     * absent -- and a boolean is 0 or 1, which is the one conversion the
+     * specification does perform on this path.
+     */
+    public static double numberOr(NtsValue value, double fallback) {
+        switch (value == null ? NULL : value.tag) {
+            case UNDEFINED:
+            case NULL:
+                return fallback;
+            case NUMBER:
+                return value.num;
+            case BOOLEAN:
+                return value.num != 0.0 ? 1.0 : 0.0;
+            default:
+                return Double.NaN;
+        }
+    }
+
     public static boolean isView(NtsValue value) {
         Object ref = value == null ? null : value.ref;
         return ref instanceof NtsAnyView;
