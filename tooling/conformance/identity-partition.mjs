@@ -120,11 +120,11 @@ try {
       .filter((l) => l !== "" && !l.startsWith("#"));
     for (const name of wanted) {
       if (name === "abort") {
-        const abort = await import(join(ROOT, "web-platform/src/core/abort.ts"));
+        const abort = await import(join(ROOT, "runtime/web-platform/src/core/abort.ts"));
         globalThis.AbortController = abort.AbortController;
         globalThis.AbortSignal = abort.AbortSignal;
       } else if (name === "encoding") {
-        const encoding = await import(join(ROOT, "web-platform/src/core/encoding.ts"));
+        const encoding = await import(join(ROOT, "runtime/web-platform/src/core/encoding.ts"));
         globalThis.TextEncoder = encoding.TextEncoder;
         globalThis.TextDecoder = encoding.TextDecoder;
       }
