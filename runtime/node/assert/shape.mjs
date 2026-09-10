@@ -77,6 +77,18 @@ export function shape(exports) {
   // boundary even though the compiled implementation has no property map.
   assert.AssertionError = exports.AssertionError;
   assert.CallTracker = exports.CallTracker;
+  // `assert`, `assert.ok` and `assert.strict.ok` are all **one function**, and
+  // it is the loose callable. Measured against node rather than reasoned:
+  //
+  //     assert.ok === assert                 true
+  //     assert.strict.ok === assert          true
+  //     assert.strict.ok === assert.strict    false
+  //
+  // This line was already right. The one below it was not: `strict.ok = strict`
+  // gave the strict surface its own `ok`, so the two surfaces disagreed on `ok`
+  // while agreeing on `fail` and `ifError`. No test anywhere caught it, because
+  // node has no reason to assert the identity of its own two surfaces --
+  // `local/surface-identity-static.js` does now.
   assert.ok = assert;
   for (const name of METHODS) {
     assert[name] = exports[name];
@@ -87,7 +99,7 @@ export function shape(exports) {
   };
   strict.AssertionError = exports.AssertionError;
   strict.CallTracker = exports.CallTracker;
-  strict.ok = strict;
+  strict.ok = assert;
   for (const name of METHODS) {
     strict[name] = exports[name];
   }
