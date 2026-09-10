@@ -1153,6 +1153,55 @@ export const CORPORA = {
     },
     calls: [
       {
+        // The five pure predicates, which were uncompared -- the corpus reached
+        // 2 of `stream`'s 22 functions. Each takes a value and answers a
+        // boolean with no I/O, and each is asked about a stream in a *known
+        // state* rather than a fresh one: destroyed, ended, errored, written
+        // to. A predicate that answers correctly for a new stream and wrongly
+        // for a used one is the failure worth catching, and only a state
+        // machine reaches it.
+        label: "stream-predicates",
+        call: (m, program) => {
+          const out = [];
+          const mk = () => {
+            const r = new m.Readable({ read() {} });
+            r.on("error", () => {});
+            return r;
+          };
+          const ask = (tag, obj) => {
+            for (const n of ["isDestroyed", "isDisturbed", "isErrored", "isReadable", "isWritable"]) {
+              try {
+                out.push(`${tag}.${n}:${m[n](obj)}`);
+              } catch (e) {
+                out.push(`${tag}.${n}:threw:${(e && e.code) || (e && e.name)}`);
+              }
+            }
+          };
+          ask("fresh", mk());
+          const destroyed = mk();
+          destroyed.destroy();
+          ask("destroyed", destroyed);
+          const errored = mk();
+          errored.destroy(new Error("x"));
+          ask("errored", errored);
+          const pushed = mk();
+          pushed.push(Buffer.from(program.slice(0, 4) || "a"));
+          pushed.read();
+          ask("read", pushed);
+          const w = new m.Writable({ write(_c, _e, cb) { cb(); } });
+          w.on("error", () => {});
+          ask("writable", w);
+          w.end();
+          ask("ended", w);
+          // Non-stream values: node answers these rather than throwing, and a
+          // reimplementation that throws instead is a difference no pinned test
+          // reaches.
+          ask("plain", {});
+          ask("nul", null);
+          return out;
+        },
+      },
+      {
         label: "stream-program",
         call: (m, program) => {
           const log = [];

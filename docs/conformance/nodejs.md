@@ -11705,7 +11705,7 @@ constructors as well as top-level names.
 
     path                 21/39
     console               1/25   not measurable this way
-    stream                2/22
+    stream                2/22   -> 7/22
     url                   8/14
     readline              4/7
     querystring           4/7   -> 7/7
@@ -11723,8 +11723,25 @@ documented aliases for `stringify` and `parse`, and `unescapeBuffer` is the safe
 fast decoder `unescape` falls back to. An alias that stops aliasing is exactly
 the kind of break no pinned test catches, and nothing was watching it.
 
-Both are complete now, and the suite is **21 modules, 563,583 comparisons, 0
-divergences** — up 20,097 comparisons from the eight new calls.
+**`stream` was comparing 2 of 22.** Its five pure predicates — `isDestroyed`,
+`isDisturbed`, `isErrored`, `isReadable`, `isWritable` — take a value and answer
+a boolean with no I/O, and none was compared. Added, and asked about a stream in
+a **known state** rather than a fresh one: destroyed, errored, read from, ended,
+plus a plain object and `null`. A predicate that answers correctly for a new
+stream and wrongly for a used one is the failure worth catching, and only a
+state machine reaches it.
+
+That is 40 answers per input across eight states, and node's answers are not
+uniform — `fresh.isDestroyed` is `false`, `destroyed` and `errored` are `true`,
+and `null.isDestroyed` is **`null`** rather than a throw. A sabotage making
+`isDestroyed` always answer `false` is caught.
+
+`stream` remains 7 of 22 rather than complete: the rest are `pipeline`,
+`finished`, `compose`, `Readable.from` and the constructors, which answer over
+time and belong to a harness that can compare ordering.
+
+The suite is **21 modules, 567,613 comparisons, 0 divergences** — up 24,127 from
+the thirteen new calls.
 
 **`console` is still not measurable by this instrument and is left saying so.**
 Its corpus calls methods on a constructed `Console` instance, and those methods
