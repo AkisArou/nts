@@ -18817,9 +18817,19 @@ there, `duplex instanceof Writable` really was false.
 **1,871 passed, 0 failed across 22 modules**, from 1,859. The twelve added are
 tests for defects these seams found, each controlled against the code it replaced.
 
+**0 hollow.** The goal asks for 100% *with* zero hollow, and twelve new tests are
+twelve new chances to have written one that passes against nothing. Re-run with
+`--sabotage` across all nine modules changed tonight:
+
+    assert 0/13   console 0/21   timers 0/60   fs 0/348   stream 0/252
+    os 0/10       process 0/91   http 0/407    util 0/25
+
+Every file fails when its module is blanked, so none of the twelve is passing on
+node's own implementation or on nothing.
+
 One caveat that applies to every lane number in this tree, including this one:
 `test-util-inspect-long-running.js` fails about one run in seven, and it passed on
-the run that produced 1,869. Every number here is one sample.
+the run that produced this total. Every number here is one sample.
 
 ## A private name is per class, and this corpus collides once
 
