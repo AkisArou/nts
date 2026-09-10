@@ -33,6 +33,25 @@ function callableConstructor(Class, name) {
   Object.setPrototypeOf(callable, Class);
   callable.prototype = Class.prototype;
   Object.defineProperty(callable, "name", { value: name });
+  // The class's statics, copied onto the facade as **own enumerable** properties.
+  //
+  // Two differences from node stack up without this. `Object.setPrototypeOf`
+  // above makes the facade *reach* `Readable.from`, and reaching is not having:
+  // node's `Object.keys(stream.Readable)` lists `from`, `fromWeb`, `toWeb` and
+  // `wrap` and ours listed none of them. And node defines them with assignment,
+  // which is enumerable, where a TypeScript `static` member is non-enumerable --
+  // so even copied verbatim they would still not appear.
+  //
+  // A blanket copy is right here because it was measured: our classes' own
+  // statics are exactly the four names node has, with nothing else on them. The
+  // shim was already doing this by hand for `Duplex.fromWeb` and `Duplex.toWeb`,
+  // which is what made the gap look like two names rather than seven.
+  for (const key of Object.getOwnPropertyNames(Class)) {
+    if (key === "prototype" || key === "name" || key === "length") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(Class, key);
+    if (descriptor === undefined) continue;
+    Object.defineProperty(callable, key, { ...descriptor, enumerable: true });
+  }
   Class.prototype.constructor = callable;
   callableConstructors.set(Class, callable);
   return callable;

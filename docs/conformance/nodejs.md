@@ -20110,6 +20110,33 @@ them through the module object, which is what makes this safe to remove and also
 what let it stand: no test could see the difference, and node's surface is not
 defined by what our tests happen to read.
 
+### And the seven that were reachable but not own
+
+The same run reported seven `KEYS` rows: `Readable.from`, `fromWeb`, `toWeb` and
+`wrap`, `Writable.fromWeb` and `toWeb`, `Duplex.from`. Two differences stacked up
+to produce them.
+
+`callableConstructor` wraps each stream class in a callable whose prototype is the
+real class, so the facade *reaches* `Readable.from` and does not have it --
+`Object.keys(stream.Readable)` was `["ReadableState"]` against node's
+`["ReadableState", "_fromList", "from", "fromWeb", "toWeb", "wrap"]`. And node
+defines those by assignment, which is enumerable, where a TypeScript `static`
+member is non-enumerable, so copying them verbatim would still not have shown
+them.
+
+The facade now takes the class's own statics as own **enumerable** properties. A
+blanket copy is safe here because it was measured first: our classes carry exactly
+the four names node has and nothing else. The shim was already doing this by hand
+for `Duplex.fromWeb` and `Duplex.toWeb`, which is why the gap looked like two
+names rather than seven.
+
+`Readable`, `Writable` and `Duplex` now match node's keys exactly. `_fromList`
+remains, and it is an absence rather than a shape difference. Interpreted lane
+252 passed / 0 failed, unchanged.
+
+Swept across all 22 modules afterwards: `process` has 9 `KEYS` rows and `util` 1;
+every other module has none.
+
 `stream` now reports 0 extra. `process` still reports 3 -- `throwDeprecation`,
 `traceDeprecation`, `traceProcessWarnings` -- and those are a different question:
 node creates them on assignment, so a fresh `process` lacks the own property while
