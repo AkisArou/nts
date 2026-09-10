@@ -56,7 +56,13 @@ process.noDeprecation = true;
 const compiled = require_(resolve(addonPath));
 const upstream = require_(`node:${name}`);
 
-const show = (r) => ("threw" in r ? `throw ${r.threw}` : JSON.stringify(r.value));
+// `code` is part of a thrown error here, not decoration: `assert.throws(fn, { code })`
+// is how node states nearly every error expectation, so a right name and message
+// over a wrong code is a divergence this had no way to show.
+const show = (r) =>
+  "threw" in r
+    ? `throw ${r.threw}${r.code === undefined || r.code === null ? "" : ` [${r.code}]`}`
+    : JSON.stringify(r.value);
 
 let compared = 0;
 let diverged = 0;
@@ -71,7 +77,7 @@ function invoke(target, spec, input) {
     if (typeof fn !== "function") return { missing: true };
     return { value: fn(...spec.args(input)) };
   } catch (error) {
-    return { threw: `${error.name}: ${error.message}` };
+    return { threw: `${error.name}: ${error.message}`, code: error.code ?? null };
   }
 }
 

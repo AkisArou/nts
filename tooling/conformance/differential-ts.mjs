@@ -208,7 +208,12 @@ for (const name of modules) {
           theirs = { value: fn(...spec.args(inputs[i])) };
         }
       } catch (error) {
-        theirs = { threw: `${error.name}: ${error.message}` };
+        // `code` as well as name and message. Node's errors carry one --
+        // `ERR_INVALID_ARG_TYPE` and its kin -- and `assert.throws(fn, { code })`
+        // is how node's own suite states nearly every error expectation, so a
+        // wrong `code` under a right name and message is exactly the divergence
+        // this file exists to find and was the one shape it could not see.
+        theirs = { threw: `${error.name}: ${error.message}`, code: error.code ?? null };
       }
       compared++;
       if (show(mine) === show(theirs)) continue;

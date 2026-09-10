@@ -19229,6 +19229,44 @@ It matters for ranking. `WithStatic.limit` is a reduction that exists, reproduce
 and is *not* the http case: clearing the static-read shape need not clear the
 store-the-constructor shape, and the 274 files are behind the second.
 
+## The differential could not see a wrong error code, and mostly still cannot
+
+`assert.throws(fn, { code: 'ERR_...' })` is how node's own suite states nearly
+every error expectation, and both differential harnesses recorded a throw as
+`name: message` and nothing else. A wrong `code` under a right name and message
+was invisible to ~596,000 comparisons.
+
+Both sides record it now, and the addon harness prints it. **Controlled** by
+changing our `atob`'s `InvalidCharacterError.code` from 5 to 6:
+
+    ours {"threw":"InvalidCharacterError: Invalid character","code":6}
+    node {"threw":"InvalidCharacterError: Invalid character","code":5}
+
+Identical name, identical message, and the divergence is now reported. Restored,
+`buffer` is 116,725 comparisons and 0 divergences.
+
+### And the number that says how much this buys today: two
+
+The first control chosen for it was `ERR_OUT_OF_RANGE`, and it did **not** fire.
+That is not the comparison failing; it is `buffer`'s corpus never reaching that
+error. Counting how often the corpora throw at all, over 400 generated inputs plus
+the fixed ones per module:
+
+    buffer      12,325 calls    811 threw   811 with a code
+    punycode     3,024 calls    424 threw     0 with a code
+    every other module          0 threw     0 with a code
+
+    TOTAL       63,055 calls  1,235 threw   811 with a code
+
+**Nineteen of twenty-one corpora never reach an error path.** And `buffer`'s 811
+are all one call: `atob`, throwing a `DOMException` whose `code` is the legacy
+numeric 5, not an `ERR_` string. `punycode`'s 424 carry no code at all.
+
+So the error-shape question is not answered by this harness -- it is asked of one
+function in one module. The corpora were written to generate *inputs a function
+accepts*, and an error path needs an input it rejects. That is a corpus gap rather
+than a harness gap, and it is the honest size of what "0 divergences" covers.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

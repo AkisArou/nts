@@ -16,7 +16,7 @@ const call = (fn, args) => {
   try {
     return { value: fn(...args) };
   } catch (error) {
-    return { threw: `${error.name}: ${error.message}` };
+    return { threw: `${error.name}: ${error.message}`, code: error.code ?? null };
   }
 };
 
@@ -31,7 +31,7 @@ import(corporaPath).then(({ CORPORA }) => {
         try {
           return { value: spec.call(target, input) };
         } catch (error) {
-          return { threw: `${error.name}: ${error.message}` };
+          return { threw: `${error.name}: ${error.message}`, code: error.code ?? null };
         }
       }
       const fn = target[spec.name];
