@@ -52,7 +52,13 @@ if (corpus === undefined) {
   process.exit(2);
 }
 
-process.noDeprecation = true;
+// Assigned defensively: under `node --no-deprecation` this property is read-only
+// and a bare assignment throws before the harness reaches its first comparison.
+try {
+  process.noDeprecation = true;
+} catch {
+  // already suppressed by the flag, which is the outcome this wanted
+}
 const compiled = require_(resolve(addonPath));
 const upstream = require_(`node:${name}`);
 

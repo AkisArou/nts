@@ -446,8 +446,28 @@ export function userInfo(options?: UserInfoOptions): UserInfo<string | Buffer> {
   };
 }
 
-/** `validateInt32`, node `lib/internal/validators.js`. */
-function validateInt32(value: number, name: string, min = -2147483648, max = 2147483647): void {
+/**
+ * `validateInt32`, node `lib/internal/validators.js`.
+ *
+ * **`unknown`, not `number`, and that is the whole point of the first branch.**
+ * Node's validator takes whatever the caller passed, which is why it can answer
+ * `ERR_INVALID_ARG_TYPE` at all. Declared `number`, the `typeof` guard below is a
+ * branch the declaration says can never be taken, and the compiled lane folded it
+ * away: `os.setPriority(0, "x")` reached `Number.isInteger("x")` and answered
+ * `ERR_OUT_OF_RANGE` where node answers `ERR_INVALID_ARG_TYPE`. The interpreted
+ * lane passed the same test throughout, because there the guard still runs.
+ *
+ * A string can reach here because an overloaded function's second argument is not
+ * checked at the wrapper -- `tooling/conformance/blockers/`
+ * `an-overloads-second-argument-is-unchecked`. Two facts compose into the wrong
+ * error type, and this is the half that lives in this file.
+ */
+function validateInt32(
+  value: unknown,
+  name: string,
+  min = -2147483648,
+  max = 2147483647,
+): asserts value is number {
   if (typeof value !== "number") {
     throw new ERR_INVALID_ARG_TYPE(name, "number", value);
   }
@@ -484,7 +504,14 @@ export function getPriority(pid?: number): number {
 /** Upstream `lib/os.js:252`. Nice values run -20 (highest) to 19 (lowest). */
 export function setPriority(priority: number): void;
 export function setPriority(pid: number, priority: number): void;
-export function setPriority(pid: number, priority?: number): void {
+// The two overloads above are node's documented API and are what a caller sees.
+// The implementation takes `unknown` because that is what it actually receives:
+// an overloaded function's second argument reaches the body unchecked, so
+// `priority` can hold a string. Declared `number`, the `typeof` guard inside
+// `validateInt32` is folded away at *this* call site -- widening the validator's
+// own parameter is not enough, which was measured both ways -- and node's
+// `ERR_INVALID_ARG_TYPE` becomes `ERR_OUT_OF_RANGE`.
+export function setPriority(pid: number, priority?: unknown): void {
   if (priority === undefined) {
     priority = pid;
     pid = 0;

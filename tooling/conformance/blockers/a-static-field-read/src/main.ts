@@ -1,51 +1,58 @@
-// expect: `Limits`, a class used as a value
+// expect: lowers
+//
+// **Kept as a guard. Fixed 2026-09-10.**
 //
 // A **static field** read through the class name.
 //
 //     class Event { static readonly AT_TARGET = 2; }
 //     this.phase = Event.AT_TARGET;                    REFUSED
 //
-// # It wears the same message as two other constructs
+// # It wore the same message as two other constructs
 //
-// "a class used as a value" covers three unlike things, and the Node lane
-// separated them by measurement before I started, which saved a wrong first
-// move:
+// "a class used as a value" covered three unlike things, and the Node lane
+// separated them by measurement before this was started, which saved a wrong
+// first move:
 //
-//     WithStatic.double(3)    a static method call      lowers today
-//     WithStatic.limit        a static field read       refused -- this
-//     ?? IncomingMessage      the bare class as a value  fixed 2026-09-10
+//     WithStatic.double(3)     a static method call       already lowered
+//     WithStatic.limit         a static field read        this
+//     ?? IncomingMessage       the bare class as a value  record 0269
 //
-// The third is `examples/a-class-stored-and-compared`. It needed a token: one
-// immortal object per class, comparable, `typeof` `"function"`. **A static read
-// does not want a token** — it wants the storage behind the name, and handing
-// it a token would produce an object with no field to read. Starting from this
-// reduction would have cleared a shape and left `http.Server`'s constructor
-// exactly where it was.
+// A static read never wanted a class token; it wanted the storage behind the
+// name. Handing it a token would have produced an object with no field to read.
 //
-// That the static *method call* already lowers is the useful half: the lowering
-// can resolve a member through a class name when the result is immediately
-// consumed. What it cannot do is produce a value for the name on its own.
+// # What it is now
 //
-// # Size
+// One global per static field, named `Class.field`, initialized in `module#init`
+// in class-definition order -- which is exactly what a `static` field *is*: one
+// location for the program, written once when the class is defined. Everything
+// after that is `collect_module_scope`'s machinery keyed on the property's own
+// symbol, so a read resolves as a module-scope `const`'s does, and a write is a
+// global write.
 //
-// The commonest of the three in the corpus by a wide margin: **about ten per
-// module** across `stream`, `net`, `process`, `fs`, `util`, `events`, `zlib`
-// and `console`, and they are the same few shared files counted repeatedly --
-// `web-platform/src/core/events.ts` reading `Event.AT_TARGET` and `Event.NONE`,
-// `event-source.ts` reading `EventSource.CLOSED`, and `events/src/main.ts`
-// reading `EventEmitter.errorMonitor`.
+// A class joins the ordered statement list only if it has a static field with an
+// initializer. Putting every class in gave a file that had no module evaluation
+// an empty `module#init`, and `examples/delete` went from eight exports to nine
+// -- caught by a test asserting the count exactly.
 //
-// A static field is close to a module-scope `const` with a qualified name: one
-// storage location for the program, initialised once. What makes it not simply
-// that is a `static` whose initializer reads `this`, and inheritance -- a
-// subclass reading a base's static through its own name.
+// # What it was under
+//
+// `EventEmitter#emit` reads `EventEmitter.errorMonitor`. Under `emit` sit
+// `addListener`, `EventEmitter#on`, `net.Server`'s constructor, `http.Server`'s,
+// and `createServer` -- **274 failing test files** by the Node lane's ranking.
+// `EventEmitter#on` lowers now.
+//
+// It also needed `unique symbol` to have a representation, which it did not:
+// `TypeFlagsUniqueESSymbol` is `1 << 14` and came through as
+// `Structured { flags: 16384 }`, so every declaration of one was "of
+// unrepresentable type". The uniqueness is a type-level identity and the
+// runtime value is an interned symbol like any other.
 //
 // # Controls
 //
-// `staticMethod` is the shape that already lowers, so this fixture reports the
+// `staticMethod` is the shape that already lowered, so this fixture reports the
 // field and not the class name. `instanceField` reads the same value off an
 // instance, which is the rewrite available to source we control and not to
-// node's -- and it lowers, so what is refused is the *static* and not the read.
+// node's -- so what was refused was the *static* and not the read.
 
 class Limits {
   static readonly LIMIT = 5;

@@ -19836,6 +19836,79 @@ two calls, so the spec compares `typeof` and nothing finer. They now carry
 countable. Across the six modules that compare anything: **0 unexplained
 silences.**
 
+## An overloaded function's second argument is not checked, and a `typeof` guard is folded at the call site
+
+`os.setPriority(0, "x")` answered `ERR_OUT_OF_RANGE` where node answers
+`ERR_INVALID_ARG_TYPE`. Wrong error *type*, which is the one thing about an error
+this project will not trade. Measured on a 16:52 pin, compiler `bde69ce8` plus
+whatever a peer had rebuilt by then.
+
+The interpreted lane passed `test-os-process-priority.js` throughout. Same
+TypeScript, so the compiled lane was losing something.
+
+### Two facts compose, and neither is dangerous alone
+
+The wrapper table, from `blockers/an-overloads-second-argument-is-unchecked`:
+
+    required("s")            threw            the wrapper rejects it
+    optional("s")            threw
+    secondRequired(1, "s")   threw
+    secondOptional(1, "s")   threw
+    overloaded(1, "s")       "number,string"  the string arrives, as a string
+    overloaded("s", 1)       threw            the first argument is still checked
+
+So it is not coercion -- nothing is converted on the way in, it simply is not
+checked -- and it is the second argument of an **overloaded** function
+specifically. `secondOptional` is second and optional and not overloaded, and it
+rejects. `os.getPriority(pid?: number)` rejects. `setPriority`'s own first
+argument rejects. Three explanations ruled out by measurement before the fixture
+was written.
+
+The second fact is what turns an escape into a wrong answer. `validateInt32`
+opens with `typeof value !== "number"`, and its parameter was declared `number`:
+
+    viaOverload          classify(v: number)     "not-integer"   guard folded
+    viaOverloadUnknown   classify(v: unknown)    "not-integer"   still folded
+    viaOverloadLoose     priority: unknown       "not-number"    the guard runs
+
+**It is the type at the call site that decides, not the callee's.** Widening the
+validator -- the function actually doing the checking, and the obvious repair --
+changes nothing. That is worth knowing before spending an hour on it.
+
+### The fix, and what it does not close
+
+`os.setPriority` keeps node's two documented overloads and widens only the
+implementation's `priority` to `unknown`. All four scalar cases now match node:
+
+    setPriority("not-a-pid", 1e9)   ERR_INVALID_ARG_TYPE   both
+    setPriority("abc", 1e9)         ERR_INVALID_ARG_TYPE   both
+    setPriority(0, "x")             ERR_INVALID_ARG_TYPE   both   <- was ERR_OUT_OF_RANGE
+    setPriority(null, 1e9)          ERR_INVALID_ARG_TYPE   both
+
+`test-os-process-priority.js` still fails, and the count is still 5 of 14. It
+also passes objects, and those meet the inbound-reference wall with
+`an argument of this type has no representation in the compiled runtime`. **That
+half was always failing and was masked**: the test died earlier on a scalar and
+never reached it. A first attempt widened `pid` as well, which moved the boundary
+error onto the pid argument -- one failure traded for another, same count. Only
+`priority` is widened.
+
+### The corpus read 0 divergences throughout, and here is why
+
+`setPriority-validation` puts its bad value in the **first** argument, and the
+first argument was never the broken one. 60,280 comparisons, 0 divergences, on a
+binary that had the defect.
+
+`setPriority-priority-validation` is the missing half -- a bad `priority` behind a
+valid `pid` -- and it is controlled against the binary that has the defect rather
+than asserted: it diverges on the 16:28 addon and reads 0 on the rebuilt one. The
+value is prefixed so it stays non-numeric whatever happens to it on the way in;
+`setPriority(0, "5")` is one coercion away from renicing the host, and a corpus
+spec must not be able to do that.
+
+**A test found what a 60,000-comparison differential could not**, because the
+differential only ever asked about the argument that worked.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

@@ -202,6 +202,27 @@ export const CORPORA = {
         },
       },
       {
+        // **A bad `priority` behind a valid `pid`, which the spec above never
+        // reaches.** That one puts its bad value in the *first* argument, and the
+        // first argument was never the broken one: on 2026-09-10 the compiled
+        // lane answered `ERR_OUT_OF_RANGE` here where node answers
+        // `ERR_INVALID_ARG_TYPE`, and this corpus read 0 divergences throughout.
+        // `test-os-process-priority.js` is what found it.
+        //
+        // The prefix keeps the value non-numeric whatever happens to it on the
+        // way in. `setPriority(0, "5")` would be one coercion away from actually
+        // renicing the host, and a corpus spec must not be able to do that.
+        label: "setPriority-priority-validation",
+        call: (m, s) => {
+          try {
+            m.setPriority(0, `p${s}`);
+            return ["ACCEPTED-should-not-happen"];
+          } catch (e) {
+            return ["threw", (e && e.code) || "?", (e && e.name) || "?"];
+          }
+        },
+      },
+      {
         label: "userInfo-shape",
         call: (m) => {
           try {
