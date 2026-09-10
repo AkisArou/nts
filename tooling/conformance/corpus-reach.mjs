@@ -88,6 +88,32 @@ for (const moduleName of MODULES) {
         if (isClass) {
           skipped.push(path);
           copy[key] = value;
+          // **A class's prototype methods are measured too.** `console`'s spec
+          // constructs a `Console` and drives the instance, so the module-level
+          // `console.log` is genuinely never called and the module read 0 of 24
+          // while its behaviour was thoroughly compared. Counting only what the
+          // module object publishes made that look like a gap.
+          const proto = value.prototype;
+          if (proto !== undefined && proto !== null) {
+            for (const methodKey of Object.getOwnPropertyNames(proto)) {
+              if (methodKey === "constructor") continue;
+              const descriptor = Object.getOwnPropertyDescriptor(proto, methodKey);
+              if (descriptor === undefined || typeof descriptor.value !== "function") continue;
+              if (!descriptor.writable && !descriptor.configurable) continue;
+              const methodPath = `${path}#${methodKey}`;
+              const original = descriptor.value;
+              if (!counts.has(original)) counts.set(original, 0);
+              nameToFn.set(methodPath, original);
+              restore.push([proto, methodKey, descriptor]);
+              Object.defineProperty(proto, methodKey, {
+                ...descriptor,
+                value: function (...args) {
+                  counts.set(original, counts.get(original) + 1);
+                  return original.apply(this, args);
+                },
+              });
+            }
+          }
           // **A class's statics are still measured**, and they have to be:
           // `Buffer.from` is the example this file was written for. A facade
           // would break `instanceof` and `x.constructor`, so the statics are

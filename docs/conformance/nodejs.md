@@ -20556,11 +20556,39 @@ called.
     os 20/20    querystring 7/7    punycode 6/6    diagnostics_channel 5/5
     path 36/39   timers 6/9   url 8/14   readline 5/7   net 4/15   http 2/8
     assert 4/19   buffer 4/18   events 3/17   stream 12/52   zlib 8/45
-    util 6/72     fs 8/124      process 2/61     console 0/24
+    util 6/72     fs 8/124      process 2/61     console 0/24 <- misread
 
 Much of the tail is I/O or asynchronous and a synchronous value-differential
 cannot reach it -- node's own tests are the other lane. **A zero here means "the
 differential says nothing about this", which is weaker than "unverified".**
+
+### `console 0 of 24` was the instrument's third mistake, and the worst
+
+It was published before it was checked. `console`'s spec constructs a `Console`
+and drives the **instance**, so the module-level `console.log` really is never
+called -- while the module's behaviour was among the best compared in the corpus,
+both streams captured, group indentation and per-label counts and all. Counting
+only what the module object publishes made thorough coverage read as none.
+
+Class prototype methods are now instrumented the same way statics are, and
+`console` reads 10 of 43 rather than 0 of 24. The remaining zeros are the corpus's
+own documented exclusions -- `time`, `timeEnd`, `timeLog`, `trace`, `clear`,
+`countReset` -- which write durations, stacks or process warnings and would
+diverge every run for reasons that are not defects.
+
+That left three genuine gaps, now closed: `info`, `debug` and `table`. `info` and
+`debug` are aliases of `log` that route to stdout, and an implementation defining
+them as *the same function object* rather than separate ones passes every other
+check here. `table` is the richest formatter in the module -- column discovery,
+alignment, the index column -- driven with rows of differing keys, an array of
+primitives, and a non-tabular value node falls back to `log` for.
+
+**0 divergences**, so this profile's `console.table` output is byte-identical to
+node's. Controlled by subclassing `Console`: `info` routed to stderr, `table`
+falling back to `log`, `debug` prefixed -- noticed on 4, 7 and 4 of 42 programs,
+which is exactly the number containing those ops. The first control run used the
+first 24 fixed programs, none of which contain them, and reported 0 of 24: the
+control needed controlling too.
 
 ### Two corrections it needed first, both found by disbelieving its output
 

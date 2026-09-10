@@ -2463,9 +2463,10 @@ export const CORPORA = {
       "l", "lg", "lgl", "lglG", "lgGl", "cc", "ccc", "ccl", "ew", "a",
       "lew", "gggl", "GGl", "d", "ld", "gdG", "cgcG", "lgglGGl", "", "n",
       "ngl", "aew", "lcl", "gcGc", "nnn", "lGl", "gagG", "cdc", "lnd", "gng",
+      "i", "b", "ib", "t", "T", "u", "gt", "gTG", "itb", "tT", "lut", "gigb",
     ],
     input: (rnd) => {
-      const OPS = "lnewagGcd";
+      const OPS = "lnewagGcdibtTu";
       let out = "";
       const k = 1 + Math.floor(rnd() * 10);
       for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
@@ -2515,6 +2516,19 @@ export const CORPORA = {
               else if (op === "G") con.groupEnd();
               else if (op === "c") con.count("k");
               else if (op === "d") con.dir({ a: { b: { c: n } } });
+              // `info` and `debug` are aliases of `log` on node and route to stdout;
+              // a reimplementation that defines them as *the same function object*
+              // rather than as separate ones passes every other check here. Driving
+              // them separately is what makes the stream they land on comparable.
+              else if (op === "i") con.info(`info${n}`);
+              else if (op === "b") con.debug(`debug${n}`);
+              // `table` is the richest formatter in the module -- column discovery,
+              // alignment, the index column -- and it was uncompared. Three shapes:
+              // rows of objects with differing keys, an array of primitives, and a
+              // non-tabular value node falls back to `log` for.
+              else if (op === "t") con.table([{ a: 1, b: `x${n}` }, { b: 2, c: null }]);
+              else if (op === "T") con.table([1, "two", null]);
+              else if (op === "u") con.table(`not tabular ${n}`);
             } catch (e) {
               outText += `THREW:${e && e.name}\n`;
             }
