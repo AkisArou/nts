@@ -83,6 +83,31 @@ for target in $targets; do
 { "extends": "$root/tsconfig.fixtures.json", "include": ["$root/$target"] }
 JSON
   fi
+  # **No `--entry`, deliberately: the library reading is the widest surface.**
+  # Every export is a root, so this dexes everything the compiler can emit for
+  # the program rather than only what one entry reaches. For a ratchet that is
+  # the point -- more code dexed is more code d8 can refuse.
+  #
+  # It did not mean that until 2026-09-10. `emit_options` read
+  # `!entry.is_empty()`, and `named_entry()` returns `[MODULE_INIT]` when
+  # nothing is named, so the test was never false and every `emit-jvm` without
+  # `--main` compiled as an *executable* rooted at module evaluation. An
+  # exported function nothing calls internally was pruned before the backend
+  # saw it, and `nts.gen.Program` came out with the same four members for every
+  # case in the corpus:
+  #
+  #     case              as-shipped    under the bug
+  #     fib                        6                4
+  #     node-utf8                 11                4
+  #
+  # So this step reported `0 refused` over two hundred times while dexing a
+  # skeleton. It is the failure it exists to prevent, wearing its own uniform:
+  # an instrument that cannot fail reads exactly like one that keeps passing.
+  #
+  # MainClaude found and fixed the CLI. What survives unaffected is
+  # `agrees-on-device.sh`, which passes `--entry` explicitly -- so the
+  # `__@kCount@2` defect that motivated this ratchet was found on a real
+  # program, and it is this ratchet that was hollow rather than the finding.
   if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$config" \
        --out "$out/classes" > "$out/emit.log" 2>&1; then
     # A refusal is this backend working. It is counted, not failed: the corpus
