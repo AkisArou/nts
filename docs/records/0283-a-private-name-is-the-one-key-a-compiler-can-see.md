@@ -78,6 +78,30 @@ is a real economy and is not the problem; sharing the identity is. Both backends
 compare descriptors, so it is one decision for both and belongs with the Node
 and JVM lanes rather than in a unilateral commit.
 
+**How far it reaches, because the first guess was that it reaches a published
+surface.** The Node lane raised `util/src/types.ts`, whose sixteen typed-array
+predicates are each `value instanceof Uint8Array`, and typed arrays are the
+purest same-shape case there is. `util` publishes `types`, so a collapse would
+make `isUint8Array(new Int8Array(2))` answer `true` where a program acts on it.
+
+It does not reach them. Typed-array `instanceof` never reaches the layout
+lookup — it emits `nts_is_view_kind(v44, v45)`, an element-kind test, because
+these are `View`/`AnyView` and never `Object(TypeId)`. Read out of the emitted C
+rather than argued from the types.
+
+So the blast radius is **user-declared classes sharing a field shape**, and no
+host surface at all. A good question with a wrong conclusion, answered in one
+build, and the narrowing is worth more than the original filing: "anything using
+`instanceof`" and "two declared classes with identical fields" are different
+sizes of problem.
+
+What decides the fix is the Node lane's other point. `X.isX(value)` is
+`value instanceof X` throughout this profile — `BlockList.isBlockList`,
+`SocketAddress.isSocketAddress`, `AssertionError`, `util.types`' whole surface —
+and those are the *documented* predicate rather than an incidental use.
+**A profile whose `instanceof` cannot separate two declared classes cannot
+implement them.**
+
 ## The thing to carry
 
 A fixture that fails for a reason other than the one it was written for is the

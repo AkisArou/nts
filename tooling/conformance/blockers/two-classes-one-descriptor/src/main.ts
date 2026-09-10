@@ -46,6 +46,38 @@
 // the same trap as one that passes for a reason other than the one it was
 // written for, and it is harder to notice because failure looks like work to do.
 //
+// # How far it reaches, measured
+//
+// **Not to native classes.** The obvious escalation is `util/src/types.ts`,
+// whose ~16 typed-array predicates are each `value instanceof Uint8Array`, and
+// typed arrays are the purest same-shape case there is -- `Uint8Array` and
+// `Int8Array` differ in element interpretation and in nothing a layout would
+// see. `util` publishes `types`, so a collapse there would make
+// `isUint8Array(new Int8Array(2))` answer `true` on a published surface.
+//
+// It does not. Typed-array `instanceof` never reaches the layout lookup:
+//
+//     v46 = nts_is_view_kind(v44, v45);
+//
+// an element-kind test rather than `nts_is_class`. These are `View`/`AnyView`
+// in this representation and never `Object(TypeId)`. Checked in the emitted C
+// rather than argued: `i8IsNotU8`, `u16IsNotU8`, `f64IsNotU8` and `u8IsNotF64`
+// all agree with node.
+//
+// So the blast radius is **user-declared classes that share a field shape**,
+// and nothing with an element kind, nothing native, no host surface. That is a
+// much smaller and more checkable set than "anything using `instanceof`", and
+// it is the reason this is filed rather than treated as an emergency.
+//
+// # What decides the fix
+//
+// `X.isX(value)` is `value instanceof X` throughout this profile --
+// `BlockList.isBlockList`, `SocketAddress.isSocketAddress`, `assert`'s
+// `AssertionError`, `util.types`' whole surface. Those are the *documented*
+// predicate rather than an incidental use that could be rewritten around, and
+// node's answer is identity. **A profile whose `instanceof` cannot separate two
+// declared classes cannot implement them.**
+//
 // # What it would take
 //
 // A descriptor per class rather than per layout. Sharing the *struct* between
