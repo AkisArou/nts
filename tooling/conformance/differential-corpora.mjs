@@ -637,6 +637,48 @@ export const CORPORA = {
     ],
     input: (rnd) => unicodeWord(rnd),
     calls: [
+      {
+        // **The array-like path**, which every spec here reached past: they all
+        // hand `Buffer.from` a string, and the object arm is a different function
+        // entirely. Node accepts three storage shapes behind one contract -- a
+        // real array, a typed array, and any object with a `length` -- and the
+        // last of those was checked by hand on 2026-09-10 and then had nothing
+        // holding it.
+        //
+        // Eight shapes per input, including the ones that decide the edges: a
+        // non-number `length` yields an empty buffer, a negative one likewise, a
+        // fractional one truncates, and a missing index reads as 0 rather than
+        // being skipped. The null-prototype object is here because a
+        // representation keyed off the prototype would pass every other row.
+        label: "from(array-like)",
+        call: (m, s) => {
+          const codes = [...s].map((c) => c.charCodeAt(0) & 0xff);
+          const indexed = (base) => {
+            for (let i = 0; i < codes.length; i++) base[i] = codes[i];
+            return base;
+          };
+          const show = (v) => {
+            try {
+              return `<${[...m.Buffer.from(v)].join(" ")}>`;
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const bare = Object.create(null);
+          bare.length = codes.length;
+          for (let i = 0; i < codes.length; i++) bare[i] = codes[i];
+          return [
+            show(codes),
+            show(Uint8Array.from(codes)),
+            show(indexed({ length: codes.length })),
+            show(bare),
+            show(indexed({ length: String(codes.length) })),
+            show(indexed({ length: codes.length - 0.3 })),
+            show({ length: codes.length }),
+            show({ length: -codes.length, 0: 65 }),
+          ].join("|");
+        },
+      },
       { name: "atob", args: (s) => [s] },
       { name: "btoa", args: (s) => [s] },
       ...["utf8", "utf16le", "latin1", "base64", "base64url", "hex", "ascii", "binary", "ucs2"]

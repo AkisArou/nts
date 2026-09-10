@@ -20493,6 +20493,52 @@ first is `"kFlag"`, the symbol's description. The post-fix one adds `nts_str_0 =
 exist in the earlier output at all, which is a stronger statement than a failing
 assertion: there was nothing to assert against.
 
+## `Buffer.from`'s array-like arm: three storage shapes, and why the interface stays wide
+
+`string_decoder` publishes nothing, entirely through `Buffer`, and the message
+under it is `indexing UnknownArrayLike, which is not an array`. The compiler lane
+asked whether `runtime/node` would rather narrow that interface than have a
+representation guessed. The answer is no, and it is a measurement rather than a
+preference:
+
+    { length: 2, 0: 65, 1: 66 }              node <65 66>    ours <65 66>
+    { length: 3 }                            node <0 0 0>    ours <0 0 0>
+    [65, 66]                                 node <65 66>    ours <65 66>
+    new Uint8Array([65, 66])                 node <65 66>    ours <65 66>
+    Object.create(null) + length + index      node <67>       ours <67>
+    { length: "2", 0: 65, 1: 66 }            node <>         ours <>
+    { length: -1, 0: 65 }                    node <>         ours <>
+    { length: 1.7, 0: 65 }                   node <65>       ours <65>
+
+**0 differences.** Node accepts all three shapes, so narrowing the interface would
+make this profile reject what node takes -- and a null-prototype object works,
+so a representation cannot key off the prototype either.
+
+What the contract needs, stated for whoever picks the representation: `length` is
+read once and only `typeof === "number"` counts; then `source[i]` for
+`i` in `0..length-1`, each through `primitiveNumber` and masked to a byte. An
+absent index reads `undefined` and becomes 0 rather than being skipped, which is
+the `{ length: 3 }` row. Nothing else about the object is consulted.
+
+### Hand-checked once is not covered
+
+Every one of `buffer`'s 29 specs hands `Buffer.from` a **string**. The object arm
+is a different function and none of them reached it, so the eight rows above were
+true on the day and held by nothing. `from(array-like)` now builds all eight from
+each input: **116,725 comparisons to 120,750, 0 divergences.**
+
+Controlled against three plausible wrong representations rather than asserted --
+one accepting only real arrays, one keyed off the prototype, one coercing `length`
+with `Number()`:
+
+    only real arrays     11 of 12 inputs noticed
+    prototype-keyed      11 of 12 inputs noticed
+    length coerced       11 of 12 inputs noticed
+    node against itself   0 spurious differences
+
+The twelfth input is the empty string, where every shape gives an empty buffer and
+there is nothing to notice.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
