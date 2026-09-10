@@ -9735,6 +9735,21 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(call, "a rest parameter that is not an array"));
         };
         let origin = self.origin(call);
+        // The spreads are set aside and folded on at the end. Everything before
+        // the first one keeps its position; a spread in the *middle* would need
+        // the elements after it placed at an offset this compiler does not know,
+        // so it is refused by name rather than mis-placed.
+        let (fixed, spreads): (Vec<NodeId>, Vec<NodeId>) = elements
+            .iter()
+            .partition(|node| self.kind_of(**node) != Some(syntax::SPREAD_ELEMENT));
+        if let Some(first) = elements
+            .iter()
+            .position(|node| self.kind_of(*node) == Some(syntax::SPREAD_ELEMENT))
+            && first != fixed.len()
+        {
+            return Err(self.unsupported(call, "a spread element before another argument"));
+        }
+        let elements = &fixed[..];
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
         let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
@@ -9743,7 +9758,7 @@ impl<'a> FuncBuilder<'a> {
                 length,
                 zeroed: true,
             },
-            ty,
+            ty.clone(),
             origin.clone(),
         );
         for (index, node) in elements.iter().enumerate() {
@@ -9766,6 +9781,87 @@ impl<'a> FuncBuilder<'a> {
                 },
                 HirType::Void,
                 origin.clone(),
+            );
+        }
+        if spreads.is_empty() {
+            return Ok(array);
+        }
+        self.gather_rest_with_spreads(call, &element, &ty, array, &spreads)
+    }
+
+    /// `f(a, ...rest)` -- the rest array, built by concatenation.
+    ///
+    /// A rest parameter is one array parameter and a call site builds it, so a
+    /// spread is a *length this compiler does not know*: `f(a, b)` allocates
+    /// two slots and `f(a, ...rest)` allocates one plus however many `rest`
+    /// holds. `nts_array_concat` already answers that and every backend already
+    /// emits it, so this is the fixed part plus a fold rather than a loop
+    /// this lowering has to build.
+    ///
+    /// **The concatenation is what makes it correct, not only what makes it
+    /// short.** A rest array is fresh on every call in JavaScript, so passing
+    /// the caller's array through would alias it -- `function f(...xs) {
+    /// xs.push(1) }` would then reach back into the caller's. `concat` returns
+    /// a new array, so even `f(...rest)` with nothing leading gets a copy, and
+    /// the empty leading array it concatenates with is the thing that makes
+    /// that fall out rather than be a special case.
+    ///
+    /// What it was under: `this.emit(EventEmitter.errorMonitor, ...args)` is
+    /// the single spread refusal in `events`, and `EventEmitter#emit` is under
+    /// `addListener`, `EventEmitter#on`, `net.Server`, `http.Server` and
+    /// `createServer`. One refusal, 274 failing test files.
+    fn gather_rest_with_spreads(
+        &mut self,
+        call: NodeId,
+        element: &HirType,
+        ty: &HirType,
+        mut array: ValueId,
+        spreads: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        // `concat` reads its elements as doubles or as pointers, and a narrower
+        // one is neither -- the same line `slice` and the array methods draw,
+        // and drawn here rather than emitting a copy that would read the wrong
+        // width.
+        let helper = match element {
+            HirType::Managed(_) => "nts_array_concat_ref",
+            HirType::Float { bits: 64 } => "nts_array_concat",
+            // `unknown[]`, which is what a variadic forwarder takes:
+            // `emit(type, ...args: unknown[])`. Sixteen bytes an element and a
+            // reference only when the tag says so, so neither of the two above
+            // can copy one -- the double form reads eight and the reference
+            // form would retain a payload that may be a number.
+            HirType::Erased => "nts_array_concat_value",
+            // A narrower element is a typed array, whose storage is neither a
+            // double nor a pointer nor a tagged value. The same line `slice`
+            // and the array methods draw.
+            _ => {
+                return Err(self.unsupported(call, "a spread into a typed array's rest parameter"));
+            }
+        };
+        for spread in spreads {
+            let Some(inner) = self.children(*spread).first().copied() else {
+                return Err(self.unsupported(*spread, "a spread of nothing"));
+            };
+            let source = self.lower_expression(inner)?;
+            // The spread's own element type has to be the parameter's, because
+            // the result is read at the parameter's width. Two arrays of one
+            // representation are one storage under two names, which
+            // `the_same_element` is the general form of.
+            if self.values[source.0 as usize].ty != *ty {
+                return Err(self.unsupported(
+                    inner,
+                    "a spread of an array whose elements are not the parameter's",
+                ));
+            }
+            let origin = self.origin(*spread);
+            array = self.push(
+                OpKind::Call {
+                    callee: Callee::External(helper.to_owned()),
+                    args: vec![array, source],
+                    frame: None,
+                },
+                ty.clone(),
+                origin,
             );
         }
         Ok(array)

@@ -55,6 +55,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature { name: "nts_array_at_value", returns: "{ i32, i64 }", params: &["ptr", "double"], attributes: &["nounwind", "willreturn", "memory(read)"] },
     Signature { name: "nts_array_concat", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_concat_ref", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
+    Signature { name: "nts_array_concat_value", returns: "ptr", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_element", returns: "{ i32, i64 }", params: &["i32", "i64", "double"], attributes: &[] },
     Signature { name: "nts_array_extend", returns: "void", params: &["ptr", "ptr"], attributes: &[] },
     Signature { name: "nts_array_extend_ref", returns: "void", params: &["ptr", "ptr"], attributes: &[] },

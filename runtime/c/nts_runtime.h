@@ -1647,6 +1647,9 @@ NtsArray *nts_array_concat(const NtsArray *a, const NtsArray *b);
 void nts_array_extend(NtsArray *dst, const NtsArray *src);
 void nts_array_extend_ref(NtsArray *dst, const NtsArray *src);
 NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b);
+/* The same for an array of tagged values, which neither of the other two can
+ * copy: sixteen bytes each, and a reference only when the tag says so. */
+NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b);
 NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count);
 double nts_array_unshift(NtsArray *a, double value);
 /* `pop` and `at` with the `undefined` the checker already gave them. A number

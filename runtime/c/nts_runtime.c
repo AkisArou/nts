@@ -3285,6 +3285,39 @@ NtsArray *nts_array_concat_ref(const NtsArray *a, const NtsArray *b) {
   return out;
 }
 
+/* The same again, for an array whose elements carry their own tag.
+ *
+ * `NtsValue` is sixteen bytes and only *sometimes* a reference, so neither of
+ * the two above can copy one: the double form reads eight and the reference
+ * form retains a payload that may be a number. This retains exactly the
+ * elements whose tag says they are references, which is the rule
+ * `nts_array_element` already follows for reading one.
+ *
+ * Reached by a spread into a rest parameter of `unknown[]` --
+ * `this.emit(EventEmitter.errorMonitor, ...args)` is the one in `runtime/node`,
+ * and it is under `EventEmitter#on` and therefore under `http.createServer`. */
+NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b) {
+  uint32_t total = a->header.length + b->header.length;
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)total);
+  NtsValue *into = NTS_ITEMS(out, NtsValue);
+  const NtsValue *first = NTS_ITEMS(a, NtsValue);
+  const NtsValue *second = NTS_ITEMS(b, NtsValue);
+  for (uint32_t at = 0; at < a->header.length; at++) {
+    into[at] = first[at];
+  }
+  for (uint32_t at = 0; at < b->header.length; at++) {
+    into[a->header.length + at] = second[at];
+  }
+  for (uint32_t at = 0; at < total; at++) {
+    if (NTS_TAG_IS_REFERENCE(nts_value_tag(into[at])) &&
+        nts_value_reference(into[at])) {
+      nts_retain(nts_value_reference(into[at]));
+    }
+  }
+  return out;
+}
+
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   /* Negative counts from the end, as `String.prototype.slice` does. */
   uint32_t start = nts_str_clamp(from, a->header.length, 1);
