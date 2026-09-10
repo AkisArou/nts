@@ -93,10 +93,60 @@ export function shape(exports) {
       name === "kSynchronousCallback" ||
       name === "addAbortSignalNoValidate" ||
       name === "duplexFromWeb" ||
-      name === "duplexToWeb"
+      name === "duplexToWeb" ||
+      // Node keeps these two off the module object and on the constructors:
+      // `"WritableState" in require("node:stream")` is false there, while
+      // `Object.keys(stream.Writable)` is `["WritableState", "fromWeb", "toWeb"]`.
+      name === "ReadableState" ||
+      name === "WritableState"
     )
       continue;
     Stream[name] = shapedConstructors[name] ?? value;
+  }
+
+  // The state classes, as statics, where node puts them.
+  if (Writable !== undefined && exports.WritableState !== undefined) {
+    Writable.WritableState = exports.WritableState;
+  }
+  if (Readable !== undefined && exports.ReadableState !== undefined) {
+    Readable.ReadableState = exports.ReadableState;
+  }
+
+  // `duplex instanceof Writable` is **true** on node and was false here.
+  //
+  // Node's `Duplex extends Readable`, not `Writable`, so an ordinary prototype
+  // walk says no -- and node adds a `Symbol.hasInstance` to `Writable` that says
+  // yes for anything carrying a real `WritableState`:
+  //
+  //     if (FunctionPrototypeSymbolHasInstance(this, instance)) return true;
+  //     if (this !== Writable) return false;
+  //     return instance && instance._writableState instanceof WritableState;
+  //
+  // Measured before it was copied: a plain object with `_writableState: {}` is
+  // **not** an instance there, and neither is one with `write`, `end` and `on`,
+  // so this is not duck-typing -- the state has to be a real `WritableState`.
+  //
+  // The prototype walk is written out rather than delegated, because the shaped
+  // `Writable` is a callable facade over the real class and the question is about
+  // `Writable.prototype`, which the facade shares.
+  if (Writable !== undefined && exports.WritableState !== undefined) {
+    const WritableStateClass = exports.WritableState;
+    Object.defineProperty(Writable, Symbol.hasInstance, {
+      value: function (instance) {
+        const target = this === undefined ? Writable : this;
+        const proto = target.prototype;
+        if (instance !== null && (typeof instance === "object" || typeof instance === "function")) {
+          for (let p = Object.getPrototypeOf(instance); p !== null; p = Object.getPrototypeOf(p)) {
+            if (p === proto) return true;
+          }
+        }
+        if (target !== Writable) return false;
+        return Boolean(instance) && instance._writableState instanceof WritableStateClass;
+      },
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    });
   }
   // These symbol-keyed links are CommonJS function-object metadata. They
   // belong in the Node shape bridge, not in the statically compiled stream

@@ -6,8 +6,8 @@
 // written since depends on it.
 
 import { Stream } from "./legacy.ts";
-import { Readable } from "./readable.ts";
-import { Writable } from "./writable.ts";
+import { Readable, ReadableState } from "./readable.ts";
+import { Writable, WritableState } from "./writable.ts";
 import { Duplex } from "./duplex.ts";
 import { Transform } from "./transform.ts";
 import { PassThrough } from "./passthrough.ts";
@@ -64,7 +64,14 @@ import {
 export {
   Stream,
   Readable,
+  // Node publishes both state classes as statics -- `Writable.WritableState` and
+  // `Readable.ReadableState` -- and `Object.keys(stream.Writable)` there is
+  // `["WritableState", "fromWeb", "toWeb"]`. They are re-exported here so the
+  // shim can attach them, and because `Writable[Symbol.hasInstance]` needs the
+  // class to answer what node answers.
+  ReadableState,
   Writable,
+  WritableState,
   Duplex,
   Transform,
   PassThrough,
