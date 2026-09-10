@@ -18567,6 +18567,72 @@ for NTS1003 subjects. It has one, and it is an NTS1001. A census that searches f
 one diagnostic shape is blind to the other, which is the same failure as ranking
 causes by grepping their messages.
 
+## A cleared refusal that bought nothing, and the blocker it uncovered
+
+Re-derived on a 06:35 pin after `array-of-object-literals-has-no-layout` landed,
+against the 06:13 pin of the section above. Both pins are working-tree builds.
+
+**The axis did not move: 41 passes before, 41 after, every module identical, all 22
+still building.** The fixture cleared and no test changed lane. Recorded that way
+because a refusal delta is not a measure of a fix.
+
+What did change is an exact exchange, identical in every module that pulls in
+`buffer`:
+
+    gone       blob.ts:756:6   NTS1003 `resolveObjectURL` … calls `Blob#constructor`
+    appeared   blob.ts:756:16  NTS1001 an array of Managed(Object(TypeId(N))) where
+                               an array of Erased is wanted
+
+`Blob#constructor` compiles now; `resolveObjectURL` stopped cascading and began
+refusing in place. Across the tree cascades fell and roots rose by the same shape
+-- `fs` 734 to 726 cascades against 2,062 to 2,071 roots, `http` 884 to 879 against
+1,938 to 1,943 -- with wrapper declines unchanged in all 22.
+
+### The blocker it named: `stream`'s three constructors
+
+    stream/src/readable.ts:292:32   an array of Managed(String) where an array of
+    stream/src/writable.ts:274:32   Erased is wanted
+    stream/src/duplex.ts:83:32
+
+Line 292 is inside `Readable`'s constructor, which opens at 290. The call is
+`this._initializeEventShape(readableEventShape)`, where the constant is a `string[]`
+literal and the parameter is `readonly EventName[]` with `EventName = string |
+symbol`. A union erases; a `string[]` does not; the two hold different widths.
+
+**On the previous pin all three sites were silent.** No diagnostic at any of them,
+and `Readable` was declined `is a class whose constructor was not compiled` with
+nothing naming why -- the same decline, and the same single pass, on both pins. So
+this is not a regression. It is the thing that was already blocking the module
+finally saying so at a source line, which is what this ledger keeps recording about
+obstacles that emit no diagnostic.
+
+By the ranking above those constructors are **80 failing files for `stream.Readable`,
+36 for `Writable`, 13 for `Transform`**.
+
+### The source cannot route around it, and the attempt is the evidence
+
+Annotating all three shape constants `readonly EventName[]` -- which is accurate,
+they are event names -- moves the refusal and does not remove it:
+
+    before   readable.ts:292:32  writable.ts:274:32  duplex.ts:83:32   7 sites in stream
+    after    readable.ts:79:6    writable.ts:58:6    duplex.ts:53:6    7 sites in stream
+
+Seven to seven, declines 65 to 65, and `no wrapper for Readable` byte-identical.
+The literal is built at `Managed(String)` and then refused on assignment, so a
+contextual annotation relocates the refusal to the initializer. Reverted.
+
+Narrowing the parameter is not open either: `EventName` is `string | symbol`
+because node's event names can be symbols, and `captureRejectionSymbol` is one.
+
+What it needs is for a contextually-typed array literal to be **built at its
+contextual element type**. Handed to MainClaude as a diagnosis with that sentence
+and the 129 files behind it, to rank against `http.createServer`'s 274.
+
+**A miscount inside this, kept.** The annotation was first read as making `stream`
+worse, three sites to seven. It was seven to seven; the "three" was a subset counted
+with a narrower grep than the one used for the "seven". Two numbers from two
+instruments, compared as though they were one.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
