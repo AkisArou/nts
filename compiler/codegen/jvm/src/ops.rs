@@ -454,6 +454,10 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_to_uint32" => (RUNTIME, "toUint32", "(D)I"),
 
         "nts_number_to_string" => (RUNTIME, "numberToString", "(D)Ljava/lang/String;"),
+        // `Integer.parseInt` is not this function -- it throws where this
+        // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
+        // `long`. Transliterated; see the method.
+        "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
         // `Long.toString(long, int)` is not this: it handles integers, and the
         // fraction is the whole difficulty. See `numberToStringRadix`.
         "nts_number_to_string_radix" => {

@@ -244,6 +244,88 @@ public final class NtsRuntime {
         int index = (int) at;
         return index < 0 || index >= s.length() ? 1.0 : Character.charCount(s.codePointAt(index));
     }
+    /**
+     * {@code parseInt(text, radix)}.
+     *
+     * <p>Transliterated from `nts_parse_int` rather than reached for in the
+     * JDK, because nothing there is this function. {@code Integer.parseInt}
+     * throws where this returns {@code NaN}, refuses a trailing non-digit where
+     * this stops at one, knows nothing about the {@code 0x} prefix, and cannot
+     * answer above {@code long}. {@code parseInt("99999999999999999999")} is a
+     * double here and an exception there.
+     *
+     * <p>The accumulator is a {@code double} for that last reason: the value is
+     * allowed to exceed every integer type, and precision loss past 2^53 is the
+     * specified answer rather than an error.
+     *
+     * <p>Three rules that a version written from the description gets wrong:
+     * the whitespace set is the specification's {@code StrWhiteSpaceChar} and
+     * includes {@code U+00A0} and {@code U+FEFF}; a radix outside 2..36 that is
+     * not zero is {@code NaN} and not a default; and the {@code 0x} prefix is
+     * consumed for radix 16 as well as for an absent radix, so
+     * {@code parseInt("0x1f", 16)} is 31.
+     */
+    public static double parseInt(String text, double radix) {
+        if (text == null) {
+            return Double.NaN;
+        }
+        int units = text.length();
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d
+                    && unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+                break;
+            }
+            at++;
+        }
+        boolean negative = false;
+        if (at < units && (text.charAt(at) == '+' || text.charAt(at) == '-')) {
+            negative = text.charAt(at) == '-';
+            at++;
+        }
+        int base = (int) radix;
+        if (Double.isNaN(radix) || base == 0) {
+            base = 0;
+        }
+        if (base != 0 && (base < 2 || base > 36)) {
+            return Double.NaN;
+        }
+        if ((base == 0 || base == 16) && at + 1 < units && text.charAt(at) == '0'
+                && (text.charAt(at + 1) == 'x' || text.charAt(at + 1) == 'X')) {
+            at += 2;
+            base = 16;
+        }
+        if (base == 0) {
+            base = 10;
+        }
+        double value = 0.0;
+        int digits = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            int digit;
+            if (unit >= '0' && unit <= '9') {
+                digit = unit - '0';
+            } else if (unit >= 'a' && unit <= 'z') {
+                digit = unit - 'a' + 10;
+            } else if (unit >= 'A' && unit <= 'Z') {
+                digit = unit - 'A' + 10;
+            } else {
+                break;
+            }
+            if (digit >= base) {
+                break;
+            }
+            value = value * base + digit;
+            digits++;
+            at++;
+        }
+        if (digits == 0) {
+            return Double.NaN;
+        }
+        return negative ? -value : value;
+    }
+
     public static String stringFromCharCode(double code) { return String.valueOf((char) toUint16(code)); }
 
     /**
