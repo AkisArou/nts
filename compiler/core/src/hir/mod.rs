@@ -2923,14 +2923,47 @@ fn excise_from_initializer(
     // Control flow is the one thing this cannot cut. A terminator reading a
     // doomed value, or a block parameter carrying one, is a statement whose
     // *shape* depends on the refusal rather than only its value.
+    // **Why it could not be cut, at the line that stopped it.**
+    //
+    // This used to `return false` three times in silence, and the caller then
+    // drops the whole initializer -- so every deferred global goes unwritten
+    // and every function reading one cascades. In `http` that is nearly the
+    // module: `no function of that name was compiled` for `createServer`, and
+    // the refusal it points at is `unicodeEscape reads SHORT_ESCAPES, whose
+    // initializer was not compiled -- see the refusal above that says which`,
+    // where **there is no refusal above**. Two of fourteen modules lose their
+    // initializer this way and neither said so.
+    //
+    // A whole-program consequence with no diagnostic is the shape record 0271
+    // is about. This does not fix it -- cutting a statement whose *shape*
+    // depends on a refusal is a different piece of work -- but it names the
+    // statement that costs a module its surface, which is what anyone fixing it
+    // has to find first.
+    let mut blame = |func: &Func, value: ValueId, what: &str| {
+        let origin = func.values[value.0 as usize].origin.clone();
+        let cause = doomed.get(&value).cloned().unwrap_or_default();
+        lowered.diagnostics.push(nts_diagnostics::Diagnostic::error(
+            "NTS1003",
+            format!(
+                "module evaluation was dropped whole rather than cut here: this \
+                 statement's {what} depends on `{cause}`, which was refused above, so \
+                 cutting it would change the shape of the evaluation rather than its \
+                 value -- every module-scope binding is left unwritten and every \
+                 function reading one is refused with it"
+            ),
+            origin.location,
+        ));
+    };
     for block in &func.blocks {
-        if operands_of_terminator(&block.terminator)
+        if let Some(&value) = operands_of_terminator(&block.terminator)
             .iter()
-            .any(|value| doomed.contains_key(value))
+            .find(|value| doomed.contains_key(value))
         {
+            blame(func, value, "control flow");
             return false;
         }
-        if block.params.iter().any(|param| doomed.contains_key(param)) {
+        if let Some(&param) = block.params.iter().find(|param| doomed.contains_key(param)) {
+            blame(func, param, "block parameter");
             return false;
         }
         let carried: Vec<&Vec<ValueId>> = match &block.terminator {
@@ -2942,10 +2975,12 @@ fn excise_from_initializer(
             } => vec![then_args, else_args],
             Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => Vec::new(),
         };
-        if carried
+        if let Some(&value) = carried
             .iter()
-            .any(|args| args.iter().any(|value| doomed.contains_key(value)))
+            .flat_map(|args| args.iter())
+            .find(|value| doomed.contains_key(value))
         {
+            blame(func, value, "value carried to another block");
             return false;
         }
     }

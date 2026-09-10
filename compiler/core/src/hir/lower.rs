@@ -18194,7 +18194,20 @@ impl<'a> FuncBuilder<'a> {
                 let Some(initializer) = initializer else {
                     continue;
                 };
-                let Some(text) = self.node(name).text.clone() else {
+                // **`literal_name`, not `.text`.** A quoted or numeric property
+                // name carries no text on its node -- the decoder does not put
+                // one there -- so this skipped it with a `continue` and the
+                // field was never initialized. `{ "a b": 1, "x+y": 2,
+                // ordinary: 3 }` wrote only `ordinary`, and `use` returned
+                // `3 + n` where node returns `6 + n`.
+                //
+                // A silent wrong answer, and it was masked: the C emitter
+                // refused a layout holding a name it could not spell, so the
+                // whole program was refused before anything could observe the
+                // missing stores. Escaping the name -- which is right, and
+                // which `http`'s `{ 100: "Continue" }` needs -- removed the
+                // mask and the defect underneath was two `continue`s.
+                let Some(text) = self.literal_name(name) else {
                     continue;
                 };
                 // **By declaring class, not by name.** A field initializer runs
@@ -20043,6 +20056,58 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// `t.a` on an index-signature type, which is `t["a"]`.
+    ///
+    /// They are one operation in JavaScript -- a property access with a literal
+    /// key -- and only the *spelling* differed: the bracketed form reached
+    /// `element_of`'s table arm and the dotted form fell through to "a property
+    /// of a value with no fields", which is a sentence about a
+    /// `Record<string, T>` that has no fields *because that is what an index
+    /// signature is*.
+    ///
+    /// ```text
+    /// const env: Readonly<Record<string, string | undefined>>
+    /// env.NODE_USE_ENV_PROXY === "1"
+    /// ```
+    ///
+    /// is `http`'s `useEnvironmentProxy`, and what it cost is not one function.
+    /// `globalAgent`'s initializer is a ternary on that call, so a doomed value
+    /// reaches a branch, so `excise_from_initializer` cannot cut the statement
+    /// -- and `module#init` was dropped **whole**, leaving every deferred global
+    /// in the program unwritten and every function reading one refused with it.
+    /// Two modules of fourteen lost their initializer that way and `http` was
+    /// one; see record 0272. With this in, `http` goes from 1196 functions to
+    /// 1522.
+    ///
+    /// The result is erased and `narrowed` puts back whatever the checker has
+    /// already taken away, exactly as the bracketed form does -- `V | undefined`
+    /// is what the language says a lookup answers and what `nts_map_get`
+    /// returns.
+    fn table_member(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let key = self.push(
+            OpKind::ConstString(member_name.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        let key = self.erased_for_table(key, &origin);
+        let read = self.push(
+            OpKind::Call {
+                callee: Callee::External("nts_map_get".to_owned()),
+                args: vec![value, key],
+                frame: None,
+            },
+            HirType::Erased,
+            origin,
+        );
+        self.narrowed(id, read)
+    }
+
     fn member_of(
         &mut self,
         id: NodeId,
@@ -20145,6 +20210,32 @@ impl<'a> FuncBuilder<'a> {
             self.values[value.0 as usize].ty
         {
             return self.any_view_property(id, value, member_name);
+        }
+        // **`t.a` on an index-signature type is `t["a"]`**, which already
+        // lowers. They are one operation in JavaScript -- a property access
+        // with a literal key -- and only the *spelling* differed here: the
+        // bracketed form reached `element_of`'s table arm and the dotted form
+        // fell through to "a property of a value with no fields", which is a
+        // sentence about a `Record<string, T>` that has no fields *because that
+        // is what an index signature is*.
+        //
+        //     const env: Readonly<Record<string, string | undefined>>
+        //     env.NODE_USE_ENV_PROXY === "1"
+        //
+        // is `http`'s `useEnvironmentProxy`, and what it costs is not one
+        // function. `globalAgent`'s initializer is a ternary on that call, so a
+        // doomed value reaches a branch, so `excise_from_initializer` cannot cut
+        // the statement -- and `module#init` is dropped **whole**, leaving every
+        // deferred global in the program unwritten and every function reading
+        // one refused with it. Two modules of fourteen lost their initializer
+        // that way and `http` is one; see record 0272.
+        //
+        // The result is erased and `narrowed` puts back whatever the checker has
+        // already taken away, exactly as the bracketed form does -- `V |
+        // undefined` is what the language says a lookup answers and what
+        // `nts_map_get` returns.
+        if let HirType::Managed(ManagedType::Table(_, _)) = self.values[value.0 as usize].ty {
+            return self.table_member(id, value, member_name);
         }
         let sequence = matches!(
             self.values[value.0 as usize].ty,

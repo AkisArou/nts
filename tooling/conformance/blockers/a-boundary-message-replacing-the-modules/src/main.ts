@@ -1,5 +1,13 @@
-// expect: emit-c --napi -> calls (() => { try { exports.takesANumber("x"); return "no throw"; } catch (e) { return e.message; } })() === "The \"value\" argument must be of type number. Received type string"
+// expect: emit-c --napi -> calls (() => { try { exports.takesANumber("x"); return "no throw"; } catch (e) { return e.message; } })() === "The \"value\" argument must be of type number. Received type string ('x')"
 // control: typeof exports.takesANumber === "function"
+//
+// **The expectation gained the value on 2026-09-10, and it is node's.** The
+// boundary used to stop at the type -- `Received type string` -- on the ground
+// that rendering an arbitrary value is `util.inspect`'s job and a wrong
+// rendering is worse than an absent one. True of an object and false of a
+// primitive: `napi_coerce_to_string` is the engine's own spelling, so
+// `('x')` is exact. Checked against node through the `os` addon rather than
+// argued: both sides now say the same bytes.
 //
 // FIXED, and kept as a guard. The boundary's argument check still rejects
 // before the module's validator runs -- it must, because `napi_get_value_double`

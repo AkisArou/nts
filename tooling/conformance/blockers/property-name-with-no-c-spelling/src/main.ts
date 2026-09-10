@@ -1,49 +1,54 @@
-// expect: emit-c --napi -> a property named `a b`, which contains ` ` and so has no C spelling
+// expect: emit-c --napi -> calls exports.use(1) === 7
+// control: typeof exports.use === "function"
 //
-// A quoted property name containing a character C cannot spell.
+// **Kept as a guard. Escaped rather than refused, 2026-09-10.**
 //
-//     class Holder { "a b": number = 1 }
-//     ->  int32_t a b;
-//     program.c:8:14: error: expected ';' at end of declaration list
+// A quoted property name containing a character C cannot spell -- `"a b"` came
+// back verbatim and took `int32_t a b;` with it. `c_identifier`'s first branch
+// is injective and deliberately so, but it only ran for the five qualifiers
+// this compiler puts in a name itself, and a TypeScript property may carry any
+// character at all.
 //
-// `c_identifier`'s first branch is injective and its comment says so
-// deliberately: `#`, `.` and `@` each get their own spelling "so that two
-// different qualified names cannot become one C name". But that branch only ran
-// when the name contained one of those five qualifiers, and a TypeScript
-// property may legally carry any character at all -- so `"a b"` took the `else`
-// and came back verbatim, taking `_Static_assert(offsetof(NtsObj_Holder, a b))`
-// with it.
+// Found by the JVM lane, who had the identical defect in `jvm_member_name`:
+// their hand-listed `match` of six characters was short by twenty-two, so a
+// list became a predicate.
 //
-// Found by the JVM lane, who had the identical defect in `jvm_member_name` and
-// fixed it the same way: their hand-listed `match` of six characters was short
-// by twenty-two, so a list became a predicate.
+// # Why it was refused, and why that stopped being the answer
 //
-// Refused rather than escaped, and the reason is in `unspellable_in_c`: the
-// catch-all maps every other character to `_`, which is **not** injective --
-// `a b` and `a+b` would be one C name -- and an injective escape costs every
-// generated name its readability for a construct no program in this tree
-// writes.
+// This file used to argue that escaping was wrong because "the catch-all maps
+// every other character to `_`, which is not injective -- `a b` and `a+b` would
+// be one C name -- and an injective escape costs every generated name its
+// readability for a construct no program in this tree writes."
 //
-// The `emit-c ->` prefix is load-bearing: without it the harness runs
-// `nts hir`, which is the raw lowering and never reaches the C backend at all,
-// so the refusal this fixture is about cannot appear. It reported FIXED --
-// "no longer refuses" -- for a construct that refuses every time.
+// **Both halves were false.** `c_member_escaped` is injective: `_x` plus the
+// byte in hex, so `a b` is `a_x20b` and `x+y` is `x_x2by`. It costs no
+// readability either, because a name that is already a C identifier is returned
+// unchanged and only an unspellable one is escaped.
 //
-// The expectation is the diagnostic, and `lacks-c NtsObj_Holder` was tried
-// first and is wrong: the typedef and the descriptor are emitted before the
-// body, so the name survives a refusal that suppresses every use of it. What
-// the fixture asserts is that the construct is *named*, which is the thing that
-// changed.
+// And a program in this tree does write one: `http`'s status table is
+// `{ 100: "Continue", 101: "Switching Protocols", ... }`, where a leading digit
+// is every-character-legal and still not an identifier.
 //
-// Refusing the whole struct rather than the field is deliberate and the first
-// attempt got it wrong. Skipping the field alone left the struct two members
-// short with two `_Static_assert(offsetof(NtsObj_Holder, a b))` lines still
-// naming them -- emitted from `layout.fields` further down. `emit.rs` already
-// carries a comment about exactly that shape: "a struct missing a field the
-// reference map still points at is not a smaller object, it is a wrong one".
+// # The refusal emitted invalid C anyway, which is what settled it
 //
-// `ordinary` is the control. It spells fine, so a refusal that named it would
-// mean the predicate had gone too wide.
+// Skipping the struct left its descriptor and reference tables behind --
+// `offsetof(NtsObj_Type11376, 100)` for a struct that was never defined.
+// `emit.rs` carries a comment about exactly that shape, "a struct missing a
+// field the reference map still points at is not a smaller object, it is a
+// wrong one", and the guard written to prevent it was doing it. Unreachable
+// until `http`'s `module#init` began to compile, which is a state a predicate
+// can sit in for a long time.
+//
+// # What this fixture asserts now
+//
+// That the values **round trip**: `use(1)` is `1 + 2 + 3 + 1`. A spelling that
+// merely compiles is not enough -- two names escaping to one would compile and
+// return the wrong sum, which is why both `"a b"` and `"x+y"` are here and why
+// the assertion is an answer rather than an absence.
+//
+// `ordinary` is the control inside the class: it spells fine, so an escape that
+// touched it would mean the predicate had gone too wide.
+//
 class Holder {
   "a b": number = 1;
   "x+y": number = 2;

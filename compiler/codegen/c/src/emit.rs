@@ -14,7 +14,6 @@
 //! to be visible.
 
 pub use nts_codegen_common::symbols::{c_global, c_identifier, c_member};
-use nts_codegen_common::symbols::unspellable_in_c;
 use nts_codegen_common::{CodeWriter, Copy, block_order, destruct};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp, ValueId,
@@ -1496,14 +1495,67 @@ fn c_member_at(layout: &nts_core::hir::Layout, at: usize) -> String {
     let Some(field) = layout.fields.get(at) else {
         return String::new();
     };
+    let spelled = c_member_escaped(&field.name);
+    // **Compared after escaping, not before.** Two fields collide in C when
+    // their *spellings* match, which is a weaker condition than their names
+    // matching once the escape below can map several characters to one shape.
     if layout.fields[..at]
         .iter()
-        .any(|before| before.name == field.name)
+        .any(|before| c_member_escaped(&before.name) == spelled)
     {
-        format!("{}_{at}", c_member(&field.name))
+        format!("{spelled}_{at}")
     } else {
-        c_member(&field.name)
+        spelled
     }
+}
+
+/// A property name as a C identifier, for any name a JavaScript object can have.
+///
+/// `c_member` handles the punctuation this compiler puts in a name itself. What
+/// it cannot handle is punctuation the *program* put there, and an object
+/// literal's key is an arbitrary string:
+///
+/// ```text
+/// { 100: "Continue", 101: "Switching Protocols", ... }
+/// ```
+///
+/// is `http`'s status table, and `struct { NtsString * 100; }` is not C.
+/// `{ "content-type": ... }` is the same thing with a different character.
+///
+/// This was refused rather than escaped, and **the refusal emitted invalid C
+/// anyway**: the struct was skipped and the descriptor and reference tables for
+/// the same layout were not, so the program said `offsetof(NtsObj_Type11376,
+/// 100)` for a struct that does not exist. A guard that skips one of two things
+/// that must agree is the defect it was written to prevent, which the comment
+/// fifty lines below it describes arriving through a different door.
+///
+/// So it is spelled instead. A numeric or hyphenated key is an ordinary
+/// property; nothing about it is unrepresentable, and only the C *name* was
+/// ever the problem. `_x` plus two hex digits per byte, and a leading `_` where
+/// the name starts with a digit -- unambiguous, and it keeps an ordinary name
+/// spelled as itself so a struct stays readable.
+fn c_member_escaped(name: &str) -> String {
+    let spelled = c_member(name);
+    if spelled
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && !spelled.starts_with(|c: char| c.is_ascii_digit())
+    {
+        return spelled;
+    }
+    let mut out = String::with_capacity(spelled.len() + 4);
+    if spelled.starts_with(|c: char| c.is_ascii_digit()) {
+        out.push('_');
+    }
+    for byte in spelled.bytes() {
+        if byte.is_ascii_alphanumeric() || byte == b'_' {
+            out.push(char::from(byte));
+        } else {
+            use std::fmt::Write as _;
+            let _ = write!(out, "_x{byte:02x}");
+        }
+    }
+    out
 }
 
 fn field_store(
@@ -1878,22 +1930,11 @@ fn emit_object_types(
         // Found by the JVM lane, who had the identical defect in
         // `jvm_member_name` and fixed it the same way after a hand-listed
         // `match` of six characters turned out to be short by twenty-two.
-        if let Some(bad) = layout
-            .fields
-            .iter()
-            .find_map(|field| unspellable_in_c(&field.name).map(|why| (field.name.clone(), why)))
-        {
-            diagnostics.push(Diagnostic::error(
-                "NTS1001",
-                format!(
-                    "a property named `{}`, which {} and so has no C spelling, \
-                     is not supported by this lowering yet",
-                    bad.0, bad.1
-                ),
-                origin.location,
-            ));
-            continue;
-        }
+        // No field is refused here any more; `c_member_escaped` spells every
+        // name a program can write. The check that used to stand here skipped
+        // the struct and left the descriptor and reference tables pointing into
+        // it, which is invalid C rather than a smaller program -- see that
+        // function for what it cost and why escaping is the answer instead.
         let name = object_type_name(layout);
         writer.line(origin, format!("struct {name} {{"));
         // The header first, so every managed object starts the same way and a

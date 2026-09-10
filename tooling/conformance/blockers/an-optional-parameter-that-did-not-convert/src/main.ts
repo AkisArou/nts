@@ -1,5 +1,13 @@
-// expect: emit-c --napi -> calls (() => { try { exports.optionalSecond(1, "y"); return "no throw"; } catch (e) { return e.message; } })() === "The \"second\" argument must be of type number. Received type string"
+// expect: emit-c --napi -> calls (() => { try { exports.optionalSecond(1, "y"); return "no throw"; } catch (e) { return e.message; } })() === "The \"second\" argument must be of type number. Received type string ('y')"
 // control: exports.optionalSecond(1, 3) === 3
+//
+// **The expectation gained the value on 2026-09-10, and it is node's.** The
+// boundary used to stop at the type -- `Received type string` -- on the ground
+// that rendering an arbitrary value is `util.inspect`'s job and a wrong
+// rendering is worse than an absent one. True of an object and false of a
+// primitive: `napi_coerce_to_string` is the engine's own spelling, so
+// `('x')` is exact. Checked against node through the `os` addon rather than
+// argued: both sides now say the same bytes.
 //
 // FIXED, and kept as a guard, with both faces of it in the header below.
 //

@@ -3018,8 +3018,27 @@ fn namespace_value(program: &hir::Program, emitted: &str, property: &str) -> Opt
         ),
         Cross::Object(_) | Cross::Void => return None,
     };
+    // **A value that cannot cross is left off the surface, not fatal.**
+    //
+    // An erased export goes through `nts_to_napi_value`, which refuses a
+    // reference that is not a string -- an object's identity here is an address
+    // and the far side cannot reproduce it. That refusal is right for a
+    // *function's return*, where it is a call-time error the caller asked for.
+    // At registration it killed the module: `http`'s addon answered
+    // `TypeError: the compiled function returned a value with no JavaScript
+    // representation` from `require`, and nothing loaded at all.
+    //
+    // Omitting the name is what the boundary already does for a function it
+    // cannot wrap -- `no wrapper for X` -- and it is the same trade: a smaller
+    // surface rather than none. The pending exception is cleared, because a
+    // pending one makes every later napi call fail and the next export would
+    // report this one's failure as its own.
+    //
+    // Reachable only once module evaluation runs: with `module#init` dropped
+    // every global sat at its zero, which is the `undefined` tag and crosses
+    // fine. Fixing the initializer is what made an object arrive here.
     Some(format!(
-        "    {{\n        napi_value value;\n        if (!nts_napi_check(env, {make}, \"could not create a namespace value\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, __NTS_NS__, {key}, value), \"could not add a value to a namespace\")) return NULL;\n    }}\n"
+        "    {{\n        napi_value value;\n        if ({make} == napi_ok) {{\n            if (!nts_napi_check(env, napi_set_named_property(env, __NTS_NS__, {key}, value), \"could not add a value to a namespace\")) return NULL;\n        }} else {{\n            bool pending = false;\n            if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {{\n                napi_value ignored;\n                napi_get_and_clear_last_exception(env, &ignored);\n            }}\n        }}\n    }}\n"
     ))
 }
 
@@ -3420,7 +3439,13 @@ fn publish_value_exports(
         };
         let _ = write!(
             out,
-            "    {{\n        napi_value value;\n        if (!nts_napi_check(env, {make}, \"could not create an exported value\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {key}, value), \"could not export a value\")) return NULL;\n    }}\n"
+            // Left off the surface rather than fatal, for the reason the
+            // namespace form beside it gives: an erased export whose value is
+            // an object refuses at `nts_to_napi_value`, and killing the module
+            // for one name is a worse trade than publishing the rest. This is
+            // the pair -- top-level exports here, namespace members there --
+            // and guarding one is guarding half.
+            "    {{\n        napi_value value;\n        if ({make} == napi_ok) {{\n            if (!nts_napi_check(env, napi_set_named_property(env, exports, {key}, value), \"could not export a value\")) return NULL;\n        }} else {{\n            bool pending = false;\n            if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {{\n                napi_value ignored;\n                napi_get_and_clear_last_exception(env, &ignored);\n            }}\n        }}\n    }}\n"
         );
     }
     out

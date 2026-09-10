@@ -4410,6 +4410,22 @@ bool nts_string_eq(const NtsString *a, const NtsString *b) {
   if (a == b) {
     return true;
   }
+  /* **A null is the absence, and the absence equals no string.**
+   *
+   * A nullable string slot holds `NULL` for `undefined`, so
+   * `table["missing"] === "1"` arrives here as `(NULL, "1")` and this
+   * dereferenced it -- `nts_string_eq` in `module.init`, SIGSEGV, with `http`'s
+   * whole addon failing to load.
+   *
+   * The `a == b` above already answers `true` for two absences, which is what
+   * `undefined === undefined` is, so only the mixed case is left and it is
+   * `false` by the language. Reached the moment a program looked up a key that
+   * is not there and compared the result, which `Record<string, string |
+   * undefined>` invites -- and nothing had, because a dotted read on such a
+   * type was refused and the bracketed form was rare. */
+  if (a == 0 || b == 0) {
+    return false;
+  }
   if (a->length != b->length) {
     return false;
   }
