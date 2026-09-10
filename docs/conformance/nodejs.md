@@ -19926,6 +19926,52 @@ blast radius and not a count of defects. `fs` is where to look first, and its
 compiled lane publishes 2 of node's 104 names today, so almost none of it is
 reachable to check.
 
+## 41 more guards that the compiled lane will fold, and not one is reachable yet
+
+`tooling/conformance/dead-type-guards.mjs`, run 2026-09-10. A labelled diagnosis
+rather than a fix, and the label matters: **none of these is reachable today**,
+because the modules holding them publish almost nothing. Each becomes a wrong
+error type on the day its export lands.
+
+    7 buffer/src/main.ts        4 http/src/outgoing.ts    3 fs/src/options.ts
+    2 assert, blob, dchannel, fs/main, fs/streams, stream/writable,
+      url/fileurl, url/legacy, util/main
+    1 events, fs/dir, fs/readdir, fs/utf8-stream, internal/errors,
+      net/block-list, net/main, querystring, stream/iter/utils
+
+The shape is always `os.setPriority`'s: a parameter declared `string` or `number`,
+guarded with `typeof x !== "string"` to produce node's `ERR_INVALID_ARG_TYPE`. The
+declaration lets the compiler fold the guard, the next check answers instead, and
+the error changes type. `assert.match(string: string, …)` is the clearest of them.
+
+### The sweep found itself first, twice
+
+**199 rows, then 4, then 41**, and only the last is a measurement.
+
+The first version matched a declaration anywhere in the file, so it called
+`win32.toNamespacedPath(path: unknown)` a dead guard because some other function
+in that file takes a `path: string`. 199 rows, mostly noise.
+
+Scoping to the enclosing function took it to 4, which looked like a precision win
+and was a bug: the backward walk tested for `<ident>(` and matched the guard's own
+`if (`, read the condition as the parameter list, and dropped nearly everything.
+**The control is what caught it.** Pointed at `os/src/main.ts` as it was before
+the fix -- the source the sweep was built from, containing the one defect it is
+known to be able to find -- it reported nothing at all. Checking the opener's name
+against a list of keywords took it to 41, and the control now finds
+`validateInt32` at line 451 where it should.
+
+A sweep with no demonstrated failure would have shipped the 4-row version, and 4
+rows in 4 files reads like good news.
+
+### What it cannot see, which is the shape that actually bit
+
+A validator whose parameter is correctly `unknown` but whose **caller** passes a
+concretely-typed local. That is what `os.setPriority` was: widening
+`validateInt32` changed nothing and widening the call site fixed it. Nothing about
+the validator is wrong in that shape, so nothing here points at it. Read a row as
+"this file has the pattern", then follow the call site.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
