@@ -19131,6 +19131,37 @@ own recorded mistake, that node modules build through `build.sh` and bare clang 
 their sources counts errors nobody builds. Those three are test C files and are
 not the finding; the three symbols above are.
 
+## "No emitted wrapper builds a typed array at all" is now two of them
+
+The goal says *no emitted wrapper builds a typed array at all -- zero across 24
+addons*. Re-derived against the 22 `addon.c` files from a 09:28 pin:
+
+    napi_create_typedarray present   22 of 22
+    nts_to_napi_view defined         22 of 22
+    nts_to_napi_view called           2
+
+The helper is real and complete -- it switches over every element kind the runtime
+defines, allocates an ArrayBuffer, copies the bytes, and fails loudly on a kind it
+does not know rather than handing back the wrong width. It is emitted into every
+addon as part of the preamble.
+
+**Emitted is not reached, and the distinction is the whole point of the number.**
+Twenty of the twenty-two reference it exactly once, at its own definition. Two
+call it:
+
+    buffer/addon.c:1549       inside nts_napi_SlowBuffer
+    querystring/addon.c:1500  inside nts_napi_unescapeBuffer
+
+So the honest form is: the capability exists everywhere and **two exports cross a
+typed array outward**, both returning a Buffer. Counting the twenty as capable
+would be the "feature probe below its first use" mistake this ledger already
+records -- correct C that compiles, links, and does nothing, which `nm` and a
+reference count are the check for.
+
+One connection worth naming: `querystring.unescapeBuffer` is the first typed-array
+return to cross, and it is also the one that **aborts** on `"%0日"`. The first
+export through a new boundary is the one exercising code no test had reached.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
