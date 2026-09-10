@@ -38,6 +38,20 @@
 // object does not report as fifty missing members: the parent is named once and
 // its children are counted rather than listed.
 
+// # A `process.stdin` row is not stable between runs, and that is the subject
+//
+// `process.stdin` is built lazily from whatever fd 0 *is*, so the object being
+// compared changes with how the run was started: a pipe gives a `Socket`, a file
+// a `ReadStream`, and `/dev/null` took an inert `Readable` fallback. Each has a
+// different own-key set, so the `KEYS` rows under `process.stdin` differ run to
+// run -- `_read` in one, `_writev`, `_handle` and `bytesRead` in the next -- on
+// an unchanged tree.
+//
+// Two runs disagreeing about it is not this file being wrong, and it cost an hour
+// to establish that. Read a `process.stdin.*` row as "these two stdin objects
+// differ", not as a name to go and fix; the name is an accident of the terminal
+// the run happened to have.
+
 import { loadNode, loadOurs, paths } from "./surface-load.mjs";
 
 const moduleName = process.argv[2];

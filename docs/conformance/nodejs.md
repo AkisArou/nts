@@ -19968,6 +19968,23 @@ guarded with `typeof x !== "string"` to produce node's `ERR_INVALID_ARG_TYPE`. T
 declaration lets the compiler fold the guard, the next check answers instead, and
 the error changes type. `assert.match(string: string, …)` is the clearest of them.
 
+**Amended the same evening, and the amendment matters more than the list.** The
+wrapper defect these depended on is fixed: `public_api` was reading
+`declarations.first()`, which for an overloaded function is a signature that may
+not mention the later parameters, so nothing was recorded for them and the wrapper
+read them with `nts_from_napi_value` -- which accepts every JavaScript value. With
+every argument checked again, **a wrong-typed value cannot reach a public
+function's body from the host at all**, and these 41 guards are unreachable rather
+than latent.
+
+So the list is no longer "41 wrong error types waiting to land". It is 41 places
+where the module's own validation is dead code that the boundary is standing in
+for, and where the boundary is the only thing standing in. That is worth keeping
+written down, because it is a dependency nobody declared: the guards read as the
+defence and are not, and the day a wrapper stops checking one of them, all 41 come
+back at once. Re-derive with `dead-type-guards.mjs` rather than trusting this
+paragraph.
+
 ### The sweep found itself first, twice
 
 **199 rows, then 4, then 41**, and only the last is a measurement.
@@ -20248,6 +20265,55 @@ keys, the change reaches `inspect`, and a non-object throws with node's code.
 Controlled by restoring the pre-fix shim from `git show HEAD:` into a scratch copy
 and running against it: **fails there, passes restored.** All four were wrong
 before today and no test could see any of them.
+
+## `process.stdin` from `/dev/null` never ends, and the comment says node agrees
+
+Node, stdin redirected from `/dev/null`: `process.stdin` is an `fs.ReadStream` and
+it **ends** immediately. Here it is a bare `Readable` that never produces and never
+ends, so a program waiting on stdin runs forever where node's exits.
+
+    node   ReadStream   'end' fires
+    ours   Readable     nothing after 3s
+
+Two separate causes, both in files this session owns.
+
+**The classifier disagrees with libuv.** `process.c` calls `uv_guess_handle(0)`,
+which is what node calls, and returns `FILE` for a character device. The
+interpreted lane does not use it: `bindings.node.mjs` stands in with an
+`fstatSync` of fd 0 that tests `isFile()`, `isFIFO()` and `isSocket()` and **not
+`isCharacterDevice()`**, so `/dev/null` falls through to `UNKNOWN`. The two lanes
+therefore classify the same descriptor differently, and only the interpreted one
+is wrong.
+
+**And the `UNKNOWN` fallback is missing a line.** Node's default branch is
+
+    stdin = new Readable({ read() {} });
+    stdin.push(null);
+
+Ours has the first line and not the second. The comment above it reads
+"Deliberately not ended -- node does not end it either, and a program that waits
+on stdin here waits", and node's own source three lines away says otherwise. A
+wrong comment asserting the upstream behaviour is worse than no comment: it is
+what stops the next reader checking.
+
+### What was ruled out on the way
+
+`manualStart: true` is on node's PIPE/TCP branch and absent from ours. It looked
+like a third defect and is not one that can be shown: piping data and attaching a
+listener 250ms late, both sides receive it intact. Recorded as measured-and-clean
+rather than fixed on suspicion.
+
+### And why the surface sweep kept changing its mind
+
+`process.stdin` is built lazily from whatever fd 0 is, so the object being
+compared depends on how the run was started -- a pipe gives a `Socket`, a file a
+`ReadStream`, `/dev/null` the fallback. Each has a different own-key set, so
+`surface-absence.mjs` reported `stdin._read` in one run and `_writev`, `_handle`
+and `bytesRead` in the next, on an unchanged tree. An hour went into deciding
+which instrument was wrong before the answer turned out to be that the subject
+changes. The instrument now says so in its header, and chasing a
+`process.stdin.*` name is chasing the terminal the run happened to have -- but
+following one of them is what found everything above.
 
 ## Conventions
 
