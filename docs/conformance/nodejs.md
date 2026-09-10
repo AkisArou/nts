@@ -16953,16 +16953,27 @@ documented shape, matched the file's own comment, and removed an eager
 allocation. Running node's suite after making it is the only thing that said
 otherwise.
 
-## The interpreted lane, every module: 1,859 passing and nothing failing
+## The interpreted lane, every module: 1,862 passing and nothing failing
 
 `tooling/conformance/interpreted-lane.sh`, all twenty-two modules -- node's own
 tests against the TypeScript running on node:
 
-    22 modules, 2,323 files
-    1,859 passed    0 failed    29 skipped    435 not applicable
+    22 modules, 2,326 files
+    1,862 passed    0 failed    29 skipped    435 not applicable
 
     http     405 of 451      fs       346 of 395      stream   250 of 269
     net      150 of 181      async_hooks 117 of 155   process   89 of 153
+
+1,859 until 2026-09-10. The three added are the identity contracts: `assert`,
+`console` and `timers` each gained a `test/surface-identity-static.js`, and each
+fails against the code it replaced.
+
+**A trap worth naming, because a fresh loop walked into it.** Re-derived here with
+an ad-hoc `for` loop over every `runtime/node/*/` holding a `test/`, which is 23
+directories: `internal` has one, holding a single C file, and node's
+`test-internal-*.js` then run against a module that does not exist and report 29
+failures. `interpreted-lane.sh` takes an explicit module list for exactly this
+reason and says so at its line 18. The lane is 0 failed; the loop was 29.
 
 **Not one module has a failing file.** The implementation passes every
 applicable test it runs, and has no outstanding defect this suite can see.
