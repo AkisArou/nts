@@ -20708,6 +20708,30 @@ The battery is built to hold the pairs these predicates exist to separate: a box
 all 35, chosen by the input, because 42 predicates over 35 values on 4,000 inputs
 is a million calls answering the same question repeatedly.
 
+## Two counts, two units: 222 of 571 and 305 of 1,087
+
+Instrumenting class prototype methods changed what `corpus-reach.mjs` counts, and
+the number before and after **cannot be compared**:
+
+    module-level functions only     147 -> 222 of 571
+    plus class prototype methods    305 of 1,087
+
+The second is not progress on the first. It is a larger question -- `Buffer`'s
+methods, `Readable`'s, `URL`'s, every stream and every parser -- and it was
+invisible while only module-level names were counted. `console` is the case that
+forced it: a module whose behaviour is thoroughly compared read 0 of 24, because
+its spec drives a constructed instance and never touches the published function.
+
+Both numbers are in the ledger deliberately. Quoting "222 of 571" after this
+change would be quoting a figure the instrument no longer produces, and quoting
+"305 of 1,087" as an improvement on it would be reading two units as one. Re-derive
+with the instrument rather than either.
+
+**This is the third time in one file that a count's unit was the finding rather
+than the count.** The first was per-name versus per-identity on `path`, the second
+was module-level versus instance on `console`, and this is the two of them
+together changing the denominator by 516.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
