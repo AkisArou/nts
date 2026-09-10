@@ -1,4 +1,17 @@
-// expect: an array of Float { bits: 64 } where an array of Erased is wanted
+// expect: lowers
+//
+// **Kept as a guard, and fixed within the hour by the change it made possible.**
+// Filing this refusal is what exposed the real defect: an array literal was
+// built at the element type its own contents suggest and then *rejected* by the
+// slot it was going into, when the slot's element type was available all along.
+//
+// `sumErased([1, 2, n])` now builds the literal at `Erased` because that is what
+// the parameter holds. The refusal below still stands for the case it was
+// written for -- an array that already exists, of the wrong element, handed to a
+// slot that cannot take it -- and `subject` is no longer that case, because
+// nothing exists before the slot is known.
+//
+// See `examples/an-array-literal-at-the-slots-element`, which asks node.
 //
 // **A blocker whose refusal replaced a verifier crash.** `number[]` is
 // assignable to `readonly unknown[]` in TypeScript, and the two are different

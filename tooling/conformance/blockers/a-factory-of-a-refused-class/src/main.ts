@@ -1,8 +1,23 @@
-// expect: `createServer`, a declaration outside every walk
+// expect: a `new` of unrepresentable type (`Map<any, any>`)
 //
-// An exported function returning a class whose own body was refused. The
-// function is reported as **unwalked** rather than as cascaded, and it is the
-// largest single obstacle measured anywhere in this profile.
+// An exported function returning a class whose own body was refused.
+//
+// **The expectation changed on 2026-09-10, and the change is the finding.** It
+// used to be `` `createServer`, a declaration outside every walk`` -- and that
+// message was **false**. The function had been refused, with a cause, in the
+// same output. `super::unaccounted` asks whether a diagnostic's *span covers*
+// the declaration; a refusal's location is the offending construct, which for
+// `http`'s real `createServer` is seven hundred lines above itself inside the
+// class it constructs. Nothing covered it, so the conservation law concluded the
+// function had vanished, and emitted a second message contradicting the first.
+//
+// The walk records what it refused now, by node rather than by span, so this
+// fixture reports the cause it always had: a `new` of a `Map<any, any>`.
+//
+// What the filing below argued about the *cone* is unaffected -- the numbers
+// were measured at the wrapper, which never saw the message at all. What is
+// no longer true is that the function is "reported as unwalked rather than as
+// cascaded". It is reported as refused, which is what it was. Record 0261.
 //
 // # What it is standing in front of
 //

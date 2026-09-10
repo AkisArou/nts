@@ -9214,7 +9214,21 @@ impl<'a> FuncBuilder<'a> {
                 args.push(gathered);
                 return Ok(args);
             }
-            let value = self.lower_expression(*argument)?;
+            // **Lowered knowing the parameter's representation**, not merely
+            // coerced into it afterwards. An array literal decides its own
+            // element width when it is built, and `coerce` can only reject the
+            // result: `["close", "error"]` passed where `readonly EventName[]`
+            // is wanted was built at `Managed(String)` and then refused, because
+            // a pointer to an array of strings is not a pointer to an array of
+            // erased values.
+            //
+            // The same channel `null` already uses -- `lower_expecting` was
+            // written so a bare `null` in an argument takes the slot's type --
+            // asked one question wider.
+            let value = match self.parameter_representation(call, args.len()) {
+                Some(want) => self.lower_expecting(*argument, &want)?,
+                None => self.lower_expression(*argument)?,
+            };
             args.push(self.coerce_to_parameter(call, args.len(), value, *argument)?);
         }
         // A rest the call gave nothing to still takes an array, an empty one.
@@ -15991,11 +16005,44 @@ impl<'a> FuncBuilder<'a> {
         let ty = own
             // `[]` is typed `never[]`, which is the checker saying the literal
             // decides nothing -- the slot it goes into does. So the expected
-            // type wins over it, and only over it: a literal with elements
-            // knows what it holds.
+            // type wins over it.
             .filter(|ty| {
                 !matches!(ty, HirType::Managed(ManagedType::Array(element))
                     if **element == HirType::Never)
+            })
+            // **And it wins over an array whose element is not the slot's**,
+            // which is the other half of the same argument. "A literal with
+            // elements knows what it holds" is true of the *values* and not of
+            // the width they have to be stored at: `["close", "error"]` passed
+            // where `readonly EventName[]` is wanted -- `EventName` being
+            // `string | symbol` -- was built as `Managed(String)` and then
+            // refused on assignment, because a pointer to an array of strings
+            // is not a pointer to an array of erased values.
+            //
+            // Building it at the slot's element type costs nothing: the literal
+            // is being constructed here, and each element goes through `coerce`
+            // into whatever the array holds, exactly as it already did.
+            //
+            // **This is what makes an annotation work.** The Node lane tried
+            // annotating the three `stream` shape constants `readonly
+            // EventName[]` and measured the refusal *relocating* rather than
+            // going -- 7 sites to 7, declines 65 to 65, `no wrapper for
+            // Readable` byte-identical -- because the initializer was still
+            // built at `Managed(String)` and rejected one line later. With this,
+            // the annotation is the contextual type and the literal is built
+            // right the first time.
+            //
+            // 129 failing test files across `Readable`, `Writable` and
+            // `Transform` sit behind those three constructors.
+            .filter(|ty| {
+                let (
+                    HirType::Managed(ManagedType::Array(mine)),
+                    Some(HirType::Managed(ManagedType::Array(slot))),
+                ) = (ty, self.expecting.as_ref())
+                else {
+                    return true;
+                };
+                mine == slot
             })
             // Unfiltered, and the line below is why: a non-array expected type
             // is rejected there, with a message that names what went wrong.
