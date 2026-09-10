@@ -52,8 +52,12 @@ if (theirs.absent) { say(`not compared -- ${theirs.absent}`); process.exit(0); }
 const ours = await loadOurs(moduleName);
 if (ours.absent) { say(`not compared -- ${ours.absent}`); process.exit(0); }
 
-const nodePaths = paths(theirs.surface, 2);
-const ourPaths = paths(ours.surface, 2);
+// `primitives: true`, because a string export is as published as an object one.
+// Without it this file reported `process` clean on `title`, `ppid`, `exitCode`
+// and `_exiting` -- all four own properties on node and inherited here -- and
+// could not see `domain`, `sourceMapsEnabled` or `debugPort` missing at all.
+const nodePaths = paths(theirs.surface, 2, { primitives: true });
+const ourPaths = paths(ours.surface, 2, { primitives: true });
 
 const parentOf = (path) => {
   const cut = path.lastIndexOf(".");

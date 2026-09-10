@@ -19972,6 +19972,71 @@ concretely-typed local. That is what `os.setPriority` was: widening
 the validator is wrong in that shape, so nothing here points at it. Read a row as
 "this file has the pattern", then follow the call site.
 
+## What the last two `os` exports are waiting on, and the last two `path` ones
+
+`os` publishes 21 of node's 23 and `path` 15 of 17, which is why those two carry
+most of the compiled differential. The four that are missing account for eight
+failing test files between them, so they are worth naming exactly.
+
+    os.userInfo             calls `userInfoString`, which is
+                            `Buffer.from(bytes).toString(encoding)`
+    os.networkInterfaces    returns Record<string, unknown[]>
+    path.format             takes an object
+    path.matchesGlob        calls `compileGlobPatterns`, refused on a regular
+                            expression literal
+
+Three walls, all known, none of them mine: `Buffer.from`, an object crossing
+outward, an object crossing inward, and the regex engine. Nothing here is a new
+class -- which is itself the finding, because it means these four are not four
+problems.
+
+`os`'s four `local/` failures are all one of the two above:
+`constants-table-static.js` wants `userInfo`, `core-static.js` wants
+`networkInterfaces`, and `export-surface-static.js` and `to-primitive-static.js`
+want both. `path`'s four are `format` three times and `matchesGlob` once.
+
+## `paths()` recorded only values with identity, so every string export was invisible
+
+`surface-load.mjs`'s shared `paths()` walker skipped anything that was not a
+function or a non-null object. The instruments built on it -- `surface-absence.mjs`
+above all, whose whole question is "what does node publish that this profile does
+not" -- could not see a single string, number, boolean or undefined export.
+
+Found sideways, which is the usual way. Listing what the interpreted lane does not
+publish turned up `process.title`, `ppid`, `exitCode` and `_exiting`; a direct
+descriptor read said all four are own enumerable properties on node and sit on
+`Process.prototype` here, so `Object.keys(process)` differs. That is exactly the
+`KEYS` column `surface-absence.mjs` exists to print, and it printed one row --
+`stdin` -- because `stdin` is an object and the other four are primitives.
+
+**32 primitive-valued names across node's 22 surfaces were invisible.** Three of
+them are genuinely absent here: `process.domain`, `process.sourceMapsEnabled`,
+`process.debugPort`.
+
+`paths(root, depth, { primitives: true })` is opt-in rather than a change in
+default. The identity instruments -- `identity-partition`, `descriptor-diff` --
+want what they have: a primitive has no identity to compare and nothing to recurse
+into, and quietly changing what they walk would change what they measure without
+changing what they say. `surface-absence.mjs` opts in.
+
+    process   95 node paths -> 515,  33 missing -> 73,   3 KEYS -> 13
+    stream    unchanged shape, 7 missing and 8 extra now visible
+    the other twenty modules: assert, fs, path, zlib, buffer and eleven more
+      still report 0 missing and 0 extra
+
+That last line is the point of running it everywhere rather than on `process`: the
+blind spot was wide and what it hid was narrow.
+
+### And a second instrument, one-directional by construction
+
+`descriptor-diff.mjs` iterates **our** paths and looks up node's, so a property
+node owns and we merely inherit is never visited. It reported `process` at 12
+differences and none of them were these four. That is not a defect in it -- it
+answers "where our descriptors differ from node's" and it does -- but the two
+files together were being read as a complete surface comparison, and they were
+not. `surface-absence.mjs` is the one that walks node's side, which is why fixing
+`paths()` fixes the coverage rather than fixing both files.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

@@ -81,7 +81,22 @@ export async function loadOurs(moduleName) {
  * Each entry carries the parent and key as well as the value, so a caller can ask
  * about the *property* -- its descriptor -- and not only about what it holds.
  */
-export function paths(root, depth) {
+export function paths(root, depth, options = {}) {
+  // `primitives: true` records string, number, boolean, bigint, symbol, null and
+  // undefined values as paths of their own. It is opt-in because the default
+  // behaviour is what the identity instruments need -- a primitive has no
+  // identity to compare and nothing to recurse into -- and changing it under them
+  // would be a silent change to what they measure.
+  //
+  // It is not opt-in because primitives do not matter. `surface-absence.mjs`
+  // asks "what does node publish that this profile does not", and without this it
+  // could not see `process.domain`, `process.sourceMapsEnabled` or
+  // `process.debugPort` at all, nor that `process.title`, `ppid`, `exitCode` and
+  // `_exiting` are own properties on node and inherited here -- an
+  // `Object.keys(process)` difference, which is the exact thing that file's
+  // `KEYS` column exists to report. 32 primitive-valued names across node's 22
+  // surfaces were invisible to it.
+  const withPrimitives = options.primitives === true;
   const out = new Map();
   const walk = (value, prefix, level) => {
     let keys;
@@ -101,10 +116,10 @@ export function paths(root, depth) {
       }
       const hasIdentity = typeof child === "function" ||
         (typeof child === "object" && child !== null);
-      if (!hasIdentity) continue;
+      if (!hasIdentity && !withPrimitives) continue;
       const path = prefix ? `${prefix}.${key}` : key;
       out.set(path, { value: child, parent: value, key });
-      if (level < depth) walk(child, path, level + 1);
+      if (hasIdentity && level < depth) walk(child, path, level + 1);
     }
   };
   walk(root, "", 1);
