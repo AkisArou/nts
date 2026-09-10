@@ -21084,32 +21084,56 @@ where node answers `false`. Nothing refuses; it compiles, runs, and answers
 wrongly. Every other defect between the two sessions this week announced itself
 with a diagnostic.
 
-### The largest collapse in this profile does not exist
+### The largest collapse in this profile, in three states over one evening
 
-**Corrected the same evening, and the correction is better than what it
-replaced.** The compiler lane emitted C for `os` and counted **62 distinct `ERR_`
-descriptors, one per class** -- `nts_desc_NtsObj_ERR_BUFFER_OUT_OF_BOUNDS` and so
-on. Nothing shared. Every `ERR_*` extends `TypeError`, `RangeError` or `Error`,
-and **a provided base gives distinct identity**, so two classes carrying the same
-`code: string` answer `instanceof` correctly.
+This claim was written three times. The order is kept because the third is only
+trustworthy for the reason the second was not.
 
-That is a positive fact where the paragraph below had only a reprieve, and the
-difference matters: "latent because nothing asks" would need re-checking every
-time somebody wrote an `instanceof`. "Not collapsed" does not.
+**First**, from an own-enumerable survey here: 87 `ERR_*` classes share exactly
+`[code: string]`, so they are a candidate group -- and latent, because nothing
+observes it.
 
-**What the survey could not see was the base class** -- a third axis after the
-`#private` fields already noted. Own enumerable keys of a no-argument instance is
-a real question and it is not this one.
+**Second**, from the compiler lane: not collapsed at all. `os`'s emitted C has
+**62 distinct `ERR_` descriptors**, and the mechanism offered was that *a provided
+base gives distinct identity*. I recorded that as the better fact and said so:
+"latent because nothing asks" carries a maintenance cost that "not collapsed" does
+not.
 
-The original reasoning is kept below, because its second half stands on its own.
+**Third, retracted by its author within the hour**, and the retraction is the one
+that holds:
 
-### The reasoning that stands: a value survives what an identity would not
+    ERR_TWO extends TypeError { code: string }
+    ERR_ONE extends TypeError { code: string }
+    new ERR_TWO() instanceof ERR_ONE   ours: true.  node: false.
+
+The C is unambiguous -- one `nts_desc_NtsObj_ERR_ONE` in the program, and
+`static void ERR_TWO__constructor(NtsObj_ERR_ONE * v0)`. **`ERR_TWO` is
+`ERR_ONE`.** So "a provided base gives distinct identity" is false. The 62
+descriptors are real and mean those particular classes carry *different field
+sets* -- several `ERR_*` take extra arguments -- not that the base separated
+anything. A count was taken and a mechanism inferred from it.
+
+**How the second version happened is worth more than the second version.** The
+probe was run, `tail -5` of its output was read, and the error pair's eight
+disagreeing cases sat three lines above where the reading stopped:
+
+    12  qIsNotP
+     8  twoIsNotOne
+
+**A tail is not a summary.** That is the day's pattern executed by hand rather
+than by an instrument -- accurate about the population it displayed, adjacent to
+the one that mattered.
+
+So the first version stands, and the two latency arguments below carry the whole
+weight rather than being a footnote to a stronger fact.
+
+### What makes it unexposed: a value survives what an identity would not
 
     89 of 93 `ERR_*` classes share an own-enumerable field shape
     87 of them share exactly [code: string]
 
-That shape is real; the collapse it suggested is not. Independently of it, nothing
-here would have observed one anyway:
+A genuine candidate group. Nothing observes it, for two independent reasons --
+these were checked at the time and neither correction touched them:
 
 - `grep 'instanceof ERR_'` across `runtime/node`: **no matches at all**.
 - An error crossing the napi boundary arrives as a **host `TypeError` with `code`
@@ -21159,7 +21183,7 @@ safe case, and the guess was backwards.** Asked with layouts:
     no base, identical fields                COLLAPSES
     same user base, identical extra field    COLLAPSES
     same field name, different type          distinct
-    identical fields, base `TypeError`       distinct
+    identical fields, base `TypeError`       WITHDRAWN -- it collapses
 
 `PassThrough extends Transform extends Duplex` is a **chain**, so all three
 `stream` rows are ancestor/descendant and all three are correct: `parent
