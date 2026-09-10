@@ -19184,6 +19184,95 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
+        // **An out-of-range read the program is handling is `undefined`, not an
+        // abort.**
+        //
+        // The trapping read below is right for the common case and its comment
+        // says why: a `double` slot has nowhere to put an `undefined`, so the
+        // representation comes from the array and the bounds test is what makes
+        // that honest. What it cannot be is the answer when the *program* has
+        // said it expects an absence.
+        //
+        // `type_of(id)` is exactly that question. Under
+        // `noUncheckedIndexedAccess` the checker types every element access
+        // `T | undefined` and then narrows it away at each `!`, each `?? d` and
+        // each preceding length test -- so a still-erased access type is the
+        // checker reporting that this program does not know the index is in
+        // range, which is the one case where the language's `undefined` is
+        // observable rather than a technicality.
+        //
+        //     const hexLow = unhexTable[nextChar] ?? -1;
+        //     if (!(hexLow >= 0)) { ... }
+        //
+        // `querystring`'s table is 256 entries and `nextChar` is a
+        // `charCodeAt`. `unescapeBuffer("%0<CJK>")` **aborted the process**
+        // where node answers a replacement character, and the source was
+        // already correct: the `??` is not the author being defensive, it is
+        // the author doing what the type demands.
+        //
+        // `nts_array_element` is the read that answers `undefined` out of
+        // range, and it already exists for the case a guard proved an array
+        // without proving what it holds. Both other backends emit it, so this
+        // is a routing decision rather than an ABI change.
+        //
+        // **Arrays only.** A view is an `NtsView` and `nts_array_element`
+        // asserts `nts_is_array`, so routing one there would trade an abort for
+        // a different abort. `blockers/an-out-of-range-read-that-still-traps`
+        // carries that half; it is a smaller cone -- a typed array's length is nearly always
+        // the thing the loop is bounded by -- and it wants a view-shaped helper
+        // rather than a cast.
+        // **`xs[i]!` keeps the trapping read**, which is what the comment above
+        // means by "the claim that one is there". Under
+        // `noUncheckedIndexedAccess` the checker types *every* element access
+        // `T | undefined` and narrows at the parent, so `type_of(id)` alone
+        // routes `xs[i]!` here too -- and that is every counted loop in the
+        // corpus paying a call and a tag test for an index the author has
+        // already sworn to.
+        //
+        // An abort on a violated `!` is the documented bargain and it stays.
+        // What changes is only the access that made no such claim.
+        let asserted = self
+            .node(id)
+            .parent
+            .is_some_and(|parent| self.kind_of(parent) == Some(syntax::NON_NULL_EXPRESSION));
+        // **And only where the slot itself cannot hold the absence.**
+        //
+        // That is the whole of the reason the trap exists -- "there is no
+        // `undefined` to put in a double" -- so where the element type is
+        // already erased the slot *can* hold one, and paying a call to learn
+        // that is a cost with nothing bought. `unknown[]` is the case:
+        // `benches/cases/erasure-stored-unknown` reads `values[i]` 200,000
+        // times in its inner loop, and routing it here turned a load into a
+        // call in the hottest loop of a benchmark. Caught by emitting the bench
+        // program and grepping for the call, before any timing.
+        //
+        // An out-of-range read of an erased array still traps, which is the
+        // same defect one representation over, and it wants `ArrayGet` to
+        // *answer* the undefined tag rather than a call to compute it --
+        // reachable, because that slot has room. Filed as
+        // `blockers/an-out-of-range-read-that-still-traps` rather than
+        // solved by making the fast case slow.
+        let slot_holds_the_absence = matches!(
+            self.values[array.0 as usize].ty,
+            HirType::Managed(ManagedType::Array(ref element)) if **element == HirType::Erased
+        );
+        if !asserted
+            && !slot_holds_the_absence
+            && matches!(
+                self.values[array.0 as usize].ty,
+                HirType::Managed(ManagedType::Array(_))
+            )
+            && self.type_of(id) == Some(HirType::Erased)
+        {
+            let origin = self.origin(id);
+            let erased = self.push(OpKind::Erase { value: array }, HirType::Erased, origin.clone());
+            return Ok(self.runtime_call(
+                "nts_array_element",
+                vec![erased, index],
+                HirType::Erased,
+                origin,
+            ));
+        }
         let HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)) =
             self.values[array.0 as usize].ty.clone()
         else {
