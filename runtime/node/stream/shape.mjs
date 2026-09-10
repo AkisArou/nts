@@ -103,6 +103,18 @@ export function shape(exports) {
   // implementation.
   exports.pipeline[promisify.custom] = exports.promises.pipeline;
   exports.finished[promisify.custom] = exports.promises.finished;
+  // `promises.ts` is reached with `import * as promises`, so what the loop above
+  // copied is an **ESM module namespace object**: frozen, null-prototyped and
+  // carrying `Symbol.toStringTag` of `"Module"`. Node's `stream.promises` is an
+  // ordinary object over `Object.prototype` with no tag.
+  //
+  // `{ ... }` rather than the null-prototype form used for `fs.constants`,
+  // because node's two differ: `fs.constants` really is null-prototyped and this
+  // one is not. Measured, not assumed.
+  //
+  // Third of these found, after `util.types` and `fs.constants`. Representation
+  // shaping only: the values are the same function objects.
+  if (exports.promises !== undefined) Stream.promises = { ...exports.promises };
   Duplex.fromWeb = exports.duplexFromWeb;
   Duplex.toWeb = exports.duplexToWeb;
   // The Web Stream classes are platform objects supplied by Node. The
@@ -113,9 +125,12 @@ export function shape(exports) {
 }
 
 /** Public subpath modules that share this stream implementation and state. */
-export function subpaths(exports) {
+export function subpaths(exports, shaped) {
   return {
-    "stream/promises": exports.promises,
+    // `shaped.promises`, so that `require('stream/promises')` is the same object
+    // as `require('stream').promises`. The shape rebuilds it, and returning the
+    // raw namespace here would hand the subpath a different object.
+    "stream/promises": shaped?.promises ?? exports.promises,
     "stream/consumers": exports.consumers,
     "stream/iter": exports.iter,
     "stream/web": webStreams,

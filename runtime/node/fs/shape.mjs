@@ -155,6 +155,24 @@ export function shape(exports) {
   const promises = {};
   for (const name of promiseExportNames) promises[name] = promiseNamespace[name];
   module.promises = promises;
+  // `constants.ts` is reached with `import * as constants`, so `exports.constants`
+  // is an **ESM module namespace object**: frozen, and carrying
+  // `Symbol.toStringTag` of `"Module"`. Node's is an ordinary null-prototype
+  // object with no tag and no freeze --
+  //
+  //                        node                 here, before
+  //     Symbol.toStringTag undefined            "Module"
+  //     isExtensible       true                 false
+  //
+  // A namespace object is frozen by specification, so no care on the TypeScript
+  // side changes it. Null prototype rather than `{ ... }`, because node's really
+  // is null-prototyped; the tag does not come across because it is not enumerable.
+  //
+  // The same line in `util/shape.mjs` covers `util.types`, which was the first of
+  // these found. Representation shaping only: the values are unchanged.
+  const plainConstants = Object.assign(Object.create(null), exports.constants);
+  module.constants = plainConstants;
+  promises.constants = plainConstants;
   module.Stats = callableStats(exports.Stats);
   module.ReadStream = callableReadStream(exports.ReadStream);
   module.WriteStream = callableWriteStream(exports.WriteStream);

@@ -20,6 +20,22 @@ export function shape(exports) {
     setInterval: exports.promises.setInterval,
     scheduler: exports.promises.scheduler,
   };
+  // `util.promisify(setTimeout)` must return the `timers/promises` form rather
+  // than a callback-wrapped one, and node says so with a symbol-keyed link on the
+  // function itself:
+  //
+  //     timers.setTimeout[promisify.custom]   === timers/promises.setTimeout
+  //     timers.setImmediate[promisify.custom] === timers/promises.setImmediate
+  //
+  // Without it `promisify` falls back to its generic wrapper, which passes a
+  // node-style `(err, value)` callback to a function whose last argument is the
+  // value to resolve with -- so it resolves with the wrong thing rather than
+  // failing. `stream/shape.mjs` carries the same two lines for `pipeline` and
+  // `finished`; this is CommonJS function-object metadata and belongs at the host
+  // boundary, not in the compiled implementation.
+  const promisifyCustom = Symbol.for("nodejs.util.promisify.custom");
+  exports.setTimeout[promisifyCustom] = promises.setTimeout;
+  exports.setImmediate[promisifyCustom] = promises.setImmediate;
   return {
     setTimeout: exports.setTimeout,
     clearTimeout: exports.clearTimeout,
