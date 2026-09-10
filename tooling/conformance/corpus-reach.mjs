@@ -35,6 +35,16 @@
 // are covered there. Read a zero as "the differential says nothing about this",
 // which is a different and weaker claim than "this is unverified".
 //
+// **It mutates node's own classes and puts them back.** A class's statics and
+// prototype methods are wrapped on the class itself -- a facade would break
+// `instanceof` and `x.constructor` -- and every descriptor is restored in a
+// `finally`. That is not a claim: after a real run over `buffer`, `events` and
+// `url` in one process, `Buffer.prototype.readUInt8`, `Buffer.from`,
+// `EventEmitter.prototype.emit`, `URL.prototype.toJSON` and `URL.canParse` are
+// all identical to the functions held before it started. Check it again after
+// changing the wrapping; a run that leaves node's objects wrapped would poison
+// everything that imports them afterwards, silently and in the same process.
+//
 // A function whose wrapper throws where the original would not would corrupt the
 // run, so the wrapper delegates with the original receiver and rethrows
 // unchanged. Constructors are skipped -- wrapping one breaks `new` -- and named
