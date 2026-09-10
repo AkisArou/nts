@@ -96,15 +96,34 @@ function invoke(target, spec, input) {
  */
 function publishes(spec) {
   const label = spec.label ?? spec.name ?? "";
-  // The leading identifier, not the segment before a dot. `posix.normalize`
-  // needs `posix` and `format(t)` needs `format` -- a label may spell its
-  // arguments, and splitting on "." alone let every flat call form through.
+  // The whole dotted chain, not only the leading identifier. A label may spell
+  // its arguments -- `posix.format("")` -- so the chain is the identifiers
+  // before the first `(`, and each one is resolved in turn.
+  //
+  // **The root alone is one level too shallow.** `path` publishes `posix` and
+  // does not publish `posix.format`, so every `posix.format(...)` spec passed
+  // this guard, threw inside the module, and arrived as a divergence: 40,084 of
+  // them on a 2026-09-10 pin, every one `m[ns].format is not a function`. That
+  // is the same failure this function was written to fix, one level down, and it
+  // hid whatever real divergence `path` may have -- which is exactly the
+  // objection recorded above.
+  //
   // `util` published two functions and its corpus exercises `format`, so it
   // reported 45,216 comparisons and 45,216 divergences, all of them
   // `m.format is not a function`.
-  const root = /^[A-Za-z_$][\w$]*/.exec(label)?.[0];
-  if (root === undefined) return true;
-  return compiled[root] !== undefined && compiled[root] !== null;
+  //
+  // Still a lookup rather than a guess about an error message, for the reason
+  // given above: matching "is not a function" would also catch a module that
+  // genuinely published a non-function, which is a defect and not an absence.
+  const chain = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(label)?.[0];
+  if (chain === undefined) return true;
+  let cursor = compiled;
+  for (const segment of chain.split(".")) {
+    if (cursor === undefined || cursor === null) return false;
+    if (typeof cursor !== "object" && typeof cursor !== "function") return false;
+    cursor = cursor[segment];
+  }
+  return cursor !== undefined && cursor !== null;
 }
 
 function compare(spec, input) {
