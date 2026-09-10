@@ -18747,6 +18747,71 @@ One caveat that applies to every lane number in this tree, including this one:
 `test-util-inspect-long-running.js` fails about one run in seven, and it passed on
 the run that produced 1,869. Every number here is one sample.
 
+## A private name is per class, and this corpus collides once
+
+MainClaude found that the layout matched `#` names across a base and a derived
+class and kept one slot. A `#` name is per class in JavaScript -- that is what the
+`#` is for -- so `Base` and `Derived` may each declare `#count` and they are two
+fields. Measured against node on eleven lines:
+
+    class Base    { #count = 0;   bumpBase()    { return ++this.#count; } }
+    class Derived extends Base
+                  { #count = 100; bumpDerived() { return ++this.#count; } }
+
+    node 2102     compiled 102502     28 of 28 cases disagree
+
+`http.Server` hit it visibly: `net.Server` declares `#connections = 0`, `http.Server
+extends NetServer` and declares `#connections = new Set<HTTPDuplex>()`, and an
+`Int32` slot meeting a `Set` refuses. That refusal is the top of this ledger's own
+ranked list, three layers down: `a declaration outside every walk` was a false
+message, `a value of type Set<…> where Float is wanted` was the symptom, and the
+private-name collision is the cause.
+
+**The refusal is the lucky case.** Where the two fields have the same
+representation there is no refusal and no divergence in any instrument here; the
+program computes with one field where it should have two. So the question is not
+what refuses but what else stands on this without saying so.
+
+`private-name-shadowing.mjs` answers it:
+
+    497 classes, 208 with a base, 158 resolved in-tree, 50 not resolved,
+    619 (derived field, ancestor) pairs checked, 1 collision
+
+The one is `#connections`. The 50 unresolved bases are `Error`, `Set`,
+`Uint8Array`, `Iterator`, `TypeError` and their kin -- JavaScript builtins with no
+declaration in this tree, which is the right answer for them.
+
+### It answered zero twice before it answered one
+
+Both wrong answers were the instrument, and each would have read as good news:
+
+**Bare class names.** `http/src/server.ts` says `class Server extends NetServer`,
+and `NetServer` is `import { Server as NetServer }`. A base is a *local* name, so
+matching by the identifier finds nothing. `Server` is also declared in both `net`
+and `http`, so a map keyed by bare class name holds one and drops the other.
+
+**Entry files re-export rather than declare.** `fs/src/streams.ts` imports
+`Readable` from `stream/src/main.ts`, which does not declare it -- it does
+`import { Readable } from "./readable.ts"` and then `export { … Readable … }`,
+an export list with **no** `from` clause. Following `export … from` alone changed
+nothing at all: 154 resolved before and 154 after, which is what said the pattern
+was wrong rather than the idea. With bare export lists handled, chains went 154 to
+158 and pairs 527 to 619 -- the whole `stream`, `fs`, `http` and `zlib` hierarchy,
+which is precisely where a deep chain could hide one.
+
+A zero from either version was not evidence. The instrument prints what it
+resolved and what it could not for that reason.
+
+### Not renamed
+
+`http.Server`'s `#connections` could be renamed -- the two really are different
+fields and the shared name is an accident -- and it would clear the refusal today
+without touching the compiler. It has not been, for two reasons. It is rewriting
+correct source to route around a refusal, which this lane does not do; and the
+sweep above says it is the corpus's **only** instance, so renaming it would remove
+the single witness to a defect that is otherwise a silent wrong answer.
+`blockers/a-private-name-is-per-class` carries the reduction and the design.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
