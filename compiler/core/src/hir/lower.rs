@@ -17528,6 +17528,66 @@ impl<'a> FuncBuilder<'a> {
         Ok(layout)
     }
 
+    /// The base's fields first, then this class's own.
+    ///
+    /// Base-first layout is what makes an upcast a no-op pointer cast, and it is
+    /// taken *from the base's layout* rather than sorted towards it — see the
+    /// note inside, which is why.
+    fn after_the_base(
+        &mut self,
+        id: NodeId,
+        base: TypeId,
+        fields: Vec<Field>,
+    ) -> Result<Vec<Field>, Diagnostic> {
+        let inherited = self.layout_of(id, base)?.fields;
+        let mut ordered = inherited;
+        for field in fields {
+            // **A `#` name is per class, and sharing the slot is a wrong
+            // answer rather than a refusal.**
+            //
+            // `class Base { #count = 0 }` and `class Derived extends Base
+            // { #count = 100 }` are two fields in JavaScript -- that is what
+            // the `#` is for -- and the dedup below matched them by name and
+            // dropped the derived one. Both classes then read and wrote the
+            // base's slot. Measured against node on an eleven-line program:
+            // **28 of 28 cases disagree**, node answering 2102 where the
+            // compiled program answered 102502.
+            //
+            // In `runtime/node` it happens to refuse instead, because the
+            // two types differ: `net.Server` has `#connections = 0` and
+            // `http.Server extends` it with `#connections = new
+            // Set<HTTPDuplex>()`, so the Set meets an `Int32` slot and says
+            // so. That refusal is `http.createServer`'s, which the Node lane
+            // ranks as **274 failing test files** -- the largest single item
+            // on the compiled axis -- and its message names a `Set` where a
+            // `Float` is wanted, which is the symptom two steps from here.
+            //
+            // Refused rather than fixed. The fix is to give a private field
+            // a name of its own so the two slots can coexist, and the name
+            // is read back at twelve lookup sites; doing half of that to a
+            // defect that is currently a *wrong answer* would be worse than
+            // this. `blockers/a-private-name-is-per-class` carries the
+            // reduction and the design.
+            if field.name.starts_with('#')
+                && let Some(shadowed) = ordered.iter().find(|kept| kept.name == field.name)
+            {
+                let what = shadowed.name.clone();
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "`{what}`, a private name this class and its base both declare -- \
+                         they are two fields in JavaScript and one slot here, so the base's \
+                         would be read and written by both"
+                    ),
+                ));
+            }
+            if !ordered.iter().any(|kept| kept.name == field.name) {
+                ordered.push(field);
+            }
+        }
+        Ok(ordered)
+    }
+
     /// Whether two array element types are the same storage under two names.
     ///
     /// Element types are compared by `HirType`, and **two structurally identical
@@ -17708,14 +17768,7 @@ impl<'a> FuncBuilder<'a> {
         // the same order. Then its own additions. That is base-first layout
         // stated as a construction instead of hoped for as a sort.
         if let Some(base) = base {
-            let inherited = self.layout_of(id, base)?.fields;
-            let mut ordered = inherited;
-            for field in fields {
-                if !ordered.iter().any(|kept| kept.name == field.name) {
-                    ordered.push(field);
-                }
-            }
-            fields = ordered;
+            fields = self.after_the_base(id, base, fields)?;
         } else {
             fields = self.as_the_program_writes_them(fields);
         }
