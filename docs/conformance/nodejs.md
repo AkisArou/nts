@@ -20444,6 +20444,22 @@ runs -- so the miss is the program's and not the spec's. The second line is the
 other half: a spec that is not deterministic would report divergences against
 *itself* and every number above would be noise.
 
+## Five shims changed in a day, and the hollow check after them
+
+`shape.mjs` changes are the ones that can hollow a lane: they decide what a test
+sees, and a test can start passing on node's own implementation without anything
+saying so. Five modules were changed today -- `process`, `stream`, `util`, `http`,
+`os` -- and `run.mjs --sabotage` blanks the module and keeps its declared
+dependencies, so a file that still passes is passing on nothing.
+
+    process   0 passed, 91 failed      stream  0 passed, 252 failed
+    util      0 passed,  25 failed     http    0 passed, 409 failed
+    os        0 passed,  10 failed
+
+**0 hollow across all five.** Every pass depends on the implementation under test,
+including the two tests changed today: `util/test/inspect-static.js`'s new
+`defaultOptions` block and `process/test/export-surface-static.js`'s shortened pin.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
