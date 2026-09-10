@@ -1708,7 +1708,24 @@ fn named_entry() -> Vec<String> {
 /// whose output does not match what is built is worse than no command, because
 /// its answers are specific and wrong.
 fn emit_options<'a>(entry: &'a [String], entry_files: &'a [String]) -> hir::Options<'a> {
-    let standalone = std::env::args().any(|arg| arg == "--main") || !entry.is_empty();
+    // **`!entry.is_empty()` was never false.** `named_entry` returns
+    // `vec![MODULE_INIT]` when nothing is named -- module evaluation is a root
+    // in the same sense a named entry is -- so this read `standalone` for every
+    // invocation, and the *library* reading below was unreachable code.
+    //
+    // What that costs is the whole surface. With `Roots::Entry(["module#init"])`
+    // the only functions kept are the ones module evaluation reaches, so an
+    // exported function nothing calls internally is pruned before any backend
+    // sees it. `export function addTwo(n: number) { return n + 2; }` emitted an
+    // empty `class nts/gen/Program` through `emit-jvm`, against the two
+    // occurrences `emit-c` emits for the same file -- and `emit_c` has this
+    // logic written out separately and correctly, which is why only the two
+    // callers of *this* function had it.
+    //
+    // Asked of the arguments, which is where the claim actually is: `--main`
+    // says the product is an executable and `--entry` names its roots. A
+    // synthesized default is not a claim about anything.
+    let standalone = std::env::args().any(|arg| arg == "--main" || arg == "--entry");
     hir::Options {
         provider: if std::env::args().any(|arg| arg == "--rc") {
             hir::Provider::ReferenceCounting
