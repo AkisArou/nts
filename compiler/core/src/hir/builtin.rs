@@ -98,8 +98,20 @@ pub(super) fn constructor_name(name: &str) -> String {
 }
 
 /// Whether a layout name is a constructor token's.
+///
+/// **Any `Ctor_`, not only a provided error's.** A class used as a value is an
+/// empty layout whose name is its whole identity, so `Ctor_IncomingMessage` and
+/// `Ctor_ServerResponse` are two tokens that `Layout::same_shape` cannot tell
+/// apart -- and merging them would make `opts.IncomingMessage ?? IncomingMessage`
+/// and its `ServerResponse` neighbour one value, so a program asking which it
+/// got would be told the wrong one with nothing emitted to say so.
+///
+/// Widening this is what enrols user class tokens in `nominal_name`'s rule: a
+/// layout whose name is its identity does not merge with a differently-named
+/// one. A user class actually spelled `Ctor_Foo` is then treated as nominal
+/// too, which costs a merge that was only ever an optimization.
 pub(super) fn is_constructor_name(name: &str) -> bool {
-    name.strip_prefix("Ctor_").is_some_and(is_error)
+    name.starts_with("Ctor_")
 }
 
 /// Why a member of the declared `Error` is absent here, if it is one.

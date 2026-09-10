@@ -839,7 +839,7 @@ fn cell_name(index: usize) -> String {
 fn closure_type(index: usize) -> TypeId {
     let id = super::SYNTHETIC_CLOSURES + u32::try_from(index).unwrap_or(0);
     debug_assert!(
-        id < super::PROVIDED_ERRORS,
+        id < super::SYNTHETIC_CLASS_TOKENS,
         "more closures than the synthetic id space holds",
     );
     TypeId(id)
@@ -1330,6 +1330,24 @@ struct Naming {
     /// the generator fills and the frame the `for...of` walks -- which is what
     /// the rest of this struct is for.
     generators: rustc_hash::FxHashMap<NodeId, usize>,
+
+    /// The token index of each class this program declares.
+    ///
+    /// A class used as a *value* needs one immortal object, the same one
+    /// wherever the name is written, so its type id has to be the same in every
+    /// function that mentions it -- and a builder is made fresh per function,
+    /// which is the reason everything else in this struct is here.
+    ///
+    /// **Keyed by the declaring symbol, not by the type.** A class has a type
+    /// for its instances and the value is not one of them; two classes can also
+    /// share an instance layout by being structurally identical, and their
+    /// tokens must still be two. The symbol is what the source wrote.
+    ///
+    /// Every class gets an index whether or not it is used as a value, because
+    /// an unused one costs nothing: no layout is pushed until a read reaches
+    /// the arm that pushes it. Assigning only to the used ones would mean
+    /// finding them first, which is the same walk with a way to be wrong.
+    class_tokens: rustc_hash::FxHashMap<u32, usize>,
 }
 
 /// Decide what every function declaration is called in the emitted program.
@@ -1397,10 +1415,10 @@ fn distinguishing_tail(snapshot: &SemanticSnapshot, group: &[NodeId], id: NodeId
     tail(&mine, mine.len())
 }
 
-fn naming(snapshot: &SemanticSnapshot) -> Naming {
-    let probe = FuncBuilder::new(snapshot);
-    let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
-        rustc_hash::FxHashMap::default();
+/// Which generator each `function*` is, in source order. See
+/// [`Naming::generators`], and [`class_token_indices`] beside it -- the same
+/// shape of walk, lifted out for the same reason.
+fn generator_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<NodeId, usize> {
     let mut generators: rustc_hash::FxHashMap<NodeId, usize> = rustc_hash::FxHashMap::default();
     for (index, node) in snapshot.nodes.iter().enumerate() {
         if node
@@ -1411,6 +1429,35 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
             generators.insert(NodeId(u32::try_from(index).unwrap_or(u32::MAX)), next);
         }
     }
+    generators
+}
+
+/// A token index for every class the program declares. See
+/// [`Naming::class_tokens`].
+///
+/// In symbol order, which is a property of the snapshot rather than of the walk
+/// that reads it -- so one program gives one token the same id on every run,
+/// and a dump can be diffed.
+fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32, usize> {
+    let mut tokens: rustc_hash::FxHashMap<u32, usize> = rustc_hash::FxHashMap::default();
+    for (index, symbol) in snapshot.symbols.iter().enumerate() {
+        if symbol
+            .flags
+            .contains(nts_semantic_schema::SymbolFlags::CLASS)
+        {
+            let next = tokens.len();
+            tokens.insert(u32::try_from(index).unwrap_or(u32::MAX), next);
+        }
+    }
+    tokens
+}
+
+fn naming(snapshot: &SemanticSnapshot) -> Naming {
+    let probe = FuncBuilder::new(snapshot);
+    let class_tokens = class_token_indices(snapshot);
+    let mut declarations: rustc_hash::FxHashMap<String, Vec<NodeId>> =
+        rustc_hash::FxHashMap::default();
+    let generators = generator_indices(snapshot);
     // Every object literal, by the type the checker gave it, with its property
     // names in source order. A type written two different ways is dropped: a
     // conflict has no answer and a guess would be a wrong one.
@@ -1491,7 +1538,10 @@ fn naming(snapshot: &SemanticSnapshot) -> Naming {
         }
     }
 
-    let mut naming = Naming::default();
+    let mut naming = Naming {
+        class_tokens,
+        ..Naming::default()
+    };
     for (name, ids) in declarations {
         if ids.len() < 2 {
             continue;
@@ -2051,11 +2101,30 @@ impl Shared {
             suffix,
         );
         builder.generic_calls.clone_from(&self.generics.at_call);
-        builder.qualified.clone_from(&self.naming.qualified);
-        builder.generators.clone_from(&self.naming.generators);
-        builder.written_order.clone_from(&self.naming.written_order);
+        wire_naming(&mut builder, &self.naming);
         builder
     }
+}
+
+/// Give a builder the whole of the program-wide naming.
+///
+/// **All of it, in one place, because taking part of it is silent.** Every
+/// field of [`Naming`] exists for one reason -- a builder is made fresh per
+/// function and cannot see another's -- so a site that copies two of the four
+/// has that same problem for the other two, and says nothing about it.
+///
+/// The closure-body site was doing exactly that. Without `class_tokens` a class
+/// named inside a closure fell through to "a class used as a value" while the
+/// same name in the enclosing function lowered; without `written_order` an
+/// object literal written inside a closure took the checker's field order
+/// instead of the program's, so `Object.keys` on it disagreed with node --
+/// silently, because the layout is otherwise correct and no diagnostic is
+/// involved.
+fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
+    builder.qualified.clone_from(&naming.qualified);
+    builder.generators.clone_from(&naming.generators);
+    builder.written_order.clone_from(&naming.written_order);
+    builder.class_tokens.clone_from(&naming.class_tokens);
 }
 
 /// Reads that happen before the module declaring them has evaluated.
@@ -3435,14 +3504,10 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             hierarchy.clone(),
             closures.clone(),
         );
-        // The qualified names, which this builder needs for the same reason
-        // every other one does: a wrapper forwards to the function it stands
-        // for, and where two modules declare that name the function is emitted
-        // under the qualified one. Without this the wrapper called a name the
-        // program does not define -- see `lower_closure`, which is where the
-        // consequence is written down.
-        builder.qualified.clone_from(&shared.naming.qualified);
-        builder.generators.clone_from(&shared.naming.generators);
+        // A closure body is a function like any other and takes the whole of
+        // the naming; this site used to take two of its four fields. See
+        // `wire_naming`.
+        wire_naming(&mut builder, &shared.naming);
         match builder.lower_closure(index, &closures[index]) {
             Ok(func) => lowered.program.funcs.push(func),
             Err(diagnostic) => lowered.diagnostics.push(diagnostic),
@@ -5874,6 +5939,9 @@ struct FuncBuilder<'a> {
     /// The order the program writes each field-name set; see
     /// [`Naming::written_order`], which computes it once for the whole program.
     written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
+    /// The token index of each class used as a value; see
+    /// [`Naming::class_tokens`], and its reason for being decided once.
+    class_tokens: rustc_hash::FxHashMap<u32, usize>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -5919,6 +5987,7 @@ impl<'a> FuncBuilder<'a> {
             async_result: None,
             generator: None,
             generators: rustc_hash::FxHashMap::default(),
+            class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
             used_closures: Vec::new(),
             substitution: Substitution::default(),
@@ -17922,7 +17991,32 @@ impl<'a> FuncBuilder<'a> {
                 let value = self
                     .this
                     .ok_or_else(|| self.unsupported(capture.at, "`this` outside a method"))?;
-                let field_ty = self.values[value.0 as usize].ty.clone();
+                // **The type the body will read it at, not the type in hand.**
+                //
+                // The two sides of a closure's layout are built by different
+                // builders and merged, so they have to agree on every field's
+                // type. The body takes `this` from `type_of(capture.at)` -- the
+                // checker's type for `this` inside the arrow, which is the class
+                // that *declares* the arrow. This side had been using whatever
+                // the receiver happened to be.
+                //
+                // Those were the same thing for as long as a closure could only
+                // be allocated in a method, where the receiver is the declaring
+                // class. A field initializer is lowered at the *allocation
+                // site* and its `this` is the object being constructed -- so
+                // `class GlobalConsole extends Console` writing `Console`'s
+                // arrow fields put a `GlobalConsole *` in a slot the body reads
+                // as `NtsObj_Console *`, and clang refused the module with
+                // `incompatible pointer types`. Seven of them in `console`,
+                // which is the only inheritance in that file.
+                //
+                // The upcast is free -- base-first layout makes the pointers
+                // equal -- so this is a type correction rather than a
+                // conversion, and `coerce` emits nothing for it.
+                let field_ty = self
+                    .type_of(capture.at)
+                    .unwrap_or_else(|| self.values[value.0 as usize].ty.clone());
+                let value = self.coerce(value, &field_ty, capture.at)?;
                 self.push(
                     OpKind::FieldSet {
                         object,
@@ -25179,6 +25273,47 @@ impl<'a> FuncBuilder<'a> {
             && let Some(index) = super::builtin::error_index(&record.name)
         {
             let ty = super::constructor_token(index);
+            self.layouts.push(Layout {
+                types: vec![ty],
+                name: super::builtin::constructor_name(&record.name),
+                interfaces: Vec::new(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                base: None,
+            });
+            let ty = HirType::Managed(ManagedType::Object(ty));
+            return Ok(self.push(OpKind::ClosureStatic, ty, origin));
+        }
+        // A class **this program declares**, used as a value.
+        //
+        // Everything the arm above says applies unchanged; the only difference
+        // is where the token's index comes from. A provided error's is its
+        // position in `builtin::ERRORS`, which is a compile-time list. A user
+        // class's is `Naming::class_tokens`, because there is no list -- and it
+        // has to be decided once for the whole program, since a builder is made
+        // fresh per function and the value must be the same object in each.
+        //
+        //     this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
+        //
+        // is node's documented `createServer({ IncomingMessage })` option, a
+        // caller substituting the message class. It is the single NTS1001 in
+        // `http.Server`'s constructor, which is what `createServer` waits on,
+        // which the Node lane ranks at **274 failing test files** -- the
+        // largest item on the compiled axis.
+        //
+        // **`new` through such a value is a separate feature and still
+        // refuses**, as "a computed constructor". This produces the class
+        // object; constructing through one needs the token to carry something
+        // that allocates and runs a constructor, which is the closure-base
+        // dispatch of record 0096 with a different member. Both refusals are
+        // visible on one probe, so this is not a cleared root revealing another
+        // -- it is half of a known two.
+        if let Some(record) = self.snapshot.symbols.get(symbol.0 as usize)
+            && self.member_read_from(id).is_none()
+            && record.flags.contains(SymbolFlags::CLASS)
+            && let Some(index) = self.class_tokens.get(&symbol.0).copied()
+        {
+            let ty = super::class_token(index);
             self.layouts.push(Layout {
                 types: vec![ty],
                 name: super::builtin::constructor_name(&record.name),

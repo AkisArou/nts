@@ -1399,6 +1399,40 @@ pub const SYNTHETIC_CELLS: u32 = SYNTHETIC_TYPE_FLOOR;
 pub const SYNTHETIC_FRAMES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 18);
 pub const SYNTHETIC_CLOSURES: u32 = SYNTHETIC_TYPE_FLOOR + (1 << 19);
 
+/// The upper half of the closures' space, for a **class used as a value**.
+///
+/// `opts.IncomingMessage ?? IncomingMessage` stores a class in a field so it
+/// can be `new`ed later, which is node's documented way of letting a caller
+/// substitute the message class -- and the same shape as `err.constructor ===
+/// TypeError`, which `runtime/node` writes 88 times. What such a value has to
+/// be is what [`CONSTRUCTOR_TOKENS`] says: one immortal object per class, the
+/// same one wherever the name is written, `typeof` `"function"`, comparable.
+///
+/// So it is a closure token with a different source, and it belongs in the
+/// closures' band for the reason that band exists: `is_closure_type` decides
+/// the *tag*, and a class value answers `"function"` there correctly.
+///
+/// A sub-band rather than the same counter, because
+/// [`has_a_closure_body`] must answer **no**. Nothing dispatches a `call` to a
+/// class token -- it exists to have an address -- and a token in the lower half
+/// would have every pass that emits a `call` looking for a body that was never
+/// written. The provided error classes are told apart the same way, one band up.
+///
+/// Half of 2^19 is 262,144 classes, against a corpus whose largest module
+/// declares under two hundred.
+pub const SYNTHETIC_CLASS_TOKENS: u32 = SYNTHETIC_CLOSURES + (1 << 18);
+
+/// The token for the `n`th class this program uses as a value.
+#[must_use]
+pub fn class_token(index: usize) -> TypeId {
+    let id = SYNTHETIC_CLASS_TOKENS + u32::try_from(index).unwrap_or(0);
+    debug_assert!(
+        id < PROVIDED_ERRORS,
+        "more classes used as values than the token band holds"
+    );
+    TypeId(id)
+}
+
 /// The upper half of the frames' space, for a **generator**'s frame.
 ///
 /// Split from the lower half because the two are numbered by different things
@@ -1448,7 +1482,7 @@ pub const fn is_closure_type(ty: TypeId) -> bool {
 /// refused twelve examples for holding an error constructor.
 #[must_use]
 pub const fn has_a_closure_body(ty: TypeId) -> bool {
-    ty.0 >= SYNTHETIC_CLOSURES && ty.0 < PROVIDED_ERRORS
+    ty.0 >= SYNTHETIC_CLOSURES && ty.0 < SYNTHETIC_CLASS_TOKENS
 }
 
 /// The band the constructor tokens live in.
