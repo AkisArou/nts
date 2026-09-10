@@ -19345,6 +19345,33 @@ also invisible to every count in this ledger that stops at "publishes" or "passe
 and it was invisible to this harness until the corpora reached an error path at
 all.
 
+### Re-measured on a 14:38 pin: 160,336 to 40,084
+
+Fixed upstream, and the remainder is one thing.
+
+    541,134 comparison(s)   160,336 divergence(s)  ->  40,084
+
+**Every remaining divergence is `join`, and every one of them is the parameter
+name**: ours says `"paths[1]"` where node says `"path"`. The tail now matches node
+character for character, including the distinction that produced `Received type
+null` -- node answers `null` and `undefined` bare and everything else as
+`type <t>`, because `typeof null` is `"object"` and node never reaches the
+`typeof` arm for it.
+
+`resolve` **agrees exactly**, and it says `paths[0]` on both sides. So node's
+convention is per function in node's own source, and a boundary standing in for a
+validator that never ran cannot know which one it is standing in for -- which is
+why the last 40,084 need the module's own guard to survive rather than a better
+boundary message.
+
+The other three modules whose corpora reach the compiled lane are unchanged and
+clean: `os` 400,280, `punycode` 140,224, `util` 20,024, and `querystring` 40,038,
+0 divergences each. The interpreted lane is untouched at 125,302 and 0, which is
+the right answer for a boundary-only change.
+
+Nothing in this profile's tests pinned the old wording, checked before
+re-measuring.
+
 ## Two hazards in a shared table of "rejected" values
 
 Both found by using one, and both are the same shape: **a value is invalid only
