@@ -45,9 +45,23 @@
 // is currently a *wrong answer* would be worse than refusing it outright, and
 // the refusal is what stops the miscompile today.
 //
-// The base's copy has to keep its index, because an upcast is a pointer cast and
-// base-first layout is what makes that free. So it is the derived's that gets
-// the new name.
+// The base's copy has to keep its **index**, because an upcast is a pointer cast
+// and base-first layout is what makes that free. Its *name* is another matter,
+// and that suggests a one-place fix: rename the **inherited** copy, leaving the
+// plain name to the derived class where every access asks for it. The index is
+// what runs, so a method of the base still reads slot 0 whatever slot 0 is
+// called.
+//
+// **That was tried and it does not work as written.** Renaming the inherited
+// copy to `#count@Base` produces two struct members with the same C name:
+//
+//     program.c:18:13  error: duplicate member '__count____Base'
+//
+// `c_identifier` maps `#` to `__` and `@` to `____`, and those two spellings are
+// distinct — `#count` is `__count` and `#count@Base` is `__count____Base` — so
+// the collision is not the mangling. Something produces the renamed field
+// twice, and the next attempt should start by finding out what rather than by
+// choosing a different separator. Reverted; the refusal above is what stands.
 //
 // # The control
 //
