@@ -12,6 +12,25 @@
 // bun 0.341ms -- this is **0.89x of node and 2.07x of bun**. 10.2x from the first shape to this
 // one, with no compiler change at any step.
 //
+// **Re-measured 2026-09-10, under reference counting, on a quiet machine with both other lanes
+// idle by arrangement.** The series is still a series and the ordering is unchanged; the numbers
+// are not:
+//
+//   json-stringify-doc      3.55ms   node 3.68ms    0.96x of node
+//   json-stringify-inline   0.960ms  node 1.15ms
+//   json-stringify-fused    0.735ms  node 0.876ms   0.84x of node
+//   json-parse              3.98ms   node 4.07ms    0.98x of node
+//
+// **The shipped shape has halved and is now ahead of node's built-in**, which the sentence at the
+// top of this file says only `fused` is. That sentence was true when it was written. The series is
+// 4.8x rather than 10.2x, which is still the size of the generated-serializer prize and is a
+// different number from the one this file would otherwise have been quoted for.
+//
+// `json-stringify-typed` is not in the second list because it was not separated out in that run.
+// The four figures above are from the same run as the corrected reference-counting table in
+// `../../README.md`, and `json-build-join` from that run is excluded everywhere because a third
+// session's compiler was running while it was measured.
+//
 // **What this row is.** What a *generated* serializer for a known type would emit, written by
 // hand so the design can be sized before it is built. It is not what ships: `JSON.stringify` is
 // still refused in compiled user code and the shipped path still builds the graph.

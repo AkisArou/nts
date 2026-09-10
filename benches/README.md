@@ -100,19 +100,35 @@ no real program asks — and when it was first asked, the table changed shape.
 The middle column is what NoGC was hiding. The right one is what elision
 recovered, in one night, from a pass that had none:
 
-| row | NoGC vs C++ | RC, before elision | RC, after |
-|---|---:|---:|---:|
-| `awfy-list` | 1.07x | **12.97x** | **1.79x** (0.82x node) |
-| `awfy-queens` | 1.40x | 3.85x | **1.32x** |
-| `awfy-permute` | 1.33x | 3.07x | **1.34x** |
-| `awfy-nbody` | 1.14x | 2.13x | **1.87x** |
-| `awfy-bounce` | 1.55x | 4.06x | 3.96x |
-| `awfy-towers` | 1.31x | 8.67x | 7.82x |
-| `accumulate`, `checksum`, `closures`, `dispatch`, `elementwise`, `loop`, `mandelbrot` | | *unchanged* | |
+| row | NoGC vs C++ | RC, before elision | RC, the night after | RC, 2026-09-10 |
+|---|---:|---:|---:|---:|
+| `awfy-list` | 1.07x | **12.97x** | 1.79x | **1.84x** (0.84x node) |
+| `awfy-queens` | 1.40x | 3.85x | 1.32x | **1.31x** |
+| `awfy-permute` | 1.33x | 3.07x | 1.34x | **1.08x** |
+| `awfy-nbody` | 1.14x | 2.13x | 1.87x | **1.11x** |
+| `awfy-bounce` | 1.55x | 4.06x | 3.96x | **1.14x** |
+| `awfy-towers` | 1.31x | 8.67x | 7.82x | **1.59x** |
+| `accumulate`, `checksum`, `closures`, `dispatch`, `elementwise`, `loop`, `mandelbrot` | | *unchanged* | | |
 
 Every row that moved allocates; every row that did not, does not. On `queens`
 and `permute` reference counting now costs **nothing** — both land at their own
 NoGC baselines, so reclamation is free on them.
+
+**The fourth column is a column because the third was wrong for weeks and read as
+current.** Four of the six had moved and nobody had re-run the table:
+`awfy-bounce` by 3.5x and `awfy-towers` by 4.9x, the two rows this section goes
+on to single out as the ones elision *failed* on. A reader — including the
+author of this file, later that week — would have taken 7.82x as a fact about
+the compiler in front of them.
+
+So the columns are dated now rather than replaced. A row that is "1.79x" with no
+date is a claim that ages into a falsehood without changing, which is the one
+failure mode a number in a document has.
+
+Measured 2026-09-10 on a quiet machine, both other lanes idle by arrangement, 58
+of 60 cases clean; `generator` and `json-build-join` were spoiled by a third
+session and are not in this table. `publish()` declined to rewrite the root
+`README.md` for that reason, which is what it is for.
 
 Three changes did that, and all three came from reading the generated C rather
 than reasoning about the pass: `counted()` was counting compile-time nulls (65%
@@ -122,14 +138,31 @@ counting at all; and a store *into* a container cannot invalidate the container.
 Then an interprocedural summary let a borrow survive a call to a function that
 stores nothing, which took `Element#length` to zero operations.
 
-`awfy-towers` is the row that refused all three, and two experiments say why it
-is *not* what it looks like. Raising `NTS_COLLECT_THRESHOLD` to infinity moved
-it 98.50us to 98.25us, so the cycle collector is not the cost. Disabling
-candidate buffering outright — unsound, and reverted — moved it to 81.5us, so
-that is 17%. What is left is the sheer number of operations, at about 1.5 cycles
-each. Its hot pair call nothing, so the interprocedural summary cannot reach
-them; what blocks them is a store, and the next question is whether that store
-could alias the slot the borrow came from at all.
+`awfy-towers` was the row that refused all three, and the paragraph that used to
+stand here explained why at 7.82x: `NTS_COLLECT_THRESHOLD` at infinity moved it
+98.50us to 98.25us so the collector was not the cost, disabling candidate
+buffering — unsound, and reverted — moved it to 81.5us, and what was left was the
+sheer number of operations. Its hot pair call nothing, so the interprocedural
+summary could not reach them; what blocked them was a store, and the open
+question was whether that store could alias the slot the borrow came from.
+
+**That row is now 1.59x and the question was measured and answered: no.** The
+refinement is one line — a `FieldSet` on a different *field index* cannot
+overwrite the slot a borrow was read from, whatever the objects turn out to be,
+so `disk.next = top` cannot invalidate a borrow of `this.piles`. It is sound and
+free and it was implemented:
+
+    awfy-towers (rc)                       19.68 us without   20.17 us with
+    retain/release, ten allocating cases   identical, every one
+
+**Zero.** The borrows it would have helped are already elided by the
+interprocedural summary and by the rule that a function containing no store, no
+call and no allocation cannot invalidate anything. Reverted, and written down
+here rather than in a commit message so the next reader of this paragraph does
+not implement it twice.
+
+Which leaves `awfy-towers` at 1.59x with no identified remaining cost, and this
+section without a row that reference counting is visibly failing on.
 
 ### `objects` and what a column can and cannot say
 

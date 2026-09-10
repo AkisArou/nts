@@ -22,13 +22,22 @@ them, so read the ratios rather than the absolute times.
 
 ### How fast it is
 
-**Measured with memory reclamation on**, which is why every row is marked
-`(rc)`. The alternative the harness offers is a bump allocator that never frees;
-it produces better numbers and no real program runs that way, so it is a
-diagnostic rather than a headline. Turning reclamation on cost `awfy-list` a
-factor of twelve when it was first measured, and most of that has since been
-given back by eliding reference counting the compiler can prove unnecessary —
-see [`benches/README.md`](benches/README.md) for what each row is made of.
+**A row marked `(rc)` was measured with memory reclamation on**, and 20 of the 64
+are. The alternative the harness offers is a bump allocator that never frees; it
+produces better numbers and no real program runs that way, so it is a diagnostic
+rather than a headline. Turning reclamation on cost `awfy-list` a factor of
+twelve when it was first measured, and most of that has since been given back by
+eliding reference counting the compiler can prove unnecessary — see
+[`benches/README.md`](benches/README.md) for what each row is made of.
+
+**This paragraph said "every row is marked `(rc)`" and that was not true of the
+table beneath it.** A case declares its own provider, most declare none, and a
+default run publishes each at whatever it declared — so 44 of these 64 rows
+are the diagnostic the sentence above calls not a headline, presented as the
+headline. `NTS_BENCH_RC=1` runs every case under reclamation and produces a
+table the old sentence would have described correctly; the numbers here are not
+from such a run, and saying which they are from is cheaper than implying they
+are something else.
 
 <!-- benchmarks:start -->
 | case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |
@@ -145,13 +154,13 @@ question.
 
 | outcome | files |
 | --- | ---: |
-| lowered completely | **55** |
-| refused a construct | 42 |
+| lowered completely | **56** |
+| refused a construct | 41 |
 | rejected by the typechecker | 86 |
 | **the frontend fell over** | **1** |
 | **invalid HIR or a panic** | **0** |
 
-Of the 97 that typecheck, **56%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
+Of the 97 that typecheck, **57%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
@@ -172,9 +181,9 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | a method on an object literal | 3 |
 | a parameter of unrepresentable type (any) | 3 |
 | `a`, which `an anonymous type` does not declare | 2 |
-| `null` or `undefined` where what it stands in for is not a reference | 2 |
 | a `method declaration` in an object literal | 2 |
 | a parameter of unrepresentable type (a union of `RegExp` | null | number | undefined) | 2 |
+| a parameter of unrepresentable type (a union of `RegExp` | null | number) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
