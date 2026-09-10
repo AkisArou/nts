@@ -18763,11 +18763,32 @@ compare only paths present on both sides, because absence is `surface-diff.mjs`'
 column. It arrived through the symbol seam instead, by way of a hook that needed
 the class.
 
-### Left, with reasons
+### Left, with reasons -- and two that are absent for a reason
 
 `Buffer[Symbol.species]` is an accessor returning node's internal `FastBuffer`
-subclass, which is not a thing to reproduce. `Symbol.hasInstance` on
-`console.Console` and `diagnostics_channel.Channel` is still unmeasured.
+subclass, which is not a thing to reproduce.
+
+`Symbol.hasInstance` on `console.Console` and `diagnostics_channel.Channel` is
+missing here and is **not** a defect, which was established by measuring the
+answers rather than by matching the surfaces:
+
+    node console: instance=true  module console=true  {}=false
+    ours console: instance=true  module console=true  {}=false
+    node dc: unsubscribed=true  subscribed=true
+    ours dc: unsubscribed=true  subscribed=true
+
+Node needs both hooks because of how it builds those objects and we do not.
+`Console[Symbol.hasInstance]` reads a `kIsConsole` brand, because node's global
+console is a plain object with methods bound onto it rather than a `Console`
+instance. `Channel[Symbol.hasInstance]` accepts `Channel.prototype` **or**
+`ActiveChannel.prototype`, because node swaps a channel's prototype when it gains
+a subscriber and `ActiveChannel` does not inherit from `Channel`. Ours are
+ordinary instances in both cases, so the default answer is already node's.
+
+Adding either would be installing a metaobject hook that reimplements the
+behaviour it replaces. **A missing symbol is a defect only where an answer
+differs**, which is the distinction `stream.Writable` failed and these two pass:
+there, `duplex instanceof Writable` really was false.
 
 ### The lane
 
