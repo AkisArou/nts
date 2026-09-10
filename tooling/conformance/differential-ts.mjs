@@ -121,7 +121,14 @@ for (const name of modules) {
   }
   const ours = JSON.parse(line.slice("NTSDIFF ".length));
 
+  // Assigned defensively: under `node --no-deprecation` this property is read-only
+// and a bare assignment throws before the harness reaches its first comparison.
+// `differential-addon.mjs` carries the same guard, for the same reason.
+try {
   process.noDeprecation = true;
+} catch {
+  // already suppressed by the flag, which is the outcome this wanted
+}
   const upstream = require_(`node:${name}`);
 
   // A corpus may declare what has to be true before its answers mean anything.

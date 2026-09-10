@@ -887,6 +887,78 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **All 42 `util.types` predicates**, which the corpus never called once.
+        // They are the purest thing in the module -- a value in, a boolean out,
+        // no I/O and no state -- and they were the largest gap `corpus-reach.mjs`
+        // found: 42 of `util`'s 72 published functions, not one exercised.
+        //
+        // Three values per input rather than the whole battery, chosen by the
+        // input itself. Running 42 predicates over 35 values on every one of
+        // 4,000 inputs is a million calls answering the same question repeatedly;
+        // rotating through the battery covers it across the corpus and keeps each
+        // input cheap.
+        //
+        // The battery holds the pairs these predicates exist to tell apart and
+        // that a naive implementation merges: a boxed `String` against a
+        // primitive, a `Map` against a `Set`, a `DataView` against a
+        // `Uint8Array`, a generator function against an ordinary one, a
+        // `TypeError` against an `Error`, and a boxed `BigInt` against a bare one.
+        label: "types-predicates",
+        call: (m, s) => {
+          const battery = [
+            s, new String(s), s.length, new Number(s.length),
+            Boolean(s.length % 2), new Boolean(s.length % 2),
+            new Date(s.length * 1000), new RegExp(s.length % 2 === 0 ? "a" : "b"),
+            new Map([["k", s]]), new Set([s]), new WeakMap(), new WeakSet(),
+            new Map().entries(), new Set().values(), Promise.resolve(s),
+            new ArrayBuffer(4), new DataView(new ArrayBuffer(4)),
+            new Uint8Array(4), new Uint8ClampedArray(4), new Int16Array(2),
+            new Float64Array(1), new BigInt64Array(1),
+            new Error(s), new TypeError(s),
+            (function* named() {})(), function* named() {},
+            async function named() {}, () => s,
+            Object(Symbol("x")), BigInt(s.length), Object(BigInt(s.length)),
+            null, undefined, { a: 1 }, [1, 2],
+          ];
+          // **Eight predicates excluded, by name and with the reason.** Each
+          // answers `false` for every value in `util/src/types.ts`, deliberately
+          // and with its rationale written at the function: recognising a
+          // generator, an async function, a Map/Set iterator or a boxed Symbol or
+          // BigInt needs a runtime kind tag, and the structural alternative --
+          // "has `next` and `throw`" -- would accept ordinary user objects. Node
+          // asks V8 for the brand and this profile has no brand to ask.
+          //
+          // They are a recorded refusal, so this spec names them rather than
+          // reporting 2,203 divergences that all say the same known thing. That
+          // number is what the first run produced, and it is the measurement of
+          // the refusal's cost: on every real generator, iterator, async function
+          // and boxed primitive, node answers `true` and this profile answers
+          // `false`. Excluding them here does not make that untrue; it stops one
+          // known decision from hiding the other 35 predicates behind noise.
+          const REFUSED = new Set([
+            "isMapIterator", "isSetIterator", "isGeneratorObject",
+            "isGeneratorFunction", "isAsyncFunction", "isBoxedPrimitive",
+            "isSymbolObject", "isBigIntObject",
+          ]);
+          const names = Object.keys(m.types).sort().filter((k) => !REFUSED.has(k));
+          const pick = (n) => battery[(s.length * 7 + n * 13) % battery.length];
+          const out = [];
+          for (let n = 0; n < 3; n++) {
+            const value = pick(n);
+            for (const name of names) {
+              let answer;
+              try {
+                answer = m.types[name](value);
+              } catch (error) {
+                answer = `threw:${(error && error.code) || (error && error.name) || "?"}`;
+              }
+              out.push(answer === true ? "1" : answer === false ? "0" : String(answer));
+            }
+          }
+          return `${names.length}:${out.join("")}`;
+        },
+      },
       // Error paths. See `REJECTED` above: the generated inputs are ones these
       // functions accept, so nothing here reached a validation branch until
       // these were added, and the `code` node's own suite asserts on was never

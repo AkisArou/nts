@@ -20539,6 +20539,75 @@ with `Number()`:
 The twelfth input is the empty string, where every shape gives an empty buffer and
 there is nothing to notice.
 
+## The corpus calls 147 of node's 571 published functions
+
+`corpus-reach.mjs`. `Buffer.from`'s array-like arm prompted it: all 29 of
+`buffer`'s specs hand that function a **string**, so three documented storage
+shapes sat uncompared under a row reading "116,725 comparisons, 0 divergences". A
+large number beside a module says how hard the corpus worked, not how much of the
+module it touched.
+
+It counts **calls**, not labels, because a label is prose -- `emitter-program`
+calls eight EventEmitter methods and names none of them. Each published function
+is replaced on a copy of the module with a wrapper that counts and delegates,
+every spec runs over the fixed inputs, and what is left at zero is what nothing
+called.
+
+    os 20/20    querystring 7/7    punycode 6/6    diagnostics_channel 5/5
+    path 36/39   timers 6/9   url 8/14   readline 5/7   net 4/15   http 2/8
+    assert 4/19   buffer 4/18   events 3/17   stream 12/52   zlib 8/45
+    util 6/72     fs 8/124      process 2/61     console 0/24
+
+Much of the tail is I/O or asynchronous and a synchronous value-differential
+cannot reach it -- node's own tests are the other lane. **A zero here means "the
+differential says nothing about this", which is weaker than "unverified".**
+
+### Two corrections it needed first, both found by disbelieving its output
+
+It reported eight `path` functions never called, including `format` and `parse`,
+on a corpus that calls them constantly. On Linux `path.format` and
+`path.posix.format` are the **same function object** and counting per name
+credited only the spelling the spec used. Counting by function identity took
+`path` from 31/39 to 36/39.
+
+And `Buffer.from` -- the case it was written for -- was not measured at all,
+because `Buffer` is a class and wrapping a class breaks `new`. A class's statics
+are now wrapped on the class itself and restored in a `finally`. Mutating node's
+own object is not something to do quietly, so it is named in the header.
+
+## `util.types`: 42 pure predicates, none of them called, and eight that answer `false` by design
+
+The largest gap the reach instrument found. A value in, a boolean out, no I/O and
+no state -- and not one of them exercised.
+
+The first run reported **2,203 divergences**, and every one was the same known
+thing. Eight predicates answer `false` for every value, deliberately, with the
+reason written at each function in `util/src/types.ts`: recognising a generator, an
+async function, a Map or Set iterator, or a boxed Symbol or BigInt needs a runtime
+kind tag, and the structural alternative -- "has `next` and `throw`" -- would
+accept ordinary user objects. Node asks V8 for the brand; this profile has no
+brand to ask.
+
+    isMapIterator   isSetIterator   isGeneratorObject   isGeneratorFunction
+    isAsyncFunction   isBoxedPrimitive   isSymbolObject   isBigIntObject
+
+They are excluded from the spec **by name and with the reason**, not quietly: the
+2,203 is the measured cost of that refusal -- on every real generator, iterator,
+async function and boxed primitive, node answers `true` and this profile answers
+`false` -- and excluding them stops one known decision from hiding the other 35
+behind noise.
+
+**The other 35 agree with node across 44,264 comparisons.** Controlled by
+inverting one predicate at a time -- `isDate`, `isRegExp`, `isMap`, `isSet`,
+`isTypedArray`, `isPromise`, `isNativeError`, `isProxy` -- each noticed on 20 of
+20 inputs, with 0 spurious differences from node against itself.
+
+The battery is built to hold the pairs these predicates exist to separate: a boxed
+`String` against a primitive, a `Map` against a `Set`, a `DataView` against a
+`Uint8Array`, a `TypeError` against an `Error`. Three values per input rather than
+all 35, chosen by the input, because 42 predicates over 35 values on 4,000 inputs
+is a million calls answering the same question repeatedly.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
