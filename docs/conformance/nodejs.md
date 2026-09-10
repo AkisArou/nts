@@ -20770,6 +20770,47 @@ What remains unreached is node's internal encoding helpers -- `utf8Slice`,
 `base64Write` and the rest, which the public `toString`/`write` already cover --
 and `Blob`'s asynchronous methods.
 
+## What the corpus work of 2026-09-10 came to
+
+Every number below is from that day and is historical the moment it is read.
+
+    differential reach   147 -> 381 of 1,087 published functions
+    divergences found    2,203, all one recorded refusal, none new
+    specs added          9, each controlled against a broken subject
+    vacuous checks found 2, both only because the control was run
+
+**Nothing in this profile disagreed with node.** Nine new specs across seven
+modules -- `Buffer.from`'s array-like arm, `Buffer`'s 90-odd accessors, `buffer`'s
+statics, `events`' receiver identity and meta-events and helpers, `assert`'s
+non-deep assertions, `util.types`, `util`'s helpers, `zlib`'s sniffing
+decompressor and `crc32`, `console`'s `info`/`debug`/`table`, `url`'s methods --
+and every one came back at zero. The one number that was not zero, `util.types`'
+2,203, is eight predicates that answer `false` by design with the reason written
+at each function.
+
+**The failures were all in the instruments.** Four of them, each found by
+disbelieving an output rather than by a test:
+
+- `paths()` recorded only values with identity, so `surface-absence.mjs` could not
+  see a string export -- 32 of them, hiding three absences and four
+  own-vs-inherited differences.
+- `corpus-reach.mjs` counted per name, so `path.format` and `path.posix.format`
+  read as two functions and one of them as never called.
+- It skipped classes, so `Buffer.from` -- the case it was written for -- and every
+  one of `console`'s methods were invisible.
+- `dead-type-guards.mjs` matched the guard's own `if (` as a function opener and
+  reported 4 rows where there are 41. **The control caught that one**: pointed at
+  the source it was built from, it found nothing.
+
+**And two specs compared a value against itself.** `util.styleText` writes no
+escapes when stdout is not a TTY, and `os`'s `typeof` shape specs cannot see a
+value change at all. Both read as coverage; both were only visible because
+something was deliberately broken to see whether the check would notice.
+
+The lesson worth keeping is narrow and it is not "write more specs". A number
+beside a module says how hard the corpus worked. Whether it worked on anything is
+a different measurement, and until this day nothing made it.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
