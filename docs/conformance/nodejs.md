@@ -19868,8 +19868,30 @@ rejects. `os.getPriority(pid?: number)` rejects. `setPriority`'s own first
 argument rejects. Three explanations ruled out by measurement before the fixture
 was written.
 
-The second fact is what turns an escape into a wrong answer. `validateInt32`
-opens with `typeof value !== "number"`, and its parameter was declared `number`:
+### One defect, not two, and the correction is worth keeping
+
+This was first written up as two facts composing. It is one, and MainClaude's
+reading is the right one: **the boundary stands in for a guard the declaration
+deleted**, and for an overloaded function it was not standing in. Both symptoms
+are that.
+
+The fold is not itself a defect. Inside a compiled program, `classify(n)` where
+`n` really is a number *should* fold, and node agrees -- they probed it at 87 of
+87 agreeing. What makes the fold visible is a value of the wrong type arriving,
+which is the wrapper's job to prevent and which it was not doing here.
+
+The cause is one word. A symbol's declarations list the overload signatures ahead
+of the implementation, and `public_api` took `declarations.first()` -- for a
+function whose first overload has one parameter, that signature has no second
+parameter, so no optional scalar was recorded at index 1 and the wrapper read that
+argument with `nts_from_napi_value`, which accepts every JavaScript value.
+`secondOptional` used `nts_napi_optional_scalar` at the same index of the same
+shape, which is exactly why the two differed.
+
+### The measurement that stopped the wrong fix being written
+
+`validateInt32` opens with `typeof value !== "number"`, and its parameter was
+declared `number`:
 
     viaOverload          classify(v: number)     "not-integer"   guard folded
     viaOverloadUnknown   classify(v: unknown)    "not-integer"   still folded
@@ -19877,7 +19899,9 @@ opens with `typeof value !== "number"`, and its parameter was declared `number`:
 
 **It is the type at the call site that decides, not the callee's.** Widening the
 validator -- the function actually doing the checking, and the obvious repair --
-changes nothing. That is worth knowing before spending an hour on it.
+changes nothing. That is worth knowing before spending an hour on it, and it was
+worth more than the hour it cost me: MainClaude had started reasoning toward
+"the fold is the defect" and these three rows are what stopped it.
 
 ### The fix, and what it does not close
 
