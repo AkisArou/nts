@@ -18519,6 +18519,40 @@ chain that ends in a function with no backticked name in any diagnostic cannot b
 joined by text. Only **48 of 765** have no NTS1001 or NTS1003 mentioning them at
 all.
 
+### `a declaration outside every walk` is one message over at least three shapes
+
+38 distinct sites carry it across the 22 builds, and grouping them by what the
+source actually says gives three unlike things:
+
+    object-literal method shorthand   fs/src/utf8-stream.ts writeSync, fsync,
+                                      close, open, mkdir -- consecutive members of
+                                      one object literal; and every web-platform
+                                      `pull`, `cancel`, `consume`, which are
+                                      underlyingSource methods
+    an overload set                   fs.readFileSync, three signatures with the
+                                      implementation last
+    a plain exported function         http.createServer, http.request
+
+So the largest named construct on the axis is a *text*, not a cause, which is the
+trap this directory already records about ranking by message. The 297 files behind
+it are almost entirely the third shape -- `createServer` 274 and `request` 12, or
+286 of 297 -- and the object-literal sites, which are the most numerous in the
+source, cost almost nothing on the axis.
+
+**The location is the end of the preceding declaration, not the declaration named.**
+
+    http/src/server.ts:930:2   ->  930 is the `}` closing `class Server`
+                                   `createServer` begins at 932
+    os/src/main.ts:395:2       ->  395 is the `}` closing the function above
+                                   `userInfoString` begins at 397
+    fs/src/main.ts:764:20      ->  764 is the end of the *second* overload
+                                   signature of `readFileSync`
+
+Every one of these reads, at its printed location, as a diagnostic about the
+declaration before it. That is worth fixing independently of the walk itself: it
+sent this analysis to the wrong construct twice before the line numbers were
+checked against the source.
+
 `http.createServer` is the clearest single item: 274 files, more than any other,
 and its body is one line.
 
