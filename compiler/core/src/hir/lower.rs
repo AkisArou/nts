@@ -3309,6 +3309,11 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
     let refused =
         mark_refused_initializers(snapshot, &mut module, &hierarchy, &closures, &mut lowered);
     let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures);
+    // Which declarations the walk refused, by node. See the note where they are
+    // inserted: a refusal's *location* is the offending construct and routinely
+    // sits outside the declaration it refused, so a span test cannot answer
+    // this and only the walk knows.
+    let mut refused_functions: rustc_hash::FxHashSet<NodeId> = rustc_hash::FxHashSet::default();
 
     for (index, node) in snapshot.nodes.iter().enumerate() {
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
@@ -3385,7 +3390,26 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
             let mut builder = shared.builder(snapshot, substitution, suffix);
             match builder.lower_function(id) {
                 Ok(func) => lowered.program.funcs.push(func),
-                Err(diagnostic) => lowered.diagnostics.push(diagnostic),
+                Err(diagnostic) => {
+                    // **Recorded by declaration, not by span.** The refusal's
+                    // location is the offending construct, which is routinely
+                    // outside the function that was being lowered: `http`'s
+                    // `createServer` at `server.ts:932` fails on a `Set` where a
+                    // `Float` is wanted at `server.ts:154`, seven hundred lines
+                    // above, inside the class it constructs.
+                    //
+                    // `super::unaccounted` asks whether any diagnostic's span
+                    // *covers* the declaration, so it saw none and reported
+                    // `createServer, a declaration outside every walk` -- a
+                    // second message, contradicting the first, saying the
+                    // function vanished when it had been refused with a cause.
+                    // The Node lane ranked that message as the single largest
+                    // item on the compiled axis at 274 test files, and it is a
+                    // text rather than a cause: 38 sites carry it over at least
+                    // three unlike shapes.
+                    refused_functions.insert(id);
+                    lowered.diagnostics.push(diagnostic);
+                }
             }
             wanted.extend(builder.used_closures.iter().copied());
             collect_layouts(&mut lowered.program, builder.layouts);
@@ -3450,6 +3474,7 @@ pub fn lower_with(snapshot: &SemanticSnapshot, entry: &[String]) -> Lowered {
         &lowered.program,
         &lowered.diagnostics,
         &shared.generics,
+        &refused_functions,
     ) {
         lowered.diagnostics.push(Diagnostic::error(
             "NTS1001",

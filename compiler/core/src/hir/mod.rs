@@ -2012,6 +2012,7 @@ pub fn unaccounted(
     program: &Program,
     diagnostics: &[nts_diagnostics::Diagnostic],
     generic: &generics::GenericFunctions,
+    refused: &std::collections::HashSet<nts_semantic_schema::NodeId, impl std::hash::BuildHasher>,
 ) -> Vec<(nts_diagnostics::Location, Option<String>)> {
     use nts_semantic_schema::{NodeKind, syntax};
 
@@ -2073,6 +2074,18 @@ pub fn unaccounted(
         // definition is somewhere else. There is nothing to emit and nothing to
         // refuse.
         if !has_a_body(snapshot, node) {
+            continue;
+        }
+        // **The walk refused this one and said why.** Asked by node rather than
+        // by span, because a refusal's location is the offending construct and
+        // routinely sits outside the declaration that was being lowered --
+        // `http`'s `createServer` fails seven hundred lines above itself, inside
+        // the class it constructs. The span test below cannot see that, and
+        // reported the function as having vanished when a diagnostic naming its
+        // cause was already in the list.
+        if refused.contains(&nts_semantic_schema::NodeId(
+            u32::try_from(index).unwrap_or(u32::MAX),
+        )) {
             continue;
         }
         // A generic function is lowered once per instantiation and not at all
