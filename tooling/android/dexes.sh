@@ -25,6 +25,16 @@
 # contains. That is the right order and it is worth saying rather than
 # implying: a sweep tells you about the sweep, and this one is here to keep a
 # fix from rotting, not to have found the bug.
+# Editing this file: **write through it or copy the mode.** An atomic write --
+# temp file plus `os.replace` -- is a rename, so the destination inode becomes
+# the new file and keeps *its* mode, not this one's. `mkstemp` creates 0600, so
+# the pattern that was adopted to stop a peer reading half a script then took
+# the executable bit off two of them. `all.sh` went 100755 to 100644 in git and
+# no gate could run for any of the three sessions until it went back; this file
+# survived only because the gate invokes it as `sh <path>`.
+#
+# `shutil.copymode(path, tmp)` before the replace is the whole fix, and `ls -l`
+# after editing anything the gate executes is the check.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
