@@ -261,12 +261,17 @@ fn check_layouts(program: &Program, problems: &mut Vec<Invalid>) {
         let Some(base) = program.layouts.get(at) else {
             continue;
         };
+        // `same_slot` rather than a comparison written out here. A shadowed
+        // private field carries its base's name plus `@` and the base's type id,
+        // and this check and `laid_out_as_a_prefix` must agree about that --
+        // "two places that must agree" is what `Layout::same_shape`'s own
+        // comment says has cost this project a week.
         let prefix = base.fields.len() <= layout.fields.len()
             && base
                 .fields
                 .iter()
                 .zip(&layout.fields)
-                .all(|(mine, theirs)| mine.name == theirs.name && mine.ty == theirs.ty);
+                .all(|(mine, theirs)| super::lower::same_slot(mine, theirs));
         if !prefix {
             problems.push(Invalid::BrokenBase {
                 layout: layout.name.clone(),

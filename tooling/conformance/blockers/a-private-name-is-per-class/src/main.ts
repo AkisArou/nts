@@ -1,107 +1,79 @@
-// expect: a private name this class and its base both declare
+// expect: lowers
 //
-// **This replaced a wrong answer, and that is the whole of why it is filed.**
+// **Kept as a guard. Fixed 2026-09-10, in five places, every one of which
+// compared names.**
 //
 //     class Base    { #count = 0;   bumpBase()    { return ++this.#count; } }
 //     class Derived extends Base
 //                   { #count = 100; bumpDerived() { return ++this.#count; } }
 //
+//     node 2102     before 102502     28 of 28 cases disagreed
+//
 // Two fields in JavaScript — that is what the `#` is for — and one slot here.
-// The base-first construction matched them by name and dropped the derived
-// one, so both classes read and wrote the base's storage.
+// The derived's was dropped and both classes read and wrote the base's storage.
+// It refused in the corpus rather than answering, only because the two types
+// differ there: `net.Server`'s `#connections = 0` against `http.Server`'s
+// `#connections = new Set<HTTPDuplex>()`. That refusal was `http.createServer`'s,
+// which the Node lane ranked as **274 failing test files**, the largest single
+// item on the compiled axis — and which was reported before that as `a
+// declaration outside every walk`, a message that was simply false.
 //
-// Measured against node, eleven lines, **28 of 28 cases disagree**: node answers
-// 2102 and the compiled program answered 102502. No crash, no refusal, nothing
-// in any instrument that was not looking for it.
+// # The five places, because each was a separate discovery
 //
-// # What it is standing in front of
+// **`fields_of`** — the checker's member list is flattened and holds *both*
+// records, most-derived first, with `own` answering `true` for each. Keep the
+// first of a repeated `#` name; the rest are ancestors'.
 //
-// `net.Server` declares `#connections = 0`. `http.Server extends NetServer` and
-// declares `#connections = new Set<HTTPDuplex>()`. The two types differ, so the
-// corpus got a refusal rather than a wrong answer — the `Set` meets the base's
-// `Int32` slot and says so:
+// **`after_the_base`** — rename the **inherited** copy, not the declaring one.
+// The plain name then stays where every access inside the derived class asks for
+// it, and none of the twelve `index_of` sites has to learn a qualifier.
 //
-//     http/src/server.ts:154:17  a value of type Managed(Set(Managed(Object(…))))
-//                                where Float { bits: 64 } is wanted
+// **`reorder_to_base_first`** — matches a base's field to a derived's by name,
+// so the renamed one stopped matching, and it hoisted the derived's field into
+// slot 0. That undid the entire fix one pass later, silently.
 //
-// That is `http.createServer`'s refusal, which the Node lane ranks as **274
-// failing test files**, the largest single item on the compiled axis. Its
-// message names a `Set` where a `Float` is wanted, which is the symptom two
-// steps from the cause.
+// **`verify::check_layouts`** — the same comparison, which then reported
+// `BrokenBase` for a layout that was right.
 //
-// It took three failed reductions to find. A private field holding a `Set` of a
-// class, of an interface, and of an interface with method-syntax members all
-// compile — because none of them has a **base** declaring the same private
-// name, which is the precondition. That is the shape written down as *reduction
-// removes the precondition*: minimising deleted the trigger three times.
+// **`initialize_fields`** — a field initializer runs where the object is
+// allocated, so the base's `#count = 0` was writing whatever `#count` names in
+// the *derived's* layout. Both initializers wrote offset 28 and offset 24 stayed
+// zero.
 //
-// # Why refused rather than fixed
+// `laid_out_as_a_prefix` needed it too, and shares one `same_slot` with the
+// verifier rather than repeating the rule — "two places that must agree" is what
+// `Layout::same_shape`'s own comment says has cost this project a week.
 //
-// The fix is to give a private field a name of its own so the two slots can
-// coexist — `#count@Derived` beside `#count` — and that name is read back at
-// **twelve** `index_of` sites. The access site can compute the right one,
-// because a `#` member is only reachable inside the class that declares it, so
-// the enclosing class is the qualifier. But doing half of that to a defect that
-// is currently a *wrong answer* would be worse than refusing it outright, and
-// the refusal is what stops the miscompile today.
+// # The qualifier is a type id, and two names were tried first
 //
-// The base's copy has to keep its **index**, because an upcast is a pointer cast
-// and base-first layout is what makes that free. Its *name* is another matter,
-// and that suggests a one-place fix: rename the **inherited** copy, leaving the
-// plain name to the derived class where every access asks for it. The index is
-// what runs, so a method of the base still reads slot 0 whatever slot 0 is
-// called.
+// The *type's* name is ambiguous: `net.Server` and `http.Server` are both
+// `Server`, which is exactly the pair this has to separate, so http's
+// `#connections@Server` found net's field. The *layout's* name is
+// disambiguated — and disambiguated **later**, by `unshared_layout_name` at
+// merge time, after the qualifier has already been written into a field. An id
+// is unique by construction and fixed before either.
 //
-// **That was tried, and what stopped it is in the snapshot rather than in the
-// lowering.** Renaming the inherited copy to `#count@Base` produced two struct
-// members with the same C name:
+// # What this guard certifies
 //
-//     program.c:18:13  error: duplicate member '__count____Base'
+// That both functions lower. It does not certify the answer — a layout with one
+// slot lowers just as cleanly, which is what it did before.
+// `examples/two-private-names-that-collide` is what asks node, and that is the
+// half that matters, because the defect was a wrong answer rather than a
+// refusal.
 //
-// Not the mangling: `c_identifier` maps `#` to `__` and `@` to `____`, so
-// `#count` is `__count` and `#count@Base` is `__count____Base`, which are
-// distinct. Printing the two inputs says why:
+// The Node lane swept 619 (derived field, ancestor) pairs across 497 classes:
+// `#connections` is the corpus's only collision. So this is worth one site in
+// `runtime/node` and a class of silent wrong answer everywhere else.
 //
-//     base=Base  inherited=["#count"]  own=["#count", "#count"]
+// # And it does not travel to the JVM
 //
-// **The derived class's own member list contains `#count` twice, and both
-// records answer `own = true`.** One of them is the base's and one is the
-// derived's, and nothing in `PropertyRecord` tells them apart: the checker
-// returns a flattened list, `own` is the flag that exists for exactly this
-// question, and for a *shadowed private name* it answers the same for both.
-// Skipping `!own && name.starts_with('#')` therefore skips neither, and the
-// rename fires twice.
-//
-// The order is recoverable without a schema change: the flattened list is
-// **most-derived first**, which is `getPropertiesOfType`'s order, so the first
-// `#count` is this class's and the rest are its ancestors'. Printed:
-//
-//     own = [("#count", Set), ("#count", Float)]
-//
-// on `class Base { #count = 0 }` / `class Derived extends Base
-// { #count = new Set<number>() }`.
-//
-// **A second attempt used that and got two fields with the right types and the
-// wrong order.** Keeping only the first `#count` in `fields_of` and renaming the
-// inherited copy in the base-first construction produced
-//
-//     Derived   #count : Managed(Set(Float))
-//               #count@Base : Int
-//
-// — the derived's at slot **0**. Base-first layout requires the inherited one
-// there, because a method of the base operates on a `Base *` and reads slot 0;
-// with the derived's field sitting in it, `bumpBase` and `bumpDerived` shared a
-// counter again and the same 28 of 28 cases disagreed, with the same numbers.
-//
-// So both fields can be built and the remaining work is entirely about **where**
-// they land. That is `after_the_base`'s construction, not the member list, and
-// it is where a third attempt should start. Reverted; the refusal above is what
-// stands.
-//
-// # The control
-//
-// `Separate` uses a private name its base does not, which is every other private
-// field in the tree, and compiles.
+// That lane addresses a field by name and class, so a renamed inherited copy is
+// `NoSuchFieldError: nts.gen.Base does not have member field 'int $count$t1'`.
+// It can express the case **better** than C can — Java has field hiding, so
+// `Derived.$count` and `Base.$count` are two fields the verifier already tells
+// apart — and what does not travel is the rename, which is a C-shaped answer
+// written into a shared `Layout`. The durable form is a `declared_by` on `Field`
+// rather than a mangled name.
 
 class Base {
   #count = 0;

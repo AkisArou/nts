@@ -8109,7 +8109,7 @@ impl<'a> FuncBuilder<'a> {
         to.fields
             .iter()
             .zip(from.fields.iter())
-            .all(|(want, have)| want.name == have.name && want.ty == have.ty)
+            .all(|(want, have)| same_slot(want, have))
     }
 
     fn coerce_to_parameter(
@@ -17295,6 +17295,11 @@ impl<'a> FuncBuilder<'a> {
             if !property.kind.is_stored() {
                 continue;
             }
+            if property.name.starts_with('#')
+                && fields.iter().any(|kept| kept.name == property.name)
+            {
+                continue;
+            }
             // A reference field is a pointer. Under NoGC nothing is ever freed,
             // so it costs neither a write barrier nor a trace; which fields are
             // references is recorded on the layout for the collector that comes
@@ -17539,47 +17544,27 @@ impl<'a> FuncBuilder<'a> {
         base: TypeId,
         fields: Vec<Field>,
     ) -> Result<Vec<Field>, Diagnostic> {
+        // The base's **type id**, not any name it has.
+        //
+        // A name was tried twice and both are unstable. The *type's* name is
+        // ambiguous -- `net.Server` and `http.Server` are both `Server`, which is
+        // exactly the pair this qualifier has to separate, so http's
+        // `#connections@Server` found net's field. The *layout's* name is
+        // disambiguated, and it is disambiguated **later**: `unshared_layout_name`
+        // renames at merge time, after this has already written the qualifier
+        // into a field.
+        //
+        // An id is unique by construction and is fixed before either. It reads
+        // badly and it is a private field's name, which no source writes and no
+        // diagnostic prints.
+        let base_name = format!("t{}", base.0);
         let inherited = self.layout_of(id, base)?.fields;
         let mut ordered = inherited;
         for field in fields {
-            // **A `#` name is per class, and sharing the slot is a wrong
-            // answer rather than a refusal.**
-            //
-            // `class Base { #count = 0 }` and `class Derived extends Base
-            // { #count = 100 }` are two fields in JavaScript -- that is what
-            // the `#` is for -- and the dedup below matched them by name and
-            // dropped the derived one. Both classes then read and wrote the
-            // base's slot. Measured against node on an eleven-line program:
-            // **28 of 28 cases disagree**, node answering 2102 where the
-            // compiled program answered 102502.
-            //
-            // In `runtime/node` it happens to refuse instead, because the
-            // two types differ: `net.Server` has `#connections = 0` and
-            // `http.Server extends` it with `#connections = new
-            // Set<HTTPDuplex>()`, so the Set meets an `Int32` slot and says
-            // so. That refusal is `http.createServer`'s, which the Node lane
-            // ranks as **274 failing test files** -- the largest single item
-            // on the compiled axis -- and its message names a `Set` where a
-            // `Float` is wanted, which is the symptom two steps from here.
-            //
-            // Refused rather than fixed. The fix is to give a private field
-            // a name of its own so the two slots can coexist, and the name
-            // is read back at twelve lookup sites; doing half of that to a
-            // defect that is currently a *wrong answer* would be worse than
-            // this. `blockers/a-private-name-is-per-class` carries the
-            // reduction and the design.
             if field.name.starts_with('#')
-                && let Some(shadowed) = ordered.iter().find(|kept| kept.name == field.name)
+                && let Some(shadowed) = ordered.iter_mut().find(|kept| kept.name == field.name)
             {
-                let what = shadowed.name.clone();
-                return Err(self.unsupported(
-                    id,
-                    &format!(
-                        "`{what}`, a private name this class and its base both declare -- \
-                         they are two fields in JavaScript and one slot here, so the base's \
-                         would be read and written by both"
-                    ),
-                ));
+                shadowed.name = format!("{}@{base_name}", shadowed.name);
             }
             if !ordered.iter().any(|kept| kept.name == field.name) {
                 ordered.push(field);
@@ -18042,7 +18027,30 @@ impl<'a> FuncBuilder<'a> {
                 let Some(text) = self.node(name).text.clone() else {
                     continue;
                 };
-                let Some(field) = layout.index_of(&text) else {
+                // **A shadowed private field is under its declaring class's
+                // name.** `class Derived extends Base` where both declare
+                // `#count` keeps the derived's as `#count` and renames the
+                // inherited copy to `#count@Base`, so the base's initializer --
+                // emitted here, at the allocation, because that is where a field
+                // initializer runs -- has to write the base's slot rather than
+                // whatever `#count` now names.
+                //
+                // Without this both initializers wrote offset 28 and the base's
+                // `#count = 0` never reached offset 24. The qualified name is
+                // tried first and the plain one is the fallback, because a
+                // private field the derived does *not* shadow keeps its plain
+                // name in the derived's layout.
+                // The declaring class's type id, for the reason
+                // `after_the_base` gives: every name available here is either
+                // ambiguous or assigned later.
+                let qualified = text
+                    .starts_with('#')
+                    .then(|| format!("{text}@t{}", class.0));
+                let Some(field) = qualified
+                    .as_deref()
+                    .and_then(|name| layout.index_of(name))
+                    .or_else(|| layout.index_of(&text))
+                else {
                     continue;
                 };
                 let value = self.lower_expression(initializer)?;
@@ -26306,6 +26314,26 @@ struct CaseChain<'a> {
 /// `Clone` and not `Copy`: `Member` carries a representation, which is a type
 /// and owns a `Box` for an array's element. Every branch is built where it is
 /// used and moved once, so nothing here wanted the copy.
+/// Whether a base's field and a derived's are the same slot.
+///
+/// The same question `verify::check_layouts` asks, and it has to be asked the
+/// same way: a **shadowed private field** carries its base's name plus `@` and
+/// the base's type id, because the derived class declares one of that name too
+/// and the plain name belongs to the derived. `#count@t1` *is* `Base`'s
+/// `#count`, at `Base`'s index, and nothing else is.
+///
+/// Names as well as types. Without the suffix rule a correct prefix is rejected
+/// -- `examples/two-private-names-that-collide` lost `throughTheBase` to it --
+/// and with names ignored a prefix of the right types and the wrong fields would
+/// be accepted.
+pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
+    let named = want.name == have.name
+        || (want.name.starts_with('#')
+            && have.name.starts_with(want.name.as_str())
+            && have.name[want.name.len()..].starts_with('@'));
+    named && want.ty == have.ty
+}
+
 /// A natively represented thing an erased value can be, for the one question
 /// `in` asks of it: does something of this shape declare the name.
 ///

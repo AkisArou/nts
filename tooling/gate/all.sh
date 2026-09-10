@@ -685,7 +685,7 @@ backend_examples() {
 # 80 of 89 for the same reason its sibling below was: six examples that compare
 # nothing stopped being counted as agreements. Same set of programs.
 llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
-  backend_examples 153 "through the LLVM backend, counting" ); }
+  backend_examples 154 "through the LLVM backend, counting" ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -696,7 +696,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
 # 74 of 83 is the same set of programs as 80 of 89. It is not a regression, and
 # writing it down here is cheaper than someone rediscovering that in a year.
 llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
-  backend_examples 153 "through the LLVM backend" ); }
+  backend_examples 154 "through the LLVM backend" ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: RFC §13 puts TypeScript objects in the platform
@@ -813,6 +813,23 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # Measured by the JVM lane, not assumed here: `implements Named, Counted` was
   # tried on that example to make it expressible and made it worse.
+  #
+  # **Two apart now**, and the second gap is the opposite asymmetry.
+  # `examples/two-private-names-that-collide` is a base and a derived class
+  # declaring the same `#name`, which C and LLVM answer by giving the inherited
+  # copy a qualified name and addressing both by *index*. The JVM addresses a
+  # field by name and class, so it reports
+  # `NoSuchFieldError: nts.gen.Base does not have member field 'int $count$t1'`.
+  #
+  # That lane can express this **better** than C can: Java has field hiding, so
+  # `Derived.$count` and `Base.$count` are two fields the verifier already tells
+  # apart, and nothing needs renaming there at all. What does not travel is the
+  # rename, which is a C-shaped answer written into a shared `Layout`. The
+  # durable form is a `declared_by` on `Field` rather than a mangled name, and
+  # that is a representation change to agree on rather than to land unilaterally.
+  #
+  # No regression: the other 152 pass on that lane with this in, swept one by
+  # one.
   backend_examples 152 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1

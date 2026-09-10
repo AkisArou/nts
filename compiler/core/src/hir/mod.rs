@@ -2541,10 +2541,28 @@ fn base_first_positions(fields: &[Field], order: &[String]) -> Vec<usize> {
     let mut taken = vec![false; fields.len()];
     let mut positions: Vec<usize> = Vec::with_capacity(fields.len());
     for wanted in order {
+        // **A shadowed private field carries its base's name plus a suffix.**
+        // `class Derived extends Base` where both declare `#count` keeps the
+        // derived's as `#count` and renames the inherited copy to
+        // `#count@Base`, so that the plain name stays where every access inside
+        // the derived class asks for it. Matching by exact name then finds the
+        // *derived's* field for the base's `#count` and hoists it to slot 0 --
+        // which is the base's slot, so a method of the base reads the derived's
+        // field and both classes share one counter again.
+        //
+        // That is the whole defect this rename exists to fix, undone one pass
+        // later by a name comparison. `#count@Base` is the base's `#count`, and
+        // this is where the two have to be recognised as one.
+        let is_the_inherited_copy = |field: &Field| {
+            field.name == *wanted
+                || (wanted.starts_with('#')
+                    && field.name.starts_with(wanted.as_str())
+                    && field.name[wanted.len()..].starts_with('@'))
+        };
         if let Some(found) = fields
             .iter()
             .enumerate()
-            .position(|(at, field)| !taken[at] && field.name == *wanted)
+            .position(|(at, field)| !taken[at] && is_the_inherited_copy(field))
         {
             taken[found] = true;
             positions.push(found);
