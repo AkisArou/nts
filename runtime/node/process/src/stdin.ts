@@ -48,10 +48,19 @@ export function stdinStream(): Readable {
     // intent where it sets `_writableState.ended` by hand.
     created = new Socket({ fd: 0, readable: true, writable: false });
   } else {
-    // Node's own fallback for a descriptor it cannot classify: a readable that
-    // simply never produces anything. Deliberately not ended -- node does not
-    // end it either, and a program that waits on stdin here waits.
+    // Node's own fallback for a descriptor it cannot classify, and node **ends
+    // it immediately**:
+    //
+    //     stdin = new Readable({ read() {} });
+    //     stdin.push(null);
+    //
+    // This had the first line and not the second, under a comment claiming node
+    // does not end it either and that a program waiting on stdin here waits.
+    // Node's source says otherwise three lines from the code it describes. A
+    // wrong comment asserting upstream behaviour is worse than none: it is what
+    // stops the next reader checking.
     created = new Readable({ read() {} });
+    created.push(null);
   }
   stream = created;
   return created;

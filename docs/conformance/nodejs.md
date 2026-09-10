@@ -20268,6 +20268,18 @@ before today and no test could see any of them.
 
 ## `process.stdin` from `/dev/null` never ends, and the comment says node agrees
 
+**Fixed, both halves, each controlled separately.** `bindings.node.mjs` now maps a
+character device to `FILE`, and the `UNKNOWN` fallback pushes `null` as node's
+does. Ours answers `ReadStream` and ends, as node does.
+
+Controlling the second fix needed the first one out of the way -- with the
+classifier corrected the fallback is unreachable for `/dev/null`, so it proves
+nothing. Reverting only `bindings.node.mjs` from `git show HEAD:` puts the
+descriptor back on the `UNKNOWN` branch: `Readable`, and it **ends**. Two fixes,
+two demonstrations, neither standing on the other.
+
+Interpreted lane 90 passed / 0 failed and compiled 1 / 91, both unchanged.
+
 Node, stdin redirected from `/dev/null`: `process.stdin` is an `fs.ReadStream` and
 it **ends** immediately. Here it is a bare `Readable` that never produces and never
 ends, so a program waiting on stdin runs forever where node's exits.

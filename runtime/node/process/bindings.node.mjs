@@ -232,6 +232,16 @@ globalThis.nts_stdin_handle_type = () => {
     if (stats.isFile()) return "FILE";
     if (stats.isFIFO()) return "PIPE";
     if (stats.isSocket()) return "TCP";
+    // A character device is `UV_FILE` to libuv, and so `FILE` to node -- measured
+    // rather than read off the header: `node -e '…' < /dev/null` builds an
+    // `fs.ReadStream`. Without this line `/dev/null` fell through to `UNKNOWN`,
+    // which took the inert-`Readable` branch and gave a `process.stdin` that
+    // never ends, so a program waiting on stdin ran forever where node's exited.
+    //
+    // The compiled lane never had this: `process.c` calls `uv_guess_handle(0)`
+    // directly, which is the function node calls. This stand-in is the only place
+    // the two lanes could disagree about what fd 0 is, and it did.
+    if (stats.isCharacterDevice()) return "FILE";
     return "UNKNOWN";
   } catch {
     return "UNKNOWN";
