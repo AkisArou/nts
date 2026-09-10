@@ -1301,6 +1301,28 @@ and is excluded by name. Others are host-process facts (`process.ppid`,
 buys is that each is now a line someone can argue with, instead of absent from
 both the code and the document.
 
+**Automated and widened, 2026-09-10.** `surface-absence.mjs` asks the same
+question over all 22 modules and to depth 2, and agrees with the table above
+where they overlap -- including that `util.inherits` should stay missing. Four
+modules with depth-1 absences are not in it at all:
+
+    dgram._createSocketHandle   http._connectionListener
+    net._createServerHandle     net._normalizeArgs
+    stream._isUint8Array, ._isArrayBufferView, ._uint8ArrayToBuffer
+
+Most are node internals that node happens to expose. Of the four checked against
+node's own suite, `net._normalizeArgs` is referenced by one parallel test and the
+other three by none, so the practical cost is one test rather than seven names.
+
+It also separates a distinction the `Object.keys` method could not make, and got
+wrong itself first. It reported `stream.Readable.from`, `.wrap`, `.fromWeb` and
+`.toWeb` as missing; they are reachable and merely **inherited**, because
+`shape.mjs` wraps each stream constructor in a callable facade whose prototype is
+the real class. `Object.keys` returning a name and the name existing are different
+questions, and a diff of `Object.keys` answers only the first. Absence is asked
+with a property read now, and the enumerability disagreement is reported apart as
+`KEYS`: `stream` went 14 "missing" to 7 missing and 7 `KEYS`.
+
 ## Eighteen `test-std*` files, and the input half of the process
 
 The export diff and the pattern audit met here. `process` was reporting 69 of
