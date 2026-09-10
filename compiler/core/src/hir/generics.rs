@@ -313,6 +313,7 @@ fn declared_signature(
 /// wrong only in being conservative.
 fn unify(snapshot: &SemanticSnapshot, generic: TypeId, actual: TypeId, into: &mut Substitution) {
     if is_parameter(snapshot, generic) {
+        let actual = concrete(snapshot, actual);
         if let Some(ty) = representation(snapshot, actual)
             && !is_parameter(snapshot, actual)
         {
@@ -329,6 +330,54 @@ fn unify(snapshot: &SemanticSnapshot, generic: TypeId, actual: TypeId, into: &mu
     if let (TypeKind::Array(inner), TypeKind::Array(against)) = (&generic.kind, &actual.kind) {
         unify(snapshot, *inner, *against, into);
     }
+}
+
+/// A type parameter resolved through its constraint, where that pins it down.
+///
+/// **The polymorphic `this` type is a type parameter**, and the checker spells
+/// it as one named after the class with the class as its constraint:
+///
+/// ```text
+/// #6 `Emitter` TypeParameter { constraint: Some(TypeId(1)) }
+/// ```
+///
+/// So `addTo(this, by)` instantiates `T` to *another parameter*, and the caller
+/// below refused to bind one parameter to another -- correctly, for an unbound
+/// one, and wrongly for this. Nothing was inserted, `T` was not pinned, the call
+/// was skipped, and **no diagnostic was emitted anywhere**: the only sign was a
+/// cascade saying "calls `addTo`, which was refused above" with no refusal
+/// above.
+///
+/// What it cost is `EventEmitter#on`. node's `addListener(target, ...)` is
+/// called as `addListener(this, ...)` from `on`, `addListener` and
+/// `prependListener`, so all three were dropped -- and `on` is the base of
+/// `net.Server`, `http.Server`, every stream, `process`, `readline` and
+/// `dgram`. The `http.createServer` chain bottoms out here, and the Node lane
+/// ranks that at 274 failing test files.
+///
+/// **Substituting the constraint is what the run-time already does.** `this`
+/// inside `C` is "the receiver's class, which is `C` or a subclass", and
+/// base-first layout makes a derived pointer valid wherever a `C *` is wanted
+/// -- so one copy over `C` serves every subclass, which is exactly what node's
+/// single JavaScript function does. What is lost is TypeScript's tracking of
+/// the subclass through the *return* type, and that costs nothing here: the
+/// pointer is the same and any member reached through it is at a prefix offset.
+///
+/// Bounded rather than followed to a fixed point. A constraint that is itself a
+/// parameter is a genuinely unbound one -- `<T extends U, U>` -- and belongs in
+/// the refusal the caller's guard already gives it.
+fn concrete(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
+    let Some(TypeKind::TypeParameter {
+        constraint: Some(constraint),
+        ..
+    }) = snapshot.types.get(ty.0 as usize).map(|record| &record.kind)
+    else {
+        return ty;
+    };
+    if is_parameter(snapshot, *constraint) {
+        return ty;
+    }
+    *constraint
 }
 
 /// What one instantiation's copy is called.
