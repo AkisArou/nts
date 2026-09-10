@@ -193,7 +193,27 @@ for module in $FLOOR; do
     continue
   fi
   echo "REGRESSED -- was building on 2026-09-08 and no longer does"
-  printf '%s\n' "$out" | grep -E 'error:' | head -3 | sed 's/^/                         /'
+  # **The verdict names its reason, or says it has none.**
+  #
+  # This grepped `error:` alone, which is clang's spelling. A *typecheck* refusal
+  # is `TS6133 ... is declared but its value is never read` followed by
+  # `Error: the program does not typecheck` -- no lowercase `error:` anywhere --
+  # so a module that stopped typechecking printed `REGRESSED` with nothing under
+  # it. On 2026-09-10 that rendered one unused function in `net` as three modules
+  # regressing for no stated reason, and the reader's first thought is that the
+  # compiler broke them.
+  #
+  # `net` is in the module graph of `http` and `process`, which is why one edit
+  # failed three: the blast radius of a briefly untypecheckable module is its
+  # dependents, not itself.
+  reason=$(printf '%s\n' "$out" | grep -E 'error:|Error:|TS[0-9]{4}|NTS[0-9]{4}' | head -3)
+  if [ -n "$reason" ]; then
+    printf '%s\n' "$reason" | sed 's/^/                         /'
+  else
+    # A bare REGRESSED is the one outcome that cannot be acted on, so the absence
+    # of a reason is stated as a fact about the output rather than left as blank.
+    echo "                         (no error, Error:, TS or NTS line in the build output)"
+  fi
   failures=$((failures + 1))
 done
 

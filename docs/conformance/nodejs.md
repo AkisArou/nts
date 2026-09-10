@@ -20998,6 +20998,50 @@ reached" but "222 of the module-level functions node publishes, instance methods
 not counted". Every one of the four would have been caught at the moment of
 writing by a sentence that named what was being counted, and none of them was.
 
+## A `REGRESSED` with no reason under it, and one unused function reported as three
+
+`build-floor.sh` printed the cause of a regression with `grep -E 'error:'`, which
+is clang's spelling. A **typecheck** refusal is
+
+    TS6133 'parseDecimalPort' is declared but its value is never read.
+    Error: the program does not typecheck
+
+-- capital `Error:`, no lowercase `error:` anywhere -- so a module that stopped
+typechecking printed `REGRESSED` with nothing beneath it. Read cold, that says the
+compiler broke a module; it meant the typechecker declined one.
+
+It happened to me. Removing `net`'s hand-written `SocketAddress.parse` left
+`parseDecimalPort` unused, and in the window between that edit and removing the
+helper, the compiler lane's gate ran:
+
+    http     REGRESSED -- was building on 2026-09-08 and no longer does
+    net      REGRESSED
+    process  REGRESSED
+
+**One unused function, three modules, no stated reason.** `net` is compiled into
+`http`'s and `process`'s C, so the blast radius of a briefly untypecheckable
+module is its dependents. My commits typechecked either side of it; the working
+tree in between did not, and other sessions build the tree rather than the commit.
+
+The filter now takes `error:`, `Error:`, `TS[0-9]{4}` and `NTS[0-9]{4}`. Both
+branches controlled against real `emit-c` output rather than asserted:
+
+    a real typecheck refusal   old filter: nothing    new: all three lines
+    output with no error line  old filter: nothing    new: names that as the fact
+
+That second line is the other half. A bare `REGRESSED` is the one verdict a reader
+cannot act on, so an absent reason is now printed as `(no error, Error:, TS or NTS
+line in the build output)` -- the same argument as `NOTHING WAS COMPARED`
+replacing a clean-looking zero.
+
+### Applied on a waiter, not immediately
+
+The gate held `/tmp/nts-gate/gate.lock.d` with a live holder when the change was
+ready. `bash` reads a script incrementally, so editing a shared script mid-gate is
+how a second incident starts. The patch waited on the lock and its holder's pid
+and landed at 20:06 when it freed, which is the only reason this entry is about
+one collision and not two.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
