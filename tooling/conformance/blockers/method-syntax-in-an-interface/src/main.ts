@@ -79,6 +79,50 @@
 // "is this true today?", and it cost the finding to somebody reading assembly
 // for an unrelated reason.
 //
+// # 2026-09-10: the option space, with one branch closed by measurement
+//
+// The design step this paragraph names — what an interface's representation
+// should be when both an object literal and a class instance can be one — is
+// now blocking most of the 49 `runtime/node` cast sites. The obvious answers
+// and what each costs:
+//
+//   1. **Order the class to satisfy its interfaces.** Closed. A class cannot
+//      satisfy two interfaces whose field orders conflict, and this is
+//      measured rather than argued:
+//
+//          interface AB { a; b }   interface BA { b; a }
+//          class Both { a; b }
+//          readAB(new Both())    crosses
+//          readBA(new Both())    REFUSED
+//
+//      The same object, two interfaces, and no single layout satisfies both.
+//      Any ordering rule has to pick a winner, and there is no principled
+//      winner when both interfaces are equally legitimate.
+//
+//   2. **Copy at the boundary.** Rejected upstream already, and for the
+//      stronger of the two available reasons: a copy is not the same object,
+//      so a callee writing through its parameter becomes invisible to the
+//      caller. That trades a crash for a silent wrong answer, which this
+//      profile ranks as worse.
+//
+//   3. **Refuse.** What is landed. Safe, loud, and it holds the stream family
+//      shut — `Readable`, `Writable`, `Duplex` against `ErrorOrDestroyStream`
+//      and `WritableImplementation`, which is most of the sites.
+//
+//   4. **Indirection** — pass the object with an offset table, or read fields
+//      through an accessor rather than a fixed offset. Unmeasured here. It is
+//      the only option in this list that does not have to choose between
+//      correctness and coverage, and it is also the only one that costs
+//      something on every field read rather than at a boundary.
+//
+// **Base-first ordering, landed 04:47, is not one of these.** It fixes the
+// *other* layout problem — interface extending interface, where the shared
+// fields have identical representations and only position differed. That is
+// eight sites and it cleared them. It does nothing for a class against an
+// unrelated interface, because `EventEmitter`'s fields sit at the front of
+// `Readable` correctly, so `ErrorOrDestroyStream { destroyed }` can never be a
+// prefix of it.
+//
 // The conclusion still holds and is stronger for it: what an interface's
 // representation should be, when both an object literal and a class instance
 // can be one, is a design step. The refusal being landed for the field-order
