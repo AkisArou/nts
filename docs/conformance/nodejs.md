@@ -18886,6 +18886,52 @@ sweep above says it is the corpus's **only** instance, so renaming it would remo
 the single witness to a defect that is otherwise a silent wrong answer.
 `blockers/a-private-name-is-per-class` carries the reduction and the design.
 
+## `util.inspect`'s depth ceiling, and a diagnosis of mine that was two-thirds wrong
+
+`test-util-inspect-long-running.js` fails about one run in seven with
+`Maximum call stack size exceeded`. The first account of it here was that our
+`inspect` spends four frames per level -- `formatValue`, `formatObject`,
+`formatByShape`, `formatWithKeys` -- and overflows at 2,000 deep against node's
+32,000. Two of those three claims do not survive measurement.
+
+**Node's 32,000 was measured on the wrong object.** That probe built
+`{ next: { deeper: last } }`, which is cyclic, so node stopped early through
+circular detection rather than descending. On the structure the test actually
+builds, node truncates too -- by its own budget, which this profile already
+implements faithfully at `inspect.ts:745`, threshold and all.
+
+**At the test's depth our output is byte-identical to node's.**
+
+    depth  node                                 ours
+      500  134,844,727 bytes, "next:" x32935    134,844,727 bytes, "next:" x32935
+    1,000  135,020,941 bytes, "next:" x14986    135,020,941 bytes, "next:" x14986
+    2,000  158,913,755 bytes, "next:" x9357     THREW
+
+So the budget cut-off is node's, the rendering is node's, and the only difference
+is how much stack is left when the descent gets there. 135 MB of output at the
+depth the test uses, on both sides.
+
+**And it is not the frame count.** `formatObject` has exactly one caller and
+`formatByShape` exactly one, so the three merge mechanically. Merging
+`formatValue` and `formatObject` was tried: the stack trace confirms it worked --
+`formatObject` is gone and the cycle is three frames rather than four -- and the
+ceiling did not move by one:
+
+    four frames per level   survives 1999, fails at 2000
+    three frames per level  survives 1999, fails at 2000
+
+A round number surviving a change to the thing supposedly producing it is the
+answer. The bound is stack **bytes**, not frames: the merged function absorbed the
+other's locals, so three larger frames cost what four smaller ones did. The merge
+was reverted, because a change whose only justification is a benefit that cannot
+be measured should not be kept in a formatter.
+
+What is left of the finding: our per-level stack cost is higher than node's, the
+test sits close enough to the ceiling that machine state decides it, and the
+lane's total is 1,870 about six runs in seven and 1,869 the other one. The fix is
+a cheaper descent and not a shorter call chain, which is a bigger change than this
+was worth tonight.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
