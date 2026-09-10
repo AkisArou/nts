@@ -19500,6 +19500,40 @@ Of the rest, nine are `TextDecoder` in `runtime/web-platform`, which this lane
 leaves alone, and the remainder are `http`'s `OutgoingMessage` internals,
 `fs.Dirent.type` and `net.SocketAddress.numericValue`.
 
+## `console` stopped building, and no pass count would have shown it
+
+    pin 09:28  console BUILDS
+    pin 10:43  console BUILDS
+    pin 11:15  console FAILS, 7 errors
+
+`runtime/node/console/src/main.ts` is unchanged across all three. Same source,
+same command, three pins, so it is the compiler and the window is 32 minutes.
+
+    program.c: error: incompatible pointer types assigning to
+      'NtsObj_Console *' from 'NtsObj_GlobalConsole *'
+
+seven of them. `class GlobalConsole extends Console` is the only inheritance in
+that file, so it is a derived-to-base assignment losing its cast in the emitted C.
+
+**It costs zero passes**, because `console` publishes nothing compiled and its row
+was already 0. The axis reads 43 before and 43 after. So the pass count -- the
+number this ledger quotes most -- could not have shown it, and the `built=` column
+is the only reason it was seen at all. That column was added after a run where a
+refusal appeared to move two `dgram` tests against an addon that had never been
+built.
+
+### And the comparison that reported it wrongly first
+
+The first per-module diff of the two axis runs used `paste` over two
+`awk`-extracted columns. `console` has no `passed,` field when unbuilt, so its row
+emitted one value instead of two and **every subsequent row shifted by one**. The
+output named eleven modules as changed, including `path` 15 to 1 and `os` 5 to 15.
+
+All eleven were the off-by-one; the real answer is one module. What made it
+visible was the two totals agreeing at 43 while eleven rows claimed to differ. A
+missing value does not leave a hole in a positional join, it moves everything
+after it -- so the re-run joins on the module name instead.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
