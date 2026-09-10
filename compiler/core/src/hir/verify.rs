@@ -1091,6 +1091,7 @@ mod tests {
             name: name.to_owned(),
             ty: HirType::Float { bits: 64 },
             readonly: false,
+            declared_by: None,
         };
         let laid_out = |base: Option<TypeId>, id: u32, name: &str, fields: Vec<Field>| Layout {
             types: vec![TypeId(id)],

@@ -8889,6 +8889,7 @@ impl<'a> FuncBuilder<'a> {
                 name: capture.name.clone(),
                 ty,
                 readonly: true,
+                declared_by: None,
             });
         }
         Ok(fields)
@@ -8909,6 +8910,7 @@ impl<'a> FuncBuilder<'a> {
             ty,
             // Written by definition -- being written is why it exists.
             readonly: false,
+            declared_by: None,
         }];
         // Zero until the declaration runs, which is what the guard reads. Only
         // on a cell that has the window; every other one carries nothing.
@@ -8917,6 +8919,7 @@ impl<'a> FuncBuilder<'a> {
                 name: "ready".to_owned(),
                 ty: HirType::Bool,
                 readonly: false,
+                declared_by: None,
             });
         }
         Layout {
@@ -17376,6 +17379,17 @@ impl<'a> FuncBuilder<'a> {
                 name: property.name.clone(),
                 ty: field_ty,
                 readonly: property.readonly,
+                // Stated here because this is the only place that knows. See
+                // `Field::declared_by`: two classes can declare one `#` name and
+                // nothing else in a `Layout` separates them.
+                //
+                // **Only where the property is this type's own.** The checker
+                // hands back a flattened member list, so a base's field appears
+                // here too and claiming it would name the wrong class. The
+                // inherited ones are replaced wholesale in `after_the_base`,
+                // which holds the base's records and so holds the answer; a
+                // class with no base has no inherited property to mistake.
+                declared_by: property.own.then_some(ty),
             });
         }
         Ok(fields)
@@ -17518,6 +17532,7 @@ impl<'a> FuncBuilder<'a> {
                 // not. Marking these `readonly` refused a program the checker
                 // accepts.
                 readonly: false,
+                declared_by: None,
             });
         }
         let layout = Layout {
@@ -17546,25 +17561,39 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<Vec<Field>, Diagnostic> {
         // The base's **type id**, not any name it has.
         //
-        // A name was tried twice and both are unstable. The *type's* name is
-        // ambiguous -- `net.Server` and `http.Server` are both `Server`, which is
-        // exactly the pair this qualifier has to separate, so http's
-        // `#connections@Server` found net's field. The *layout's* name is
-        // disambiguated, and it is disambiguated **later**: `unshared_layout_name`
-        // renames at merge time, after this has already written the qualifier
-        // into a field.
-        //
-        // An id is unique by construction and is fixed before either. It reads
-        // badly and it is a private field's name, which no source writes and no
-        // diagnostic prints.
-        let base_name = format!("t{}", base.0);
         let inherited = self.layout_of(id, base)?.fields;
         let mut ordered = inherited;
         for field in fields {
-            if field.name.starts_with('#')
-                && let Some(shadowed) = ordered.iter_mut().find(|kept| kept.name == field.name)
-            {
-                shadowed.name = format!("{}@{base_name}", shadowed.name);
+            // **A `#` name is per class, so a shadowed one is two fields.**
+            //
+            // `class Base { #count = 0 }` and `class Derived extends Base
+            // { #count = 100 }` are two fields in JavaScript -- that is what the
+            // `#` is for -- and the dedup below matches by name, so the derived's
+            // was dropped and both classes read and wrote the base's slot.
+            // Measured against node: **28 of 28 cases disagreed**, node
+            // answering 2102 where this answered 102502.
+            //
+            // Both are kept now, under their own names, told apart by
+            // `declared_by`. An earlier version renamed the inherited copy
+            // instead: correct on a lane that addresses a field by index, and
+            // `NoSuchFieldError` on one that addresses it by name. A mangled
+            // name in a shared `Layout` is a C-shaped answer, and each backend
+            // spells the distinction its own way now.
+            //
+            // A *public* field redeclared by a derived class is the same
+            // property and must go on sharing one slot, which is what the dedup
+            // below is for and why this exempts only `#`.
+            //
+            // `declared_by` is the own-ness test, and the reason it has to be
+            // one: an inherited `#count` is in the flattened list beside the
+            // derived's own fields, and pushing it unconditionally gave
+            // `Derived` a second `#count` slot that nothing ever read.
+            // `examples/a-private-name-inherited-not-redeclared` is that
+            // control -- the program agreed with node either way, because a
+            // phantom slot is wrong without being observable.
+            if field.name.starts_with('#') && field.declared_by.is_some() {
+                ordered.push(field);
+                continue;
             }
             if !ordered.iter().any(|kept| kept.name == field.name) {
                 ordered.push(field);
@@ -17881,6 +17910,7 @@ impl<'a> FuncBuilder<'a> {
                     name: capture.name.clone(),
                     ty: field_ty,
                     readonly: true,
+                    declared_by: None,
                 });
                 continue;
             }
@@ -17922,6 +17952,7 @@ impl<'a> FuncBuilder<'a> {
                 name: capture.name.clone(),
                 ty: field_ty,
                 readonly: true,
+                declared_by: None,
             });
         }
         // The same layout the body's side builds. Both are pushed, and
@@ -18027,28 +18058,17 @@ impl<'a> FuncBuilder<'a> {
                 let Some(text) = self.node(name).text.clone() else {
                     continue;
                 };
-                // **A shadowed private field is under its declaring class's
-                // name.** `class Derived extends Base` where both declare
-                // `#count` keeps the derived's as `#count` and renames the
-                // inherited copy to `#count@Base`, so the base's initializer --
-                // emitted here, at the allocation, because that is where a field
-                // initializer runs -- has to write the base's slot rather than
-                // whatever `#count` now names.
+                // **By declaring class, not by name.** A field initializer runs
+                // where the object is *allocated*, so a base's `#count = 0`
+                // executes against the derived layout -- where `#count` names
+                // the derived's field, because a `#` name is per class and both
+                // are there. Both initializers wrote one offset and the other
+                // stayed zero.
                 //
-                // Without this both initializers wrote offset 28 and the base's
-                // `#count = 0` never reached offset 24. The qualified name is
-                // tried first and the plain one is the fallback, because a
-                // private field the derived does *not* shadow keeps its plain
-                // name in the derived's layout.
-                // The declaring class's type id, for the reason
-                // `after_the_base` gives: every name available here is either
-                // ambiguous or assigned later.
-                let qualified = text
-                    .starts_with('#')
-                    .then(|| format!("{text}@t{}", class.0));
-                let Some(field) = qualified
-                    .as_deref()
-                    .and_then(|name| layout.index_of(name))
+                // `index_of` is the fallback for every field that is not a
+                // shadowed private one, which is all of them but this.
+                let Some(field) = layout
+                    .index_of_declared(&text, class)
                     .or_else(|| layout.index_of(&text))
                 else {
                     continue;
@@ -26305,33 +26325,19 @@ struct CaseChain<'a> {
     exhaustive: bool,
 }
 
-/// One side of a branching expression.
-///
-/// A ternary's arms are expressions to lower inside their own blocks; a
-/// short-circuit's "untaken" arm is the left operand, already evaluated before
-/// the branch.
-///
-/// `Clone` and not `Copy`: `Member` carries a representation, which is a type
-/// and owns a `Box` for an array's element. Every branch is built where it is
-/// used and moved once, so nothing here wanted the copy.
 /// Whether a base's field and a derived's are the same slot.
 ///
 /// The same question `verify::check_layouts` asks, and it has to be asked the
-/// same way: a **shadowed private field** carries its base's name plus `@` and
-/// the base's type id, because the derived class declares one of that name too
-/// and the plain name belongs to the derived. `#count@t1` *is* `Base`'s
-/// `#count`, at `Base`'s index, and nothing else is.
+/// same way, which is the only reason this is not two functions.
 ///
-/// Names as well as types. Without the suffix rule a correct prefix is rejected
-/// -- `examples/two-private-names-that-collide` lost `throughTheBase` to it --
-/// and with names ignored a prefix of the right types and the wrong fields would
-/// be accepted.
+/// Member identity and type. [`Field::names_the_same_member`] carries the first
+/// half and says why a public field's declaring class is not consulted.
+///
+/// Names as well as types, because a prefix of the right types and the wrong
+/// fields is not a prefix; types as well as names, because a derived class may
+/// narrow one.
 pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
-    let named = want.name == have.name
-        || (want.name.starts_with('#')
-            && have.name.starts_with(want.name.as_str())
-            && have.name[want.name.len()..].starts_with('@'));
-    named && want.ty == have.ty
+    want.names_the_same_member(have) && want.ty == have.ty
 }
 
 /// A natively represented thing an erased value can be, for the one question
@@ -26358,6 +26364,15 @@ enum Native {
     Function,
 }
 
+/// One side of a branching expression.
+///
+/// A ternary's arms are expressions to lower inside their own blocks; a
+/// short-circuit's "untaken" arm is the left operand, already evaluated before
+/// the branch.
+///
+/// `Clone` and not `Copy`: `Member` carries a representation, which is a type
+/// and owns a `Box` for an array's element. Every branch is built where it is
+/// used and moved once, so nothing here wanted the copy.
 #[derive(Clone)]
 enum Branch {
     Expression(NodeId),

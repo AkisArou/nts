@@ -197,6 +197,8 @@ mod tests {
             name: name.to_owned(),
             ty,
             readonly: false,
+            // Placement depends on width and order, never on who declared what.
+            declared_by: None,
         }
     }
 

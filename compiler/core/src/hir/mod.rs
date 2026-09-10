@@ -1159,6 +1159,27 @@ pub enum UnOp {
 pub struct Field {
     pub name: String,
     pub ty: HirType,
+    /// The class that declares this field, where it is a class's at all.
+    ///
+    /// **A stated fact rather than a derived one.** A `#` name is per class, so
+    /// `class Base { #count }` and `class Derived extends Base { #count }` are
+    /// two fields with one name, and both are in the derived layout. Nothing
+    /// else in a `Layout` can separate them: the checker's member list marks
+    /// both `own`, and the JVM emitter was inferring an owner by *arithmetic* --
+    /// "fields are base-first, so the declaring class is the highest ancestor
+    /// still long enough to contain this index" -- which is the same kind of
+    /// assumption C makes about offsets, one level up.
+    ///
+    /// Each backend spells the distinction its own way. C derives a distinct
+    /// member identifier, because a struct has one namespace; the JVM needs no
+    /// spelling at all, because a `Fieldref` names its declaring class and Java
+    /// has field hiding. Putting a mangled *name* in the layout was a C-shaped
+    /// answer in a structure both read, and it produced `NoSuchFieldError` on
+    /// the other lane.
+    ///
+    /// `None` for a field no class declares -- a tuple's `_0`, a closure's
+    /// capture, an anonymous object type's member.
+    pub declared_by: Option<TypeId>,
     /// Never written after construction — semantic, not syntactic, so
     /// `Readonly<T>` counts. Load-bearing: `const` in C, `ACC_FINAL` on the
     /// JVM, hoistable loads, and no write barrier on a reference field that is
@@ -1295,20 +1316,59 @@ impl Layout {
     /// the erased fields, whose slots it reads as `NtsValue`. See
     /// [`HirType::holds_a_pointer`] for what a slot in both did.
     #[must_use]
-    pub fn pointer_fields(&self) -> Vec<&str> {
+    pub fn pointer_fields(&self) -> Vec<usize> {
+        // Indices rather than names, because a name does not identify a slot:
+        // a layout can hold two fields called `#count`, one the base's and one
+        // the derived's. See `Field::declared_by`.
         self.fields
             .iter()
-            .filter(|field| field.ty.holds_a_pointer())
-            .map(|field| field.name.as_str())
+            .enumerate()
+            .filter(|(_, field)| field.ty.holds_a_pointer())
+            .map(|(at, _)| at)
             .collect()
     }
 
     /// The index of a field by name.
     #[must_use]
     pub fn index_of(&self, name: &str) -> Option<u32> {
+        // **The last match for a `#` name, the first for anything else.**
+        //
+        // A shadowed private name is two fields with one name -- `class Base
+        // { #count }` and `class Derived extends Base { #count }` are two fields
+        // in JavaScript -- and both are in the derived layout, base-first. An
+        // access by name is always written *inside* a class body, and a `#`
+        // member is only reachable there, so the one meant is the one the
+        // innermost class declares: the last, because base-first puts ancestors
+        // ahead of it.
+        //
+        // A layout with no shadowing has one match either way, which is every
+        // class in `runtime/node` except `http.Server`.
+        //
+        // Where the *base's* field is the one wanted -- a base's initializer
+        // running at a derived allocation -- the caller has the declaring class
+        // and asks with [`Self::index_of_declared`] instead. Nothing else needs
+        // to, because nothing else can see a `#` member of a class it is not in.
+        let found = if name.starts_with('#') {
+            self.fields.iter().rposition(|field| field.name == name)
+        } else {
+            self.fields.iter().position(|field| field.name == name)
+        };
+        found.and_then(|at| u32::try_from(at).ok())
+    }
+
+    /// The field of this name that a named class declares.
+    ///
+    /// The precise form of [`Self::index_of`], for the one caller that knows
+    /// which class it means: a field initializer runs where the object is
+    /// *allocated*, so a base's `#count = 0` executes against a derived layout
+    /// and has to reach the base's slot rather than whatever `#count` names
+    /// there. Without it both initializers wrote one offset and the other stayed
+    /// zero.
+    #[must_use]
+    pub fn index_of_declared(&self, name: &str, class: TypeId) -> Option<u32> {
         self.fields
             .iter()
-            .position(|field| field.name == name)
+            .position(|field| field.name == name && field.declared_by == Some(class))
             .and_then(|at| u32::try_from(at).ok())
     }
 }
@@ -2496,10 +2556,10 @@ fn reorder_to_base_first(program: &mut Program) -> Vec<Vec<u32>> {
             if at == index {
                 continue;
             }
-            let order: Vec<String> = program.layouts[at]
+            let order: Vec<(String, Option<TypeId>)> = program.layouts[at]
                 .fields
                 .iter()
-                .map(|field| field.name.clone())
+                .map(|field| (field.name.clone(), field.declared_by))
                 .collect();
             let positions = base_first_positions(&program.layouts[index].fields, &order);
             if positions.iter().enumerate().all(|(to, from)| to == *from) {
@@ -2531,33 +2591,52 @@ fn reorder_to_base_first(program: &mut Program) -> Vec<Vec<u32>> {
     moved
 }
 
-/// Where each field should come from, so that `order`'s names lead.
+impl Field {
+    /// Whether two records name the same member.
+    ///
+    /// **The name, and the declaring class only where the name is a `#` one.**
+    /// A public `a` is the same property wherever it is declared -- that is what
+    /// makes `class Derived extends Base { override readonly a = "4" }` one slot
+    /// -- and a `#a` is a different field in every class that writes it.
+    ///
+    /// Consulting `declared_by` for a public field looks more precise and is
+    /// wrong, because **structurally identical classes share one layout**.
+    /// `class NoModifier { a = "1" }` and `class TwoBase { a: string = "x" }`
+    /// are one `Layout` under the first one's name, so the record a derived
+    /// class inherits names a class the shared layout does not, and every such
+    /// class failed `check_layouts` with `BrokenBase`. Caught by
+    /// `examples/modifiers-on-a-field`, which is a fixture about something else
+    /// entirely and the only one in the tree with that shape.
+    #[must_use]
+    pub fn names_the_same_member(&self, other: &Self) -> bool {
+        self.name == other.name
+            && (!self.name.starts_with('#') || self.declared_by == other.declared_by)
+    }
+}
+
+/// Where each field should come from, so that `order`'s fields lead.
 ///
-/// A name the base has and this layout does not is skipped rather than
+/// A field the base has and this layout does not is skipped rather than
 /// invented: a base with a field its subclass lacks is a different defect and
 /// not one to paper over here. Everything the base does not name keeps its
 /// relative order behind those that it does.
-fn base_first_positions(fields: &[Field], order: &[String]) -> Vec<usize> {
+///
+/// **Keyed on name *and* declaring class**, because a name alone does not
+/// identify a field. `class Derived extends Base` where both declare `#count`
+/// puts two `#count` fields in the derived layout, and matching the base's by
+/// name finds whichever comes first -- hoisting the *derived's* field to the
+/// base's slot, so a method of the base writes the derived's counter and the
+/// two classes share one again. That is the defect [`Field::declared_by`]
+/// exists to settle, and this is the pass that would otherwise undo it.
+fn base_first_positions(fields: &[Field], order: &[(String, Option<TypeId>)]) -> Vec<usize> {
     let mut taken = vec![false; fields.len()];
     let mut positions: Vec<usize> = Vec::with_capacity(fields.len());
-    for wanted in order {
-        // **A shadowed private field carries its base's name plus a suffix.**
-        // `class Derived extends Base` where both declare `#count` keeps the
-        // derived's as `#count` and renames the inherited copy to
-        // `#count@Base`, so that the plain name stays where every access inside
-        // the derived class asks for it. Matching by exact name then finds the
-        // *derived's* field for the base's `#count` and hoists it to slot 0 --
-        // which is the base's slot, so a method of the base reads the derived's
-        // field and both classes share one counter again.
-        //
-        // That is the whole defect this rename exists to fix, undone one pass
-        // later by a name comparison. `#count@Base` is the base's `#count`, and
-        // this is where the two have to be recognised as one.
+    for (wanted, from) in order {
+        // See `Field::names_the_same_member`, which this is the by-parts form
+        // of: the base's fields arrive as a name and a declaring class rather
+        // than as records, because the two layouts cannot be borrowed at once.
         let is_the_inherited_copy = |field: &Field| {
-            field.name == *wanted
-                || (wanted.starts_with('#')
-                    && field.name.starts_with(wanted.as_str())
-                    && field.name[wanted.len()..].starts_with('@'))
+            field.name == *wanted && (!wanted.starts_with('#') || field.declared_by == *from)
         };
         if let Some(found) = fields
             .iter()
@@ -3501,6 +3580,7 @@ mod tests {
                 name: "message".to_owned(),
                 ty: HirType::Managed(ManagedType::String),
                 readonly: false,
+                declared_by: None,
             }],
         );
         for value in [ValueId(1), ValueId(4)] {
@@ -3525,6 +3605,7 @@ mod tests {
                 name: "count".to_owned(),
                 ty: HirType::Float { bits: 64 },
                 readonly: false,
+                declared_by: None,
             }],
         );
         for value in [ValueId(1), ValueId(4)] {
@@ -3570,6 +3651,7 @@ mod tests {
             name: name.to_owned(),
             ty,
             readonly: false,
+            declared_by: None,
         }
     }
 

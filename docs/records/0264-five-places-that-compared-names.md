@@ -86,3 +86,14 @@ The Node lane swept 619 (derived field, ancestor) pairs across 497 classes:
 `#connections` is the corpus's only collision. So this is worth one site there
 and a class of silent wrong answer everywhere else — and it is the second kind
 that made it worth doing.
+
+## Superseded, one day later
+
+The rename is gone. Record 0265 replaces it with a `declared_by` on `Field` --
+the fact rather than a spelling of it -- at the JVM lane's request, that lane
+being unable to use a mangled name at all. The five places below are still the
+five places; each consults the declaring class now instead of a suffix.
+
+It also found what the rename had hidden: a class that *inherits* a private name
+and does not redeclare it was getting a second slot, and every answer agreed
+with node anyway.

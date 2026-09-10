@@ -1439,11 +1439,16 @@ fn field_load(
             op.origin.location,
         )
     })?;
-    // `c_member`, which is what the read used before this function existed.
-    // `field_store` spells the same slot with `c_identifier`; the two agree on
-    // every name in the corpus and that is luck rather than design, and not a
-    // thing to change while fixing something else.
-    let read = format!("{}->{}", value_name(object), c_member(&declared.name));
+    // `c_member_at`, which both this and `field_store` now go through. They
+    // used to spell the same slot two ways -- `c_member` here and
+    // `c_identifier` there -- agreeing on every name in the corpus by luck. A
+    // field named `header` would have parted them, and a shadowed `#` name
+    // parts them for certain, so the luck was spent.
+    let read = format!(
+        "{}->{}",
+        value_name(object),
+        c_member_at(layout, field as usize)
+    );
     if declared.ty == op.ty || !matches!(declared.ty, HirType::Erased) {
         return Ok(format!("{name} = {read};"));
     }
@@ -1469,6 +1474,36 @@ fn field_load(
         }
     };
     Ok(format!("{name} = {widened};"))
+}
+
+/// The C spelling of the field at `at`, which is not a function of its name.
+///
+/// **A C struct has one namespace and a JavaScript class has one per class.**
+/// `class Base { #count }` and `class Derived extends Base { #count }` declare
+/// two fields, and base-first layout puts both in `NtsObj_Derived` -- so the
+/// obvious spelling emits `duplicate member '__count'` and clang refuses the
+/// whole program. Every other backend addresses a slot by index and never sees
+/// this; C is the one that has to name it.
+///
+/// The first of a name keeps the plain spelling and each later one takes its
+/// index. The index is unique within the layout by construction, and stable
+/// because a layout's field order is fixed before any of this runs -- so the
+/// same slot gets the same spelling in the struct, in its `_Static_assert`, in
+/// the reference tables and at every load and store, which is the only property
+/// that matters. A layout with no shadowing is spelled exactly as before, which
+/// is every layout in the corpus but one.
+fn c_member_at(layout: &nts_core::hir::Layout, at: usize) -> String {
+    let Some(field) = layout.fields.get(at) else {
+        return String::new();
+    };
+    if layout.fields[..at]
+        .iter()
+        .any(|before| before.name == field.name)
+    {
+        format!("{}_{at}", c_member(&field.name))
+    } else {
+        c_member(&field.name)
+    }
 }
 
 fn field_store(
@@ -1500,7 +1535,7 @@ fn field_store(
     Ok(format!(
         "{}->{} = {cast}{};",
         value_name(object),
-        c_identifier(&declared.name),
+        c_member_at(layout, field as usize),
         value_name(stored)
     ))
 }
@@ -1864,7 +1899,7 @@ fn emit_object_types(
         // The header first, so every managed object starts the same way and a
         // provider can read the descriptor without knowing the type (RFC 8.2).
         writer.line(origin, "    NtsHeader header;");
-        for field in &layout.fields {
+        for (at, field) in layout.fields.iter().enumerate() {
             // A field whose C type cannot be computed used to be *dropped
             // from the struct*, silently, while the descriptor beside it kept
             // taking an `offsetof` into it. Ninety-three of them across the
@@ -1924,7 +1959,7 @@ fn emit_object_types(
             // The fact is not lost: `readonly` stays in the HIR, where a field
             // load that cannot change is something this compiler can common up
             // itself. That is strictly more than the C qualifier was buying.
-            writer.line(origin, format!("    {ty} {};", c_member(&field.name)));
+            writer.line(origin, format!("    {ty} {};", c_member_at(layout, at)));
         }
         writer.line(origin, "};");
         // What this compiler believes about the struct clang just laid out.
@@ -1948,12 +1983,12 @@ fn emit_object_types(
                     placed.size
                 ),
             );
-            for (field, offset) in layout.fields.iter().zip(&placed.offsets) {
+            for (at, (field, offset)) in layout.fields.iter().zip(&placed.offsets).enumerate() {
                 writer.line(
                     origin,
                     format!(
                         "_Static_assert(offsetof({name}, {}) == {offset}u, \"{name}.{} is not where nts computed\");",
-                        c_member(&field.name),
+                        c_member_at(layout, at),
                         field.name
                     ),
                 );
@@ -2171,7 +2206,7 @@ fn emit_object_descriptors(
         } else {
             let entries: Vec<String> = references
                 .iter()
-                .map(|field| format!("offsetof({name}, {})", c_member(field)))
+                .map(|at| format!("offsetof({name}, {})", c_member_at(layout, *at)))
                 .collect();
             writer.line(
                 origin,
@@ -2186,18 +2221,19 @@ fn emit_object_descriptors(
         // says so. Emitted the same way and for the same reason as the
         // reference table above: `offsetof`, so the compiler that laid the
         // struct out is the one that says where its fields are.
-        let erased: Vec<&str> = layout
+        let erased: Vec<usize> = layout
             .fields
             .iter()
-            .filter(|field| field.ty == HirType::Erased)
-            .map(|field| field.name.as_str())
+            .enumerate()
+            .filter(|(_, field)| field.ty == HirType::Erased)
+            .map(|(at, _)| at)
             .collect();
         let erased_offsets = if erased.is_empty() {
             "0".to_owned()
         } else {
             let entries: Vec<String> = erased
                 .iter()
-                .map(|field| format!("offsetof({name}, {})", c_member(field)))
+                .map(|at| format!("offsetof({name}, {})", c_member_at(layout, *at)))
                 .collect();
             writer.line(
                 origin,
