@@ -21076,6 +21076,77 @@ and someone will try again:
 Until then `stream` stays at 25 of 108, and the reason is here rather than in a
 silence.
 
+## Two classes with one descriptor: what it reaches here, and what my instrument could not tell
+
+The compiler lane found that **two classes whose fields match exactly share one
+layout and therefore one descriptor**, so `new B() instanceof A` answers `true`
+where node answers `false`. Nothing refuses; it compiles, runs, and answers
+wrongly. Every other defect between the two sessions this week announced itself
+with a diagnostic.
+
+### The largest collapse in this profile, and it is entirely latent
+
+    89 of 93 `ERR_*` classes are in a group sharing a field shape
+    87 of them share exactly [code: string]
+
+Eighty-seven declared classes resolving to one layout -- and not one observable,
+for two independent reasons, both checked rather than assumed:
+
+- `grep 'instanceof ERR_'` across `runtime/node`: **no matches at all**.
+- An error crossing the napi boundary arrives as a **host `TypeError` with `code`
+  set**, so our class identity never crosses.
+
+**A value survives a collapse that an identity would not**, which is why every
+differential corpus here -- comparing `error.code` rather than error identity --
+is immune. That was not chosen for the reason; `code` is what node's tests assert
+on. It happens to be the one axis the collapse does not touch.
+
+### A false alarm, and where it came from
+
+`util/src/types.ts` implements sixteen typed-array predicates as
+`value instanceof Uint8Array`, which looked like the defect reaching a published
+surface. It does not: typed-array `instanceof` emits `nts_is_view_kind`, an
+element-kind test that never reaches the layout lookup -- and the predicates
+cannot be asked about a reference at all, which
+`blockers/a-reference-cannot-cross-inward` states outright, in a file read that
+same morning. **Reachability comes first**, which is `corpus-reach.mjs`'s own
+lesson, skipped on the one question where it decided the answer.
+
+### Seven candidate pairs, and why the list is a shortlist
+
+    LIVE    buffer: Buffer / Blob            net: BlockList / BoundSocket
+    LIVE    net: Socket / Stream             stream: Duplex / PassThrough
+    LIVE    stream: Duplex / Transform
+    latent  events: EventEmitterAsyncResource / EventEmitter
+    latent  stream: PassThrough / Transform
+
+`LIVE` means some `instanceof` in `runtime/node` names one of the pair.
+
+**The instrument compares own enumerable keys, and a `#private` field is part of
+the layout and invisible to it.** Sources eliminate at least three: `Buffer` 0
+private against `Blob`'s 4, `BlockList`'s 2 against `BoundSocket`'s 0,
+`Transform`'s 1 against `PassThrough`'s 0. `Buffer` is eliminated twice --
+`class Buffer extends Uint8Array` makes it a View kind.
+
+One row is simply wrong: `net: Socket / Stream` resolved `Socket` to **dgram**'s
+class, the check having taken the first match across `runtime/node`.
+
+What survives is `Duplex`/`PassThrough` and the `events` pair, and the shape is
+**inheritance rather than coincidence** -- a subclass adding no fields has its
+parent's layout exactly, and node's tests use `instanceof Duplex` and
+`instanceof Transform` to tell precisely those apart.
+
+The division that follows: this profile can ask the *shaped surface* about
+same-shaped instances; the layout question wants layouts.
+
+### The sweep found itself three times getting there
+
+`new process.abort()` **called** `abort` and killed the process mid-run --
+`instance-shape-diff.mjs`'s header warns of that exact risk. `path.join` and
+`toNamespacedPath` came out as same-shaped classes because `new join()` yields an
+empty object. And sweeping twenty-two modules in one process hung for eleven
+minutes with no output, because a constructed class can hold the event loop open.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
