@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "violations": 0,
+  "stages": {
+    "normalized": {
+      "directory": "generated/client-mutation-production",
+      "files": 123,
+      "anyKeywords": 0,
+      "typeScriptDirectives": 0,
+      "nestedTypeAssertions": 0,
+      "examples": []
+    },
+    "specialized": {
+      "directory": "generated/client-mutation-production-specialized",
+      "files": 123,
+      "anyKeywords": 0,
+      "typeScriptDirectives": 0,
+      "nestedTypeAssertions": 0,
+      "examples": []
+    },
+    "linked": {
+      "directory": "generated/client-mutation-production-linked",
+      "files": 123,
+      "anyKeywords": 0,
+      "typeScriptDirectives": 0,
+      "nestedTypeAssertions": 0,
+      "examples": []
+    }
+  }
+}

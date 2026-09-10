@@ -1,0 +1,2105 @@
+{
+  "schema": 1,
+  "profile": "client-mutation-production",
+  "constantModules": {
+    "packages/react-reconciler/src/ReactFiberClassUpdateQueue.ts": {
+      "UpdateState": 0,
+      "ReplaceState": 1,
+      "ForceUpdate": 2,
+      "CaptureUpdate": 3
+    },
+    "packages/react-reconciler/src/ReactFiberConfig.ts": {
+      "supportsHydration": false,
+      "supportsMutation": true,
+      "supportsPersistence": false,
+      "supportsResources": false,
+      "supportsSingletons": false
+    },
+    "packages/react-reconciler/src/ReactFiberFlags.ts": {
+      "NoFlags": 0,
+      "PerformedWork": 1,
+      "Placement": 2,
+      "DidCapture": 128,
+      "Hydrating": 4096,
+      "Update": 4,
+      "Cloned": 8,
+      "ChildDeletion": 16,
+      "ContentReset": 32,
+      "Callback": 64,
+      "ForceClientRender": 256,
+      "Ref": 512,
+      "Snapshot": 1024,
+      "Passive": 2048,
+      "Visibility": 8192,
+      "StoreConsistency": 16384,
+      "Hydrate": 64,
+      "ScheduleRetry": 16384,
+      "ShouldSuspendCommit": 8192,
+      "ViewTransitionNamedMount": 8192,
+      "DidDefer": 32,
+      "FormReset": 1024,
+      "AffectedParentLayout": 32,
+      "HostEffectMask": 32767,
+      "Incomplete": 32768,
+      "ShouldCapture": 65536,
+      "ForceUpdateForLegacySuspense": 131072,
+      "DidPropagateContext": 262144,
+      "NeedsPropagation": 524288,
+      "Forked": 1048576,
+      "SnapshotStatic": 2097152,
+      "LayoutStatic": 4194304,
+      "RefStatic": 4194304,
+      "PassiveStatic": 8388608,
+      "MaySuspendCommit": 16777216,
+      "ViewTransitionStatic": 33554432,
+      "ViewTransitionStaticParent": 1073741824,
+      "PortalStatic": 67108864,
+      "PlacementDEV": 134217728,
+      "MountLayoutDev": 268435456,
+      "MountPassiveDev": 536870912
+    },
+    "packages/react-reconciler/src/ReactFiberLane.ts": {
+      "TotalLanes": 31,
+      "NoLanes": 0,
+      "NoLane": 0,
+      "SyncHydrationLane": 1,
+      "SyncLane": 2,
+      "SyncLaneIndex": 1,
+      "InputContinuousHydrationLane": 4,
+      "InputContinuousLane": 8,
+      "DefaultHydrationLane": 16,
+      "DefaultLane": 32,
+      "GestureLane": 64,
+      "SelectiveHydrationLane": 67108864,
+      "IdleHydrationLane": 134217728,
+      "IdleLane": 268435456,
+      "OffscreenLane": 536870912,
+      "DeferredLane": 1073741824,
+      "NoTimestamp": -1
+    },
+    "packages/react-reconciler/src/ReactFiberOffscreenComponent.ts": {
+      "OffscreenVisible": 1,
+      "OffscreenPassiveEffectsConnected": 2
+    },
+    "packages/react-reconciler/src/ReactFiberSuspenseContext.ts": {
+      "ForceSuspenseFallback": 2
+    },
+    "packages/react-reconciler/src/ReactFiberTracingMarkerComponent.ts": {
+      "TransitionRoot": 0,
+      "TransitionTracingMarker": 1
+    },
+    "packages/react-reconciler/src/ReactFiberTransition.ts": {
+      "NoTransition": null
+    },
+    "packages/react-reconciler/src/ReactFiberWorkLoop.ts": {
+      "NoContext": 0,
+      "RenderContext": 2,
+      "CommitContext": 4
+    },
+    "packages/react-reconciler/src/ReactHookEffectTags.ts": {
+      "NoFlags": 0,
+      "HasEffect": 1,
+      "Insertion": 2,
+      "Layout": 4,
+      "Passive": 8
+    },
+    "packages/react-reconciler/src/ReactProfilerTimer.ts": {
+      "REGULAR_UPDATE": 0,
+      "SPAWNED_UPDATE": 1,
+      "PINGED_UPDATE": 2
+    },
+    "packages/react-reconciler/src/ReactRootTags.ts": {
+      "LegacyRoot": 0,
+      "ConcurrentRoot": 1
+    },
+    "packages/react-reconciler/src/ReactTypeOfMode.ts": {
+      "NoMode": 0,
+      "ConcurrentMode": 1,
+      "ProfileMode": 2,
+      "StrictLegacyMode": 8,
+      "StrictEffectsMode": 16,
+      "SuspenseyImagesMode": 32
+    },
+    "packages/react-reconciler/src/ReactWorkTags.ts": {
+      "FunctionComponent": 0,
+      "ClassComponent": 1,
+      "HostRoot": 3,
+      "HostPortal": 4,
+      "HostComponent": 5,
+      "HostText": 6,
+      "Fragment": 7,
+      "Mode": 8,
+      "ContextConsumer": 9,
+      "ContextProvider": 10,
+      "ForwardRef": 11,
+      "Profiler": 12,
+      "SuspenseComponent": 13,
+      "MemoComponent": 14,
+      "SimpleMemoComponent": 15,
+      "LazyComponent": 16,
+      "IncompleteClassComponent": 17,
+      "DehydratedFragment": 18,
+      "SuspenseListComponent": 19,
+      "ScopeComponent": 21,
+      "OffscreenComponent": 22,
+      "LegacyHiddenComponent": 23,
+      "CacheComponent": 24,
+      "TracingMarkerComponent": 25,
+      "HostHoistable": 26,
+      "HostSingleton": 27,
+      "IncompleteFunctionComponent": 28,
+      "Throw": 29,
+      "ViewTransitionComponent": 30,
+      "ActivityComponent": 31
+    },
+    "packages/scheduler/src/SchedulerFeatureFlags.ts": {
+      "enableProfiling": false,
+      "frameYieldMs": 5,
+      "userBlockingPriorityTimeout": 250,
+      "normalPriorityTimeout": 5000,
+      "lowPriorityTimeout": 10000,
+      "enableRequestPaint": true,
+      "enableAlwaysYieldScheduler": true
+    },
+    "packages/scheduler/src/SchedulerPriorities.ts": {
+      "NoPriority": 0,
+      "ImmediatePriority": 1,
+      "UserBlockingPriority": 2,
+      "NormalPriority": 3,
+      "LowPriority": 4,
+      "IdlePriority": 5
+    },
+    "packages/shared/ReactFeatureFlags.ts": {
+      "enableBrowserAPI": true,
+      "disableSchedulerTimeoutInWorkLoop": false,
+      "enableSuspenseCallback": false,
+      "enableScopeAPI": false,
+      "enableCreateEventHandleAPI": false,
+      "enableLegacyFBSupport": false,
+      "enableYieldingBeforePassive": false,
+      "enableThrottledScheduling": false,
+      "enableLegacyCache": true,
+      "enableAsyncIterableChildren": true,
+      "enableFlightWeakThenables": true,
+      "enableTaint": true,
+      "enableViewTransition": true,
+      "enableViewTransitionParentEnterExit": true,
+      "enableViewTransitionForPersistenceMode": false,
+      "enableGestureTransition": true,
+      "enableScrollEndPolyfill": true,
+      "enableSuspenseyImages": false,
+      "enableFizzBlockingRender": true,
+      "enableSrcObject": true,
+      "enableHydrationChangeEvent": true,
+      "enableDefaultTransitionIndicator": true,
+      "enableOptimisticKey": true,
+      "enableObjectFiber": false,
+      "enableTransitionTracing": false,
+      "enableLegacyHidden": false,
+      "enableSuspenseAvoidThisFallback": false,
+      "enableCPUSuspense": true,
+      "enableNoCloningMemoCache": false,
+      "enableFizzExternalRuntime": true,
+      "alwaysThrottleRetries": true,
+      "enableEffectEventMutationPhase": true,
+      "passChildrenWhenCloningPersistedNodes": false,
+      "enableRetryLaneExpiration": false,
+      "retryLaneExpirationMs": 5000,
+      "syncLaneExpirationMs": 250,
+      "transitionLaneExpirationMs": 5000,
+      "enableInfiniteRenderLoopDetection": false,
+      "enableInfiniteRenderLoopDetectionForceThrow": false,
+      "enableConditionalUseWarning": true,
+      "enableFragmentRefs": true,
+      "enableFragmentRefsScrollIntoView": true,
+      "enableFragmentRefsInstanceHandles": true,
+      "enableFragmentRefsTextNodes": true,
+      "enableInternalInstanceMap": false,
+      "disableLegacyContext": true,
+      "disableLegacyContextForFunctionComponents": true,
+      "enableMoveBefore": false,
+      "disableClientCache": true,
+      "enableReactTestRendererWarning": true,
+      "disableLegacyMode": true,
+      "disableCommentsAsDOMContainers": true,
+      "enableTrustedTypesIntegration": true,
+      "disableInputAttributeSyncing": false,
+      "disableTextareaChildren": false,
+      "enableParallelTransitions": true,
+      "enableProfilerTimer": false,
+      "enableComponentPerformanceTrack": true,
+      "enablePerformanceIssueReporting": false,
+      "enableSchedulingProfiler": false,
+      "enableProfilerCommitHooks": false,
+      "enableProfilerNestedUpdatePhase": false,
+      "enableAsyncDebugInfo": true,
+      "enableUpdaterTracking": false,
+      "ownerStackLimit": 10000,
+      "eprh_enableUseKeyedStateCompilerLint": false,
+      "eprh_enableVerboseNoSetStateInEffectCompilerLint": false,
+      "eprh_enableExhaustiveEffectDependenciesCompilerLint": "off"
+    },
+    "packages/shared/ReactRecoverable.ts": {
+      "REACT_RECOVERABLE_DIGEST": ""
+    }
+  },
+  "summary": {
+    "files": 123,
+    "exportedConstants": 204,
+    "importedConstantReferences": 2448,
+    "derivedLocalConstants": 1,
+    "localConstantReferences": 28,
+    "ifStatementsFolded": 610,
+    "conditionalExpressionsFolded": 27,
+    "logicalExpressionsFolded": 354,
+    "unaryExpressionsFolded": 128,
+    "unreachableStatementsRemoved": 145
+  },
+  "files": [
+    {
+      "path": "packages/react-reconciler/src/ReactCapturedValue.ts",
+      "inputSha256": "8072b7055bdf114f419ce3447c8bbb692f68e328868ecaf703e87ca44d1bf4d6",
+      "outputSha256": "8072b7055bdf114f419ce3447c8bbb692f68e328868ecaf703e87ca44d1bf4d6",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactChildFiber.ts",
+      "inputSha256": "cbd73245bd8fb7a55338d2a17e8a16e2fae175adaf6108f66ead80c17ab4a079",
+      "outputSha256": "2a7881039162e38d64c1399111cf54520643b0e60d55f48e35aefb3bbdb6b64e",
+      "metrics": {
+        "importedConstantReferences": 36,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 8,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 15,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactCurrentFiber.ts",
+      "inputSha256": "681ba781a9a631c2fe6057d751fbc92a646752522227dedadbf069790d3885c8",
+      "outputSha256": "681ba781a9a631c2fe6057d751fbc92a646752522227dedadbf069790d3885c8",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactEventPriorities.ts",
+      "inputSha256": "fe36b63183f08fd7329ae950bd3cb1f1239ef117fc5d2090e57dea635a7ea5ad",
+      "outputSha256": "f95b2eaefbbc76fbd5b136e7614291a475a8c15663067a7408269e2a2435903b",
+      "metrics": {
+        "importedConstantReferences": 5,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiber.ts",
+      "inputSha256": "a72ccf67be5c74e25f7def1ebdca337a6563bfad3a9f54248fab14c4f613d543",
+      "outputSha256": "9c6e9b89bcce4a38f8cb167742d97f90fd17585185228d5a0c30d7e48cc5d5cb",
+      "metrics": {
+        "importedConstantReferences": 82,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 20,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 4,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAct.ts",
+      "inputSha256": "29d91088a09bb4b806af18785f896e296d575bc0c869fd8813e876d49519ce79",
+      "outputSha256": "29d91088a09bb4b806af18785f896e296d575bc0c869fd8813e876d49519ce79",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberActivityComponent.ts",
+      "inputSha256": "04a902434e6d6746533e38fef5cbc5db29dfb10afb7839291f1506565f352ce0",
+      "outputSha256": "04a902434e6d6746533e38fef5cbc5db29dfb10afb7839291f1506565f352ce0",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberApplyGesture.ts",
+      "inputSha256": "2c04851cbbdd1708beed05325a2d4036659829a5b3b9ef2826bf5258d30e535c",
+      "outputSha256": "832d9b3e6cf561c824655b88c5cbe4911043c42f09bacad8fb9abc160fafd318",
+      "metrics": {
+        "importedConstantReferences": 79,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 6,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+      "inputSha256": "ea19edd33bbbd3648196583791f09fed089354a02f78b2829c97bf1e7b061e86",
+      "outputSha256": "8a034c50d239aac0eb3ac9419eb034cb4c11e5afab055587c4172147543daecc",
+      "metrics": {
+        "importedConstantReferences": 8,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 5,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 3,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAsyncDispatcher.ts",
+      "inputSha256": "68d847f2485d9786983b9d9a4cd5d7deaad7a056e9f2ce96c89237f8ab30ce10",
+      "outputSha256": "68d847f2485d9786983b9d9a4cd5d7deaad7a056e9f2ce96c89237f8ab30ce10",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberBeginWork.ts",
+      "inputSha256": "466de9c9c545fdeed43500f29c2d5cd870eaccb095b99ccf5a794858525b4fb2",
+      "outputSha256": "6f385c082e16cb4a3c57f3d7a50e6545a2c59597872876e25576754e2929ac93",
+      "metrics": {
+        "importedConstantReferences": 223,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 44,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 15,
+        "unaryExpressionsFolded": 9,
+        "unreachableStatementsRemoved": 8
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+      "inputSha256": "e52c7cfe8cd613ee400fb0a5362c9a2a13120b41e962540f3a865fa200af891c",
+      "outputSha256": "e52c7cfe8cd613ee400fb0a5362c9a2a13120b41e962540f3a865fa200af891c",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCallUserSpace.ts",
+      "inputSha256": "2ca3b65a52e56d20b146119b92b11e40ba463f8a904f798ab6cd06d32cd56af9",
+      "outputSha256": "2ca3b65a52e56d20b146119b92b11e40ba463f8a904f798ab6cd06d32cd56af9",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberClassComponent.ts",
+      "inputSha256": "5f7925c79b6cb50e7bd86edde36ac10a40b220b4636fd6e3c1c5e1da2ce719f8",
+      "outputSha256": "a27ff2d43613014b6be32105dd9ae0a8e4bc4fcad4d1aabeefddfd181fd4ef1b",
+      "metrics": {
+        "importedConstantReferences": 24,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 7,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 3,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberClassUpdateQueue.ts",
+      "inputSha256": "d1c40c60a58c21ce983f6ce07892f306be4188a4d0c41bd8909eef50ce583bcf",
+      "outputSha256": "330a4d109304753f0ee574cb6c351467059b4259b061306ee3dfdd1f691e9c86",
+      "metrics": {
+        "importedConstantReferences": 10,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitEffects.ts",
+      "inputSha256": "7d90cd3ca0ff2a9106aca91044f3cb968dfb9969f54293f729a237b3df282783",
+      "outputSha256": "86c7697b1e5d7da8541a083f2f3e536626604fcdf855979211326e5221641f68",
+      "metrics": {
+        "importedConstantReferences": 38,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 10,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitHostEffects.ts",
+      "inputSha256": "0db6d6cc61ebdf7aadfa1cdd0fcdcfce03a5a0535df890eccf769cc6135b46be",
+      "outputSha256": "c641cd7496958a4bd0d8f8d620f848d51cac8f270b1c3165e78266758fbb2a32",
+      "metrics": {
+        "importedConstantReferences": 44,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 11,
+        "conditionalExpressionsFolded": 6,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 2,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitViewTransitions.ts",
+      "inputSha256": "ef08b3e0bdf79e466669f1bb860d1442747233ab43a21574ec4d0586b0b61e08",
+      "outputSha256": "d3dd9fdfe126c08ddae56163f21978057fb9c7908f5fbf5ad021be65996af09a",
+      "metrics": {
+        "importedConstantReferences": 88,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 9,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 3,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitWork.ts",
+      "inputSha256": "fffc50698bc2453f7867a5f04d8eabfd3e7150a800552953d467c124f33b5dcf",
+      "outputSha256": "175bbeeb6b6fa41af8a029fc21845f0065ed750efab6bf42b1d57d34a5f8570b",
+      "metrics": {
+        "importedConstantReferences": 581,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 120,
+        "conditionalExpressionsFolded": 2,
+        "logicalExpressionsFolded": 167,
+        "unaryExpressionsFolded": 8,
+        "unreachableStatementsRemoved": 4
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCompleteWork.ts",
+      "inputSha256": "a576b2185ccf6dcded295530131afdefc03d11e95f983d75ef6c23070a5642b3",
+      "outputSha256": "df6b6775a87f9662afd85b50974384e960f8a3fe6419cd6251f6ce8552857078",
+      "metrics": {
+        "importedConstantReferences": 186,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 38,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 11,
+        "unaryExpressionsFolded": 4,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberComponentStack.ts",
+      "inputSha256": "82da96b9cb4128371ed71a60d723d8c93c3fdfe3b5b809d06eb73fa14a6784e3",
+      "outputSha256": "3f623a280f11e5ffacd4253540ca2d2e5bb6e2789dce10170730f66008ead868",
+      "metrics": {
+        "importedConstantReferences": 13,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 1,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberConcurrentUpdates.ts",
+      "inputSha256": "ef4eca625831855bf631756594da9b7101804d8641b64a56daa2dc9c5a6be263",
+      "outputSha256": "94bcfde6011fc7d077d51ffb1ac4f0bdb63e96cdfc6b40125200a9724deeb8ac",
+      "metrics": {
+        "importedConstantReferences": 8,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberConfig.ts",
+      "inputSha256": "879fc4e6a9176e237db2fed72c347bee2edddd5973ee85ad956d1ae7bdeacd5d",
+      "outputSha256": "879fc4e6a9176e237db2fed72c347bee2edddd5973ee85ad956d1ae7bdeacd5d",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberDevToolsHook.ts",
+      "inputSha256": "b9a8c68816a981ed484d6471f7a6929e2942710f711d871a333572b613f0c090",
+      "outputSha256": "db7229eea7f3aadf3573533e13b0629226e4b6fe53321a5f01127f415327524f",
+      "metrics": {
+        "importedConstantReferences": 27,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 25,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberDuplicateViewTransitions.ts",
+      "inputSha256": "2513fc03a1ff18e06fb407b5f4bd3a3fb349f7048cd0d0943650e2c13050f364",
+      "outputSha256": "2513fc03a1ff18e06fb407b5f4bd3a3fb349f7048cd0d0943650e2c13050f364",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberErrorLogger.ts",
+      "inputSha256": "0dc6865ed4b3d78167bae08581430f3776d3f12d5f8d8617fa84b7d9b4f36e1e",
+      "outputSha256": "8ad9fcaba84c44536eed6137d524a50d3aa064ef03a66a2652abf48eefdece60",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberFlags.ts",
+      "inputSha256": "d503ebc45bc03fd7164e3542510bb6a22382a5342dda6978607531846d0e20aa",
+      "outputSha256": "b11e3bdfe5164fc6f7215e33d82ec2ec61af89acdda2998db434b29c2b9413d3",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 2,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberFragmentInstance.ts",
+      "inputSha256": "9f737570bff03f32510661ecc9a946a73de21e8e8b613efb2e03cd036a48b360",
+      "outputSha256": "e5231c6e712f4d85b3b72f2713bdf8958338df09ba2c5cc266d65b796f624e3d",
+      "metrics": {
+        "importedConstantReferences": 9,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberGestureScheduler.ts",
+      "inputSha256": "006e64e32ecd6fab082944c4d191120b177dcaf3075aaeecebe278668ed3a8d6",
+      "outputSha256": "fa66c21a0dd07bfb545e3889aaad908172b9b58f7d5de65122fd99bc5207cc30",
+      "metrics": {
+        "importedConstantReferences": 8,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHiddenContext.ts",
+      "inputSha256": "01150aa5e990b744337ca3f27bf1a067a8255aaf31ad9aa376615072e8ef65aa",
+      "outputSha256": "230065dc0e1045725182a6f274c9cb150b44400b49320a008dcec18df0694085",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHooks.ts",
+      "inputSha256": "6303ceb5efc87333714c6e64127287413c0e7b9134ee1008b9984dc9aba1ac83",
+      "outputSha256": "d0d8e4340c83586e8d576a4d7578c1e68c1028827b9146d0cecbd9fa25b20fd5",
+      "metrics": {
+        "importedConstantReferences": 82,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 8,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 4,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHostContext.ts",
+      "inputSha256": "39377dd1787d0debff0d44ea9b77fa97068b91f4c238493ed241fd77408b9b7a",
+      "outputSha256": "39377dd1787d0debff0d44ea9b77fa97068b91f4c238493ed241fd77408b9b7a",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHotReloading.ts",
+      "inputSha256": "014f951e9e7d7b74130812e29f436b3cb324d63d8173928bbb6c2158aaf22456",
+      "outputSha256": "014f951e9e7d7b74130812e29f436b3cb324d63d8173928bbb6c2158aaf22456",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHydrationContext.ts",
+      "inputSha256": "cec7c13a2d7122f1bed1be0fbf4c3c900a5513a86fd928c39deedad510c7d945",
+      "outputSha256": "caf224d9eecb80837a40f3c860908991f4909f7be6be74c92487211df8e3e385",
+      "metrics": {
+        "importedConstantReferences": 33,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 14,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 11,
+        "unreachableStatementsRemoved": 65
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+      "inputSha256": "8b99b84a947e348fac3b7a39011bfa62e03981bf286298c2bd530ab3d70c9ec1",
+      "outputSha256": "f64218543b53312227e9e4f34138dbb75b04b8bd7aeea8a05c7c9b2beab9bbb5",
+      "metrics": {
+        "importedConstantReferences": 13,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberLane.ts",
+      "inputSha256": "c2236301e2df6f2439a2b7fd7ed16ad5659bb16a468778429245a344aab8b946",
+      "outputSha256": "1e3ca0c7f3ddf25bd5c4f71fd103dc0a7817155929bbb329d3b09763831aa0c4",
+      "metrics": {
+        "importedConstantReferences": 17,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 10,
+        "conditionalExpressionsFolded": 2,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 5,
+        "unreachableStatementsRemoved": 12
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberLegacyContext.ts",
+      "inputSha256": "f2c629be3fdbd6096fff2a0ef57973cab7c9ebafeff4d92096aabfee565723f0",
+      "outputSha256": "14e789952c42248b789322a8992c4737a6c399ae3e908ad7640650b4f27ea534",
+      "metrics": {
+        "importedConstantReferences": 14,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 12,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberMutationTracking.ts",
+      "inputSha256": "93edb7d372db8e69db3006f16190f2ada5ee87af274aef4e3fd01b058f333285",
+      "outputSha256": "a4a14828d7028ba3f198cc1f696d82460bf0790aa91f8f6b5e5098041051d35e",
+      "metrics": {
+        "importedConstantReferences": 6,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 6,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberNewContext.ts",
+      "inputSha256": "5c0944c2d3047d8f614cc038a802823c788212194465ab03e179c0b056520fd6",
+      "outputSha256": "8ed6efb5242ee28a5fa8168d429b55e8a160a6ef4042dfcaf6dbee0c0939e952",
+      "metrics": {
+        "importedConstantReferences": 10,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberOffscreenComponent.ts",
+      "inputSha256": "75f6870d13959b16b1843be80374354da638c98cf7cb3a8e4b97b1759b972533",
+      "outputSha256": "75f6870d13959b16b1843be80374354da638c98cf7cb3a8e4b97b1759b972533",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberPerformanceTrack.ts",
+      "inputSha256": "eac5fb13533d8cd09942b9e03f1c47c62d798b6dbc06e544171778a25217c1b4",
+      "outputSha256": "1ed7392d58c4e84085dbc5b8bf46e29adf488ac51997424e5650b4c3128ef3eb",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 1,
+        "localConstantReferences": 28,
+        "ifStatementsFolded": 29,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 3,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberReconciler.ts",
+      "inputSha256": "66fc1c84cc0136889a15983329e395c4b2e1f21b13e1a67b35b3abba9bd425e0",
+      "outputSha256": "4d172e7249d81ab37ee08c8d15a038109520fd7f38ae94f195e696bfdd75c22b",
+      "metrics": {
+        "importedConstantReferences": 22,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 4,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberRoot.ts",
+      "inputSha256": "c6dad22e5f1a312a41b4553342aee4d4ece913a00af4bb0260edf68356f35325",
+      "outputSha256": "3c41a61ac6d418fa8230c73972303a00535a162f170a7e657e3aee8f1d17567e",
+      "metrics": {
+        "importedConstantReferences": 26,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 10,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberRootScheduler.ts",
+      "inputSha256": "d87a1f9ffff2b987f4216511eb744cf9543fac57ebbebdf7ba44f29e7c657899",
+      "outputSha256": "f6ae3f62f94d5977019fa7e8d170f6587557e8932d9cf256f7ac3cb03ea0c6a1",
+      "metrics": {
+        "importedConstantReferences": 47,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 8,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 9,
+        "unaryExpressionsFolded": 3,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberScope.ts",
+      "inputSha256": "c9f8ade2f7b2a5c9c02ae572c77fceea078289642125ec7b129cf85524faf792",
+      "outputSha256": "4e269d3974907560dbc44061fa9ff9f5495af468162227789996b47fa56dd559",
+      "metrics": {
+        "importedConstantReferences": 6,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 2,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberShellHydration.ts",
+      "inputSha256": "b86f0ca1882863a3bf101817534396167295bef0ed0cff7530e307e1939f414c",
+      "outputSha256": "b86f0ca1882863a3bf101817534396167295bef0ed0cff7530e307e1939f414c",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberStack.ts",
+      "inputSha256": "e9c9f0dca2bf26912e8a96a13ebd0e3e4df8926aeabc02bd8c480791f1e67eae",
+      "outputSha256": "e9c9f0dca2bf26912e8a96a13ebd0e3e4df8926aeabc02bd8c480791f1e67eae",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberSuspenseComponent.ts",
+      "inputSha256": "2be5c497ee2a8dc9d4e8242cd997770e92ecabfd89bcedb46f479329a2a66269",
+      "outputSha256": "25a4bb6f6113faca6020c33afe23e69ebe90285253a9b32fabdced1b4fbb10fc",
+      "metrics": {
+        "importedConstantReferences": 4,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberSuspenseContext.ts",
+      "inputSha256": "600676b1e59f8296393c97cbcf1d3eec625607cdc7d2846bff59611bc44ec35e",
+      "outputSha256": "a1d9cfc73a47f2bb515e301636d98f6b2c0dd58ce9fe159564bf4fe2d0365fea",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 1,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberThenable.ts",
+      "inputSha256": "811e1c75a8b24b661b85357ba2eb354329802321b0490f282c37bf13e38f2564",
+      "outputSha256": "904bad6292944ecf8c95937edff5b8999b3071e5736a5296187a6b0441bfc115",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberThrow.ts",
+      "inputSha256": "6718265d2b088d1588261a4f91b69d33db575c563b0265ed923163540c30b98a",
+      "outputSha256": "b9b39fbf7470abbafe9f85fae3c2be9decef3babb3323e916762e709a91a7a4c",
+      "metrics": {
+        "importedConstantReferences": 56,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 7,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 8,
+        "unaryExpressionsFolded": 2,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTracingMarkerComponent.ts",
+      "inputSha256": "9aebd9a95749336a815e4d4e786039b8611dedbf8ca677d724f758a1defc7e67",
+      "outputSha256": "15589f7bcbc58ce6dcbf73c41cff52673501ff61bde0d40bfa113ad5ab52aae3",
+      "metrics": {
+        "importedConstantReferences": 6,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 6,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTransition.ts",
+      "inputSha256": "1c2113b561bee9f9c1a241c2ebfc9feb40191d254d7a2b0ff53aa5620cf15fd2",
+      "outputSha256": "d7d9f0f5d6a6dd9686373e5b33543d8fba15d01efe04493300793859c1ae214c",
+      "metrics": {
+        "importedConstantReferences": 8,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 7,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 1
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTransitionTypes.ts",
+      "inputSha256": "12dd0d706748070e13ee42436a4672c5af38019abccdb438a8487ad91bcbe743",
+      "outputSha256": "1f4c47d2ed8651e974613b38db73afd8f73e6b29f64588741387269de178530d",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 2,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTreeContext.ts",
+      "inputSha256": "2538233ea57adf4790ebb8f2bdd84a8099e1c91337f8e0d22732e104dc5ba33b",
+      "outputSha256": "5e58842ba2538ba206e4e4cdc554ccd0872e6d65bf36face9719e35a44164915",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTreeReflection.ts",
+      "inputSha256": "378e1f6b13b8fa18dbad9895b08022db3f7985b96c1b716155a9b83abcdfa30b",
+      "outputSha256": "b55ac21b95b4e1cf336a9601ec81eb5bfb9e40349f3c66dab40e412500997d5f",
+      "metrics": {
+        "importedConstantReferences": 52,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberUnwindWork.ts",
+      "inputSha256": "6c39002d9317e051311826fc016c6413bba928549b72f94aa641475b7d4ed085",
+      "outputSha256": "217ef5b58aabc8cb06973b5139181cb7eafe1f7c85fedb05ba4053a28dffd0f1",
+      "metrics": {
+        "importedConstantReferences": 66,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 8,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 4,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberViewTransitionComponent.ts",
+      "inputSha256": "ec7024c0d81fe2fea5823742825a96dcc9144283192a31f8ef1c87737f0a2c13",
+      "outputSha256": "ec7024c0d81fe2fea5823742825a96dcc9144283192a31f8ef1c87737f0a2c13",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+      "inputSha256": "522f906ceb2dd31b541ddfbbf3bb8866bfde7c3c2d385b72714c9da289a47d6c",
+      "outputSha256": "a741b48dc942d393c1b62509ed05fc61ade5c1b27d896c6b82f00926e6f9cb8c",
+      "metrics": {
+        "importedConstantReferences": 310,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 98,
+        "conditionalExpressionsFolded": 5,
+        "logicalExpressionsFolded": 61,
+        "unaryExpressionsFolded": 7,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactHookEffectTags.ts",
+      "inputSha256": "7bd1ad2787b3122c4b29869233f4dd19c27cc9297717e82513429fb9f5493481",
+      "outputSha256": "7bd1ad2787b3122c4b29869233f4dd19c27cc9297717e82513429fb9f5493481",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactInternalTypes.ts",
+      "inputSha256": "3ee4638370463dc40b4684d8eab8bdcf74ded2315b309bba4936c3d0a9ba8152",
+      "outputSha256": "3ee4638370463dc40b4684d8eab8bdcf74ded2315b309bba4936c3d0a9ba8152",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactPortal.ts",
+      "inputSha256": "eff2ca16d6d59374a4c1333d22f767cfecbb280c983cbc7191a616a11598c968",
+      "outputSha256": "eff2ca16d6d59374a4c1333d22f767cfecbb280c983cbc7191a616a11598c968",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactPostPaintCallback.ts",
+      "inputSha256": "5cacfb199d519877228cee315e5e3ea285f32e16ec32445cde5d03c017d7e29a",
+      "outputSha256": "5cacfb199d519877228cee315e5e3ea285f32e16ec32445cde5d03c017d7e29a",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactProfilerTimer.ts",
+      "inputSha256": "fb0434c1e711deae1a421fa782768651e02b41b418a4e8e59e06e65b2acfe80f",
+      "outputSha256": "c54d867c9fed6d023fc5e33b6e4f340051fb485dc7299417da603c2dcdc7fb97",
+      "metrics": {
+        "importedConstantReferences": 64,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 36,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 27,
+        "unaryExpressionsFolded": 60,
+        "unreachableStatementsRemoved": 55
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactRootTags.ts",
+      "inputSha256": "15b96061d89b58d7117c1ce04a16f16c1beb673d253176912c05aa8880a31c8d",
+      "outputSha256": "15b96061d89b58d7117c1ce04a16f16c1beb673d253176912c05aa8880a31c8d",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactStrictModeWarnings.ts",
+      "inputSha256": "53704e9db44226abbfd688b2169ee3a48ae8a6f2e86f998f87110cc81c3f43ee",
+      "outputSha256": "53704e9db44226abbfd688b2169ee3a48ae8a6f2e86f998f87110cc81c3f43ee",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactTestSelectors.ts",
+      "inputSha256": "c38a068ed7847d7a735d30e21c7a0d34188a7e9f0d86c68a2edf1fed13f835bb",
+      "outputSha256": "b9d4b2ffe24eab24f4846a385449427a9714912dc2b9edda75db76f69f0998df",
+      "metrics": {
+        "importedConstantReferences": 25,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactTypeOfMode.ts",
+      "inputSha256": "6569daea4edb8588cfddc877b785c8cedfa060b94406a4aece390afa9b1df779",
+      "outputSha256": "6569daea4edb8588cfddc877b785c8cedfa060b94406a4aece390afa9b1df779",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactWorkTags.ts",
+      "inputSha256": "8ca8bad87a7b24f9c5a07c20002877b9b228467d77f7bb4e3bd1aa9d8e18ef14",
+      "outputSha256": "8ca8bad87a7b24f9c5a07c20002877b9b228467d77f7bb4e3bd1aa9d8e18ef14",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/Scheduler.ts",
+      "inputSha256": "fbcc07c32ae4bbcf6a6f7edad4aeca743c188a2ea7b1b31b98a31e8f93e3d0c0",
+      "outputSha256": "fbcc07c32ae4bbcf6a6f7edad4aeca743c188a2ea7b1b31b98a31e8f93e3d0c0",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/clz32.ts",
+      "inputSha256": "b5bbbf93ba1c67877c4ba057dcf9104b0781a074bdd6e4cfe84de6ea0b52b57f",
+      "outputSha256": "b5bbbf93ba1c67877c4ba057dcf9104b0781a074bdd6e4cfe84de6ea0b52b57f",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-reconciler/src/getComponentNameFromFiber.ts",
+      "inputSha256": "b796ec8c4ae59373ab9cacc1e2a4752850112072cbc5850d1b5f22fe920e0a97",
+      "outputSha256": "e25cbaaff335f828be95d8b79304eb9216877caab33ea4203c9d57551d009971",
+      "metrics": {
+        "importedConstantReferences": 33,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 3,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react-server/src/ReactFizzComponentStack.ts",
+      "inputSha256": "7ecaa9e630d0114a1f7a069939c6d6eb6e4760a88adfe825f8c6a398aa830624",
+      "outputSha256": "d6764a5e6447e376b4c3f595ea972e8fc09dbe3c3f4bf990f40134206f19ca88",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 1,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/index.ts",
+      "inputSha256": "0c03d313d1d76c7fc11de01656bfb938d2d596cdbb4f600bbbd07363c7c4f306",
+      "outputSha256": "0c03d313d1d76c7fc11de01656bfb938d2d596cdbb4f600bbbd07363c7c4f306",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactAct.ts",
+      "inputSha256": "042910fbe6f42b3b4317b297f9affc10398dda9e172f6fae8e4161447d1ec5d8",
+      "outputSha256": "042910fbe6f42b3b4317b297f9affc10398dda9e172f6fae8e4161447d1ec5d8",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactBaseClasses.ts",
+      "inputSha256": "0d5ea516c47fbc1dae0fe4324d17a22265f3d602d8a0b281bca4250ab1961aad",
+      "outputSha256": "0d5ea516c47fbc1dae0fe4324d17a22265f3d602d8a0b281bca4250ab1961aad",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactCacheClient.ts",
+      "inputSha256": "0b6d8545a3a5625d1a0fe90e3402c68174468f74bfae667166df7928962aa993",
+      "outputSha256": "f7467aab7a5c6978447d07f6d1ecbf4cc7763688397c8af49f73e40200c9dd64",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 2,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactCacheImpl.ts",
+      "inputSha256": "b285e4d6046af66ec1da6a15c1ec8ec74196cd8d5dc00b07abd50463cdf237d4",
+      "outputSha256": "b285e4d6046af66ec1da6a15c1ec8ec74196cd8d5dc00b07abd50463cdf237d4",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactChildren.ts",
+      "inputSha256": "56b98ef92fef77f409bc0a463bee3f75963130dde4ae1c87085bc7654b7953eb",
+      "outputSha256": "818da4793803b829c6fe7837c881d04f2e7dab4cbeda6a3fa9bbf8456afb2c6c",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 1,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactClient.ts",
+      "inputSha256": "e8b48df854d15ff3e872bf2c05604781af1ff6ef141f8ba8500b671a070d73f8",
+      "outputSha256": "e8b48df854d15ff3e872bf2c05604781af1ff6ef141f8ba8500b671a070d73f8",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactCompilerRuntime.ts",
+      "inputSha256": "866a6fd4dca67c466ff4851875ac833816dfd0be044d312df32bfd6b46fdaa91",
+      "outputSha256": "866a6fd4dca67c466ff4851875ac833816dfd0be044d312df32bfd6b46fdaa91",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactContext.ts",
+      "inputSha256": "e383193c0033251cfe17dabea762e142f15aeb30eb7cb5db92b4bc40042175a0",
+      "outputSha256": "e383193c0033251cfe17dabea762e142f15aeb30eb7cb5db92b4bc40042175a0",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactCreateRef.ts",
+      "inputSha256": "e03c65b9767b7fdc871d2c5da2c8b8928bfbb5ad3481728d06ec7a609a96046a",
+      "outputSha256": "e03c65b9767b7fdc871d2c5da2c8b8928bfbb5ad3481728d06ec7a609a96046a",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactForwardRef.ts",
+      "inputSha256": "00084b6958918b1506f40c5cf9048e1e4b84cce5884c616a8e740d2b4b85c326",
+      "outputSha256": "00084b6958918b1506f40c5cf9048e1e4b84cce5884c616a8e740d2b4b85c326",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactHooks.ts",
+      "inputSha256": "cf2c93847e017a00c5c3f6276a1abb3b98c4e053a45944daa9f16302ec286221",
+      "outputSha256": "cf2c93847e017a00c5c3f6276a1abb3b98c4e053a45944daa9f16302ec286221",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactLazy.ts",
+      "inputSha256": "b26e70d65eb53145998a4c7fd02f3ef552271ae6235b94ce55d6ca7e7fd7f55d",
+      "outputSha256": "b26e70d65eb53145998a4c7fd02f3ef552271ae6235b94ce55d6ca7e7fd7f55d",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactMemo.ts",
+      "inputSha256": "bf41514b00389051734fb7f7d122a07d98c5b04d2c9003b5d1678f1cfa331e8c",
+      "outputSha256": "bf41514b00389051734fb7f7d122a07d98c5b04d2c9003b5d1678f1cfa331e8c",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactNoopUpdateQueue.ts",
+      "inputSha256": "d041dadce996013ba856211a07dffc660add71b23395e15bfced5bd1cd505ed3",
+      "outputSha256": "d041dadce996013ba856211a07dffc660add71b23395e15bfced5bd1cd505ed3",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactOwnerStack.ts",
+      "inputSha256": "b1bfd0987ae2f77152a795238a06f90e4d69c04302a78bf403bec47e6214f4f4",
+      "outputSha256": "b1bfd0987ae2f77152a795238a06f90e4d69c04302a78bf403bec47e6214f4f4",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactSharedInternalsClient.ts",
+      "inputSha256": "7021f8e42119e357b3bb307cf634984a7ad33d8957e7d3ba9e5116cfbfe63669",
+      "outputSha256": "c14a2fa2cbddc80bf063d5c61ba789356bd7ddee8964b644657ec4a25a03e993",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 1,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactStartTransition.ts",
+      "inputSha256": "b3a4ab048fc5748943bd34cd52e678ff5cb921bdb224f10fa6e8b8610c85bef8",
+      "outputSha256": "93ee68408d090a223f0aede9226c159ac792180ef9007eae0a47a46467b3e9fa",
+      "metrics": {
+        "importedConstantReferences": 7,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 7,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 1,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/ReactTransitionType.ts",
+      "inputSha256": "1bdb9e2a93f235cd27132426d17267cc8316d61a41c163a54cc26a843da89b9f",
+      "outputSha256": "8379b88427fdb409126d01f8a03deaef4ed0ea136287d65748cb440467a5e19e",
+      "metrics": {
+        "importedConstantReferences": 1,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 1,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/react/src/jsx/ReactJSXElement.ts",
+      "inputSha256": "555b714ec0a601666ff53b4de84723bd6442a274b4f45738146a690176f741c8",
+      "outputSha256": "4a79c17263cffca12b6a821412837a7da3e929872ebeb28b5de5281c1cb94762",
+      "metrics": {
+        "importedConstantReferences": 4,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 4,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/index.ts",
+      "inputSha256": "5427824571e8e1eb470beb33d334056db6e2279ec419d1359fa2d8ffef989591",
+      "outputSha256": "5427824571e8e1eb470beb33d334056db6e2279ec419d1359fa2d8ffef989591",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerFeatureFlags.ts",
+      "inputSha256": "f759552261b2933d3755df0de1e6584714781074f496359d6834ee4cf1fe51d8",
+      "outputSha256": "f759552261b2933d3755df0de1e6584714781074f496359d6834ee4cf1fe51d8",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerMinHeap.ts",
+      "inputSha256": "06f53e0b52841f48b3f29b4de188cea6a70317161da121cdd29315478ff0559f",
+      "outputSha256": "06f53e0b52841f48b3f29b4de188cea6a70317161da121cdd29315478ff0559f",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerPriorities.ts",
+      "inputSha256": "651ffe3fa99957a29b9490cf2050d015a622e822ce381541e8db02a59428023e",
+      "outputSha256": "651ffe3fa99957a29b9490cf2050d015a622e822ce381541e8db02a59428023e",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerProfiling.ts",
+      "inputSha256": "f61449159033ac323a0f3df308e905f119b1b4281060f034879d182a95bb38de",
+      "outputSha256": "ad3e7d19e50bb3e738f59b3bb740806f95cedeb117cbc12161ac0ea8ff5c8a24",
+      "metrics": {
+        "importedConstantReferences": 8,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 8,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/scheduler/src/forks/Scheduler.ts",
+      "inputSha256": "6ae5d569463c1ae53fcc0fa88fdfbbee946331aef8fa13add700038ff2ce9ce8",
+      "outputSha256": "349c36dfd30755bf9f27eb691aedc46e97d0751dc81efd0bd0de01877b252306",
+      "metrics": {
+        "importedConstantReferences": 38,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 15,
+        "conditionalExpressionsFolded": 1,
+        "logicalExpressionsFolded": 2,
+        "unaryExpressionsFolded": 2,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/CheckStringCoercion.ts",
+      "inputSha256": "f60b0951cae7d2849ecc1b7ccfdb15cf70af31da5860ba002806ce7b7a697b28",
+      "outputSha256": "f60b0951cae7d2849ecc1b7ccfdb15cf70af31da5860ba002806ce7b7a697b28",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ConsolePatchingDev.ts",
+      "inputSha256": "1d79fd40fce91137acdb4fc8390bf6024a8d3f4128f94d10e815e47c6f16dd7b",
+      "outputSha256": "1d79fd40fce91137acdb4fc8390bf6024a8d3f4128f94d10e815e47c6f16dd7b",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/DefaultPrepareStackTrace.ts",
+      "inputSha256": "3abda85d15ecc942af1a369cdf14cada55294e81fbbae3aeae3eec0eb5ac2f81",
+      "outputSha256": "3abda85d15ecc942af1a369cdf14cada55294e81fbbae3aeae3eec0eb5ac2f81",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactComponentStackFrame.ts",
+      "inputSha256": "021c0d65732b39deb0ce5f867db39ed97aaf44d3ca607d9a47a9345ccc0512e8",
+      "outputSha256": "021c0d65732b39deb0ce5f867db39ed97aaf44d3ca607d9a47a9345ccc0512e8",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactElementType.ts",
+      "inputSha256": "bad36f9a3483b78a547714879a9d0804e348cb7d38a2ec39b4ce443e3555a40d",
+      "outputSha256": "bad36f9a3483b78a547714879a9d0804e348cb7d38a2ec39b4ce443e3555a40d",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactFeatureFlags.ts",
+      "inputSha256": "d3a7eb711ed912b9437ea28769b3e3da03c6fc00a5d0a7491b29c8548fc6b09c",
+      "outputSha256": "d3a7eb711ed912b9437ea28769b3e3da03c6fc00a5d0a7491b29c8548fc6b09c",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactFlightPropertyAccess.ts",
+      "inputSha256": "0ad8fd24ea826c3eb276d8d92adc2bd21eab895c3acfdfa1a5b7e154e9bdeec3",
+      "outputSha256": "0ad8fd24ea826c3eb276d8d92adc2bd21eab895c3acfdfa1a5b7e154e9bdeec3",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactInstanceMap.ts",
+      "inputSha256": "068b99e7c3540328c3fde29d1b8aad0090e62dd736df54dfc10f82d0b23364fc",
+      "outputSha256": "068b99e7c3540328c3fde29d1b8aad0090e62dd736df54dfc10f82d0b23364fc",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactOwnerStackFrames.ts",
+      "inputSha256": "d6ef127699e73b0a7352a360209f348e1e8c7f67b9a7f559dc90d264dfc862fe",
+      "outputSha256": "d6ef127699e73b0a7352a360209f348e1e8c7f67b9a7f559dc90d264dfc862fe",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactOwnerStackReset.ts",
+      "inputSha256": "ce149937bfae06895c1f2b983f761cf2ca814c1f4322b65a07d44a6310ab4c47",
+      "outputSha256": "ce149937bfae06895c1f2b983f761cf2ca814c1f4322b65a07d44a6310ab4c47",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactPerformanceTrackProperties.ts",
+      "inputSha256": "80b7e57893d508938e4e284dc32947c64ca3a4015520c0726322eb0a2d348e68",
+      "outputSha256": "80b7e57893d508938e4e284dc32947c64ca3a4015520c0726322eb0a2d348e68",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactRecoverable.ts",
+      "inputSha256": "a3ecaf3ad39097e8c77f851a161a7c8cc0d3e06ac94d5b3ffa40ccf92d53c2dd",
+      "outputSha256": "a3ecaf3ad39097e8c77f851a161a7c8cc0d3e06ac94d5b3ffa40ccf92d53c2dd",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactSymbols.ts",
+      "inputSha256": "fd023215b0a83ca6d4200ee6f2ccb2b12b058c1ccdee30bc169c0a7e6b481381",
+      "outputSha256": "fd023215b0a83ca6d4200ee6f2ccb2b12b058c1ccdee30bc169c0a7e6b481381",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactTypes.ts",
+      "inputSha256": "d578357be9f0b612fd5eab768e855d2b78fe919e3804485d54678b701c111065",
+      "outputSha256": "d578357be9f0b612fd5eab768e855d2b78fe919e3804485d54678b701c111065",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/ReactVersion.ts",
+      "inputSha256": "60b8e0fd8e4a78eb2eb23442c0cd3606a48551abf70b33c306031fd4144fdc73",
+      "outputSha256": "60b8e0fd8e4a78eb2eb23442c0cd3606a48551abf70b33c306031fd4144fdc73",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/assign.ts",
+      "inputSha256": "301f8d8272c164325bffa0af8b47f83b203e03986308a1b84cc56c6f9a3e73c5",
+      "outputSha256": "301f8d8272c164325bffa0af8b47f83b203e03986308a1b84cc56c6f9a3e73c5",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/enqueueTask.ts",
+      "inputSha256": "af04f5ff8580e78e3c38c9882be4582a520357736ac7f4f012abba851b5853ea",
+      "outputSha256": "af04f5ff8580e78e3c38c9882be4582a520357736ac7f4f012abba851b5853ea",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/getComponentNameFromType.ts",
+      "inputSha256": "80458e671e06c5650fa487fedca5ac88ace66ba35a0d970e7462c75c6e2b1609",
+      "outputSha256": "b6695b182cb2baece50ee0f07d08284fae38631dd192e165dea349ae725671dd",
+      "metrics": {
+        "importedConstantReferences": 2,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 2,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/hasOwnProperty.ts",
+      "inputSha256": "c7af770fccc86e76ed101c10b822182af5765caf07b1b1143de44b580d6834eb",
+      "outputSha256": "c7af770fccc86e76ed101c10b822182af5765caf07b1b1143de44b580d6834eb",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/isArray.ts",
+      "inputSha256": "5b15a435d491acdd62f9e4a809ce6c4b5c4f4e9de263e731e31aff6d8b0e78b4",
+      "outputSha256": "5b15a435d491acdd62f9e4a809ce6c4b5c4f4e9de263e731e31aff6d8b0e78b4",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/noop.ts",
+      "inputSha256": "12d5140b28ec2f8a183cceb8d74b482545eccbdd05c0933b6f1b30b21bf46a12",
+      "outputSha256": "12d5140b28ec2f8a183cceb8d74b482545eccbdd05c0933b6f1b30b21bf46a12",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/objectIs.ts",
+      "inputSha256": "a7d47d48e063b6c4b0c2a6cb61b936b4d4d6908be485e592e35decfd79c72156",
+      "outputSha256": "a7d47d48e063b6c4b0c2a6cb61b936b4d4d6908be485e592e35decfd79c72156",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/reportGlobalError.ts",
+      "inputSha256": "71ce0e36ac9458b92ff7d25c915ec24a5d87d80026a651c098905da04adc248f",
+      "outputSha256": "71ce0e36ac9458b92ff7d25c915ec24a5d87d80026a651c098905da04adc248f",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    },
+    {
+      "path": "packages/shared/shallowEqual.ts",
+      "inputSha256": "b02f08fdb92df161f4b9770a2d9870b9752d42b712de3a170a08ac3b9d21b0c4",
+      "outputSha256": "b02f08fdb92df161f4b9770a2d9870b9752d42b712de3a170a08ac3b9d21b0c4",
+      "metrics": {
+        "importedConstantReferences": 0,
+        "derivedLocalConstants": 0,
+        "localConstantReferences": 0,
+        "ifStatementsFolded": 0,
+        "conditionalExpressionsFolded": 0,
+        "logicalExpressionsFolded": 0,
+        "unaryExpressionsFolded": 0,
+        "unreachableStatementsRemoved": 0
+      }
+    }
+  ]
+}

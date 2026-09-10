@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "upstream": {
+    "commit": "1d34f91dfde6bba84d08b683aaba164c7194dacb"
+  },
+  "files": [
+    {
+      "fixture": "experiments/compiler-output/fixtures/Branching.tsx",
+      "golden": "experiments/compiler-output/golden/Branching.compiler.tsx",
+      "sourceSha256": "75d231af4ccefba2b6e7382c9e79cb78ca9e0f1e1099522f748740dd99b77089",
+      "outputSha256": "0bf5e4ae4e6395f7747df06b9d8479a4224d17d217376f713855d672d4faf192",
+      "memoCacheSizes": [
+        4
+      ],
+      "cacheElementAccesses": 8,
+      "jsxElements": 1,
+      "unannotatedFunctionParameters": 1,
+      "uninitializedLocalDeclarations": 2,
+      "originalExportParameters": {
+        "Branching": [
+          true
+        ]
+      },
+      "outputExportParameters": {
+        "Branching": [
+          false
+        ]
+      },
+      "sourceMappedParameters": [
+        {
+          "function": "Branching",
+          "parameter": "t0",
+          "sourceRange": "105:141",
+          "type": "Props"
+        }
+      ]
+    },
+    {
+      "fixture": "experiments/compiler-output/fixtures/Effect.tsx",
+      "golden": "experiments/compiler-output/golden/Effect.compiler.tsx",
+      "sourceSha256": "9604957b34bbc73ebc3e8cf53eb8f51bfa5134861ab151fd5bb76d432683eaba",
+      "outputSha256": "83e34296e8c1813bf167e975f92752228d04f9f4656229514ef3e9614f9ad2f2",
+      "memoCacheSizes": [
+        6
+      ],
+      "cacheElementAccesses": 12,
+      "jsxElements": 1,
+      "unannotatedFunctionParameters": 1,
+      "uninitializedLocalDeclarations": 3,
+      "originalExportParameters": {
+        "Effect": [
+          true
+        ]
+      },
+      "outputExportParameters": {
+        "Effect": [
+          false
+        ]
+      },
+      "sourceMappedParameters": [
+        {
+          "function": "Effect",
+          "parameter": "t0",
+          "sourceRange": "130:154",
+          "type": "Props"
+        }
+      ]
+    },
+    {
+      "fixture": "experiments/compiler-output/fixtures/List.tsx",
+      "golden": "experiments/compiler-output/golden/List.compiler.tsx",
+      "sourceSha256": "0c1fffb4d375596a51a1d488b31af4cc33a7bf95c810c40521314233075c8a77",
+      "outputSha256": "5e5ce5f1d38d852d15afb890963b479baff6bc13686cae40f6f13a3cfd0e1346",
+      "memoCacheSizes": [
+        4
+      ],
+      "cacheElementAccesses": 8,
+      "jsxElements": 2,
+      "unannotatedFunctionParameters": 2,
+      "uninitializedLocalDeclarations": 2,
+      "originalExportParameters": {
+        "List": [
+          true
+        ]
+      },
+      "outputExportParameters": {
+        "List": [
+          false
+        ]
+      },
+      "sourceMappedParameters": [
+        {
+          "function": "List",
+          "parameter": "t0",
+          "sourceRange": "115:129",
+          "type": "Props"
+        },
+        {
+          "function": "_temp",
+          "parameter": "item",
+          "sourceRange": "158:162",
+          "type": "Item"
+        }
+      ]
+    }
+  ]
+}

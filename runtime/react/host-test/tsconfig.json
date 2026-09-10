@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "include": [
+    "../profiles/runtime-globals.d.ts",
+    "ReactFiberConfigMutation.ts",
+    "recording-host.ts",
+    "native-check.ts"
+  ]
+}

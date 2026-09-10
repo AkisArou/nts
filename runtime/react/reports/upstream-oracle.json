@@ -1,0 +1,353 @@
+{
+  "schema": 1,
+  "upstream": {
+    "commit": "1d34f91dfde6bba84d08b683aaba164c7194dacb"
+  },
+  "entry": "conformance/upstream-oracle.ts",
+  "entrySha256": "5f12a182e95d226523dfde9e42f5922abeb586fbf451e840e08a2116510371ce",
+  "esbuild": "0.25.12",
+  "bundle": {
+    "bytes": 559953,
+    "sha256": "caeee3460c0cc0dd4407c895538952156cb97d87e32e2f0c152463a7fd09bb5c",
+    "inputFiles": 100,
+    "inputBytes": 892813
+  },
+  "scenarios": [
+    {
+      "name": "function-mount-unmount",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "label",
+            "props": [
+              "label=NTS"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": [
+              {
+                "kind": "text",
+                "type": "",
+                "props": [],
+                "text": "Hello NTS",
+                "hidden": false,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      "operations": [
+        "append-initial",
+        "clear",
+        "append",
+        "remove"
+      ],
+      "observations": [
+        "function rendered",
+        "text mounted",
+        "root unmounted"
+      ]
+    },
+    {
+      "name": "keyed-reconciliation",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "list",
+            "props": [],
+            "text": "",
+            "hidden": false,
+            "children": [
+              {
+                "kind": "instance",
+                "type": "row",
+                "props": [
+                  "id=c"
+                ],
+                "text": "",
+                "hidden": false,
+                "children": []
+              },
+              {
+                "kind": "instance",
+                "type": "row",
+                "props": [
+                  "id=a"
+                ],
+                "text": "",
+                "hidden": false,
+                "children": []
+              },
+              {
+                "kind": "instance",
+                "type": "row",
+                "props": [
+                  "id=d"
+                ],
+                "text": "",
+                "hidden": false,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      "operations": [
+        "remove",
+        "update-props",
+        "append",
+        "update-props",
+        "append",
+        "update-props"
+      ],
+      "observations": [
+        "reused c and a",
+        "deleted b",
+        "inserted d"
+      ]
+    },
+    {
+      "name": "hooks-state-reducer-context",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "output",
+            "props": [
+              "value=second:4:17"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": []
+          }
+        ]
+      },
+      "operations": [
+        "clear",
+        "append",
+        "update-props",
+        "update-props",
+        "remove"
+      ],
+      "observations": [
+        "state=4",
+        "reducer=17",
+        "context=second"
+      ]
+    },
+    {
+      "name": "effects-cleanup-host-ref",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "leaf",
+            "props": [
+              "value=2"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": []
+          }
+        ]
+      },
+      "operations": [
+        "clear",
+        "append",
+        "update-props",
+        "remove"
+      ],
+      "observations": [
+        "layout:1",
+        "passive:1",
+        "layout-clean:1",
+        "layout:2",
+        "passive-clean:1",
+        "passive:2",
+        "layout-clean:2",
+        "passive-clean:2"
+      ]
+    },
+    {
+      "name": "class-state-lifecycle-ref",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "class-leaf",
+            "props": [
+              "value=5"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": []
+          }
+        ]
+      },
+      "operations": [
+        "clear",
+        "append",
+        "update-props",
+        "remove"
+      ],
+      "observations": [
+        "mount",
+        "update",
+        "unmount"
+      ]
+    },
+    {
+      "name": "suspense-fallback",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "fallback",
+            "props": [
+              "label=waiting"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": []
+          }
+        ]
+      },
+      "operations": [
+        "clear",
+        "append",
+        "remove"
+      ],
+      "observations": [
+        "pending thenable selected fallback"
+      ]
+    },
+    {
+      "name": "compiler-cache-ownership",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "cache-output",
+            "props": [
+              "value=8:1"
+            ],
+            "text": "",
+            "hidden": false,
+            "children": []
+          }
+        ]
+      },
+      "operations": [
+        "clear",
+        "append",
+        "update-props",
+        "update-props",
+        "remove"
+      ],
+      "observations": [
+        "same cache object across committed update",
+        "unrelated state update hit cache",
+        "prop change invalidated cache",
+        "computations=2"
+      ]
+    },
+    {
+      "name": "react-compiler-output",
+      "tree": {
+        "kind": "container",
+        "type": "",
+        "props": [],
+        "text": "",
+        "hidden": false,
+        "children": [
+          {
+            "kind": "instance",
+            "type": "button",
+            "props": [],
+            "text": "",
+            "hidden": false,
+            "children": [
+              {
+                "kind": "text",
+                "type": "",
+                "props": [],
+                "text": "compiled",
+                "hidden": false,
+                "children": []
+              },
+              {
+                "kind": "text",
+                "type": "",
+                "props": [],
+                "text": ":",
+                "hidden": false,
+                "children": []
+              },
+              {
+                "kind": "text",
+                "type": "",
+                "props": [],
+                "text": "6",
+                "hidden": false,
+                "children": []
+              }
+            ]
+          }
+        ]
+      },
+      "operations": [
+        "append-initial",
+        "append-initial",
+        "append-initial",
+        "clear",
+        "append",
+        "update-text",
+        "update-props",
+        "remove"
+      ],
+      "observations": [
+        "typed recovered _c(6) output executed",
+        "same props hit compiler cache",
+        "changed prop invalidated compiler cache"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,441 @@
+{
+  "schema": 1,
+  "ntsCommit": "a21cb72ae52e5e6d01523a73826ada6b7f9b4dbe",
+  "typescript": "7.0.2",
+  "probes": {
+    "jsx-lowering": {
+      "config": "blockers/jsx-lowering/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "877e6e3f6a503b6c49eab26ea22d2282f6adab499a3afc761ce4a8d395f0b844"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 0,
+        "refusedConstructs": 1,
+        "diagnosticsByCode": {
+          "NTS1001": 1
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/jsx-lowering/repro/src/main.tsx",
+            "line": 13,
+            "column": 9,
+            "message": "a jsx self closing element is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "react-value-representation": {
+      "config": "blockers/react-value-representation/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "dae2dd44d37b4b0b0ed408c59b476681c3567ac251d9f5806b7d2b395fb50c91"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 1,
+        "refusedConstructs": 3,
+        "diagnosticsByCode": {
+          "NTS1001": 3
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/react-value-representation/repro/src/main.ts",
+            "line": 30,
+            "column": 25,
+            "message": "a property `key` of unrepresentable type (a union of `OptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/react-value-representation/repro/src/main.ts",
+            "line": 36,
+            "column": 28,
+            "message": "a property `key` of unrepresentable type (a union of `OptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/react-value-representation/repro/src/main.ts",
+            "line": 40,
+            "column": 27,
+            "message": "a parameter of unrepresentable type (a union of `Iterable` | a boolean literal | a structured type (flags 0x20000) | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "intersection-representation": {
+      "config": "blockers/intersection-representation/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "f4394f0685d14170a6450cde35100846b7132d5dfaa3fcff8e208a014ef85a18"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 0,
+        "refusedConstructs": 1,
+        "diagnosticsByCode": {
+          "NTS1001": 1
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/intersection-representation/repro/src/main.ts",
+            "line": 11,
+            "column": 29,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "object-literal-methods": {
+      "config": "blockers/object-literal-methods/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "9db65d26eb4eb882a0d3c39da6d7df2969090ba0e085ed3e701db40529a9db26"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 1,
+        "refusedConstructs": 4,
+        "diagnosticsByCode": {
+          "NTS1001": 4
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/object-literal-methods/repro/src/main.ts",
+            "line": 5,
+            "column": 37,
+            "message": "a method on an object literal is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/object-literal-methods/repro/src/main.ts",
+            "line": 13,
+            "column": 40,
+            "message": "a method on an object literal is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/object-literal-methods/repro/src/main.ts",
+            "line": 17,
+            "column": 33,
+            "message": "a module-scope variable whose initializer is not constant is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/object-literal-methods/repro/src/main.ts",
+            "line": 21,
+            "column": 39,
+            "message": "a module-scope variable whose initializer is not constant is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "function-object-semantics": {
+      "config": "blockers/function-object-semantics/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "ff8a2a16074c6184336b05492ffec77fda16d9e7c6b9e1f3b8efb91c4a89720a"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 1,
+        "refusedConstructs": 5,
+        "diagnosticsByCode": {
+          "NTS1001": 3,
+          "NTS1005": 2
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/function-object-semantics/repro/src/main.ts",
+            "line": 7,
+            "column": 67,
+            "message": "`this` outside a method is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/function-object-semantics/repro/src/main.ts",
+            "line": 9,
+            "column": 2,
+            "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1005",
+            "file": "blockers/function-object-semantics/repro/src/main.ts",
+            "line": 9,
+            "column": 2,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/function-object-semantics/repro/src/main.ts",
+            "line": 11,
+            "column": 43,
+            "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1005",
+            "file": "blockers/function-object-semantics/repro/src/main.ts",
+            "line": 11,
+            "column": 43,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "module-function-storage": {
+      "config": "blockers/module-function-storage/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "be727661163ef761ec4bc7471bdcd50959937a1398ebd53bccb7494a6719a3a4"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 5,
+        "refusedConstructs": 1,
+        "diagnosticsByCode": {
+          "NTS1001": 1
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/module-function-storage/repro/src/main.ts",
+            "line": 10,
+            "column": 9,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "production-empty-return": {
+      "config": "blockers/production-empty-return/repro/tsconfig.json",
+      "input": {
+        "files": 2,
+        "sha256": "3921a2e89c8da1391665435b57d252ba80770de8fb223bc062e0d7a57a1424bc"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 2,
+        "refusedConstructs": 0,
+        "diagnosticsByCode": {},
+        "diagnostics": [],
+        "verifier": {
+          "valid": false,
+          "failures": [
+            {
+              "kind": "FellThrough",
+              "function": "getLabel",
+              "block": 0
+            },
+            {
+              "kind": "FellThrough",
+              "function": "getFlag",
+              "block": 0
+            }
+          ]
+        }
+      }
+    },
+    "module-cycle": {
+      "config": "blockers/module-cycle/repro/tsconfig.json",
+      "input": {
+        "files": 4,
+        "sha256": "2add714e4a4030f8758173c0f04cb28e31ecb237330024bd431a1426eac0d548"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 2,
+        "refusedConstructs": 1,
+        "diagnosticsByCode": {
+          "NTS1004": 1
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1004",
+            "file": "blockers/module-cycle/repro/src/b.ts",
+            "line": 3,
+            "column": 33,
+            "message": "`laneFromA` is read here while evaluating this module, and `nts-workspace:///src/a.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'laneFromA' before initialization`, at the moment the read runs"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    },
+    "language-surface": {
+      "config": "blockers/language-surface/repro/tsconfig.json",
+      "input": {
+        "files": 8,
+        "sha256": "cde2888b46c63e8e86276161b2f6fabeb1f04395cc030d971b6657388cf61ff6"
+      },
+      "typescript": {
+        "status": 0,
+        "diagnostics": 0
+      },
+      "nts": {
+        "status": 0,
+        "signal": null,
+        "stderrBytes": 0,
+        "refusedFunctions": 4,
+        "refusedConstructs": 10,
+        "diagnosticsByCode": {
+          "NTS1001": 10
+        },
+        "diagnostics": [
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/module-initializer.ts",
+            "line": 2,
+            "column": 33,
+            "message": "a conversion to string from this type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/callable-metadata.ts",
+            "line": 5,
+            "column": 33,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/module-initializer.ts",
+            "line": 5,
+            "column": 9,
+            "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/nullish.ts",
+            "line": 7,
+            "column": 2,
+            "message": "a function returning null is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/optional-presence.ts",
+            "line": 6,
+            "column": 9,
+            "message": "an `in` naming `ref`, which is optional -- its slot exists here whether or not it was written, and `{}` and `{ ref: undefined }` disagree in JavaScript is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/regex-and-for-in.ts",
+            "line": 2,
+            "column": 24,
+            "message": "a regular expression literal, which needs a regular expression engine is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/regex-and-for-in.ts",
+            "line": 6,
+            "column": 17,
+            "message": "a `for in statement` is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/rest.ts",
+            "line": 8,
+            "column": 18,
+            "message": "a spread element is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/standard-library.ts",
+            "line": 2,
+            "column": 9,
+            "message": "`JSON.stringify`, a global member with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "blockers/language-surface/repro/src/standard-library.ts",
+            "line": 7,
+            "column": 2,
+            "message": "a function returning `AggregateError` is not supported by this lowering yet"
+          }
+        ],
+        "verifier": {
+          "valid": true,
+          "failures": []
+        }
+      }
+    }
+  }
+}

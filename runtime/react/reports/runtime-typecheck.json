@@ -1,0 +1,44 @@
+{
+  "schema": 2,
+  "compiler": "@typescript/native",
+  "typescript": "7.0.2",
+  "configTemplate": "profiles/runtime-input.tsconfig.json",
+  "requiredCleanFiles": [
+    "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+    "generated/client-mutation-production-linked/packages/react/src/ReactNoopUpdateQueue.ts",
+    "generated/client-mutation-production-linked/packages/shared/ReactInstanceMap.ts",
+    "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactPostPaintCallback.ts",
+    "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+    "generated/client-mutation-production-linked/packages/scheduler/src/SchedulerProfiling.ts",
+    "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberDevToolsHook.ts",
+    "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+    "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRoot.ts",
+    "generated/client-mutation-production-linked/packages/shared/isArray.ts"
+  ],
+  "stages": {
+    "normalized": {
+      "directory": "generated/client-mutation-production",
+      "sourceFiles": 123,
+      "diagnostics": 0,
+      "diagnosticsByCode": {},
+      "diagnosticsByFile": {},
+      "examples": []
+    },
+    "specialized": {
+      "directory": "generated/client-mutation-production-specialized",
+      "sourceFiles": 123,
+      "diagnostics": 0,
+      "diagnosticsByCode": {},
+      "diagnosticsByFile": {},
+      "examples": []
+    },
+    "linked": {
+      "directory": "generated/client-mutation-production-linked",
+      "sourceFiles": 123,
+      "diagnostics": 0,
+      "diagnosticsByCode": {},
+      "diagnosticsByFile": {},
+      "examples": []
+    }
+  }
+}

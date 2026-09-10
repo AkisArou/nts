@@ -1,0 +1,636 @@
+{
+  "schema": 1,
+  "profile": "client-mutation-production",
+  "constants": {
+    "__DEV__": false,
+    "__EXPERIMENTAL__": true,
+    "__PROFILE__": false,
+    "__TEST__": false
+  },
+  "summary": {
+    "files": 123,
+    "constantReferences": 571,
+    "ifStatementsFolded": 501,
+    "conditionalExpressionsFolded": 30,
+    "logicalExpressionsFolded": 85,
+    "unaryExpressionsFolded": 9,
+    "unreachableStatementsRemoved": 5
+  },
+  "files": [
+    {
+      "path": "packages/react-reconciler/src/clz32.ts",
+      "inputSha256": "b5bbbf93ba1c67877c4ba057dcf9104b0781a074bdd6e4cfe84de6ea0b52b57f",
+      "outputSha256": "b5bbbf93ba1c67877c4ba057dcf9104b0781a074bdd6e4cfe84de6ea0b52b57f"
+    },
+    {
+      "path": "packages/react-reconciler/src/getComponentNameFromFiber.ts",
+      "inputSha256": "f27d4d28cc0addf03b2ff50d2bd90d41a6d089a114422f46f37079f7444d6b27",
+      "outputSha256": "b796ec8c4ae59373ab9cacc1e2a4752850112072cbc5850d1b5f22fe920e0a97"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactCapturedValue.ts",
+      "inputSha256": "8072b7055bdf114f419ce3447c8bbb692f68e328868ecaf703e87ca44d1bf4d6",
+      "outputSha256": "8072b7055bdf114f419ce3447c8bbb692f68e328868ecaf703e87ca44d1bf4d6"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactChildFiber.ts",
+      "inputSha256": "68d4c49d90cb9318bc4c6f99a67f7a62ebd76235cb91871360bc38b1b8934002",
+      "outputSha256": "cbd73245bd8fb7a55338d2a17e8a16e2fae175adaf6108f66ead80c17ab4a079"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactCurrentFiber.ts",
+      "inputSha256": "0d274398148db898b2bf0ca9f2a8d66ddb5c0970859402132466533fc673cd70",
+      "outputSha256": "681ba781a9a631c2fe6057d751fbc92a646752522227dedadbf069790d3885c8"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactEventPriorities.ts",
+      "inputSha256": "fe36b63183f08fd7329ae950bd3cb1f1239ef117fc5d2090e57dea635a7ea5ad",
+      "outputSha256": "fe36b63183f08fd7329ae950bd3cb1f1239ef117fc5d2090e57dea635a7ea5ad"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiber.ts",
+      "inputSha256": "e987dc5c2927d7d1f71ae02c3de36fb793cfc63c3d239ef690b32a957d332bf7",
+      "outputSha256": "a72ccf67be5c74e25f7def1ebdca337a6563bfad3a9f54248fab14c4f613d543"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAct.ts",
+      "inputSha256": "83ecf4a7433aa2ce5ff4d3ac825bce8e2c12e100ca6464bf0a70e7d2723a9a17",
+      "outputSha256": "29d91088a09bb4b806af18785f896e296d575bc0c869fd8813e876d49519ce79"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberActivityComponent.ts",
+      "inputSha256": "04a902434e6d6746533e38fef5cbc5db29dfb10afb7839291f1506565f352ce0",
+      "outputSha256": "04a902434e6d6746533e38fef5cbc5db29dfb10afb7839291f1506565f352ce0"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberApplyGesture.ts",
+      "inputSha256": "7ad97ddb14b46a9dd2fda4cb6eecb608b6aa15102389f4572ae6ca2fc569a328",
+      "outputSha256": "2c04851cbbdd1708beed05325a2d4036659829a5b3b9ef2826bf5258d30e535c"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+      "inputSha256": "ea19edd33bbbd3648196583791f09fed089354a02f78b2829c97bf1e7b061e86",
+      "outputSha256": "ea19edd33bbbd3648196583791f09fed089354a02f78b2829c97bf1e7b061e86"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberAsyncDispatcher.ts",
+      "inputSha256": "390c406048cb9da5d6c328c84f7acd17c3c8cdfd40e4fc0d2f0e0a1abea81514",
+      "outputSha256": "68d847f2485d9786983b9d9a4cd5d7deaad7a056e9f2ce96c89237f8ab30ce10"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberBeginWork.ts",
+      "inputSha256": "87e423fb50269fda44863696d88eb5769abe339d33c73b41870fe2c83d0eb67f",
+      "outputSha256": "466de9c9c545fdeed43500f29c2d5cd870eaccb095b99ccf5a794858525b4fb2"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+      "inputSha256": "15a65f434e9a7906a14a7763180922ce26eb45fd63824dd190e009900d82c21b",
+      "outputSha256": "e52c7cfe8cd613ee400fb0a5362c9a2a13120b41e962540f3a865fa200af891c"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCallUserSpace.ts",
+      "inputSha256": "5d1368e520f784c693206d73a26ed69aacf3b7b2aa251ae45f7fbc360357fb32",
+      "outputSha256": "2ca3b65a52e56d20b146119b92b11e40ba463f8a904f798ab6cd06d32cd56af9"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberClassComponent.ts",
+      "inputSha256": "54b3d1089d552a542cd0bf2edc111535d17473d0e822cfc4303966543f28823e",
+      "outputSha256": "5f7925c79b6cb50e7bd86edde36ac10a40b220b4636fd6e3c1c5e1da2ce719f8"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberClassUpdateQueue.ts",
+      "inputSha256": "fdc700b8e9299036a43c0227f39a87bb134b2af03c6bc32723b58f9cd3864de3",
+      "outputSha256": "d1c40c60a58c21ce983f6ce07892f306be4188a4d0c41bd8909eef50ce583bcf"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitEffects.ts",
+      "inputSha256": "c74e77b14a956b88bfc5bb2a96f0230432a209ae1a9857838febf61e969576ce",
+      "outputSha256": "7d90cd3ca0ff2a9106aca91044f3cb968dfb9969f54293f729a237b3df282783"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitHostEffects.ts",
+      "inputSha256": "30cbb6718b5d70cb413bf6b59d3e68048127260f02ab568d3ec46e359a8634a7",
+      "outputSha256": "0db6d6cc61ebdf7aadfa1cdd0fcdcfce03a5a0535df890eccf769cc6135b46be"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitViewTransitions.ts",
+      "inputSha256": "ef08b3e0bdf79e466669f1bb860d1442747233ab43a21574ec4d0586b0b61e08",
+      "outputSha256": "ef08b3e0bdf79e466669f1bb860d1442747233ab43a21574ec4d0586b0b61e08"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCommitWork.ts",
+      "inputSha256": "13717cecb1efedf664187b3d7faba62f4563a912c915efbcf417c366ffa7bac2",
+      "outputSha256": "fffc50698bc2453f7867a5f04d8eabfd3e7150a800552953d467c124f33b5dcf"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberCompleteWork.ts",
+      "inputSha256": "a576b2185ccf6dcded295530131afdefc03d11e95f983d75ef6c23070a5642b3",
+      "outputSha256": "a576b2185ccf6dcded295530131afdefc03d11e95f983d75ef6c23070a5642b3"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberComponentStack.ts",
+      "inputSha256": "239dfa7a81c0d5688719e7588a3bf91de2a441b0c2222766acdd6e143861876b",
+      "outputSha256": "82da96b9cb4128371ed71a60d723d8c93c3fdfe3b5b809d06eb73fa14a6784e3"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberConcurrentUpdates.ts",
+      "inputSha256": "1bdcdd4ae5d783321ac507668f5f0137a667a02fbacc30883195415dd5e93f2d",
+      "outputSha256": "ef4eca625831855bf631756594da9b7101804d8641b64a56daa2dc9c5a6be263"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberConfig.ts",
+      "inputSha256": "4ff4c77f96ff47a4ac40c1b9a2a367df285d011e7138478013883cdc64fef6ba",
+      "outputSha256": "879fc4e6a9176e237db2fed72c347bee2edddd5973ee85ad956d1ae7bdeacd5d"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberDevToolsHook.ts",
+      "inputSha256": "6076cf6dea6cf227527b2e1867ec3dc4cfb00cf245cfb70f749f6ee184d0cdc9",
+      "outputSha256": "b9a8c68816a981ed484d6471f7a6929e2942710f711d871a333572b613f0c090"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberDuplicateViewTransitions.ts",
+      "inputSha256": "5d25081288ed8b8acdbeb7d47a97617d19bd8219d78f24266523b233480da037",
+      "outputSha256": "2513fc03a1ff18e06fb407b5f4bd3a3fb349f7048cd0d0943650e2c13050f364"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberErrorLogger.ts",
+      "inputSha256": "57444c9b38b9c0a6f3f2257cffd956f062740058a51d4d9fbd9bd8f60c57a4a9",
+      "outputSha256": "0dc6865ed4b3d78167bae08581430f3776d3f12d5f8d8617fa84b7d9b4f36e1e"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberFlags.ts",
+      "inputSha256": "d503ebc45bc03fd7164e3542510bb6a22382a5342dda6978607531846d0e20aa",
+      "outputSha256": "d503ebc45bc03fd7164e3542510bb6a22382a5342dda6978607531846d0e20aa"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberFragmentInstance.ts",
+      "inputSha256": "9f737570bff03f32510661ecc9a946a73de21e8e8b613efb2e03cd036a48b360",
+      "outputSha256": "9f737570bff03f32510661ecc9a946a73de21e8e8b613efb2e03cd036a48b360"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberGestureScheduler.ts",
+      "inputSha256": "006e64e32ecd6fab082944c4d191120b177dcaf3075aaeecebe278668ed3a8d6",
+      "outputSha256": "006e64e32ecd6fab082944c4d191120b177dcaf3075aaeecebe278668ed3a8d6"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHiddenContext.ts",
+      "inputSha256": "01150aa5e990b744337ca3f27bf1a067a8255aaf31ad9aa376615072e8ef65aa",
+      "outputSha256": "01150aa5e990b744337ca3f27bf1a067a8255aaf31ad9aa376615072e8ef65aa"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHooks.ts",
+      "inputSha256": "e85ace7fc239074aa01dd5b4d91428d14c31e67dd6c6ff31c3545cc341e38f5c",
+      "outputSha256": "6303ceb5efc87333714c6e64127287413c0e7b9134ee1008b9984dc9aba1ac83"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHostContext.ts",
+      "inputSha256": "224b00df094696be5bf1ddc5acc7b32e0eb6346660b978f99601bc967d61c871",
+      "outputSha256": "39377dd1787d0debff0d44ea9b77fa97068b91f4c238493ed241fd77408b9b7a"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHotReloading.ts",
+      "inputSha256": "f6f1c3a51c35f3efcae6a6254395be9de04c05acc4075fb1df875347ecaa1254",
+      "outputSha256": "014f951e9e7d7b74130812e29f436b3cb324d63d8173928bbb6c2158aaf22456"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHydrationContext.ts",
+      "inputSha256": "877ffa4d571a467dc8c3c21861f7ab49e42800c87cc28e5d9b9b4ec593ce80a9",
+      "outputSha256": "cec7c13a2d7122f1bed1be0fbf4c3c900a5513a86fd928c39deedad510c7d945"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+      "inputSha256": "ad5f5518bc1df58b94558dc37ba87fc4bebb63deefa6671e6c19f08072cd31c5",
+      "outputSha256": "8b99b84a947e348fac3b7a39011bfa62e03981bf286298c2bd530ab3d70c9ec1"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberLane.ts",
+      "inputSha256": "0d44c33d0d257bdc5a0dd5c061992a07cf341ca393a6b9013e4dcfaf6faa73c2",
+      "outputSha256": "c2236301e2df6f2439a2b7fd7ed16ad5659bb16a468778429245a344aab8b946"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberLegacyContext.ts",
+      "inputSha256": "fa065a9a167cc77b74255d387c6e588105a997093b81584a5d670c6b874a783f",
+      "outputSha256": "f2c629be3fdbd6096fff2a0ef57973cab7c9ebafeff4d92096aabfee565723f0"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberMutationTracking.ts",
+      "inputSha256": "93edb7d372db8e69db3006f16190f2ada5ee87af274aef4e3fd01b058f333285",
+      "outputSha256": "93edb7d372db8e69db3006f16190f2ada5ee87af274aef4e3fd01b058f333285"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberNewContext.ts",
+      "inputSha256": "72645a74e860732fe87315ee8b4c2e5afab69f7a20a0cdcd2fd1c6a95783a0b1",
+      "outputSha256": "5c0944c2d3047d8f614cc038a802823c788212194465ab03e179c0b056520fd6"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberOffscreenComponent.ts",
+      "inputSha256": "75f6870d13959b16b1843be80374354da638c98cf7cb3a8e4b97b1759b972533",
+      "outputSha256": "75f6870d13959b16b1843be80374354da638c98cf7cb3a8e4b97b1759b972533"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberPerformanceTrack.ts",
+      "inputSha256": "ca98951d2785ec172290998b38feed65c214115c1b3a2ef7364ac6a22525d97a",
+      "outputSha256": "eac5fb13533d8cd09942b9e03f1c47c62d798b6dbc06e544171778a25217c1b4"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberReconciler.ts",
+      "inputSha256": "ad106cfa94c1cbb9c711c7a682a681343de019f8d0aa4ddb06bf16ee8c623caf",
+      "outputSha256": "66fc1c84cc0136889a15983329e395c4b2e1f21b13e1a67b35b3abba9bd425e0"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberRoot.ts",
+      "inputSha256": "4efb488880534f5e9fa72992d57ff09b620904bc1c3e6eeb8a120a85b9db6017",
+      "outputSha256": "c6dad22e5f1a312a41b4553342aee4d4ece913a00af4bb0260edf68356f35325"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberRootScheduler.ts",
+      "inputSha256": "ab924b220091236fbe5ed8169dcaa00a8e0ed9f73d63b4bf344ec8f0a35c7e27",
+      "outputSha256": "d87a1f9ffff2b987f4216511eb744cf9543fac57ebbebdf7ba44f29e7c657899"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberScope.ts",
+      "inputSha256": "c9f8ade2f7b2a5c9c02ae572c77fceea078289642125ec7b129cf85524faf792",
+      "outputSha256": "c9f8ade2f7b2a5c9c02ae572c77fceea078289642125ec7b129cf85524faf792"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberShellHydration.ts",
+      "inputSha256": "b86f0ca1882863a3bf101817534396167295bef0ed0cff7530e307e1939f414c",
+      "outputSha256": "b86f0ca1882863a3bf101817534396167295bef0ed0cff7530e307e1939f414c"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberStack.ts",
+      "inputSha256": "587856d4d9cc315da7b60e7fc704342b617a83f3db943528df7bd75cf277af86",
+      "outputSha256": "e9c9f0dca2bf26912e8a96a13ebd0e3e4df8926aeabc02bd8c480791f1e67eae"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberSuspenseComponent.ts",
+      "inputSha256": "2be5c497ee2a8dc9d4e8242cd997770e92ecabfd89bcedb46f479329a2a66269",
+      "outputSha256": "2be5c497ee2a8dc9d4e8242cd997770e92ecabfd89bcedb46f479329a2a66269"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberSuspenseContext.ts",
+      "inputSha256": "600676b1e59f8296393c97cbcf1d3eec625607cdc7d2846bff59611bc44ec35e",
+      "outputSha256": "600676b1e59f8296393c97cbcf1d3eec625607cdc7d2846bff59611bc44ec35e"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberThenable.ts",
+      "inputSha256": "923653d85eb35322b1ec5b441882a89d21e7f83224c6d6f3a91b23a3ff53334d",
+      "outputSha256": "811e1c75a8b24b661b85357ba2eb354329802321b0490f282c37bf13e38f2564"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberThrow.ts",
+      "inputSha256": "f5149b23506d37d66557558886afc1f6af978125223c2b4069f371d683724ffc",
+      "outputSha256": "6718265d2b088d1588261a4f91b69d33db575c563b0265ed923163540c30b98a"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTracingMarkerComponent.ts",
+      "inputSha256": "9aebd9a95749336a815e4d4e786039b8611dedbf8ca677d724f758a1defc7e67",
+      "outputSha256": "9aebd9a95749336a815e4d4e786039b8611dedbf8ca677d724f758a1defc7e67"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTransition.ts",
+      "inputSha256": "1c2113b561bee9f9c1a241c2ebfc9feb40191d254d7a2b0ff53aa5620cf15fd2",
+      "outputSha256": "1c2113b561bee9f9c1a241c2ebfc9feb40191d254d7a2b0ff53aa5620cf15fd2"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTransitionTypes.ts",
+      "inputSha256": "12dd0d706748070e13ee42436a4672c5af38019abccdb438a8487ad91bcbe743",
+      "outputSha256": "12dd0d706748070e13ee42436a4672c5af38019abccdb438a8487ad91bcbe743"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTreeContext.ts",
+      "inputSha256": "f5107f0842d18f3c8b54806492ee727c4dfbfc17cce0c81ae536bbaca1d13267",
+      "outputSha256": "2538233ea57adf4790ebb8f2bdd84a8099e1c91337f8e0d22732e104dc5ba33b"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberTreeReflection.ts",
+      "inputSha256": "378e1f6b13b8fa18dbad9895b08022db3f7985b96c1b716155a9b83abcdfa30b",
+      "outputSha256": "378e1f6b13b8fa18dbad9895b08022db3f7985b96c1b716155a9b83abcdfa30b"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberUnwindWork.ts",
+      "inputSha256": "6c39002d9317e051311826fc016c6413bba928549b72f94aa641475b7d4ed085",
+      "outputSha256": "6c39002d9317e051311826fc016c6413bba928549b72f94aa641475b7d4ed085"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberViewTransitionComponent.ts",
+      "inputSha256": "ec7024c0d81fe2fea5823742825a96dcc9144283192a31f8ef1c87737f0a2c13",
+      "outputSha256": "ec7024c0d81fe2fea5823742825a96dcc9144283192a31f8ef1c87737f0a2c13"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+      "inputSha256": "7249f2cd7654f0fe8124fdcd304c467de31ea3922e1df47b47bb21fd91a597ad",
+      "outputSha256": "522f906ceb2dd31b541ddfbbf3bb8866bfde7c3c2d385b72714c9da289a47d6c"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactHookEffectTags.ts",
+      "inputSha256": "7bd1ad2787b3122c4b29869233f4dd19c27cc9297717e82513429fb9f5493481",
+      "outputSha256": "7bd1ad2787b3122c4b29869233f4dd19c27cc9297717e82513429fb9f5493481"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactInternalTypes.ts",
+      "inputSha256": "3ee4638370463dc40b4684d8eab8bdcf74ded2315b309bba4936c3d0a9ba8152",
+      "outputSha256": "3ee4638370463dc40b4684d8eab8bdcf74ded2315b309bba4936c3d0a9ba8152"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactPortal.ts",
+      "inputSha256": "e1744fef37307686aaa0a9e0df68cbfdfd4e8df5fccc29ae33fbd0982b3f517c",
+      "outputSha256": "eff2ca16d6d59374a4c1333d22f767cfecbb280c983cbc7191a616a11598c968"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactPostPaintCallback.ts",
+      "inputSha256": "5cacfb199d519877228cee315e5e3ea285f32e16ec32445cde5d03c017d7e29a",
+      "outputSha256": "5cacfb199d519877228cee315e5e3ea285f32e16ec32445cde5d03c017d7e29a"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactProfilerTimer.ts",
+      "inputSha256": "fc98b2597d57d3b03fda5e602dcdc856ff57d6d449ea5c3849ca455c2d60f01f",
+      "outputSha256": "fb0434c1e711deae1a421fa782768651e02b41b418a4e8e59e06e65b2acfe80f"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactRootTags.ts",
+      "inputSha256": "15b96061d89b58d7117c1ce04a16f16c1beb673d253176912c05aa8880a31c8d",
+      "outputSha256": "15b96061d89b58d7117c1ce04a16f16c1beb673d253176912c05aa8880a31c8d"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactStrictModeWarnings.ts",
+      "inputSha256": "d833cdce294a7260a6322cfc34553e9a82a021e85165cdc4a7f52c1adb99583f",
+      "outputSha256": "53704e9db44226abbfd688b2169ee3a48ae8a6f2e86f998f87110cc81c3f43ee"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactTestSelectors.ts",
+      "inputSha256": "c38a068ed7847d7a735d30e21c7a0d34188a7e9f0d86c68a2edf1fed13f835bb",
+      "outputSha256": "c38a068ed7847d7a735d30e21c7a0d34188a7e9f0d86c68a2edf1fed13f835bb"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactTypeOfMode.ts",
+      "inputSha256": "6569daea4edb8588cfddc877b785c8cedfa060b94406a4aece390afa9b1df779",
+      "outputSha256": "6569daea4edb8588cfddc877b785c8cedfa060b94406a4aece390afa9b1df779"
+    },
+    {
+      "path": "packages/react-reconciler/src/ReactWorkTags.ts",
+      "inputSha256": "8ca8bad87a7b24f9c5a07c20002877b9b228467d77f7bb4e3bd1aa9d8e18ef14",
+      "outputSha256": "8ca8bad87a7b24f9c5a07c20002877b9b228467d77f7bb4e3bd1aa9d8e18ef14"
+    },
+    {
+      "path": "packages/react-reconciler/src/Scheduler.ts",
+      "inputSha256": "fbcc07c32ae4bbcf6a6f7edad4aeca743c188a2ea7b1b31b98a31e8f93e3d0c0",
+      "outputSha256": "fbcc07c32ae4bbcf6a6f7edad4aeca743c188a2ea7b1b31b98a31e8f93e3d0c0"
+    },
+    {
+      "path": "packages/react-server/src/ReactFizzComponentStack.ts",
+      "inputSha256": "81628ae0f82eceb0a54b4bc44ec6fc868f99c35f9dea0791915f0968b6a27734",
+      "outputSha256": "7ecaa9e630d0114a1f7a069939c6d6eb6e4760a88adfe825f8c6a398aa830624"
+    },
+    {
+      "path": "packages/react/index.ts",
+      "inputSha256": "0c03d313d1d76c7fc11de01656bfb938d2d596cdbb4f600bbbd07363c7c4f306",
+      "outputSha256": "0c03d313d1d76c7fc11de01656bfb938d2d596cdbb4f600bbbd07363c7c4f306"
+    },
+    {
+      "path": "packages/react/src/jsx/ReactJSXElement.ts",
+      "inputSha256": "655178a24f5334867abe43a8f7e13188497ceeeb931bb3c10fb5e2b090d49ee7",
+      "outputSha256": "555b714ec0a601666ff53b4de84723bd6442a274b4f45738146a690176f741c8"
+    },
+    {
+      "path": "packages/react/src/ReactAct.ts",
+      "inputSha256": "811b87beaf8e4c774448ae3e64c9c23995f38522c8560b4792a4350bbd67ec65",
+      "outputSha256": "042910fbe6f42b3b4317b297f9affc10398dda9e172f6fae8e4161447d1ec5d8"
+    },
+    {
+      "path": "packages/react/src/ReactBaseClasses.ts",
+      "inputSha256": "9e4efbe95002c456bf8dfb752e069387423f42983f2b45fa488cccab8787cc0c",
+      "outputSha256": "0d5ea516c47fbc1dae0fe4324d17a22265f3d602d8a0b281bca4250ab1961aad"
+    },
+    {
+      "path": "packages/react/src/ReactCacheClient.ts",
+      "inputSha256": "0b6d8545a3a5625d1a0fe90e3402c68174468f74bfae667166df7928962aa993",
+      "outputSha256": "0b6d8545a3a5625d1a0fe90e3402c68174468f74bfae667166df7928962aa993"
+    },
+    {
+      "path": "packages/react/src/ReactCacheImpl.ts",
+      "inputSha256": "b285e4d6046af66ec1da6a15c1ec8ec74196cd8d5dc00b07abd50463cdf237d4",
+      "outputSha256": "b285e4d6046af66ec1da6a15c1ec8ec74196cd8d5dc00b07abd50463cdf237d4"
+    },
+    {
+      "path": "packages/react/src/ReactChildren.ts",
+      "inputSha256": "8a3fb5c7fb93d787d45209882a7e55e869506b3f48e0c7abadd94035a6ee2e2b",
+      "outputSha256": "56b98ef92fef77f409bc0a463bee3f75963130dde4ae1c87085bc7654b7953eb"
+    },
+    {
+      "path": "packages/react/src/ReactClient.ts",
+      "inputSha256": "e8b48df854d15ff3e872bf2c05604781af1ff6ef141f8ba8500b671a070d73f8",
+      "outputSha256": "e8b48df854d15ff3e872bf2c05604781af1ff6ef141f8ba8500b671a070d73f8"
+    },
+    {
+      "path": "packages/react/src/ReactCompilerRuntime.ts",
+      "inputSha256": "866a6fd4dca67c466ff4851875ac833816dfd0be044d312df32bfd6b46fdaa91",
+      "outputSha256": "866a6fd4dca67c466ff4851875ac833816dfd0be044d312df32bfd6b46fdaa91"
+    },
+    {
+      "path": "packages/react/src/ReactContext.ts",
+      "inputSha256": "161fc43acfb7f501f435c4881781eaff2a0b9339466e38a22f249d4f5ac4b4e5",
+      "outputSha256": "e383193c0033251cfe17dabea762e142f15aeb30eb7cb5db92b4bc40042175a0"
+    },
+    {
+      "path": "packages/react/src/ReactCreateRef.ts",
+      "inputSha256": "ba4f52f55655ff53d2f4aa38841bfbe1118f1995e730534b344a962858ebcc89",
+      "outputSha256": "e03c65b9767b7fdc871d2c5da2c8b8928bfbb5ad3481728d06ec7a609a96046a"
+    },
+    {
+      "path": "packages/react/src/ReactForwardRef.ts",
+      "inputSha256": "4c13a6d15b3eb010a6910590016292246f5af3e81f4584c40edf4ed143e089c4",
+      "outputSha256": "00084b6958918b1506f40c5cf9048e1e4b84cce5884c616a8e740d2b4b85c326"
+    },
+    {
+      "path": "packages/react/src/ReactHooks.ts",
+      "inputSha256": "82bacc2221bc200df07d67d3d46021b06deaa3049ed416f17e94c0fdea5ee266",
+      "outputSha256": "cf2c93847e017a00c5c3f6276a1abb3b98c4e053a45944daa9f16302ec286221"
+    },
+    {
+      "path": "packages/react/src/ReactLazy.ts",
+      "inputSha256": "21bf74cbe0252d64d4ae77c611cae4821bd7b8ba8cc7ca07b280f5d5c26dbd84",
+      "outputSha256": "b26e70d65eb53145998a4c7fd02f3ef552271ae6235b94ce55d6ca7e7fd7f55d"
+    },
+    {
+      "path": "packages/react/src/ReactMemo.ts",
+      "inputSha256": "5ab7280337a9463c5a22a723380028d68439c639127c453816e093494cd1cc18",
+      "outputSha256": "bf41514b00389051734fb7f7d122a07d98c5b04d2c9003b5d1678f1cfa331e8c"
+    },
+    {
+      "path": "packages/react/src/ReactNoopUpdateQueue.ts",
+      "inputSha256": "76dd334495c7cf0279e9b7b41aa3395ca215b3d47b5de91b200403b9375b56c4",
+      "outputSha256": "d041dadce996013ba856211a07dffc660add71b23395e15bfced5bd1cd505ed3"
+    },
+    {
+      "path": "packages/react/src/ReactOwnerStack.ts",
+      "inputSha256": "114ee0bd05a7d962458a9e20a54a94dfabfbe05eb64b106f4f731f4552dcd0b6",
+      "outputSha256": "b1bfd0987ae2f77152a795238a06f90e4d69c04302a78bf403bec47e6214f4f4"
+    },
+    {
+      "path": "packages/react/src/ReactSharedInternalsClient.ts",
+      "inputSha256": "5dec5cea65f0bc5e6c1f1b8fb5bbca842288fc99e42d3c0c9bb2bd0372a15473",
+      "outputSha256": "7021f8e42119e357b3bb307cf634984a7ad33d8957e7d3ba9e5116cfbfe63669"
+    },
+    {
+      "path": "packages/react/src/ReactStartTransition.ts",
+      "inputSha256": "ee83a5e75d7a59950b07527c21eb9a0f06d440c654e4efa51d20d2293987fcb2",
+      "outputSha256": "b3a4ab048fc5748943bd34cd52e678ff5cb921bdb224f10fa6e8b8610c85bef8"
+    },
+    {
+      "path": "packages/react/src/ReactTransitionType.ts",
+      "inputSha256": "13905f9f604e79728eab638a4c90d475ad2429cf038e79d8f8a948c0fc1ecac7",
+      "outputSha256": "1bdb9e2a93f235cd27132426d17267cc8316d61a41c163a54cc26a843da89b9f"
+    },
+    {
+      "path": "packages/scheduler/index.ts",
+      "inputSha256": "5427824571e8e1eb470beb33d334056db6e2279ec419d1359fa2d8ffef989591",
+      "outputSha256": "5427824571e8e1eb470beb33d334056db6e2279ec419d1359fa2d8ffef989591"
+    },
+    {
+      "path": "packages/scheduler/src/forks/Scheduler.ts",
+      "inputSha256": "6ae5d569463c1ae53fcc0fa88fdfbbee946331aef8fa13add700038ff2ce9ce8",
+      "outputSha256": "6ae5d569463c1ae53fcc0fa88fdfbbee946331aef8fa13add700038ff2ce9ce8"
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerFeatureFlags.ts",
+      "inputSha256": "589e1202af4d0c9212cd15ac250e1d0cb8ddea87cc02313bab9be9ce26bac1da",
+      "outputSha256": "f759552261b2933d3755df0de1e6584714781074f496359d6834ee4cf1fe51d8"
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerMinHeap.ts",
+      "inputSha256": "06f53e0b52841f48b3f29b4de188cea6a70317161da121cdd29315478ff0559f",
+      "outputSha256": "06f53e0b52841f48b3f29b4de188cea6a70317161da121cdd29315478ff0559f"
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerPriorities.ts",
+      "inputSha256": "651ffe3fa99957a29b9490cf2050d015a622e822ce381541e8db02a59428023e",
+      "outputSha256": "651ffe3fa99957a29b9490cf2050d015a622e822ce381541e8db02a59428023e"
+    },
+    {
+      "path": "packages/scheduler/src/SchedulerProfiling.ts",
+      "inputSha256": "f61449159033ac323a0f3df308e905f119b1b4281060f034879d182a95bb38de",
+      "outputSha256": "f61449159033ac323a0f3df308e905f119b1b4281060f034879d182a95bb38de"
+    },
+    {
+      "path": "packages/shared/assign.ts",
+      "inputSha256": "301f8d8272c164325bffa0af8b47f83b203e03986308a1b84cc56c6f9a3e73c5",
+      "outputSha256": "301f8d8272c164325bffa0af8b47f83b203e03986308a1b84cc56c6f9a3e73c5"
+    },
+    {
+      "path": "packages/shared/CheckStringCoercion.ts",
+      "inputSha256": "80176e1d78ccb5107a3846d0cb3f14dfb994fe7e6f0b7d2231474d395fb51b4b",
+      "outputSha256": "f60b0951cae7d2849ecc1b7ccfdb15cf70af31da5860ba002806ce7b7a697b28"
+    },
+    {
+      "path": "packages/shared/ConsolePatchingDev.ts",
+      "inputSha256": "f220500377cdf6aca723fe801f9c59921e619aeb4ce3b2ad6cd29479e7ebbbf0",
+      "outputSha256": "1d79fd40fce91137acdb4fc8390bf6024a8d3f4128f94d10e815e47c6f16dd7b"
+    },
+    {
+      "path": "packages/shared/DefaultPrepareStackTrace.ts",
+      "inputSha256": "3abda85d15ecc942af1a369cdf14cada55294e81fbbae3aeae3eec0eb5ac2f81",
+      "outputSha256": "3abda85d15ecc942af1a369cdf14cada55294e81fbbae3aeae3eec0eb5ac2f81"
+    },
+    {
+      "path": "packages/shared/enqueueTask.ts",
+      "inputSha256": "5fa61f1218ad3bc5fa35b4f7f2b9393c3ed25a5b51b92cf8ffb13eebb9099685",
+      "outputSha256": "af04f5ff8580e78e3c38c9882be4582a520357736ac7f4f012abba851b5853ea"
+    },
+    {
+      "path": "packages/shared/getComponentNameFromType.ts",
+      "inputSha256": "c5b36195b3c179e6485b6b2b9a89829ce10cf3ead8d86c6fcf0e062c94d377c7",
+      "outputSha256": "80458e671e06c5650fa487fedca5ac88ace66ba35a0d970e7462c75c6e2b1609"
+    },
+    {
+      "path": "packages/shared/hasOwnProperty.ts",
+      "inputSha256": "c7af770fccc86e76ed101c10b822182af5765caf07b1b1143de44b580d6834eb",
+      "outputSha256": "c7af770fccc86e76ed101c10b822182af5765caf07b1b1143de44b580d6834eb"
+    },
+    {
+      "path": "packages/shared/isArray.ts",
+      "inputSha256": "5b15a435d491acdd62f9e4a809ce6c4b5c4f4e9de263e731e31aff6d8b0e78b4",
+      "outputSha256": "5b15a435d491acdd62f9e4a809ce6c4b5c4f4e9de263e731e31aff6d8b0e78b4"
+    },
+    {
+      "path": "packages/shared/noop.ts",
+      "inputSha256": "12d5140b28ec2f8a183cceb8d74b482545eccbdd05c0933b6f1b30b21bf46a12",
+      "outputSha256": "12d5140b28ec2f8a183cceb8d74b482545eccbdd05c0933b6f1b30b21bf46a12"
+    },
+    {
+      "path": "packages/shared/objectIs.ts",
+      "inputSha256": "a7d47d48e063b6c4b0c2a6cb61b936b4d4d6908be485e592e35decfd79c72156",
+      "outputSha256": "a7d47d48e063b6c4b0c2a6cb61b936b4d4d6908be485e592e35decfd79c72156"
+    },
+    {
+      "path": "packages/shared/ReactComponentStackFrame.ts",
+      "inputSha256": "d029e54df19ebacc842321d03eeadbb3a5d9bdf7d4e8cf4c1ddab9a971fc57e8",
+      "outputSha256": "021c0d65732b39deb0ce5f867db39ed97aaf44d3ca607d9a47a9345ccc0512e8"
+    },
+    {
+      "path": "packages/shared/ReactElementType.ts",
+      "inputSha256": "bad36f9a3483b78a547714879a9d0804e348cb7d38a2ec39b4ce443e3555a40d",
+      "outputSha256": "bad36f9a3483b78a547714879a9d0804e348cb7d38a2ec39b4ce443e3555a40d"
+    },
+    {
+      "path": "packages/shared/ReactFeatureFlags.ts",
+      "inputSha256": "0cb21a57857c25871e79bf040795584b60b2ce8ab0dbac953ebecf0e7df4f994",
+      "outputSha256": "d3a7eb711ed912b9437ea28769b3e3da03c6fc00a5d0a7491b29c8548fc6b09c"
+    },
+    {
+      "path": "packages/shared/ReactFlightPropertyAccess.ts",
+      "inputSha256": "0ad8fd24ea826c3eb276d8d92adc2bd21eab895c3acfdfa1a5b7e154e9bdeec3",
+      "outputSha256": "0ad8fd24ea826c3eb276d8d92adc2bd21eab895c3acfdfa1a5b7e154e9bdeec3"
+    },
+    {
+      "path": "packages/shared/ReactInstanceMap.ts",
+      "inputSha256": "068b99e7c3540328c3fde29d1b8aad0090e62dd736df54dfc10f82d0b23364fc",
+      "outputSha256": "068b99e7c3540328c3fde29d1b8aad0090e62dd736df54dfc10f82d0b23364fc"
+    },
+    {
+      "path": "packages/shared/ReactOwnerStackFrames.ts",
+      "inputSha256": "d6ef127699e73b0a7352a360209f348e1e8c7f67b9a7f559dc90d264dfc862fe",
+      "outputSha256": "d6ef127699e73b0a7352a360209f348e1e8c7f67b9a7f559dc90d264dfc862fe"
+    },
+    {
+      "path": "packages/shared/ReactOwnerStackReset.ts",
+      "inputSha256": "f9e13f492ee24e31e4a240b15e63a32968cb0c2c0def8f77784ac91eb0c763a5",
+      "outputSha256": "ce149937bfae06895c1f2b983f761cf2ca814c1f4322b65a07d44a6310ab4c47"
+    },
+    {
+      "path": "packages/shared/ReactPerformanceTrackProperties.ts",
+      "inputSha256": "80b7e57893d508938e4e284dc32947c64ca3a4015520c0726322eb0a2d348e68",
+      "outputSha256": "80b7e57893d508938e4e284dc32947c64ca3a4015520c0726322eb0a2d348e68"
+    },
+    {
+      "path": "packages/shared/ReactRecoverable.ts",
+      "inputSha256": "a3ecaf3ad39097e8c77f851a161a7c8cc0d3e06ac94d5b3ffa40ccf92d53c2dd",
+      "outputSha256": "a3ecaf3ad39097e8c77f851a161a7c8cc0d3e06ac94d5b3ffa40ccf92d53c2dd"
+    },
+    {
+      "path": "packages/shared/ReactSymbols.ts",
+      "inputSha256": "fd023215b0a83ca6d4200ee6f2ccb2b12b058c1ccdee30bc169c0a7e6b481381",
+      "outputSha256": "fd023215b0a83ca6d4200ee6f2ccb2b12b058c1ccdee30bc169c0a7e6b481381"
+    },
+    {
+      "path": "packages/shared/ReactTypes.ts",
+      "inputSha256": "d578357be9f0b612fd5eab768e855d2b78fe919e3804485d54678b701c111065",
+      "outputSha256": "d578357be9f0b612fd5eab768e855d2b78fe919e3804485d54678b701c111065"
+    },
+    {
+      "path": "packages/shared/ReactVersion.ts",
+      "inputSha256": "60b8e0fd8e4a78eb2eb23442c0cd3606a48551abf70b33c306031fd4144fdc73",
+      "outputSha256": "60b8e0fd8e4a78eb2eb23442c0cd3606a48551abf70b33c306031fd4144fdc73"
+    },
+    {
+      "path": "packages/shared/reportGlobalError.ts",
+      "inputSha256": "71ce0e36ac9458b92ff7d25c915ec24a5d87d80026a651c098905da04adc248f",
+      "outputSha256": "71ce0e36ac9458b92ff7d25c915ec24a5d87d80026a651c098905da04adc248f"
+    },
+    {
+      "path": "packages/shared/shallowEqual.ts",
+      "inputSha256": "b02f08fdb92df161f4b9770a2d9870b9752d42b712de3a170a08ac3b9d21b0c4",
+      "outputSha256": "b02f08fdb92df161f4b9770a2d9870b9752d42b712de3a170a08ac3b9d21b0c4"
+    }
+  ]
+}

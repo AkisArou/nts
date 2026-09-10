@@ -1,0 +1,10 @@
+{
+  "extends": "../../../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "jsx": "preserve"
+  },
+  "include": [
+    "../../../generated/compiler-output/Counter.lowered.ts",
+    "../../../generated/compiler-output/ambient.d.ts"
+  ]
+}

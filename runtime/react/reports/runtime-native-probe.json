@@ -1,0 +1,1419 @@
+{
+  "schema": 1,
+  "profile": "client-mutation-production-linked",
+  "ntsCommit": "a21cb72ae52e5e6d01523a73826ada6b7f9b4dbe",
+  "input": {
+    "sha256": "308097701e2000f04a789a1c55f6439399e38339b494201ce99be22f90365a9d",
+    "files": 126
+  },
+  "command": {
+    "executable": "cargo",
+    "arguments": [
+      "run",
+      "--manifest-path",
+      "../../Cargo.toml",
+      "-q",
+      "-p",
+      "nts-cli",
+      "--",
+      "hir",
+      "profiles/runtime-input.tsconfig.json"
+    ],
+    "exitStatus": 0,
+    "signal": null,
+    "stderrBytes": 0
+  },
+  "typescriptInput": {
+    "compiler": "@typescript/native",
+    "version": "7.0.2",
+    "diagnostics": 0,
+    "clean": true
+  },
+  "hir": {
+    "lines": 6884,
+    "normalizedBytes": 385003,
+    "normalizedSha256": "b30f5d0835df42b5f3a146bdecf720c21f3d46c2c0baf66969288fd137490aae"
+  },
+  "refusals": {
+    "functions": 385,
+    "constructs": 941,
+    "diagnosticsByCode": {
+      "NTS1001": 919,
+      "NTS1005": 15,
+      "NTS1004": 7
+    },
+    "diagnosticsByFile": {
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberWorkLoop.ts": 85,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitWork.ts": 69,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberBeginWork.ts": 65,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactChildFiber.ts": 36,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHooks.ts": 36,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTreeReflection.ts": 32,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationContext.ts": 26,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiber.ts": 24,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitHostEffects.ts": 24,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberLane.ts": 24,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitEffects.ts": 23,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitViewTransitions.ts": 23,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberApplyGesture.ts": 22,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts": 21,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberReconciler.ts": 18,
+      "generated/client-mutation-production-linked/packages/react/src/jsx/ReactJSXElement.ts": 18,
+      "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts": 18,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCompleteWork.ts": 17,
+      "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts": 17,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberLegacyContext.ts": 16,
+      "host-test/ReactFiberConfigMutation.ts": 15,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts": 14,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberDevToolsHook.ts": 14,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCallUserSpace.ts": 13,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberNewContext.ts": 13,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactTestSelectors.ts": 13,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts": 12,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberSuspenseContext.ts": 12,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactProfilerTimer.ts": 12,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHostContext.ts": 11,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberPerformanceTrack.ts": 11,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts": 10,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberScope.ts": 10,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTreeContext.ts": 9,
+      "generated/client-mutation-production-linked/packages/react/src/ReactChildren.ts": 9,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberThenable.ts": 8,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberConcurrentUpdates.ts": 7,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCacheComponent.ts": 6,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberFragmentInstance.ts": 6,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberStack.ts": 6,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberErrorLogger.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHiddenContext.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHotReloading.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberThrow.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTracingMarkerComponent.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-server/src/ReactFizzComponentStack.ts": 5,
+      "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts": 5,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncAction.ts": 4,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberComponentStack.ts": 4,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberGestureScheduler.ts": 4,
+      "generated/client-mutation-production-linked/packages/shared/ReactComponentStackFrame.ts": 4,
+      "generated/client-mutation-production-linked/packages/shared/ReactOwnerStackReset.ts": 4,
+      "generated/client-mutation-production-linked/packages/shared/ReactPerformanceTrackProperties.ts": 4,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/getComponentNameFromFiber.ts": 3,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactCapturedValue.ts": 3,
+      "generated/client-mutation-production-linked/packages/shared/ReactInstanceMap.ts": 3,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncDispatcher.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassUpdateQueue.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberDuplicateViewTransitions.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRoot.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransitionTypes.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberUnwindWork.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberViewTransitionComponent.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/Scheduler.ts": 2,
+      "generated/client-mutation-production-linked/packages/react/src/ReactStartTransition.ts": 2,
+      "generated/client-mutation-production-linked/packages/shared/ConsolePatchingDev.ts": 2,
+      "generated/client-mutation-production-linked/packages/shared/getComponentNameFromType.ts": 2,
+      "generated/client-mutation-production-linked/packages/shared/reportGlobalError.ts": 2,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/clz32.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactCurrentFiber.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAct.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberConfig.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberShellHydration.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberSuspenseComponent.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactPortal.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactPostPaintCallback.ts": 1,
+      "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactStrictModeWarnings.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactAct.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactCacheClient.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactCacheImpl.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactClient.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactCreateRef.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactNoopUpdateQueue.ts": 1,
+      "generated/client-mutation-production-linked/packages/react/src/ReactTransitionType.ts": 1,
+      "generated/client-mutation-production-linked/packages/scheduler/src/SchedulerProfiling.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/CheckStringCoercion.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/enqueueTask.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/isArray.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/ReactOwnerStackFrames.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/ReactSymbols.ts": 1,
+      "generated/client-mutation-production-linked/packages/shared/shallowEqual.ts": 1,
+      "host-test/recording-host.ts": 1
+    },
+    "categories": {
+      "react-key-representation": {
+        "classification": "representation",
+        "count": 528,
+        "diagnosticsByCode": {
+          "NTS1001": 528
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberComponentStack.ts",
+            "line": 8,
+            "column": 24,
+            "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberComponentStack.ts",
+            "line": 42,
+            "column": 45,
+            "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberComponentStack.ts",
+            "line": 61,
+            "column": 43,
+            "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactCapturedValue.ts",
+            "line": 10,
+            "column": 56,
+            "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactCapturedValue.ts",
+            "line": 10,
+            "column": 56,
+            "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "intersection-representation": {
+        "classification": "claimed-supported-conformance-defect",
+        "count": 138,
+        "diagnosticsByCode": {
+          "NTS1001": 138
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/getComponentNameFromType.ts",
+            "line": 6,
+            "column": 44,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactStartTransition.ts",
+            "line": 46,
+            "column": 91,
+            "message": "a parameter of unrepresentable type (a union of an intersection | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactComponentStackFrame.ts",
+            "line": 39,
+            "column": 46,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactComponentStackFrame.ts",
+            "line": 174,
+            "column": 45,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactComponentStackFrame.ts",
+            "line": 177,
+            "column": 48,
+            "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "module-value-representation": {
+        "classification": "representation",
+        "count": 36,
+        "diagnosticsByCode": {
+          "NTS1001": 36
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 304,
+            "column": 15,
+            "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 73,
+            "column": 54,
+            "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactSymbols.ts",
+            "line": 28,
+            "column": 66,
+            "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/getComponentNameFromType.ts",
+            "line": 27,
+            "column": 20,
+            "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactCapturedValue.ts",
+            "line": 37,
+            "column": 35,
+            "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+          }
+        ]
+      },
+      "null-and-undefined-representation": {
+        "classification": "representation",
+        "count": 29,
+        "diagnosticsByCode": {
+          "NTS1001": 29
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberNewContext.ts",
+            "line": 15,
+            "column": 56,
+            "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberSuspenseContext.ts",
+            "line": 10,
+            "column": 76,
+            "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHiddenContext.ts",
+            "line": 11,
+            "column": 93,
+            "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 89,
+            "column": 77,
+            "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHostContext.ts",
+            "line": 11,
+            "column": 78,
+            "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+          }
+        ]
+      },
+      "module-function-storage": {
+        "classification": "documented-gap",
+        "count": 26,
+        "diagnosticsByCode": {
+          "NTS1001": 26
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncDispatcher.ts",
+            "line": 21,
+            "column": 19,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 24,
+            "column": 22,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCallUserSpace.ts",
+            "line": 87,
+            "column": 20,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 283,
+            "column": 24,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberNewContext.ts",
+            "line": 222,
+            "column": 10,
+            "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+          }
+        ]
+      },
+      "react-node-representation": {
+        "classification": "representation",
+        "count": 24,
+        "diagnosticsByCode": {
+          "NTS1001": 24
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "host-test/ReactFiberConfigMutation.ts",
+            "line": 72,
+            "column": 21,
+            "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "host-test/ReactFiberConfigMutation.ts",
+            "line": 149,
+            "column": 14,
+            "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "host-test/ReactFiberConfigMutation.ts",
+            "line": 164,
+            "column": 15,
+            "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "host-test/ReactFiberConfigMutation.ts",
+            "line": 171,
+            "column": 50,
+            "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "host-test/ReactFiberConfigMutation.ts",
+            "line": 228,
+            "column": 15,
+            "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "object-literal-and-structural-layout": {
+        "classification": "documented-gap",
+        "count": 18,
+        "diagnosticsByCode": {
+          "NTS1001": 18
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactStrictModeWarnings.ts",
+            "line": 14,
+            "column": 6,
+            "message": "a method on an object literal is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberThenable.ts",
+            "line": 26,
+            "column": 67,
+            "message": "a method on an object literal is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+            "line": 47,
+            "column": 68,
+            "message": "a method on an object literal is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberScope.ts",
+            "line": 11,
+            "column": 20,
+            "message": "an object literal that is not an object is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+            "line": 23,
+            "column": 29,
+            "message": "an object literal that is not an object is not supported by this lowering yet"
+          }
+        ]
+      },
+      "module-evaluation-cascade": {
+        "classification": "secondary-refusal",
+        "count": 15,
+        "diagnosticsByCode": {
+          "NTS1005": 15
+        },
+        "examples": [
+          {
+            "code": "NTS1005",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 23,
+            "column": 2,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          },
+          {
+            "code": "NTS1005",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 24,
+            "column": 43,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          },
+          {
+            "code": "NTS1005",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 56,
+            "column": 3,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          },
+          {
+            "code": "NTS1005",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 82,
+            "column": 29,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          },
+          {
+            "code": "NTS1005",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 95,
+            "column": 190,
+            "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+          }
+        ]
+      },
+      "closure-and-name-lowering": {
+        "classification": "supported-language-defect",
+        "count": 12,
+        "diagnosticsByCode": {
+          "NTS1001": 12
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCallUserSpace.ts",
+            "line": 105,
+            "column": 20,
+            "message": "`lazy`, a name from an enclosing scope is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/Scheduler.ts",
+            "line": 18,
+            "column": 47,
+            "message": "`\"runtime/react/generated/client-mutation-production-linked/packages/scheduler/index\"`, a name from an enclosing scope is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/Scheduler.ts",
+            "line": 15,
+            "column": 21,
+            "message": "`\"runtime/react/generated/client-mutation-production-linked/packages/scheduler/index\"`, a name from an enclosing scope is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 38,
+            "column": 28,
+            "message": "`transition`, a name from an enclosing scope is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 27,
+            "column": 40,
+            "message": "`returnValue`, a name from an enclosing scope is not supported by this lowering yet"
+          }
+        ]
+      },
+      "abort-controller-and-signal": {
+        "classification": "host-or-library-interface",
+        "count": 10,
+        "diagnosticsByCode": {
+          "NTS1001": 10
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberStack.ts",
+            "line": 22,
+            "column": 41,
+            "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberNewContext.ts",
+            "line": 236,
+            "column": 2,
+            "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+            "line": 53,
+            "column": 3,
+            "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+            "line": 61,
+            "column": 29,
+            "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+            "line": 64,
+            "column": 30,
+            "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "generic-and-broad-function-representation": {
+        "classification": "representation-or-object-model",
+        "count": 10,
+        "diagnosticsByCode": {
+          "NTS1001": 10
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberLegacyContext.ts",
+            "line": 35,
+            "column": 28,
+            "message": "a parameter of unrepresentable type (`Function`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiber.ts",
+            "line": 88,
+            "column": 26,
+            "message": "a parameter of unrepresentable type (`Function`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiber.ts",
+            "line": 97,
+            "column": 42,
+            "message": "a parameter of unrepresentable type (`Function`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactPerformanceTrackProperties.ts",
+            "line": 40,
+            "column": 71,
+            "message": "a parameter of unrepresentable type (the type parameter `InspectedObject`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactPerformanceTrackProperties.ts",
+            "line": 195,
+            "column": 66,
+            "message": "a parameter of unrepresentable type (the type parameter `DiffObject`) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "native-host-capabilities": {
+        "classification": "native-host-interface",
+        "count": 10,
+        "diagnosticsByCode": {
+          "NTS1001": 10
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/reportGlobalError.ts",
+            "line": 15,
+            "column": 22,
+            "message": "`window.dispatchEvent`, a global member with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 20,
+            "column": 27,
+            "message": "`performance`, a global with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactOwnerStackReset.ts",
+            "line": 7,
+            "column": 27,
+            "message": "`performance`, a global with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 18,
+            "column": 33,
+            "message": "`performance`, a global with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactOwnerStackReset.ts",
+            "line": 5,
+            "column": 33,
+            "message": "`performance`, a global with no definition here is not supported by this lowering yet"
+          }
+        ]
+      },
+      "remaining-union-and-erased-representation": {
+        "classification": "representation",
+        "count": 10,
+        "diagnosticsByCode": {
+          "NTS1001": 10
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberViewTransitionComponent.ts",
+            "line": 49,
+            "column": 11,
+            "message": "`default`, a property of a value with no fields is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactInstanceMap.ts",
+            "line": 22,
+            "column": 9,
+            "message": "an erased value where a concrete representation is wanted is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+            "line": 52,
+            "column": 59,
+            "message": "a property `_debugInfo` of unrepresentable type (a union of an array | null | undefined) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactTestSelectors.ts",
+            "line": 131,
+            "column": 11,
+            "message": "`$$typeof` on a union, whose members lay their fields out differently is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberThenable.ts",
+            "line": 35,
+            "column": 17,
+            "message": "`status` on a union, whose members lay their fields out differently is not supported by this lowering yet"
+          }
+        ]
+      },
+      "standard-library-wiring": {
+        "classification": "library-gap-or-import-linking",
+        "count": 9,
+        "diagnosticsByCode": {
+          "NTS1001": 9
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/isArray.ts",
+            "line": 7,
+            "column": 9,
+            "message": "`isArrayImpl`, a builtin this compiler does not provide is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactComponentStackFrame.ts",
+            "line": 11,
+            "column": 12,
+            "message": "`Error`, a builtin this compiler does not provide is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 123,
+            "column": 24,
+            "message": "`JSON.stringify`, a global member with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 251,
+            "column": 6,
+            "message": "`assign`, an imported name whose implementation is not in this program is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/clz32.ts",
+            "line": 10,
+            "column": 16,
+            "message": "`log`, a builtin this compiler does not provide is not supported by this lowering yet"
+          }
+        ]
+      },
+      "function-object-and-prototype-semantics": {
+        "classification": "explicit-non-goal",
+        "count": 8,
+        "diagnosticsByCode": {
+          "NTS1001": 8
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 95,
+            "column": 31,
+            "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactOwnerStackFrames.ts",
+            "line": 4,
+            "column": 32,
+            "message": "`prepareStackTrace`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 114,
+            "column": 15,
+            "message": "`Object.prototype`, a global member with no definition here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 23,
+            "column": 2,
+            "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 24,
+            "column": 43,
+            "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+          }
+        ]
+      },
+      "thenable-representation-and-lowering": {
+        "classification": "representation-or-frontend-defect",
+        "count": 8,
+        "diagnosticsByCode": {
+          "NTS1001": 8
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactStartTransition.ts",
+            "line": 33,
+            "column": 74,
+            "message": "`then`, declared by `ReactThenableObject` with a type that has no representation (a function type) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+            "line": 67,
+            "column": 39,
+            "message": "a parameter of unrepresentable type (a union of `FulfilledThenable` | `PendingThenable` | `RejectedThenable` | `UntrackedThenable` | `WeakPendingThenable`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactChildFiber.ts",
+            "line": 45,
+            "column": 28,
+            "message": "a parameter of unrepresentable type (a union of `FulfilledThenable` | `PendingThenable` | `RejectedThenable` | `UntrackedThenable` | an object) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHooks.ts",
+            "line": 361,
+            "column": 25,
+            "message": "a parameter of unrepresentable type (a union of `FulfilledThenable` | `PendingThenable` | `RejectedThenable` | `UntrackedThenable` | an object) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHooks.ts",
+            "line": 361,
+            "column": 25,
+            "message": "a parameter of unrepresentable type (a union of `FulfilledThenable` | `PendingThenable` | `RejectedThenable` | `UntrackedThenable` | an object) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "array-and-collection-layout": {
+        "classification": "library-or-representation",
+        "count": 7,
+        "diagnosticsByCode": {
+          "NTS1001": 7
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 286,
+            "column": 47,
+            "message": "a `new` of unrepresentable type (`Map<any, any>`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberThenable.ts",
+            "line": 31,
+            "column": 11,
+            "message": "an array literal that is not an array is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitViewTransitions.ts",
+            "line": 23,
+            "column": 31,
+            "message": "a `new` of unrepresentable type (`Map<any, any>`) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+            "line": 128,
+            "column": 111,
+            "message": "a property `_retryCache` of unrepresentable type (a union of `Set<an object>` | `WeakSet` with no recorded arguments | null) is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+            "line": 131,
+            "column": 89,
+            "message": "a property `_retryCache` of unrepresentable type (a union of `Set<an object>` | `WeakSet` with no recorded arguments | null) is not supported by this lowering yet"
+          }
+        ]
+      },
+      "module-cycle-tdz": {
+        "classification": "semantic-integration-check",
+        "count": 7,
+        "diagnosticsByCode": {
+          "NTS1004": 7
+        },
+        "examples": [
+          {
+            "code": "NTS1004",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 22,
+            "column": 36,
+            "message": "`ReactSharedInternals` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react/src/ReactSharedInternalsClient.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'ReactSharedInternals' before initialization`, at the moment the read runs"
+          },
+          {
+            "code": "NTS1004",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 22,
+            "column": 60,
+            "message": "`ReactSharedInternals` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react/src/ReactSharedInternalsClient.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'ReactSharedInternals' before initialization`, at the moment the read runs"
+          },
+          {
+            "code": "NTS1004",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 32,
+            "column": 17,
+            "message": "`firstScheduledRoot` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'firstScheduledRoot' before initialization`, at the moment the read runs"
+          },
+          {
+            "code": "NTS1004",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 40,
+            "column": 17,
+            "message": "`firstScheduledRoot` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'firstScheduledRoot' before initialization`, at the moment the read runs"
+          },
+          {
+            "code": "NTS1004",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberTransition.ts",
+            "line": 65,
+            "column": 45,
+            "message": "`ReactSharedInternals` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react/src/ReactSharedInternalsClient.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'ReactSharedInternals' before initialization`, at the moment the read runs"
+          }
+        ]
+      },
+      "dynamic-method-and-call-dispatch": {
+        "classification": "lowering-or-object-model",
+        "count": 6,
+        "diagnosticsByCode": {
+          "NTS1001": 6
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactTransitionType.ts",
+            "line": 17,
+            "column": 23,
+            "message": "a method `bind` with no declaration in the hierarchy is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 321,
+            "column": 18,
+            "message": "a computed callee is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/scheduler/src/forks/Scheduler.ts",
+            "line": 325,
+            "column": 31,
+            "message": "a computed callee is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberAsyncAction.ts",
+            "line": 139,
+            "column": 35,
+            "message": "a call of something that is not a function is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHooks.ts",
+            "line": 1501,
+            "column": 16,
+            "message": "a method `bind` with no declaration in the hierarchy is not supported by this lowering yet"
+          }
+        ]
+      },
+      "structural-method-dispatch": {
+        "classification": "claimed-supported-conformance-defect",
+        "count": 6,
+        "diagnosticsByCode": {
+          "NTS1001": 6
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts",
+            "line": 39,
+            "column": 9,
+            "message": "a method `useEffect` with no declaration in the hierarchy is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts",
+            "line": 43,
+            "column": 9,
+            "message": "a method `useInsertionEffect` with no declaration in the hierarchy is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts",
+            "line": 47,
+            "column": 9,
+            "message": "a method `useLayoutEffect` with no declaration in the hierarchy is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts",
+            "line": 66,
+            "column": 9,
+            "message": "a method `useTransition` with no declaration in the hierarchy is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactHooks.ts",
+            "line": 74,
+            "column": 9,
+            "message": "a method `useId` with no declaration in the hierarchy is not supported by this lowering yet"
+          }
+        ]
+      },
+      "iteration-and-loop-lowering": {
+        "classification": "documented-gap",
+        "count": 5,
+        "diagnosticsByCode": {
+          "NTS1001": 5
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 200,
+            "column": 20,
+            "message": "a `for in statement` is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 222,
+            "column": 25,
+            "message": "a `for in statement` is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitWork.ts",
+            "line": 85,
+            "column": 108,
+            "message": "a loop assigning a name declared outside it is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCommitWork.ts",
+            "line": 136,
+            "column": 83,
+            "message": "a loop assigning a name declared outside it is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+            "line": 1694,
+            "column": 54,
+            "message": "a `new Set` with contents, which needs the iteration protocol is not supported by this lowering yet"
+          }
+        ]
+      },
+      "rest-parameter-lowering": {
+        "classification": "supported-language-defect",
+        "count": 5,
+        "diagnosticsByCode": {
+          "NTS1001": 5
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberConfig.ts",
+            "line": 11,
+            "column": 51,
+            "message": "a rest parameter whose element type has no representation is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactTestSelectors.ts",
+            "line": 284,
+            "column": 24,
+            "message": "a rest parameter of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberWorkLoop.ts",
+            "line": 1634,
+            "column": 40,
+            "message": "a rest parameter of unrepresentable type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts",
+            "line": 94,
+            "column": 9,
+            "message": "a rest parameter that is not an array is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts",
+            "line": 255,
+            "column": 28,
+            "message": "a rest parameter of unrepresentable type is not supported by this lowering yet"
+          }
+        ]
+      },
+      "frontend-internal-refusals": {
+        "classification": "frontend-defect",
+        "count": 3,
+        "diagnosticsByCode": {
+          "NTS1001": 3
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactClient.ts",
+            "line": 20,
+            "column": 19,
+            "message": "a shorthand naming nothing in scope is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+            "line": 62,
+            "column": 5,
+            "message": "`enqueueReplaceState`, a declaration outside every walk"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+            "line": 78,
+            "column": 5,
+            "message": "`enqueueForceUpdate`, a declaration outside every walk"
+          }
+        ]
+      },
+      "function-expression-this": {
+        "classification": "documented-gap",
+        "count": 3,
+        "diagnosticsByCode": {
+          "NTS1001": 3
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberCacheComponent.ts",
+            "line": 18,
+            "column": 6,
+            "message": "`this` outside a method is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 15,
+            "column": 152,
+            "message": "`this` outside a method is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactBaseClasses.ts",
+            "line": 88,
+            "column": 156,
+            "message": "`this` outside a method is not supported by this lowering yet"
+          }
+        ]
+      },
+      "property-presence-and-metaobject-semantics": {
+        "classification": "explicit-non-goal",
+        "count": 3,
+        "diagnosticsByCode": {
+          "NTS1001": 3
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberReconciler.ts",
+            "line": 66,
+            "column": 19,
+            "message": "an `Object` static over something that is not an object here is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/ReactPerformanceTrackProperties.ts",
+            "line": 58,
+            "column": 23,
+            "message": "an `in` naming `$$typeof` on an `object`, which the anonymous `{ $$typeof? }` declares optionally -- its slot exists here whether or not it was written, so no test of the value can say which is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassComponent.ts",
+            "line": 320,
+            "column": 7,
+            "message": "an `in` naming `ref`, which is optional -- its slot exists here whether or not it was written, and `{}` and `{ ref: undefined }` disagree in JavaScript is not supported by this lowering yet"
+          }
+        ]
+      },
+      "regular-expressions": {
+        "classification": "documented-runtime-gap",
+        "count": 3,
+        "diagnosticsByCode": {
+          "NTS1001": 3
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactChildren.ts",
+            "line": 25,
+            "column": 35,
+            "message": "a regular expression literal, which needs a regular expression engine is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberHydrationDiffs.ts",
+            "line": 71,
+            "column": 22,
+            "message": "a regular expression literal, which needs a regular expression engine is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react/src/ReactChildren.ts",
+            "line": 12,
+            "column": 22,
+            "message": "a regular expression literal, which needs a regular expression engine is not supported by this lowering yet"
+          }
+        ]
+      },
+      "string-conversion": {
+        "classification": "documented-semantic-gap",
+        "count": 2,
+        "diagnosticsByCode": {
+          "NTS1001": 2
+        },
+        "examples": [
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/shared/CheckStringCoercion.ts",
+            "line": 5,
+            "column": 14,
+            "message": "a conversion to string from this type is not supported by this lowering yet"
+          },
+          {
+            "code": "NTS1001",
+            "file": "generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberClassUpdateQueue.ts",
+            "line": 334,
+            "column": 105,
+            "message": "a conversion to string from this type is not supported by this lowering yet"
+          }
+        ]
+      }
+    },
+    "topExactMessages": [
+      {
+        "count": 516,
+        "message": "a property `key` of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+      },
+      {
+        "count": 115,
+        "message": "a parameter of unrepresentable type (an intersection) is not supported by this lowering yet"
+      },
+      {
+        "count": 26,
+        "message": "a module-scope `let` holding a function, which may be reassigned with a closure of another layout is not supported by this lowering yet"
+      },
+      {
+        "count": 18,
+        "message": "a module-scope variable of unrepresentable type is not supported by this lowering yet"
+      },
+      {
+        "count": 17,
+        "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+      },
+      {
+        "count": 15,
+        "message": "this statement, which module evaluation therefore skips; the rest of the module's evaluation still runs, and every value this line would have computed keeps whatever it held before it"
+      },
+      {
+        "count": 13,
+        "message": "`null` or `undefined` where what it stands in for is not a reference is not supported by this lowering yet"
+      },
+      {
+        "count": 13,
+        "message": "a property `children` of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+      },
+      {
+        "count": 11,
+        "message": "a parameter of unrepresentable type (a union of `Iterable` | a boolean literal | an object | bigint | null | number | string | undefined) is not supported by this lowering yet"
+      },
+      {
+        "count": 9,
+        "message": "a function returning null is not supported by this lowering yet"
+      },
+      {
+        "count": 8,
+        "message": "a parameter of unrepresentable type (a union of an intersection) is not supported by this lowering yet"
+      },
+      {
+        "count": 7,
+        "message": "a parameter of unrepresentable type (a union of `NTSReactOptimisticKey` | null | string) is not supported by this lowering yet"
+      },
+      {
+        "count": 7,
+        "message": "a property `controller` of unrepresentable type (`AbortController`) is not supported by this lowering yet"
+      },
+      {
+        "count": 6,
+        "message": "a property `type` of unrepresentable type (a union of an intersection) is not supported by this lowering yet"
+      },
+      {
+        "count": 6,
+        "message": "a property the type does not declare is not supported by this lowering yet"
+      },
+      {
+        "count": 6,
+        "message": "an object literal that is not an object is not supported by this lowering yet"
+      },
+      {
+        "count": 5,
+        "message": "`prototype`, which `an anonymous type` does not declare is not supported by this lowering yet"
+      },
+      {
+        "count": 5,
+        "message": "a parameter of unrepresentable type (null) is not supported by this lowering yet"
+      },
+      {
+        "count": 4,
+        "message": "`performance`, a global with no definition here is not supported by this lowering yet"
+      },
+      {
+        "count": 4,
+        "message": "`ReactSharedInternals` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react/src/ReactSharedInternalsClient.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'ReactSharedInternals' before initialization`, at the moment the read runs"
+      },
+      {
+        "count": 4,
+        "message": "a parameter of unrepresentable type (`Function`) is not supported by this lowering yet"
+      },
+      {
+        "count": 3,
+        "message": "`console`, a global with no definition here is not supported by this lowering yet"
+      },
+      {
+        "count": 3,
+        "message": "`firstScheduledRoot` is read here while evaluating this module, and `nts-workspace:///runtime/react/generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberRootScheduler.ts` -- which declares it -- has not been evaluated yet; the two modules import each other, so one of them runs first and this is the one. Node reports the same program as `ReferenceError: Cannot access 'firstScheduledRoot' before initialization`, at the moment the read runs"
+      },
+      {
+        "count": 3,
+        "message": "`now`, a name from an enclosing scope is not supported by this lowering yet"
+      },
+      {
+        "count": 3,
+        "message": "`this` outside a method is not supported by this lowering yet"
+      }
+    ]
+  },
+  "verifier": {
+    "valid": false,
+    "failures": [
+      {
+        "kind": "FellThrough",
+        "function": "checkAttributeStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkKeyStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkPropStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkOptionStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkCSSPropertyStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkHtmlStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "checkFormFieldValueStringCoercion",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "getIsRendering",
+        "block": 0
+      },
+      {
+        "kind": "FellThrough",
+        "function": "getLabelForLane",
+        "block": 0
+      }
+    ]
+  },
+  "exports": {
+    "emittedFunctions": 279,
+    "requiredReactExports": {
+      "createContainer": false,
+      "createHydrationContainer": false,
+      "updateContainer": false,
+      "updateContainerSync": false,
+      "flushSyncFromReconciler": false,
+      "injectIntoDevTools": false,
+      "createPortal": false
+    },
+    "allRequiredPresent": false
+  },
+  "usable": false
+}

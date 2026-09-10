@@ -1,0 +1,22 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "rootDir": "..",
+    "paths": {
+      "react": ["../generated/client-mutation-production-linked/packages/react/index.ts"],
+      "react/*": ["../generated/client-mutation-production-linked/packages/react/*"],
+      "react-reconciler": ["../generated/client-mutation-production-linked/packages/react-reconciler/index.ts"],
+      "react-reconciler/*": ["../generated/client-mutation-production-linked/packages/react-reconciler/*"],
+      "scheduler": ["../generated/client-mutation-production-linked/packages/scheduler/index.ts"],
+      "scheduler/*": ["../generated/client-mutation-production-linked/packages/scheduler/*"],
+      "shared/*": ["../generated/client-mutation-production-linked/packages/shared/*"]
+    }
+  },
+  "include": [
+    "runtime-globals.d.ts",
+    "../generated/client-mutation-production-linked/packages/react/index.ts",
+    "../generated/client-mutation-production-linked/packages/react-reconciler/src/ReactFiberReconciler.ts",
+    "../generated/client-mutation-production-linked/packages/scheduler/index.ts"
+  ]
+}

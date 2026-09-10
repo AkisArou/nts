@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "profile": "client-mutation-production",
+  "output": "generated/client-mutation-production/packages/react-reconciler/src/ReactFiberConfig.ts",
+  "coreImport": "../../../../../host-test/ReactFiberConfigMutation.ts",
+  "importedRuntimeBindings": 164,
+  "importedTypeBindings": 24,
+  "coreRuntimeBindings": 47,
+  "coreTypeBindings": 13,
+  "hostCapabilities": {
+    "supportsHydration": false,
+    "supportsMutation": true,
+    "supportsPersistence": false,
+    "supportsResources": false,
+    "supportsSingletons": false
+  },
+  "explicitCapabilityBindings": 5,
+  "trappingRuntimeBindings": 117,
+  "typedTrappingRuntimeBindings": 7,
+  "opaqueTypeBindings": 11,
+  "sha256": "4ff4c77f96ff47a4ac40c1b9a2a367df285d011e7138478013883cdc64fef6ba"
+}

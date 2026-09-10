@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "upstream": {
+    "commit": "1d34f91dfde6bba84d08b683aaba164c7194dacb"
+  },
+  "fixture": "experiments/compiler-output/Counter.tsx",
+  "sourceSha256": "7d76de3d911b7b3f0f2d5f9570893383837a90149b43711a833d97c6ee1c9589",
+  "raw": {
+    "sha256": "ef7eaa53e67e1068d6fc6746222d668c0582c89a393629adc968e203782e74bc",
+    "memoCacheCalls": [
+      6
+    ],
+    "diagnostics": [
+      {
+        "code": 7006,
+        "file": "generated/compiler-output/Counter.raw.tsx",
+        "line": 7,
+        "message": "Parameter 't0' implicitly has an 'any' type."
+      },
+      {
+        "code": 2322,
+        "file": "generated/compiler-output/Counter.raw.tsx",
+        "line": 26,
+        "message": "Type 'unknown' is not assignable to type '(() => void) | undefined'."
+      }
+    ]
+  },
+  "recovery": {
+    "parameters": [
+      "Counter:0"
+    ],
+    "locals": [
+      {
+        "name": "t1",
+        "type": "() => void"
+      },
+      {
+        "name": "t3",
+        "type": "JSX.Element"
+      }
+    ],
+    "specializedCalls": 1,
+    "cacheSlotTypes": [
+      "number",
+      "() => void",
+      "string",
+      "() => void",
+      "number",
+      "JSX.Element"
+    ],
+    "sha256": "2507ff9d36f655a4e53b03b5b608bc252a38da51cf0265e356fe9e81d9d9bc6a",
+    "diagnostics": [],
+    "jsxLowering": {
+      "elements": 1,
+      "sha256": "c00606a7f9aa77862e6f3debceac19755f7e2f824e52ababab3668aba01c4a40",
+      "diagnostics": []
+    }
+  }
+}

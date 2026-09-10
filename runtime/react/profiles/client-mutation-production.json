@@ -1,0 +1,28 @@
+{
+  "name": "client-mutation-production",
+  "description": "React client and reconciler, production constants, mutation host supplied by NTS",
+  "entries": [
+    "packages/react/index.js",
+    "packages/react-reconciler/src/ReactFiberReconciler.js",
+    "packages/scheduler/index.js"
+  ],
+  "constants": {
+    "__DEV__": false,
+    "__EXPERIMENTAL__": true,
+    "__PROFILE__": false,
+    "__TEST__": false
+  },
+  "forks": {
+    "packages/shared/ReactSharedInternals.js": "packages/react/src/ReactSharedInternalsClient.js",
+    "packages/shared/ReactFeatureFlags.js": "packages/shared/ReactFeatureFlags.js",
+    "packages/scheduler/src/SchedulerFeatureFlags.js": "packages/scheduler/src/SchedulerFeatureFlags.js",
+    "packages/react-reconciler/src/ReactFiberConfig.js": "virtual:nts-recording-mutation-host"
+  },
+  "hostCapabilities": {
+    "supportsMutation": true,
+    "supportsPersistence": false,
+    "supportsHydration": false,
+    "supportsResources": false,
+    "supportsSingletons": false
+  }
+}

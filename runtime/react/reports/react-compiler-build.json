@@ -1,0 +1,578 @@
+{
+  "schema": 2,
+  "upstream": {
+    "repository": "/home/akisarou/Projects/react",
+    "commit": "1d34f91dfde6bba84d08b683aaba164c7194dacb",
+    "entry": "compiler/packages/babel-plugin-react-compiler/src/index.ts"
+  },
+  "builder": "tsup@8.4.0",
+  "toolchainLock": {
+    "path": "package-lock.json",
+    "sha256": "193b9536325ee35b98ebf246bd27f9fcae189e7a05aab8e7c1742800e3d5428f"
+  },
+  "sources": {
+    "count": 111,
+    "files": [
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Babel/BabelPlugin.ts",
+        "bytes": 3417,
+        "sha256": "dc5f173d633e5270a6ef54b0bdc62b83aa7d3c93cd32abd71c37fa6cec3b9260"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Babel/RunReactCompilerBabelPlugin.ts",
+        "bytes": 1376,
+        "sha256": "7836df7434a99ee5535a1c5abc4b9a05c3a36707556314173a87f844c0858cfa"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/CompilerError.ts",
+        "bytes": 30981,
+        "sha256": "79e7b6221e16f9ad2f73767d0050366f5455963ed7f0a3d2aaa03696536b5c05"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Gating.ts",
+        "bytes": 7063,
+        "sha256": "2b8ab098dc8937d3dd27be87f64254c9a8a1f62fe2886a50955ba0057e2b013a"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Imports.ts",
+        "bytes": 10177,
+        "sha256": "98b1dc484ceb4c30fd38fb7be9a74a657d0f737d6aaa1657dfec11b662774d09"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Options.ts",
+        "bytes": 13414,
+        "sha256": "16bd95f5fc9a07612a162814b97c3944ffa6c105518fe1cdfbbaf06037054196"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Pipeline.ts",
+        "bytes": 17472,
+        "sha256": "0d4c67bd60443f528385b7eea4890caefd8ee0b9be43d8cd59b01092e8c315af"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Program.ts",
+        "bytes": 39100,
+        "sha256": "9ab724df606e3bc59a9bb7f19f6f9619753535d2bff007a4b0fd45a1063260e1"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Reanimated.ts",
+        "bytes": 1809,
+        "sha256": "58c615f92ac703bfb2a694656d89e0554dc005f3c8f1f3e9ec22a0b1cf9165bf"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Entrypoint/Suppression.ts",
+        "bytes": 6885,
+        "sha256": "bb9517524d9f145ec3a0d124dd5fc1a5770d62d21bc3bee5c03dc325bdfc96d1"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Flood/TypeErrors.ts",
+        "bytes": 3222,
+        "sha256": "ae21bdc8c5f167000dc6f2f113f93fbd214aaf6ed73e61c7d7bb31dbb638ff88"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Flood/Types.ts",
+        "bytes": 28038,
+        "sha256": "f431b4f6b2bff96bda12111f5d0fc34a3e29f101e4b7c4a10abe7ac995b11c2b"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/AssertConsistentIdentifiers.ts",
+        "bytes": 2680,
+        "sha256": "925f90a8a6ba52159b5b0aed901b24b518079fad5d4ac12c334f1854995b3b70"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/AssertTerminalBlocksExist.ts",
+        "bytes": 1772,
+        "sha256": "7c39614a1a66eab6ca433a1e653b5baa30fa4802fee3450b02824d6adbfd0097"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/AssertValidBlockNesting.ts",
+        "bytes": 4892,
+        "sha256": "021866fbb54c6346557b8ac787131ec82c99897a65f4383e5f09d12931003d4a"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/AssertValidMutableRanges.ts",
+        "bytes": 1949,
+        "sha256": "ffbad56a3aa2815c6acc3691da8b4c35436314302167ef6a08a397810810f5d0"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/BuildHIR.ts",
+        "bytes": 148820,
+        "sha256": "b76acd787baa40d3b89fe164694a9f675bc08ec0b6b1aabdba4542c6b177ca13"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/BuildReactiveScopeTerminalsHIR.ts",
+        "bytes": 8375,
+        "sha256": "c46175b915cd04502f4298eb82bc3e9d6237549d7443638dff7a196067b23d18"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/CollectHoistablePropertyLoads.ts",
+        "bytes": 26215,
+        "sha256": "2e9843d2bd8e683407f7e24b3b79bc05f07502a4eb3cf875edb972f8449fe3a6"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/CollectOptionalChainDependencies.ts",
+        "bytes": 13854,
+        "sha256": "b06708cca3041320c6d146704f46729a69c956eaf878494c4db6f6d89fed5e8c"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/ComputeUnconditionalBlocks.ts",
+        "bytes": 1212,
+        "sha256": "2a521ac74986d96faf9fddd40049e93c887d6b5a49850c8f9fbb4d0be4ab1015"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/DefaultModuleTypeProvider.ts",
+        "bytes": 4925,
+        "sha256": "b8fa4ed2c428780674674595c444831024e7190b526db61d92ff0d303bff89d2"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/DeriveMinimalDependenciesHIR.ts",
+        "bytes": 12400,
+        "sha256": "617d0f95e4e8ed4bb5901829819a36b1d060eb87853810d466efad1751ea680d"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/Dominator.ts",
+        "bytes": 8364,
+        "sha256": "34ff9d406a4f5708e08d3c7bc2f86f39be5428c30ae94a7588981178538cc6b6"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/Environment.ts",
+        "bytes": 36928,
+        "sha256": "eff1b270143e8fb31e7b86bd750c71cf9e405d659194b4f3e979da22fa5b5838"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/FindContextIdentifiers.ts",
+        "bytes": 6993,
+        "sha256": "ec9bcdc123cc5a830b309e212b9c085c4528e2089c7d9ea19f25cfb810836312"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/Globals.ts",
+        "bytes": 30535,
+        "sha256": "1541ca5eab65bdd47d9fd1e638e5b9dc57f20fcb6e3e06aa7ae0273498248b99"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/HIR.ts",
+        "bytes": 52298,
+        "sha256": "9812bddc5fabba270c3b403a3b7ab92abfce0fef7d3c81528c53f651f87c8b47"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/HIRBuilder.ts",
+        "bytes": 28001,
+        "sha256": "98d6abed6872c57f8a4760887f5522c7a1cc099b31afaef81ab65ee8a4b6d077"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/MergeConsecutiveBlocks.ts",
+        "bytes": 4769,
+        "sha256": "92ec05f046335ac2d8dbc8041dc10a561bf4efdec0e8ac4140784cf676f31293"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/MergeOverlappingReactiveScopesHIR.ts",
+        "bytes": 10013,
+        "sha256": "8b5f7ebeaea4434c80cf29a82e548b89785389149316a6fd97d462fb77b03816"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/ObjectShape.ts",
+        "bytes": 42332,
+        "sha256": "f7764cb677e93f374d9377da01dfcdc984fbc514a7c3d7d5b4453ad0892005db"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/PrintHIR.ts",
+        "bytes": 31304,
+        "sha256": "c8927bc5f61528dc6053b57cdd7879930c83db9852f9d0a4136249c6f202968f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/PropagateScopeDependenciesHIR.ts",
+        "bytes": 26271,
+        "sha256": "70726b07b76cd7227bc13f5c6d9263fdfd44c3e003337f5048199d1ac2509a8f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/PruneUnusedLabelsHIR.ts",
+        "bytes": 2625,
+        "sha256": "ac36ed30eefb5a57a2fe8ba80e95ebcc374a578638e7476aec44bcda826dd045"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/Types.ts",
+        "bytes": 5612,
+        "sha256": "98101eee1678c37cffd5e897b652e8ed13c813c87de7b05d7e08c6ff083d2748"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/TypeSchema.ts",
+        "bytes": 8610,
+        "sha256": "1e84c8c25a119561494aa0e30a841b914cba73f3bf2f93132f26ed16fa7a7847"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/HIR/visitors.ts",
+        "bytes": 31159,
+        "sha256": "c1dc4319f85086ee10778d5c7bf42deb342cdddb919a534b522c116e5805b743"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/index.ts",
+        "bytes": 1572,
+        "sha256": "2caf5a8cc86c68f48275d86ff68de9bee29f9577c740837c16808ecf725fadb1"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/AliasingEffects.ts",
+        "bytes": 8908,
+        "sha256": "67b545bbe25f2c857d28da97e41958e619e065c1113e9d201aa898743a014d95"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/AnalyseFunctions.ts",
+        "bytes": 4036,
+        "sha256": "e1980cc43f0d43fea1a6f5c2c1b23c28ced06174d077e09157a8638f033859eb"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/ControlDominators.ts",
+        "bytes": 3592,
+        "sha256": "0d95cde46e114433a11ba547b524e7e1ebbd76fe98f3949765bf77bb3f6da6f7"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/DropManualMemoization.ts",
+        "bytes": 18986,
+        "sha256": "4cce51a6d718b619db1a078c0d8e0fa853079edc3aa8043ea5e102fea92e5096"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/InferMutationAliasingEffects.ts",
+        "bytes": 97927,
+        "sha256": "d99d48cb4ed8ded3a2ce0a0f2f7fb0c2f67d9973523b4d879711b234e5fc1368"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/InferMutationAliasingRanges.ts",
+        "bytes": 27963,
+        "sha256": "a2c9d9aa4f098453aed0b9b89e4f2f93b403e4b1f5a133bdedfe674e8f5bf522"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/InferReactivePlaces.ts",
+        "bytes": 13158,
+        "sha256": "8e7f5386f4c4141463a9f563e57e16dbc4495e6de7a347caaef9deffbd17b18f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Inference/InlineImmediatelyInvokedFunctionExpressions.ts",
+        "bytes": 11100,
+        "sha256": "90a290b9945b068fcc80f0d4a460308c9b75cd910bc9ad977abb7db0d1083fea"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/ConstantPropagation.ts",
+        "bytes": 19467,
+        "sha256": "b0d3917d6b9ca3fe2d49ff9a03aa25a4bd3afaaf507d21a50c875f29d63f6401"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/DeadCodeElimination.ts",
+        "bytes": 13588,
+        "sha256": "1cd0972efa64dfc72ec3b43e466cdf913c275daa4a593395f3d3360669a766a6"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/OptimizeForSSR.ts",
+        "bytes": 8495,
+        "sha256": "3097b83174ca95df82a1ab4158602e0a67e2fdd2f6b3a0f8ae1b846b93af33b0"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/OptimizePropsMethodCalls.ts",
+        "bytes": 1157,
+        "sha256": "b5e9d1dfe16f004c9a53afb7237c7dae117c4ccbb19934022e953b12066751c3"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/OutlineFunctions.ts",
+        "bytes": 1452,
+        "sha256": "11e09c98a969171ab5726e1d890ca0ed02026e4f8ef28213449e0098853334bf"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/OutlineJsx.ts",
+        "bytes": 13513,
+        "sha256": "82a97cad6e0cf2326e3b58ba6f43fe1899158b8d35a86c729ab38f3fe81f9544"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Optimization/PruneMaybeThrows.ts",
+        "bytes": 3609,
+        "sha256": "a31fb42650e6aba7e20e149d30adf33e16d3d2bef612b56880543cdc6de74e73"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/AlignMethodCallScopes.ts",
+        "bytes": 2603,
+        "sha256": "1cc8cf975c8bce47d08f40d50251dfd3906b4f4c8772f992c130f13a2fc0c810"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/AlignObjectMethodScopes.ts",
+        "bytes": 3166,
+        "sha256": "50e5379b797ad0f0a96cd02ee3347dd9d6bfd52c63e6d3b8d883c5c84ef5e112"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/AlignReactiveScopesToBlockScopesHIR.ts",
+        "bytes": 11528,
+        "sha256": "c09d2a0b407ff861e2980743d6b8404ad08fe5ab0748cc87d8ee87a78fff0a68"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/AssertScopeInstructionsWithinScope.ts",
+        "bytes": 2936,
+        "sha256": "e8d44c6c7cd2d311bb55f0fb8f3c4b875cd4a6446e60b9a6e6e94588e980bdd2"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/AssertWellFormedBreakTargets.ts",
+        "bytes": 1106,
+        "sha256": "aeecbed84fb7bddc5cd715eb8df2762b16a00f53dc2f9ccc35816afa43d36bad"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/BuildReactiveFunction.ts",
+        "bytes": 44709,
+        "sha256": "baa3d032583501aa226079fb6eb2518e91c78585120699a17ef01a54c54f2729"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/CodegenReactiveFunction.ts",
+        "bytes": 77700,
+        "sha256": "f0da74fedda4951e9aefe4b5a9b379955650150ce560b4113ce70519efabb31f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/CollectReactiveIdentifiers.ts",
+        "bytes": 2135,
+        "sha256": "783054f865761840631a27da557cfe4fcd81e91ead050553dffba4c651dc91ad"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/CollectReferencedGlobals.ts",
+        "bytes": 1325,
+        "sha256": "bfa0e557f6ce49008552567918c0ac971ee7eafadeb5e554560fbe1889441c80"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/ExtractScopeDeclarationsFromDestructuring.ts",
+        "bytes": 5684,
+        "sha256": "fb095060dba1b0a3c3b4ddb519b712650255c79d551e1465404f1834da164a51"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/FlattenReactiveLoopsHIR.ts",
+        "bytes": 2136,
+        "sha256": "b7b49b4bef92b64b07bc3365dad7fbed1ad2586770d50eb71fb009862ead1014"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/FlattenScopesWithHooksOrUseHIR.ts",
+        "bytes": 3952,
+        "sha256": "eab3ef14c99f5da65af8c63633a567bce4343adc86acb74c6accac042004c1b3"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/InferReactiveScopeVariables.ts",
+        "bytes": 13808,
+        "sha256": "0fa766102520e0f3e5d2aa827486b54bf0818fd9c2e4b45c0a1bafde17ab8d21"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/MemoizeFbtAndMacroOperandsInSameScope.ts",
+        "bytes": 9522,
+        "sha256": "dc3b563b0399ebb5ce7eba4e7ed311f7dae6456e4a1ae59f32d9003f559e89d8"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/MergeReactiveScopesThatInvalidateTogether.ts",
+        "bytes": 19919,
+        "sha256": "4ea439c8c129fb57aa1da1c3ec8b408c42f32008759482393f67b8f66690dbe1"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PrintReactiveFunction.ts",
+        "bytes": 12517,
+        "sha256": "3b04c6d53f210fc8d19fd08d178082609c6f04fe7bf9b7c2917847f2ad42eb6f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PromoteUsedTemporaries.ts",
+        "bytes": 14954,
+        "sha256": "0f856921223f600edb67e84ac8255fee8ab844750001f27912d9beaee32d3ae3"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PropagateEarlyReturns.ts",
+        "bytes": 9966,
+        "sha256": "02fedffe921de0d798dd1b17b9946ec7b1318d8fada3bfa016cafccde3521c9d"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneAlwaysInvalidatingScopes.ts",
+        "bytes": 3773,
+        "sha256": "2f3ca2f359b8e72cb5a90e97ad54914fbc2931ce86c161bba5683da0211ab511"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneHoistedContexts.ts",
+        "bytes": 5347,
+        "sha256": "1a23fc0a49294e227e5ec669cac842b308bd0d0faa0dba581286e48faf3e8604"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneNonEscapingScopes.ts",
+        "bytes": 36836,
+        "sha256": "eeda9bd2f73b48d16b42b12279aa766aa42b457b3840778df0c1bfd4ae0e218b"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneNonReactiveDependencies.ts",
+        "bytes": 3642,
+        "sha256": "487551edd1d54d9e8bf594e008065e424aff00ae2fc5612b079041b7b7dc2c2f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneTemporaryLValues.ts",
+        "bytes": 1822,
+        "sha256": "8884ca7b80634526cb2b4199aece7f1e3db3e4016df3e89d34229fde0611744b"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneUnusedLabels.ts",
+        "bytes": 1904,
+        "sha256": "568b41f8563e7e1922460631e362dd411cbb0ed575b634f9152e90f058d7ad1f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/PruneUnusedScopes.ts",
+        "bytes": 2118,
+        "sha256": "5628fdafd795dbadd874b5e3a511ff67905bd2d3a1fa68e55e14a01c859d3b77"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/RenameVariables.ts",
+        "bytes": 6037,
+        "sha256": "d2968aa6f6e7dba8f007e0e98076c473ca64031cf18f050d82de446281c38df7"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/StabilizeBlockIds.ts",
+        "bytes": 2502,
+        "sha256": "9000fd8bb3072bf00ebfc739913859e9d260fa737a7bdf6471e1dd47a6ee2fbb"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/ReactiveScopes/visitors.ts",
+        "bytes": 18737,
+        "sha256": "37ac2f18d5281b9901ad02746d527bf581057dd4fd1331ba17f1fda2a2879c83"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/SSA/EliminateRedundantPhi.ts",
+        "bytes": 6066,
+        "sha256": "5a097ab9d726c78d2f18e01996f729046cca8cd5fc7512d9965cc0333aaa6fd9"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/SSA/EnterSSA.ts",
+        "bytes": 10052,
+        "sha256": "dc90bd087e75075d05f07d41c99d30f1a685dc548fa615e513b44e96eccb4ca8"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/SSA/RewriteInstructionKindsBasedOnReassignment.ts",
+        "bytes": 6398,
+        "sha256": "4d6e323d27bd5d227c7b31de38d2803bc72a89a46cee93f7ae480acef5726699"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Transform/NameAnonymousFunctions.ts",
+        "bytes": 6036,
+        "sha256": "7f7ab0701cea523cfb3304b1b1b441a83322c289a1c1662d3300912b17ebf4b0"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/TypeInference/InferTypes.ts",
+        "bytes": 22390,
+        "sha256": "32259c8e5f856e32d1961f8b1a7dea75c537ad5dcb5e1ff420f060f051910197"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/ComponentDeclaration.ts",
+        "bytes": 677,
+        "sha256": "4c1154e47b6e4b1ad361da3503103632d12489ed9981cb0aecf51bf22d1ceefc"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/DisjointSet.ts",
+        "bytes": 3790,
+        "sha256": "2affd269fd779dc10d915f63abcbd85acf824a712def09896de356d1c5bb7e04"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/HookDeclaration.ts",
+        "bytes": 637,
+        "sha256": "5b57620efa0d35db66cbf92e8eb350c363cf9352cbb82920a67750cf2594b7ac"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/Keyword.ts",
+        "bytes": 1742,
+        "sha256": "3781364d7c8f8af08ba32906dc2761b82c299a8095d4a81d76b01422ebf2c3c4"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/Result.ts",
+        "bytes": 6349,
+        "sha256": "56f3d6fc1eee67b1e9f071b1740efececc020a88ea718797a84565981ee38b26"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/Stack.ts",
+        "bytes": 2448,
+        "sha256": "73ac6df53cc9d31cc6cfdeb7e707905c1c1e7d5ecdd48f8d5147748d5a843e5d"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/TestUtils.ts",
+        "bytes": 4988,
+        "sha256": "ccc467cd7ea22e9b98782d6a8bd542b969d3934d1c250f94f2f8cf41559e48b9"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Utils/utils.ts",
+        "bytes": 4034,
+        "sha256": "6645228b2f93b33e2c41277dacd9307a0766142c5aa83a454762d75d2681b9e0"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateContextVariableLValues.ts",
+        "bytes": 4359,
+        "sha256": "817f61dbc8293dec36144bd2b7cc57bc7c3ec968e858466388604f729bd51f2f"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateExhaustiveDependencies.ts",
+        "bytes": 36726,
+        "sha256": "cf2ebb34441cf1c74833eeebbfc7290a1bcfd5b00bd5870bbea79e64b2fb9418"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateHooksUsage.ts",
+        "bytes": 16123,
+        "sha256": "6637c5c62818a2436aef6916531545b513d2505101723ecf09739b86e90cf099"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateLocalsNotReassignedAfterRender.ts",
+        "bytes": 8383,
+        "sha256": "07c045a861572395078f48fd82eee99ef03b212d24e3c203a986c21cd6e67cc2"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoCapitalizedCalls.ts",
+        "bytes": 3297,
+        "sha256": "8ebcc14ce339f681bc4c93acdcaa7313a75f6db3b39a695155ab32e587e7f32e"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoDerivedComputationsInEffects_exp.ts",
+        "bytes": 23676,
+        "sha256": "0e9b043fd4f36366c84072c1453f7dae7673d39e34462affc89dd2d3d7a9da1d"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoDerivedComputationsInEffects.ts",
+        "bytes": 7184,
+        "sha256": "1e6b10c18b19d89ad39cf7d2c0f134fc109b1c4db4e9289d992c258fc9ce53d5"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoFreezingKnownMutableFunctions.ts",
+        "bytes": 5738,
+        "sha256": "b689a9c7767b65049b93f2c47f9b90eb3099a91c2b5e6f0bad27eec93510cb94"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoJSXInTryStatement.ts",
+        "bytes": 2402,
+        "sha256": "718e27b4ce443f619fefdc4c6954b9a516304006c622b66b4dc5f7d8620472d3"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoRefAccessInRender.ts",
+        "bytes": 31746,
+        "sha256": "2375ecde74bf01f1d711f5f5b620bd89ed7caa876187ed76a97a7d38974933e8"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoSetStateInEffects.ts",
+        "bytes": 13229,
+        "sha256": "9d29326404214b79b8f60ef8492ff1138526983ca6494b88f0b122d0cc1628d4"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateNoSetStateInRender.ts",
+        "bytes": 7413,
+        "sha256": "5d66b446435bf768f6ea3a6811a48848741f87eefda55f87613c6e8b011415c1"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidatePreservedManualMemoization.ts",
+        "bytes": 20481,
+        "sha256": "8253c0a03c6f6aeaba2208ed2f2196aa7ea6e3d7f01091df94b15ca027175df3"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateSourceLocations.ts",
+        "bytes": 9946,
+        "sha256": "4df786a31cc2b51c2277678e66eb1b18a13c62f65838bf0298c29e5796a6e222"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateStaticComponents.ts",
+        "bytes": 3145,
+        "sha256": "6c3e9bff971077719f7683421eef97a4a72e265d79dd88c468412609306e0cec"
+      },
+      {
+        "path": "compiler/packages/babel-plugin-react-compiler/src/Validation/ValidateUseMemo.ts",
+        "bytes": 8026,
+        "sha256": "57f8a1f3fb52ca4355f24f603fe22a1e811f963a1dd56a5f17d6b418b7797c43"
+      }
+    ]
+  },
+  "artifact": {
+    "path": "generated/react-compiler/index.cjs",
+    "bytes": 1118658,
+    "sha256": "443f73a990b678088a084ad7f0e2413da496ecf9a678aee45fea9678b6e72c8f"
+  }
+}
