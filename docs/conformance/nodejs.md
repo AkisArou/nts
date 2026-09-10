@@ -19014,6 +19014,62 @@ wrapper**, which is also why `SlowBuffer.name` and `CallTracker.name` are
 not our absence -- the same category as `zlib.deflate` reporting
 `"asyncBufferWrapper"`.
 
+## The compiled lane has no wrong answers, and one abort
+
+Asked for the first time with the guard working. `differential-addon.mjs` on the
+22 addons from an 08:32 pin:
+
+    os        400,280 comparisons   0 divergence(s)
+    path      380,798              0
+    punycode  140,224              0
+    util       20,024              0
+    seventeen others  NOTHING WAS COMPARED
+
+The seventeen are the guard added earlier doing its job. A module publishing none
+of the names its corpus calls used to answer "0 comparison(s), 0 divergence(s)"
+and exit 0, which reads as agreement and is a blank.
+
+### The 40,084 that were not divergences
+
+`publishes()` skips a spec whose export the addon lacks, and resolved only the
+**leading** identifier of the label. `path` publishes `posix` and does not publish
+`posix.format`, so every `posix.format(...)` spec passed the guard, threw inside
+the module, and arrived as a divergence:
+
+    before  420,882 comparison(s), 40,084 divergence(s)
+    after   380,798 comparison(s), 0 divergence(s)
+            not compared, absent from the addon: posix.format, win32.format, …
+
+All 40,084 were `m[ns].format is not a function`. That is the failure the function
+was written to prevent, one level down, and the file's own header states the
+objection: a real wrong answer among them would have been invisible. It resolves
+the whole dotted chain now.
+
+Second instrument in this directory this evening to conflate a refusal with a
+wrong answer, in the column it exists to keep clean -- `agreement.mjs` was
+counting a module that built and would not load as a disagreement.
+
+### The abort
+
+    unescapeBuffer("%0日")
+      compiled  nts: refused: index 26085 is outside [0, 256), core dumped
+      node      "%0�"
+
+`querystring/src/main.ts:92` is `unhexTable[nextChar] ?? -1`, followed on the next
+line by `if (!(hexLow >= 0))`. `unhexTable` is exactly 256 entries and `nextChar`
+is a `charCodeAt`, so it can be anything; 26085 is a CJK character. JavaScript
+defines that read as `undefined`, **the source guards it**, and the compiled
+program aborts the process.
+
+The trigger needs all three parts: a `%`, a valid hex digit, then a character of
+code >= 256. `"%0é"` is fine because 233 is in range, and `"%日"` is fine because
+it is too short to reach the second digit. That is why no pinned test finds it,
+and why a generated corpus did on its first honest run.
+
+So the axis today reads: nothing is wrong, a great deal is absent, and one thing
+aborts. A refusal costs a test; an abort costs the process, from a three-character
+input any query string can carry.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
