@@ -20919,7 +20919,7 @@ Implementing that means reaching for `URL` from inside `net`, which is a couplin
 decision rather than a missing function, so it is written down instead of guessed
 at.
 
-## Which rows would catch a regression: 81 of 275 fields are constant
+## Which rows would catch a regression: 250 of 899 fields are constant
 
 `spec-variance.mjs`, written to answer a question from the compiler lane rather
 than one of mine. Their result: `nts check` reported **"agreed on every case" with
@@ -20932,7 +20932,14 @@ One level in, so do a field that varies and a field that is a constant. A field
 answering the same value for every fixed input can only catch a change to that
 constant, and it contributes comparisons regardless.
 
-    81 of 275 field(s) answer the same value for every fixed input
+    250 of 899 field(s) answer the same value for every fixed input
+
+The first figure written here was **81 of 275**, which was three modules and not
+twenty-two -- the sweep had died partway on `String()` refusing a null-prototype
+object, after printing enough output to look complete. `os`'s `plainConstants` and
+`querystring`'s parsed results are null-prototyped on purpose, which is a thing
+this profile gets right and an instrument reading them has to expect. Guarded, and
+the number is the whole corpus now.
 
 **Sampled rather than audited, and every one sampled is deliberate.**
 `BlockList.isBlockList(list)` is `true` for all inputs and should be;
@@ -20946,7 +20953,7 @@ that was **meant** to vary and does not -- usually because every input drives it
 down one path, most often an error path they share. Reading the list is a person's
 job and the question for each row is "what change would this notice".
 
-I have not audited all 81. That is stated rather than left implied: the number is
+I have not audited all 250. That is stated rather than left implied: the number is
 a starting point for a review, not a result.
 
 ## Conventions

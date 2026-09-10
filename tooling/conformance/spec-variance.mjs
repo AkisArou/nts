@@ -27,6 +27,27 @@
 // of them are constant. Reading them is a person's job, and the useful question
 // for each constant is "what change would this notice".
 
+/**
+ * A string for anything a spec can return, including what `String()` refuses.
+ *
+ * `String(value)` throws `Cannot convert object to primitive value` on a
+ * null-prototype object, and `os`'s `plainConstants` and `querystring`'s parsed
+ * results are exactly that -- a first version of this file died on them partway
+ * through the sweep, after printing several modules' worth of output that looked
+ * complete.
+ */
+function render(value) {
+  try {
+    return String(value);
+  } catch {
+    try {
+      return JSON.stringify(value) ?? "(unrenderable)";
+    } catch {
+      return "(unrenderable)";
+    }
+  }
+}
+
 import { loadNode } from "./surface-load.mjs";
 import { CORPORA } from "./differential-corpora.mjs";
 
@@ -53,7 +74,7 @@ for (const moduleName of MODULES) {
       } catch (error) {
         value = `threw:${error?.code ?? error?.name ?? "?"}`;
       }
-      answers.push(Array.isArray(value) ? value.map(String) : String(value).split("|"));
+      answers.push(Array.isArray(value) ? value.map(render) : render(value).split("|"));
     }
     if (answers.length === 0) continue;
     const width = Math.max(...answers.map((a) => a.length));
