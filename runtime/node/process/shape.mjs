@@ -45,6 +45,29 @@ export function shape(exports) {
     instance.memoryUsage.rss = exports._memoryUsageRss;
   }
 
+  // The class's members, promoted to own enumerable properties of the instance.
+  //
+  // Node's `process` carries `title`, `ppid`, `stdin`, `exitCode` and `_exiting`
+  // as its own keys; ours held them on `Process.prototype`, so `Object.keys`,
+  // spread, `JSON.stringify` and `assert.deepStrictEqual` all saw five fewer
+  // properties than node's. `stream/shape.mjs` carries the same correction for
+  // its class facades.
+  //
+  // Blanket, and measured before it was written: `Process.prototype` has exactly
+  // five members and node has own-enumerable versions of all five, so nothing is
+  // promoted that node does not have. The descriptor is carried across as it is,
+  // accessors included, so a getter still runs with the instance as its receiver.
+  const prototype = Object.getPrototypeOf(instance);
+  if (prototype !== null && prototype !== Object.prototype) {
+    for (const key of Object.getOwnPropertyNames(prototype)) {
+      if (key === "constructor") continue;
+      if (Object.prototype.hasOwnProperty.call(instance, key)) continue;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+      if (descriptor === undefined) continue;
+      Object.defineProperty(instance, key, { ...descriptor, enumerable: true });
+    }
+  }
+
   // `Object.prototype.toString.call(process)` is `"[object process]"` on node.
   // Its descriptor differs from `console`'s in both directions -- writable and
   // *non*-configurable, where console's is non-writable and configurable -- so

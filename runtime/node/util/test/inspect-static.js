@@ -102,3 +102,42 @@ assert.strictEqual(
     '\u001b[32m[byteLength]\u001b[39m: \u001b[33m1\u001b[39m }',
 );
 assert.strictEqual(inspect(() => 1), '[Function]');
+
+// `util.inspect.defaultOptions`, which node documents and programs use to set a
+// depth or turn on colours globally. Retained here because the upstream file that
+// covers it is a §13 non-goal for other reasons, and this behaviour is not one:
+// it is a property descriptor and an object merge.
+//
+// All four of these were wrong on 2026-09-10 and none of them was visible to any
+// test. The property was a plain assignment, so it was enumerable where node's is
+// not, and setting it replaced the property's value while `inspect` and `format`
+// went on reading the module's live defaults object -- making the documented way
+// to change the default depth a silent no-op.
+{
+  const descriptor = Object.getOwnPropertyDescriptor(inspect, 'defaultOptions');
+  assert.strictEqual(typeof descriptor.get, 'function');
+  assert.strictEqual(descriptor.enumerable, false);
+
+  const deep = { a: { b: { c: { d: { e: 1 } } } } };
+  const held = inspect.defaultOptions;
+  const before = inspect(deep);
+  const keysBefore = Object.keys(held).length;
+  const depthBefore = held.depth;
+  try {
+    inspect.defaultOptions = { depth: 5 };
+    // The same object, merged into -- not a replacement.
+    assert.strictEqual(inspect.defaultOptions, held);
+    assert.strictEqual(Object.keys(inspect.defaultOptions).length, keysBefore);
+    assert.strictEqual(inspect.defaultOptions.depth, 5);
+    // And the change reaches the implementation, which is the point of it.
+    assert.notStrictEqual(inspect(deep), before);
+
+    assert.throws(() => { inspect.defaultOptions = 5; },
+                  { code: 'ERR_INVALID_ARG_TYPE' });
+    assert.throws(() => { inspect.defaultOptions = null; },
+                  { code: 'ERR_INVALID_ARG_TYPE' });
+  } finally {
+    inspect.defaultOptions = { depth: depthBefore };
+  }
+  assert.strictEqual(inspect(deep), before);
+}

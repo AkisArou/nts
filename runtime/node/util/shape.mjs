@@ -43,7 +43,28 @@ export function shape(exports) {
   // message for every test, naming nothing. Guarded so each test fails saying
   // which export it wanted.
   if (util.inspect !== undefined) {
-  util.inspect.defaultOptions = exports.inspectDefaultOptions;
+  // An accessor, non-enumerable, matching node's own descriptor -- and a setter
+  // that merges. A plain assignment made this own *and enumerable* where node's
+  // is own and not, and made `util.inspect.defaultOptions = { depth: 5 }` a
+  // no-op: it replaced the property's value while `inspect` and `format` went on
+  // reading the module's live object. Measured both ways against node.
+  //
+  // `configurable: false` is node's, and the guard is because `shape()` can run
+  // more than once against the same `exports.inspect` function object in one
+  // process -- two instruments loading the profile is enough -- and redefining a
+  // non-configurable property throws.
+  if (Object.getOwnPropertyDescriptor(util.inspect, "defaultOptions")?.get === undefined) {
+    Object.defineProperty(util.inspect, "defaultOptions", {
+      get() {
+        return exports.inspectDefaultOptions;
+      },
+      set(options) {
+        exports.setInspectDefaultOptions(options);
+      },
+      enumerable: false,
+      configurable: false,
+    });
+  }
   util.inspect.colors = exports.colors;
   util.inspect.styles = exports.styles;
   util.inspect.custom = Symbol.for("nodejs.util.inspect.custom");
@@ -73,6 +94,7 @@ export function shape(exports) {
   }
 
   delete util.inspectDefaultOptions;
+  delete util.setInspectDefaultOptions;
   delete util.colors;
   delete util.styles;
   return util;

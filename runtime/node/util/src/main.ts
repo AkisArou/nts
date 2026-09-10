@@ -35,6 +35,26 @@ import { shouldColorize } from "../../internal/colors.ts";
 import { stdout } from "../../internal/stdio.ts";
 
 export { inspect, inspectDefaultOptions, format, formatWithOptions, types };
+
+/**
+ * `util.inspect.defaultOptions`'s setter, node `lib/util.js`.
+ *
+ * **Node merges rather than replaces**, and that is not a detail: `inspect` and
+ * `format` both read `inspectDefaultOptions` at call time, so replacing the
+ * object would leave every caller reading the old defaults. Measured against node
+ * -- `util.inspect.defaultOptions = { depth: 5 }` leaves the object identical and
+ * its other eleven keys intact there, and here it replaced a twelve-key object
+ * with a one-key one that nothing read.
+ *
+ * Exported for `shape.mjs`, which owns where the property sits -- on the
+ * `inspect` function, which is public-object shaping rather than typed module
+ * behaviour -- and which deletes this name from the published surface the way it
+ * already deletes `inspectDefaultOptions`, `colors` and `styles`.
+ */
+export function setInspectDefaultOptions(options: unknown): void {
+  validateObject(options, "options");
+  Object.assign(inspectDefaultOptions, options);
+}
 export { deprecate };
 export { parseArgs };
 

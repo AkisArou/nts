@@ -20173,6 +20173,82 @@ can see it.
 compiled lane provides -- arrived at here by a different route than the surface
 census, and agreeing with it.
 
+## `process` held five of its own names on a prototype
+
+Node's `process` carries `title`, `ppid`, `stdin`, `exitCode` and `_exiting` as
+own properties. Ours held all five on `Process.prototype`, so `Object.keys`,
+spread, `JSON.stringify` and `assert.deepStrictEqual` saw five fewer properties
+than node's, while every read of them worked perfectly.
+
+`process/shape.mjs` now promotes the class's members to own enumerable properties
+of the instance, carrying each descriptor across as it is so an accessor still
+runs with the instance as its receiver. The same correction `stream/shape.mjs`
+took for its class facades, and measured the same way before it was written:
+`Process.prototype` has exactly five members and node has own-enumerable versions
+of all five, so nothing is promoted that node does not have.
+
+`surface-absence.mjs` on `process` went from nine `KEYS` rows to one, and that one
+is in the other direction -- `process.stdin._read` is own here and inherited on
+node, which is a stream-shape question rather than this one.
+
+### The test that failed is the one that should have
+
+`process/test/export-surface-static.js` pins the list of names node has and we do
+not, so it cannot widen unnoticed. The list **shrank** by exactly those five and
+the test failed, which is the outcome it exists to produce. Its own note read
+"`exitCode`, `title`, `ppid`, `stdin` are public and wanted" -- they were never
+absent, they were on the prototype, and nothing in the surface instruments could
+say which until `paths()` learned to see primitives.
+
+The pin is now 23 names. Removing five from a ledger of known gaps because the
+gaps closed is not weakening it; the test failing is how the closure was noticed
+at all.
+
+## `util.inspect.defaultOptions` was a no-op, and the descriptor is how it showed
+
+Found while clearing the last `KEYS` row of the sweep above: node's is an own
+**non-enumerable** getter and ours was an own **enumerable** data property.
+Ownership agreed and enumerability did not, which is a one-line fix and was not
+the interesting part.
+
+The property is documented public API -- the way a program sets a global inspect
+depth or turns on colours. Measured against node:
+
+    node    inspect.defaultOptions = { depth: 5 }   output deepens, object keeps
+                                                    its identity and 12 keys
+    ours    the same assignment                     output unchanged, object
+                                                    replaced by a 1-key one
+
+**It did nothing.** `inspect` and `format` both read the module's live
+`inspectDefaultOptions` object at call time, and a plain data property assignment
+replaced the property's value without touching that object. So the documented way
+to change the default depth silently had no effect, and the other eleven defaults
+were dropped from what a program read back.
+
+Node merges rather than replaces, and that is why: `ObjectAssign(defaults,
+options)` keeps every caller reading the same object. `shape.mjs` now installs an
+accessor with node's descriptor -- non-enumerable, non-configurable -- whose
+setter calls a `setInspectDefaultOptions` exported from the typed module, which
+validates with `validateObject` and merges. Non-object assignment throws
+`ERR_INVALID_ARG_TYPE` on both sides.
+
+The helper is deleted from the published surface the way `inspectDefaultOptions`,
+`colors` and `styles` already are, and the `defineProperty` is guarded because
+`shape()` can run twice against the same `inspect` function in one process and
+redefining a non-configurable property throws.
+
+### Covered, and the coverage controlled
+
+`test-util-inspect.js` is a §13 non-goal for reasons that have nothing to do with
+this -- realms, private V8 bindings, forged prototypes -- so the behaviour goes in
+`local/inspect-static.js`, which is what that file is for. Four assertions: the
+descriptor is a non-enumerable getter, the object survives assignment with its
+keys, the change reaches `inspect`, and a non-object throws with node's code.
+
+Controlled by restoring the pre-fix shim from `git show HEAD:` into a scratch copy
+and running against it: **fails there, passes restored.** All four were wrong
+before today and no test could see any of them.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

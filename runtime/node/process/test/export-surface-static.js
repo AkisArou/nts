@@ -87,15 +87,25 @@ const NAME_DIFFERS = {
 };
 
 // Absent, deliberately pinned so the list cannot widen unnoticed.
-//   `exitCode`, `title`, `ppid`, `stdin` are public and wanted.
 //   The `_`-prefixed ones plus `binding`, `dlopen`, `moduleLoadList` and
 //   `getBuiltinModule` are loader and V8 plumbing with no representation here.
 //   `report`, `domain` and the source-map pair are subsystems, not names.
+//
+// **Five names came off this list on 2026-09-10**: `_exiting`, `exitCode`,
+// `ppid`, `stdin` and `title`. The note here used to read "`exitCode`, `title`,
+// `ppid`, `stdin` are public and wanted", and they were never absent -- they sat
+// on `Process.prototype` where node has them as own properties of `process`, so
+// `Object.keys`, spread and `assert.deepStrictEqual` saw five fewer than node's.
+// `process/shape.mjs` now promotes the class's members to own enumerable
+// properties of the instance, which is the same correction `stream/shape.mjs`
+// carries for its class facades.
+//
+// This test failing is what said so. The list is a ledger of known gaps, and it
+// shrinking is the outcome it exists to make visible.
 const ABSENT = [
   "_debugEnd",
   "_debugProcess",
   "_eval",
-  "_exiting",
   "_kill",
   "_linkedBinding",
   "_preload_modules",
@@ -107,18 +117,14 @@ const ABSENT = [
   "debugPort",
   "dlopen",
   "domain",
-  "exitCode",
   "getBuiltinModule",
   "moduleLoadList",
   "openStdin",
-  "ppid",
   "reallyExit",
   "ref",
   "report",
   "setSourceMapsEnabled",
   "sourceMapsEnabled",
-  "stdin",
-  "title",
   "unref",
 ];
 
