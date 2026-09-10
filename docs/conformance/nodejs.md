@@ -21200,6 +21200,40 @@ shaped surface, adjacent to the layout question rather than the same as it --
 blind to `#private` fields and blind to the base. The layout question wants
 layouts.
 
+### Both halves, run: no at-risk pair in `runtime/node`
+
+`merged-layouts.mjs` reads the answer out of the compiler and **under-reports**:
+its signal is the `this` parameter of a lowered method, so a class with neither
+constructor nor methods emits nothing and field-less siblings are invisible to it.
+It found **five groups, twelve classes, every one latent** -- verified here
+independently by grepping all twelve names: no `instanceof` in `runtime/` mentions
+any of them. `SocketPeerEndedError` merging with `ERR_SERVER_NOT_RUNNING` is a
+*cross-family* pair neither survey would have predicted from names.
+
+`same-shape-classes.mjs` is the other half, and it needed three corrections before
+it was worth anything:
+
+- **Chains are safe, siblings are not**, so every pair is now classified. The walk
+  is the **prototype** chain, not the constructor chain -- `stream`'s facades made
+  a constructor walk call `Duplex`/`PassThrough` siblings when they are three
+  links of one chain.
+- **"No own fields" is indistinguishable from "only private fields"**, which is
+  where the layout lives. All three at-risk candidates were false, and the source
+  says why: `Blob` four private against `Buffer`'s none, `BlockList` three against
+  `BoundSocket`'s none, `net.Socket` twenty-seven against `Stream`'s none, plus
+  three different bases.
+- The lookup that reads those fields found **dgram**'s `Socket` for a question
+  about `net`'s, and separately returned nothing for `Stream` because `net`
+  publishes a class `stream` declares. Declaring module first, wider search only
+  if unique, no guessing.
+
+    seven pairs nominated -> three at risk -> three eliminated from source
+    four survivors, all chains
+
+So neither half finds a live pair. Nothing in this profile currently answers an
+`instanceof` wrongly, and the twelve latent groups are each one `instanceof` away
+from doing so.
+
 ### The sweep found itself three times getting there
 
 `new process.abort()` **called** `abort` and killed the process mid-run --
