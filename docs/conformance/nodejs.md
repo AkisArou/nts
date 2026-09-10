@@ -19452,6 +19452,54 @@ down so the remaining difference does not read as unfinished work: the earlier
 note that "node's stream instances carry no `_eventsCount`" was mine and was
 wrong.
 
+## What an instance looks like: a seventh seam, and 33 keys cleared
+
+Six instruments ask about the *module* -- which names it publishes, what they are,
+how they are installed, what class they inherit from, and which of node's it
+lacks. None asked what an **instance** looks like, which is what a program
+actually holds, and `EventEmitter` carrying two own keys node has neither of went
+through all six.
+
+`instance-shape-diff.mjs` constructs each published class with no arguments and
+compares own keys. 17 modules, **89 instances compared, 197 not constructible**
+with no arguments and counted rather than skipped.
+
+**Cleared: 33 keys in `zlib`.** `ZlibBase` declared `_flushMinimum`,
+`_flushMaximum` and `_flushFamily`, so eleven classes each carried three own
+enumerable keys node's instances do not have -- node's carry `_defaultFlushFlag`,
+`_finishFlushFlag`, `_defaultFullFlushFlag` and `_flushBoundIdx` and no equivalent.
+All six uses are `this.` inside the class, so `#` works where `EventEmitter`'s
+could not. Ours-only keys across the profile went 66 to 23.
+
+### Three categories, and only one of them is a finding
+
+    OWN-ONLY-NODE     130   node's internals, which this profile is not obliged to have
+    OWN-ONLY-OURS      23   a question, see below
+    OWN-VS-INHERITED   40   the object model
+
+**The instrument's own first answer was wrong**, and the correction changes how
+the rest reads. Reachability was `for...in`, which enumerates only *enumerable*
+properties, so `OutgoingMessage.writableEnded` was reported as a key node does not
+have -- node has it, as a non-enumerable prototype getter. Nine `TextDecoder` rows
+and several `OutgoingMessage` ones were the same mistake. Walking the chain with
+`getOwnPropertyNames` moved ten rows out of "node does not have this".
+
+**And an OWN-ONLY-OURS row is still a question rather than a finding.** The
+object-model difference also occurs with no prototype default at all, and then it
+is indistinguishable from absence:
+
+    new net.Server()   maxConnections   own false, `in` false
+    server.maxConnections = 5           own true
+
+`maxConnections` and `timeout` are documented node API; node creates the property
+when something assigns it and a typed class declares it up front. Six of the 23
+are that. It cannot be inferred from the objects, so answering one means asking
+whether node has the concept, which is a person reading node's documentation.
+
+Of the rest, nine are `TextDecoder` in `runtime/web-platform`, which this lane
+leaves alone, and the remainder are `http`'s `OutgoingMessage` internals,
+`fs.Dirent.type` and `net.SocketAddress.numericValue`.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
