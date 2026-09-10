@@ -733,7 +733,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # backend has no name for it: `runtime/jvm` carries `isDataView` and
   # `isViewKind` and not the pair together, so it is a method and a row in
   # `external`, both in the JVM lane's files. Asked for; not written here.
-  backend_examples 143 "through the JVM backend" ); }
+  backend_examples 144 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \

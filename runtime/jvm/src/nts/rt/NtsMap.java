@@ -116,15 +116,82 @@ public final class NtsMap {
         // The first version allocated `Object[]` and every case threw
         // `ClassCastException` at run time rather than refusing, which is the
         // one outcome this backend is supposed to make impossible.
+        // **Two passes, because JavaScript's own-property order is not insertion
+        // order.** Every key that is an array index comes first, *ascending*,
+        // and the rest follow in insertion order. This walked once and wrote
+        // each key as it came, which is the order the C runtime had until the
+        // same fix landed there -- and `http`'s status table is
+        // `{ 100: "Continue", 101: "Switching Protocols", ... }`, every key an
+        // index, so any enumeration of it was wrong unless the insertions
+        // happened to be ascending.
+        //
+        // It did not read as a defect on this lane because it is not a refusal:
+        // `examples/object-key-order` lowered, emitted, ran, and disagreed with
+        // node on 87 cases while the floor counted it as compiled.
         String[] out = new String[(int) size(map)];
-        int at = 0;
-        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+        int written = 0;
+        for (int slot = map.head; slot < map.used && written < out.length; slot++) {
             NtsValue key = map.keys[slot];
-            if (key != null) {
-                out[at++] = (String) key.ref;
+            if (key == null || indexKey((String) key.ref) < 0) {
+                continue;
             }
+            out[written++] = (String) key.ref;
+        }
+        // Insertion sort over the index keys alone. They are few in every table
+        // this compiles -- a status table is the large case at sixty -- and the
+        // value is re-derived rather than carried, because parsing ten digits
+        // is cheaper than an allocation to hold them. The C says the same.
+        int indices = written;
+        for (int i = 1; i < indices; i++) {
+            String held = out[i];
+            long value = indexKey(held);
+            int j = i;
+            while (j > 0 && indexKey(out[j - 1]) > value) {
+                out[j] = out[j - 1];
+                j--;
+            }
+            out[j] = held;
+        }
+        for (int slot = map.head; slot < map.used && written < out.length; slot++) {
+            NtsValue key = map.keys[slot];
+            if (key == null || indexKey((String) key.ref) >= 0) {
+                continue;
+            }
+            out[written++] = (String) key.ref;
         }
         return out;
+    }
+
+    /**
+     * The array-index value of a key, or {@code -1} if it is not one.
+     *
+     * <p>A transliteration of `nts_array_index_key`, and the rule is narrower
+     * than "looks numeric": the string must be the *canonical* decimal of a
+     * value below 2^32-1. So {@code "0"} is an index and {@code "01"} is not,
+     * {@code "-1"} is not, and {@code "4294967295"} is not -- that last is the
+     * one a length check alone would let through.
+     *
+     * <p>Answers {@code -1} where the C takes an out-parameter and a
+     * {@code bool}. An index can never be negative, so the two are the same
+     * function and this one does not need the caller to hold a slot.
+     */
+    private static long indexKey(String key) {
+        int units = key.length();
+        if (units == 0 || units > 10) {
+            return -1;
+        }
+        if (units > 1 && key.charAt(0) == '0') {
+            return -1;
+        }
+        long value = 0;
+        for (int at = 0; at < units; at++) {
+            char unit = key.charAt(at);
+            if (unit < '0' || unit > '9') {
+                return -1;
+            }
+            value = value * 10 + (unit - '0');
+        }
+        return value >= 4294967295L ? -1 : value;
     }
 
     public static NtsMap copy(NtsMap from) {
