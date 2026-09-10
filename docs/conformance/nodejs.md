@@ -19070,6 +19070,27 @@ So the axis today reads: nothing is wrong, a great deal is absent, and one thing
 aborts. A refusal costs a test; an abort costs the process, from a three-character
 input any query string can carry.
 
+## The counted lane, every building module, on a 09:28 pin
+
+The standing requirement is that the counted lane cover **every building module
+with its uncounted control**, which `counted-lane.sh` does not produce: it reports
+"pass" meaning the module built and its tests ran, and the question the lane exists
+to answer is whether a module behaves the *same* counted and uncounted.
+
+All 22 build now, so all 22 are covered:
+
+    22 module(s), 0 differ between the columns
+
+Driven one module per invocation, since a single run over 22 has died partway on
+this box before and a per-module loop costs one row rather than the file.
+
+**The comparison was controlled rather than trusted.** A comparison that has never
+been seen to fire is a claim about agreement, not a measurement of it, so the
+`!=` was inverted to `=` and re-run:
+
+    inverted   1 module(s) differ between the columns
+    restored   0 module(s) differ between the columns
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
