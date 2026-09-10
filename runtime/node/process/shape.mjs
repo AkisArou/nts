@@ -45,6 +45,17 @@ export function shape(exports) {
     instance.memoryUsage.rss = exports._memoryUsageRss;
   }
 
+  // `Object.prototype.toString.call(process)` is `"[object process]"` on node.
+  // Its descriptor differs from `console`'s in both directions -- writable and
+  // *non*-configurable, where console's is non-writable and configurable -- so
+  // the two were read off node separately rather than shaped with one idiom.
+  Object.defineProperty(instance, Symbol.toStringTag, {
+    value: "process",
+    writable: true,
+    enumerable: false,
+    configurable: false,
+  });
+
   return instance;
 }
 

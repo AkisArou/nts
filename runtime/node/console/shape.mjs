@@ -31,6 +31,16 @@ export function shape(exports) {
     }
   }
 
+  // `Object.prototype.toString.call(console)` is `"[object console]"` on node,
+  // which needs an own `Symbol.toStringTag`. Node's descriptor, matched exactly:
+  // non-writable, non-enumerable, configurable.
+  Object.defineProperty(underTest, Symbol.toStringTag, {
+    value: "console",
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+
   return underTest;
 }
 

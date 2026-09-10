@@ -78,5 +78,27 @@ export function shape(exports) {
       value,
     });
   }
+  // Node gives its zero-argument, primitive-returning `os` functions a
+  // `Symbol.toPrimitive` that answers what calling them answers, so `${os.arch}`
+  // is `"x64"` and `+os.freemem` is a number without a call anywhere in sight.
+  //
+  // The split is uniform and is the reason to state it as a rule rather than a
+  // list: exactly these fourteen have it, and the six that do not --
+  // `cpus`, `getPriority`, `loadavg`, `networkInterfaces`, `setPriority`,
+  // `userInfo` -- are precisely the ones that take an argument or return an
+  // object. A primitive conversion has nowhere to put either.
+  //
+  // Plain assignment rather than `defineProperty`, because node's descriptor is
+  // `{ writable: true, enumerable: true, configurable: true }`, which is what an
+  // assignment produces. Measured rather than matched by eye.
+  for (const name of [
+    "arch", "availableParallelism", "endianness", "freemem", "homedir",
+    "hostname", "platform", "release", "tmpdir", "totalmem", "type",
+    "uptime", "version", "machine",
+  ]) {
+    const fn = os[name];
+    if (typeof fn !== "function") continue;
+    fn[Symbol.toPrimitive] = () => fn();
+  }
   return os;
 }

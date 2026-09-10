@@ -170,6 +170,30 @@ export function shape(exports) {
   //
   // The same line in `util/shape.mjs` covers `util.types`, which was the first of
   // these found. Representation shaping only: the values are unchanged.
+  // `util.promisify` needs telling about the two `fs` entry points whose shape it
+  // cannot guess. Both are symbol-keyed links node sets beside the definition, so
+  // on node they cannot be missing and nothing upstream asserts them.
+  //
+  // `exists` takes a `(exists)` callback rather than a node-style
+  // `(err, exists)`, so the generic wrapper reads the boolean as an error: a
+  // directory that exists rejects, and one that does not resolves with undefined.
+  // Node's custom form resolves with the boolean.
+  //
+  // `promises.opendir` is a **self-link** on node -- `opendir[custom] === opendir`
+  // -- because it already returns a promise and promisify must hand it back
+  // untouched rather than wrap it.
+  const promisifyCustom = Symbol.for("nodejs.util.promisify.custom");
+  if (typeof module.exists === "function") {
+    const exists = module.exists;
+    exists[promisifyCustom] = (path) =>
+      new Promise((resolve) => {
+        exists(path, resolve);
+      });
+  }
+  if (typeof promises.opendir === "function") {
+    promises.opendir[promisifyCustom] = promises.opendir;
+  }
+
   const plainConstants = Object.assign(Object.create(null), exports.constants);
   module.constants = plainConstants;
   promises.constants = plainConstants;
