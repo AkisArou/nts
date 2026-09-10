@@ -11668,6 +11668,75 @@ modules, 523,331 comparisons, 0 divergences. Interpreted unchanged — `net`
 150/0, `path` 20/0, `os` 9/0 — which matters because `internal/errors.ts` is
 shared by every module in the tree.
 
+
+## The compiled lane, differentially: 0 behaviour divergences in three modules
+
+2026-09-10, on a post-`a80dcb8a` pin. `differential-ts.mjs` asks whether the
+**TypeScript** answers what node answers. `differential-addon.mjs` asks it of
+the **built artifact**, which is the compiled axis's own question and had never
+been swept.
+
+    punycode  140,224 comparison(s) over 20,000 random + 32 fixed   0 divergences
+    os        340,238 comparison(s) over 20,000 random + 14 fixed   0 divergences
+    path      420,882 comparison(s) over 20,000 random + 42 fixed   40,084 divergences
+
+**`os` at 340,238 comparisons is the one worth pausing on.** It is the module
+`differential-ts.mjs` *skips* — its bindings stand in as node on the TypeScript
+lane, so the comparison there would be node against node — and this is the
+instrument that skip points at. It has now been asked, and it agrees with node
+everywhere.
+
+### `path`'s 40,084 divergences are one missing export
+
+Not forty thousand defects, and the arithmetic says so exactly. At 2,000
+iterations:
+
+    42,882 comparison(s) over 2,000 random inputs and 42 fixed
+     4,084 divergence(s)
+
+**4,084 = 2,042 × 2.** Every input diverges exactly twice — `posix.format` and
+`win32.format`, one per namespace — and every printed divergence is
+`format is not a function`. There is no third thing hiding in the count.
+
+`format` declines with `no wrapper for format@posix: takes an object`, which is
+already filed as `blockers/object-parameter-at-the-wrapper` with `path`'s cost
+recorded on it. So the compiled `path` addon has **zero behaviour divergences**:
+everything it publishes answers what node answers on twenty thousand generated
+inputs, and the only difference is a name it does not publish at all.
+
+**A missing export diverges on every input, so the count measures the input
+volume and not the defect count.** Reporting "40,084 divergences in `path`" would
+be true of the number and false of the artifact — the same shape as a refusal
+delta standing in for a fix, in a different instrument.
+
+
+### `buffer` reported "0 divergences" over 0 comparisons
+
+Widening the sweep to three more modules produced two results and one blank:
+
+    querystring   2,019 comparison(s)   0 divergences
+    util          2,024 comparison(s)   0 divergences
+    buffer            0 comparison(s)   0 divergences
+
+**`buffer`'s addon publishes five names and its corpus calls twenty-nine
+others.** The overlap is empty, so nothing was compared, and the instrument
+printed `0 comparison(s) ... 0 divergence(s)` and exited 0. Read down a column
+of modules, that row is indistinguishable from a module that agreed with node
+everywhere.
+
+The reporter already listed the absent names above that line. It was not enough:
+nobody reads the absent list when the number beside it is zero.
+
+`differential-addon.mjs` now refuses to report a run that compared nothing as a
+run — it prints `NOTHING WAS COMPARED`, says the zero is a blank rather than a
+result, and exits non-zero. Verified both ways: the guard fires on `buffer` and
+stays silent on `punycode`.
+
+This is the same failure this ledger recorded for the `stream` corpus a few
+hours earlier — a check that exercises nothing announces itself as a pass, which
+is what everybody wants to see — and it is the reason the sabotage count, not
+the divergence count, is the number to read on any new comparison.
+
 ## The counted lane: 22 of 22, 0 differing
 
 2026-09-10, on a pin taken after `a80dcb8a`. **This is the standing goal's named

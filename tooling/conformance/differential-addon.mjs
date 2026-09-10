@@ -184,4 +184,22 @@ console.log(
     `${corpus.fixed.length} fixed: ${diverged} divergence(s), ` +
     `${propertyFailures} property failure(s)`,
 );
-process.exitCode = diverged + propertyFailures > 0 ? 1 : 0;
+
+// A run that compared nothing is not a clean run, and until now it printed as
+// one: `buffer` answered "0 comparison(s) ... 0 divergence(s)" and exited 0,
+// because its addon publishes five names and its corpus calls twenty-nine
+// others -- no overlap at all. Read down a column of modules, that row is
+// indistinguishable from a module that agreed with node everywhere.
+//
+// The `absent` list above says which names were missing, and it was not enough:
+// nobody reads it when the number beside it is zero.
+if (compared === 0) {
+  console.log(
+    `\n  NOTHING WAS COMPARED. The addon publishes none of the names this\n` +
+      `  corpus calls, so "0 divergence(s)" above is a blank and not a result.\n` +
+      `  Fix the addon's exports or the corpus's calls before reading this row.`,
+  );
+  process.exitCode = 1;
+} else {
+  process.exitCode = diverged + propertyFailures > 0 ? 1 : 0;
+}
