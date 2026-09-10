@@ -1168,6 +1168,39 @@ export const CORPORA = {
     ],
     input: (rnd) => unicodeWord(rnd, 40),
     calls: [
+      {
+        // **`unzipSync`, the `zstd` pair and `crc32`**, which the round-trip specs
+        // above never reach. `unzipSync` is not another decompressor: it *sniffs*
+        // the header and dispatches, so it is the only one that can be wrong about
+        // which format it was given, and it is fed both gzip and deflate output
+        // here for that reason.
+        //
+        // `crc32` is pure arithmetic over bytes and the cheapest thing in the module
+        // to get subtly wrong -- a wrong polynomial or a missing final xor agrees
+        // with itself on every round trip and with node on nothing.
+        label: "unzip-zstd-crc32",
+        call: (m, s) => {
+          const bytes = Buffer.from(s, "utf8");
+          const show = (f) => {
+            try {
+              const v = f();
+              if (v instanceof Uint8Array) return v.toString("base64");
+              return String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          return [
+            show(() => m.unzipSync(m.gzipSync(bytes)).toString("utf8")),
+            show(() => m.unzipSync(m.deflateSync(bytes)).toString("utf8")),
+            show(() => m.unzipSync(bytes)),
+            show(() => m.zstdCompressSync === undefined ? "absent" : m.zstdDecompressSync(m.zstdCompressSync(bytes)).toString("utf8")),
+            show(() => m.crc32 === undefined ? "absent" : m.crc32(s)),
+            show(() => m.crc32 === undefined ? "absent" : m.crc32(bytes)),
+            show(() => m.crc32 === undefined ? "absent" : m.crc32(s, 1)),
+          ].join("|");
+        },
+      },
       // Error paths. See `REJECTED` above: the generated inputs are ones these
       // functions accept, so nothing here reached a validation branch until
       // these were added, and the `code` node's own suite asserts on was never

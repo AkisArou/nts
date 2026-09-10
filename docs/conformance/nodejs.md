@@ -20583,6 +20583,7 @@ Three specs, on the gaps that are pure functions rather than I/O.
     buffer        4 of 18 -> 16 of 18   (SlowBuffer and resolveObjectURL remain)
     events        3 of 17 ->  9 of 17   (the rest are `once`/`on`, asynchronous)
     assert        4 of 19 -> 15 of 19   (the rest are the fuzzer's, or async)
+    zlib          8 of 45 -> 12 of 45   (the rest are streams and callbacks)
 
 `buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
 `isEncoding`, `compare`, `concat`, `copyBytesFrom`, and the free `isUtf8`,
@@ -20606,6 +20607,13 @@ observable part, and the operator is what tells `equal` from `strictEqual` in a
 failure a program prints. The loose pair is given `"1"` against `1` and `""`
 against `0`, which is where `==` and `===` part company -- an implementation
 routing both through one comparison stops being distinguishable anywhere else.
+
+`zlib`'s were `unzipSync`, the `zstd` pair and `crc32`. `unzipSync` is not
+another decompressor -- it **sniffs** the header and dispatches, so it is the only
+one that can be wrong about which format it was given, and it is fed both gzip and
+deflate output for that reason. `crc32` is pure arithmetic and the cheapest thing
+in the module to get subtly wrong: a wrong polynomial or a missing final xor
+agrees with itself on every round trip and with node on nothing.
 
 `events`' were `listenerCount`, `getEventListeners` and `getMaxListeners`, which
 answer *about* an emitter rather than driving one -- so the program specs never
