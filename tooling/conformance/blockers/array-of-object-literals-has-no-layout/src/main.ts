@@ -1,4 +1,31 @@
-// expect: emit-c --napi -> NTS2006 an object type with no layout
+// expect: emits-addon nts_to_napi_array_of_Row
+//
+// **Kept as a guard. Fixed 2026-09-10, and the fix was one line asking a
+// question nobody had asked.**
+//
+// The type was layable-out the whole time. A field of array type forces its
+// element's layout; a *returned* array did not, so `[{ name: "r", size: 1 }]`
+// typed `Row[]` reached the C emitter with no layout for its element and
+// stopped there -- `NTS2006`, raised by the backend, one step past every message
+// that names a source line. `lower_array_literal` asks for it now.
+//
+// Built and run rather than read off the emitted text:
+//
+//     one()   {"name":"r","size":1}
+//     many()  [{"name":"r","size":1},{"name":"s","size":2}]
+//
+// which is node's answer for both.
+//
+// **Found by accident**, and the accident is worth recording. A predicate added
+// to `coerce` for an unrelated check happened to call `layout_of` on the element
+// type, and this fixture went green with nothing aimed at it. That is the second
+// query-with-a-side-effect in one night and the first that changed a program for
+// the better -- the other emitted `incompatible pointer types` in six modules.
+// A fix that arrives that way is not a fix until it is made deliberate, because
+// it depends on a coercion that may not happen.
+//
+// The filing below is kept: what it argued about the wrapper being done and
+// inert is what made the one-line fix obviously sufficient.
 //
 // An array *literal* of object literals has an element type the lowering gives
 // no layout, so `[{ name: "r", size: 1 }]` refuses where the same object on its

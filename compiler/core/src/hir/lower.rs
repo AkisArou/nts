@@ -7952,6 +7952,37 @@ impl<'a> FuncBuilder<'a> {
             // its parameter has to be visible to the caller, which is what a
             // reference means. The prefix case is the one that is genuinely a
             // no-op and it is the one this admits.
+            // **The same question one container along, and the verifier was
+            // answering it.** `number[]` is assignable to `readonly unknown[]`
+            // in TypeScript and the two are different arrays here: eight bytes
+            // of `double` against a sixteen-byte `NtsValue`. Passing one as the
+            // other reached `verify` as
+            // `CallArgumentType { expected: Managed(Array(Erased)),
+            // found: Managed(Array(Float { bits: 64 })) }` and stopped the
+            // build with `refusing to emit code from invalid HIR` -- which is
+            // the right outcome arriving at the wrong end, with no source
+            // location and nothing naming the two element types.
+            //
+            // Refused rather than converted, for the reason the struct case
+            // gives: a conversion is a copy and a copy is not the same object.
+            // `readonly` promises the callee will not write, which makes a copy
+            // *safe* and still leaves `===` answering differently.
+            if let (
+                HirType::Managed(ManagedType::Array(from)),
+                HirType::Managed(ManagedType::Array(to)),
+            ) = (&have, want)
+                && from != to
+                && !self.the_same_element(id, from, to)
+            {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "an array of {from:?} where an array of {to:?} is wanted -- the two \
+                         hold different widths, so a pointer to one is not a pointer to the \
+                         other"
+                    ),
+                ));
+            }
             if let (
                 HirType::Managed(ManagedType::Object(from)),
                 HirType::Managed(ManagedType::Object(to)),
@@ -16005,6 +16036,29 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_mixed_literal(&elements, &ty, &origin);
         }
 
+        // An object element needs a layout, and asking is what builds one.
+        //
+        // `[{ name: "r", size: 1 }]` typed `Row[]` refused at the **C emitter**
+        // with `NTS2006 an object type with no layout`, one step past every
+        // message that names a source line. The type is layable-out: nothing was
+        // wrong with it except that nothing had asked, because a field of array
+        // type forces its element's layout and a *returned* array does not.
+        //
+        // Found by accident and then made deliberate. A predicate added to
+        // `coerce` happened to call `layout_of` on the element and this fixture
+        // went green -- the second time in a night that a query with a side
+        // effect changed a program, and the first time it changed one for the
+        // better. The addon it produced answers
+        // `[{"name":"r","size":1},{"name":"s","size":2}]`, which is node's
+        // answer, so the fix is real and only its arrival was an accident.
+        // Asking here means it does not depend on a coercion that may not
+        // happen.
+        if let HirType::Managed(ManagedType::Array(element)) = &ty
+            && let HirType::Managed(ManagedType::Object(at)) = element.as_ref()
+        {
+            self.layout_of(id, *at)?;
+        }
+
         #[allow(clippy::cast_precision_loss)]
         let count = elements.len() as f64;
         let length = self.push(OpKind::ConstFloat(count), HirType::NUMBER, origin.clone());
@@ -17400,6 +17454,39 @@ impl<'a> FuncBuilder<'a> {
         };
         self.layouts.push(layout.clone());
         Ok(layout)
+    }
+
+    /// Whether two array element types are the same storage under two names.
+    ///
+    /// Element types are compared by `HirType`, and **two structurally identical
+    /// object types have different ids**: `Point` and the anonymous
+    /// `{ x: number; y: number }` of a literal are one layout and two `TypeId`s.
+    /// So `Array(Object(88))` where `Array(Object(87))` is wanted is a pointer
+    /// to exactly the right bytes, and refusing it took three cases of
+    /// `examples/destructuring` and one of `examples/objects` — caught by
+    /// `tooling/gate/example-refusals` on the first run after the check went in,
+    /// which is the third thing that ledger has caught and the third that was
+    /// mine.
+    ///
+    /// A **prefix each way is equality**, which is why this is two calls to
+    /// [`Self::laid_out_as_a_prefix`] rather than a second comparison written
+    /// out. An array needs exact agreement and not a prefix: element `i` is at
+    /// `i * size`, so a shorter layout at the same offsets is still the wrong
+    /// stride.
+    ///
+    /// Only where both are objects. A `double` element against an erased one is
+    /// eight bytes against sixteen and has no layout to compare — and
+    /// `laid_out_as_a_prefix` answers `true` for a target it cannot lay out,
+    /// which is right for its own question and exactly wrong for this one.
+    fn the_same_element(&mut self, id: NodeId, from: &HirType, to: &HirType) -> bool {
+        let (
+            HirType::Managed(ManagedType::Object(from)),
+            HirType::Managed(ManagedType::Object(to)),
+        ) = (from, to)
+        else {
+            return false;
+        };
+        self.laid_out_as_a_prefix(id, *from, *to) && self.laid_out_as_a_prefix(id, *to, *from)
     }
 
     /// The fields in the order the program's literals write them, where they
