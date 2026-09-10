@@ -52,16 +52,30 @@
 // what runs, so a method of the base still reads slot 0 whatever slot 0 is
 // called.
 //
-// **That was tried and it does not work as written.** Renaming the inherited
-// copy to `#count@Base` produces two struct members with the same C name:
+// **That was tried, and what stopped it is in the snapshot rather than in the
+// lowering.** Renaming the inherited copy to `#count@Base` produced two struct
+// members with the same C name:
 //
 //     program.c:18:13  error: duplicate member '__count____Base'
 //
-// `c_identifier` maps `#` to `__` and `@` to `____`, and those two spellings are
-// distinct — `#count` is `__count` and `#count@Base` is `__count____Base` — so
-// the collision is not the mangling. Something produces the renamed field
-// twice, and the next attempt should start by finding out what rather than by
-// choosing a different separator. Reverted; the refusal above is what stands.
+// Not the mangling: `c_identifier` maps `#` to `__` and `@` to `____`, so
+// `#count` is `__count` and `#count@Base` is `__count____Base`, which are
+// distinct. Printing the two inputs says why:
+//
+//     base=Base  inherited=["#count"]  own=["#count", "#count"]
+//
+// **The derived class's own member list contains `#count` twice, and both
+// records answer `own = true`.** One of them is the base's and one is the
+// derived's, and nothing in `PropertyRecord` tells them apart: the checker
+// returns a flattened list, `own` is the flag that exists for exactly this
+// question, and for a *shadowed private name* it answers the same for both.
+// Skipping `!own && name.starts_with('#')` therefore skips neither, and the
+// rename fires twice.
+//
+// So the fix needs the **declaring class per property**, which the snapshot does
+// not carry. That is a schema question before it is a lowering one, and it is
+// where the next attempt should start rather than at a different separator or a
+// different rename direction. Reverted; the refusal above is what stands.
 //
 // # The control
 //
