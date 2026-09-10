@@ -18814,7 +18814,7 @@ there, `duplex instanceof Writable` really was false.
 
 ### The lane
 
-**1,872 passed, 0 failed across 22 modules**, from 1,859. The thirteen added are
+**1,875 passed, 0 failed across 22 modules**, from 1,859. The sixteen added are
 tests for defects these seams found, each controlled against the code it replaced.
 
 **596,000 comparisons, 0 divergences.** Twelve tests say the twelve fixes are
@@ -19562,6 +19562,46 @@ identical -- but it means the worktree check answers "does it build" and not
 
 Which is the question worth asking of it. A missing file stops a build; the lane
 is what the main tree already runs after every edit.
+
+## An HTTP/1.0 response kept the connection alive
+
+    request           node                          here, before
+    1.0 no te         chunked=false keepAlive=false   keepAlive=TRUE
+    1.0 te:chunked    chunked=true  keepAlive=false   keepAlive=TRUE
+
+Node clears `shouldKeepAlive` in the same branch that decides chunked encoding,
+and this did not. It is protocol behaviour and not a field value: HTTP/1.0 has no
+chunked encoding, so a response with no `content-length` is delimited by the
+connection closing, and answering `Connection: keep-alive` to a 1.0 peer leaves it
+with no way to know where the body ends.
+
+Ours also read `request.headers` **unconditionally**, where node reads it only
+inside that branch. `undefined < 1` is false, so `new ServerResponse({ method:
+"GET" })` never reaches the read on node and threw here.
+
+Nothing upstream asserts either half, and the reason is the usual one: node's
+tests drive a real server, so a 1.0 request reaches this constructor through the
+parser with headers attached. Building a response by hand is the only way to see
+the default, and on node the branch cannot be got wrong.
+
+### It was found while writing a test for something else
+
+The test being written was about instance *keys*: five internal fields --
+`headersMap`, `hasBody`, `statusLine`, `keepAliveWithoutFramingWhenEmpty`,
+`_maxRequestsPerSocket` -- that were own enumerable keys node's `OutgoingMessage`
+does not have, because `protected` and an `_` prefix hide a field from the type
+checker and from nothing else. They are symbol-keyed now, as node keeps
+`kOutHeaders` and `kHighWaterMark`, and symbols rather than `#` because
+`client.ts` writes three of them and `server.ts` writes the fifth onto a response
+from outside the class.
+
+That test needed a `ServerResponse`. `new ServerResponse({ method: "GET" })` threw,
+and chasing why turned up the keep-alive difference underneath it.
+
+**Third time a TypeScript `private` or `protected` was read as if it hid a field
+at runtime**, after `EventEmitter`'s `_preserveEventShape` and `fs.Dirent`'s
+`type`. A sweep for the pattern across `runtime/node` finds six such fields, and
+this commit takes four of them.
 
 ## Conventions
 
