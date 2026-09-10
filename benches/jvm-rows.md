@@ -79,6 +79,7 @@ meets them. This is the map; the row table below it is the current state.
   - The bar's second number, read at last: eight rows lose to node and six of them are the platform
   - The partition, re-measured at a fresh pin: same eight rows, same six and two
   - The published table against a fresh sweep: one of fifty-one rows is stale, and it is `array-from`
+  - `loops.rs` exists, my rows are not waiting on it, and the row table said they were
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -147,7 +148,7 @@ different problem from the four rows losing by a lot.
 | row | jvm/Java | note |
 | --- | --- | --- |
 | `node-utf8` | 6.53x | **a codec against an intrinsic**: floor is 2.40x, below |
-| `symbol-keyed-map` | 2.87x | blocked: **50.5%** is `toInt32` on an `f64` accumulator. **ART 196,912 -> 304 B/op**: the key box, below |
+| `symbol-keyed-map` | 2.87x | **not an accumulator problem -- that claim is withdrawn below.** `work$whole(I)I` and the slot is an `int`; the `f64` is the map *value*, `events.get(key) ?? 0` arriving as `NtsValue.num`. **ART 196,912 -> 304 B/op**: the key box, below |
 | `array-from` | 2.12x -> **0.96x** | the cursor is held as an `int`. Thirteen runs across two sittings, 0.94x-0.97x. **Moved.** Below |
 | `array-predicates` | 1.73x | at its floor: every helper inlines; the wrapper is the row |
 | `absences` | 1.28x | blocked: **34%** is `uirem` over an `l2i` counter |
@@ -3106,6 +3107,44 @@ by anyone reading it. `array-from` is the third time that row has taught the
 same lesson today: 0.96x over thirteen runs, 2.12x from a pin 480 commits old,
 2.09x in the published table. The number was right and three different
 artefacts disagreed about it.
+
+### `loops.rs` exists, my rows are not waiting on it, and the row table said they were
+
+The accumulator range analysis I have been recording as an upstream blocker is
+`compiler/core/src/hir/loops.rs`, and it has been there the whole time. Its own
+header states the fact I kept describing as missing -- that the bound is about
+*iterations* and nothing in the value domain can express it -- and it is
+measured at 4.4x on a dependent chain.
+
+**It runs in `hir`, so its result is already in the IR this backend reads.** An
+accumulator it proves is an `int32` in the types I see. Checked on the row I had
+filed against it:
+
+    public static int work$whole(int)      symbol-keyed-map
+    71 int loads and stores, 26 double
+
+The slot is an `int` and always was. I established that hours ago and withdrew
+the claim in a section below -- and **left it standing in the row table**, which
+is the artefact anyone reads first. "blocked: 50.5% is `toInt32` on an `f64`
+accumulator" sat there while the correction sat three thousand lines lower.
+
+That is the third time this file has done it: a heading outliving its body, a
+count outliving its table, and now a withdrawn claim outliving its withdrawal.
+The correction is cheap and the habit is not: **a retraction has to reach the
+summary, not only the section**, because the summary is what a reader quotes.
+
+**And there are two reasons a descriptor can be wide, which I had as one.**
+MainClaude's distinction: the analysis decides the descriptor, *and* a root is a
+wall, so an exported function's parameters stay as wide as their declared types
+whatever the analysis proves. `(Queens;II)Z` against `(Queens;DD)Z` was the
+second reason and I read it as the first. Worth telling them apart before
+chasing either.
+
+No bug report against `loops.rs` from this lane. What my rows want is a fact
+about a *map value* and an *array element* -- that a `number` arriving from
+`events.get(key) ?? 0` or `xs.at(-1)` is integral -- which is a different
+analysis over a different domain, and naming it as "range analysis" made it
+sound like work already done.
 
 ## Open, and whose
 
