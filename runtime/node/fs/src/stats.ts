@@ -273,34 +273,43 @@ export function bigintStatFs(columns: string[]): StatFs<bigint> {
 export class Dirent<Name extends string | Buffer = string> {
   name: Name;
   parentPath: string;
-  private type: number;
+  // `#`, not `private`: a TypeScript modifier is compile-time only, so this was an
+  // own enumerable key on every `Dirent`. Node's has exactly `name` and
+  // `parentPath` -- `"type" in dirent` is false there -- and keeps its own kind
+  // out of reach, so a `Dirent` from `readdirSync(…, { withFileTypes: true })`
+  // enumerated one key more than node's.
+  //
+  // Every use is `this.#type` inside this class, and nothing outside `stats.ts`
+  // reads a `Dirent`'s type at all -- the ten `isFile`/`isDirectory`/… predicates
+  // are the whole interface to it, which is node's design too.
+  #type: number;
 
   constructor(name: Name, type: number, parentPath: string) {
     this.name = name;
-    this.type = type;
+    this.#type = type;
     this.parentPath = parentPath;
   }
 
   // libuv's `uv_dirent_type_t`, which is what the scan reports.
   isFile(): boolean {
-    return this.type === 1;
+    return this.#type === 1;
   }
   isDirectory(): boolean {
-    return this.type === 2;
+    return this.#type === 2;
   }
   isSymbolicLink(): boolean {
-    return this.type === 3;
+    return this.#type === 3;
   }
   isFIFO(): boolean {
-    return this.type === 4;
+    return this.#type === 4;
   }
   isSocket(): boolean {
-    return this.type === 5;
+    return this.#type === 5;
   }
   isCharacterDevice(): boolean {
-    return this.type === 6;
+    return this.#type === 6;
   }
   isBlockDevice(): boolean {
-    return this.type === 7;
+    return this.#type === 7;
   }
 }
