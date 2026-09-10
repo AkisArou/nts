@@ -11674,6 +11674,61 @@ shared by every module in the tree.
 
 
 
+
+## The field-order refusal cost the axis nothing
+
+2026-09-10, 04:00 pin against the 03:44 one. MainClaude's refusal turns a raw
+pointer cast between structurally-incompatible types into a decline. It could
+only move the axis down, so it was measured rather than assumed.
+
+| module | field-order refusals | passed before | after |
+| --- | ---: | ---: | ---: |
+| `punycode` | 0 | 3 | 3 |
+| `path` | 0 | 15 | 15 |
+| `string_decoder` | 6 | 0 | 0 |
+| `os` | 6 | 5 | 5 |
+| `querystring` | 6 | 1 | 1 |
+| `buffer` | 6 | 2 | 2 |
+| `console` | 26 | 0 | 0 |
+| `events` | 17 | 0 | 0 |
+| `util` | 23 | 2 | 2 |
+
+**Not one module moved.** 84 new refusals across nine modules and no passing
+test file lost. `punycode` and `path` carry zero sites and are the control: had
+either moved, the site survey would have been wrong rather than the refusal
+free.
+
+"Correct and free" is a different fact from "correct and costly", and only the
+measurement separates them. A refusal that converts a silent misread into a
+decline is right either way — but it would have been worth saying plainly if it
+had cost `os` its fifth pass, and it did not.
+
+### `FileOptions` needs no source change, and both of us were wrong once
+
+The site is `interface FileOptions extends BlobOptions` passed to `super`. The
+emitted structs:
+
+    struct NtsObj_BlobOptions { header; endings; type; }
+    struct NtsObj_FileOptions { header; lastModified; endings; type; }
+
+**`endings` and `type` are `NtsValue` in both.** The representations agree and
+only the position differs, so base-fields-first for interface extension clears
+it with nothing changed in my source.
+
+Getting there took two corrections in opposite directions. I formed a hypothesis
+that the refusal over-fires on interface extension, held it back for want of a
+layout, and the layout refuted it — extension is derived-first, so the site is a
+live hazard. MainClaude then measured that the *representations* also disagreed
+and told me not to flatten; that turned out to be an artifact of a probe file
+mixing a class and an interface of the same shape, where structural merging put
+them on one layout and the class's assignment made a field a `Float` where a
+literal made it an `Int`.
+
+**Neither of us had it right alone.** Had they not hedged I would have flattened
+`FileOptions` on base-first reasoning; had they not retracted I would have left
+it flattened for a reason that was not real. The 8 sites stay untouched and the
+fix is a layout ordering in the compiler.
+
 ## The field-order refusal reached my lane, and my hypothesis about it was wrong
 
 2026-09-10, 04:00 pin. MainClaude landed a refusal for a value passed where a
