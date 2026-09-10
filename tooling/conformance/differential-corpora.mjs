@@ -1059,6 +1059,63 @@ export const CORPORA = {
     },
     calls: [
       {
+        // **The pure helpers outside `types`**, which nothing called:
+        // `getSystemErrorName`, `getSystemErrorMessage`, `getSystemErrorMap`,
+        // `isArray`, `styleText`, `parseArgs`, `parseEnv` and `diff`.
+        //
+        // Eight names are **deliberately not here**, and they are the ones this
+        // profile does not publish at all: `_extend`, `getCallSites`, `inherits`,
+        // `transferableAbortSignal`, `transferableAbortController`, `MIMEType`,
+        // `MIMEParams`, `setTraceSigInt`. Calling them would report one
+        // divergence per input for a known absence, which is the same mistake as
+        // letting the eight refused `types` predicates run: a recorded gap
+        // drowning out everything else in the spec.
+        //
+        // `styleText` is given a colour and `"none"`, because the interesting
+        // case is not the escape codes -- it is whether the module decides to
+        // emit them at all, which depends on stream detection and is where two
+        // implementations disagree while both "work".
+        label: "util-helpers",
+        call: (m, s) => {
+          const show = (f) => {
+            try {
+              const v = f();
+              return v === undefined ? "undefined" : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const errno = -(1 + (s.length % 40));
+          return [
+            show(() => m.getSystemErrorName(errno)),
+            show(() => m.getSystemErrorMessage(errno)),
+            show(() => m.getSystemErrorMap().size),
+            show(() => {
+              const entry = m.getSystemErrorMap().get(errno);
+              return Array.isArray(entry) ? entry.join(",") : String(entry);
+            }),
+            show(() => m.isArray([s])),
+            show(() => m.isArray(s)),
+            // `validateStream: false`, because without it `styleText` emits
+            // nothing when stdout is not a TTY -- which it never is under the
+            // harness. The first version compared the input against itself on
+            // both sides and could not fail: a control that replaced `styleText`
+            // with the identity function was noticed on **0 of 20** inputs.
+            show(() => m.styleText("red", s, { validateStream: false })),
+            show(() => m.styleText(["red", "bold"], s, { validateStream: false })),
+            show(() => m.styleText("none", s, { validateStream: false })),
+            show(() => m.styleText("notacolour", s, { validateStream: false })),
+            show(() => JSON.stringify(m.parseArgs({
+              args: ["--flag", "--name", s, "positional"],
+              options: { flag: { type: "boolean" }, name: { type: "string" } },
+              allowPositionals: true,
+            }))),
+            show(() => JSON.stringify(m.parseArgs({ args: ["-x", s], options: {}, strict: false }))),
+            show(() => m.diff === undefined ? "absent" : JSON.stringify(m.diff(s, `${s}x`))),
+          ].join("|");
+        },
+      },
+      {
         // **All 42 `util.types` predicates**, which the corpus never called once.
         // They are the purest thing in the module -- a value in, a boolean out,
         // no I/O and no state -- and they were the largest gap `corpus-reach.mjs`

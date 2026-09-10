@@ -20584,6 +20584,7 @@ Three specs, on the gaps that are pure functions rather than I/O.
     events        3 of 17 ->  9 of 17   (the rest are `once`/`on`, asynchronous)
     assert        4 of 19 -> 15 of 19   (the rest are the fuzzer's, or async)
     zlib          8 of 45 -> 12 of 45   (the rest are streams and callbacks)
+    util          6 of 72 -> 48 of 72   (types included; 8 absent names excluded)
 
 `buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
 `isEncoding`, `compare`, `concat`, `copyBytesFrom`, and the free `isUtf8`,
@@ -20607,6 +20608,23 @@ observable part, and the operator is what tells `equal` from `strictEqual` in a
 failure a program prints. The loose pair is given `"1"` against `1` and `""`
 against `0`, which is where `==` and `===` part company -- an implementation
 routing both through one comparison stops being distinguishable anywhere else.
+
+`util`'s were `getSystemErrorName`, `getSystemErrorMessage`, `getSystemErrorMap`,
+`isArray`, `styleText`, `parseArgs`, `parseEnv` and `diff`. Eight more are
+deliberately absent from the spec because they are absent from this profile --
+`_extend`, `getCallSites`, `inherits`, `transferableAbortSignal`,
+`transferableAbortController`, `MIMEType`, `MIMEParams`, `setTraceSigInt` --
+and calling them would report one divergence per input for a known gap, the same
+mistake as letting the eight refused `types` predicates run.
+
+**`styleText` was vacuous until the control said so.** It emits nothing when
+stdout is not a TTY, which it never is under the harness, so the spec compared the
+input against itself on both sides. A control replacing `styleText` with the
+identity function was noticed on **0 of 20** inputs. With
+`{ validateStream: false }` forcing it, all four controls fire on 20 of 20 -- and
+the answer is still 0 divergences, which now means something: this profile's
+escape sequences are byte-identical to node's, including for a colour *array* and
+for a colour name that does not exist.
 
 `zlib`'s were `unzipSync`, the `zstd` pair and `crc32`. `unzipSync` is not
 another decompressor -- it **sniffs** the header and dispatches, so it is the only
