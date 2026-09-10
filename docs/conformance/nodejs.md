@@ -19687,6 +19687,57 @@ nothing was relying on the hole.
 and a root in `internal/errors.ts` is compiled into every module's cone, so its
 reach is counted without the cascade. The header says that now.
 
+## The axis moves: 43 to 45, and it is `http`
+
+The first compiler-attributable movement this ledger has recorded in a while.
+Re-derived on a 16:05 pin against the 12:16 one:
+
+    http   1 pass -> 3        every other module unchanged
+    total  43 -> 45           22 of 22 still build
+
+**The denominator moved too, and the count alone does not settle it.** `http` went
+452 files to 454 and `fs` 397 to 398 -- three tests I added this session. So the
+attribution is by *name* rather than by arithmetic:
+
+    12:16   test-http-max-header-size.js
+    16:05   test-http-max-header-size.js
+            test-http-methods.js                    <- new
+            test-http-set-max-idle-http-parser.js   <- new
+
+Neither new pass is one of mine, and each corresponds exactly to a name the addon
+newly publishes.
+
+### What changed underneath, which is more than the two
+
+`http`'s `module#init` runs. Verified rather than taken:
+
+    1196 function(s), 2783 refused   ->   1522 function(s), 2497 refused
+    2 names published               ->   5, three of them node's
+
+    before   getHTTPParserPoolLimit, maxHeaderSize
+    after    + setMaxIdleHTTPParsers, METHODS, methods
+
+`setMaxIdleHTTPParsers` and `METHODS`/`methods` are precisely the two new passes.
+
+**The gate was one dotted property read.** Per MainClaude: `t["a"]` lowered and
+`t.a` did not, refused as "a property of a value with no fields" -- which is a
+sentence about a `Record<string, T>` having no fields because that is what an
+index signature is. One operation, two spellings, one refused. It sat in
+`useEnvironmentProxy`, and `globalAgent`'s initializer is a ternary on that call,
+so a doomed value reached a *branch*, the excision could not cut a statement whose
+shape depends on a refusal, and the whole initializer went with it.
+
+**And four defects were stacked in one column, each masked by the one above.** A
+null dereference in `nts_string_eq`, an erased value export killing registration,
+a quoted property name silently dropped by `initialize_fields`, and the C emitter's
+guard against unspellable names emitting invalid C while doing so. None reachable
+until the one above it cleared.
+
+That is the argument for clearing a refusal when nothing moves. `createServer`
+still does not publish -- it needs `net`'s `Server#constructor` next -- so the 274
+have not moved. **A refusal is a lid, and the count under it is unknown until it
+comes off.**
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
