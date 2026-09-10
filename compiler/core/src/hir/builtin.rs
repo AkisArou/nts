@@ -126,6 +126,7 @@ pub(super) fn error_fields() -> Vec<Field> {
             name: name.to_owned(),
             ty: HirType::Managed(ManagedType::String),
             readonly: false,
+            declared_by: None,
         })
         .collect()
 }
