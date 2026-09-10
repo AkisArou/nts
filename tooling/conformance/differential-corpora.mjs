@@ -2024,14 +2024,29 @@ export const CORPORA = {
           out.push(show(() => round.check(s)));
           out.push(show(() => round.check("10.1.2.3")));
           out.push(show(() => round.check("192.168.1.5")));
-          // `SocketAddress.parse` is **excluded**, by name and with the reason:
-          // this profile does not publish it, so comparing it would report one
-          // divergence per input for a known absence. Its contract is recorded in
-          // the ledger, measured rather than guessed, because it is not the
-          // obvious one -- node parses through `new URL("http://" + input)`, so
-          // `1.2.3.4:80` answers port **0** (the URL drops a default http port)
-          // while `[::ffff:1.2.3.4]:8` keeps 8, and a bare `::1` is undefined
-          // where `[::1]` is not.
+          // `SocketAddress.parse`, which was excluded as absent and is now the
+          // reason the exclusion was worth writing down. Node parses through
+          // `new URL("http://" + input)`, so a URL's rules show through: a
+          // default http port is dropped and `port | 0` turns it into 0, a bare
+          // `::1` is not a valid host where `[::1]` is, and a path is ignored.
+          // A hand-written parser in this profile got all four of those wrong.
+          out.push(show(() => {
+            const a = m.SocketAddress.parse(s);
+            return a === undefined || a === null ? String(a) : `${a.address}:${a.port}:${a.family}`;
+          }));
+          // The forms the corpus's address inputs never take on their own: a
+          // bracketed host, a port that is http's default, a port that is not,
+          // and a path after the authority.
+          for (const suffix of ["", ":80", ":8080", ":0", "/x"]) {
+            out.push(show(() => {
+              const a = m.SocketAddress.parse(`${s}${suffix}`);
+              return a === undefined || a === null ? String(a) : `${a.address}:${a.port}:${a.family}`;
+            }));
+            out.push(show(() => {
+              const a = m.SocketAddress.parse(`[${s}]${suffix}`);
+              return a === undefined || a === null ? String(a) : `${a.address}:${a.port}:${a.family}`;
+            }));
+          }
           out.push(show(() => {
             const a = new m.SocketAddress({ address: "1.2.3.4", port: 80 });
             return a.toJSON === undefined ? "absent" : JSON.stringify(a.toJSON());

@@ -7,6 +7,7 @@
 // rule storage linked means adding a rule never grows or copies an array;
 // `rules` allocates its public snapshot at the exact final size.
 
+import { URL } from "../../url/src/url.ts";
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ADDRESS,
@@ -31,6 +32,53 @@ interface ParsedAddress {
 }
 
 export class SocketAddress {
+  /**
+   * `SocketAddress.parse`, node `lib/internal/socketaddress.js:150`.
+   *
+   * **Through `URL`, deliberately, because the quirk belongs to `URL`.** Node
+   * parses `http://${input}` and reads `hostname` and `port`, so a URL's rules
+   * show through the whole way: `1.2.3.4:80` answers port **0**, because 80 is
+   * http's default and `URL` reports an empty `port` for it, and `port | 0`
+   * turns that into zero. `[::ffff:1.2.3.4]:8` keeps 8. A bare `::1` is
+   * `undefined` where `[::1]` is not, because a bare colon-address is not a
+   * valid URL host.
+   *
+   * Writing that by hand means `if (port === 80) port = 0` under a comment
+   * explaining a component this function did not call, which is the shape of
+   * three defects found in this profile on 2026-09-10 -- each sitting under a
+   * confident comment about behaviour the author had not gone and read.
+   *
+   * **It does not lower today and that is known rather than discovered.**
+   * `URL#constructor` is refused, so `fileURLToPath`, `pathToFileURL` and
+   * `fileURLToPathBuffer` are already `NTS1003` on it and this joins them. The
+   * interpreted lane gains the function; the compiled lane gains it when that
+   * constructor does. Nothing `net` already publishes is affected, because
+   * refusals are per-function and cascade along call edges.
+   */
+  static parse(input: string): SocketAddress | undefined {
+    validateString(input, "input");
+    // Node wraps the whole body: `URL.parse` answers `null` rather than
+    // throwing, and it is the destructuring of that `null` and the
+    // `SocketAddress` constructor below that throw. The catch is what turns an
+    // unparseable input into `undefined`.
+    try {
+      const parsed = URL.parse(`http://${input}`);
+      if (parsed === null) return undefined;
+      const address = parsed.hostname;
+      const port = Number(parsed.port) | 0;
+      if (address.startsWith("[") && address.endsWith("]")) {
+        return new SocketAddress({
+          address: address.slice(1, -1),
+          port,
+          family: "ipv6",
+        });
+      }
+      return new SocketAddress({ address, port });
+    } catch {
+      return undefined;
+    }
+  }
+
   readonly address: string;
   readonly port: number;
   readonly family: IPFamily;
@@ -70,35 +118,6 @@ export class SocketAddress {
 
   static isSocketAddress(value: unknown): value is SocketAddress {
     return value instanceof SocketAddress;
-  }
-
-  static parse(input: string): SocketAddress | undefined {
-    validateString(input, "input");
-    if (input.startsWith("[")) {
-      const closing = input.indexOf("]");
-      if (closing < 0 || input[closing + 1] !== ":") return undefined;
-      const port = parseDecimalPort(input.slice(closing + 2));
-      if (port === undefined) return undefined;
-      try {
-        return new SocketAddress({
-          address: input.slice(1, closing),
-          port,
-          family: "ipv6",
-        });
-      } catch {
-        return undefined;
-      }
-    }
-
-    const colon = input.lastIndexOf(":");
-    if (colon < 0) return undefined;
-    const port = parseDecimalPort(input.slice(colon + 1));
-    if (port === undefined) return undefined;
-    try {
-      return new SocketAddress({ address: input.slice(0, colon), port });
-    } catch {
-      return undefined;
-    }
   }
 
   toJSON(): SocketAddressOptions {
@@ -470,17 +489,6 @@ function parseDecimalByte(text: string): number | undefined {
     value = value * 10 + digit;
   }
   return value <= 255 ? value : undefined;
-}
-
-function parseDecimalPort(text: string): number | undefined {
-  if (text.length === 0) return undefined;
-  let value = 0;
-  for (let index = 0; index < text.length; index++) {
-    const digit = text.charCodeAt(index) - 48;
-    if (digit < 0 || digit > 9) return undefined;
-    value = value * 10 + digit;
-  }
-  return value <= 65535 ? value : undefined;
 }
 
 function parseHexGroup(text: string): number | undefined {

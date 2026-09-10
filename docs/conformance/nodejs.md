@@ -20868,10 +20868,42 @@ when the zero run starts at group 0 and is six long, or five long followed by
 **24,180 comparisons, 0 divergences.** `net` interpreted 151 passed / 0 failed,
 unchanged, and the module still builds.
 
-### And one absence, specified rather than implemented
+### The absence was not an absence, and the hand-written parser was wrong four ways
 
-`SocketAddress.parse` is not published here, so it is excluded from the spec by
-name. Its contract is worth recording because it is not the obvious one -- node
+`SocketAddress.parse` read as absent because the spec asked
+`m.SocketAddress.parse === undefined`, and the shaped surface answered yes. The
+module had one all along -- hand-written, splitting on the last colon and on
+`[...]` -- and it disagreed with node on four of twenty inputs:
+
+    "[::1]"           node ::1 port 0     ours undefined
+    "[::1]:80"        node ::1 port 0     ours ::1 port 80
+    "1.2.3.4:80/x"    node 1.2.3.4 port 0 ours undefined
+    "0:0"             node 0.0.0.0 port 0 ours undefined
+
+Every one is a URL rule showing through: a **default http port is dropped**, so
+`:80` becomes port 0 and `:8080` does not; a path after the authority is ignored;
+`0:0` is a host node normalises to `0.0.0.0`; and a bare `::1` is not a valid URL
+host where `[::1]` is. A hand-written parser cannot get those right without
+reimplementing the component, and this one is the demonstration -- it was written
+by someone who did not call `URL` and did not know it had to.
+
+Replaced with node's own three lines, through our `URL`. **0 differences over 20
+inputs.** Interpreted 151 passed / 0 failed and compiled 2 passed, both unchanged:
+the `net -> url` edge cost the compiled lane nothing, because `URL#constructor` is
+already refused and refusals are per-function.
+
+The price, known before it was taken rather than after: `SocketAddress.parse` does
+not lower, joining `fileURLToPath`, `pathToFileURL` and `fileURLToPathBuffer`,
+which are already `NTS1003` on that same constructor. The interpreted lane gains a
+correct function today and the compiled lane gains it when `URL#constructor` does.
+
+Removing the old parser also left `parseDecimalPort` unused, which `emit-c`
+refused with `TS6133` -- caught by building the module, which the interpreted lane
+would not have done.
+
+### The contract, kept because it is still the specification
+
+`SocketAddress.parse` is now published here. Its contract is worth recording because it is not the obvious one -- node
 parses through `new URL("http://" + input)`, so the URL's default-port rule shows
 through:
 
