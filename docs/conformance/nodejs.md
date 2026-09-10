@@ -11670,6 +11670,52 @@ shared by every module in the tree.
 
 
 
+
+## Auditing the applicability rules: no unjustified exclusion, and two proven
+
+2026-09-10. The standing rules forbid weakening applicability rules. That
+protects against loosening them; it does not check whether the ones already in
+place are earned. A test wrongly marked not-applicable hides a result as surely
+as a weakened one, so the six exclusions across `os` and `path` were read and
+two were **controlled rather than trusted**.
+
+Every one carries a reason, and they fall into two kinds:
+
+| kind | example |
+| --- | --- |
+| §13 language non-goal | `test-os-checked-function.js` — replaces a method on node's private `os` binding |
+| hollow oracle | `test-os-constants-signals.js` — passes against a module that implements nothing |
+
+The second kind is the interesting one, because "this test cannot fail" is a
+claim about a test rather than about our code, and it is checkable.
+
+**`test-os-constants-signals.js`, proven.** Line 10 is
+
+    assert.throws(() => constants.signals.FOOBAR = 1337, TypeError);
+
+Against an empty module, `constants` is `undefined`, so `constants.signals`
+throws `TypeError: Cannot read properties of undefined` — **the same `TypeError`
+the test asserts**. It passes whether or not the module implements a single
+signal. The real module reads 33.
+
+**`test-path-posix-exists.js`, proven.** Line 6 is
+
+    assert.strictEqual(require('path/posix'), require('path').posix);
+
+Against a module with no `posix`, both sides are `undefined` and
+`undefined === undefined` holds. The assertion cannot distinguish a correct
+self-reference from a total absence. `test-path-win32-exists.js` is the same
+assertion for `win32`.
+
+So these exclusions are **the `0 hollow` discipline applied to applicability**:
+they remove tests that would otherwise contribute passes no implementation
+earned. Counting them would inflate `os` from 5 to 6 and `path` from 15 to 17,
+and every one of those three would be hollow.
+
+> This is the "control your own harness" rule turned on the applicability rules
+> themselves. Reading the reason beside an `n/a` is not the same as running the
+> test against nothing and watching it pass.
+
 ## `Buffer.from` has four heads; one is cleared and `string_decoder` has not moved
 
 2026-09-10, 03:14 binary against the 02:53 one. MainClaude's optional-`in` work
