@@ -21084,13 +21084,32 @@ where node answers `false`. Nothing refuses; it compiles, runs, and answers
 wrongly. Every other defect between the two sessions this week announced itself
 with a diagnostic.
 
-### The largest collapse in this profile, and it is entirely latent
+### The largest collapse in this profile does not exist
 
-    89 of 93 `ERR_*` classes are in a group sharing a field shape
+**Corrected the same evening, and the correction is better than what it
+replaced.** The compiler lane emitted C for `os` and counted **62 distinct `ERR_`
+descriptors, one per class** -- `nts_desc_NtsObj_ERR_BUFFER_OUT_OF_BOUNDS` and so
+on. Nothing shared. Every `ERR_*` extends `TypeError`, `RangeError` or `Error`,
+and **a provided base gives distinct identity**, so two classes carrying the same
+`code: string` answer `instanceof` correctly.
+
+That is a positive fact where the paragraph below had only a reprieve, and the
+difference matters: "latent because nothing asks" would need re-checking every
+time somebody wrote an `instanceof`. "Not collapsed" does not.
+
+**What the survey could not see was the base class** -- a third axis after the
+`#private` fields already noted. Own enumerable keys of a no-argument instance is
+a real question and it is not this one.
+
+The original reasoning is kept below, because its second half stands on its own.
+
+### The reasoning that stands: a value survives what an identity would not
+
+    89 of 93 `ERR_*` classes share an own-enumerable field shape
     87 of them share exactly [code: string]
 
-Eighty-seven declared classes resolving to one layout -- and not one observable,
-for two independent reasons, both checked rather than assumed:
+That shape is real; the collapse it suggested is not. Independently of it, nothing
+here would have observed one anyway:
 
 - `grep 'instanceof ERR_'` across `runtime/node`: **no matches at all**.
 - An error crossing the napi boundary arrives as a **host `TypeError` with `code`
@@ -21131,13 +21150,31 @@ private against `Blob`'s 4, `BlockList`'s 2 against `BoundSocket`'s 0,
 One row is simply wrong: `net: Socket / Stream` resolved `Socket` to **dgram**'s
 class, the check having taken the first match across `runtime/node`.
 
-What survives is `Duplex`/`PassThrough` and the `events` pair, and the shape is
-**inheritance rather than coincidence** -- a subclass adding no fields has its
-parent's layout exactly, and node's tests use `instanceof Duplex` and
-`instanceof Transform` to tell precisely those apart.
+I guessed that what survived was `Duplex`/`PassThrough`, on the grounds that a
+subclass adding no fields carries its parent's field list exactly. **That is the
+safe case, and the guess was backwards.** Asked with layouts:
 
-The division that follows: this profile can ask the *shaped surface* about
-same-shaped instances; the layout question wants layouts.
+    ancestor vs descendant                   distinct, correct both directions
+    two field-less siblings of one parent    COLLAPSES
+    no base, identical fields                COLLAPSES
+    same user base, identical extra field    COLLAPSES
+    same field name, different type          distinct
+    identical fields, base `TypeError`       distinct
+
+`PassThrough extends Transform extends Duplex` is a **chain**, so all three
+`stream` rows are ancestor/descendant and all three are correct: `parent
+instanceof Child` is false and `child instanceof Parent` is true, both right. What
+collapses is two *siblings* that each add nothing -- indistinguishable from each
+other while both remain distinguishable from the parent.
+
+**Inheritance depth is not the hazard; siblings are.** Every row on the shortlist
+is now eliminated or characterised, and nothing in this profile is an unrelated
+same-shaped pair or a field-less sibling.
+
+The division that made this work: own-enumerable shape is a question about the
+shaped surface, adjacent to the layout question rather than the same as it --
+blind to `#private` fields and blind to the base. The layout question wants
+layouts.
 
 ### The sweep found itself three times getting there
 
