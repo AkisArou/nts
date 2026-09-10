@@ -77,7 +77,6 @@ const kNoColorInspectOptions: InspectOptions = {};
 
 function noop(): void {}
 
-function noopLabel(_label?: string): void {}
 
 type Target = "stdout" | "stderr";
 
@@ -257,11 +256,18 @@ export class Console {
 
   // ------------------------------------------------------------ the family
 
-  log = (...args: unknown[]): void => {
+  // The body behind both `log` and `dirxml`. Node backs those two names with
+  // *different* function objects that do the same thing, so neither may simply be
+  // the other -- see the note on `dirxml` below.
+  #logLine = (args: unknown[]): void => {
     if (onLog.hasSubscribers) {
       onLog.publish(args);
     }
     this.#writeToConsole("stdout", this.#format("stdout", args));
+  };
+
+  log = (...args: unknown[]): void => {
+    this.#logLine(args);
   };
 
   info = (...args: unknown[]): void => {
@@ -379,11 +385,19 @@ export class Console {
 
   // ------------------------------------------------------------- grouping
 
-  group = (...data: unknown[]): void => {
+  // The body behind both `group` and `groupCollapsed`. `this.log` rather than
+  // `this.#logLine`: node's `group` reaches the *current* `log`, so replacing
+  // `console.log` changes what `group` prints -- measured, 1 call through a
+  // replaced `.log`, and `groupCollapsed` reaches it the same way.
+  #groupLine = (data: unknown[]): void => {
     if (data.length > 0) {
       this.log(...data);
     }
     this.#groupIndent += " ".repeat(this.#groupIndentWidth);
+  };
+
+  group = (...data: unknown[]): void => {
+    this.#groupLine(data);
   };
 
   groupEnd = (): void => {
@@ -557,11 +571,35 @@ export class Console {
     final(keys, values);
   };
 
-  // Node installs the two aliases after the primary console family. They are
-  // the same function values, with no forwarding call, and retaining their
-  // source order also gives the host CommonJS namespace its exact key order.
-  dirxml = this.log;
-  groupCollapsed = this.group;
+  // Node installs these after the primary console family, and retaining their
+  // source order gives the host CommonJS namespace its exact key order.
+  //
+  // **They are not the same function values.** This read `dirxml = this.log` and
+  // `groupCollapsed = this.group` until 2026-09-10, on the strength of node's
+  //
+  //     Console.prototype.dirxml = Console.prototype.log;
+  //     Console.prototype.groupCollapsed = Console.prototype.group;
+  //
+  // which is true of the *prototype* and not of the object any test sees. Node's
+  // constructor then walks `ObjectKeys(Console.prototype)`, binds each method to
+  // the instance and redefines `.name` to the key it was found under, so every
+  // name ends up a distinct function object carrying its own name:
+  //
+  //             node                       here, before
+  //     dirxml          name="dirxml"      name="log"     and === log
+  //     groupCollapsed  name="groupCollapsed"  name="group"   and === group
+  //
+  // Behaviour was already right and only identity was wrong, which is why no
+  // test caught it -- the same shape as `assert.strict.ok`. These are arrow class
+  // fields and so are already per-instance, so giving each its own body
+  // reproduces node's surface without binding or redefining anything.
+  dirxml = (...args: unknown[]): void => {
+    this.#logLine(args);
+  };
+
+  groupCollapsed = (...data: unknown[]): void => {
+    this.#groupLine(data);
+  };
 }
 
 const keyKey = "Key";
@@ -626,9 +664,12 @@ function createWriteErrorHandler(instance: Console, target: Target): (err?: Erro
  */
 class GlobalConsole extends Console {
   Console = Console;
-  profile = noopLabel;
-  profileEnd = noopLabel;
-  timeStamp = noopLabel;
+  // Three distinct functions, not three references to one: node's bind-and-rename
+  // gives each its own name, and `length` 0 rather than the 1 an optional
+  // `label` parameter would report.
+  profile = (..._args: unknown[]): void => {};
+  profileEnd = (..._args: unknown[]): void => {};
+  timeStamp = (..._args: unknown[]): void => {};
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 } from "./immediate.ts";
 import {
   Timeout,
+  type TimeoutHandle,
   clearTimeout,
   insert,
   processTimers,
@@ -67,15 +68,34 @@ export function setInterval<A extends unknown[]>(
   return timeout;
 }
 
+export { clearTimeout };
+
 /**
  * Cancel an interval.
  *
- * The same function as `clearTimeout`, not merely similar: the HTML standard
- * gives both a single id space, so either clears either. Exported under both
- * names rather than wrapped, so that they are indistinguishable including by
- * identity.
+ * The HTML standard gives `clearTimeout` and `clearInterval` a single id space,
+ * so either clears either -- and node's do: cross-clearing a `setTimeout` with
+ * `clearInterval` and a `setInterval` with `clearTimeout` both work.
+ *
+ * **They are still two functions.** This was `clearTimeout as clearInterval`
+ * until 2026-09-10, exported under both names "so that they are
+ * indistinguishable including by identity". Node distinguishes them:
+ *
+ *     clearInterval === clearTimeout   false
+ *     clearInterval.name               "clearInterval", not "clearTimeout"
+ *
+ * Node's own is a separate function whose body is a call to `clearTimeout`,
+ * naming the same standard in a comment. The shared id space is a fact about
+ * what they *do*; it was read as a fact about what they *are*.
+ *
+ * Module-local `clearTimeout`, matching node: replacing `timers.clearTimeout`
+ * does not change what this cancels.
  */
-export { clearTimeout, clearTimeout as clearInterval };
+export function clearInterval(
+  timer: TimeoutHandle | number | string | null | undefined,
+): void {
+  clearTimeout(timer);
+}
 
 /**
  * Run `callback` after the current operation, before the loop waits for I/O.
