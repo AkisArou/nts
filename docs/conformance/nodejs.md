@@ -11673,6 +11673,53 @@ shared by every module in the tree.
 
 
 
+
+## The field-order refusal reached my lane, and my hypothesis about it was wrong
+
+2026-09-10, 04:00 pin. MainClaude landed a refusal for a value passed where a
+structural type of different field order is wanted — the fix for a raw pointer
+cast that segfaulted or misread silently. My sites, found before their list
+arrived:
+
+| site | shape | modules |
+| --- | --- | ---: |
+| `buffer/src/blob.ts:712` | `FileOptions` where a `BlobOptions` is wanted | `string_decoder` 4, `os` 4, `querystring` 4, `buffer` 4 |
+| `events/src/main.ts:707` | `EventEmitterAsyncResourceOptions` where an `AsyncResourceOptions` is wanted | `console` 16, `events` 11 |
+
+`path` and `punycode` have none. **All of them are interface-to-interface**, not
+the class-to-interface case that was reported, so the refusal reaches further
+than the bug that motivated it.
+
+### The hypothesis, and why it was not sent
+
+`buffer/src/blob.ts:712` is `interface FileOptions extends BlobOptions`, passed
+to `super(fileBits, options)`. An interface *extending* another looks
+prefix-compatible by construction — the same argument that makes
+`blockers/upcast-to-base` a free cast for a subclass. So the natural reading is
+that the refusal over-fires on the safe shape, and that reordering cannot be the
+fix because there is nothing to reorder: `FileOptions` declares only
+`lastModified` and inherits the rest.
+
+**That reading is wrong, and the emitted C says so:**
+
+    struct NtsObj_Base      { header; a; b; }
+    struct NtsObj_Extended  { header; c; a; b; }    <- `c` first, not last
+    struct NtsObj_Reordered { header; b; a; }
+
+`Extended extends Base` puts the **derived** field first. `Base.a` is in the
+first slot and `Extended.a` is in the second, so an `Extended` passed as a
+`Base` reads `c` where `a` should be. The refusal is correct here and the site
+is a live hazard.
+
+**Class inheritance is base-first; interface extension is not.** That asymmetry
+is the actual finding, and it is a layout question rather than a coercion one.
+
+> The hypothesis was held back specifically because the layout was unverified,
+> and it was the wrong hypothesis. Sending it would have argued a peer out of a
+> correct refusal, on an analogy that sounded right and was not — the same shape
+> as the 28-candidate regex list that was also not sent.
+
+
 ## The axis re-derived on a 03:44 pin: unchanged, and that is the result
 
 2026-09-10. My standing figure came from a 02:32 pin and **five compiler builds
