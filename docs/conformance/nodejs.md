@@ -20117,6 +20117,35 @@ every program that sets one has it. That is the `instance-shape-diff.mjs`
 distinction, and it wants a person reading node's documentation rather than a
 deletion.
 
+## The compiled addons publish 28 names node lacks, and none reaches a test
+
+`addon-extras.mjs`, on the 16:28 addons. The question came out of `http`, whose
+addon publishes `methods` and `getHTTPParserPoolLimit` where node has neither --
+and nothing was asking it on the compiled side. The surface instruments load the
+*interpreted* profile; the addon is a third surface neither of them opens.
+
+    published by an addon and absent from node    28 across 7 modules
+    of those, reaching a shaped surface            0
+
+    async_hooks 13   readline 7   timers 3   http 2   fs 1   url 1   util 1
+
+Every one is filtered by its shim. That is not luck -- `shape()` assembles the
+module object from named parts, so an export it does not know is simply not among
+them -- but "the shim probably handles it" is not a measurement, and this had
+never been measured.
+
+### The control, and what it re-derives for free
+
+A zero from a check that has never reported anything else is a claim. `--control`
+inverts the node test and asks the same shaping question about the names node
+**does** have: all **73** survive, across every module that publishes anything. So
+the path from "the addon publishes X" to "a test can see X" is live and this file
+can see it.
+
+73 is also, independently, the count of node's 505 published names that the
+compiled lane provides -- arrived at here by a different route than the surface
+census, and agreeing with it.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
