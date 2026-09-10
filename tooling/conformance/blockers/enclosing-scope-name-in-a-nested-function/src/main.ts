@@ -14,6 +14,22 @@
 // is a recursive matcher closing over `columns` and `memo` from the function
 // that built them; both are locals of the caller, and there is no spelling of a
 // memoised recursive match that does not read them.
+//
+// # This message had a second cause until 2026-09-10, and it was the larger
+//
+// `is_within_a_function` did not know `ARROW_FUNCTION`, `FUNCTION_EXPRESSION`
+// or the accessors, so a `const` declared in one of those became a module-scope
+// global and its initializer was lowered in `module#init` -- where the
+// enclosing function's parameters really are out of scope. `const f = (k) =>
+// { const c = k + 1; return c; }` reported this exact sentence about `k`, the
+// arrow's own parameter.
+//
+// So a census grouping by message counted those together with these, and the
+// two have nothing in common: one was a wrong answer about scope and the other
+// is a capture this compiler does not lower. **This fixture was the whole of
+// what the message should ever have meant**, and it was a minority of what it
+// said. See record 0267 -- the tell was that fixing part of a message's count
+// at a different site left the rest saying the same words.
 
 export function control(columns: number, index: number): number {
   return index * columns;

@@ -6752,8 +6752,37 @@ impl<'a> FuncBuilder<'a> {
         while let Some(parent) = at {
             if matches!(
                 self.kind_of(parent),
+                // **Every kind of function body, not the three with a name.**
+                //
+                // An arrow, a function expression and an accessor are function
+                // bodies too, and a `const` inside one is a local. Missing them
+                // meant `collect_module_scope` collected such a declaration as
+                // a module-scope global and deferred its initializer to
+                // `module#init` -- where the arrow's own parameters and its own
+                // receiver do not exist.
+                //
+                // The two diagnostics that came out of that both describe
+                // `module#init` truthfully and describe the source falsely:
+                //
+                //     const f = (k) => { const c = k + 1; return c; }
+                //     `k`, a name from an enclosing scope
+                //
+                //     count = (label) => { const c = this.#counts.get(label) }
+                //     `this` outside a method
+                //
+                // `k` is the arrow's own parameter and `this` is the instance.
+                // 192 refusals across eleven corpus modules said the first and
+                // about 170 said the second, and a census grouping by message
+                // ranked them as two unrelated items, neither of which named
+                // this function.
                 Some(
-                    syntax::FUNCTION_DECLARATION | syntax::METHOD_DECLARATION | syntax::CONSTRUCTOR
+                    syntax::FUNCTION_DECLARATION
+                        | syntax::METHOD_DECLARATION
+                        | syntax::CONSTRUCTOR
+                        | syntax::ARROW_FUNCTION
+                        | syntax::FUNCTION_EXPRESSION
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
                 )
             ) {
                 return true;
