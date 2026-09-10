@@ -1,0 +1,89 @@
+# A private name is the one key a compiler can see
+
+    if (value === null || typeof value !== "object" || !(#list in value))
+      throw new ERR_INVALID_THIS("URLSearchParams");
+
+    NTS1001 an `in` whose key is not a literal the compiler can see
+
+It is the opposite. `#list` cannot be computed, cannot be forged, and is scoped
+by the language to the class body that declares it. It is the only key whose
+declaring class is knowable exactly.
+
+`literal_key` reads the node's *type*, and a private name in this position is
+syntax rather than a string literal, so it answered nothing and the refusal
+said the key could not be seen. The machinery to answer was already there:
+`"k" in value` on an `object` lowers to `InstanceOf` over the classes declaring
+`k`, which is what a brand check is.
+
+## The count, and how I got it
+
+Six sites, all this idiom, all in `url`. `URLSearchParams.#brandCheck` alone had
+**14 functions cascading on it** — `append`, `get`, `getAll`, `has`, `entries`,
+`keys`, `values`, `sort`, `toString`, `get size` among them.
+
+Three sites cleared: `#brandCheck` and `URL`'s two over `#record`. The other
+three are `#list in this`, which now reach a *different* refusal — `an `in` on
+something that is not an object` — because the guard narrows `this` rather than
+a parameter.
+
+**And nothing newly compiles.** The 14 stopped cascading on `#brandCheck` and
+now cascade on `ERR_MISSING_ARGS#constructor`, one link further along. Written
+that way deliberately: [[0282]] recorded the same mistake twice in one document,
+reporting cleared refusals as cleared functions and then cleared functions as
+compiling ones. The cone moved one link; that is the whole claim.
+
+## The soundness case, which the fixture found on its first run
+
+Two classes may each write `#list`. They are **different names**, so a brand
+check must answer `false` for the other one — and `declares` matches on the
+name, so it answered `true` in both directions. 58 cases disagreeing,
+`Holder.brands(new Decoy())` true where node says false.
+
+Without a decoy class the fixture would have passed, and the defect would have
+been that every brand check in the tree accepts the wrong receiver — the exact
+failure a brand check exists to prevent. The fix is to keep only the class
+enclosing the `in` and its subclasses, which is the only place the name is in
+scope. Sabotaging it back returns all 58.
+
+An empty set after that filter is **refused** rather than folded to `false`. For
+a public key an empty set is the honest answer; a private name is always
+declared by the class it is written in, so an empty set means the compiler
+failed to find something the language guarantees, and `false` would make every
+brand check throw on its own instances.
+
+## What the fixture found instead, which is worth more
+
+The first decoy was an exact structural twin, and the fixture kept failing after
+the restriction was correct and checked by hand. It was measuring something
+else:
+
+    class A { x: number }   class B { x: number }
+    new B() instanceof A    // ours: true.  node: false.
+
+**Two classes whose fields match exactly share one layout, and therefore one
+descriptor.** `instance_of` resolves each class to a layout and compares
+descriptors, so it cannot separate them. The emitted C for all three cases is
+one line — `nts_is_class(v3, &nts_desc_NtsObj_A)` — and there is exactly one
+descriptor in the program. `class B` does not exist at runtime; it *is* `A`.
+
+Nothing refuses. It compiles, runs, and answers wrongly, which makes it the only
+defect this week that announced itself with no diagnostic at all. Filed as
+`blockers/two-classes-one-descriptor`, as a `lowers` guard because there is no
+refusal to assert on, with the example deliberately absent: an example must
+agree with node, and writing one that fails would redden the gate for everyone
+over a defect nobody is fixing today.
+
+The fix is a descriptor per class rather than per layout. Sharing the *struct*
+is a real economy and is not the problem; sharing the identity is. Both backends
+compare descriptors, so it is one decision for both and belongs with the Node
+and JVM lanes rather than in a unilateral commit.
+
+## The thing to carry
+
+A fixture that fails for a reason other than the one it was written for is the
+same trap as one that passes for a reason other than the one it was written for,
+and it is **harder to notice**, because failure looks like work to do. I spent
+two builds making a correct filter more correct while the fixture was measuring
+descriptor identity. What separated them was changing the decoy's shape — one
+field — and the question that suggested it was "what else do these two classes
+share besides the name I am testing".

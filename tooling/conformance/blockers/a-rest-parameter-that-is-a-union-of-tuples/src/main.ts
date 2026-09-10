@@ -73,9 +73,19 @@
 // agreement over the functions that survived and go green having stopped
 // testing the thing it was written for.
 //
-// No `runtime/node` call site passes `undefined` explicitly -- the calls that
-// would are JavaScript callers arriving through the napi wrapper, which builds
-// the array from `argc` and does not take this path.
+// No `runtime/node` call site passes `undefined` explicitly -- checked by the
+// Node lane rather than assumed: there is no two-argument `.delete(` in any
+// `runtime/node` TypeScript file, and `searchParams` does not appear outside
+// `url` at all.
+//
+// **The day it costs something is not the day `URLSearchParams` publishes.** It
+// is the day a *node test* calls `delete` with two arguments through the napi
+// wrapper, which builds the array from `argc` and does not take this path.
+// `runtime/node` will never be the caller, because the only caller that would
+// is JavaScript. So the exposure is entirely on the conformance side and none
+// of it is in code anyone would be editing -- which is a different statement
+// from "no call site today", and it is the one that decides whether anything
+// needs doing about it. Nothing does.
 //
 // # What it would take
 //

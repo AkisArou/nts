@@ -75,13 +75,44 @@ I wrote "six methods cleared" and it was four. `searchparams.ts` went from
 `set` advanced to a *different* wall — `assigning to this property`, at lines
 332 and 437, inside bodies that previously refused at their signature.
 
-`append`, `get`, `getAll` and `has` lower completely. `url` builds, loads, and
-publishes the same one name as before, because `URL#constructor` is the
-heterogeneous case and still refuses.
+`url` builds, loads, and publishes the same one name as before, because
+`URL#constructor` is the heterogeneous case and still refuses.
 
-So the honest ledger is four functions, no new published name, and a count that
-was not the count I would have reported without running it. Six refusals cleared
-and four functions cleared are different numbers about the same change.
+### And then the corrected count was also wrong
+
+**`append`, `get`, `getAll` and `has` do not lower**, and the commit message for
+`578d142e` says they do. All four cascade:
+
+    NTS1003 `URLSearchParams#append` cannot be compiled because it calls
+            `URLSearchParams.#brandCheck`, which was refused above
+
+I checked with `nts hir`, which shows *raw lowering* and does not run the
+cascade, so the four appeared with nothing against them and read as clear.
+`nts hir --prepared` is what a backend receives, and it names all four. The Node
+lane caught it by rebuilding rather than by reading my message, which is the
+only reason it is written down here rather than standing.
+
+That is the same error twice in one record, one level apart. First "six refusals
+cleared" reported as six functions; then four functions reported as four
+*compiling* functions. **A refusal that disappears from a file is not a function
+that lowers, and a function that lowers is not a function a backend receives.**
+Three counts, and I used each one to answer the next one's question.
+
+The measured ledger: six rest refusals cleared, `searchparams.ts` 14 roots to
+10, `delete` and `set` moved to a different root, **zero functions newly
+compiling**, no new published name.
+
+### What that exposed, which is worth more than what it cost
+
+Everything in `URLSearchParams` is behind one line. `#brandCheck` refuses at
+`searchparams.ts:276` on `!(#list in value)` — an `in` whose key is a **private
+name** — and **14 functions cascade on it**, including `append`, `get`,
+`getAll`, `has`, `entries`, `keys`, `values`, `sort`, `toString` and `get size`.
+
+A private name is not "a key the compiler cannot see". It is per-class, the
+layout knows which class declares `#list`, and `#list in value` is therefore an
+instance test the compiler can answer. One line, fourteen functions, and it is
+filed as the next thing rather than started here.
 
 ## What is still refused, and why it is filed rather than done
 

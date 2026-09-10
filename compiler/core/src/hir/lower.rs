@@ -14110,9 +14110,12 @@ impl<'a> FuncBuilder<'a> {
     fn lower_in_over_every_class(
         &mut self,
         id: NodeId,
+        lhs: NodeId,
         rhs: NodeId,
         key: &str,
     ) -> Result<ValueId, Diagnostic> {
+        // `None` for an ordinary key, which is every key but a private name.
+        let owner = self.brand_owner(lhs, self.private_name_key(lhs).is_some())?;
         // Every object type the program has, not every *class*: an object
         // literal typed by an interface has a layout and no entry in the
         // hierarchy, and asking the hierarchy answered `false` for
@@ -14173,6 +14176,38 @@ impl<'a> FuncBuilder<'a> {
         }
         declaring.sort_unstable_by_key(|ty| ty.0);
         declaring.dedup();
+        // **A private name is scoped to the class body that declares it.**
+        //
+        // `declares` matches on the name, and two classes may each write
+        // `#list`. Those are *different names* by the language's own rule, so a
+        // brand check must answer `false` for the other one -- and matching by
+        // name alone answered `true` for both, in either direction.
+        //
+        // `examples/a-private-name-is-a-brand` is the fixture that caught it,
+        // on its first run, with 58 cases disagreeing: `Holder.brands(new
+        // Decoy())` answered true where node answers false. Without the decoy
+        // class the fixture would have passed and the defect would have been
+        // that every brand check in the tree accepts the wrong receiver --
+        // which is the failure a brand check exists to prevent.
+        //
+        // The owner is the class enclosing the `in`, which is the only place
+        // the name is in scope. Subclasses stay: `Derived extends Holder` does
+        // carry `#list`, and node agrees.
+        if let Some(owner) = owner {
+            declaring.retain(|ty| *ty == owner || self.descends_from(*ty, owner));
+            // Refused rather than folded to `false`. For a public key an empty
+            // set is the honest answer -- nothing declares it. A private name is
+            // always declared by the class it is written in, so an empty set
+            // here means this compiler failed to find something the language
+            // guarantees, and answering `false` would make every brand check
+            // throw on its own instances.
+            if declaring.is_empty() {
+                return Err(self.unsupported(
+                    rhs,
+                    &format!("an `in` on `{key}`, whose declaring class this compiler did not find"),
+                ));
+            }
+        }
         let value = self.lower_expression(rhs)?;
         let origin = self.origin(id);
         let value = match self.values[value.0 as usize].ty {
@@ -14210,8 +14245,69 @@ impl<'a> FuncBuilder<'a> {
         Ok(answer)
     }
 
+    /// A private name used as an `in` key, which is a key this compiler can see
+    /// and is the *only* key it can see completely.
+    ///
+    /// ```text
+    /// if (value === null || typeof value !== "object" || !(#list in value))
+    ///     throw new ERR_INVALID_THIS("URLSearchParams");
+    /// ```
+    ///
+    /// [`Self::literal_key`] reads the node's type, and `#list` in this position
+    /// is syntax rather than a string literal, so it answered nothing and the
+    /// whole brand check refused as "a key the compiler cannot see". It is the
+    /// opposite: `#list` cannot be computed, cannot be forged, and is scoped by
+    /// the language to the class body that declares it, so the set of classes
+    /// declaring it is knowable exactly.
+    ///
+    /// Six sites, all of this shape, and `URLSearchParams.#brandCheck` alone has
+    /// **14 functions cascading on it** -- `append`, `get`, `getAll`, `has`,
+    /// `entries`, `keys`, `values`, `sort`, `toString` and `get size` among
+    /// them. `URL`'s two are the same idiom over `#record`.
+    fn private_name_key(&self, lhs: NodeId) -> Option<String> {
+        (self.kind_of(lhs) == Some(syntax::PRIVATE_IDENTIFIER))
+            .then(|| self.node(lhs).text.clone())
+            .flatten()
+    }
+
+    /// Which class a brand check belongs to, or `None` for an ordinary key.
+    ///
+    /// Refused rather than answered when a private name has no enclosing class:
+    /// that cannot parse, and guessing would be a silent wrong receiver test.
+    fn brand_owner(&self, lhs: NodeId, is_private: bool) -> Result<Option<TypeId>, Diagnostic> {
+        if !is_private {
+            return Ok(None);
+        }
+        match self.enclosing_class_instance(lhs) {
+            Some(owner) => Ok(Some(owner)),
+            None => Err(self.unsupported(
+                lhs,
+                "a private name outside any class, which cannot be a brand",
+            )),
+        }
+    }
+
+    /// The instance type of the class whose body encloses this node.
+    ///
+    /// What makes a private name answerable: it is in scope only inside the
+    /// class that declares it, so the class enclosing `#list in value` is the
+    /// one `#list` belongs to, whatever else in the program spells it the same.
+    fn enclosing_class_instance(&self, id: NodeId) -> Option<TypeId> {
+        let mut at = self.node(id).parent;
+        while let Some(parent) = at {
+            // Only `CLASS_DECLARATION`: this schema has no separate constant
+            // for a class expression, and a private name has to be inside a
+            // class body to parse at all.
+            if self.kind_of(parent) == Some(syntax::CLASS_DECLARATION) {
+                return self.declared_instance_type(parent);
+            }
+            at = self.node(parent).parent;
+        }
+        None
+    }
+
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
-        let Some(key) = self.literal_key(lhs) else {
+        let Some(key) = self.private_name_key(lhs).or_else(|| self.literal_key(lhs)) else {
             return Err(self.unsupported(
                 lhs,
                 "an `in` whose key is not a literal the compiler can see",
@@ -14230,7 +14326,7 @@ impl<'a> FuncBuilder<'a> {
         // a compiled program gains no classes. So this is not a different
         // operation, it is the same one with a wider set.
         if self.is_the_object_type(ty) {
-            return self.lower_in_over_every_class(id, rhs, &key);
+            return self.lower_in_over_every_class(id, lhs, rhs, &key);
         }
         // A `Record<string, V>`, whose membership is a *runtime* question.
         //
