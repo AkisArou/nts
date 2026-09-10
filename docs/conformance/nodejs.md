@@ -19204,6 +19204,31 @@ consequence: the shim has a fallback that publishes the remaining names when
 `QueryString` is absent, which is why `escape` reaches a test at all. Without it
 this module would read 0 and the two working exports would be invisible.
 
+## "A class used as a value" covers three shapes, and one of them already lowers
+
+The single root under `http.createServer`'s 274 files is
+`server.ts:252 \`IncomingMessage\`, a class used as a value`, from
+
+    this.#IncomingMessage = opts.IncomingMessage ?? IncomingMessage;
+
+`agreements/spread-and-class-member-seams` already exercises the same message, and
+comparing the two says the message is broader than either. On a 09:28 pin that
+file is 8 compared, 0 disagreeing, 2 refused:
+
+    WithStatic.double(3)   a static method call through the class   agrees
+    WithStatic.limit       a static field read through the class    refused
+    ... ?? IncomingMessage  the bare class as an rvalue             refused
+
+So a static **method call** through a class name lowers today, and a static
+**field read** through the same name does not, and both are "a class used as a
+value" -- with the bare class as an rvalue a third shape again. That is the same
+pattern this ledger records for `a declaration outside every walk`: the message
+names a construct and the constructs behind it are unlike.
+
+It matters for ranking. `WithStatic.limit` is a reduction that exists, reproduces,
+and is *not* the http case: clearing the static-read shape need not clear the
+store-the-constructor shape, and the 274 files are behind the second.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
