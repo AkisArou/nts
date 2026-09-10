@@ -9,6 +9,38 @@
 //     function twice(n: number) { … }          -> lowers
 //     const twice = function (n: number) { … } -> REFUSED, as a `let`
 //
+// # 2026-09-10: this is the whole of `assert`
+//
+// `assert` publishes **18 `export const` and 0 `export function`**:
+//
+//     export const deepEqual = looseAssertions.deepEqual;
+//     export const throws = looseAssertions.throws;
+//     …
+//
+// So every name it offers is this shape, and **20 of its 24 wrapper declines
+// are `is exported and is not a function this backend can name`**. The module
+// is 0 of 12 applicable test files on the compiled axis and this is why: node's
+// `assert` publishes 22 names, all functions, and the addon publishes almost
+// none of them.
+//
+// The form is not incidental to `assert` either. Node's `assert` is a callable
+// object with `strict` and `loose` variants sharing implementations, so binding
+// the loose set to `looseAssertions.*` is how one implementation is published
+// under two surfaces. Rewriting the eighteen as `export function` would
+// duplicate every assertion body or add a forwarding layer that changes which
+// function object a test sees — `assert.deepEqual === assert.strict.deepEqual`
+// is false in node and true if both forward to one declaration.
+//
+// The probe that found it also widens the refusal beyond a property read:
+//
+//     export const twice = bag.twice;              REFUSED
+//     export const twiceLiteral = (n) => n * 2;    REFUSED
+//     export function twiceDirect(n) { … }         crosses
+//
+// **Any `export const` holding a function fails to publish**, whether it is
+// bound to a property read or to an arrow literal. Only a function declaration
+// crosses.
+//
 // `declared` is the control: the same body, the same call, a function
 // *declaration* instead of a value bound to a name.
 //
