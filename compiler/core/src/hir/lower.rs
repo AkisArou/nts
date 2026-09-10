@@ -13051,6 +13051,12 @@ impl<'a> FuncBuilder<'a> {
                 // An optional property is refused for a *union* arm and is
                 // refused here for the same reason: the slot exists whether or
                 // not it was written, and `{}` and `{ k: undefined }` disagree.
+                Declares::Optionally if !self.is_the_type_of_some_node(class) => {
+                    // A shape no value can have, so its optionality is not a
+                    // fact about this program. See
+                    // [`Self::is_the_type_of_some_node`] -- this is the arm it
+                    // exists for, and it is what stood under `Buffer.from`.
+                }
                 Declares::Optionally => {
                     // Sound, and the honest cost of the whole-program answer:
                     // with the value typed `object`, an instance of *any* type
@@ -13062,12 +13068,20 @@ impl<'a> FuncBuilder<'a> {
                     // 208 sites in `runtime/node`, and the type is named
                     // because that is what makes it actionable: the fix is at
                     // the declaration, and "some class" points at nothing.
+                    //
+                    // **"an anonymous type" pointed at nothing either**, and it
+                    // is what stands under `Buffer.from`: `hasArrayLikeShape`
+                    // refuses `"length" in value` by a type with no name, which
+                    // told a reader that somewhere in forty thousand lines a
+                    // declaration had written `length?` and nothing more. A
+                    // type with no name still has a *declaration*, and where it
+                    // is written is the whole of what the reader needs.
                     let who = named(self.snapshot, class)
-                        .map_or_else(|| "an anonymous type".to_owned(), ToOwned::to_owned);
+                        .map_or_else(|| self.declared_at(class), |name| format!("`{name}`"));
                     return Err(self.unsupported(
                         rhs,
                         &format!(
-                            "an `in` naming `{key}` on an `object`, which `{who}` declares \
+                            "an `in` naming `{key}` on an `object`, which {who} declares \
                              optionally -- its slot exists here whether or not it was \
                              written, so no test of the value can say which"
                         ),
@@ -13542,6 +13556,130 @@ impl<'a> FuncBuilder<'a> {
         (0..self.snapshot.types.len())
             .filter_map(|at| u32::try_from(at).ok().map(TypeId))
             .find(|ty| self.name_of_type(*ty) == Some(wanted))
+    }
+
+    /// A type described by what it holds, for one that has nothing else.
+    ///
+    /// The last fallback under [`Self::declared_at`], and the one the case that
+    /// matters actually reaches. A **synthesised** type — an intersection, a
+    /// mapped type, a `Partial<T>` instantiation — has no symbol, so it has no
+    /// name *and* no declaration, and both of the answers above run out. Under
+    /// `Buffer.from` that is exactly what stood: `an anonymous type`, twice
+    /// over, describing nothing.
+    ///
+    /// Its property names are what is left and they identify it: a reader who
+    /// sees `{ length?, 0? }` knows a `Partial<ArrayLike>` when the name and
+    /// the file were both unavailable. Six at most, because the point is
+    /// recognition rather than a full printing, and a mapped type over a long
+    /// interface would otherwise fill the terminal.
+    fn shaped_like(&self, ty: TypeId) -> String {
+        let Some(TypeKind::Object { properties }) =
+            self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            return "an anonymous type".to_owned();
+        };
+        let mut names: Vec<String> = properties
+            .iter()
+            .take(6)
+            .map(|property| {
+                let mark = if property.optional { "?" } else { "" };
+                format!("{}{mark}", property.name)
+            })
+            .collect();
+        if properties.len() > names.len() {
+            names.push("...".to_owned());
+        }
+        format!("the anonymous `{{ {} }}`", names.join(", "))
+    }
+
+    /// Whether any expression in the program has this type.
+    ///
+    /// The question underneath `Declares::Optionally`, which refuses because
+    /// `{}` and `{ k: undefined }` are one layout with one erased slot and no
+    /// test of a *value* can tell them apart. That is true of a value — and a
+    /// type nothing can be is not a value.
+    ///
+    /// Sound because a value's runtime shape is decided where it is allocated,
+    /// and an allocation is an expression with a type. An object literal takes
+    /// its contextual type, so `{ other: 1 }` written as a `Maybe` **is** a
+    /// `Maybe` here and keeps the refusal; a struct built by the Node-API
+    /// wrapper takes the published signature's type, which is written on a
+    /// parameter. Every shape a value can have is some node's type, and a type
+    /// that is no node's type is a shape nothing holds.
+    ///
+    /// # Why this and not the two cheaper questions
+    ///
+    /// **"Does it have a layout" is the exact question and cannot be asked
+    /// here.** A layout is discovered by whichever function first needs one, so
+    /// the set is not complete until every function has been lowered — which is
+    /// why `prune_class_tests` runs afterwards and why this cannot.
+    ///
+    /// **"Does it have a symbol" is cheap and wrong.** It was the first attempt:
+    /// the type that poisons `"length" in value` under `Buffer.from` has none,
+    /// which made it look like the rule. Twelve of `buffer`'s 144 laid-out
+    /// types have no symbol either — `Type190`, `Type410`, `Type796`, two
+    /// closures, a signature and the four error constructors — so "no symbol"
+    /// would have answered for shapes values really do have.
+    ///
+    /// The type in question is `{ length?, toString?, toLocaleString?, pop?,
+    /// push?, concat?, ... }`: `Array` with every member optional, no symbol, no
+    /// declaration, no layout, and **the type of no node**. It reached the
+    /// candidate list because the list is every object type in the snapshot,
+    /// and a type table holds more than a program builds.
+    ///
+    /// Linear in the node count, and paid only where a candidate declares the
+    /// key optionally — 208 sites across `runtime/node`, against sites that
+    /// answer without asking. Not cached: a cache would be per-builder and a
+    /// builder is one function, so it would pay for itself only in a function
+    /// with several such sites, and none has more than two.
+    fn is_the_type_of_some_node(&self, ty: TypeId) -> bool {
+        self.snapshot.node_types.values().any(|at| *at == ty)
+    }
+
+    /// Where a type with no name is written.
+    ///
+    /// The counterpart of [`Self::name_of_type`] for the case that has no
+    /// answer: an anonymous object type — an inline `{ k?: T }`, a `Partial`, a
+    /// mapped type — has no name to print and does have a declaration, and the
+    /// declaration is what a reader has to go and change.
+    ///
+    /// The first declaration, not all of them. A merged declaration has more
+    /// than one and they are all in the same file; a list would be longer and
+    /// no more actionable.
+    ///
+    /// The file and the byte the declaration starts at, not a line and column:
+    /// a `Span` is byte offsets because tsgo's encoded AST carries them that
+    /// way, and converting is the diagnostic boundary's job rather than the
+    /// lowering's. The file alone was tried first and is not enough — one file
+    /// can declare several anonymous types with an optional field, and which
+    /// one is the whole question.
+    ///
+    /// `an anonymous type` remains the answer where there is genuinely nothing
+    /// to point at: a symbol declared outside the decoded file set has an empty
+    /// `declarations`, which is honest rather than a gap.
+    fn declared_at(&self, ty: TypeId) -> String {
+        let Some(symbol) = self.snapshot.types.get(ty.0 as usize).and_then(|r| r.symbol) else {
+            return self.shaped_like(ty);
+        };
+        let Some(declaration) = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .and_then(|declared| declared.declarations.first())
+        else {
+            return self.shaped_like(ty);
+        };
+        let Some(node) = self.snapshot.nodes.get(declaration.0 as usize) else {
+            return self.shaped_like(ty);
+        };
+        let location = node.origin.location;
+        let Some(source) = self.snapshot.sources.get(location.file.0 as usize) else {
+            return self.shaped_like(ty);
+        };
+        format!(
+            "the anonymous type at {}+{}",
+            source.display_path, location.span.start
+        )
     }
 
     /// A type's declared name, where it has one.
