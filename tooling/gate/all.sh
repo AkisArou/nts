@@ -829,8 +829,30 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # distinction its own way. Landed 2026-09-10 as a coordinated pair, `18760619`
   # here and `f9ff1be6` on that lane, with `48707004` after it.
   #
-  # The one gap left is `a-structural-cast-that-is-a-prefix`, swept one at a
-  # time by that lane rather than inferred from a total.
+  # **Two gaps, and they are one cause.** `a-structural-cast-that-is-a-prefix`
+  # and `a-class-stored-and-compared` refuse with the same NTS4001:
+  #
+  #     storing a `Prefixed` where a `Counted` is declared
+  #     storing a `Ctor_Other` where a `Fn3__1` is declared
+  #
+  # Two layouts TypeScript relates, unrelated in the class hierarchy this lane
+  # emits -- structurally in the first, by function-type subtyping in the
+  # second. The JVM relates classes by *name*, so fields coinciding buys
+  # nothing: `getfield Counted.n` needs the object to *be* a `Counted`. A
+  # conversion would be a copy and a copy is not the same object, which is the
+  # trade the C lane refused for its own reasons.
+  #
+  # It is **not** "a class token has no base". That edge was built and reverted
+  # on 2026-09-10: a token's `typeof` names a different signature layout per
+  # return type, so `Ctor_Other extends Fn3__6` against a slot declared
+  # `Fn3__1`, and the declines do not move. What is missing is that two
+  # *signature* layouts TypeScript relates are unrelated here -- covariant
+  # constructor returns -- which single inheritance cannot express and which
+  # `Layout::base` is already spent on for closures.
+  #
+  # So the two gaps are the same sentence one representation apart, and neither
+  # is this lane being behind. Both swept one at a time rather than inferred
+  # from a total.
   backend_examples 158 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
