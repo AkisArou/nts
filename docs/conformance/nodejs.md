@@ -21242,6 +21242,53 @@ from doing so.
 empty object. And sweeping twenty-two modules in one process hung for eleven
 minutes with no output, because a constructed class can hold the event loop open.
 
+## Five rungs of "cleared", and both lanes misread the bottom two
+
+`URLSearchParams.#brandCheck` had two spellings -- `#list in value` and
+`#list in this` -- and the first fix reached only one. With both gone,
+`searchparams.ts` is **10 root refusals down to 7** and **14 functions stopped
+cascading on `#brandCheck`**, re-derived here and matching the compiler lane
+exactly.
+
+Then the question was what "cleared" means, and it is five different statements.
+Neither lane had them apart:
+
+    refusals cleared                 6   (the rest parameters)
+    roots cleared                    4   (14 -> 10 -> 7)
+    functions not refused            5
+    functions a backend receives     8
+    functions the module publishes   0
+
+**Each is true and none implies the next.** This lane reported rung three as seven
+and it is five; the compiler lane reported rung four as zero and it is eight.
+
+`delete` and `set` are not clear: they are refused at roots **inside their
+bodies** -- `assigning to this property`, lines 332 and 437 -- and an `NTS1001`
+names a line where an `NTS1003` names a function, so nothing in the diagnostics
+says their names. That asymmetry had already caught me once the same evening.
+
+And five methods **are** exported functions the backend receives:
+
+    export func URLSearchParams#entries(this: managed<obj#2142>) -> managed<obj#1251>
+
+`entries`, `keys`, `values`, `sort`, `toString`, plus `pairs`, `get size` and the
+iterator's constructor -- eight definitions for a class reported as having one.
+They are lowered and unreachable at the same time: `URLSearchParams` has no
+wrapper, because its constructor still refuses at `searchparams.ts:161` on a
+parameter of unrepresentable type, so nothing can construct the class and none of
+the eight is reachable through the module object.
+
+### Three readings of one file before the number was about what I meant
+
+1. Grepping the class name anywhere in the prepared HIR found most of the methods
+   -- a refusal line and a call site both mention a name.
+2. Counting `func URLSearchParams#get` matched **`get size`** on a word boundary.
+3. Anchoring at `^\s*func` found nothing at all, because the real prefix is
+   `export func`.
+
+The question "is this function defined" took three attempts, in a document where
+the previous four findings were all a measurement being adjacent to the question.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
