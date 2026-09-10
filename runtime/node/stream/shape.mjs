@@ -94,6 +94,16 @@ export function shape(exports) {
       name === "addAbortSignalNoValidate" ||
       name === "duplexFromWeb" ||
       name === "duplexToWeb" ||
+      // Subpath modules, not members of `node:stream`. `subpaths()` below is what
+      // makes `require("stream/consumers")` and `require("stream/iter")` resolve,
+      // and the `...exports` walk was *also* leaving them on the module object,
+      // where node has neither: `"consumers" in require("node:stream")` is false.
+      // `iter` carried 38 members out with it and `web` 19.
+      name === "consumers" ||
+      name === "iter" ||
+      // Node's own `pipeline` is the public name; `pipelineImpl` is the internal
+      // one it calls, and node does not publish it.
+      name === "pipelineImpl" ||
       // Node keeps these two off the module object and on the constructors:
       // `"WritableState" in require("node:stream")` is false there, while
       // `Object.keys(stream.Writable)` is `["WritableState", "fromWeb", "toWeb"]`.
@@ -167,10 +177,11 @@ export function shape(exports) {
   if (exports.promises !== undefined) Stream.promises = { ...exports.promises };
   Duplex.fromWeb = exports.duplexFromWeb;
   Duplex.toWeb = exports.duplexToWeb;
-  // The Web Stream classes are platform objects supplied by Node. The
-  // TypeScript implementation owns the adapters; this bridge only makes the
-  // platform module reachable under its `stream/web` spelling in the test.
-  Stream.web = webStreams;
+  // The Web Stream classes are platform objects supplied by Node, and
+  // `subpaths()` below is what makes them reachable under `stream/web` -- which
+  // is the spelling node uses and the only one it has. `Stream.web = webStreams`
+  // stood here as well and put a `web` property on the module object that node
+  // does not have.
   return Stream;
 }
 

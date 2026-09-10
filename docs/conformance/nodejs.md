@@ -20061,6 +20061,62 @@ files together were being read as a complete surface comparison, and they were
 not. `surface-absence.mjs` is the one that walks node's side, which is why fixing
 `paths()` fixes the coverage rather than fixing both files.
 
+## The counted lane, re-derived: 22 modules, 39,531 retain/release sites, 0 differ
+
+`counted-vs-uncounted.sh` on a 16:52 pin, both columns from the same compiler.
+Every one of the 22 modules built twice -- once with `NTS_CONFORMANCE_RC=1` and
+`-DNTS_POISON=1`, once without -- and ran node's tests both ways.
+
+    22 module(s), 0 module(s) differ between the columns
+    39,531 retain/release sites across the counted builds
+    45 test file(s) passing on the compiled lane
+
+The largest counted builds are `process` at 3,971 sites, `http` at 3,639, `net` at
+2,928, `zlib` at 2,683 and `stream` at 2,622; `punycode` is the smallest at 55.
+Every pair matched: `http` 3 passed and 406 failed on both sides, `path` 15 and 5
+on both, `os` 5 and 5 on both.
+
+An identical pair is a result and not a blank -- it says the allocator sees
+nothing these tests reach -- and it only reads that way because the comparison
+itself has been seen to fire. Inverting it (`!=` to `=`) makes `punycode` flag and
+the run report `1 module(s) differ`.
+
+The 45 is unchanged by the overload fix that landed during the run, which is what
+it should be: that fix changes what a wrapper *checks*, not what a module
+*publishes*, and the axis counts published behaviour.
+
+## `stream` published four names node keeps in separate modules
+
+`surface-absence.mjs`, once it could see primitives, reported `stream` with 8
+extra paths. Four names and their subtrees:
+
+    stream.consumers      node has `node:stream/consumers`, a separate module
+    stream.iter           a separate module, and 38 members came with it
+    stream.web            a separate module, 19 members
+    stream.pipelineImpl   node publishes `pipeline`; this is the internal it calls
+
+`"consumers" in require("node:stream")` is false, so this is absence and not an
+enumerability difference. `subpaths()` in the shim already registers all three
+subpaths under the spellings node uses, which is what makes them resolvable -- the
+`...exports` walk was leaving them on the module object *as well*, and
+`Stream.web = webStreams` was putting the fourth there by hand.
+
+The shim already carried an exclusion list for exactly this, with
+`duplexFromWeb`, `duplexToWeb` and `kSynchronousCallback` on it. These four were
+not.
+
+**Interpreted lane before and after: 252 passed, 0 failed, both.** Nothing reached
+them through the module object, which is what makes this safe to remove and also
+what let it stand: no test could see the difference, and node's surface is not
+defined by what our tests happen to read.
+
+`stream` now reports 0 extra. `process` still reports 3 -- `throwDeprecation`,
+`traceDeprecation`, `traceProcessWarnings` -- and those are a different question:
+node creates them on assignment, so a fresh `process` lacks the own property while
+every program that sets one has it. That is the `instance-shape-diff.mjs`
+distinction, and it wants a person reading node's documentation rather than a
+deletion.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
