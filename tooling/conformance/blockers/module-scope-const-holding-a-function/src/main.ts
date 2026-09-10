@@ -55,6 +55,35 @@
 // binding**, not the `const`, and `assert`'s eighteen are all the instance
 // form because `looseAssertions` is `new Assert({ strict: false })`.
 //
+// # What `assert`'s surface actually requires, measured against node
+//
+// The paragraph above claimed a rewrite to `export function` would make
+// `assert.deepEqual === assert.strict.deepEqual` true where node has it false.
+// That reasoning was wrong too — eighteen separate declarations are eighteen
+// distinct objects, so the equality would stay false. The real constraint is
+// sharper and only shows up by asking node:
+//
+//     assert.deepEqual === assert.strict.deepEqual   false
+//     assert.ok        === assert.strict.ok          TRUE
+//     assert           === assert.strict             false
+//     assert.strict.strict === assert.strict         true
+//     typeof assert                                  "function"
+//
+// **The identity contract is per name.** `deepEqual` differs between the two
+// surfaces because the implementations differ; `ok` is the *same function
+// object* in both because it has no loose/strict variance. A mechanical rewrite
+// to eighteen `export function`s makes all eighteen distinct and breaks
+// `assert.ok === assert.strict.ok`, which is the opposite error to the one
+// first claimed.
+//
+// So the eighteen are not a style choice: an instance method read is how one
+// implementation appears under two surfaces *with the sharing node has*, and
+// any rewrite has to reproduce a per-name pattern rather than a uniform one.
+//
+// `typeof assert === "function"` is a second thing entirely — node's `assert` is
+// callable and an ESM module's exports cannot be — and it is not this fixture's
+// subject, but it bounds how far the module can go regardless of this refusal.
+//
 // The wrong claim was committed before `punycode` was checked. The survey that
 // would have refuted it — `export const` counts per module — was run *after*,
 // which is the wrong order and is the whole lesson: a rule about a construct
