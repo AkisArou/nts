@@ -18814,7 +18814,7 @@ there, `duplex instanceof Writable` really was false.
 
 ### The lane
 
-**1,871 passed, 0 failed across 22 modules**, from 1,859. The twelve added are
+**1,872 passed, 0 failed across 22 modules**, from 1,859. The thirteen added are
 tests for defects these seams found, each controlled against the code it replaced.
 
 **596,000 comparisons, 0 divergences.** Twelve tests say the twelve fixes are
@@ -19274,9 +19274,9 @@ A shared `REJECTED` table, and error-path specs in `path`, `zlib`, `url`,
 with the input, so a module's error calls are a spread rather than one case
 repeated four thousand times.
 
-    coded throws   811  ->  9,392
-    modules        1    ->  9
-    comparisons    596k ->  676,436, still 0 divergence(s)
+    coded throws   811  ->  ~11,000
+    modules        1    ->  14
+    comparisons    596k ->  700,591, still 0 divergence(s)
 
 `assert`, `fs`, `console`, `dgram` and `diagnostics_channel` joined `path`, `zlib`,
 `url`, `timers` and `util`. Two of those needed a different insertion point --
@@ -19374,6 +19374,52 @@ identical rows in every `fs` run and a harness whose output is 590 copies of a
 known difference buries the next unknown one. Removing it to make a number green
 would be the other mistake, which is why it is written down here where it can be
 argued with.
+
+## Two more defects, both found by a corpus spec that was wrong about itself
+
+Adding error paths to the corpora found two things that are not error paths.
+
+**Every `EventEmitter` instance carried two own keys node's does not.**
+
+    node  ["_events", "_eventsCount", "_maxListeners"]
+    ours  [... , "_captureRejections", "_preserveEventShape"]
+
+`EventEmitter` is the base of `net.Server`, `net.Socket`, `http.Server`, every
+stream, `process`, `readline` and `dgram`, so it was every one of those objects,
+and it is visible through `Object.keys`, spread, `JSON.stringify` and
+`assert.deepStrictEqual`. A TypeScript `private` is compile-time only, which is
+why one of the two was already marked private and still enumerated.
+
+Symbol-keyed now, as node keeps its own `Symbol(kCapture)`.
+`process/test/export-surface-static.js` had pinned these as a known difference and
+argued that *deleting* them at the host is not the fix -- a host-side `delete`
+cannot remove a struct field in the compiled representation, so the two lanes
+would disagree about the same object. That argument is right and does not reach
+this: the field exists in both lanes and neither enumerates it. A `#` field would
+have hidden them too and cannot be used, because two module-level functions read
+the flag off an instance.
+
+**`new Socket({ fd: "x" })` answered `EPERM` where node answers
+`ERR_INVALID_ARG_TYPE`.** The descriptor went straight to `nts_net_adopt_fd`, so
+an invalid *argument* came back as a *system* error from whatever it coerced to --
+the wrong kind of failure, naming the wrong cause, and invisible to a caller
+matching on `err.code`. `validateInteger(options.fd, "fd", 0, 2147483647)` gives
+node's three answers exactly, message included.
+
+### The rule those specs kept teaching
+
+Neither was found by a spec that worked. `ee.setMaxListeners(rejected(s))` was
+meant to reject and `1` is a perfectly good max-listeners count, so the call
+succeeded and the harness compared the two returned emitters -- 1,547 divergences
+that had nothing to do with errors and one real defect underneath them. The `net`
+spec then did it again with `{ fd: undefined }`, which means *no* fd and
+constructs a socket.
+
+**A value that is invalid for a parameter is not the same as one that is invalid
+generally**, and a shared table of rejected values is a claim about every
+parameter it is used on. Three times in one sitting: `readFileSync(-0)` reading
+standard input, `setMaxListeners(1)` succeeding, `{ fd: undefined }` meaning
+absence. The table is split by that distinction now.
 
 ## Conventions
 
