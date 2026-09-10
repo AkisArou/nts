@@ -53,12 +53,49 @@ class Keyed {
   [kTag] = 7;
   named = 3;
   other = 5;
+  // A decoy, and the reason this fixture can fail.
+  //
+  // `namedKey` is the *spelling of the variable* that holds `"named"`. Without
+  // a member under that spelling, reading the text instead of the type merely
+  // refuses -- and `nts check` compiles what it can, runs that, and reports
+  // "agreed on every case" over the functions that survived, exit 0. The
+  // fixture goes green while the defect is live; only the `example-refusals`
+  // ledger notices, and only because this example is absent from it.
+  //
+  // With the decoy present, the text path *finds* something and `byVariableLiteral`
+  // answers 99 instead of 3. A wrong answer is a differential disagreement, so
+  // the example fails at the thing it was written for. Measured: sabotaging
+  // `indexed_member_name` to return `None` takes it from "agreed on every case"
+  // to 29 disagreeing cases.
+  namedKey = 99;
 }
 
 /** Control: a string literal index still names a member. */
 export function byLiteralString(n: number): number {
   const k = new Keyed();
   return k["named"] + n * 0;
+}
+
+/**
+ * Under test: a **variable** whose type is one literal.
+ *
+ * This is the case the whole change is about and the one the first draft of this
+ * fixture did not have -- every other index here is written at the site, where
+ * the node's text and its type happen to agree. Here they do not: the text is
+ * `namedKey` and the member is `named`.
+ *
+ * `blockers/a-key-held-in-a-variable` called this "the surprise": a single
+ * literal held in a variable refused exactly as a two-member union did, and the
+ * literal written at the site compiled. It is `stream`'s
+ * `options[duplexKey]`.
+ *
+ * Answers 3. Reading the text rather than the type answers **99** -- see the
+ * decoy on `Keyed`.
+ */
+export function byVariableLiteral(n: number): number {
+  const namedKey: "named" = "named";
+  const k = new Keyed();
+  return k[namedKey] + n * 0;
 }
 
 /** Control: a `unique symbol` index still names a member at compile time. */
