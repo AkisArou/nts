@@ -19857,9 +19857,13 @@ The wrapper table, from `blockers/an-overloads-second-argument-is-unchecked`:
     overloaded(1, "s")       "number,string"  the string arrives, as a string
     overloaded("s", 1)       threw            the first argument is still checked
 
+    threeOverloaded("s", 2, 3)   threw
+    threeOverloaded(1, "s", 2)   "number,string,number"
+    threeOverloaded(1, 2, "s")   "number,number,string"
+
 So it is not coercion -- nothing is converted on the way in, it simply is not
-checked -- and it is the second argument of an **overloaded** function
-specifically. `secondOptional` is second and optional and not overloaded, and it
+checked -- and it is **every argument after the first** of an overloaded
+function, not the second specifically. `secondOptional` is second and optional and not overloaded, and it
 rejects. `os.getPriority(pid?: number)` rejects. `setPriority`'s own first
 argument rejects. Three explanations ruled out by measurement before the fixture
 was written.
@@ -19908,6 +19912,19 @@ spec must not be able to do that.
 
 **A test found what a 60,000-comparison differential could not**, because the
 differential only ever asked about the argument that worked.
+
+### How far it reaches
+
+52 exported functions carry overload declarations, across eight modules:
+
+    fs 32   os 5   timers 4   stream 3   util 2   readline 2   process 2   events 2
+
+Every one of them takes whatever the host passes in every argument but the first.
+Whether that shows up as a wrong error depends on the second half -- a `typeof`
+guard the declaration lets the compiler fold -- so this is an upper bound on the
+blast radius and not a count of defects. `fs` is where to look first, and its
+compiled lane publishes 2 of node's 104 names today, so almost none of it is
+reachable to check.
 
 ## Conventions
 

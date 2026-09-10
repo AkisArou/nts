@@ -1,8 +1,8 @@
-// expect: emit-c --napi -> calls (() => { const p = (f, ...a) => { try { f(...a); return "accepted"; } catch (e) { return "rejected"; } }; return [p(exports.required, "s"), p(exports.optional, "s"), p(exports.secondRequired, 1, "s"), p(exports.secondOptional, 1, "s"), p(exports.overloaded, 1, "s")].join(",") === "rejected,rejected,rejected,rejected,accepted" && exports.overloaded(1, "s") === "number,string" && exports.viaOverload(1, "s") === "not-integer" && exports.viaOverloadUnknown(1, "s") === "not-integer" && exports.viaOverloadLoose(1, "s") === "not-number"; })()
+// expect: emit-c --napi -> calls (() => { const p = (f, ...a) => { try { f(...a); return "accepted"; } catch (e) { return "rejected"; } }; return [p(exports.required, "s"), p(exports.optional, "s"), p(exports.secondRequired, 1, "s"), p(exports.secondOptional, 1, "s"), p(exports.overloaded, 1, "s"), p(exports.threeOverloaded, "s", 2, 3), p(exports.threeOverloaded, 1, "s", 2), p(exports.threeOverloaded, 1, 2, "s")].join(",") === "rejected,rejected,rejected,rejected,accepted,rejected,accepted,accepted" && exports.overloaded(1, "s") === "number,string" && exports.threeOverloaded(1, "s", 2) === "number,string,number" && exports.threeOverloaded(1, 2, "s") === "number,number,string" && exports.viaOverload(1, "s") === "not-integer" && exports.viaOverloadUnknown(1, "s") === "not-integer" && exports.viaOverloadLoose(1, "s") === "not-number"; })()
 // control: exports.required(1) === "number" && exports.optional(1) === "number" && exports.secondRequired(1, 2) === "number,number" && exports.overloaded(1, 2) === "number,number" && exports.viaOverload(1, 2) === "integer" && exports.viaOverloadLoose(1, 2) === "integer"
 //
-// An overloaded function's wrapper does not check its arguments, and every other
-// shape's does.
+// An overloaded function's wrapper checks its first argument and none of the rest,
+// and every other shape's checks them all.
 //
 // Found in `os.setPriority`, where `setPriority(0, "x")` answers
 // `ERR_OUT_OF_RANGE` and node answers `ERR_INVALID_ARG_TYPE`. Wrong error type
@@ -19,10 +19,13 @@
 // So it is not coercion -- the value is not converted to a number on the way in,
 // it simply is not checked. Four shapes reject and the overloaded one does not.
 //
-// It is the *second* argument specifically, and the first is still checked:
+// It is every argument *after the first*, and the first is still checked:
 //
-//     overloaded("s", 1)      threw
-//     overloaded(1, "s")      "number,string"
+//     overloaded("s", 1)        threw
+//     overloaded(1, "s")        "number,string"
+//     threeOverloaded("s",2,3)  threw
+//     threeOverloaded(1,"s",2)  "number,string,number"
+//     threeOverloaded(1,2,"s")  "number,number,string"
 //
 // which is also why `os.setPriority("not-a-pid", 1e9)` gives node's error and
 // `os.setPriority(0, "x")` does not. And `secondOptional(a: number, b?: number)`
@@ -135,4 +138,12 @@ export function viaOverloadLoose(pid: unknown, priority?: unknown): string {
     priority = pid;
   }
   return classifyUnknown(priority);
+}
+
+/** Three parameters, to ask whether it is "the second" or "everything after the first". */
+export function threeOverloaded(a: number): string;
+export function threeOverloaded(a: number, b: number): string;
+export function threeOverloaded(a: number, b: number, c: number): string;
+export function threeOverloaded(a: number, b?: number, c?: number): string {
+  return `${typeof a},${typeof b},${typeof c}`;
 }
