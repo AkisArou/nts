@@ -69,6 +69,52 @@
 // much smaller and more checkable set than "anything using `instanceof`", and
 // it is the reason this is filed rather than treated as an emergency.
 //
+// # Which pairs actually collapse, measured
+//
+// Not every same-shaped pair, and the exceptions are what make the exposure
+// small. Each row below is a control in this file.
+//
+//     no base, identical fields                COLLAPSES
+//     same *user* base, identical extra field  COLLAPSES
+//     two field-less siblings of one parent    COLLAPSES
+//     ancestor vs descendant                   distinct
+//     same field name, different type          distinct
+//     different field name, same type          distinct
+//     identical fields, base `TypeError`       distinct
+//
+// **Inheritance depth is safe; siblings are not.** A subclass adding no fields
+// keeps its parent's field list exactly, which looks like the worst case and is
+// not one: `parent instanceof Child` answers `false` and `child instanceof
+// Parent` answers `true`, both correct. What collapses is two *siblings* that
+// each add nothing -- they are indistinguishable from each other while both
+// remain distinguishable from the parent.
+//
+// That distinction decides a real list. The Node lane swept the published
+// classes for same-shaped pairs and found `Duplex`/`PassThrough`,
+// `Duplex`/`Transform` and `PassThrough`/`Transform`. All three are **chain**
+// relationships -- `PassThrough extends Transform extends Duplex` -- so all
+// three are fine, and node's tests telling them apart with `instanceof Duplex`
+// and `instanceof Transform` would keep working.
+//
+// The last row is the one that matters for this profile. The Node lane surveyed
+// the shaped surface and found **89 of 93 `ERR_*` classes in one shape group,
+// 87 sharing exactly `[code: string]`**, and read that as eighty-seven classes
+// resolving to one layout -- which would be this defect at its maximum
+// anywhere in the tree.
+//
+// They do not collapse. Every `ERR_*` extends `TypeError`, `RangeError` or
+// `Error`, and a provided base gives distinct identity: `emit-c` on `os` emits
+// **62 distinct `ERR_` descriptors**, one per class --
+// `nts_desc_NtsObj_ERR_BUFFER_OUT_OF_BOUNDS` and so on -- not one shared. Two
+// classes extending `TypeError` with the same `code: string` field answer
+// `instanceof` correctly.
+//
+// So the identical *own-property shape* a JavaScript survey sees is not the key
+// a layout is merged on, and the two questions have different answers. The
+// conclusion the Node lane drew -- that the `ERR_` family is unexposed -- holds,
+// and for a stronger reason than the one they gave: not "latent because nothing
+// asks", but "not collapsed at all".
+//
 // # What decides the fix
 //
 // `X.isX(value)` is `value instanceof X` throughout this profile --
@@ -119,4 +165,103 @@ export function bIsNotA(n: number): boolean {
 /** And the other direction, also `true`. */
 export function aIsNotB(n: number): boolean {
   return (new A(n) as unknown) instanceof B;
+}
+
+class UserBase {
+  b: number;
+  constructor(n: number) {
+    this.b = n;
+  }
+}
+class D1 extends UserBase {
+  x: number;
+  constructor(n: number) {
+    super(n);
+    this.x = n;
+  }
+}
+class D2 extends UserBase {
+  x: number;
+  constructor(n: number) {
+    super(n);
+    this.x = n;
+  }
+}
+
+/** Also collapses: a shared *user* base does not separate them. Answers `true`. */
+export function d2IsNotD1(n: number): boolean {
+  return (new D2(n) as unknown) instanceof D1;
+}
+
+class T1 {
+  x: number;
+  constructor(n: number) {
+    this.x = n;
+  }
+}
+class T2 {
+  x: string;
+  constructor(n: number) {
+    this.x = String(n);
+  }
+}
+
+/** Control: one field type differs. Distinct, and answers `false`. */
+export function t2IsNotT1(n: number): boolean {
+  return (new T2(n) as unknown) instanceof T1;
+}
+
+class Parent {
+  hw: number;
+  constructor(n: number) {
+    this.hw = n;
+  }
+}
+/** Adds no fields, so it carries `Parent`'s field list exactly. */
+class ChildA extends Parent {}
+/** And a sibling that also adds none. */
+class ChildB extends Parent {}
+
+/** Control: the parent is not an instance of the child. Correct, `false`. */
+export function parentIsNotChild(n: number): boolean {
+  return (new Parent(n) as unknown) instanceof ChildA;
+}
+
+/** Control: the child is an instance of the parent. Correct, `true`. */
+export function childIsParent(n: number): boolean {
+  return (new ChildA(n) as unknown) instanceof Parent;
+}
+
+/**
+ * Collapses. Two field-less siblings are indistinguishable from each other
+ * while both stay distinguishable from `Parent` -- which is why a `PassThrough
+ * extends Transform extends Duplex` chain is unaffected and a pair of siblings
+ * would not be. Answers `true`; node answers `false`.
+ */
+export function siblingIsNotSibling(n: number): boolean {
+  return (new ChildB(n) as unknown) instanceof ChildA;
+}
+
+class ERR_ONE extends TypeError {
+  code: string;
+  constructor() {
+    super("one");
+    this.code = "ERR_ONE";
+  }
+}
+class ERR_TWO extends TypeError {
+  code: string;
+  constructor() {
+    super("two");
+    this.code = "ERR_TWO";
+  }
+}
+
+/**
+ * Control, and the load-bearing one: the `ERR_*` shape. Same field, same
+ * provided base, and **distinct** -- which is why 87 same-shaped error classes
+ * are not eighty-seven collapsed ones. Answers `false`.
+ */
+export function errTwoIsNotErrOne(n: number): boolean {
+  return ((new ERR_TWO() as unknown) instanceof ERR_ONE) || n < 0;
 }
