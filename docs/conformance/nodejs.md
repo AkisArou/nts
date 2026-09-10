@@ -20539,7 +20539,7 @@ with `Number()`:
 The twelfth input is the empty string, where every shape gives an empty buffer and
 there is nothing to notice.
 
-## The corpus calls 147 of node's 571 published functions
+## The corpus calls 200 of node's 571 published functions, and did call 147
 
 `corpus-reach.mjs`. `Buffer.from`'s array-like arm prompted it: all 29 of
 `buffer`'s specs hand that function a **string**, so three documented storage
@@ -20574,6 +20574,36 @@ And `Buffer.from` -- the case it was written for -- was not measured at all,
 because `Buffer` is a class and wrapping a class breaks `new`. A class's statics
 are now wrapped on the class itself and restored in a `finally`. Mutating node's
 own object is not something to do quietly, so it is named in the header.
+
+### Closing the pure ones: 147 to 200
+
+Three specs, on the gaps that are pure functions rather than I/O.
+
+    util.types    0 of 42 predicates -> 35 compared, 8 excluded by name
+    buffer        4 of 18 -> 16 of 18   (SlowBuffer and resolveObjectURL remain)
+    events        3 of 17 ->  9 of 17   (the rest are `once`/`on`, asynchronous)
+
+`buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
+`isEncoding`, `compare`, `concat`, `copyBytesFrom`, and the free `isUtf8`,
+`isAscii` and `transcode`. `allocUnsafe` is compared by **length only** -- its
+contents are whatever the allocator last left there, so comparing them would
+diverge on every input and say nothing. `concat` is given a `totalLength` that is
+wrong in both directions and absent, because truncating and zero-padding are the
+two behaviours a reimplementation gets backwards.
+
+`events`' were `listenerCount`, `getEventListeners` and `getMaxListeners`, which
+answer *about* an emitter rather than driving one -- so the program specs never
+reach them however long the program is. They run against an emitter with a real
+history, because asking `listenerCount` of a fresh one compares 0 against 0
+forever.
+
+All three came back **0 divergences**: 124,775 comparisons on `buffer`, 28,140 on
+`events`, 44,264 on `util`. Each controlled by breaking the subject rather than
+asserted -- `concat` ignoring `totalLength`, `isEncoding` always true, `compare`
+sign-flipped, `alloc` leaving garbage: 15, 15, 7 and 14 of 15 inputs noticed. The
+`compare` flip is caught less often because for many inputs the two buffers are
+equal and a sign flip on `0` is invisible, which is the input's doing and not the
+spec's.
 
 ## `util.types`: 42 pure predicates, none of them called, and eight that answer `false` by design
 

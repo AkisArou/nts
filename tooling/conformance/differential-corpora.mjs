@@ -638,6 +638,60 @@ export const CORPORA = {
     input: (rnd) => unicodeWord(rnd),
     calls: [
       {
+        // **`Buffer`'s statics**, which the corpus never called: `alloc`,
+        // `concat`, `compare`, `isBuffer`, `isEncoding`, `of`, `copyBytesFrom`,
+        // and the free functions `isUtf8`, `isAscii` and `transcode`. Ten of the
+        // fourteen `corpus-reach.mjs` reported unreached in this module, and all
+        // ten are pure.
+        //
+        // `allocUnsafe` is here for its **length only**. Its contents are
+        // whatever the allocator last left there, so comparing them would report
+        // a divergence on every input and say nothing -- the one thing about it
+        // that is specified is how much memory you get.
+        //
+        // `concat` is given a `totalLength` that is deliberately wrong in both
+        // directions as well as absent, because truncating and zero-padding are
+        // the two behaviours a reimplementation gets backwards.
+        label: "buffer-statics",
+        call: (m, s) => {
+          const B = m.Buffer;
+          const bytes = [...s].map((c) => c.charCodeAt(0) & 0xff);
+          const a = B.from(s, "utf8");
+          const b = B.from(bytes);
+          const show = (f) => {
+            try {
+              const v = f();
+              if (v instanceof Uint8Array) return `<${[...v].join(" ")}>`;
+              return String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          return [
+            show(() => B.alloc(bytes.length)),
+            show(() => B.alloc(bytes.length, 0x41)),
+            show(() => B.alloc(bytes.length, s, "utf8")),
+            show(() => B.allocUnsafe(bytes.length).length),
+            show(() => B.allocUnsafeSlow(bytes.length).length),
+            show(() => B.of(...bytes.slice(0, 4))),
+            show(() => B.isBuffer(a)),
+            show(() => B.isBuffer(bytes)),
+            show(() => B.isEncoding(s)),
+            show(() => B.isEncoding("utf8")),
+            show(() => B.compare(a, b)),
+            show(() => B.compare(a, a)),
+            show(() => B.concat([a, b])),
+            show(() => B.concat([a, b], 0)),
+            show(() => B.concat([a, b], a.length + b.length + 3)),
+            show(() => B.concat([], 2)),
+            show(() => B.copyBytesFrom(Uint8Array.from(bytes))),
+            show(() => m.isUtf8(a)),
+            show(() => m.isAscii(a)),
+            show(() => m.transcode(a, "utf8", "latin1")),
+          ].join("|");
+        },
+      },
+      {
         // **The array-like path**, which every spec here reached past: they all
         // hand `Buffer.from` a string, and the object arm is a different function
         // entirely. Node accepts three storage shapes behind one contract -- a
@@ -722,6 +776,66 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **The module-level helpers**, which the corpus never called:
+        // `listenerCount`, `getEventListeners`, `getMaxListeners`. They answer
+        // *about* an emitter rather than driving one, so the program specs never
+        // touch them however long the program is.
+        //
+        // Driven by the same program alphabet so the emitter under inspection has
+        // a real history: asking `listenerCount` of a fresh emitter compares 0
+        // against 0 forever.
+        //
+        // `getEventListeners` returns the listener array, and the two lanes hold
+        // different function objects -- so its length is compared and its contents
+        // are not, the same rule the meta-event spec uses.
+        label: "emitter-helpers",
+        call: (m, program) => {
+          const emitter = new m.EventEmitter();
+          const log = [];
+          const made = [];
+          let n = 0;
+          for (const op of program) {
+            n++;
+            const fn = () => n;
+            try {
+              if (op === "o") { made.push(fn); emitter.on("x", fn); }
+              else if (op === "n") { made.push(fn); emitter.once("x", fn); }
+              else if (op === "p") { made.push(fn); emitter.prependListener("y", fn); }
+              else if (op === "e") emitter.emit("x");
+              else if (op === "r") { if (made.length > 0) emitter.removeListener("x", made.shift()); }
+              else if (op === "a") emitter.removeAllListeners("x");
+              else if (op === "c") {
+                log.push(`mc=${m.listenerCount(emitter, "x")}`);
+                log.push(`gel=${m.getEventListeners(emitter, "x").length}`);
+              } else if (op === "b") {
+                log.push(`gml=${m.getMaxListeners(emitter)}`);
+                log.push(`dml=${m.EventEmitter.defaultMaxListeners}`);
+              }
+            } catch (error) {
+              log.push(`threw=${(error && error.code) || error.name}`);
+            }
+          }
+          // Every helper once at the end, so a program with no `c` or `b` still
+          // exercises them against whatever state it left behind.
+          const tail = (f) => {
+            try {
+              return String(f());
+            } catch (error) {
+              return `threw:${(error && error.code) || error.name}`;
+            }
+          };
+          return [
+            log.join(","),
+            `final-mc=${tail(() => m.listenerCount(emitter, "x"))}`,
+            `final-y=${tail(() => m.listenerCount(emitter, "y"))}`,
+            `final-gel=${tail(() => m.getEventListeners(emitter, "x").length)}`,
+            `final-gml=${tail(() => m.getMaxListeners(emitter))}`,
+            `raw=${tail(() => emitter.rawListeners("x").length)}`,
+            `names=${tail(() => emitter.eventNames().map(String).join("+"))}`,
+          ].join("|");
+        },
+      },
       // Error paths. See `REJECTED` above.
       { label: "setMaxListeners!", throws: true, call: (m, s) => m.setMaxListeners(-(String(s).length + 1)) },
       // `rejectedNonNumeric`: `setMaxListeners(1)` is a perfectly good call, so the
