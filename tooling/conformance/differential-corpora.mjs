@@ -2536,9 +2536,15 @@ export const CORPORA = {
     fixed: [
       "sp", "ssp", "sup", "spu", "pp", "s", "p", "", "sppu", "ssuup",
       "shp", "hsp", "sphp", "ssp", "supp", "sdp", "dsp", "spd", "ssppuu", "hh",
+      // The instance forms, in `fixed` and not only in the generator, because
+      // `corpus-reach.mjs` walks the fixed inputs -- an op that exists only in
+      // the random alphabet is exercised by the differential and invisible to the
+      // coverage question. Adding them to `OPS` alone left `Channel#unsubscribe`
+      // still reading "never called".
+      "Sp", "SUp", "SpU", "SSUp", "SUUp", "sUp", "Suh", "SpSp", "USp", "ShUp",
     ],
     input: (rnd) => {
-      const OPS = "spuhd";
+      const OPS = "spuhdUS";
       let out = "";
       const k = 1 + Math.floor(rnd() * 8);
       for (let i = 0; i < k; i++) out += OPS[Math.floor(rnd() * OPS.length)];
@@ -2639,6 +2645,19 @@ export const CORPORA = {
               else if (op === "u") {
                 const fn = made.length > 0 ? made[made.length - 1] : () => {};
                 log.push(`u${seq}:${m.unsubscribe(name, fn)}`);
+              } else if (op === "U") {
+                // The **instance** form. `dc.unsubscribe(name, fn)` and
+                // `channel.unsubscribe(fn)` are separate entry points to the same
+                // registry, and only the module-level one was reached -- an
+                // implementation where the instance method forgets to update the
+                // shared registry answers correctly to every op above and wrongly
+                // to this one.
+                const fn = made.length > 0 ? made[made.length - 1] : () => {};
+                log.push(`U${seq}:${ch.unsubscribe(fn)}:hs=${ch.hasSubscribers}`);
+              } else if (op === "S") {
+                // And the instance form of subscribe, for the same reason.
+                ch.subscribe(listener(`S${seq}`));
+                log.push(`S${seq}:hs=${m.hasSubscribers(name)}`);
               } else if (op === "p") {
                 log.push(`hs${seq}:${ch.hasSubscribers}`);
                 ch.publish({ n: seq });

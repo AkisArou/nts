@@ -20615,6 +20615,8 @@ Three specs, on the gaps that are pure functions rather than I/O.
     buffer       18 of 117 -> 94 of 117  (instance methods, once they were visible)
     url          23 of 35  -> 30 of 35   (URLPattern is absent here)
     console      10 of 43  -> 13 of 43   (the rest are its own exclusions)
+    net           6 of 86  -> 11 of 86   (and four defects, above)
+    dchannel      7 of 11  ->  8 of 11   (bindStore needs a store from elsewhere)
     util          6 of 72 -> 48 of 72   (types included; 8 absent names excluded)
 
 `buffer`'s ten were `alloc`, `allocUnsafe`, `allocUnsafeSlow`, `of`, `isBuffer`,
@@ -20656,6 +20658,18 @@ identity function was noticed on **0 of 20** inputs. With
 the answer is still 0 divergences, which now means something: this profile's
 escape sequences are byte-identical to node's, including for a colour *array* and
 for a colour name that does not exist.
+
+`diagnostics_channel`'s was the **instance** form of `unsubscribe`. Its spec
+already drove subscribe and unsubscribe hard, through the module-level
+`dc.unsubscribe(name, fn)`; `channel.unsubscribe(fn)` is a separate entry point to
+the same registry, and an implementation whose instance method forgets to update
+that registry answers every existing op correctly.
+
+Adding the ops to the generator's alphabet was not enough and the reach instrument
+said so: it walks the **fixed** inputs, so an op that exists only in the random
+alphabet is exercised by the differential and invisible to the coverage question.
+`Channel#unsubscribe` went on reading "never called" until fixed programs carried
+it.
 
 `zlib`'s were `unzipSync`, the `zstd` pair and `crc32`. `unzipSync` is not
 another decompressor -- it **sniffs** the header and dispatches, so it is the only
