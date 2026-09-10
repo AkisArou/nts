@@ -18344,6 +18344,90 @@ instrument here. `loads.sh` counts the name, `unusable-exports.mjs` calls it,
 `surface-diff.mjs` compares its value -- and a function with the wrong `length`
 passes all three.
 
+## Which names are one object: 20,217 pairs differenced against node
+
+A seam nothing else in this directory asks about. `surface-diff.mjs` asks whether
+the value behind a name is node's; `hidden-exports.mjs` asks whether a name reaches
+a test. Neither asks whether two names are backed by **one** object.
+
+It came from `assert`. Node exposes eighteen names on two surfaces, shares `ok`,
+`fail` and `ifError` between them, gives `deepEqual` and `equal` two
+implementations each, and the shared `ok` is the callable `assert` itself -- one
+function under three names. Ours gave the strict surface its own `ok`. Every test
+passed: each assertion still did the right thing and only identity differed.
+
+`identity-partition.mjs` generalises it. Own enumerable paths to depth 2,
+restricted to values that have identity, every pair compared on both sides, and
+only paths present on both -- absence is another instrument's column. Two findings,
+both defects: node backs two names with one object and we with two, or the reverse.
+
+**Result, 2026-09-10: 21 modules, 20,217 pairs, 0 divergences.** One module not
+compared, printed rather than skipped: `string_decoder` publishes a single path
+with identity, and a pair needs two.
+
+It found six wrong names in two modules on its first run.
+
+### `console`: the prototype is aliased and the surface is not
+
+Node really does write
+
+    Console.prototype.dirxml = Console.prototype.log;
+    Console.prototype.groupCollapsed = Console.prototype.group;
+
+and this module was written from those two lines. The constructor then walks
+`ObjectKeys(Console.prototype)`, binds each method to the instance and redefines
+`.name` to the key it was found under, so nothing a test can reach is shared:
+
+                    node                      here, before
+    dirxml          name="dirxml"             name="log", and === log
+    groupCollapsed  name="groupCollapsed"     name="group", and === group
+    profile         name="profile" len 0      name="noopLabel" len 1
+    profileEnd      name="profileEnd" len 0   name="noopLabel" len 1
+    timeStamp       name="timeStamp" len 0    name="noopLabel" len 1
+
+Only the first half of node's construction was read. The fix needs no binding and
+no redefinition: these are arrow class fields and so already per-instance, so each
+name gets its own body over a shared private.
+
+**The obvious repair breaks the wiring, so the wiring was measured first.** Writing
+`dirxml(...a) { this.log(...a) }` would route through the *current* `log`, and
+node's does not. Node's answers, which this now matches:
+
+    dirxml through a replaced .log            0
+    group through a replaced .log             1
+    groupCollapsed through a replaced .group  0
+    groupCollapsed through a replaced .log    1
+
+so `#groupLine` calls `this.log` and `#logLine` does not. `dirxml` also publishes
+to the `console.log` diagnostics channel and prints byte-identical output.
+
+### `timers`: a fact about behaviour read as a fact about identity
+
+`export { clearTimeout, clearTimeout as clearInterval }`, with the reasoning
+recorded in the source: the HTML standard gives both a single id space, "so that
+they are indistinguishable including by identity". The premise is right and node
+honours it -- cross-clearing works both ways, and still does here. The conclusion
+is not node's: `clearInterval !== clearTimeout`, and its name is its own. Node's
+`clearInterval` is a separate function whose body calls `clearTimeout`, citing the
+same paragraph.
+
+### Both are controlled
+
+Each fix has a `test/surface-identity-static.js` that fails against the code it
+replaced and passes against the fix:
+
+    console  reinstated  19 passed, 1 failed     fixed  20 passed, 0 failed
+    timers   reinstated  58 passed, 1 failed     fixed  59 passed, 0 failed
+
+### One correction the instrument earned
+
+Its first run reported `events` and `util` as not compared, naming
+`web-platform/src/core/{abort,encoding}.ts`. Those files are present, at
+`runtime/web-platform/`; the preamble had been lifted from `run-one.mjs`, which
+resolves them relative to the module directory, and rewritten against the repo
+root. The instrument reported the failure correctly and the reason recorded for it
+was wrong. Both compare clean, and they are 2,638 of the 20,217 pairs.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
