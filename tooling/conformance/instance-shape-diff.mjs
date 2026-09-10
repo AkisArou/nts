@@ -33,6 +33,27 @@
 // rather than an oversight -- so it is reported apart and not as a difference to
 // go and fix.
 //
+// # An OWN-ONLY-OURS row is not automatically a defect, and this cannot tell
+//
+// The same object-model difference also appears with **no prototype default at
+// all**, and then it is indistinguishable from a key node does not have:
+//
+//     new net.Server()   maxConnections   own false, `in` false, undefined
+//     server.maxConnections = 5           own true
+//     new net.Socket()   timeout          own false, `in` false, undefined
+//     socket.setTimeout(50)               own true
+//
+// `maxConnections` and `timeout` are documented node API. Node simply creates the
+// property when something assigns it, and a typed class declares it up front, so
+// a fresh instance differs while every program that uses either agrees. Six of the
+// rows this reports are that.
+//
+// It cannot be inferred from the objects, because "node creates this on
+// assignment" and "node has no such property" look identical on a fresh one. So
+// an OWN-ONLY-OURS row is a *question*, and answering it means asking whether
+// node has the concept -- which is a person reading node's documentation, not
+// this file.
+//
 // # Constructing is not free, and what could not be constructed is printed
 //
 // Only the no-argument form is tried, in a `try`, and anything that throws is
