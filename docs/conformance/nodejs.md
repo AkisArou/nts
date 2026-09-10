@@ -20811,6 +20811,68 @@ The lesson worth keeping is narrow and it is not "write more specs". A number
 beside a module says how hard the corpus worked. Whether it worked on anything is
 a different measurement, and until this day nothing made it.
 
+## Four defects in `BlockList`, found by asking a module that was 6 of 86
+
+`net`'s corpus header says the module is "three address parsers and a value-shaped
+class" and covers the parsers. The class was never touched: `addRange`,
+`addSubnet`, `toJSON`, `fromJSON`, `isBlockList` and `SocketAddress.parse` had
+never been called. The first run of a spec covering it reported **337
+divergences**, and they were four separate defects.
+
+**An IPv4-mapped address was downgraded at parse time.** `parseIPv6` answered
+`{ family: "ipv4", … }` for `::ffff:1.2.3.4`, under a comment reading "IPv4-mapped
+IPv6 addresses compare as IPv4 in Node's block list". Half true, and the half that
+is true is about *comparison*:
+
+    addAddress("::ffff:1.2.3.4", "ipv6")   node: Address: IPv6 ::ffff:1.2.3.4
+                                           ours: Address: IPv4 1.2.3.4
+    addRange("::ffff:1.2.3.4", …, "ipv6")  node: Range: IPv6 …
+                                           ours: Range: IPv4 …
+
+**And it broke a call that should work.** `addSubnet("::ffff:1.2.3.0", 120,
+"ipv6")` validated the prefix against IPv4's 32-bit width and threw
+`ERR_OUT_OF_RANGE`; node accepts it. A representation choice made at parse time
+reached a range check three functions away.
+
+The equivalence now lives where node has it: `BlockRule.matches` maps the checked
+address into the rule's family. `check("1.2.3.4")` still matches a rule added as
+`::ffff:1.2.3.4`, which it did before -- the matching was never wrong, only the
+rule.
+
+**The fourth was the formatter, and the corpus found it after the first three
+were fixed.** `::a:01` prints as `::0.10.0.1` on node and printed as `::a:1` here.
+That is `inet_ntop`'s dotted-tail rule: the last two groups print as `a.b.c.d`
+when the zero run starts at group 0 and is six long, or five long followed by
+`ffff`. Measured rather than derived, because the boundaries are not guessable:
+
+    ::2          -> ::2             a run of 7, so no dotted tail
+    ::a:1        -> ::0.10.0.1      a run of 6
+    ::0.1.0.0    -> ::0.1.0.0       a run of 6, second half zero
+    ::1:0:0      -> ::1:0:0         a run of 5, group 5 is not ffff
+    ::ffff:0:1   -> ::ffff:0.0.0.1  a run of 5, group 5 is ffff
+
+**24,180 comparisons, 0 divergences.** `net` interpreted 151 passed / 0 failed,
+unchanged, and the module still builds.
+
+### And one absence, specified rather than implemented
+
+`SocketAddress.parse` is not published here, so it is excluded from the spec by
+name. Its contract is worth recording because it is not the obvious one -- node
+parses through `new URL("http://" + input)`, so the URL's default-port rule shows
+through:
+
+    "1.2.3.4:80"          1.2.3.4 port 0     80 is http's default and is dropped
+    "[::ffff:1.2.3.4]:8"  ::ffff:1.2.3.4 port 8
+    "1.2.3.4:65536"       undefined
+    "::1"                 undefined          bare v6 needs brackets
+    "[::1]:80"            ::1 port 0
+    "0"                   0.0.0.0 port 0
+    "1.2.3.4:80/x"        1.2.3.4 port 0     the path is ignored
+
+Implementing that means reaching for `URL` from inside `net`, which is a coupling
+decision rather than a missing function, so it is written down instead of guessed
+at.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

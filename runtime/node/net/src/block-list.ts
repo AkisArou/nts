@@ -141,14 +141,27 @@ class BlockRule {
   }
 
   matches(address: ParsedAddress): boolean {
-    if (address.family !== this.family) return false;
-    if (this.kind === "Address") return address.value === this.start;
+    // **Cross-family matching is where the IPv4-mapped equivalence lives.** Node
+    // matches `check("1.2.3.4")` against a rule added as `::ffff:1.2.3.4` and
+    // the reverse, so the value is mapped into the rule's family here rather
+    // than the address being downgraded when it was parsed.
+    let value = address.value;
+    if (address.family !== this.family) {
+      if (this.family === "ipv6" && address.family === "ipv4") {
+        value = address.value | MAPPED_PREFIX;
+      } else if (this.family === "ipv4" && (address.value >> 32n) === 0xffffn) {
+        value = address.value & 0xffffffffn;
+      } else {
+        return false;
+      }
+    }
+    if (this.kind === "Address") return value === this.start;
     if (this.kind === "Range") {
-      return address.value >= this.start && address.value <= this.end;
+      return value >= this.start && value <= this.end;
     }
     const width = this.family === "ipv4" ? 32 : 128;
     const shift = BigInt(width - this.prefix);
-    return (address.value >> shift) === (this.start >> shift);
+    return (value >> shift) === (this.start >> shift);
   }
 }
 
@@ -425,11 +438,17 @@ function parseIPv6(text: string): ParsedAddress | undefined {
     cursor = end + 1;
   }
 
-  // IPv4-mapped IPv6 addresses compare as IPv4 in Node's block list.
-  if ((value >> 32n) === 0xffffn) {
-    const ipv4 = value & 0xffffffffn;
-    return { family: "ipv4", value: ipv4, text: formatIPv4(ipv4) };
-  }
+  // **A mapped address stays IPv6 here.** This used to answer
+  // `{ family: "ipv4", … }` under a comment saying "IPv4-mapped IPv6 addresses
+  // compare as IPv4 in Node's block list", and half of that is true: they
+  // *compare* as IPv4, at comparison time, which `BlockRule.matches` now does.
+  // Node keeps the rule itself IPv6 -- `addAddress("::ffff:1.2.3.4", "ipv6")`
+  // lists `Address: IPv6 ::ffff:1.2.3.4` there and listed
+  // `Address: IPv4 1.2.3.4` here.
+  //
+  // Downgrading at parse time also broke a call that should work:
+  // `addSubnet("::ffff:1.2.3.0", 120, "ipv6")` validated 120 against IPv4's
+  // 32-bit width and threw `ERR_OUT_OF_RANGE`, where node accepts it.
   return { family: "ipv6", value, text: formatIPv6(value) };
 }
 
@@ -484,6 +503,9 @@ function formatIPv4(value: bigint): string {
     `${Number((value >> 8n) & 255n)}.${Number(value & 255n)}`;
 }
 
+/** `::ffff:a.b.c.d`'s high 96 bits, which is what makes an address IPv4-mapped. */
+const MAPPED_PREFIX = 0xffff00000000n;
+
 function formatIPv6(value: bigint): string {
   const groups = new Array<number>(8);
   let remaining = value;
@@ -506,6 +528,25 @@ function formatIPv6(value: bigint): string {
       bestStart = start;
       bestLength = length;
     }
+  }
+
+  // **The dotted tail, which is `inet_ntop`'s rule and node's.** The last two
+  // groups print as `a.b.c.d` when the run of zeros starts at group 0 and is
+  // either six long -- `::a:1` is `::0.10.0.1` -- or five long followed by
+  // `ffff`, the IPv4-mapped form. Measured against node rather than derived:
+  //
+  //     ::2          -> ::2            run of 7, so no dotted tail
+  //     ::a:1        -> ::0.10.0.1     run of 6
+  //     ::0.1.0.0    -> ::0.1.0.0      run of 6, second half zero
+  //     ::1:0:0      -> ::1:0:0        run of 5 and group 5 is not ffff
+  //     ::ffff:0:1   -> ::ffff:0.0.0.1 run of 5 and group 5 is ffff
+  //
+  // A first version special-cased only the mapped form and left `::a:1` reading
+  // `::a:1` where node reads `::0.10.0.1`. The rule text is what `BlockList`
+  // compares, so this is observable rather than cosmetic.
+  if (bestStart === 0 && (bestLength === 6 || (bestLength === 5 && groups[5] === 0xffff))) {
+    const dotted = formatIPv4(value & 0xffffffffn);
+    return bestLength === 5 ? `::ffff:${dotted}` : `::${dotted}`;
   }
 
   let text = "";

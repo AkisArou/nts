@@ -1966,6 +1966,79 @@ export const CORPORA = {
       return out;
     },
     calls: [
+      {
+        // **`BlockList` whole, and `SocketAddress`.** The corpus already reaches
+        // `isIP` and the address parsers; the class that *uses* those answers was
+        // 6 of 86 reached, with `addRange`, `addSubnet`, `toJSON`, `fromJSON`,
+        // `isBlockList` and `SocketAddress.parse` never called.
+        //
+        // It belongs in a value-differential and the module's own header says
+        // why: `BlockList` is a value-shaped class with no I/O -- addresses in,
+        // a boolean out -- and matching an address against a range is exactly
+        // where an implementation is almost right. The corpus's inputs are
+        // already addresses, valid and malformed, which is the hard half of
+        // building this spec and it was already done.
+        //
+        // Every rule is added under a `try`, because most inputs are not valid
+        // addresses and the throw is the comparison: `ERR_INVALID_ADDRESS`
+        // against `ERR_INVALID_ARG_TYPE` is a distinction node makes per rule
+        // kind.
+        label: "blocklist-whole",
+        call: (m, s) => {
+          const show = (f) => {
+            try {
+              const v = f();
+              return v === undefined ? "undefined" : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const list = new m.BlockList();
+          const out = [
+            show(() => m.BlockList.isBlockList(list)),
+            show(() => m.BlockList.isBlockList({})),
+            show(() => list.addAddress(s)),
+            show(() => list.addAddress(s, "ipv6")),
+            show(() => list.addRange(s, "1.2.3.4")),
+            show(() => list.addRange("1.2.3.4", s)),
+            show(() => list.addSubnet(s, 24)),
+            show(() => list.addSubnet("1.2.3.0", 24)),
+            show(() => list.check(s)),
+            show(() => list.check("1.2.3.4")),
+            show(() => list.check("::ffff:1.2.3.4", "ipv6")),
+            show(() => list.rules.length),
+            show(() => JSON.stringify(list.rules)),
+          ];
+          // `toJSON`/`fromJSON` round trip, on a list built from inputs node
+          // accepted -- a list that rejected everything round-trips trivially.
+          const round = new m.BlockList();
+          out.push(show(() => {
+            round.addSubnet("10.0.0.0", 8);
+            round.addRange("192.168.1.1", "192.168.1.9");
+            const json = round.toJSON === undefined ? "absent" : JSON.stringify(round.toJSON());
+            const back = m.BlockList.fromJSON === undefined
+              ? "absent"
+              : JSON.stringify(m.BlockList.fromJSON(round.toJSON()).rules);
+            return `${json}#${back}`;
+          }));
+          out.push(show(() => round.check(s)));
+          out.push(show(() => round.check("10.1.2.3")));
+          out.push(show(() => round.check("192.168.1.5")));
+          // `SocketAddress.parse` is **excluded**, by name and with the reason:
+          // this profile does not publish it, so comparing it would report one
+          // divergence per input for a known absence. Its contract is recorded in
+          // the ledger, measured rather than guessed, because it is not the
+          // obvious one -- node parses through `new URL("http://" + input)`, so
+          // `1.2.3.4:80` answers port **0** (the URL drops a default http port)
+          // while `[::ffff:1.2.3.4]:8` keeps 8, and a bare `::1` is undefined
+          // where `[::1]` is not.
+          out.push(show(() => {
+            const a = new m.SocketAddress({ address: "1.2.3.4", port: 80 });
+            return a.toJSON === undefined ? "absent" : JSON.stringify(a.toJSON());
+          }));
+          return out.join("|");
+        },
+      },
       // Error paths. See `REJECTED` above.
       // A string `fd`, which node rejects by type. Not `rejectedNonNumeric`: that
       // table holds `undefined`, and `{ fd: undefined }` means *no* fd, so the
