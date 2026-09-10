@@ -56,6 +56,72 @@ process.noDeprecation = true;
 const compiled = require_(resolve(addonPath));
 const upstream = require_(`node:${name}`);
 
+// # `--sabotage`: the control, and why it perturbs the module rather than the
+// # comparison
+//
+// "0 divergence(s)" is a claim until something has been shown to make it say
+// otherwise, and this harness shipped with nothing that could. Two of its own
+// recorded failures were exactly that: a spec naming `m.ucs3.decode` compared a
+// TypeError against a TypeError and read clean, and `http` reported 0 over 0
+// because every spec it had was skipped.
+//
+// The cheap version of this flag would append a marker to one side's rendered
+// string, which demonstrates that `!==` works and nothing else. This perturbs the
+// **addon's own exported values** instead, so a sabotaged run exercises the whole
+// path a real defect takes: the module answers differently, `invoke` carries it,
+// `show` renders it, `compare` counts it. A spec that stays silent under sabotage
+// is a spec that is not reading the addon.
+//
+// `publishes()` still consults the unperturbed exports, so sabotage changes what
+// the specs *answer* and never which of them run -- a control that also moved the
+// coverage would confound the two.
+const SABOTAGE = argv.includes("--sabotage");
+
+function perturb(value, depth = 0) {
+  if (typeof value === "number") return Number.isFinite(value) ? value + 1 : 0;
+  if (typeof value === "bigint") return value + 1n;
+  if (typeof value === "string") return `${value}\u0001`;
+  if (typeof value === "boolean") return !value;
+  if (Array.isArray(value)) return value.length > 0 ? value.slice(0, -1) : ["sabotage"];
+  if (typeof value === "function") {
+    return (...args) => {
+      let result;
+      try {
+        result = value(...args);
+      } catch (error) {
+        // The thrown error is perturbed too, and it has to be. A `throws: true`
+        // spec records the error rather than a return value, so rethrowing the
+        // original made both sides answer identically and all six of `path`'s
+        // `!` specs read SILENT on the first sweep -- the control suppressing
+        // exactly what it exists to demonstrate.
+        const sabotaged = new TypeError(`${error?.message ?? "threw"}\u0001`);
+        sabotaged.code = error?.code === undefined ? "ERR_SABOTAGE" : `${error.code}_SABOTAGE`;
+        throw sabotaged;
+      }
+      return perturb(result, depth + 1);
+    };
+  }
+  // Every own key, not just the first. An earlier version perturbed one key of an
+  // object and stopped, which made a spec reaching `m.constants.X` read *silent*
+  // under sabotage -- the control would then have accused a working spec.
+  // Depth is bounded because a module's exports reach cyclic structures.
+  if (value !== null && typeof value === "object" && depth < 4) {
+    const copy = { ...value };
+    for (const key of Object.keys(copy)) copy[key] = perturb(copy[key], depth + 1);
+    return copy;
+  }
+  return value;
+}
+
+/** The addon's exports with every own value perturbed one step. */
+function sabotaged(exports_) {
+  const copy = { ...exports_ };
+  for (const key of Object.keys(copy)) copy[key] = perturb(copy[key]);
+  return copy;
+}
+
+const subject = SABOTAGE ? sabotaged(compiled) : compiled;
+
 // `code` is part of a thrown error here, not decoration: `assert.throws(fn, { code })`
 // is how node states nearly every error expectation, so a right name and message
 // over a wrong code is a divergence this had no way to show.
@@ -132,13 +198,16 @@ function publishes(spec) {
   return cursor !== undefined && cursor !== null;
 }
 
+const perLabel = new Map();
+const perLabelDiverged = new Map();
+
 function compare(spec, input) {
   const label = spec.label ?? spec.name;
   if (!publishes(spec)) {
     absent.add(label);
     return;
   }
-  const a = invoke(compiled, spec, input);
+  const a = invoke(subject, spec, input);
   const b = invoke(upstream, spec, input);
   // An addon that does not publish the function is named rather than counted
   // as agreeing: a differential over three of four functions reporting zero
@@ -149,8 +218,10 @@ function compare(spec, input) {
   }
   if (b.missing === true) return;
   compared++;
+  perLabel.set(label, (perLabel.get(label) ?? 0) + 1);
   if (show(a) === show(b)) return;
   diverged++;
+  perLabelDiverged.set(label, (perLabelDiverged.get(label) ?? 0) + 1);
   if (diverged <= 10) {
     console.log(`  ${label}(${JSON.stringify(input)})`);
     console.log(`     compiled: ${show(a)}`);
@@ -221,6 +292,29 @@ console.log(
     `${corpus.fixed.length} fixed: ${diverged} divergence(s), ` +
     `${propertyFailures} property failure(s)`,
 );
+
+// Under sabotage, a spec that compared and never diverged is the finding: the
+// addon answered differently and this spec did not notice. Reported by label so
+// the answer is "which spec", not "how many".
+if (SABOTAGE) {
+  const silent = [...perLabel.keys()].filter((l) => (perLabelDiverged.get(l) ?? 0) === 0);
+  // A spec that declares `shapeOnly` compares a type and not a value, because the
+  // quantity behind it moves between the two calls. It is silent by construction
+  // and is reported apart, so the unexplained ones stay countable.
+  const declared = new Set(
+    (corpus.calls ?? []).filter((sp) => sp.shapeOnly === true).map((sp) => sp.label ?? sp.name),
+  );
+  const unexplained = silent.filter((l) => !declared.has(l));
+  const byDesign = silent.filter((l) => declared.has(l));
+  console.log(
+    `\n  SABOTAGE: ${perLabel.size} spec(s) compared, ` +
+      `${perLabel.size - silent.length} noticed, ${unexplained.length} silent, ` +
+      `${byDesign.length} shape-only`,
+  );
+  for (const l of unexplained) console.log(`    SILENT  ${l}  (${perLabel.get(l)} comparison(s), 0 noticed)`);
+  for (const l of byDesign) console.log(`    shape-only  ${l}  (compares a type, not a value)`);
+  process.exitCode = unexplained.length > 0 ? 1 : 0;
+}
 
 // A run that compared nothing is not a clean run, and until now it printed as
 // one: `buffer` answered "0 comparison(s) ... 0 divergence(s)" and exited 0,

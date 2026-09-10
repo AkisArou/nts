@@ -227,6 +227,7 @@ export const CORPORA = {
       },
       {
         label: "cpus-shape",
+        shapeOnly: true,
         call: (m) => {
           try {
             const c = m.cpus();
@@ -272,8 +273,16 @@ export const CORPORA = {
       // `freemem`, `uptime` and `loadavg` move between calls, so their *values*
       // cannot be compared. Their shapes can, and a binding returning the wrong
       // type or an error is what would actually break.
-      { label: "freemem:shape", call: (os) => typeof os.freemem() },
-      { label: "uptime:shape", call: (os) => typeof os.uptime() },
+      // `shapeOnly` on these three, and it is a declaration rather than an excuse.
+      // A differential compares two answers, and these three quantities *cannot*
+      // agree by value: free memory and uptime move between the two calls, and
+      // `cpus()` carries per-core times that advance while it runs. So the spec
+      // asks the only question that has a stable answer -- the type -- and the
+      // cost is that it can catch a value that stops being a number and nothing
+      // finer. `--sabotage` reports them apart so an unexplained silence stays
+      // legible as a finding.
+      { label: "freemem:shape", shapeOnly: true, call: (os) => typeof os.freemem() },
+      { label: "uptime:shape", shapeOnly: true, call: (os) => typeof os.uptime() },
       {
         label: "loadavg:shape",
         call: (os) => {
@@ -1253,20 +1262,39 @@ export const CORPORA = {
         },
       },
       {
-        // The two tables, compared whole once per input rather than per key.
-        // `STATUS_CODES` is 63 entries of prose and `METHODS` is an ordered
-        // list; a missing or misspelled entry in either is invisible to every
-        // pinned test that does not happen to use that code.
-        label: "tables",
+        // `STATUS_CODES` whole, once per input rather than per key: 63 entries of
+        // prose, and a missing or misspelled one is invisible to every pinned test
+        // that does not happen to use that code.
+        label: "statusCodes",
         call: (m) => [
           Object.keys(m.STATUS_CODES).length,
           m.STATUS_CODES[200],
           m.STATUS_CODES[404],
           m.STATUS_CODES[418],
           m.STATUS_CODES[451],
+        ],
+      },
+      {
+        // **Split from `STATUS_CODES`, and the split is the point.** These were one
+        // spec called `tables`, and `publishes()` skips a spec whose export the
+        // addon lacks -- so bundling two exports means the compiled lane compares
+        // *neither* when it publishes only one. `http` began publishing `METHODS`
+        // when its `module#init` started running and the compiled differential went
+        // on reporting NOTHING WAS COMPARED, because `STATUS_CODES` was in the same
+        // call.
+        //
+        // A spec is the unit of skipping, so a spec should reach one export.
+        label: "methods",
+        call: (m) => [
           Array.isArray(m.METHODS) ? m.METHODS.length : "not-array",
           Array.isArray(m.METHODS) ? m.METHODS.join(",") : "",
         ],
+      },
+      {
+        // A number, and one node's own tests read: `--max-http-header-size` moves
+        // it, so a wrong default is a wrong parse limit rather than a wrong field.
+        label: "maxHeaderSize",
+        call: (m) => m.maxHeaderSize,
       },
     ],
   },

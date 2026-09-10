@@ -19738,6 +19738,104 @@ still does not publish -- it needs `net`'s `Server#constructor` next -- so the 2
 have not moved. **A refusal is a lid, and the count under it is unknown until it
 comes off.**
 
+## The compiled differential compares 59 of 198 specs, and 73 of node's 505 names
+
+Measured 16:47 on addons built 16:28-16:29, compiler at `bde69ce8` (16:18) -- the
+first build after `module#init` began evaluating, so this is the post-fix picture
+and not the one before it.
+
+`differential-addon.mjs` refuses to print a clean row when it compared nothing, so
+no module here was reading as green. What no instrument asked was the lane-level
+question, and read together the sixteen footnotes say something the sixteen
+separate rows did not:
+
+    compiled differential coverage: 59 of 198 spec(s) reachable across 22 modules
+      16 module(s) reach nothing at all
+
+    http 2/6   os 20/22   path 27/31   punycode 7/7   querystring 2/7   util 1/10
+    the other sixteen: 0
+
+**The reason is upstream of the corpus.** Counted against node's own published
+names, with no shim on either side:
+
+    lane          of node's 505 public names
+    interpreted   460
+    compiled       73
+
+`buffer` publishes five names and `Buffer` is not among them. `assert`, `console`,
+`dgram`, `diagnostics_channel`, `events` and `string_decoder` publish **none**.
+`os` publishes 21 of 23 and `path` 15 of 17, which is why those two carry most of
+the lane.
+
+### The shim cannot stand in, and it does not pretend to
+
+`shape()` is handed the addon's exports and wraps what it finds. Given an addon
+without `Agent`, `http`'s shim still installs an `Agent` -- a callable built over
+`undefined`. So the *shaped* surface looks fuller than the addon is, and every
+name behind a missing export throws when used. That is worth stating plainly
+because it is the shape of a hollow lane, and it is not one: the wrapper supplies
+no implementation and the tests that touch those names fail rather than pass.
+
+It also answers the narrower question from earlier today. `http`'s addon publishes
+`methods` and `getHTTPParserPoolLimit`, and node has neither. The shim filters
+both -- the shaped surface is nine names and neither is in it -- so no test sees
+an internal node lacks. The addon publishing them is still true and still worth
+knowing; it is just not reaching a test.
+
+### Ranked by what would clear, not by what is skipped
+
+Attributing a skipped spec to the missing export rather than counting the spec
+ranks causes instead of symptoms. 59 missing exports block 77 specs:
+
+       5  util.format          3  assert.deepStrictEqual   2  timers.setTimeout
+       4  zlib.gzipSync        2  assert.strictEqual       2  url.fileURLToPath
+       2  fs.readFileSync      2  http.validateHeaderName  2  zlib.deflateSync
+
+The tail is 50 exports blocking one spec each, which is the honest shape of it:
+there is no single lever here, and `util.format` at five is the largest.
+
+### 67 of the 144 were not blocked by an absence at all
+
+The guard reads an identifier off the front of a spec's label with
+`/^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/` and looks it up. Labels are often
+descriptive, so what it looks up is often not an export name:
+
+    cpus-shape          -> `cpus`   resolves, and the spec runs
+    split-every-byte    -> `split`  does not, and the spec is skipped
+    top-level-answers   -> `top`    does not, and the spec is skipped
+
+`\w` excludes `-`, so whether a descriptive label happens to truncate to a real
+export decides whether its spec runs. **Node is what tells the two apart**: if the
+chain does not resolve on node either, the guard asked a question nothing could
+answer, and the spec's skip says nothing about the addon.
+
+Separating them moved the blocked count from 144 to 77 and the reachable count
+from 54 to 59 -- and it mattered more than the totals suggest, because the
+unseparated list named `buffer.from` as the single largest blocker at 18. There is
+no `from` on `node:buffer`; it is `Buffer.from`. Handing that list to whoever
+lowers it would have pointed them at an export that does not exist.
+
+### `--sabotage` for the addon differential, and what it found in itself
+
+The harness had nothing that could make it say a number other than zero. It now
+perturbs the **addon's own exported values** -- numbers up one, strings extended,
+arrays shortened, functions wrapped -- so a sabotaged run drives the whole path a
+real defect takes rather than demonstrating that `!==` works.
+
+First sweep: `path` reported all six of its `!` specs SILENT. Those are
+`throws: true` specs, and the wrapper rethrew the original error unchanged, so
+both sides answered identically. **The control was suppressing exactly what it
+exists to demonstrate** -- the fourth failure mode, arriving in the instrument
+written to rule out the other three. Perturbing the thrown error's code as well
+took `path` to 27 of 27.
+
+What remained is three `os` specs -- `cpus-shape`, `freemem:shape`, `uptime:shape`
+-- and those are silent by construction: free memory and uptime move between the
+two calls, so the spec compares `typeof` and nothing finer. They now carry
+`shapeOnly: true` and are reported apart, so an unexplained silence stays
+countable. Across the six modules that compare anything: **0 unexplained
+silences.**
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
