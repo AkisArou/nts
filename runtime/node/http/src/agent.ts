@@ -78,6 +78,9 @@ interface ManagedSocketListeners {
 }
 
 export class Agent extends EventEmitter {
+  /** Node `_http_agent.js:291`, and settable: every agent built after reads it. */
+  static defaultMaxSockets = Infinity;
+
   defaultPort: number;
   protocol: string;
   keepAlive: boolean;
@@ -127,7 +130,13 @@ export class Agent extends EventEmitter {
       typeof timeoutBuffer === "number" && timeoutBuffer >= 0 && Number.isFinite(timeoutBuffer)
         ? timeoutBuffer
         : 1000;
-    this.maxSockets = options.maxSockets ?? Infinity;
+    // `||`, not `??`, and `Agent.defaultMaxSockets` rather than a literal --
+    // node `_http_agent.js:174`. The static is settable, so a program that
+    // assigns `http.Agent.defaultMaxSockets = 5` changes every agent built
+    // afterwards; a literal here made that documented knob inert. `||` also
+    // means `maxSockets: 0` takes the default, which is node's behaviour and
+    // what `??` would have changed.
+    this.maxSockets = options.maxSockets || Agent.defaultMaxSockets;
     if (options.maxTotalSockets !== undefined) {
       validateNumberRange(options.maxTotalSockets, "maxTotalSockets", 1);
     }

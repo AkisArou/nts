@@ -11,6 +11,42 @@ function callableConstructor(Class, name) {
   Object.setPrototypeOf(callable, Class);
   callable.prototype = Class.prototype;
   Object.defineProperty(callable, "name", { value: name });
+  // The class's statics as own **enumerable** properties of the facade, the same
+  // correction `stream/shape.mjs` carries. Two differences stack otherwise: the
+  // facade reaches a static through its prototype without having it, and a
+  // TypeScript `static` is non-enumerable where node assigns and so is not.
+  // `Object.keys(http.Agent)` is `["defaultMaxSockets"]` on node and was empty
+  // here.
+  //
+  // **A value static is delegated, not copied**, and the difference is a live
+  // knob against a dead one. `http.Agent.defaultMaxSockets = 5` is documented and
+  // every agent built afterwards should see it -- but the constructor reads the
+  // *class*, and the facade is what a program holds, so a copied value shadows
+  // the class and the assignment does nothing. That is exactly the shape of the
+  // `util.inspect.defaultOptions` defect found the same day, and it would have
+  // been introduced here to fix an enumerability row.
+  //
+  // Function statics are copied as data: identity is what matters for them, node
+  // has them as data properties, and none is a knob a program assigns.
+  for (const key of Object.getOwnPropertyNames(Class)) {
+    if (key === "prototype" || key === "name" || key === "length") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(Class, key);
+    if (descriptor === undefined) continue;
+    if (typeof descriptor.value === "function") {
+      Object.defineProperty(callable, key, { ...descriptor, enumerable: true });
+    } else {
+      Object.defineProperty(callable, key, {
+        get() {
+          return Class[key];
+        },
+        set(value) {
+          Class[key] = value;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+    }
+  }
   return callable;
 }
 

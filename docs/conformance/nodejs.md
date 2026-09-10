@@ -20366,6 +20366,50 @@ these was taken under `node --no-deprecation`, where node's `noDeprecation` is
 default. I read a divergence off it before noticing the flag was mine. Node's
 defaults have to be measured in a process with no flags on it.
 
+## `http.Agent.defaultMaxSockets`, and a fix that nearly introduced the bug it followed
+
+`Object.keys(http.Agent)` is `["defaultMaxSockets"]` on node and was empty here,
+and `Agent.defaultMaxSockets` did not exist at all: the constructor read
+`options.maxSockets ?? Infinity`, a literal where node reads a settable static
+(`_http_agent.js:174`, `291`). So the documented knob had nothing behind it.
+
+    this.maxSockets = options.maxSockets || Agent.defaultMaxSockets;
+
+`||` rather than `??`, which is node's and matters: `maxSockets: 0` takes the
+default there.
+
+### The trap, which I walked into and measured my way out of
+
+Adding the static and copying it onto the callable facade -- the same correction
+`stream/shape.mjs` had just taken for `Readable.from` and friends -- made
+`Object.keys` match and left the knob **inert**:
+
+    node   Agent.defaultMaxSockets = 5   a new agent has maxSockets 5
+    ours   the same assignment            a new agent has Infinity
+
+The constructor reads the *class*; a program holds the *facade*. A value copied
+onto the facade shadows the class, so the assignment lands somewhere nothing
+reads. That is precisely the `util.inspect.defaultOptions` defect from earlier the
+same day -- a documented knob that silently does nothing -- and it would have been
+introduced here while fixing an enumerability row.
+
+**A value static is delegated through an accessor; a function static is copied.**
+Function statics want identity, node has them as data properties, and none of them
+is a knob a program assigns. The rule is written into both shims rather than only
+the one that needs it today: every static on a stream class is currently a
+function, so it changes nothing there, and two shims with two rules is how the
+next value static gets added and quietly does nothing.
+
+Both lanes hold: `http` 408 passed / 0 failed, `stream` 252 / 0. `http`'s
+`surface-absence` went from 4 missing to 3 with 0 extra, so nothing was
+over-promoted.
+
+The three that remain are `_connectionListener` and the `withoutStackTrace`
+variants of the two header validators. `withoutStackTrace` throws the same code
+with a one-line stack instead of nine, which needs an error path that skips
+capture -- a real thing, and not this change. `_connectionListener` is compat
+surface for an internal, declined on the same ground as `net._normalizeArgs`.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

@@ -46,11 +46,31 @@ function callableConstructor(Class, name) {
   // statics are exactly the four names node has, with nothing else on them. The
   // shim was already doing this by hand for `Duplex.fromWeb` and `Duplex.toWeb`,
   // which is what made the gap look like two names rather than seven.
+  //
+  // **A value static is delegated, not copied.** Every static on a stream class
+  // today is a function, so this changes nothing here -- it is the same rule
+  // `http/shape.mjs` needs for `Agent.defaultMaxSockets`, where a copied value
+  // shadows the class the constructor reads and a documented knob silently stops
+  // working. Two shims with two rules is the trap; the next value static added to
+  // a stream class would be dead and nothing would say so.
   for (const key of Object.getOwnPropertyNames(Class)) {
     if (key === "prototype" || key === "name" || key === "length") continue;
     const descriptor = Object.getOwnPropertyDescriptor(Class, key);
     if (descriptor === undefined) continue;
-    Object.defineProperty(callable, key, { ...descriptor, enumerable: true });
+    if (typeof descriptor.value === "function") {
+      Object.defineProperty(callable, key, { ...descriptor, enumerable: true });
+    } else {
+      Object.defineProperty(callable, key, {
+        get() {
+          return Class[key];
+        },
+        set(value) {
+          Class[key] = value;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+    }
   }
   Class.prototype.constructor = callable;
   callableConstructors.set(Class, callable);
