@@ -18439,6 +18439,100 @@ resolves them relative to the module directory, and rewritten against the repo
 root. The instrument reported the failure correctly and the reason recorded for it
 was wrong. Both compare clean, and they are 2,638 of the 20,217 pairs.
 
+## The compiled axis re-derived on a 06:13 pin, and what actually blocks it
+
+All 22 modules built from scratch on a pin taken at 06:13 from `target/release/nts`,
+whose md5 differs from the 05:18 pin -- a peer rebuilt during the evening, so the
+provenance is a working tree and not a commit. `NTS_ADDON_OUT` private throughout.
+
+    22 of 22 build and load
+    41 passes across 15 modules
+    1 whole module: punycode, 3 of 3
+
+Unmoved. Seven modules are at zero: `assert`, `console`, `dgram`,
+`diagnostics_channel`, `events`, `string_decoder`, `url`.
+
+    path  15/20   os 5/9   punycode 3/3   async_hooks 2   buffer 2   fs 2
+    net 2   timers 2   util 2   http 1   process 1   querystring 1
+    readline 1   stream 1   zlib 1
+
+### Ranking it, and the two instruments that could not
+
+`prize.mjs` per module gives **1,821 files to gain**. Its per-module output stops
+at eight failures and prints `… N more`, and the elided total is **1,663 of
+1,821** -- so any ranking taken from what it prints covers 8.7% of the population.
+It is a sample, and the note in this directory about not extrapolating one is
+exactly this case.
+
+Re-derived from the lane itself with `--verbose`, every failing file and its first
+reason: **1,824 rows**, three more than the axis's 1,821, which is unexplained and
+recorded rather than reconciled away.
+
+Of those, **1,444 name an absent export and 380 do not.** The 380 are behaviour
+differences on names that did publish, and they are 21 of 22 modules.
+
+### What the 1,444 are blocked by, by wrapper decline
+
+     765  16 mod  is exported and no function of that name was compiled
+     232  10 mod  is a class whose constructor was not compiled
+     161   6 mod  is a namespace member that is neither a wrapped function nor a
+                  value this backend can call
+     101   9 mod  is exported and is not a function this backend can name
+      93   8 mod  names an export that no wrapper decline mentions
+      65   1 mod  returns an object          (async_hooks.createHook)
+      22   1 mod  takes an object            (events.EventEmitter)
+       1   1 mod  returns Record<string, unknown[]>   (os.networkInterfaces)
+       1   1 mod  returns Map<f64, string[]>
+
+The largest is not a wrapper gap at all: 765 files wait on a function that never
+compiled, which is a lowering refusal wearing a wrapper message.
+
+### The exports that cost the most, resolved through the cascade
+
+     274  http: createServer
+     124  fs: parseFileMode              via mkdirSync
+      96  net: addListener               via createServer
+      68  dgram: Socket@dgram_src_main#constructor   via createSocket
+      30  diagnostics_channel: channel
+      29  http: readGlobalAgentBinding
+      12  fs: mkdtempSync
+      12  http: request
+      11  fs: WriteStream#constructor    via createWriteStream
+      11  fs: ReadStream#constructor     via createReadStream
+
+**A wrong ranking was printed first and is worth keeping.** The cascade walk fell
+back to matching a callee by the text after `#` when no exact edge existed, which
+made every `#constructor` the same node: `dgram.createSocket` and
+`fs.createWriteStream` both resolved to `formatInvalidStatusCode`, an HTTP name in
+`internal/errors.ts`, and it read as a plausible shared root. Exact edges only give
+the table above. The give-away was a name from the wrong module, not the numbers.
+
+### Attribution stops here, and the number that stops it
+
+Resolving those 765 to the compiler construct behind them attributes **298** and
+leaves **467 unattributed**. `a declaration outside every walk` is 297 of the 298,
+across 4 modules, and is the largest single named construct on the axis.
+
+The 467 are not a mystery about the code, they are a limit of the method: an
+NTS1001 names a construct and a location, and only sometimes a function, so a
+chain that ends in a function with no backticked name in any diagnostic cannot be
+joined by text. Only **48 of 765** have no NTS1001 or NTS1003 mentioning them at
+all.
+
+`http.createServer` is the clearest single item: 274 files, more than any other,
+and its body is one line.
+
+    export function createServer(options?, listener?): Server {
+      return new Server(options, listener);
+    }
+
+    http/src/server.ts:930:2  NTS1001 `createServer`, a declaration outside every walk
+
+It was briefly recorded here as having *no* diagnostic, on a grep that looked only
+for NTS1003 subjects. It has one, and it is an NTS1001. A census that searches for
+one diagnostic shape is blind to the other, which is the same failure as ranking
+causes by grepping their messages.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
