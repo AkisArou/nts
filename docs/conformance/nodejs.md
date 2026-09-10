@@ -11706,7 +11706,7 @@ constructors as well as top-level names.
     path                 21/39
     console               1/25   not measurable this way
     stream                2/22   -> 7/22
-    url                   8/14
+    url                   8/14   -> 11/14
     readline              4/7
     querystring           4/7   -> 7/7
     diagnostics_channel   4/6
@@ -11740,8 +11740,28 @@ and `null.isDestroyed` is **`null`** rather than a throw. A sabotage making
 `finished`, `compose`, `Readable.from` and the constructors, which answer over
 time and belong to a harness that can compare ordering.
 
-The suite is **21 modules, 567,613 comparisons, 0 divergences** — up 24,127 from
-the thirteen new calls.
+**`url` was comparing 8 of 14**, and the three added are the ones with the most
+behaviour per call. `URLSearchParams` is compared as a **state machine**,
+because that is what it is: the same key appended twice keeps both in order,
+`set` collapses them to one *in the first one's position*, `sort` is stable
+across equal keys, and `delete` takes every match. Constructing one and reading
+it back reaches none of that.
+
+    append2:a=1&b=2&a=3&a=1&a=2
+    set:a=3&b=2          <- three `a` entries collapsed, in the first's slot
+    delete:b=2
+
+The serialisation is compared at every step, because **the ordering is the
+behaviour** — two implementations can agree on `getAll` and disagree on
+`toString`. A sabotage where `set` appends instead of replacing in place is
+caught, and it is the exact break that a `getAll`-only comparison would miss.
+
+`domainToASCII` and `domainToUnicode` went in alongside: pure IDNA string
+functions that answer `''` rather than throwing on input they cannot convert,
+which is a difference a reimplementation gets wrong quietly.
+
+The suite is **21 modules, 575,661 comparisons, 0 divergences** — up 32,175 from
+the fifteen new calls.
 
 **`console` is still not measurable by this instrument and is left saying so.**
 Its corpus calls methods on a constructed `Console` instance, and those methods

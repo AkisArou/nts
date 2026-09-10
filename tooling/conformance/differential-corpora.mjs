@@ -735,6 +735,62 @@ export const CORPORA = {
         choose(rnd, PATH) + choose(rnd, TAIL);
     },
     calls: [
+      {
+        // `URLSearchParams` as a state machine, which is what it is: the same
+        // key appended twice must keep both and in order, `set` must collapse
+        // them to one *in the first one's position*, `sort` must be stable
+        // across equal keys, and `delete` must take every match. None of that
+        // is reachable by constructing one and reading it back, and none of it
+        // was compared -- the corpus reached 8 of `url`'s 14 functions.
+        //
+        // The serialisation is compared at every step, because the ordering
+        // *is* the behaviour: two implementations can agree on `getAll` and
+        // disagree on `toString`.
+        label: "searchparams-program",
+        call: (m, seed) => {
+          let sp;
+          try {
+            sp = new m.URLSearchParams(seed);
+          } catch (e) {
+            return `CONSTRUCT:${(e && e.code) || (e && e.name)}`;
+          }
+          const out = [`init:${sp.toString()}`, `size:${sp.size}`];
+          const key = seed.length > 0 ? seed[0] : "k";
+          try {
+            sp.append(key, "1");
+            out.push(`append1:${sp.toString()}`);
+            sp.append(key, "2");
+            out.push(`append2:${sp.toString()}`);
+            out.push(`getAll:${JSON.stringify(sp.getAll(key))}`);
+            out.push(`get:${JSON.stringify(sp.get(key))}`);
+            out.push(`has:${sp.has(key)}`);
+            sp.set(key, "3");
+            out.push(`set:${sp.toString()}`);
+            sp.sort();
+            out.push(`sort:${sp.toString()}`);
+            sp.delete(key);
+            out.push(`delete:${sp.toString()}`, `sizeAfter:${sp.size}`);
+            out.push(`keys:${JSON.stringify([...sp.keys()])}`);
+            out.push(`entries:${JSON.stringify([...sp.entries()])}`);
+          } catch (e) {
+            out.push(`THREW:${(e && e.code) || (e && e.name)}`);
+          }
+          return out;
+        },
+      },
+      {
+        // `domainToASCII` and `domainToUnicode` are pure string functions over
+        // IDNA, and answer `''` rather than throwing on input they cannot
+        // convert -- a reimplementation that throws instead is a difference no
+        // pinned test reaches.
+        label: "domainTo",
+        call: (m, s2) => {
+          const a = m.domainToASCII(s2);
+          const u = m.domainToUnicode(s2);
+          return [a, u, a === "" ? "empty" : "converted"];
+        },
+      },
+
       { name: "parse", args: (s) => [s] },
       { name: "format", args: (s) => [s] },
       { name: "resolve", args: (s) => ["http://base.example/x/y", s] },
