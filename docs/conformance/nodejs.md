@@ -11709,7 +11709,7 @@ constructors as well as top-level names.
     url                   8/14   -> 11/14
     readline              4/7
     querystring           4/7   -> 7/7
-    diagnostics_channel   4/6
+    diagnostics_channel   4/6   -> 6/6
     timers                2/6   -> 6/6
 
 **`timers` was comparing 2 of 6 functions.** `setInterval` and `setImmediate`
@@ -11778,8 +11778,21 @@ not the same check:
       caught by the identity check       yes
       caught by the answer comparison    no
 
-The suite is **21 modules, 583,745 comparisons, 0 divergences** — up 40,259 from
-the seventeen new calls. `path` is 29 of 39; the ten left are `format`,
+**`diagnostics_channel` was 4 of 6**, missing `tracingChannel` and `Channel`.
+`traceSync` carries an **ordering contract**, and ordering is normally the half
+a value comparison cannot hold — here it can, because the whole sequence is
+synchronous and the subscriber writes a log:
+
+    normal    start,end
+    throwing  start,error,end     <- `error` before `end`, not after
+
+A reimplementation that emits `error` after `end`, or skips `end` when the
+traced function throws, answers every single-event test correctly and gets this
+wrong. Controlled: a sabotage that publishes an extra `end` after the error is
+caught, `start,error,end` against `start,error,end,end`.
+
+The suite is **21 modules, 591,785 comparisons, 0 divergences** — up 48,299 from
+the nineteen new calls. `path` is 29 of 39; the ten left are `format`,
 `matchesGlob` and `_makeLong` across the two namespaces, which is the surface
 that does not publish compiled anyway.
 

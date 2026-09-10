@@ -1632,6 +1632,73 @@ export const CORPORA = {
     },
     calls: [
       {
+        // `tracingChannel` and `Channel`, the two names this corpus did not
+        // reach. `traceSync` has an **ordering contract**, and ordering is the
+        // half a value comparison usually cannot hold — here it can, because
+        // the whole sequence is synchronous and the subscriber writes a log.
+        //
+        //     normal   start,end
+        //     throwing start,error,end     <- `error` before `end`, not after
+        //
+        // A reimplementation that emits `error` after `end`, or skips `end`
+        // when the traced function throws, answers every single-event test
+        // correctly and gets this wrong.
+        label: "tracing-channel",
+        call: (m, program) => {
+          const name = `nts-trace-${program || "empty"}-${++dcInvocation}`;
+          let tc;
+          try {
+            tc = m.tracingChannel(name);
+          } catch (e) {
+            return `NO-TRACING:${(e && e.code) || (e && e.name)}`;
+          }
+          const seen = [];
+          const handlers = {};
+          for (const ev of ["start", "end", "asyncStart", "asyncEnd", "error"]) {
+            handlers[ev] = () => seen.push(ev);
+          }
+          const out = [`channels:${Object.getOwnPropertyNames(tc).sort().join(",")}`];
+          try {
+            out.push(`subs-before:${tc.hasSubscribers}`);
+            tc.subscribe(handlers);
+            out.push(`subs-after:${tc.hasSubscribers}`);
+            const r = tc.traceSync(() => 42, {});
+            out.push(`ok:${r}`, `order:${seen.join(",")}`);
+            seen.length = 0;
+            try {
+              tc.traceSync(() => {
+                throw new Error("boom");
+              }, {});
+            } catch (e) {
+              out.push(`threw:${e && e.message}`);
+            }
+            out.push(`throw-order:${seen.join(",")}`);
+            tc.unsubscribe(handlers);
+            out.push(`subs-end:${tc.hasSubscribers}`);
+          } catch (e) {
+            out.push(`THREW:${(e && e.code) || (e && e.name)}`);
+          }
+          return out;
+        },
+      },
+      {
+        // `Channel` as a constructor: node exposes the class, and a channel
+        // built directly must behave as one from `channel(name)` does.
+        label: "Channel-class",
+        call: (m, program) => {
+          const out = [`is-fn:${typeof m.Channel}`];
+          try {
+            const named = m.channel(`nts-cls-${program || "e"}-${++dcInvocation}`);
+            out.push(`instance:${named instanceof m.Channel}`);
+            out.push(`name-type:${typeof named.name}`);
+            out.push(`hasSubscribers:${named.hasSubscribers}`);
+          } catch (e) {
+            out.push(`THREW:${(e && e.code) || (e && e.name)}`);
+          }
+          return out;
+        },
+      },
+      {
         label: "channel-program",
         call: (m, program) => {
           // The name has to be unique per program and identical on both sides,
