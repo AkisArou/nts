@@ -11707,7 +11707,7 @@ constructors as well as top-level names.
     console               1/25   not measurable this way
     stream                2/22   -> 7/22
     url                   8/14   -> 11/14
-    readline              4/7
+    readline              4/7   -> 7/7
     querystring           4/7   -> 7/7
     diagnostics_channel   4/6   -> 6/6
     timers                2/6   -> 6/6
@@ -11791,8 +11791,28 @@ traced function throws, answers every single-event test correctly and gets this
 wrong. Controlled: a sabotage that publishes an extra `end` after the error is
 caught, `start,error,end` against `start,error,end,end`.
 
-The suite is **21 modules, 591,785 comparisons, 0 divergences** — up 48,299 from
-the nineteen new calls. `path` is 29 of 39; the ten left are `format`,
+**`readline` was 4 of 7**, and the last name was `emitKeypressEvents`, which
+turns bytes on a stream into `'keypress'` events. The decoding is a state
+machine and is synchronous end to end, so a value comparison holds it:
+
+    "abc"      -> a, b, c            three keys
+    "E[A"      -> up                 one key, the escape sequence consumed
+    "E"        -> []                 a lone escape is held, waiting for more
+    "E[1;5A"   -> up with ctrl
+
+What is compared is the **sequence** of `(name, ctrl, meta, shift)` tuples,
+because a decoder that produces the right keys in the wrong order, or splits one
+sequence into two, answers every single-key test correctly. 46 distinct
+decodings over 50 fixed inputs, all emitting at least one key.
+
+Its control is the weakest of the seven and is recorded as such: a sabotage that
+drops the `ctrl` flag is caught by **2 of 50**, because only two fixed inputs
+carry a modifier. That is not vacuous — it can fail, and does — but it is thin,
+and the honest reading is that this corpus tests *decoding* well and *modifiers*
+barely.
+
+The suite is **21 modules, 595,855 comparisons, 0 divergences** — up 52,369 from
+the twenty new calls. `path` is 29 of 39; the ten left are `format`,
 `matchesGlob` and `_makeLong` across the two namespaces, which is the surface
 that does not publish compiled anyway.
 

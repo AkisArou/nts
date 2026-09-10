@@ -18,7 +18,7 @@
 // named for it.
 
 /** A seeded PRNG. Same seed, same sequence, in every process. */
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 
 export function makeRandom(seed = 0x9e3779b9) {
   let state = seed >>> 0;
@@ -1553,6 +1553,8 @@ export const CORPORA = {
       "m0,0", "m1,1", "m-1,-1", "m5,-5", "mN,1", "m1,N", "m1.5,-2.5", "mI,I",
       "l-1", "l0", "l1", "l2", "l-2", "lN", "lI", "lU",
       "s", "c0", "cU,0", "c0,U", "m0", "mU,U",
+      "a", "abc", "E", "E[A", "E[B", "E[C", "E[D", "EE", "E[", "T", "R", "N",
+      "RN", "aE[Ab", "E[1;5A", "\u0001", "\u007f", "", "EOA", "E[3~",
     ],
     input: (rnd) => {
       const NUMS = ["0", "1", "-1", "2", "-2", "5", "N", "I", "U", "1.5", "-1.5", "1e21"];
@@ -1564,6 +1566,46 @@ export const CORPORA = {
       return "s";
     },
     calls: [
+      {
+        // `emitKeypressEvents`, the last of `readline`'s three uncompared
+        // names. It turns bytes on a stream into `'keypress'` events, and the
+        // decoding is a state machine: an escape sequence arrives as several
+        // chunks and must be held until it is complete, a lone `\x1b` is the
+        // Escape key, and `\x1b[A` is Up with no Escape emitted before it.
+        //
+        // Synchronous end to end -- the stream is fed and the events land
+        // before `push` returns -- so a value comparison holds it. What is
+        // compared is the *sequence* of `(name, ctrl, meta, shift)` tuples,
+        // because a decoder that produces the right keys in the wrong order,
+        // or splits one sequence into two, answers every single-key test.
+        label: "keypress-decode",
+        call: (m, spec) => {
+          const seen = [];
+          let input;
+          try {
+            input = new Readable({ read() {} });
+            input.setEncoding("utf8");
+            m.emitKeypressEvents(input);
+          } catch (e) {
+            return `SETUP:${(e && e.code) || (e && e.name)}`;
+          }
+          input.on("keypress", (ch, key) => {
+            seen.push(`${key ? key.name : "?"}:${key && key.ctrl ? "c" : "-"}${key && key.meta ? "m" : "-"}${key && key.shift ? "s" : "-"}`);
+          });
+          const bytes = spec
+            .replace(/E/g, "\u001b")
+            .replace(/T/g, "\t")
+            .replace(/R/g, "\r")
+            .replace(/N/g, "\n");
+          try {
+            input.push(bytes);
+            input.read();
+          } catch (e) {
+            seen.push(`THREW:${(e && e.code) || (e && e.name)}`);
+          }
+          return seen;
+        },
+      },
       {
         label: "cursor-op",
         call: (m, spec) => {
