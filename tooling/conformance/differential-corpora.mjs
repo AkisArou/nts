@@ -796,6 +796,20 @@ export const CORPORA = {
       { name: "escape", args: (s) => [s] },
       { name: "unescape", args: (s) => [s] },
       { name: "stringify", args: (s) => [{ [s]: "v", other: ["1", "2"] }] },
+      // `encode` and `decode` are node's documented aliases for `stringify` and
+      // `parse`, and `unescapeBuffer` is the safe fast decoder `unescape` falls
+      // back to. None were compared -- the corpus reached 4 of 7 functions, and
+      // an alias that stops aliasing is exactly the kind of break no pinned
+      // test catches.
+      { name: "decode", args: (s) => [s] },
+      { name: "encode", args: (s) => [{ [s]: "v", other: ["1", "2"] }] },
+      {
+        label: "unescapeBuffer",
+        call: (m, s) => {
+          const b = m.unescapeBuffer(s, false);
+          return [b.length, b.toString("latin1")];
+        },
+      },
     ],
   },
 
@@ -888,6 +902,49 @@ export const CORPORA = {
       return `${CB[Math.floor(rnd() * CB.length)]}|${D[Math.floor(rnd() * D.length)]}${OP[Math.floor(rnd() * OP.length)]}`;
     },
     calls: [
+      {
+        // `setInterval` and `setImmediate` have the same synchronous surface as
+        // `setTimeout` and were not being compared at all -- the corpus reached
+        // 2 of `timers`' 6 functions. Each handle is cleared in the same call;
+        // an interval left running keeps the process alive and the sweep never
+        // ends.
+        label: "setInterval-surface",
+        call: (m, spec) => {
+          const [cbKind, delayText] = spec.split("|");
+          const cb = cbKind === "fn" ? () => {} : cbKind === "str" ? "no" : undefined;
+          const delay =
+            delayText === "" ? undefined
+            : delayText === "N" ? NaN
+            : delayText === "I" ? Infinity
+            : delayText === "s" ? "later"
+            : Number(delayText);
+          let h;
+          try {
+            h = m.setInterval(cb, delay);
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+          const out = ["scheduled", `hasRef:${h.hasRef()}`, `unref-self:${h.unref() === h}`];
+          m.clearInterval(h);
+          return out;
+        },
+      },
+      {
+        label: "setImmediate-surface",
+        call: (m, spec) => {
+          const cbKind = spec.split("|")[0];
+          const cb = cbKind === "fn" ? () => {} : cbKind === "str" ? "no" : undefined;
+          let h;
+          try {
+            h = m.setImmediate(cb);
+          } catch (e) {
+            return `${(e && e.code) || "?"}:${(e && e.name) || "?"}`;
+          }
+          const out = ["scheduled", `hasRef:${h.hasRef()}`, `ref-self:${h.ref() === h}`];
+          m.clearImmediate(h);
+          return out;
+        },
+      },
       {
         label: "setTimeout-surface",
         call: (m, spec) => {

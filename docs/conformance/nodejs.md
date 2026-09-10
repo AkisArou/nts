@@ -11696,6 +11696,44 @@ harness named what it could not ask —
 which is the two exports that do not publish, skipped rather than counted as
 false divergences.
 
+
+### Finishing the audit: `timers` and `querystring` were also short
+
+The audit was left unfinished for corpora that build an object before calling
+anything, so it was finished with an instrument that wraps namespaces and
+constructors as well as top-level names.
+
+    path                 21/39
+    console               1/25   not measurable this way
+    stream                2/22
+    url                   8/14
+    readline              4/7
+    querystring           4/7   -> 7/7
+    diagnostics_channel   4/6
+    timers                2/6   -> 6/6
+
+**`timers` was comparing 2 of 6 functions.** `setInterval` and `setImmediate`
+have the same synchronous surface as `setTimeout` — validation, `hasRef()`,
+`ref()`/`unref()` returning the handle — and none of it was compared. Added,
+with each handle cleared in the same call: an interval left running keeps the
+process alive and the sweep never ends.
+
+**`querystring` was comparing 4 of 7.** `encode` and `decode` are node's
+documented aliases for `stringify` and `parse`, and `unescapeBuffer` is the safe
+fast decoder `unescape` falls back to. An alias that stops aliasing is exactly
+the kind of break no pinned test catches, and nothing was watching it.
+
+Both are complete now, and the suite is **21 modules, 563,583 comparisons, 0
+divergences** — up 20,097 comparisons from the eight new calls.
+
+**`console` is still not measurable by this instrument and is left saying so.**
+Its corpus calls methods on a constructed `Console` instance, and those methods
+are own properties of the instance rather than of the namespace or the
+prototype — the arrow-field shape recorded in
+`blockers/an-arrow-class-field-using-this`. A namespace shim cannot see them.
+The remaining rows above are real gaps and are recorded as open rather than
+closed quietly.
+
 ### Two wrong measurements before the right one
 
 Worth recording because both looked plausible and both undercounted.
