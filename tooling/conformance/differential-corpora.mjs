@@ -317,6 +317,43 @@ export const CORPORA = {
         { label: `${ns}.toNamespacedPath`, call: (m, s) => m[ns].toNamespacedPath(s) },
       ]),
       { name: "resolve", args: (s) => [s] },
+      // The **top-level names**, which were never called. Everything above goes
+      // through `posix.` or `win32.`, so the corpus reached 21 of `path`'s 39
+      // functions and none of the twelve the module publishes directly.
+      //
+      // This is not redundancy. On a posix host `path.normalize` should *be*
+      // `path.posix.normalize` -- the same function object, not merely one that
+      // agrees -- and an alias that stops aliasing is a break no pinned test
+      // catches. `path._makeLong` was exactly that failure earlier today: it
+      // answered correctly while being a *different* function from
+      // `toNamespacedPath`, which `local/legacy-make-long.js` asserts with
+      // `strictEqual`. Identity is compared here alongside the answers.
+      {
+        label: "top-level-answers",
+        call: (m, s2) => [
+          m.normalize(s2),
+          m.dirname(s2),
+          m.basename(s2),
+          m.extname(s2),
+          m.isAbsolute(s2),
+          m.join(s2, "z"),
+          m.relative(s2, "/tmp"),
+          m.toNamespacedPath(s2),
+        ],
+      },
+      {
+        label: "top-level-identity",
+        call: (m) => {
+          const platform = m.sep === "\\" ? m.win32 : m.posix;
+          const names = ["normalize", "dirname", "basename", "extname", "isAbsolute",
+                         "join", "relative", "toNamespacedPath", "resolve", "parse", "format"];
+          const out = [];
+          for (const n of names) out.push(`${n}:${m[n] === platform[n]}`);
+          out.push(`_makeLong-is-toNamespacedPath:${m._makeLong === m.toNamespacedPath}`);
+          out.push(`self:${m.posix === m || m.win32 === m}`);
+          return out;
+        },
+      },
     ],
   },
 

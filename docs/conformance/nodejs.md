@@ -11703,7 +11703,7 @@ The audit was left unfinished for corpora that build an object before calling
 anything, so it was finished with an instrument that wraps namespaces and
 constructors as well as top-level names.
 
-    path                 21/39
+    path                 21/39   -> 29/39
     console               1/25   not measurable this way
     stream                2/22   -> 7/22
     url                   8/14   -> 11/14
@@ -11760,8 +11760,28 @@ caught, and it is the exact break that a `getAll`-only comparison would miss.
 functions that answer `''` rather than throwing on input they cannot convert,
 which is a difference a reimplementation gets wrong quietly.
 
-The suite is **21 modules, 575,661 comparisons, 0 divergences** — up 32,175 from
-the fifteen new calls.
+**`path` was calling 21 of 39 and none of them top-level.** Every call went
+through `posix.` or `win32.`, so the twelve names the module publishes directly
+were never compared.
+
+That is not redundancy, and `_makeLong` is why. On a posix host
+`path.normalize` should **be** `path.posix.normalize` — the same function
+object, not merely one that agrees — and earlier today `path._makeLong` answered
+correctly while being a *different* function from `toNamespacedPath`, which
+`local/legacy-make-long.js` asserts with `strictEqual`. Right answers, wrong
+object.
+
+So identity is compared alongside the answers, and the control shows the two are
+not the same check:
+
+    sabotage: top-level `normalize` re-wrapped, answering identically
+      caught by the identity check       yes
+      caught by the answer comparison    no
+
+The suite is **21 modules, 583,745 comparisons, 0 divergences** — up 40,259 from
+the seventeen new calls. `path` is 29 of 39; the ten left are `format`,
+`matchesGlob` and `_makeLong` across the two namespaces, which is the surface
+that does not publish compiled anyway.
 
 **`console` is still not measurable by this instrument and is left saying so.**
 Its corpus calls methods on a constructed `Console` instance, and those methods
