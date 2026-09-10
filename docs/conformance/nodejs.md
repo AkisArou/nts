@@ -11672,6 +11672,35 @@ shared by every module in the tree.
 
 
 
+
+## The axis re-derived on a 03:44 pin: unchanged, and that is the result
+
+2026-09-10. My standing figure came from a 02:32 pin and **five compiler builds
+had landed since** — 03:14, 03:18, 03:37, 03:41, 03:44. Quoting it further would
+have been the stale-baseline failure, so all 22 modules were rebuilt and rerun
+on the newest.
+
+    41 passed, 1,821 failed, 15 module(s) with a pass, 1 whole
+    built=no: 0 of 22
+
+**Not one module differs from the 02:32 measurement.** Every row is identical,
+including `punycode` whole at 3/0 and `string_decoder` at 0/5.
+
+That is worth stating rather than skipping, because the five builds in between
+were not idle: MainClaude's optional-`in` work cleared `buffer/src/main.ts:189`,
+`{ ...base, k: v }` began lowering across 25 sites and 158 refused functions, and
+`"length" in xs` on an array started answering. **Three real compiler fixes and
+the axis did not move by one test file.**
+
+The reason is the one this ledger recorded earlier tonight: a refusal is
+function-granular, so a module is held shut by the *last* refusal in each cone
+rather than by their number. `Buffer.from` had four heads, one is cleared, and
+`string_decoder` needs all four.
+
+> The pass count is a poor instrument for progress at this stage and a good one
+> for honesty. Nothing here was hidden by it; the fixes are real and the ledger
+> says where they landed instead.
+
 ## The `os` corpus was calling fifteen of twenty, and now calls twenty
 
 2026-09-10. The corpora were never audited for how much of a module's public

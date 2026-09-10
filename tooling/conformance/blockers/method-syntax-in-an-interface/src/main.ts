@@ -51,6 +51,40 @@
 // It is the same shape as `upcast-to-base` being free only because base fields
 // come first.
 //
+// # 2026-09-10: the hazard above is not hypothetical, and never was
+//
+// The paragraph reasons that *if* `I` gained a stored slot, `I`'s layout and
+// `C`'s would stop agreeing about offsets and a `C` passed as an `I` would read
+// the wrong ones silently. It uses that as a reason not to take the one-line
+// fix. The reasoning is right and it stopped one step short: **it is already
+// true**, for any interface whose field order differs from the class's, with no
+// change to method members at all.
+//
+//     interface Named { name: string }
+//     class Thing { id: number; name: string }
+//     function readName(v: Named): number { return v.name.length; }
+//     readName(new Thing(5))          // SIGSEGV; node answers 6
+//
+// `Thing.name` is at offset 32 and `Named.name` at 24. The emitter writes a raw
+// pointer cast, so `readName` loads `id` -- a double -- as an `NtsString *`.
+// Declare the class as `{ name; id }` and the same program is correct.
+//
+// MainClaude found it by reading the emitted C for something else, and observed
+// that this paragraph had the mechanism, the `upcast-to-base` analogy and the
+// word "silently" already.
+//
+// **The lesson is about the shape of the reasoning, not the conclusion.** A
+// consequence derived for a change you are declining is a consequence worth
+// testing against the code you already have. The question never asked here was
+// "is this true today?", and it cost the finding to somebody reading assembly
+// for an unrelated reason.
+//
+// The conclusion still holds and is stronger for it: what an interface's
+// representation should be, when both an object literal and a class instance
+// can be one, is a design step. The refusal being landed for the field-order
+// case is the honest placeholder for that -- it makes the hazard loud instead
+// of silent, and it does not decide the design.
+//
 // **So this is not 24 things of layout work.** It is "what is an interface's
 // representation when both an object literal and a class instance can be one",
 // which is a design step and not a member-kind check. The count above is what
