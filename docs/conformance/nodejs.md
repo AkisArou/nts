@@ -20732,6 +20732,41 @@ than the count.** The first was per-name versus per-identity on `path`, the seco
 was module-level versus instance on `console`, and this is the two of them
 together changing the denominator by 516.
 
+## `Buffer`'s accessors: 18 of 117 to 94 of 117, and 0 divergences
+
+The largest single gap once instance methods became visible. The 99 unreached
+included **every numeric accessor** -- `readUInt16LE` through `writeBigUInt64BE`,
+the variable-width `readUIntLE`/`readIntBE` family, `swap16`/`swap32`/`swap64`,
+`copy`, `equals`, `compare`, `indexOf`, `lastIndexOf`, `includes`, `fill`,
+`write`, `toJSON`, `subarray` and `slice`. Endianness, sign extension and
+unaligned offsets are where a byte-level reimplementation goes wrong, and they are
+the cheapest thing in the module to compare: a buffer in, a number out.
+
+Every accessor is called at offset 0 **and** at offset 1, because an
+implementation reading through a `DataView` and one assembling bytes by hand agree
+on aligned reads and can differ on unaligned ones. Out-of-range offsets are
+included rather than avoided: `ERR_OUT_OF_RANGE` against
+`ERR_BUFFER_OUT_OF_BOUNDS` is a distinction node makes and a reimplementation
+collapses, and the code is compared.
+
+**128,800 comparisons, 0 divergences.** Controlled by breaking
+`Buffer.prototype` one method at a time and restoring in a `finally`:
+
+    readUInt16LE reading BE     10 of 12 inputs noticed
+    readInt8 reading unsigned    6 of 12
+    writeInt32LE writing BE     12 of 12
+    swap32 doing swap16         10 of 12
+    compare ignoring its ranges 12 of 12
+
+The two that catch fewer are the honest ones: `readInt8` unsigned differs only
+when the byte has its high bit set, and `swap32` matches `swap16` on some byte
+patterns. That is the input's doing, and a control that fired on every input for
+every break would mean the spec was comparing something coarser than it claims.
+
+What remains unreached is node's internal encoding helpers -- `utf8Slice`,
+`base64Write` and the rest, which the public `toString`/`write` already cover --
+and `Blob`'s asynchronous methods.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

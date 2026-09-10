@@ -695,6 +695,99 @@ export const CORPORA = {
     input: (rnd) => unicodeWord(rnd),
     calls: [
       {
+        // **`Buffer`'s instance methods**, which were the largest single gap in
+        // the corpus: 18 of 117 reached, and the 99 unreached include every
+        // numeric accessor. Endianness, sign extension and the unaligned offset
+        // are exactly where a byte-level reimplementation goes wrong, and they
+        // are trivially comparable -- a buffer in, a number out.
+        //
+        // Every accessor is called at offset 0 **and** at offset 1, because an
+        // implementation that reads through a `DataView` and one that assembles
+        // bytes by hand agree on aligned reads and can differ on unaligned ones.
+        //
+        // Out-of-range offsets are included rather than avoided: `ERR_OUT_OF_RANGE`
+        // against `ERR_BUFFER_OUT_OF_BOUNDS` is a distinction node makes and one a
+        // reimplementation collapses, and the code is compared.
+        label: "buffer-accessors",
+        call: (m, s) => {
+          const base = m.Buffer.alloc(16);
+          m.Buffer.from(s, "utf8").copy(base, 0, 0, Math.min(16, m.Buffer.byteLength(s, "utf8")));
+          const show = (f) => {
+            try {
+              const v = f();
+              if (v instanceof Uint8Array) return `<${[...v].join(" ")}>`;
+              return typeof v === "bigint" ? `${v}n` : String(v);
+            } catch (error) {
+              return `threw:${(error && error.code) || (error && error.name) || "?"}`;
+            }
+          };
+          const reads = [
+            "readUInt8", "readUInt16LE", "readUInt16BE", "readUInt32LE", "readUInt32BE",
+            "readInt8", "readInt16LE", "readInt16BE", "readInt32LE", "readInt32BE",
+            "readFloatLE", "readFloatBE", "readDoubleLE", "readDoubleBE",
+            "readBigInt64LE", "readBigInt64BE", "readBigUInt64LE", "readBigUInt64BE",
+          ];
+          const out = [];
+          for (const name of reads) {
+            out.push(show(() => base[name](0)));
+            out.push(show(() => base[name](1)));
+            out.push(show(() => base[name](15)));
+          }
+          for (const name of ["readUIntLE", "readUIntBE", "readIntLE", "readIntBE"]) {
+            for (const width of [1, 3, 6, 7]) out.push(show(() => base[name](0, width)));
+          }
+          const writes = [
+            ["writeUInt8", 0xff], ["writeUInt16LE", 0xfffe], ["writeUInt16BE", 0xfffe],
+            ["writeUInt32LE", 0xfffffffe], ["writeUInt32BE", 0xfffffffe],
+            ["writeInt8", -2], ["writeInt16LE", -2], ["writeInt16BE", -2],
+            ["writeInt32LE", -2], ["writeInt32BE", -2],
+            ["writeFloatLE", 1.5], ["writeFloatBE", 1.5],
+            ["writeDoubleLE", -1.25], ["writeDoubleBE", -1.25],
+            ["writeBigInt64LE", -2n], ["writeBigInt64BE", -2n],
+            ["writeBigUInt64LE", 2n ** 63n], ["writeBigUInt64BE", 2n ** 63n],
+          ];
+          for (const [name, value] of writes) {
+            out.push(show(() => {
+              const t = m.Buffer.alloc(16);
+              const at = t[name](value, 1);
+              return `${at}:${[...t].join(" ")}`;
+            }));
+          }
+          for (const name of ["writeUIntLE", "writeUIntBE", "writeIntLE", "writeIntBE"]) {
+            for (const width of [1, 3, 6]) {
+              out.push(show(() => {
+                const t = m.Buffer.alloc(16);
+                const at = t[name](name.includes("Int") && !name.includes("UInt") ? -3 : 3, 0, width);
+                return `${at}:${[...t].join(" ")}`;
+              }));
+            }
+          }
+          const other = m.Buffer.from(`${s}z`, "utf8");
+          out.push(show(() => base.equals(base)));
+          out.push(show(() => base.equals(other)));
+          out.push(show(() => base.compare(other)));
+          out.push(show(() => base.compare(other, 0, 4, 0, 4)));
+          out.push(show(() => base.indexOf(other)));
+          out.push(show(() => base.indexOf(0)));
+          out.push(show(() => base.lastIndexOf(0)));
+          out.push(show(() => base.includes(0)));
+          out.push(show(() => base.toJSON().data.length));
+          out.push(show(() => base.subarray(2, 6)));
+          out.push(show(() => base.slice(2, 6)));
+          out.push(show(() => m.Buffer.from(base).fill(0x41, 2, 6)));
+          out.push(show(() => m.Buffer.from(base).fill(s, 0, 8)));
+          out.push(show(() => {
+            const t = m.Buffer.alloc(8);
+            const n = t.write(s, 1, "utf8");
+            return `${n}:${[...t].join(" ")}`;
+          }));
+          out.push(show(() => m.Buffer.from(base).swap16()));
+          out.push(show(() => m.Buffer.from(base).swap32()));
+          out.push(show(() => m.Buffer.from(base).swap64()));
+          return out.join("|");
+        },
+      },
+      {
         // **`Buffer`'s statics**, which the corpus never called: `alloc`,
         // `concat`, `compare`, `isBuffer`, `isEncoding`, `of`, `copyBytesFrom`,
         // and the free functions `isUtf8`, `isAscii` and `transcode`. Ten of the
