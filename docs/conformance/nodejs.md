@@ -11671,6 +11671,50 @@ shared by every module in the tree.
 
 
 
+
+## The `os` corpus was calling fifteen of twenty, and now calls twenty
+
+2026-09-10. The corpora were never audited for how much of a module's public
+surface they reach. `os` turned out to call **15 of its 20 functions**, and the
+five it missed were not incidental: `getPriority`, `setPriority`, `userInfo`,
+`networkInterfaces`, `cpus`. `getPriority`'s validation is where tonight's
+wrapper-coercion finding lives, and nothing was comparing it.
+
+All five are added. `setPriority` appears **through its validation only** —
+every input is one that must throw before reaching the system call, because a
+successful call renices the host process and a comparison corpus has no
+business doing that. The others are compared for shape rather than value:
+`cpus()` for `model` and `times.user` being present and typed, `userInfo()` for
+its five fields, `networkInterfaces()` for its keys mapping to arrays of
+addressed records. Their values are machine-specific and their shapes are not.
+
+Against the compiled addon: **30,280 comparisons, 0 divergences**, and the
+harness named what it could not ask —
+
+    not compared, absent from the addon: userInfo-shape, networkInterfaces-shape
+
+which is the two exports that do not publish, skipped rather than counted as
+false divergences.
+
+### Two wrong measurements before the right one
+
+Worth recording because both looked plausible and both undercounted.
+
+The first matched a function's name against each call's **label**, and reported
+`console 0/25` — the console corpus calls `log`, `warn` and `error` from inside
+a `call()` whose label is `"console-program"`, so the heuristic could not see
+them.
+
+The second wrapped every function on the **module namespace** with a counter,
+which is accurate for corpora that call top-level functions and blind for those
+that go through a constructor or a namespace. It reported `console 1/25` and
+`path 1/13` — both wrong, because those corpora call `new m.Console(...)` and
+`m.posix.resolve` respectively.
+
+Only the rows where a corpus calls top-level functions directly are trustworthy,
+and `os` is one of them. **The other rows in that table are not evidence**, and
+the audit is unfinished for every corpus that builds an object first.
+
 ## Auditing the applicability rules: no unjustified exclusion, and two proven
 
 2026-09-10. The standing rules forbid weakening applicability rules. That

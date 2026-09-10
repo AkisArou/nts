@@ -108,6 +108,76 @@ export const CORPORA = {
       return [pick(), pick(), pick()];
     },
     calls: [
+      // Five names the corpus did not reach until a coverage audit said so:
+      // `getPriority`, `setPriority`, `userInfo`, `networkInterfaces`, `cpus`.
+      // `os` publishes twenty functions and this file was calling fifteen.
+      //
+      // `setPriority` appears through its **validation only**. A successful
+      // call renices the host process, which a comparison corpus has no
+      // business doing, so every input here is one that must throw before it
+      // reaches the system call -- and both lanes are asked for the `code`.
+      {
+        label: "getPriority",
+        call: (m, s) => {
+          const pid = s === "" ? undefined : Number(s);
+          try {
+            const v = m.getPriority(Number.isNaN(pid) ? s : pid);
+            return ["ok", typeof v, Number.isInteger(v)];
+          } catch (e) {
+            return ["threw", (e && e.code) || "?", (e && e.name) || "?"];
+          }
+        },
+      },
+      {
+        label: "setPriority-validation",
+        call: (m, s) => {
+          // Deliberately invalid in every case: a bad pid or a bad priority,
+          // never a pair that would succeed and change the host.
+          try {
+            m.setPriority(s === "" ? "not-a-pid" : s, 1e9);
+            return ["ACCEPTED-should-not-happen"];
+          } catch (e) {
+            return ["threw", (e && e.code) || "?", (e && e.name) || "?"];
+          }
+        },
+      },
+      {
+        label: "userInfo-shape",
+        call: (m) => {
+          try {
+            const u = m.userInfo();
+            return ["ok", typeof u.username, typeof u.homedir, typeof u.uid, typeof u.gid];
+          } catch (e) {
+            return ["threw", (e && e.code) || (e && e.name)];
+          }
+        },
+      },
+      {
+        label: "networkInterfaces-shape",
+        call: (m) => {
+          try {
+            const n = m.networkInterfaces();
+            const keys = Object.keys(n).sort();
+            const first = keys.length > 0 ? n[keys[0]] : [];
+            return ["ok", Array.isArray(first), first.length > 0 ? typeof first[0].address : "none"];
+          } catch (e) {
+            return ["threw", (e && e.code) || (e && e.name)];
+          }
+        },
+      },
+      {
+        label: "cpus-shape",
+        call: (m) => {
+          try {
+            const c = m.cpus();
+            return ["ok", Array.isArray(c), c.length > 0 ? typeof c[0].model : "none",
+                    c.length > 0 ? typeof c[0].times.user : "none"];
+          } catch (e) {
+            return ["threw", (e && e.code) || (e && e.name)];
+          }
+        },
+      },
+
       {
         label: "tmpdir",
         // The environment is the input, so it is applied before each call and
