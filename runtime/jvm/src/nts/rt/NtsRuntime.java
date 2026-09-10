@@ -1084,6 +1084,70 @@ public final class NtsRuntime {
     }
 
     // ---- Bare arrays: results are fresh objects even for empty slices. ------
+    /**
+     * {@code a.concat(b)} over bare arrays, in the three element widths.
+     *
+     * <p>The growable path has had this since it existed -- `NtsArrayL.concat`
+     * and its siblings -- and the bare path never did, so `nts_array_concat`
+     * and `nts_array_concat_ref` were refused here for as long as both have
+     * existed. It surfaced only when `nts_array_concat_value` arrived with an
+     * example whose program grows no array, which sent it down this path.
+     *
+     * <p>{@code Object[]} covers the erased width as well as the reference one:
+     * an {@code NtsValue} is a reference here, and under {@code NoGc} there is
+     * nothing to retain, so the tag never has to be consulted. The C lane needs
+     * the width in the *name* precisely because it does have to retain, and has
+     * to know which elements are references to do it.
+     *
+     * <p>A fresh array, not a view: a rest parameter is a new array on every
+     * call in JavaScript, and returning either input would let
+     * {@code function f(...xs) { xs.push(1) }} reach into its caller's.
+     */
+    public static double[] arrayConcat(double[] a, double[] b) {
+        double[] out = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    public static boolean[] arrayConcat(boolean[] a, boolean[] b) {
+        boolean[] out = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    public static Object[] arrayConcat(Object[] a, Object[] b) {
+        // **The component type has to survive, and `new Object[]` does not
+        // carry it.** The first version allocated one to avoid an
+        // `ArrayStoreException` and got the mirror failure instead:
+        //
+        //     class [Ljava.lang.Object; cannot be cast to class [Lnts.rt.NtsValue;
+        //
+        // Java's array covariance is one-way. A `String[]` *is* an `Object[]`,
+        // so it can be passed here; an `Object[]` is not a `String[]`, so it
+        // cannot be handed back to a slot that wants one. `keysStr` cost this
+        // lane the same lesson and this is that lesson from the other end.
+        //
+        // The empty array is why neither input's type can simply win.
+        // `f(...rest)` concatenates an **empty leading array** with the rest,
+        // and that one is `Object[]` -- so taking `a`'s component type loses
+        // exactly the case the operation exists for. Take the non-empty one's,
+        // and the more specific of the two when both have elements.
+        Class<?> component;
+        if (a.length == 0) {
+            component = b.getClass().getComponentType();
+        } else if (b.length == 0) {
+            component = a.getClass().getComponentType();
+        } else {
+            Class<?> first = a.getClass().getComponentType();
+            Class<?> second = b.getClass().getComponentType();
+            component = first.isAssignableFrom(second) ? second : first;
+        }
+        Object[] out = (Object[]) java.lang.reflect.Array.newInstance(component, a.length + b.length);
+        System.arraycopy(a, 0, out, 0, a.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
     public static double[] arraySlice(double[] a, double from, double to) {
         int start = NtsArrays.clamp(from, a.length), end = Math.max(start, NtsArrays.clamp(to, a.length));
         return Arrays.copyOfRange(a, start, end);

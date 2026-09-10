@@ -161,7 +161,16 @@ fn growable_external(name: &str, holds: &str) -> Option<(String, &'static str, S
         "fill" | "fill_ref" | "fill_bool" => ("fill", format!("(L{class};{element})L{class};")),
         "reverse" | "reverse_ref" => ("reverse", format!("(L{class};)L{class};")),
         "slice" | "slice_ref" => ("slice", format!("(L{class};DD)L{class};")),
-        "concat" | "concat_ref" => ("concat", format!("(L{class};L{class};)L{class};")),
+        // `_value` joins the two above rather than needing a third method:
+        // the class comes from what the array *holds*, and an `NtsValue` is a
+        // reference here, so all three are `NtsArrayL.concat`. The C lane needs
+        // the width in the name because it retains the reference elements and
+        // has to know which they are; under `NoGc` there is nothing to retain,
+        // so the tag never has to be consulted and the copy is the whole
+        // operation.
+        "concat" | "concat_ref" | "concat_value" => {
+            ("concat", format!("(L{class};L{class};)L{class};"))
+        }
         "extend" | "extend_ref" => ("extend", format!("(L{class};L{class};)L{class};")),
         "splice" | "splice_ref" => ("splice", format!("(L{class};DD)L{class};")),
         "keep_first" => ("keepFirst", format!("(L{class};D)V")),
@@ -230,6 +239,13 @@ fn array_external(name: &str, element: &str) -> Option<(&'static str, &'static s
             (RUNTIME, "arrayAtRef", format!("({array}D)Ljava/lang/Object;"))
         }
         "nts_array_slice" => (RUNTIME, "arraySlice", format!("({array}DD){result}")),
+        // All three widths, and one method each. The bare path had no concat at
+        // all until `nts_array_concat_value` arrived on a program that grows no
+        // array -- so `_ref` and the plain form were refused here too, and had
+        // been for as long as they have existed.
+        "nts_array_concat" | "nts_array_concat_ref" | "nts_array_concat_value" => {
+            (RUNTIME, "arrayConcat", format!("({array}{array}){result}"))
+        }
         "nts_array_reverse" => (RUNTIME, "arrayReverse", format!("({array}){result}")),
         "nts_array_join_str" => (
             RUNTIME,
