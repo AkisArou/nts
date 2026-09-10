@@ -11669,6 +11669,63 @@ modules, 523,331 comparisons, 0 divergences. Interpreted unchanged — `net`
 shared by every module in the tree.
 
 
+
+## `Buffer.from` has four heads; one is cleared and `string_decoder` has not moved
+
+2026-09-10, 03:14 binary against the 02:53 one. MainClaude's optional-`in` work
+landed between them, and this is the before and after on the same file and the
+same lines rather than a delta:
+
+    02:53   184  an `in` on something that is not an object
+            189  an `in` naming `length` on an `object` … declares optionally
+            196  an erased value where a concrete representation is wanted
+            218  `i`, which `UnknownArrayLike` does not declare
+
+    03:14   184  an `in` on something that is not an object
+            196  an erased value where a concrete representation is wanted
+            218  `i`, which `UnknownArrayLike` does not declare
+
+**189 is cleared, confirmed positively rather than by absence**: a probe holding
+`hasArrayLikeShape` and `isTypedArrayView` side by side publishes the first and
+refuses only the second.
+
+**`string_decoder` is unmoved** — 0 passed / 5 failed, five cascades still
+naming `Buffer.from`. Which is exactly the shape the standing rules warn about:
+a refusal cleared is not a fix delivered, and what replaced it has to be shown.
+Here nothing replaced it; three of the four heads were always there and the
+module needs all four.
+
+### The root of 184 is not an `in` at all
+
+A verbatim copy of `isTypedArrayView` in a standalone program reproduces the
+refusal **and reports a second one in the same file**:
+
+    a base `ArrayBufferView` of unrepresentable type (`ArrayBufferView`)
+
+`ArrayBuffer.isView(value)` narrows `value` to `ArrayBufferView`, and an `in` on
+a type the compiler cannot represent reads as "not an object". So 184 is
+`ArrayBufferView`'s representability wearing an `in` message — the third
+instance today of a diagnostic naming something other than its cause.
+
+### A rewrite I considered and did not make
+
+`isTypedArrayView`'s structural test could be nominal — `value instanceof
+Uint8Array || value instanceof Int8Array || …` — and **that form compiles
+cleanly**, checked rather than assumed. It would not be a weakening either: the
+set of typed-array classes is fixed and enumerable, and node's own `Buffer.from`
+uses nominal bindings rather than structural tests, so it is arguably the closer
+shape.
+
+**It would still gain nothing.** 196 and 218 are separate heads in the same
+cone, and `Buffer.from` needs all three cleared. Rewriting a hot central
+dispatch to clear one of three, with the risk that carries, is churn — so it is
+recorded here rather than done, with the measurement that says why.
+
+> 218 is worth one line for whoever takes it: `UnknownArrayLike` **does**
+> declare `readonly [index: number]: unknown`. The refusal says `i` is not
+> declared, which reads as the index signature not being consulted for a
+> non-literal index.
+
 ## The compiled lane, differentially: 0 behaviour divergences in three modules
 
 2026-09-10, on a post-`a80dcb8a` pin. `differential-ts.mjs` asks whether the
