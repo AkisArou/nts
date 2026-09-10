@@ -19630,6 +19630,63 @@ at runtime**, after `EventEmitter`'s `_preserveEventShape` and `fs.Dirent`'s
 `type`. A sweep for the pattern across `runtime/node` finds six such fields, and
 this commit takes four of them.
 
+## What `http` is actually gated on, and two roots I named that were not it
+
+Twice now this ledger has named *the* single root under `http.createServer`'s 274
+files, and twice it was a construct visible above the gate rather than the gate.
+
+    first    `createServer`, a declaration outside every walk   -- a false message
+    second   `Set<Object>` where a `Float` is wanted            -- the symptom of a
+                                                                  private-name collision
+    third    `IncomingMessage`, a class used as a value         -- the only NTS1001
+                                                                  in Server's constructor
+
+The third was mine and it was true as stated: it *was* the only NTS1001 in the
+constructor's line range on that pin. That is not the same claim as "this is what
+blocks the module", and I let the two read as one.
+
+**MainClaude's answer, record 0272:** walking the cascade down six links, it
+bottoms out at `module#init` being dropped **whole** rather than excised. One
+refused function reachable from module evaluation takes the entire initializer,
+every deferred global is then unwritten, and every reader of one cascades. Two
+modules of fourteen lose it -- `http` and `console` -- and the `events` build
+excises the same statement in the same file and survives, so the surrounding
+control flow decides it.
+
+Which is `a-private-name-is-per-class` one domain over: the reproducing condition
+is a program-wide fact, so a reduction that keeps the construct and drops the
+context does not reproduce, and a census that reads the construct cannot see it.
+
+**A root is what the diagnostics name. A gate is what a cleared root would
+actually free**, and only the second is worth a number. Three named roots, and the
+274 files did not move for any of them.
+
+## Plain `nts hir` does not run the cascade
+
+    http   hir              NTS1001=1889   NTS1003=0
+           hir --prepared   NTS1001=1889   NTS1003=893
+
+Three tools here invoked plain `hir`, and two were wrong about what they had.
+
+`sweep.mjs` parses `hir`'s own summary, which is counted before a refused callee
+has taken its callers: `http` read **2493 function(s), 1890 refused** where a
+backend receives **1196 and 2783**. "Lowered" is the number a reader uses to judge
+how close a module is, and it was inflated twofold.
+
+`blockers-check.mjs` had a class of guard that **could not fail**. A fixture
+asserting `nothing refused` was asserting "no *root* is refused", so a construct
+regressing into a cascade would have kept it green. `blockers/cascade-with-no-root`
+is that shape exactly -- plain `hir` says `nothing refused` where `--prepared`
+reports one `NTS1003` -- and it escaped only because it carries the
+`emit-c --napi ->` prefix and never took the `hir` path. Eight guards do take it.
+Both now pass `--prepared`, and the fixture suite is unchanged at 147 and 145, so
+nothing was relying on the hole.
+
+`blocker-reach.mjs` was **right and said something false**: its header claimed
+`hir` emits both codes. Its numbers are correct, because a root is the thing to fix
+and a root in `internal/errors.ts` is compiled into every module's cone, so its
+reach is counted without the cascade. The header says that now.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
