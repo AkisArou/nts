@@ -20956,6 +20956,48 @@ job and the question for each row is "what change would this notice".
 I have not audited all 250. That is stated rather than left implied: the number is
 a starting point for a review, not a result.
 
+## Four numbers in one day that measured a population nobody had named
+
+Not "instruments have bugs". Each of these was **accurate** about a quantity, and
+the quantity was not the one the number was published as. And in every case the
+thing that caught it was something other than the instrument that produced it.
+
+    console 0 of 24        counted module-level functions; the spec drives a
+                           constructed `Console`, so thorough coverage read as none
+    222 of 571             counted module-level functions only; with prototype
+                           methods the denominator is 1,087 and the answer 305
+    SocketAddress.parse    read as absent because the spec asked
+                           `=== undefined` of a shaped surface that did not expose
+                           a function the module had all along -- and which was
+                           wrong four ways
+    81 of 275              three modules, not twenty-two: the sweep died partway on
+                           `String()` refusing a null-prototype object, after
+                           printing enough output to look complete
+
+The catches were, in order: a `corpus-reach` run that disagreed with a spec I had
+read; a denominator that moved by 516 when I changed what was counted;
+`differential-ts` reporting a divergence on a function I had just called absent;
+and a crash three modules after the numbers I had already written down.
+
+**The common shape is that each measured something real.** `console` really does
+never call `console.log` — its spec constructs a `Console`. `SocketAddress.parse`
+really is absent *from the shaped surface*. `String()` really does refuse
+`os.plainConstants`, which is null-prototyped on purpose and a thing this profile
+gets right. None of the four was a wrong computation; all four were a right
+computation answering a question I had not asked precisely enough to notice the
+difference.
+
+The compiler lane reports the same shape from the other side -- `nts hir` counting
+lowered functions before the cascade takes them, and a calibration putting a
+3.49 ms operation at 1 µs. Six between the two sessions in a week is a property of
+the work rather than a run of bad luck.
+
+**What follows from it, and it is not "check your instruments".** It is that a
+number needs its population stated in the same breath, every time: not "222
+reached" but "222 of the module-level functions node publishes, instance methods
+not counted". Every one of the four would have been caught at the moment of
+writing by a sentence that named what was being counted, and none of them was.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
