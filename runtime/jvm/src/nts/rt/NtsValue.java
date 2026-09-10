@@ -101,6 +101,15 @@ public final class NtsValue {
                 return NtsRuntime.numberText(value.num);
             case STRING:
                 return (String) value.ref;
+            case SYMBOL:
+                // `SymbolDescriptiveString`, and **`NtsSymbol.describe` rather
+                // than a second copy of it**: `String(sym)` on a typed symbol
+                // already goes there through `nts_symbol_to_string`, and the
+                // erased arm answering `"Symbol(" + d + ")"` independently
+                // would be two spellings of one rule that could drift on
+                // `Symbol()` with no description -- which prints `Symbol()` and
+                // whose `.description` is `undefined`, not `""`.
+                return NtsSymbol.describe((NtsSymbol) value.ref);
             default:
                 throw new NtsRefusal("String() on tag " + value.tag
                     + ", which the lowering should have refused rather than reaching here");

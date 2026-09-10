@@ -831,7 +831,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # The one gap left is `a-structural-cast-that-is-a-prefix`, swept one at a
   # time by that lane rather than inferred from a total.
-  backend_examples 156 "through the JVM backend" ); }
+  backend_examples 158 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \
