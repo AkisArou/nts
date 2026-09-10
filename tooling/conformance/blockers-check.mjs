@@ -134,9 +134,23 @@ for (const name of names) {
   const extraFlags = (/^emit-c\b([^>]*)->/.exec(expected)?.[1] ?? "")
     .split(/\s+/)
     .filter((f) => f.startsWith("--") && f !== "--napi");
+  // `--prepared`, because plain `hir` does not run the cascade: it emits
+  // `NTS1001` roots and **no `NTS1003` at all**.
+  //
+  // That made one class of guard unable to fail. `blockers/cascade-with-no-root`
+  // is exactly the shape -- a function refused only because its callee was --
+  // and plain `hir` answers:
+  //
+  //     hir              nothing refused, NTS1001=0, NTS1003=0
+  //     hir --prepared   NTS1001=0, NTS1003=1
+  //
+  // So any fixture asserting `nothing refused` was asserting "no *root* is
+  // refused", and a construct that regressed into a cascade would have kept the
+  // guard green. `cascade-with-no-root` itself escaped only because it carries
+  // the `emit-c --napi ->` prefix and never took this path.
   const output = viaEmit
     ? run(["emit-c", tsconfig, "--out", workspace("fixture-"), "--napi", ...extraFlags])
-    : run(["hir", tsconfig]);
+    : run(["hir", "--prepared", tsconfig]);
 
   // Two ways for a fixture to say "this works now". `nothing refused` is the
   // lowering's, and `publishes X` is the wrapper's -- `emit-c` prints no such

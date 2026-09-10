@@ -334,14 +334,26 @@ function runAddon(module, artifact, mutate = false) {
 }
 
 /**
- * `nts hir` for one module: how many functions lowered, how many constructs
- * refused. Compiler failures propagate: reporting them as an absent optional
- * axis would turn a backend regression into an apparently successful sweep.
+ * `nts hir --prepared` for one module: how many functions lowered, how many
+ * constructs refused. Compiler failures propagate: reporting them as an absent
+ * optional axis would turn a backend regression into an apparently successful
+ * sweep.
+ *
+ * **`--prepared`, because plain `hir` does not run the cascade.** It emits
+ * `NTS1001` roots and no `NTS1003` at all, and its totals are counted before a
+ * refused callee has taken its callers with it. On `http`:
+ *
+ *     plain        2493 function(s), 1890 construct(s) refused
+ *     --prepared   1196 function(s), 2783 construct(s) refused
+ *
+ * So this reported **twice** as many functions lowered as a backend actually
+ * receives, which is the number a reader uses to judge how close a module is.
+ * `--prepared` is what a backend sees, and that is the question.
  */
 function compiles(module) {
   const out = execFileSync(
     compiler,
-    ["hir", join(PROFILE, module, "tsconfig.json")],
+    ["hir", "--prepared", join(PROFILE, module, "tsconfig.json")],
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,

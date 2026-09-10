@@ -7,9 +7,21 @@
 // `hir`, collect the refusals, normalise each to its shape, and count how many
 // distinct modules each shape stops.
 //
-// **It measures lowering refusals only, unless you ask for more.** `hir` emits
-// `NTS1001` and `NTS1003`; the backend codes -- `NTS2006`, `NTS2008`, `NTS2009`
-// -- come from `emit-c` and this tool never saw one. That was a hole rather than
+// **It measures lowering *roots* only, unless you ask for more.** Plain `hir`
+// emits `NTS1001` and **no `NTS1003` at all** -- the cascade needs `--prepared`,
+// and on `http` that is 0 against 893. This header used to say `hir` emits both,
+// which was wrong; the numbers were right, because a root is the thing to fix and
+// a cascade is its consequence, but the sentence claimed a coverage the tool did
+// not have.
+//
+// Roots are the correct unit here for a reason worth stating: a root in
+// `internal/errors.ts` is compiled into every module's cone, so it appears in
+// every module's `hir` output and its reach is counted properly without the
+// cascade. Adding `--prepared` would fill the table with derived shapes that
+// clear themselves when their root does.
+//
+// The backend codes -- `NTS2006`, `NTS2008`, `NTS2009` -- come from `emit-c` and
+// this tool never saw one. That was a hole rather than
 // a decision: the table read as a complete picture of what blocks the compiled
 // axis while saying nothing about 253 `NTS2006` in the same corpus, and it was
 // found only because another lane asked what they were. Pass `--backend` to run
