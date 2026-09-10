@@ -19,7 +19,7 @@
 // response begins where the reader is still expecting bytes.
 
 import { Buffer } from "../../buffer/src/main.ts";
-import { captureRejectionSymbol, EventEmitter } from "../../events/src/main.ts";
+import { captureRejectionSymbol } from "../../events/src/main.ts";
 import { Stream } from "../../stream/src/legacy.ts";
 import { Socket } from "../../net/src/main.ts";
 import { getDefaultHighWaterMark } from "../../stream/src/state.ts";
