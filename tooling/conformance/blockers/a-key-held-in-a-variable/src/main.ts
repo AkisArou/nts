@@ -1,4 +1,7 @@
-// expect: `key`, which `Options` does not declare
+// expect: indexing `Options`, which is not an array
+//
+// **The single-literal half was fixed 2026-09-10; the union half remains, and
+// the message is true now.** See the corrected table below.
 //
 // A computed member read whose key is a **variable**, where the interface
 // declares that key. The message says the type does not declare it, and the
@@ -22,19 +25,38 @@
 // `HighWaterMarkOptions` declares both of those keys as optional numbers. There
 // is nothing undeclared anywhere in it.
 //
-// # Three controls, and the second is the surprise
+// # Three controls, and the second was the surprise
 //
-//     options[key]  key: "a" | "b"     refuses
-//     options[key]  key: "a"           refuses    <- a single literal, still refuses
+//     options[key]  key: "a" | "b"     refuses     <- all that is left
+//     options[key]  key: "a"           compiles    <- fixed 2026-09-10
 //     options["a"]  written in source  compiles
 //
-// **It is not the union.** A key whose type is one string literal that the
-// interface declares refuses exactly as a two-member union does. What compiles
-// is the literal written at the site.
+// The second row said the condition was "held in a variable at all", and it was
+// not: it was that the name came from the node's **text** rather than its
+// **type**. `literal_name` answers for any node carrying text and an identifier
+// carries its own, so `options[key]` looked for a member called `key` — and
+// said so, of a type that declares nothing of the sort. A reader following that
+// message went looking for a missing member and found the member.
 //
-// So the condition is that the key is *held in a variable at all*, and the
-// message names the variable as though it were the property. A reader following
-// the message goes looking for a missing member and finds the member.
+// `indexed_member_name` asks the checker instead: the type of `key` is
+// `Literal(String("readableHighWaterMark"))`, which is one name and the right
+// one. Only in an index position — a *shorthand* property `{ a }` is an
+// identifier whose text **is** the name while its type is whatever `a` holds,
+// so consulting the type there would be the same mistake pointing the other
+// way. `examples/a-computed-index-is-not-a-member-name` is the guard.
+//
+// # What is left is genuinely two members
+//
+// `key: "a" | "b"` names two, and the compiler would have to branch on which
+// arrived. That is a real gap and the message says so now — "indexing
+// `Options`, which is not an array" — rather than naming a variable.
+//
+// `getHighWaterMark` lowers, and so do `ReadableState#constructor` and
+// `Readable#constructor`. **`Readable` still does not publish**, and the reason
+// moved: it is now `EventEmitter#emit`, which the backend refuses because
+// `callback.call(this, ...args)` rebinds a closure's receiver. That gates
+// `http.createServer`'s 274 files too, so the two largest concentrations in the
+// tree are one construct apart.
 //
 // # It is not `annotated-const-read`
 //

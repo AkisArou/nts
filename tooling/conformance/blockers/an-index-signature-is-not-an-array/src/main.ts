@@ -63,27 +63,29 @@ interface UnknownArrayLike {
   readonly [index: number]: unknown;
 }
 
-/** The reduction: a computed index into an index signature. */
-export function subject(n: number): number {
-  const source = { length: 3, 0: 1, 1: 2, 2: 3 } as UnknownArrayLike;
-  let total = 0;
-  for (let i = 0; i < 3; i++) {
+/** The reduction: a computed index into an index signature, as a parameter. */
+function total(source: UnknownArrayLike, count: number): number {
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
     const held = source[i];
-    if (typeof held === "number") total += held;
+    if (typeof held === "number") sum += held;
   }
-  return total + n * 0;
+  return sum;
+}
+
+export function subject(n: number): number {
+  return total([1, 2, 3], 3) + n * 0;
 }
 
 /** Control: the `length` member of the same interface reads fine. */
-export function viaLength(n: number): number {
-  const source = { length: 3, 0: 1 } as UnknownArrayLike;
-  return typeof source.length === "number" ? source.length + n * 0 : 0;
+export function viaLength(source: UnknownArrayLike): number {
+  return typeof source.length === "number" ? source.length : 0;
 }
 
 /** Control: the same loop over a real array. */
 export function viaRealArray(n: number): number {
   const source = [1, 2, 3];
-  let total = 0;
-  for (let i = 0; i < source.length; i++) total += source[i]!;
-  return total + n * 0;
+  let sum = 0;
+  for (let i = 0; i < source.length; i++) sum += source[i]!;
+  return sum + n * 0;
 }

@@ -20410,6 +20410,40 @@ with a one-line stack instead of nine, which needs an error path that skips
 capture -- a real thing, and not this change. `_connectionListener` is compat
 surface for an internal, declined on the same ground as `net._normalizeArgs`.
 
+## `events`: receiver identity and the meta-events, 24,120 comparisons and no divergence
+
+The `events` corpus was a state-machine fuzz over an emitter -- ops in, log out --
+and it is good at sequencing. It could not see **how a listener is called**, only
+that it was: every listener pushed a tag and nothing else.
+
+Three things the goal names explicitly sat outside it. Node calls a listener with
+the emitter as `this`, including a `once` listener *after* it has been removed; it
+forwards `emit`'s arguments exactly, `undefined` included; and it emits
+`newListener` **before** the listener is added, so a handler asking
+`listenerCount` there sees the old count, with `removeListener` after. All three
+can be wrong while every ordering test passes.
+
+    16,080 comparisons -> 24,120, 0 divergence(s)
+
+Two details that decide whether the specs mean anything. The listeners are plain
+`function`s, not arrows -- an arrow has no `this` of its own and the check would be
+vacuous. And the meta-event's listener argument is reported as `typeof`, not
+stringified: the two lanes hold different function objects and printing them
+compares source text, which would diverge on every input and say nothing.
+
+### Controlled against a wrong emitter rather than asserted
+
+A spec that has never failed is a claim. Both were run against node's own
+`EventEmitter` subclassed to call listeners with `undefined` as the receiver:
+
+    wrong receiver        30 of 40 spec-runs noticed
+    node against itself    0 spurious differences
+
+The 10 that did not notice are programs containing no `emit`, where no listener
+runs -- so the miss is the program's and not the spec's. The second line is the
+other half: a spec that is not deterministic would report divergences against
+*itself* and every number above would be noise.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct

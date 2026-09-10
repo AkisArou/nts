@@ -719,6 +719,89 @@ export const CORPORA = {
         },
       },
       {
+        // **Receiver identity and argument forwarding**, which the program spec
+        // above cannot see: it logs a tag and nothing about how the listener was
+        // called. Node calls a listener with the emitter as `this` -- including a
+        // `once` listener, after it has been removed -- and forwards `emit`'s
+        // arguments exactly. All three can be subtly wrong while every ordering
+        // test passes.
+        //
+        // A plain `function`, not an arrow, because an arrow has no `this` of its
+        // own and would make the check vacuous.
+        label: "emitter-receiver",
+        call: (m, program) => {
+          const emitter = new m.EventEmitter();
+          const log = [];
+          const made = [];
+          const listener = (tag) => {
+            const fn = function (...args) {
+              log.push(`${tag}:this=${this === emitter}:argc=${args.length}:${args.join("~")}`);
+            };
+            made.push(fn);
+            return fn;
+          };
+          let n = 0;
+          for (const op of program) {
+            n++;
+            try {
+              if (op === "o") emitter.on("x", listener(`on${n}`));
+              else if (op === "n") emitter.once("x", listener(`once${n}`));
+              else if (op === "p") emitter.prependListener("x", listener(`pre${n}`));
+              else if (op === "e") log.push(`emit=${emitter.emit("x", n, "s", undefined)}`);
+              else if (op === "r") {
+                if (made.length > 0) emitter.removeListener("x", made[0]);
+              } else if (op === "c") log.push(`count=${emitter.listenerCount("x")}`);
+              else if (op === "a") emitter.removeAllListeners("x");
+              else if (op === "b") log.push(`max=${emitter.getMaxListeners()}`);
+            } catch (error) {
+              log.push(`threw=${error.name}`);
+            }
+          }
+          return log.join(",");
+        },
+      },
+      {
+        // The meta-events, which node emits around every registration and removal:
+        // `newListener` **before** the listener is added, so a handler asking
+        // `listenerCount` sees the old count, and `removeListener` after. Their
+        // order relative to each other and to the operation is the contract, and
+        // nothing else here touches them.
+        //
+        // The listener argument is reported as `typeof` rather than stringified:
+        // the two lanes hold different function objects, and printing them would
+        // compare source text -- a non-goal, and it would diverge on every input.
+        label: "emitter-meta",
+        call: (m, program) => {
+          const emitter = new m.EventEmitter();
+          const log = [];
+          const made = [];
+          emitter.on("newListener", function (name, fn) {
+            log.push(`new:${String(name)}:${typeof fn}:this=${this === emitter}:count=${emitter.listenerCount("x")}`);
+          });
+          emitter.on("removeListener", function (name, fn) {
+            log.push(`rm:${String(name)}:${typeof fn}:this=${this === emitter}:count=${emitter.listenerCount("x")}`);
+          });
+          let n = 0;
+          for (const op of program) {
+            n++;
+            const fn = () => log.push(`fired${n}`);
+            try {
+              if (op === "o") { made.push(fn); emitter.on("x", fn); }
+              else if (op === "n") { made.push(fn); emitter.once("x", fn); }
+              else if (op === "p") { made.push(fn); emitter.prependListener("x", fn); }
+              else if (op === "e") log.push(`emit=${emitter.emit("x")}`);
+              else if (op === "r") { if (made.length > 0) emitter.removeListener("x", made.shift()); }
+              else if (op === "a") emitter.removeAllListeners("x");
+              else if (op === "c") log.push(`count=${emitter.listenerCount("x")}`);
+              else if (op === "b") log.push(`names=${emitter.eventNames().map(String).join("+")}`);
+            } catch (error) {
+              log.push(`threw=${error.name}`);
+            }
+          }
+          return log.join(",");
+        },
+      },
+      {
         label: "remove-during-emit",
         call: (m, program) => {
           const emitter = new m.EventEmitter();
