@@ -21042,6 +21042,40 @@ how a second incident starts. The patch waited on the lock and its holder's pid
 and landed at 20:06 when it freed, which is the only reason this entry is about
 one collision and not two.
 
+## A corpus spec that crashed the harness, and why it is reverted rather than fixed
+
+`stream` is 25 of 108 reached, and the unreached list is full of things its
+program spec looks built for: `unshift`, `pause`, `resume`, `isPaused`,
+`setEncoding`. All synchronous, all state-observable, and `setEncoding` in
+particular is a real divergence point -- it changes what `read()` **returns**, and
+applies to what is already buffered rather than only to what arrives after, so an
+implementation that decodes on push instead of on read agrees on every program
+that sets the encoding first and disagrees on one that sets it in the middle.
+
+Adding ops for them took the differential from running in seconds to **dumping
+core**. Not a hang: an out-of-memory abort inside V8.
+
+Reverted rather than debugged. A corpus must not be able to crash the harness that
+runs it, and a spec that can is worse than a gap -- a gap reports itself.
+
+**`stream`'s corpus header already records the same lesson in a different form.**
+A write after `end()` emits `'error'` asynchronously, an unhandled `'error'` on a
+stream takes the process down, and the first run of that corpus died that way
+mid-sweep; the handlers that swallow it are there for that reason. This is the
+second shape of it, and the common part is that **the danger is not the assertion,
+it is the state the spec leaves the object in**.
+
+What a safe version would need, written down because the coverage is worth having
+and someone will try again:
+
+- never leave the readable **flowing** when the program ends -- `resume()` refs
+  the stream and the event loop never empties;
+- bound `unshift`, which can put data back faster than the program reads it;
+- destroy both streams before returning, so nothing outlives the call.
+
+Until then `stream` stays at 25 of 108, and the reason is here rather than in a
+silence.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
