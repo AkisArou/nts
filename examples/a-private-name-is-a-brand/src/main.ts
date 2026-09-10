@@ -17,6 +17,23 @@ class Holder {
   static brands(value: unknown): boolean {
     return value !== null && typeof value === "object" && #list in value;
   }
+
+  /**
+   * The same check written against `this`, which is how `URLSearchParams`'s
+   * inspect method and its iterator's `next` write it.
+   *
+   * Inside a class body `this` is a **type parameter**, not the class, so this
+   * spelling asked whether a parameter is an object and refused with "an `in`
+   * on something that is not an object, which JavaScript throws for" -- a
+   * sentence about a receiver that is provably an object, said of a type
+   * variable. Resolving the parameter to its constraint is what the call path
+   * already does for `this`-typed generics.
+   *
+   * One idiom, two spellings, and only the spelling decided whether it lowered.
+   */
+  brandsThis(): boolean {
+    return this !== null && typeof this === "object" && #list in this;
+  }
 }
 
 /**
@@ -76,4 +93,21 @@ export function subclassIsHolder(n: number): boolean {
 
 export function unrelatedIsNot(n: number): boolean {
   return Holder.brands(new Unrelated()) || n < 0;
+}
+
+/**
+ * The `this` spelling, on an instance that has the field.
+ *
+ * The *false* direction is not reachable from TypeScript without detaching the
+ * method -- `f.call(decoy)` -- and `Function.prototype.call` with an explicit
+ * receiver is refused and filed. So the negative is carried by the parameter
+ * form above, which tests the same `declares` path with the same key.
+ */
+export function thisFormOnItsOwnInstance(n: number): boolean {
+  return new Holder(n).brandsThis();
+}
+
+/** And through a subclass, where `this` is the derived class. */
+export function thisFormOnASubclass(n: number): boolean {
+  return new Derived(n).brandsThis();
 }

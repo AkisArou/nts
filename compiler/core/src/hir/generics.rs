@@ -366,7 +366,7 @@ fn unify(snapshot: &SemanticSnapshot, generic: TypeId, actual: TypeId, into: &mu
 /// Bounded rather than followed to a fixed point. A constraint that is itself a
 /// parameter is a genuinely unbound one -- `<T extends U, U>` -- and belongs in
 /// the refusal the caller's guard already gives it.
-fn concrete(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
+pub(super) fn concrete(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
     let Some(TypeKind::TypeParameter {
         constraint: Some(constraint),
         ..

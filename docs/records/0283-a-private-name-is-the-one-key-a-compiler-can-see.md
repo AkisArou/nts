@@ -136,6 +136,43 @@ and those are the *documented* predicate rather than an incidental use.
 **A profile whose `instanceof` cannot separate two declared classes cannot
 implement them.**
 
+## One idiom, two spellings, and only the spelling decided
+
+Three of the six sites are `#list in this` rather than `#list in value`, and
+they kept refusing after the fix — with a different message:
+
+    NTS1001 an `in` on something that is not an object, which JavaScript throws for
+
+Said of `this`, inside a class, three lines under `typeof this !== "object"`.
+
+**Inside a class body `this` is a type parameter, not the class.** `declares`
+asks for `TypeKind::Object` and a parameter is not one, so it answered
+`NotAnObject` — a sentence about a receiver that is provably an object, said of
+a type variable. `generics::concrete` already resolves a `this` parameter to its
+constraint for the call path, and is bounded the same way: a constraint that is
+itself a parameter stays unresolved and keeps refusing.
+
+All three cleared, and `searchparams.ts` went from 10 root refusals to 7 — one
+of them because `next()` got *further*, to `{ value: undefined, done: true }` at
+line 660. Six sites, one idiom, two spellings, and only the spelling decided
+whether it lowered.
+
+## The sabotage, which landed on the other guard this time
+
+Removing the resolution and rebuilding:
+
+    differential   7 function(s) -> 5, "agreed on every case"
+    ledger         0 -> 1
+
+**The differential went green while the defect was live**, because the sabotage
+makes a function *refuse* rather than answer wrongly, and `nts check` compares
+the survivors. The `example-refusals` ledger is what fails.
+
+That is [[0281]]'s pair, third instance, and the first one predicted before it
+was run rather than discovered afterwards. Which guard catches a regression is a
+property of the *form* the regression takes, not of the invariant — and both
+forms are reachable for the same rule.
+
 ## The thing to carry
 
 A fixture that fails for a reason other than the one it was written for is the

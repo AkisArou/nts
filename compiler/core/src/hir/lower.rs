@@ -14465,7 +14465,26 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// Whether a type declares a property under this name.
+    /// Whether a type declares a member, for `in`.
+    ///
+    /// **The polymorphic `this` type is resolved to its constraint first.**
+    /// Inside a class body `this` is a *type parameter*, not the class -- so
+    /// `#list in this` asked whether a parameter is an object, got
+    /// `NotAnObject`, and refused with "an `in` on something that is not an
+    /// object, which JavaScript throws for". A sentence about a receiver that
+    /// is provably an object, said of a type variable.
+    ///
+    /// Three sites in `runtime/node/url/src/searchparams.ts` are written that
+    /// way -- `URLSearchParams`'s inspect method and the iterator's `next` --
+    /// against three more that use a parameter and were already answerable.
+    /// One idiom, two spellings, and only the spelling decided whether it
+    /// lowered.
+    ///
+    /// [`generics::concrete`] is the same substitution the call path already
+    /// makes and is bounded the same way: a constraint that is itself a
+    /// parameter stays unresolved and keeps refusing.
     fn declares(&self, ty: TypeId, key: &str) -> Declares {
+        let ty = super::generics::concrete(self.snapshot, ty);
         let Some(record) = self.snapshot.types.get(ty.0 as usize) else {
             return Declares::NotAnObject;
         };
