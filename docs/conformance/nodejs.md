@@ -18814,7 +18814,7 @@ there, `duplex instanceof Writable` really was false.
 
 ### The lane
 
-**1,870 passed, 0 failed across 22 modules**, from 1,859. The eleven added are
+**1,871 passed, 0 failed across 22 modules**, from 1,859. The twelve added are
 tests for defects these seams found, each controlled against the code it replaced.
 
 One caveat that applies to every lane number in this tree, including this one:
@@ -18931,6 +18931,65 @@ test sits close enough to the ceiling that machine state decides it, and the
 lane's total is 1,870 about six runs in seven and 1,869 the other one. The fix is
 a cheaper descent and not a shorter call chain, which is a bigger change than this
 was worth tonight.
+
+## What a class is a kind of: 315 chains differenced against node
+
+A sixth seam, and the one that found the largest behavioural gap of the evening.
+The four surface instruments ask about a name's value, identity, arity and
+descriptor; the fifth asks about absence. None asks what a class **is a kind of**,
+which is a contract node's tests use directly and which every other check is blind
+to, because the methods can all be present and all answer correctly.
+
+`prototype-chain-diff.mjs` walks `Object.getPrototypeOf` from each published
+constructor and from its `prototype`, and compares the two sequences of names --
+names, not identities, since two realms cannot share a class object.
+
+**21 modules, 315 classes.**
+
+### `res.pipe` did not exist
+
+    node  OutgoingMessage -> Stream -> EventEmitter
+    ours  OutgoingMessage -> EventEmitter
+
+Node's `http.OutgoingMessage` extends the legacy `Stream`. Ours extended
+`EventEmitter`, so `res instanceof Stream` was false and `res.pipe` was
+**undefined** on every `ServerResponse` and every `ClientRequest`. `http` runs 405
+of node's files with nothing failing and not one of them pipes a response.
+
+**Fixing the base alone was a wrong answer, and it was measured before it shipped.**
+With `Stream` as the base, ours inherited a working `pipe`, which starts forwarding
+`data` events off a write-only object. Node overrides it, and *emits* rather than
+throws:
+
+    OutgoingMessage.prototype.pipe = function pipe() {
+      this.emit('error', new ERR_STREAM_CANNOT_PIPE());
+    };
+
+Both halves are asserted now. `http` 405 to 406, chain differences 8 to 3.
+
+### The three that are left are the shim, and are not the module
+
+`shape.mjs` wraps each stream and http constructor in a callable facade whose
+prototype is the real class, so our chains legitimately begin one link earlier --
+`Agent`, `ClientRequest` and `Server` in `http`, and the same shape in `fs`, `net`
+and `stream`. It is observable through `Object.getPrototypeOf`, so it is reported
+rather than special-cased.
+
+### Three more differences that are node's deprecation shims
+
+`buffer.SlowBuffer` reads as a plain function here against node's
+`SlowBuffer -> Uint8Array -> TypedArray`; `fs.Stats` is missing node's `StatsBase`;
+`assert.CallTracker` has no chain at all. All three are behaviourally identical:
+
+    SlowBuffer(4) instanceof Uint8Array   node true   ours true
+    statSync() instanceof fs.Stats        node true   ours true
+    new CallTracker()                     node ok     ours ok
+
+The chains differ because node exports each of those through a **deprecation
+wrapper**, which is also why `SlowBuffer.name` and `CallTracker.name` are
+`"deprecated"` on node and their own names here. The extra link is node's shim,
+not our absence -- the same category as `zlib.deflate` reporting
+`"asyncBufferWrapper"`.
 
 ## Conventions
 
