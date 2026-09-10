@@ -8559,6 +8559,22 @@ impl<'a> FuncBuilder<'a> {
     /// How a call's `at`th parameter is represented, from the resolved
     /// signature rather than from the argument.
     fn parameter_representation(&self, call: NodeId, at: usize) -> Option<HirType> {
+        self.represent(self.parameter_type_id(call, at)?)
+    }
+
+    /// The checker's type for a call's `at`th parameter.
+    ///
+    /// Split out from [`Self::parameter_representation`] because the rest path
+    /// needs the type itself and not its representation: a union of tuples has
+    /// no representation as written, and [`Self::tuple_union_as_array`] is what
+    /// turns it into one. Reading it through `represent` first would have
+    /// thrown that away before the question could be asked.
+    ///
+    /// The fallback stays on the rest path rather than living here. A *non*-rest
+    /// parameter declared `[] | [string]` is a genuine union-of-tuples value and
+    /// not an array of anything, so converting it would answer a question nobody
+    /// asked -- and would do it silently, which is worse than the refusal.
+    fn parameter_type_id(&self, call: NodeId, at: usize) -> Option<TypeId> {
         let target = self.snapshot.call_targets.get(&call)?;
         // **The implementation's parameter, where the checker resolved the call
         // to an overload signature.**
@@ -8586,11 +8602,11 @@ impl<'a> FuncBuilder<'a> {
                     .nth(at)
                 && let Some(ty) = self.snapshot.node_types.get(&parameter)
             {
-                return self.represent(*ty);
+                return Some(*ty);
             }
         }
         let signature = self.snapshot.signatures.get(target.signature.0 as usize)?;
-        self.represent(signature.parameters.get(at)?.ty)
+        Some(signature.parameters.get(at)?.ty)
     }
 
     /// `delete o.x`, which TypeScript permits only where `x` is optional.
@@ -9792,8 +9808,30 @@ impl<'a> FuncBuilder<'a> {
         at: usize,
         elements: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        // The declaration and the call have to agree, and they ask two different
+        // questions to get there. `lower_param` decided this parameter is an
+        // array of `element`; if the call did not apply the same rule it would
+        // gather nothing and the callee would read a slot that was never
+        // written. The first cut fixed only the declaration, and the call site
+        // refused with a *different* message -- "a rest parameter that is not
+        // an array" -- which is how the split showed up at all.
+        //
+        // **The tuple union is asked about first, and that order is the fix.**
+        // Writing it as `represent(ty).or_else(...)` looks equivalent and is
+        // not: `represent` does not answer `None` for these unions, it answers
+        // `Erased`. A union of tuples has a perfectly good boxed representation,
+        // so the fallback was never reached and the call went on refusing while
+        // the declaration had already been fixed. Asking the narrower question
+        // first is safe because a genuine array type is not a union, so
+        // `tuple_union_as_array` declines it and `represent` answers exactly as
+        // before.
+        //
+        // Found by making the refusal print what it had rather than by reading
+        // the code again: `ty=Erased kind=Union([...])` said in one line what
+        // two readings of `representation_within` had not.
         let ty = self
-            .parameter_representation(call, at)
+            .parameter_type_id(call, at)
+            .and_then(|ty| self.tuple_union_as_array(ty).or_else(|| self.represent(ty)))
             .ok_or_else(|| self.unsupported(call, "a rest parameter of unrepresentable type"))?;
         let HirType::Managed(ManagedType::Array(element)) = ty.clone() else {
             return Err(self.unsupported(call, "a rest parameter that is not an array"));
@@ -10197,6 +10235,89 @@ impl<'a> FuncBuilder<'a> {
         .any(|flag| modifiers.contains(flag))
     }
 
+    /// The element type of a rest parameter written as a union of tuples.
+    ///
+    /// ```text
+    /// constructor(...given: [] | [input: string, base?: string | URL])
+    /// ```
+    ///
+    /// That is how this tree writes "and tell me whether I was called with no
+    /// arguments at all". The union is what makes `given.length === 0` a type
+    /// the checker can narrow, so the `ERR_MISSING_ARGS` branch is reachable
+    /// without consulting `arguments`.
+    ///
+    /// `type_of` answers `None` for it -- a union of tuples is not an array --
+    /// and the rest check read that as "the element type has no
+    /// representation". **The message named the wrong half.** `[] | [number]`
+    /// has element type `number` in both arms, nothing heterogeneous about it
+    /// and nothing unrepresentable, and it refused exactly as
+    /// `[] | [string, URL]` did. What was being asked was whether the
+    /// *parameter's* type is an array, and a union never is, so the arms were
+    /// never looked at.
+    ///
+    /// So look at them. Every arm must be a tuple or an array, and every
+    /// position across every arm must represent the same way; then the rest is
+    /// an array of that, which is what a rest parameter already is. The empty
+    /// tuple contributes no positions, which is what makes `[] | [T]` work --
+    /// it is `T[]` that happens to say "or nothing" in a way the checker can
+    /// narrow on.
+    ///
+    /// **The count stays exact, which is the part that matters.** A rest
+    /// parameter is gathered at the call site into a real array, so
+    /// `given.length` is the number of arguments actually supplied -- not a
+    /// count of leading non-`undefined` values, which is what treating the
+    /// tuple as optional parameters would have given. `URLSearchParams#set("a")`
+    /// throws where `set("a", undefined)` sets the string `"undefined"`, and
+    /// six sites in `searchparams.ts` compare `given.length < 2` to tell those
+    /// apart. `url.ts` only ever compares `=== 0`, so the shortcut would have
+    /// looked correct in the module that motivated the work and been wrong six
+    /// lines away.
+    ///
+    /// Returns `None` for a union whose positions disagree -- `URL`'s own
+    /// `[] | [input: string, base?: string | URL]` is one, holding `string` at
+    /// one position and `string | URL | undefined` at the other. There is no
+    /// representation for that element and the refusal stands, now for the
+    /// reason it names. `blockers/a-rest-parameter-that-is-a-union-of-tuples`
+    /// carries both halves and the controls that separate them.
+    fn rest_element_of_a_tuple_union(&self, name_node: NodeId) -> Option<HirType> {
+        self.element_of_a_tuple_union(*self.snapshot.node_types.get(&name_node)?)
+    }
+
+    /// [`Self::rest_element_of_a_tuple_union`] as an array, which is what both
+    /// the declaration and the call want.
+    fn tuple_union_as_array(&self, declared: TypeId) -> Option<HirType> {
+        Some(HirType::Managed(ManagedType::Array(Box::new(
+            self.element_of_a_tuple_union(declared)?,
+        ))))
+    }
+
+    /// The one element type every position of every arm represents as, or
+    /// nothing.
+    fn element_of_a_tuple_union(&self, declared: TypeId) -> Option<HirType> {
+        let record = self.snapshot.types.get(declared.0 as usize)?;
+        let TypeKind::Union(arms) = &record.kind else {
+            return None;
+        };
+        let mut element: Option<HirType> = None;
+        for arm in arms {
+            let arm = self.snapshot.types.get(arm.0 as usize)?;
+            let positions = match &arm.kind {
+                TypeKind::Tuple(positions) => positions.clone(),
+                TypeKind::Array(of) => vec![*of],
+                _ => return None,
+            };
+            for position in positions {
+                let represented = self.represent(position)?;
+                match &element {
+                    None => element = Some(represented),
+                    Some(seen) if *seen == represented => {}
+                    Some(_) => return None,
+                }
+            }
+        }
+        element
+    }
+
     fn lower_param(&mut self, id: NodeId, index: u32) -> Result<Param, Diagnostic> {
         let children = self.children(id);
         // A name, or a pattern standing where one would be. `function f({ x }:
@@ -10235,19 +10356,29 @@ impl<'a> FuncBuilder<'a> {
         // What is still refused is a rest whose element has no representation:
         // `...args: A` where `A extends unknown[]` has none until an
         // instantiation supplies one.
-        if children
+        //
+        // A *union of tuples* is the other shape that arrives here, and it is
+        // not the same refusal wearing a different type. See
+        // [`Self::rest_element_of_a_tuple_union`].
+        let is_rest = children
             .iter()
-            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
-            && !matches!(
-                self.type_of(name_node),
-                Some(HirType::Managed(ManagedType::Array(_)))
-            )
-        {
-            return Err(self.unsupported(
-                id,
-                "a rest parameter whose element type has no representation",
-            ));
-        }
+            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
+        let rest_array = if is_rest {
+            match self.type_of(name_node) {
+                Some(array @ HirType::Managed(ManagedType::Array(_))) => Some(array),
+                _ => match self.rest_element_of_a_tuple_union(name_node) {
+                    Some(element) => Some(HirType::Managed(ManagedType::Array(Box::new(element)))),
+                    None => {
+                        return Err(self.unsupported(
+                            id,
+                            "a rest parameter whose element type has no representation",
+                        ));
+                    }
+                },
+            }
+        } else {
+            None
+        };
         // A default is supplied by the calls that omit it, which is where
         // JavaScript evaluates it. Reading an *earlier parameter* used to be
         // refused here, on the grounds that the call site cannot reach the
@@ -10263,9 +10394,14 @@ impl<'a> FuncBuilder<'a> {
             .text
             .clone()
             .unwrap_or_else(|| format!("arg{index}"));
-        let ty = self
-            .type_of(name_node)
-            .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?;
+        // The rest case has already decided, and for a tuple union it decided
+        // something `type_of` cannot say.
+        let ty = match rest_array {
+            Some(array) => array,
+            None => self
+                .type_of(name_node)
+                .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?,
+        };
         self.materialize(name_node, &ty)?;
 
         let origin = self.origin(name_node);
