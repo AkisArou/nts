@@ -876,6 +876,36 @@ pub const MODULE_INIT: &str = "module#init";
 /// `return`, `break` and `continue` are absent because they are illegal at
 /// module scope, and `VariableStatement` because a module-scope declaration is
 /// a global with a static initializer, which needs no code to run.
+/// Whether a class declaration has a `static` field to initialize at evaluation.
+///
+/// **Asked of the node rather than the kind**, and only classes that answer yes
+/// join the ordered statement list. A `static` field is storage written at class
+/// definition time, which is a point among the other statements and observable
+/// from any of them -- so a class that has one belongs there.
+///
+/// A class that has none does not, and the difference is not cosmetic: putting
+/// every class in the list gives a file that had no module evaluation an empty
+/// `module#init`, which is a new exported function in every such program.
+/// `examples/delete` declares two classes, no statics, and went from eight
+/// exports to nine -- caught by a test asserting the count exactly, which is the
+/// kind of assertion that earns its keep here.
+///
+/// A field with no initializer is storage at its zero and needs no statement,
+/// the same rule `collect_module_scope` follows for `let x: number;`.
+fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
+    if probe.kind_of(id) != Some(syntax::CLASS_DECLARATION) {
+        return false;
+    }
+    probe.children(id).into_iter().any(|member| {
+        probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
+            && probe
+                .node(member)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+            && matches!(probe.child_slots::<5>(member), Some([_, _, _, _, Some(_)]))
+    })
+}
+
 fn is_module_statement(kind: u16) -> bool {
     matches!(
         kind,
@@ -1813,12 +1843,7 @@ fn collect_module_scope(
         // is nowhere to put one -- so this is the representation talking rather
         // than a lowering nobody wrote yet.
         if initializer.is_none() && erased {
-            scope.unsupported.insert(
-                symbol.0,
-                "a module-scope variable with no initializer, whose type has no \
-                 representation for the `undefined` it starts as"
-                    .to_owned(),
-            );
+            scope.unsupported.insert(symbol.0, no_initializer_for_an_erased_slot());
             continue;
         }
 
@@ -1916,10 +1941,142 @@ fn collect_module_scope(
             scope.deferred.insert(symbol.0, initializer);
         }
     }
+    collect_static_fields(snapshot, &mut probe, &mut scope);
     // What materializing the globals' types produced. Nothing else collects
     // from this walk, which is why they were missing.
     scope.layouts = probe.layouts;
     scope
+}
+
+/// A `static` field is one storage location for the program, so it is a global.
+///
+/// ```text
+/// class EventEmitter {
+///   static readonly errorMonitor: unique symbol = Symbol("events.errorMonitor");
+/// }
+/// ```
+///
+/// Reading one was refused as "`EventEmitter`, a class used as a value", which
+/// is the message for a *different* construct: producing the class object. A
+/// static read does not want the class object, it wants the storage behind the
+/// name -- which the Node lane established by measuring that a static **method**
+/// call through a class name already lowers, so the lowering can resolve a
+/// member through a class name when the result is consumed. See record 0269.
+///
+/// What it cost is the largest item on the compiled axis. `EventEmitter#emit`
+/// reads `EventEmitter.errorMonitor`, and under `emit` sit `addListener`,
+/// `EventEmitter#on`, `net.Server`'s constructor, `http.Server`'s, and
+/// `createServer` -- **274 failing test files** by that lane's ranking.
+///
+/// A global is the right storage and not an approximation: a static field is
+/// initialized once, at class definition time, which is during module
+/// evaluation -- the same moment `module#init` writes every other deferred
+/// global, and in the same source order. Everything that follows is
+/// `collect_module_scope`'s machinery keyed on the property's own symbol, so a
+/// read resolves exactly as a module-scope `const`'s does.
+///
+/// Named `Class.field`, which is what a static *method* is already called and
+/// cannot collide with a plain declaration -- `.` is not a TypeScript
+/// identifier character, which is why `c_identifier` reserves a spelling for it.
+/// Why a binding with no initializer and an erased type has no storage.
+///
+/// One sentence, two callers: a module-scope `let` and a `static` field, which
+/// share `ModuleScope` and therefore share this rule. Its initial value would
+/// have to be `undefined`, which is a tag, and an erased slot's zero has
+/// nowhere to put one -- so this is the representation talking rather than a
+/// lowering nobody wrote.
+fn no_initializer_for_an_erased_slot() -> String {
+    "a module-scope variable with no initializer, whose type has no representation \
+     for the `undefined` it starts as"
+        .to_owned()
+}
+
+fn collect_static_fields(
+    snapshot: &SemanticSnapshot,
+    probe: &mut FuncBuilder,
+    scope: &mut ModuleScope,
+) {
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        if node.kind != NodeKind::Syntax(syntax::PROPERTY_DECLARATION)
+            || !node
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+        {
+            continue;
+        }
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        // `modifiers, name, ?/!, type, initializer`, which is the same slot
+        // layout `initialize_fields` reads for an instance field.
+        let Some([_, Some(name_node), _, _, initializer]) = probe.child_slots::<5>(id) else {
+            continue;
+        };
+        let Some(symbol) = probe.node(name_node).symbol else {
+            continue;
+        };
+        let Some(class) = probe.ancestor(id, syntax::CLASS_DECLARATION) else {
+            continue;
+        };
+        let Some(field) = probe.literal_name(name_node) else {
+            continue;
+        };
+        let class_name = probe
+            .children(class)
+            .into_iter()
+            .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
+            .and_then(|child| probe.node(child).text.clone());
+        let Some(class_name) = class_name else {
+            // An anonymous class has no name to qualify with, and two of them
+            // would collide. Refused rather than numbered, because a number
+            // here is a name no source can be traced back to.
+            scope.unsupported.insert(
+                symbol.0,
+                "a static field of an anonymous class".to_owned(),
+            );
+            continue;
+        };
+        let Some(ty) = probe.type_of(name_node) else {
+            scope.unsupported.insert(
+                symbol.0,
+                "a static field of unrepresentable type".to_owned(),
+            );
+            continue;
+        };
+        if let Err(reason) = storable(probe, name_node, &ty) {
+            scope.unsupported.insert(symbol.0, reason);
+            continue;
+        }
+        // The same rule module-scope constants follow: an erased slot has no
+        // room for the `undefined` tag its zero would need, so a declaration
+        // with no initializer is refused rather than started wrong.
+        let erased = ty == HirType::Erased;
+        if initializer.is_none() && erased {
+            scope.unsupported.insert(
+                symbol.0,
+                "a static field with no initializer, whose type has no representation \
+                 for the `undefined` it starts as"
+                    .to_owned(),
+            );
+            continue;
+        }
+        let constant = match initializer {
+            Some(initializer) if !erased => probe.constant_value(initializer, &scope.constants),
+            _ => None,
+        };
+        let global = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
+        scope.globals.push(super::Global {
+            name: unshared_name(&scope.globals, Some(format!("{class_name}.{field}")), global),
+            ty: ty.clone(),
+            initial: constant.unwrap_or(0.0),
+            exported: false,
+            deferred: constant.is_none() && initializer.is_some(),
+            origin: probe.origin(name_node),
+        });
+        scope.variables.insert(symbol.0, global);
+        scope.types.push(ty);
+        if let (None, Some(initializer)) = (constant, initializer) {
+            scope.deferred.insert(symbol.0, initializer);
+        }
+    }
 }
 
 /// Lower every function declaration in a snapshot.
@@ -2026,6 +2183,23 @@ fn lower_class(
 /// Read in two places that have to agree: the loop making one copy per
 /// instantiation, which emits a static once, and `lower_method_of`, which names
 /// it without the instantiation for the same reason.
+/// Whether a symbol is declared `static`, asked of the symbol rather than a node.
+///
+/// The member-access path has the *name*'s symbol and not the declaration, and
+/// a module-scope `const` and a static field both land in
+/// `ModuleScope::variables` -- so without this, `o.someName` where `someName`
+/// happens to be a module-scope binding's symbol would read that global. It
+/// cannot arise today, because a property name and a variable are different
+/// symbols, and it is one `flags` test to make the arm say what it means.
+fn is_static_member_symbol(snapshot: &SemanticSnapshot, symbol: SymbolId) -> bool {
+    snapshot
+        .symbols
+        .get(symbol.0 as usize)
+        .into_iter()
+        .flat_map(|record| record.declarations.iter())
+        .any(|declaration| is_static_member(snapshot, *declaration))
+}
+
 fn is_static_member(snapshot: &SemanticSnapshot, member: NodeId) -> bool {
     snapshot.nodes.get(member.0 as usize).is_some_and(|node| {
         node.modifiers
@@ -2280,7 +2454,7 @@ fn module_statements(
             let Some(kind) = probe.kind_of(child) else {
                 continue;
             };
-            if is_module_statement(kind) {
+            if is_module_statement(kind) || runs_a_static_initializer(&probe, child) {
                 per_module[at].push(child);
             } else if !is_module_declaration(kind) && carries_code(&probe, child) {
                 // Something with code in it that module evaluation does not
@@ -2546,6 +2720,14 @@ fn lower_module_initializer(
             let mut probe = shared.builder(snapshot, Substitution::default(), String::new());
             let attempt = if probe.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
                 probe.lower_module_binding(*statement, refused)
+            } else if probe.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
+                // A class declaration evaluates its `static` initializers and
+                // nothing else. `lower_statement` does nothing for one -- the
+                // methods are lowered by their own walk -- so a static field
+                // whose initializer is not a constant was never written, and
+                // reading it reported "whose initializer was not compiled --
+                // see the refusal above that says which" with no refusal above.
+                probe.lower_static_fields(*statement)
             } else {
                 probe.lower_statement(*statement)
             };
@@ -5405,8 +5587,32 @@ fn representation_of(
             // read `a parameter of unrepresentable type (a structured type
             // (flags 0x20000))`.
             const NON_PRIMITIVE: u32 = 0x0002_0000;
+            const UNIQUE_SYMBOL: u32 = 1 << 14;
             if *flags == NON_PRIMITIVE {
                 return Some(HirType::Erased);
+            }
+            // **A `unique symbol` is a symbol.**
+            //
+            // `TypeFlagsUniqueESSymbol = 1 << 14` in
+            // `third_party/typescript-go/internal/checker/types.go:437`. The
+            // uniqueness is a *type-level* identity -- it is what lets the
+            // checker treat `kRefed` as its own type so a property keyed on it
+            // is a distinct member -- and at run time there is one symbol,
+            // interned, exactly like any other.
+            //
+            // Unmapped, it came through as `Structured { flags: 16384 }` and
+            // every declaration of one was "of unrepresentable type". That is
+            // most of `runtime/node`'s private keys, and it is what
+            // `EventEmitter.errorMonitor` is -- under `emit`, `addListener`,
+            // `EventEmitter#on`, `net.Server`, `http.Server` and
+            // `createServer`.
+            //
+            // The arm above says a `unique symbol` used as a *member name*
+            // never reaches here, because the lowering resolves it to a field
+            // name at compile time. This is the other half of that sentence:
+            // one used as a **value**, which `Symbol` already answers for.
+            if *flags & UNIQUE_SYMBOL != 0 {
+                return Some(HirType::Managed(ManagedType::Symbol));
             }
             let name = named(snapshot, ty)?;
             if let Some(element) = super::builtin::typed_array_element(name) {
@@ -8526,6 +8732,48 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// A class's `static` field initializers, which run at class definition.
+    ///
+    /// `collect_static_fields` gives each one a global; this is where the ones
+    /// that are not constants get written, in the same `module#init` and the
+    /// same source order as every other deferred global. Class definition
+    /// happens during module evaluation, so the order is already right by
+    /// walking the statements as they are written.
+    ///
+    /// The body is `lower_module_binding`'s, keyed on the property's symbol
+    /// rather than a declaration's -- the two share `ModuleScope::deferred`,
+    /// which is what makes a static field's storage indistinguishable from a
+    /// module-scope `const`'s everywhere downstream.
+    fn lower_static_fields(&mut self, class: NodeId) -> Result<(), Diagnostic> {
+        for member in self.children(class) {
+            if self.kind_of(member) != Some(syntax::PROPERTY_DECLARATION)
+                || !self
+                    .node(member)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+            {
+                continue;
+            }
+            let Some([_, Some(name), _, _, _]) = self.child_slots::<5>(member) else {
+                continue;
+            };
+            let Some(symbol) = self.node(name).symbol else {
+                continue;
+            };
+            let Some(initializer) = self.module.deferred.get(&symbol.0).copied() else {
+                continue;
+            };
+            let Some(global) = self.module.variables.get(&symbol.0).copied() else {
+                continue;
+            };
+            let want = self.module.types[global as usize].clone();
+            let value = self.lower_expecting(initializer, &want)?;
+            let value = self.coerce(value, &want, member)?;
+            self.write_place(member, &Place::Global(global), value);
+        }
+        Ok(())
+    }
+
     /// A module's top-level statements, as one function.
     ///
     /// Module evaluation is itself a job (`docs/async.md` §3), so what this
@@ -8542,6 +8790,16 @@ impl<'a> FuncBuilder<'a> {
         for statement in statements {
             if self.kind_of(*statement) == Some(syntax::VARIABLE_STATEMENT) {
                 self.lower_module_binding(*statement, refused)?;
+                continue;
+            }
+            // A class evaluates its `static` initializers here and nothing
+            // else; `lower_statement` has no arm for one and refuses. The
+            // `retain` pre-pass above has the same branch, and having it in
+            // only one of the two is why the first attempt reported "a `class
+            // declaration` is not supported" from the emitter it had not been
+            // added to.
+            if self.kind_of(*statement) == Some(syntax::CLASS_DECLARATION) {
+                self.lower_static_fields(*statement)?;
                 continue;
             }
             self.lower_statement(*statement)?;
@@ -14940,6 +15198,26 @@ impl<'a> FuncBuilder<'a> {
             let [object_node, member] = children.as_slice() else {
                 return Err(self.unsupported(target, "a property of unexpected shape"));
             };
+            // **A `static` field is a global, so writing one is a global write.**
+            //
+            // The same resolution the read side does, and it has to be here for
+            // the same reason: the receiver is a class *name*, lowering it asks
+            // for a class value, and `Counter.count = n` reported "`Counter`, a
+            // class used as a value" -- a message about a construct the
+            // assignment never wanted.
+            //
+            // Before the receiver, so it is never lowered. See
+            // `collect_static_fields`.
+            if let Some(symbol) = self.node(*member).symbol
+                && is_static_member_symbol(self.snapshot, symbol)
+            {
+                if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+                    return Err(self.unsupported(target, reason));
+                }
+                if let Some(global) = self.module.variables.get(&symbol.0).copied() {
+                    return Ok(Place::Global(global));
+                }
+            }
             let object = self.lower_expression(*object_node)?;
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[object.0 as usize].ty.clone()
@@ -19765,6 +20043,43 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         };
+        // **A `static` field, which is storage rather than a member.**
+        //
+        // `EventEmitter.errorMonitor` has no object to read from: a static field
+        // is one location for the program, initialized once at class definition
+        // time, and `collect_static_fields` gives it a global exactly as a
+        // module-scope `const` gets one. So this resolves through the *member's*
+        // own symbol, which is the same lookup `lower_identifier` does, and the
+        // receiver is never lowered -- which is why it stopped reporting
+        // "`EventEmitter`, a class used as a value", a message about a different
+        // construct entirely.
+        //
+        // Before the receiver, deliberately. Lowering it first is what produced
+        // that message: the class name has no value here and asking for one is
+        // asking the wrong question.
+        // The whole case, not only the part that succeeds: a static field the
+        // collector could not represent belongs to this arm too, and falling
+        // through sent it back to "a class used as a value" -- a message about
+        // a construct the read never wanted, which is the thing this arm exists
+        // to stop saying.
+        if let Some(symbol) = self.node(*member).symbol
+            && is_static_member_symbol(self.snapshot, symbol)
+        {
+            if let Some(reason) = self.module.unsupported.get(&symbol.0) {
+                return Err(self.unsupported(id, reason));
+            }
+            if let Some(global) = self.module.variables.get(&symbol.0).copied() {
+                let origin = self.origin(id);
+                let ty = self.module.types[global as usize].clone();
+                let read = self.push(OpKind::GlobalGet(global), ty, origin);
+                return self.narrowed(id, read);
+            }
+            let name = self.literal_name(*member).unwrap_or_default();
+            return Err(self.unsupported(
+                id,
+                &format!("`{name}`, a static field this compiler gave no storage"),
+            ));
+        }
         // `a?.b.c` short-circuits the *whole* chain: when `a` is absent, `.c`
         // is not evaluated either. That is a property of the chain rather than
         // of either access, so a link after an optional one is refused instead

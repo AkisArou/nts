@@ -167,6 +167,24 @@ fn a_symbol_member_name_is_still_a_field() {
             "`{}` reads a symbol-keyed member and must not build a map",
             func.name
         );
+        // **Except `module#init`, and only since `unique symbol` got a
+        // representation.** A `const kRefed: unique symbol = Symbol("refed")`
+        // is a declaration with an initializer, so module evaluation interns
+        // one -- twice here, once per declaration, once for the program.
+        //
+        // That does not touch what this row measures. The claim is that
+        // `[kRefed]` costs exactly what `_refed` would, which is about the
+        // *member access*, and the assertion above is the one that guards it:
+        // no function reads a symbol-keyed member through a map. Checked when
+        // this exemption was written -- `module#init` is the only function in
+        // the example that makes a symbol at all, and the accessors make none.
+        //
+        // Narrowed rather than deleted, because the failure it was written for
+        // -- a member name becoming a runtime lookup -- would still show here
+        // in the accessor that performed it.
+        if func.name == nts_core::hir::lower::MODULE_INIT {
+            continue;
+        }
         assert!(
             !func.values.iter().any(|op| matches!(
                 op.ty,
