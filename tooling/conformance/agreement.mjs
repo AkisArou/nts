@@ -81,6 +81,7 @@ let compared = 0;
 let disagreeing = 0;
 let unbuilt = 0;
 let refusedTotal = 0;
+let notLoadedTotal = 0;
 
 for (const name of names) {
   const dir = join(DIR, name);
@@ -166,11 +167,26 @@ for (const name of names) {
   //
   // A refused case belongs in `blockers/`, and is reported here as a refusal so
   // it can be moved there rather than counted as evidence of anything.
-  const compiledSide = { loaded: true, answers: {}, refused: [] };
+  // **A module that built and would not load is a fourth outcome.** It was
+  // counted as a disagreement, and the row read
+  //
+  //     compiled "did not load: undefined symbol: nts", node 2102
+  //
+  // which is a wrong answer being reported for a case where nothing ran. It
+  // happens exactly when a construct is refused and the addon is left with a
+  // dangling symbol -- so the cases that produce it are the cases this file most
+  // needs to count apart, and it was folding them into the column it exists to
+  // keep clean. The header already ruled it out for "did not build"; a module
+  // that built and would not load is a different fact and gets its own count.
+  const compiledSide = { loaded: true, answers: {}, refused: [], notLoaded: [] };
   for (const c of cases) {
     const answer = answerOf(c.call);
     if (answer.ok !== true && answer.why === "not published") {
       compiledSide.refused.push(c.call);
+      continue;
+    }
+    if (answer.ok !== true && String(answer.why).startsWith("did not load")) {
+      compiledSide.notLoaded.push({ call: c.call, why: answer.why });
       continue;
     }
     compiledSide.answers[c.call] = answer.ok === true ? answer.value : answer.why;
@@ -182,6 +198,7 @@ for (const name of names) {
   const rows = [];
   for (const c of cases) {
     if (compiledSide.refused.includes(c.call)) continue;
+    if (compiledSide.notLoaded.some((n) => n.call === c.call)) continue;
     let theirs;
     try { theirs = typeof onNode[c.call] === "function" ? onNode[c.call]() : "(not exported)"; }
     catch (e) { theirs = `threw: ${String(e && e.message).slice(0, 60)}`; }
@@ -194,10 +211,18 @@ for (const name of names) {
   }
 
   refusedTotal += compiledSide.refused.length;
-  const asked = cases.length - compiledSide.refused.length;
+  notLoadedTotal += compiledSide.notLoaded.length;
+  const asked = cases.length - compiledSide.refused.length - compiledSide.notLoaded.length;
   const refusedNote = compiledSide.refused.length === 0
     ? ""
     : `, ${compiledSide.refused.length} refused (${compiledSide.refused.join(", ")})`;
+  const showNotLoaded = () => {
+    if (compiledSide.notLoaded.length === 0) return;
+    console.log(
+      `      ${compiledSide.notLoaded.length} case(s) did not load: ` +
+        `${compiledSide.notLoaded[0].why.slice(0, 66)}`,
+    );
+  };
   const showReasons = () => {
     if (compiledSide.refused.length === 0) return;
     for (const reason of reasons.slice(0, 4)) {
@@ -205,12 +230,15 @@ for (const name of names) {
     }
   };
   if (rows.length === 0) {
-    console.log(`  agrees          ${name}  (${asked} case(s)${refusedNote})`);
+    const verdict = asked === 0 ? "no answer     " : "agrees        ";
+    console.log(`  ${verdict}  ${name}  (${asked} case(s)${refusedNote})`);
     showReasons();
+    showNotLoaded();
     continue;
   }
   console.log(`  DISAGREES       ${name}  (${asked} asked${refusedNote})`);
   showReasons();
+  showNotLoaded();
   for (const r of rows) {
     console.log(`      ${r.call}: compiled ${JSON.stringify(r.ours)}, node ${JSON.stringify(r.theirs)}`);
     console.log(`          ${r.why}`);
@@ -223,9 +251,11 @@ if (names.length === 0) {
   process.exit(2);
 }
 console.log(`\n  ${compared} case(s) compared, ${disagreeing} disagreeing, ${refusedTotal} refused, ` +
-  `${unbuilt} case(s) that did not build.`);
+  `${notLoadedTotal} that did not load, ${unbuilt} case(s) that did not build.`);
 console.log("  A refused case is a blocker and belongs in blockers/; it is counted apart");
 console.log("  because a wrong answer is worse than a refusal and this file exists to say so.");
 console.log("  A disagreement is a program that runs and is wrong, which is worse than a");
 console.log("  refusal and is what this profile trades refusals to avoid. A case that did");
-console.log("  not build is neither agreement nor disagreement and is counted apart.");
+console.log("  not build is neither agreement nor disagreement and is counted apart, and so");
+console.log("  is one that built and would not load -- a dangling symbol from a refused");
+console.log("  construct is no answer rather than a wrong one.");
