@@ -56,7 +56,7 @@ import {
 import type { MapFn, OperatorOptions, ReduceFn } from "./operators.ts";
 
 import type { PipeDestination } from "./legacy.ts";
-import { captureRejectionSymbol } from "../../events/src/main.ts";
+import { captureRejectionSymbol, type EventName } from "../../events/src/main.ts";
 import { newReadableFromWeb, newReadableToWeb } from "./web-adapters.ts";
 import type {
   ReadableFromWebOptions,
@@ -70,7 +70,16 @@ import type { AsyncByteStream } from "./iter/utils.ts";
 /** The shape `pipe` writes into. Shared with the legacy `pipe`. */
 type PipeTarget = PipeDestination;
 
-const readableEventShape = ["close", "error", "data", "end", "readable"];
+// Annotated `readonly EventName[]` rather than left to inference. The literal
+// holds strings, so it infers `string[]`, and `_initializeEventShape` takes
+// `readonly EventName[]` where `EventName` is `string | symbol` -- a union, which
+// is erased. An array of `Managed(String)` and an array of `Erased` hold
+// different widths, so a pointer to one is not a pointer to the other.
+//
+// The annotation is what the compiler reads to build the literal at the slot's
+// width. Without it the constant really is a `string[]`, and passing it is a
+// conversion of an array that already exists, which is refused and should be.
+const readableEventShape: readonly EventName[] = ["close", "error", "data", "end", "readable"];
 
 declare const process: {
   readonly stdout?: unknown;

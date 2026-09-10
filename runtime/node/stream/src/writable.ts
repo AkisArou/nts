@@ -41,7 +41,7 @@ import { construct, destroy, errorOrDestroy, undestroy } from "./destroy.ts";
 import type { DestroyableStream } from "./destroy.ts";
 import { addAbortSignalNoValidate } from "./add-abort-signal.ts";
 import { eos, type AbortSignalLike } from "./end-of-stream.ts";
-import { captureRejectionSymbol } from "../../events/src/main.ts";
+import { captureRejectionSymbol, type EventName } from "../../events/src/main.ts";
 import { newWritableFromWeb, newWritableToWeb } from "./web-adapters.ts";
 import type {
   WebWritableStream,
@@ -49,7 +49,16 @@ import type {
 } from "./web-adapters.ts";
 
 const nop = (): void => {};
-const writableEventShape = ["close", "error", "prefinish", "finish", "drain"];
+// Annotated `readonly EventName[]` rather than left to inference. The literal
+// holds strings, so it infers `string[]`, and `_initializeEventShape` takes
+// `readonly EventName[]` where `EventName` is `string | symbol` -- a union, which
+// is erased. An array of `Managed(String)` and an array of `Erased` hold
+// different widths, so a pointer to one is not a pointer to the other.
+//
+// The annotation is what the compiler reads to build the literal at the slot's
+// width. Without it the constant really is a `string[]`, and passing it is a
+// conversion of an array that already exists, which is refused and should be.
+const writableEventShape: readonly EventName[] = ["close", "error", "prefinish", "finish", "drain"];
 
 export type WriteCallback = (error?: unknown) => void;
 
