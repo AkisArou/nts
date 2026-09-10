@@ -37,7 +37,11 @@ import {
 } from "../../internal/validators.ts";
 import { acquireHTTPParser, HTTPParseError, RESPONSE } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
-import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption } from "./outgoing.ts";
+import { checkIsHttpToken, OutgoingMessage, parseUniqueHeadersOption,
+  kHasBody,
+  kStatusLine,
+  kKeepAliveWithoutFramingWhenEmpty,
+} from "./outgoing.ts";
 import type { HTTPDuplex, OutgoingHeaders, OutgoingHeaderValue } from "./outgoing.ts";
 import { Agent, globalAgent, kProxyConfig } from "./agent.ts";
 import type { AgentConnectionOptions } from "./agent.ts";
@@ -462,9 +466,9 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     // merely default to *no framing*: an empty request is self-delimiting, but
     // writing bytes without a Content-Length or Transfer-Encoding makes the
     // connection close-delimited and therefore ineligible for reuse.
-    this.hasBody = true;
+    this[kHasBody] = true;
     this.useChunkedEncodingByDefault = !BODILESS.has(this.method);
-    this.keepAliveWithoutFramingWhenEmpty = BODILESS.has(this.method);
+    this[kKeepAliveWithoutFramingWhenEmpty] = BODILESS.has(this.method);
     this.shouldKeepAlive =
       selectedAgent !== null &&
       (selectedAgent.keepAlive === true || Number.isFinite(selectedAgent.maxSockets));
@@ -532,7 +536,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
     }
 
     if (rawHeaderPairs !== undefined) {
-      this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
+      this[kStatusLine] = `${this.method} ${this.path} HTTP/1.1`;
       this._storeRawHeaderPairs(rawHeaderPairs);
     }
     this._setUniqueHeaders(parseUniqueHeadersOption(opts.uniqueHeaders));
@@ -630,7 +634,7 @@ export class ClientRequest extends OutgoingMessage<HTTPDuplex> {
   }
 
   protected override _implicitHeader(): void {
-    this.statusLine = `${this.method} ${this.path} HTTP/1.1`;
+    this[kStatusLine] = `${this.method} ${this.path} HTTP/1.1`;
   }
 
   /** Given a connection by the agent, or made one. Everything starts here. */

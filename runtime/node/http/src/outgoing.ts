@@ -299,6 +299,27 @@ function destroyOnRejection(this: OutgoingMessage, error: unknown): void {
 //
 //     node  OutgoingMessage -> Stream -> EventEmitter
 //     ours  OutgoingMessage -> EventEmitter
+/**
+ * Symbol keys for three fields a subclass writes.
+ *
+ * `protected` is a TypeScript modifier and compile-time only, so as `protected
+ * hasBody = true` these were own **enumerable** keys on every `ServerResponse`
+ * and `ClientRequest`, and node's `OutgoingMessage` has none of them. A `#` field
+ * would hide them and cannot be used: `ClientRequest` lives in `client.ts` and
+ * writes all three, and `#` is private to the declaring class.
+ *
+ * Symbols are what node reaches for in the same situation -- `kOutHeaders`,
+ * `kHighWaterMark` -- for the same reason: reachable wherever the symbol is, and
+ * invisible to `Object.keys`.
+ */
+export const kHasBody: unique symbol = Symbol("kHasBody");
+/** Set from `server.ts` on a response, so a `#` field cannot serve. */
+export const kMaxRequestsPerSocket: unique symbol = Symbol("kMaxRequestsPerSocket");
+export const kStatusLine: unique symbol = Symbol("kStatusLine");
+export const kKeepAliveWithoutFramingWhenEmpty: unique symbol = Symbol(
+  "kKeepAliveWithoutFramingWhenEmpty",
+);
+
 export class OutgoingMessage<
   SocketType extends OutgoingSocket = OutgoingSocket,
 > extends Stream {
@@ -562,9 +583,9 @@ export class OutgoingMessage<
   /** Set by the server or the client before anything is written. */
   shouldKeepAlive = true;
   maxRequestsOnConnectionReached = false;
-  _maxRequestsPerSocket: number | null = 0;
+  [kMaxRequestsPerSocket]: number | null = 0;
   useChunkedEncodingByDefault = true;
-  protected keepAliveWithoutFramingWhenEmpty = false;
+  [kKeepAliveWithoutFramingWhenEmpty] = false;
   sendDate = false;
   chunkedEncoding = false;
   strictContentLength = false;
@@ -580,7 +601,7 @@ export class OutgoingMessage<
   #uniqueHeaders: ReadonlySet<string> | null = null;
 
   /** Filled in by a subclass: the status line or the request line. */
-  protected statusLine = "";
+  [kStatusLine] = "";
 
   /** Serialized head waiting to be written with the first body bytes. */
   #head: string | null = null;
@@ -595,7 +616,7 @@ export class OutgoingMessage<
    * connection closes" only for a message that *may* have a body. For one
    * that cannot, it means the body is empty.
    */
-  protected hasBody = true;
+  [kHasBody] = true;
 
   #ended = false;
   #bodyWriteStarted = false;
@@ -796,8 +817,8 @@ export class OutgoingMessage<
    */
   protected prepareHeaders(): void {
     if (this.headersSent) return;
-    if (!this.statusLine) this._implicitHeader();
-    if (!this.statusLine) return;
+    if (!this[kStatusLine]) this._implicitHeader();
+    if (!this[kStatusLine]) return;
 
     const declared = this.#headersMap.get("content-length");
     const encoding = this.#headersMap.get("transfer-encoding");
@@ -816,7 +837,7 @@ export class OutgoingMessage<
       else if (connectionValue.includes("keep-alive")) this.shouldKeepAlive = true;
     }
 
-    if (!this.hasBody) {
+    if (!this[kHasBody]) {
       this.chunkedEncoding = false;
       if (encoding && String(encoding[1]).toLowerCase().includes("chunked")) {
         // A zero chunk is forbidden for 1xx/204/304 and HEAD responses. Keep
@@ -831,7 +852,7 @@ export class OutgoingMessage<
     } else if (this.useChunkedEncodingByDefault && !this._removedTE) {
       this.chunkedEncoding = true;
       addChunkedHeader = true;
-    } else if (!this.keepAliveWithoutFramingWhenEmpty || this.#bodyWriteStarted) {
+    } else if (!this[kKeepAliveWithoutFramingWhenEmpty] || this.#bodyWriteStarted) {
       // No length and no chunking on a message that may have a body: it ends
       // when the connection does, so the connection cannot be reused.
       this.shouldKeepAlive = false;
@@ -858,7 +879,7 @@ export class OutgoingMessage<
       this._keepAliveTimeout > 0 &&
       !this.#headersMap.has("keep-alive")
     ) {
-      const maximum = this._maxRequestsPerSocket;
+      const maximum = this[kMaxRequestsPerSocket];
       const max = typeof maximum === "number" && (maximum | 0) > 0 ? `, max=${maximum}` : "";
       automaticHeaders += `Keep-Alive: timeout=${Math.floor(this._keepAliveTimeout / 1000)}${max}\r\n`;
     }
@@ -869,7 +890,7 @@ export class OutgoingMessage<
       automaticHeaders += `Content-Length: ${this.#automaticContentLength}\r\n`;
     }
 
-    let head = `${this.statusLine}\r\n`;
+    let head = `${this[kStatusLine]}\r\n`;
     const rawHeaderPairs = this.#rawHeaderPairs;
     if (rawHeaderPairs === null) {
       for (const entry of this.#headersMap.values()) {
@@ -942,7 +963,7 @@ export class OutgoingMessage<
       return false;
     }
 
-    if (!this.hasBody) {
+    if (!this[kHasBody]) {
       if (this.#rejectNonStandardBodyWrites) throw new ERR_HTTP_BODY_NOT_ALLOWED();
       this.flushHeaders();
       if (callback) nextTick(callback);
@@ -1024,7 +1045,7 @@ export class OutgoingMessage<
 
     if (
       !this.headersSent &&
-      this.hasBody &&
+      this[kHasBody] &&
       this.useChunkedEncodingByDefault &&
       !this._removedContLen &&
       !this.hasHeader("content-length") &&
@@ -1072,10 +1093,10 @@ export class OutgoingMessage<
           : body.byteLength > 0);
       let flushCompletesWithBody = false;
       if (finishOnRealNetworkWrite) {
-        if (this.hasBody && bodyHasBytes && body !== undefined) {
+        if (this[kHasBody] && bodyHasBytes && body !== undefined) {
           flushCompletesWithBody = true;
           this.write(body, encodingName, this.#onFlushed);
-        } else if (!this.hasBody && body !== undefined && this.#rejectNonStandardBodyWrites) {
+        } else if (!this[kHasBody] && body !== undefined && this.#rejectNonStandardBodyWrites) {
           throw new ERR_HTTP_BODY_NOT_ALLOWED();
         }
       } else if (body !== undefined) {
@@ -1256,11 +1277,27 @@ export class ServerResponse extends OutgoingMessage {
     this.req = request;
     // HTTP/1.0 did not define chunked encoding, but Node may use it when the
     // peer explicitly advertises support through TE. Without that framing, a
-    // response body has to be delimited by closing the connection.
-    this.useChunkedEncodingByDefault =
-      (request.httpVersionMajor >= 1 && request.httpVersionMinor >= 1) ||
-      headerContainsChunked(request.headers.te);
-    this.hasBody = request.method !== "HEAD";
+    // response body has to be delimited by closing the connection -- which is why
+    // node clears `shouldKeepAlive` in the same branch, and this did not:
+    //
+    //     request                node                      here, before
+    //     1.0 no te     chunked=false keepAlive=false   chunked=false keepAlive=TRUE
+    //     1.0 te:chunked chunked=true keepAlive=false   chunked=true  keepAlive=TRUE
+    //
+    // A 1.0 peer that gets `keep-alive` on a response with no framing has no way
+    // to know where the body ends. Node's own tests do not reach it: they drive a
+    // real server, and a real 1.0 request arrives through the parser, which is a
+    // path this constructor is not on when a test builds a response by hand.
+    //
+    // Node's shape exactly, including that `request.headers` is read **only**
+    // inside the branch. Ours evaluated it unconditionally, so
+    // `new ServerResponse({ method: "GET" })` -- which node accepts, leaving both
+    // defaults -- threw here on `headers` being undefined.
+    if (request.httpVersionMajor < 1 || request.httpVersionMinor < 1) {
+      this.useChunkedEncodingByDefault = headerContainsChunked(request.headers.te);
+      this.shouldKeepAlive = false;
+    }
+    this[kHasBody] = request.method !== "HEAD";
     this.sendDate = true;
     if (serverResponseCreatedChannel.hasSubscribers) {
       serverResponseCreatedChannel.publish({ request, response: this });
@@ -1295,7 +1332,7 @@ export class ServerResponse extends OutgoingMessage {
 
     this.statusCode = statusCode;
     if ((statusCode >= 100 && statusCode < 200) || statusCode === 204 || statusCode === 304) {
-      this.hasBody = false;
+      this[kHasBody] = false;
     }
     if (message !== undefined) {
       this.statusMessage = message;
@@ -1363,7 +1400,7 @@ export class ServerResponse extends OutgoingMessage {
   protected override _implicitHeader(): void {
     const message = this.statusMessage ?? STATUS_CODES[this.statusCode] ?? "unknown";
     if (checkInvalidHeaderChar(message)) throw new ERR_INVALID_CHAR("statusMessage");
-    this.statusLine = `${RESPONSE_VERSION} ${this.statusCode} ${message}`;
+    this[kStatusLine] = `${RESPONSE_VERSION} ${this.statusCode} ${message}`;
   }
 
   /** Attach the connection currently carrying this response. */

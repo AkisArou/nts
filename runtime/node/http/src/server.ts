@@ -26,7 +26,9 @@ import {
 } from "./parser.ts";
 import type { ParserError } from "./parser.ts";
 import { IncomingMessage } from "./incoming.ts";
-import { parseUniqueHeadersOption, ServerResponse } from "./outgoing.ts";
+import { parseUniqueHeadersOption, ServerResponse,
+  kMaxRequestsPerSocket,
+} from "./outgoing.ts";
 import type { HTTPDuplex } from "./outgoing.ts";
 import { clearInterval, setInterval } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
@@ -654,7 +656,7 @@ export class Server extends NetServer {
       response._setPendingDataObserver(updateOutgoingData);
       response.shouldKeepAlive = info.shouldKeepAlive;
       response._keepAliveTimeout = this.keepAliveTimeout;
-      response._maxRequestsPerSocket = this.maxRequestsPerSocket;
+      response[kMaxRequestsPerSocket] = this.maxRequestsPerSocket;
 
       if (activeResponse === null) {
         activeResponse = response;
