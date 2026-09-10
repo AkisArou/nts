@@ -20460,6 +20460,39 @@ dependencies, so a file that still passes is passing on nothing.
 including the two tests changed today: `util/test/inspect-static.js`'s new
 `defaultOptions` block and `process/test/export-surface-static.js`'s shortened pin.
 
+## Six symbol-keyed fields lost their initialisers, and one of them was `true`
+
+Moving a field off `Object.keys` by giving it a symbol key is the fix node itself
+uses -- `kCapture`, `kOutHeaders`, `kHighWaterMark` -- and six went in on
+2026-09-10: `events`' `[kCapture] = false` and `[kPreserveEventShape] = false`,
+and `OutgoingMessage`'s `[kHasBody] = true`, `[kStatusLine] = ""`,
+`[kKeepAliveWithoutFramingWhenEmpty] = false` and `[kMaxRequestsPerSocket] = 0`.
+
+The compiled lane skipped every one of their initialisers: a **computed** member
+name is not a literal one, so `initialize_fields` passed over it. MainClaude found
+it in an example written for something else and fixed it in `9308a608`.
+
+**`[kHasBody] = true` arriving as `undefined` is the one that matters.**
+`undefined` is falsy, so the compiled lane would have taken every "no body" branch
+the interpreted lane does not. The other five default to falsy values and read the
+same either way, which is exactly why nothing noticed -- and why the two lanes
+could have disagreed about HTTP framing with every test still green. `http` does
+not publish `OutgoingMessage`, so no test could reach the field to see it.
+
+`blockers/a-symbol-keyed-field-initialiser` is the guard, kept rather than
+deleted. It asserts all four kinds -- `false`, `true`, `""`, `7` -- because a
+skipped initialiser and a `false` initialiser are indistinguishable to anything
+that only tests truthiness. The plain-named pair beside them is the comparison: if
+those break, the fixture is reporting something about fields in general.
+
+### The control is in the emitted C, not in a run
+
+The pre-fix compiler's `program.c` has no `"s"` string constant anywhere -- its
+first is `"kFlag"`, the symbol's description. The post-fix one adds `nts_str_0 =
+"s"`, which is `[kText] = "s"`'s initialiser. The value the guard asserts did not
+exist in the earlier output at all, which is a stronger statement than a failing
+assertion: there was nothing to assert against.
+
 ## Conventions
 
 **Faithful, not adapted.** Bodies are transcribed from node. Where a construct
