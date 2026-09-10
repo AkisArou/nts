@@ -914,20 +914,151 @@ static napi_status nts_to_napi_entries(napi_env env, const NtsMap *table,
  * Node's message is `The "path" argument must be of type string. Received type
  * number`, and its tests assert the *code* and the name rather than the text --
  * so the code is what has to be right and the text is what makes the failure
- * readable. */
-static const char *nts_napi_type_name(napi_env env, napi_value value) {
+ * readable.
+ *
+ * **The whole tail after `Received `, including the word `type` or its
+ * absence.** Node builds that tail with `determineSpecificType`, which answers
+ * `"null"` and `"undefined"` bare and everything else as `type <t>`:
+ *
+ *     path.join(null)   node  ... must be of type string. Received null
+ *                       here  ... must be of type string. Received type null
+ *
+ * `Received type null` is not a spelling node ever produces, because `typeof
+ * null` is `"object"` and node never reaches the `typeof` arm for it. Returning
+ * the tail rather than the type name puts the two cases where the language puts
+ * them and leaves one place that knows the rule -- the alternative is a
+ * conditional at each of the two call sites, which is the same rule written
+ * twice.
+ *
+ * Node appends the value for the `type` forms -- `Received type string ('x')` --
+ * and this does not, for the reason both call sites give: rendering an arbitrary
+ * value is `util.inspect`'s job and a wrong rendering is worse than an absent
+ * one. */
+/* A JavaScript string as ASCII, for a diagnostic and nothing else.
+ *
+ * **UTF-16, because every string crossing this boundary is** -- a JavaScript
+ * string is a sequence of UTF-16 code units and the UTF-8 reader replaces a
+ * lone surrogate, which is why `strings_cross_as_utf16` asserts that spelling
+ * appears nowhere -- including in a comment, which is how this sentence came to
+ * be phrased around it. A message is not program data and could survive the
+ * lossy read, but an invariant with one exemption is an invariant nobody can
+ * check, so this reads what everything else reads.
+ *
+ * Above 127 becomes `?`. The callers are a constructor's name, a symbol's
+ * description and a coerced number or boolean: the first is an identifier, the
+ * last two are ASCII by construction, and only a description can be anything
+ * else. Approximating it in an error message beats carrying a UTF-8 encoder
+ * here. */
+static void nts_napi_ascii(napi_env env, napi_value value, char *out,
+                           size_t cap) {
+    uint16_t units[64];
+    size_t written = 0;
+    out[0] = 0;
+    if (napi_get_value_string_utf16(env, value, units,
+                                    sizeof units / sizeof units[0],
+                                    &written) != napi_ok) {
+        return;
+    }
+    size_t at = 0;
+    for (size_t i = 0; i < written && at + 1 < cap; i++) {
+        out[at++] = units[i] < 128u ? (char)units[i] : '?';
+    }
+    out[at] = 0;
+}
+
+static const char *nts_napi_received(napi_env env, napi_value value, char *out,
+                                     size_t cap) {
     napi_valuetype kind;
     if (napi_typeof(env, value, &kind) != napi_ok) return "a value";
+    napi_value text;
+    /* Zeroed, because the object arm below reads it after a call chain that may
+     * not have written it -- a constructor lookup can fail on a null-prototype
+     * object, which is exactly the case node spells differently anyway. */
+    char spelled[64] = {0};
+    size_t written = 0;
     switch (kind) {
     case napi_undefined: return "undefined";
     case napi_null: return "null";
-    case napi_boolean: return "boolean";
-    case napi_number: return "number";
-    case napi_string: return "string";
-    case napi_symbol: return "symbol";
-    case napi_function: return "function";
-    case napi_bigint: return "bigint";
-    default: return "object";
+    /* `String(x)` is the spelling for all three, and it is the engine's own --
+     * so a float prints with node's shortest round-trip rather than a `%g` that
+     * is close. `-0` is the one exception: JavaScript's `String(-0)` is `"0"`
+     * and `determineSpecificType` says `-0`, which is the distinction the
+     * message exists to draw. */
+    case napi_boolean:
+    case napi_number:
+    case napi_bigint: {
+        double number = 0.0;
+        if (kind == napi_number
+            && napi_get_value_double(env, value, &number) == napi_ok
+            && number == 0.0 && signbit(number)) {
+            snprintf(out, cap, "type number (-0)");
+            return out;
+        }
+        if (napi_coerce_to_string(env, value, &text) != napi_ok) {
+            return kind == napi_boolean ? "type boolean"
+                   : kind == napi_number ? "type number"
+                                         : "type bigint";
+        }
+        nts_napi_ascii(env, text, spelled, sizeof spelled);
+        snprintf(out, cap, "type %s (%s%s)",
+                 kind == napi_boolean  ? "boolean"
+                 : kind == napi_number ? "number"
+                                       : "bigint",
+                 spelled, kind == napi_bigint ? "n" : "");
+        return out;
+    }
+    /* Node truncates at 28 to 25 plus an ellipsis, and quotes with `'` unless
+     * the value contains one. A string reaching a *string* parameter's error is
+     * only possible for a `Cross::Str` that rejected it for another reason, so
+     * this is the rarest arm and it is here for completeness rather than for a
+     * case in the corpus. */
+    case napi_string: {
+        nts_napi_ascii(env, value, spelled, sizeof spelled);
+        written = strlen(spelled);
+        if (written > 28) {
+            spelled[25] = 0;
+            snprintf(out, cap, "type string ('%s...')", spelled);
+        } else {
+            snprintf(out, cap, "type string ('%s')", spelled);
+        }
+        return out;
+    }
+    /* `String(sym)` throws by 13.15.3, so the description is read directly.
+     * `Symbol()` with none has `undefined` there and prints `Symbol()`. */
+    case napi_symbol: {
+        napi_value description;
+        if (napi_get_named_property(env, value, "description", &description)
+                != napi_ok) {
+            return "type symbol";
+        }
+        nts_napi_ascii(env, description, spelled, sizeof spelled);
+        snprintf(out, cap, "type symbol (Symbol(%s))", spelled);
+        return out;
+    }
+    /* Node's own spelling, trailing space and all: a function's `.name` is what
+     * would follow it, and a compiled function pointer has none to discover --
+     * so the separator stays and the name is absent, which is exactly what node
+     * prints for an anonymous one. */
+    case napi_function: return "function ";
+    /* `an instance of X`, not `type object`. Node reads the constructor's name;
+     * a null-prototype object has none and node prints an inspection instead,
+     * which is `util.inspect`'s job and not this one -- `Object` is the closer
+     * of the two answers available here and is said to be an approximation. */
+    default: {
+        napi_value constructor;
+        napi_value name;
+        if (napi_get_named_property(env, value, "constructor", &constructor)
+                == napi_ok
+            && napi_get_named_property(env, constructor, "name", &name)
+                   == napi_ok) {
+            nts_napi_ascii(env, name, spelled, sizeof spelled);
+        }
+        if (spelled[0] != 0) {
+            snprintf(out, cap, "an instance of %s", spelled);
+            return out;
+        }
+        return "an instance of Object";
+    }
     }
 }
 
@@ -969,18 +1100,20 @@ static void nts_napi_argument_type_error(napi_env env, const char *what,
     bool pending = false;
     if (napi_is_exception_pending(env, &pending) == napi_ok && pending) return;
     char message[192];
+    char received[96];
     snprintf(message, sizeof message,
-             "The \"%s\" argument must be of type %s. Received type %s", what,
-             expected, nts_napi_type_name(env, value));
+             "The \"%s\" argument must be of type %s. Received %s", what,
+             expected, nts_napi_received(env, value, received, sizeof received));
     napi_throw_type_error(env, "ERR_INVALID_ARG_TYPE", message);
 }
 
 static void nts_napi_rest_type_error(napi_env env, const char *what, size_t at,
                                      napi_value value, const char *expected) {
     char message[192];
+    char received[96];
     snprintf(message, sizeof message,
-             "The \"%s[%zu]\" argument must be of type %s. Received type %s", what,
-             at, expected, nts_napi_type_name(env, value));
+             "The \"%s[%zu]\" argument must be of type %s. Received %s", what,
+             at, expected, nts_napi_received(env, value, received, sizeof received));
     napi_throw_type_error(env, "ERR_INVALID_ARG_TYPE", message);
 }
 
@@ -2344,11 +2477,25 @@ fn unmarshal(
             numeric_guard(ty, name),
             c_type(ty, layouts)
         ),
+        // **The same message a number gets.** These two read
+        // `expected a boolean argument` and `expected a string argument` --
+        // which name neither the parameter nor what arrived, and are not
+        // sentences node ever produces. The number arm beside them has said
+        // node's since `nts_napi_argument_type_error` was written; the other
+        // two were never moved across, and a string parameter is much the
+        // commonest of the three.
+        //
+        //     path.normalize(null)
+        //       node  The "path" argument must be of type string. Received null
+        //       here  expected a string argument
+        //
+        // Four of `path`'s six single-argument entry points answered the second
+        // one, and node's suite asserts messages as well as codes.
         Cross::Bool => format!(
-            "    if (!nts_napi_expect(env, napi_get_value_bool(env, argv[{index}], &{name}), \"expected a boolean argument\")) goto nts_napi_cleanup;\n"
+            "    if (napi_get_value_bool(env, argv[{index}], &{name}) != napi_ok) {{\n        nts_napi_argument_type_error(env, \"{declared}\", argv[{index}], \"boolean\");\n        goto nts_napi_cleanup;\n    }}\n"
         ),
         Cross::Str => format!(
-            "    if (!nts_napi_expect(env, nts_from_napi_string(env, argv[{index}], &{name}), \"expected a string argument\")) goto nts_napi_cleanup;\n"
+            "    if (nts_from_napi_string(env, argv[{index}], &{name}) != napi_ok) {{\n        nts_napi_argument_type_error(env, \"{declared}\", argv[{index}], \"string\");\n        goto nts_napi_cleanup;\n    }}\n"
         ),
         // A `number[]` is copied element by element. The descriptor comes from
         // the runtime rather than from `program.c`, which keeps its own to
