@@ -252,9 +252,18 @@ export class ZlibBase extends Transform {
   _defaultFlushFlag: number;
   _finishFlushFlag: number;
   _defaultFullFlushFlag: number;
-  _flushMinimum: number;
-  _flushMaximum: number;
-  _flushFamily: FlushFamily;
+  // `#`, not `_`: node's zlib instances carry `_defaultFlushFlag`,
+  // `_finishFlushFlag`, `_defaultFullFlushFlag` and `_flushBoundIdx` and have no
+  // equivalent of these three, so as `_`-prefixed fields they were own enumerable
+  // keys on every `Gzip`, `Deflate`, `Inflate`, `Unzip`, `Brotli*` and `Zstd*`
+  // instance that node's does not have -- eleven classes, three keys each.
+  //
+  // A TypeScript `private` would not have helped: it is compile-time only. These
+  // are read at six sites and all of them are `this.` inside this class, so a `#`
+  // field works where `EventEmitter`'s could not.
+  #flushMinimum: number;
+  #flushMaximum: number;
+  #flushFamily: FlushFamily;
   _maxOutputLength: number;
   _info: boolean;
   #closed = false;
@@ -306,9 +315,9 @@ export class ZlibBase extends Transform {
       defaults.finishFlush,
     );
     this._defaultFullFlushFlag = defaults.fullFlush;
-    this._flushMinimum = defaults.minimum;
-    this._flushMaximum = defaults.maximum;
-    this._flushFamily = defaults.family;
+    this.#flushMinimum = defaults.minimum;
+    this.#flushMaximum = defaults.maximum;
+    this.#flushFamily = defaults.family;
     this._maxOutputLength = inRangeOrDefault(
       options?.maxOutputLength,
       "options.maxOutputLength",
@@ -332,7 +341,7 @@ export class ZlibBase extends Transform {
     // keep its final block and the output would be truncated.
     const isLast = this.writableEnded && this.writableLength === input.byteLength;
     const flush = requestedFlush ?? (isLast
-      ? finalFlush(this._defaultFlushFlag, this._finishFlushFlag, this._flushFamily)
+      ? finalFlush(this._defaultFlushFlag, this._finishFlushFlag, this.#flushFamily)
       : this._defaultFlushFlag);
     this.#run(input, flush, callback);
   }
@@ -484,8 +493,8 @@ export class ZlibBase extends Transform {
     const validatedKind = inRangeOrDefault(
       kind,
       "kind",
-      this._flushMinimum,
-      this._flushMaximum,
+      this.#flushMinimum,
+      this.#flushMaximum,
       this._defaultFullFlushFlag,
     );
 
