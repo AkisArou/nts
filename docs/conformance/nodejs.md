@@ -18553,6 +18553,29 @@ declaration before it. That is worth fixing independently of the walk itself: it
 sent this analysis to the wrong construct twice before the line numbers were
 checked against the source.
 
+### The message was not merely coarse; it was false
+
+MainClaude re-derived `createServer` from the walk itself rather than from the
+text, and it is refused with a cause **in the same output**:
+
+    server.ts:930:2   NTS1001 `createServer`, a declaration outside every walk
+    server.ts:154:17  NTS1001 a value of type Managed(Set(Managed(Object(…))))
+                              where Float { bits: 64 } is wanted
+
+The second is the real one. The `unaccounted` check asks whether any diagnostic's
+*span covers* a declaration; `createServer` is at 932 and its refusal is at 154,
+seven hundred lines above and inside the class it constructs, so no span covered it
+and the check concluded the function had vanished. A refusal's location is the
+offending construct and routinely sits outside the declaration that owns it, so a
+span test cannot answer that question and the walk can, because it is holding the
+error.
+
+So the 274 files stand and their cause is a `Set<Object>` where a `Float` is
+wanted, not a walk that never happened. **The ranking above had a false message at
+the top of it**, and "a text, not a cause" was an understatement: the text was
+wrong, not just coarse. 31 sites still carry the message against the 38 counted
+here.
+
 `http.createServer` is the clearest single item: 274 files, more than any other,
 and its body is one line.
 
@@ -18632,6 +18655,97 @@ and the 129 files behind it, to rank against `http.createServer`'s 274.
 worse, three sites to seven. It was seven to seven; the "three" was a subset counted
 with a narrower grep than the one used for the "seven". Two numbers from two
 instruments, compared as though they were one.
+
+## Symbols: a blind spot in three instruments, and seven defects behind it
+
+`identity-partition.mjs`, `name-arity-diff.mjs` and `descriptor-diff.mjs` all walk
+with `Object.keys`, which returns own enumerable **string** keys and no symbols at
+all. Every symbol-keyed property node publishes was invisible to all three, and
+each of them reported a clean surface over a population that excluded them without
+saying so. That is this directory's own recurring finding turned on its own tools.
+
+`symbol-surface-diff.mjs` asks the question. Node leans on symbols where behaviour
+is decided rather than where data is stored -- `Symbol.toStringTag` decides
+`Object.prototype.toString`, `Symbol.asyncIterator` decides whether `for await`
+works, `Symbol.for('nodejs.util.promisify.custom')` decides what `util.promisify`
+returns -- so a module can compute every value correctly and still be the wrong
+thing to a language construct.
+
+A symbol is compared only where two realms can agree on it: a well-known symbol by
+identity, and `Symbol.for(x)` through the global registry. A unique unregistered
+symbol cannot be compared across two module graphs and is counted and printed
+rather than reported as a difference.
+
+### The third ESM-namespace leak, and the fourth
+
+`fs.constants`, `fs.promises.constants` and `stream.promises` were module namespace
+objects, reached with `import * as X` and re-published as public tables. A
+namespace object is frozen, null-prototyped and tagged `"Module"` by
+specification, so nothing on the TypeScript side changes it.
+
+`util.types` was the first of these and was **44 of the 80 descriptor differences**
+on its own. The pattern is worth naming because it recurs: *an `import * as`
+namespace re-published as a public value*. The shim is the only place it can be
+undone.
+
+Node's two do not agree with each other, which is why they were measured
+separately rather than fixed with one idiom:
+
+    fs.constants     null prototype, extensible, no tag
+    stream.promises  Object.prototype, extensible, no tag
+
+### Two promisify links that produce wrong answers, not missing ones
+
+    timers.setTimeout[custom]     === timers/promises.setTimeout
+    timers.setImmediate[custom]   === timers/promises.setImmediate
+    fs.exists[custom]             a promise of the boolean
+    fs.promises.opendir[custom]   === fs.promises.opendir   (a self-link)
+
+Without the timers links, `promisify` builds its generic wrapper and appends a
+node-style callback, while `setTimeout(after, value)` takes the resolve value
+first -- so the call **throws** `ERR_INVALID_ARG_TYPE: The "callback" argument must
+be of type function. Received type number (5)`.
+
+`fs.exists` is worse, because it is silent. Its callback is `(exists)` and not
+`(err, exists)`, so the generic wrapper reads the boolean as an error: a path that
+exists **rejects**, and one that does not resolves with `undefined`. Exactly
+backwards. Both now answer node's:
+
+    node  exists('/tmp')=true  exists('/nope')=false
+    ours  exists('/tmp')=true  exists('/nope')=false
+
+### `${os.arch}` is "x64" with no call written
+
+Fourteen `os` functions carry a `Symbol.toPrimitive` answering what calling them
+answers. The split is uniform, which is why the test states it as a rule and
+asserts both halves: exactly those fourteen have it, and the six that do not --
+`cpus`, `getPriority`, `loadavg`, `networkInterfaces`, `setPriority`, `userInfo` --
+are precisely the ones that take an argument or return an object, where a
+primitive conversion has nowhere to put either.
+
+### Two module objects that were the wrong thing to `toString`
+
+`console` and `process` each carry `Symbol.toStringTag`. Their descriptors
+disagree on two of three fields -- console non-writable and configurable, process
+writable and non-configurable -- so neither was inferred from the other.
+
+### Left, with reasons
+
+`Buffer[Symbol.species]` is an accessor returning node's internal `FastBuffer`
+subclass, which is not a thing to reproduce. `Symbol.hasInstance` on
+`stream.Writable`, `console.Console` and `diagnostics_channel.Channel` is a
+duck-typing check whose semantics have not been measured; a duck with `write`,
+`on` and `end` is **not** an instance of node's `Writable`, so whatever it tests
+is narrower than shape.
+
+### The lane
+
+**1,869 passed, 0 failed across 22 modules**, from 1,859. The ten added are tests
+for defects these seams found, each controlled against the code it replaced.
+
+One caveat that applies to every lane number in this tree, including this one:
+`test-util-inspect-long-running.js` fails about one run in seven, and it passed on
+the run that produced 1,869. Every number here is one sample.
 
 ## Conventions
 
