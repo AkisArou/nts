@@ -830,7 +830,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # No regression: the other 152 pass on that lane with this in, swept one by
   # one.
-  backend_examples 152 "through the JVM backend" ); }
+  backend_examples 153 "through the JVM backend" ); }
 corpus() {
   ./target/release/nts-suite --root "$root" > "$root/target/suite-report.txt" 2>&1
   grep -E "single-file|lowered completely|refused a construct|rejected by|frontend failed|invalid HIR|uncompilable C|unverifiable class" \

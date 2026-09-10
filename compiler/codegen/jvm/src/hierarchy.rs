@@ -59,18 +59,37 @@ pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
 
 /// The class that declares one field, by the index `FieldGet`/`FieldSet` carry.
 ///
-/// The index is into the *derived* layout's field list, and fields are
-/// base-first, so the declaring class is the highest ancestor still long enough
-/// to contain it.
+/// **`Field::declared_by`, not arithmetic.** This used to answer "the highest
+/// ancestor still long enough to contain this index", which is right until two
+/// classes declare one name -- and `class Base { #count }` with
+/// `class Derived extends Base { #count }` is two fields in JavaScript. That
+/// derivation is the same shape of reasoning as C's offset assumption, one
+/// level up, and it is why the first fix for that case produced
+///
+/// ```text
+/// NoSuchFieldError: nts.gen.Base does not have member field 'int $count$t1'
+/// ```
+///
+/// rather than a wrong answer: a rename in the derived layout left two layouts
+/// disagreeing about the name of one slot, which cannot matter to a lane that
+/// addresses a field by index and is fatal to one that addresses it by name and
+/// class. See record 0265.
+///
+/// `None` is a field no class declares -- a tuple's `_0`, a closure's capture,
+/// an anonymous object type's member -- and the layout holding it is the owner.
+///
+/// The id may name a type merged into this layout rather than the layout's own:
+/// structurally identical classes share one `Layout` under the first one's
+/// name. `program.layout` resolves that to the layout actually emitted, which
+/// is the class name a `Fieldref` needs.
 #[must_use]
 pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize) -> &'a Layout {
-    let mut owner = layout;
-    for ancestor in ancestry(program, layout) {
-        if ancestor.fields.len() > field {
-            owner = ancestor;
-        }
-    }
-    owner
+    layout
+        .fields
+        .get(field)
+        .and_then(|at| at.declared_by)
+        .and_then(|id| program.layout(id))
+        .unwrap_or(layout)
 }
 
 /// Whether anything extends this layout, which is the whole of what decides
