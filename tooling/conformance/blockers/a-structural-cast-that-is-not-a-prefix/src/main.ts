@@ -286,11 +286,46 @@
 // which is a question for the checker rather than for the refusals, and the
 // snapshot does not carry structural assignability today.
 //
-// **Neither design is chosen.** The specialisation has three known obstacles and
-// no unknown ones; this has one obstacle that decides whether it works at all.
-// That is the comparison worth having before either is built, and it is recorded
-// rather than resolved because resolving it means asking the frontend a question
-// it is not currently asked.
+// # The tiebreak, which I said did not exist
+//
+// I told the JVM lane the two designs were "equally free" on their side, so the
+// choice was entirely about soundness on mine. That was wrong, and they checked
+// rather than reasoned.
+//
+// **A prefix buys the JVM nothing.** That lane relates classes by *name*:
+// `getfield Counted.n` needs the object to **be** a `Counted`, and coinciding
+// offsets are not a relation. Their own
+// `examples/a-structural-cast-that-is-a-prefix` is the proof and is one of their
+// two standing gaps -- its header says the layouts already *are* a prefix, and
+// the backend refuses it anyway with `NTS4001 storing a `Prefixed` where a
+// `Counted` is declared`.
+//
+//     reordering       fixes C and LLVM; the JVM refuses exactly as today
+//     specialisation   a copy of `readName` over `Prefixed` takes a `Prefixed`
+//                      directly -- there is no cast, so there is nothing to
+//                      refuse
+//
+// So **specialisation is the only one of the two that reaches the third backend
+// at all**, and it closes the older of that lane's two remaining gaps as a side
+// effect rather than as a goal.
+//
+// # Where that leaves it
+//
+// Specialisation: three known obstacles, no unknown ones, reaches all three
+// backends, and removes a standing JVM gap. Reordering: one obstacle that
+// decides whether it exists at all, and fixes two backends of three.
+//
+// **Specialisation, then**, and the obstacle count is the work rather than the
+// risk. What is not started is the work, and the reason is that each of the three
+// obstacles was found by *reading* rather than by building -- the substitution
+// arm, the pass order, and the call-site coercion -- and three in twenty minutes
+// is a rate that argues for finishing the reading first.
+//
+// One more thing the other lane established about the reordering's open
+// question, which stays relevant if anyone revisits it: **a backend cannot
+// answer it.** The classes that already satisfy an interface by accident are
+// exactly the ones that produce no layout evidence, so whatever instrument
+// settles the complete implementor set will not be an emitter.
 //
 // # What it does not cover
 //
