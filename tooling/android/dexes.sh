@@ -79,7 +79,23 @@ else
     | sed "s|^$root/||;s|/$||" | sort)
 fi
 
-dexed=0 refused=0 declined=0
+# **The count this ratchet owes itself.** See `docs/records/0295`.
+#
+# For a fortnight this printed `0 refused` while dexing a four-member skeleton,
+# because `emit_options` read `!entry.is_empty()` and that test was never false.
+# Nothing in the output said so: a step with no input that can refuse it is
+# indistinguishable from one that keeps passing.
+#
+# A failure-path sabotage would not have caught it -- the plumbing was fine and
+# the *inputs* were empty. What catches it is a floor on what was actually
+# dexed. Under the bug every case that is not a class-heavy `awfy-*` lost its
+# exported function and its specialisation, so the total roughly halves; a
+# method count collapses where `0 refused` does not move.
+#
+# Methods rather than bytes: bytes fall when codegen improves, which would make
+# a real win look like this bug. A method disappears only when a function is
+# pruned, which is the defect itself.
+dexed=0 refused=0 declined=0 methods=0
 for target in $targets; do
   name=$(basename "$target")
   out="$work/$name"
@@ -135,6 +151,10 @@ JSON
   if "$tools/d8" --min-api 29 --lib "$out/classes/nts-runtime.jar" \
        --output "$out/dex" $classes > "$out/d8.log" 2>&1; then
     dexed=$((dexed + 1))
+    names=$(echo "$classes" | sed "s|$out/classes/||g;s|\.class||g;s|/|.|g")
+    # shellcheck disable=SC2086
+    n=$(javap -p -cp "$out/classes" $names 2>/dev/null | grep -cE "^  .*\(.*\);")
+    methods=$((methods + n))
   else
     refused=$((refused + 1))
     printf "%-28s d8 refused it\n" "$name"
@@ -143,4 +163,21 @@ JSON
 done
 
 printf "\n%s dexed, %s refused, %s declined by the backend\n" "$dexed" "$refused" "$declined"
+printf "%s method(s) across them\n" "$methods"
+
+# The floor, and it only applies to a full run -- naming targets on the command
+# line is how this is used by hand and would trip it every time.
+#
+# **0 until measured.** A placeholder here is not a harmless TODO: `[ 5 -lt
+# FLOOR ]` is "integer expression expected" in every shell, and this script is a
+# gate step three sessions run. Left as a word for four minutes while the count
+# was being measured, with a peer's gate running it. Inert is the only safe
+# unmeasured value.
+floor=${NTS_DEX_METHOD_FLOOR:-0}
+if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
+  echo "only $methods method(s) dexed, against a floor of $floor" >&2
+  echo "a drop here is functions being pruned before the backend sees them," >&2
+  echo "which is what made this step green over a skeleton -- record 0295" >&2
+  exit 1
+fi
 [ "$refused" -eq 0 ] || exit 1
