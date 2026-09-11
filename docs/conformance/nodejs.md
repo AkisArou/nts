@@ -21289,6 +21289,53 @@ the eight is reachable through the module object.
 The question "is this function defined" took three attempts, in a document where
 the previous four findings were all a measurement being adjacent to the question.
 
+## Five formulations of a hook call, and none of them lowers
+
+The `emitInit` diagnosis, finished. Every arrangement of `hook.init(...)` a
+person could reasonably write, with the message each produces. Only the last
+column differs, and only one row moves it.
+
+    declaration the compiler resolves against              message
+    ---------------------------------------------------    -------------------
+    init?: ((...) => void) | undefined   (as written)       no declaration in the hierarchy
+    const init = hook.init; init(...)                       COMPILES -- wrong receiver
+    (hook as I).init(...), I has a required field           no declaration in the hierarchy
+    (hook as I).init(...), I has a required method          no declaration in the hierarchy
+    init?(...): void  on RegisteredHook itself              a union of a function type | undefined
+
+### What the matrix says
+
+**A cast never changes anything.** Three of the five rows assert a better type at
+the call site and get the identical message. The compiler resolves the method
+against the object's own declared type, which is what a structural assertion
+cannot touch -- and that is correct of it.
+
+**Method syntax is what counts as a declaration.** The only probe that moved the
+message edited `RegisteredHook` itself, and the message it moved to names the
+remaining problem exactly: `?` makes the type a union with `undefined`, and that
+union has no representation.
+
+**And the two cannot both be satisfied.** Getting past "no declaration" needs
+`init` declared as a method on the type the registry stores. Getting past the
+union needs it non-optional. But a hook legitimately omits callbacks -- that is
+node's public API, `createHook({ init })` with three of the five absent.
+
+The remaining idea is a wrapper: store, per hook, an object whose `init` is a
+required method delegating to the user's. That is circular -- the delegating body
+holds the same `hook.init!(...)` call -- and a per-instance method assignment is
+separately refused (`blockers/a-method-assigned-per-instance`).
+
+### So this one is not reformulable
+
+Which is worth stating plainly, because every previous link in this chain was.
+`dnsException`'s cast, `address.ts`'s regexes, `nextTick`'s generic rest -- all
+had a better formulation in TypeScript and two of them are now committed. This
+does not. A user-supplied optional callback invoked from a registry is what
+`async_hooks` *is*, and the profile cannot write it differently.
+
+`emitInit` needs the compiler to represent a callable-valued field. That is the
+labelled diagnosis, and it is the end of what this side can do about `dns`.
+
 ## `emitInit` needs two things, and one of them is three characters of TypeScript
 
 Pulling `dns`'s chain one more link. `emitInit` is refused at
