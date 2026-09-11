@@ -80,6 +80,7 @@ meets them. This is the map; the row table below it is the current state.
   - The partition, re-measured at a fresh pin: same eight rows, same six and two
   - The published table against a fresh sweep: one of fifty-one rows is stale, and it is `array-from`
   - `loops.rs` exists, my rows are not waiting on it, and the row table said they were
+  - A rule written for the only instance of a category is a rule about that instance
 - Open, and whose
 
 **Read this file newest-claim-first within a row.** It is written by appending,
@@ -3145,6 +3146,45 @@ about a *map value* and an *array element* -- that a `number` arriving from
 `events.get(key) ?? 0` or `xs.at(-1)` is integral -- which is a different
 analysis over a different domain, and naming it as "range analysis" made it
 sound like work already done.
+
+### A rule written for the only instance of a category is a rule about that instance
+
+`SharedFieldGet` took three `VerifyError`s to land, and they are one finding
+rather than three fixes.
+
+`crossing_values` decides which slots get a declared verification type, and its
+rule is **"a label sits between a definition and a read"**. That rule was
+written for a comparison -- until this op, the only thing that puts a label
+inside a block -- and a comparison pushes its result *after* its labels and reads
+its operands *before* them. An `instanceof` chain does neither:
+
+    Type top (locals[1])     the op was not in `puts_label` at all
+    Type top (locals[1])     it is the label AND the write, and a value is
+                             never "between" its own labels
+    Type top (locals[14])    it reads the receiver once per arm, after each
+                             `next` -- so the operand crosses too
+
+So the rule is not *which ops put labels* but **which values are live across
+one**, and this is the first op where those differ. The comment above
+`crossing_values` says "the part that cost two attempts" about labels inside a
+block; it cost two more, in the two places the category had never been tested.
+
+**Nothing could have said so, which is the point.** A fact with two derivations
+disagrees the moment both are exercised. A rule with one instance is never
+contradicted -- it is simply never asked a second question -- so it reads as
+correct for as long as the category has one member. `puts_label` was right about
+comparisons and silently wrong about everything else, and the tree contained
+nothing else.
+
+Each of the three was found by reading the listing at the offset the verifier
+named. Reasoning about which pass owned the slot would have found the first and
+would not have separated the second from the third: they name the same local,
+one line apart, for opposite reasons.
+
+**Where else this shape is waiting.** Any predicate in this backend whose
+`match` has one true arm and a `_ => false` is the same construction --
+`scalar_form`, `cursor_helper`, `object_key_form` each name exactly one helper
+today. None of them is wrong. Each is untested in the only way that matters.
 
 ## Open, and whose
 
