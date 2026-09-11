@@ -199,6 +199,50 @@
 // instantiation and 14 of them is invisible; hundreds of copies of one function
 // is measured by nobody, and should be sized before building rather than after.
 //
+// # How to build the specialisation, including the part I got wrong
+//
+// **Correction, and I told both lanes the wrong thing first.** I said the
+// machinery already exists: `Substitution` maps a `TypeId` to an `HirType`, so
+// binding `Named -> Object(Thing)` would make `represent(Named)` answer Thing's
+// layout inside that copy. **It would not.** `representation_of` consults the
+// substitution in exactly one arm:
+//
+//     TypeKind::TypeParameter { .. } => subst.get(&ty)?.clone(),
+//
+// An interface is `TypeKind::Object`, which takes the object arm and never looks
+// at it. A copy carrying that binding would have been byte-identical to the
+// original.
+//
+// The fix is a general lookup at the top of `representation_of` -- *any* bound
+// type answers with what it is bound to. **Verified as a no-op today**: applied,
+// built, and the corpus is identical (54 lowered, 0 invalid HIR) because nothing
+// populates such a binding. It is not committed, because a one-line widening
+// with no user is dead weight and its blast radius -- every representation query
+// in the compiler -- should be reviewed against the pass that needs it, not
+// before.
+//
+// # The pass-order obstacle, which is the other non-obvious part
+//
+// Deciding which calls need a copy requires asking whether the argument's layout
+// is a **prefix** of the parameter's, and `laid_out_as_a_prefix` needs layouts.
+// Layouts accumulate *during* lowering -- `collect_layouts` runs at four points
+// as functions are built -- so a pre-pass has none to read.
+//
+// The route is a throwaway `FuncBuilder::new(snapshot)` probe, which is what
+// `members_of` already does: `layout_of` builds a layout from the snapshot on
+// demand. The hazard is that a probe's layouts must **not** be merged into the
+// program -- `layout_of` is not a query, and two of the four `collect_layouts`
+// calls do merge a probe's. A probe whose layouts are discarded is safe.
+//
+// # The copy count, sized before building rather than after
+//
+//     63 sites, each seeing one type
+//     39 distinct (file, arriving type) pairs across six modules
+//
+// So tens of copies, not hundreds, which is well below where the JVM lane's
+// class-loading and code-cache question bites. Their lane already emits a class
+// per generic instantiation and 14 of those is invisible.
+//
 // # What it does not cover
 //
 // The same question for an *erased* value reaching a concrete slot, which
