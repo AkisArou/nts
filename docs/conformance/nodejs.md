@@ -21331,6 +21331,47 @@ files. Removed, reapplied clean, cone mode verified still `true`, and every shar
 path counted afterwards: `src` 456, `lib` 374, `test` 10845, `deps/zlib` 196,
 `deps/brotli` 113, `deps/zstd` 104, `deps/nghttp2` 70.
 
+## Every route from `tty`'s compiled lane to a passing test, and why each closes
+
+Five `pseudo-tty` files, one pty harness, and an exhaustive walk.
+
+    test-tty-isatty.js             the only one that needs nothing but `isatty`
+    test-tty-window-size.js        internalBinding('tty_wrap')
+    test-handle-wrap-hasref-tty.js internalBinding('tty_wrap')
+    test-tty-stream-constructors.js  ReadStream / WriteStream
+    test-tty-color-support.js        WriteStream, 118 lines of colour policy
+
+**The first closes on an argument.** `isatty({})` and `isatty(() => {})` throw in
+the wrapper before any of this profile's code runs. An `unknown` parameter carries
+null, undefined, booleans, numbers and strings inward and throws on references,
+which is `blockers/a-reference-cannot-cross-inward` seen through an `unknown`.
+There is no TypeScript signature that accepts an object and crosses, so no amount
+of module makes those two assertions reachable.
+
+**The last two close on a class, and not the one I assumed.** I was about to write
+"classes do not cross", and checked instead:
+
+    fs.Stats     PUBLISHED, class-like, in the addon today
+    buffer.Buffer, events.EventEmitter, net.Socket   declined
+
+So a class crosses when its shape is representable; `fs.Stats` is scalar fields
+and it is there. `tty.ReadStream` and `tty.WriteStream` are `net.Socket`
+subclasses, and `net.Socket` is one of the ones that does not. That is the reason,
+and it is narrower than the sentence I nearly committed.
+
+### Where that leaves the clause
+
+`tty` interpreted is green with 0 hollow and one real test that needed a harness
+capability which did not exist twelve hours ago. `tty` compiled is `0 passed`, and
+every route to changing that runs through the **boundary** -- a reference crossing
+inward, or `net.Socket` crossing outward -- not through the module and not through
+lowering.
+
+That is the same terminus `dns.promises` reached by a different road, and it is
+consistent with the measured split: 97 of 457 declined exports are the wrapper
+rather than the lowering. Two of the three things this session was asked to make
+green end at the same place.
+
 ## `tty` exists, the pty harness works, and the compiled lane is two assertions short
 
 The entry below says `tty` green with 0 hollow is unsatisfiable and names the fix:
